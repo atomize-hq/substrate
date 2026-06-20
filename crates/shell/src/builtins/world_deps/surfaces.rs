@@ -1359,8 +1359,20 @@ mod tests {
             "expected script to handle the official archive filename layout: {script}"
         );
         assert!(
+            script.contains("command -v wget"),
+            "expected script to prefer wget when available in the guest: {script}"
+        );
+        assert!(
+            script.contains("command -v python3"),
+            "expected script to fall back to python3 before curl-only resolution: {script}"
+        );
+        assert!(
+            script.contains("run_download_with_timeout 900"),
+            "expected script to bound non-curl download helpers too: {script}"
+        );
+        assert!(
             script.contains("--connect-timeout 15"),
-            "expected script to set an explicit connection timeout: {script}"
+            "expected curl fallback to keep an explicit connection timeout: {script}"
         );
         assert!(
             script.contains("--speed-time 30"),
@@ -1375,8 +1387,24 @@ mod tests {
             "expected script to enforce an upper download bound: {script}"
         );
         assert!(
+            script.contains("tar --no-same-owner --no-same-permissions -xzf"),
+            "expected script to avoid tar metadata restores that fail in the world staging dir: {script}"
+        );
+        assert!(
             script.contains("substrate: downloading Codex runtime"),
             "expected script to emit a download phase marker: {script}"
+        );
+        assert!(
+            script.contains("with wget"),
+            "expected script to make the selected downloader visible in the phase marker: {script}"
+        );
+        assert!(
+            script.contains("with python3"),
+            "expected script to expose the python3 downloader fallback in the phase marker: {script}"
+        );
+        assert!(
+            script.contains("with curl"),
+            "expected script to expose the curl fallback in the phase marker: {script}"
         );
         assert!(
             script.contains("substrate: installing Codex runtime"),

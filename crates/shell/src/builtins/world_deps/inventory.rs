@@ -255,6 +255,16 @@ archive_sha256="__SUBSTRATE_CODEX_ARCHIVE_SHA256__"
 codex_version="__SUBSTRATE_CODEX_VERSION__"
 target_triple="__SUBSTRATE_CODEX_TARGET_TRIPLE__"
 
+run_download_with_timeout() {
+  local max_seconds="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${max_seconds}" "$@"
+  else
+    "$@"
+  fi
+}
+
 mkdir -p "${world_deps_bin}" "${package_bin}" "${downloads_root}"
 
 if [ -x "${installed_binary}" ] && "${installed_binary}" --version 2>/dev/null | grep -Fq "${codex_version}"; then
@@ -265,15 +275,36 @@ fi
 if [ ! -f "${archive_path}" ] || ! echo "${archive_sha256}  ${archive_path}" | sha256sum -c - >/dev/null 2>&1; then
   tmp_archive="${archive_path}.tmp"
   rm -f "${tmp_archive}"
-  echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url}" >&2
-  curl -fsSL --retry 3 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 900 --location "${archive_url}" -o "${tmp_archive}"
+  if [[ "${archive_url}" == file://* ]]; then
+    echo "substrate: staging Codex runtime ${codex_version} for ${target_triple} from ${archive_url}" >&2
+    cp "${archive_url#file://}" "${tmp_archive}"
+  elif command -v wget >/dev/null 2>&1; then
+    echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url} with wget" >&2
+    run_download_with_timeout 900 wget --tries=4 --timeout=15 --waitretry=5 --output-document "${tmp_archive}" "${archive_url}"
+  elif command -v python3 >/dev/null 2>&1; then
+    echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url} with python3" >&2
+    run_download_with_timeout 900 python3 - "${archive_url}" "${tmp_archive}" <<'PY'
+import shutil
+import socket
+import sys
+import urllib.request
+
+url, destination = sys.argv[1], sys.argv[2]
+socket.setdefaulttimeout(15)
+with urllib.request.urlopen(url, timeout=15) as response, open(destination, "wb") as out:
+    shutil.copyfileobj(response, out)
+PY
+  else
+    echo "substrate: downloading Codex runtime ${codex_version} for ${target_triple} from ${archive_url} with curl" >&2
+    curl -fsSL --retry 3 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 900 --location "${archive_url}" -o "${tmp_archive}"
+  fi
   echo "${archive_sha256}  ${tmp_archive}" | sha256sum -c -
   mv "${tmp_archive}" "${archive_path}"
 fi
 
 stage_dir="$(mktemp -d "${package_root}/.stage.${target_triple}.XXXXXX")"
 trap 'rm -rf "${stage_dir}"' EXIT
-tar -xzf "${archive_path}" -C "${stage_dir}"
+tar --no-same-owner --no-same-permissions -xzf "${archive_path}" -C "${stage_dir}"
 
 resolved_binary=""
 if [ -x "${stage_dir}/codex" ]; then
