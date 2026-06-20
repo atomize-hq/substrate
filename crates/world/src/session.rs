@@ -1183,8 +1183,9 @@ fn read_session_root_dir(root_dir: &Path) -> Result<Option<fs::ReadDir>> {
             );
             Ok(None)
         }
-        Err(err) => Err(err)
-            .with_context(|| format!("failed to read session root {}", root_dir.display())),
+        Err(err) => {
+            Err(err).with_context(|| format!("failed to read session root {}", root_dir.display()))
+        }
     }
 }
 
@@ -1627,8 +1628,7 @@ mod tests {
         let original_permissions = std::fs::metadata(&root_dir).unwrap().permissions();
         std::fs::set_permissions(&root_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
         let recovered =
-            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec)
-                .unwrap();
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec).unwrap();
         std::fs::set_permissions(&root_dir, original_permissions).unwrap();
 
         assert!(recovered.is_none());
