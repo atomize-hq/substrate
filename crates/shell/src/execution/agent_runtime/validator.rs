@@ -334,15 +334,28 @@ fn resolve_world_scoped_codex_binary_path(
     }
 
     let probe_path = world_scoped_codex_guest_entrypoint_probe_path();
-    if !guest_entrypoint_is_available(probe_path.as_path()) {
-        return Err(RuntimeRealizabilityError {
-            exit_code: 4,
-            reason: format!(
-                "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is unavailable; install the world runtime and rerun 'substrate world deps current sync'",
-                agent_id,
-                CODEX_WORLD_GUEST_ENTRYPOINT,
-            ),
-        });
+    match inspect_guest_entrypoint_probe(probe_path.as_path()) {
+        GuestEntrypointProbe::Available => {}
+        GuestEntrypointProbe::PermissionDenied => {
+            return Err(RuntimeRealizabilityError {
+                exit_code: 4,
+                reason: format!(
+                    "selected runtime '{}' is not runtime-realizable in world scope because host access to guest entrypoint probe '{}' is permission denied; the runtime may already be installed, but the current host process cannot traverse/read the world-deps tree. On Linux fresh installs, rerun 'scripts/linux/world-provision.sh' to restore the no-shell-reload ACL bridge or refresh group membership in a new shell, then retry",
+                    agent_id,
+                    probe_path.display(),
+                ),
+            });
+        }
+        GuestEntrypointProbe::Unavailable => {
+            return Err(RuntimeRealizabilityError {
+                exit_code: 4,
+                reason: format!(
+                    "selected runtime '{}' is not runtime-realizable in world scope because guest entrypoint '{}' is unavailable; install the world runtime and rerun 'substrate world deps current sync'",
+                    agent_id,
+                    CODEX_WORLD_GUEST_ENTRYPOINT,
+                ),
+            });
+        }
     }
 
     Ok(PathBuf::from(CODEX_WORLD_GUEST_ENTRYPOINT))
@@ -358,23 +371,37 @@ fn world_scoped_codex_guest_entrypoint_probe_path() -> PathBuf {
     Path::new(&world_deps_bin).join("codex")
 }
 
-fn guest_entrypoint_is_available(path: &Path) -> bool {
-    let Ok(metadata) = std::fs::metadata(path) else {
-        return false;
+enum GuestEntrypointProbe {
+    Available,
+    PermissionDenied,
+    Unavailable,
+}
+
+fn inspect_guest_entrypoint_probe(path: &Path) -> GuestEntrypointProbe {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            return GuestEntrypointProbe::PermissionDenied;
+        }
+        Err(_) => return GuestEntrypointProbe::Unavailable,
     };
     if !metadata.is_file() {
-        return false;
+        return GuestEntrypointProbe::Unavailable;
     }
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        metadata.permissions().mode() & 0o111 != 0
+        if metadata.permissions().mode() & 0o111 != 0 {
+            GuestEntrypointProbe::Available
+        } else {
+            GuestEntrypointProbe::Unavailable
+        }
     }
 
     #[cfg(not(unix))]
     {
-        true
+        GuestEntrypointProbe::Available
     }
 }
 
@@ -1270,6 +1297,73 @@ mod tests {
         );
         assert!(
             error.reason.contains("substrate world deps current sync"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    #[serial]
+    #[cfg(unix)]
+    fn validate_runtime_realizability_distinguishes_world_scoped_codex_permission_denied() {
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
+
+        let _env_guard = crate::execution::world_env_guard();
+        let config = SubstrateConfig::default();
+        let temp = TempDir::new().expect("tempdir for permission denied guest entrypoint");
+        let world_deps_bin = temp.path().join("world-deps-bin");
+        fs::create_dir_all(&world_deps_bin).expect("create guest bin dir");
+        let guest_codex = world_deps_bin.join("codex");
+        fs::write(&guest_codex, "#!/bin/sh\nexit 0\n").expect("write fake guest codex");
+        let mut guest_perms = fs::metadata(&guest_codex)
+            .expect("guest codex metadata")
+            .permissions();
+        guest_perms.set_mode(0o755);
+        fs::set_permissions(&guest_codex, guest_perms).expect("guest codex permissions");
+
+        let mut bin_perms = fs::metadata(&world_deps_bin)
+            .expect("guest bin metadata")
+            .permissions();
+        bin_perms.set_mode(0o000);
+        fs::set_permissions(&world_deps_bin, bin_perms.clone())
+            .expect("remove guest bin traversal");
+
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            world_deps_bin.as_path(),
+        );
+
+        let entry = make_entry_with_runtime_family_and_binary(
+            "codex_world",
+            AgentExecutionScope::World,
+            Some(PURE_AGENT_PROTOCOL),
+            AgentCliMode::Persistent,
+            Some(AgentCliRuntimeFamily::Codex),
+            CODEX_WORLD_GUEST_ENTRYPOINT,
+            required_capabilities(),
+        );
+
+        let error = validate_runtime_realizability(&entry, &config).expect_err("must fail");
+
+        let mut restore_perms = bin_perms;
+        restore_perms.set_mode(0o755);
+        fs::set_permissions(&world_deps_bin, restore_perms).expect("restore guest bin traversal");
+
+        assert_eq!(error.exit_code, 4);
+        assert!(
+            error.reason.contains("permission denied"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            error.reason.contains("scripts/linux/world-provision.sh"),
+            "unexpected reason: {}",
+            error.reason
+        );
+        assert!(
+            !error.reason.contains("is unavailable"),
             "unexpected reason: {}",
             error.reason
         );
