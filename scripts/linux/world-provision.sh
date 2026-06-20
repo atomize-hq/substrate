@@ -444,6 +444,12 @@ Temporary workaround for the current shell:
 MSG
 }
 
+world_deps_probe_path() {
+    local world_deps_bin="${SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR:-${WORLD_DEPS_BIN_PATH}}"
+    world_deps_bin="${world_deps_bin%/}"
+    printf '%s/codex\n' "${world_deps_bin}"
+}
+
 verify_socket_acl_bridge() {
     local user="$1"
     if [[ ${DRY_RUN} -eq 1 ]]; then
@@ -482,6 +488,7 @@ MSG
 
 verify_world_deps_acl_bridge() {
     local user="$1"
+    local probe_path=""
     if [[ ${DRY_RUN} -eq 1 ]]; then
         return
     fi
@@ -498,20 +505,27 @@ verify_world_deps_acl_bridge() {
         echo "==> Current shell already has active ${SUBSTRATE_GROUP} group membership for world-deps access."
         return
     fi
-    if ! command -v getfacl >/dev/null 2>&1; then
-        print_acl_bridge_warning
-        return
-    fi
+    probe_path="$(world_deps_probe_path)"
 
-    local state_acl=""
-    local world_deps_acl=""
-    state_acl="$(sudo_cmd getfacl -cp "${SUBSTRATE_STATE_PATH}" 2>/dev/null || true)"
-    world_deps_acl="$(sudo_cmd getfacl -cp "${WORLD_DEPS_ROOT_PATH}" 2>/dev/null || true)"
-    if grep -Eq "^user:${user}:--x" <<<"${state_acl}" && grep -Eq "^user:${user}:r-x" <<<"${world_deps_acl}"; then
-        echo "==> Verified named-user ACL bridge for ${user} on ${WORLD_DEPS_ROOT_PATH}."
+    if [[ -x "${probe_path}" ]]; then
+        echo "==> Verified named-user ACL bridge for ${user} on runtime probe ${probe_path}."
+    elif sudo_cmd test -e "${probe_path}" >/dev/null 2>&1; then
+        cat <<MSG
+WARNING: ${user} is authorized in the ${SUBSTRATE_GROUP} account database, but the current shell still cannot reach the world-scoped runtime probe ${probe_path}.
+The runtime probe may resolve deeper into world-deps package directories; this provisioner only reports green once the real probe path is reachable from the current shell.
+If 'substrate agent doctor --json' still reports permission denied from this session, rerun this provisioner after installing ACL tools or refresh the shell with:
+  exec newgrp ${SUBSTRATE_GROUP}
+MSG
+    elif sudo_cmd test -e "${WORLD_DEPS_BIN_PATH}" >/dev/null 2>&1; then
+        cat <<MSG
+WARNING: ${user} is authorized in the ${SUBSTRATE_GROUP} account database, but the current shell cannot yet verify the world-deps ACL bridge against runtime probe ${probe_path}.
+That probe path is not present yet, so this provisioner will not claim success for the no-shell-reload bridge until the real runtime entrypoint exists.
+Once the runtime is installed, rerun this provisioner or validate from a fresh shell with:
+  test -x ${probe_path}
+MSG
     else
         cat <<MSG
-WARNING: ${user} is authorized in the ${SUBSTRATE_GROUP} account database, but the current shell still lacks a verified world-deps ACL bridge.
+WARNING: ${user} is authorized in the ${SUBSTRATE_GROUP} account database, but the current shell still lacks a verified world-deps ACL bridge on the world-deps tree.
 If 'substrate agent doctor --json' still reports permission denied from this session, rerun this provisioner after installing ACL tools or refresh the shell with:
   exec newgrp ${SUBSTRATE_GROUP}
 MSG
@@ -769,10 +783,20 @@ else
 fi
 verify_socket_acl_bridge "${INVOKING_USER}"
 echo "==> ${WORLD_DEPS_ROOT_PATH} listing (should be root:${SUBSTRATE_GROUP} 0750 with named-user ACL bridge when needed)"
-sudo_cmd ls -ld "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}"
+WORLD_DEPS_PROBE_PATH="$(world_deps_probe_path)"
+if sudo_cmd test -e "${WORLD_DEPS_PROBE_PATH}" >/dev/null 2>&1; then
+    sudo_cmd ls -ld "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}" "${WORLD_DEPS_PROBE_PATH}"
+else
+    sudo_cmd ls -ld "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}"
+    echo "==> World-deps runtime probe path not present yet: ${WORLD_DEPS_PROBE_PATH}"
+fi
 if command -v getfacl >/dev/null 2>&1; then
     echo "==> ${WORLD_DEPS_ROOT_PATH} ACL"
-    sudo_cmd getfacl -cp "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}" || true
+    if sudo_cmd test -e "${WORLD_DEPS_PROBE_PATH}" >/dev/null 2>&1; then
+        sudo_cmd getfacl -cp "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}" "${WORLD_DEPS_PROBE_PATH}" || true
+    else
+        sudo_cmd getfacl -cp "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}" || true
+    fi
 fi
 verify_world_deps_acl_bridge "${INVOKING_USER}"
 echo "==> Installed gateway binary"
@@ -798,7 +822,7 @@ print_linger_guidance "${INVOKING_USER}"
 echo "==> Provisioning complete"
 echo "    Verify socket with: sudo ls -l ${SOCKET_FS_PATH}"
 echo "    Verify socket ACL: sudo getfacl -cp ${SOCKET_FS_PATH}"
-echo "    Verify world-deps ACL: sudo getfacl -cp ${SUBSTRATE_STATE_PATH} ${WORLD_DEPS_ROOT_PATH} ${WORLD_DEPS_BIN_PATH}"
+echo "    Verify world-deps ACL: sudo getfacl -cp ${SUBSTRATE_STATE_PATH} ${WORLD_DEPS_ROOT_PATH} ${WORLD_DEPS_BIN_PATH} $(world_deps_probe_path)"
 echo "    Probe capabilities: sudo curl --unix-socket ${SOCKET_FS_PATH} http://localhost/v1/capabilities"
 echo "    Verify gateway lifecycle: $(basename "${substrate_cli:-substrate}") world gateway status --json"
 echo "    Doctor socket block: substrate host doctor --json | jq '.host.world_socket'"

@@ -22,9 +22,10 @@ Usage: tests/installers/world_provision_smoke.sh [--profile <name>] [--keep-root
 
 Verifies scripts/linux/world-provision.sh writes the substrate socket unit with
 SocketGroup=substrate, records group membership operations, emits linger guidance,
-skips the gateway proof on a clean install, and runs the proof when config/policy
-make it eligible. The harness stubs systemd and gateway commands so it never
-touches the host.
+skips the gateway proof on a clean install, runs the proof when config/policy
+make it eligible, and only reports the world-deps ACL bridge green when the real
+runtime probe path is reachable. The harness stubs systemd and gateway commands
+so it never touches the host.
 USAGE
 }
 
@@ -102,7 +103,7 @@ rewrite_dest_arg() {
   local last_index=$((${#args[@]} - 1))
   for i in "${!args[@]}"; do
     local val="${args[$i]}"
-    if [[ "${i}" -eq "${last_index}" && "${val}" == /* && -n "${FAKE_ROOT}" ]]; then
+    if [[ "${i}" -eq "${last_index}" && "${val}" == /* && -n "${FAKE_ROOT}" && "${val}" != "${FAKE_ROOT}"/* ]]; then
       rewritten+=("${FAKE_ROOT}${val}")
     else
       rewritten+=("${val}")
@@ -114,7 +115,7 @@ rewrite_dest_arg() {
 rewrite_all_paths() {
   local rewritten=()
   for val in "${args[@]}"; do
-    if [[ "${val}" == /* && -n "${FAKE_ROOT}" ]]; then
+    if [[ "${val}" == /* && -n "${FAKE_ROOT}" && "${val}" != "${FAKE_ROOT}"/* ]]; then
       rewritten+=("${FAKE_ROOT}${val}")
     else
       rewritten+=("${val}")
@@ -134,6 +135,11 @@ case "${cmd}" in
   systemctl)
     log_systemctl "$@"
     exec "${cmd}" "$@"
+    ;;
+  getfacl|test)
+    args=("$@")
+    rewrite_all_paths
+    exec "${cmd}" "${args[@]}"
     ;;
   install|cp|mv|ln)
     args=("$@")
@@ -163,7 +169,7 @@ fake_root="${FAKE_ROOT:-}"
 if [[ -n "${log}" ]]; then
   printf 'systemctl %s\n' "$*" >>"${log}"
 fi
-if [[ $# -ge 2 && "$1" == "start" && "$2" == "substrate-world-agent.socket" && -n "${fake_root}" ]]; then
+if [[ $# -ge 2 && "$1" == "start" && "$2" == "substrate-world-service.socket" && -n "${fake_root}" ]]; then
   socket_path="${fake_root}/run/substrate.sock"
   mkdir -p "$(dirname "${socket_path}")"
   : >"${socket_path}"
@@ -180,7 +186,10 @@ write_stub_id() {
 #!/usr/bin/env bash
 set -euo pipefail
 primary="${SUBSTRATE_TEST_PRIMARY_USER:-substrate-smoke}"
-groups="${SUBSTRATE_TEST_USER_GROUPS:-wheel docker}"
+active_groups="${SUBSTRATE_TEST_ACTIVE_GROUPS:-wheel docker}"
+account_groups_before="${SUBSTRATE_TEST_ACCOUNT_GROUPS_BEFORE:-wheel docker}"
+account_groups_after="${SUBSTRATE_TEST_ACCOUNT_GROUPS_AFTER:-wheel docker substrate}"
+usermod_state="${SUBSTRATE_TEST_USERMOD_STATE:-}"
 if [[ $# -eq 0 ]]; then
   printf '%s\n' "${primary}"
   exit 0
@@ -191,7 +200,15 @@ case "$1" in
     exit 0
     ;;
   -nG)
-    printf '%s\n' "${groups}"
+    if [[ $# -ge 2 ]]; then
+      if [[ -n "${usermod_state}" && -f "${usermod_state}" ]]; then
+        printf '%s\n' "${account_groups_after}"
+      else
+        printf '%s\n' "${account_groups_before}"
+      fi
+    else
+      printf '%s\n' "${active_groups}"
+    fi
     exit 0
     ;;
 esac
@@ -237,6 +254,37 @@ fi
 exit 0
 EOF
   chmod +x "${STUB_BIN}/groupadd"
+}
+
+write_stub_getfacl() {
+  cat >"${STUB_BIN}/getfacl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+user="${SUBSTRATE_TEST_PRIMARY_USER:-substrate-smoke}"
+for arg in "$@"; do
+  [[ "${arg}" == -* ]] && continue
+  printf '# file: %s\n' "${arg}"
+  case "${arg}" in
+    */run/substrate.sock)
+      printf 'user::rw-\ngroup::rw-\nother::---\nuser:%s:rw-\n' "${user}"
+      ;;
+    */var/lib/substrate)
+      printf 'user::rwx\ngroup::r-x\nother::---\nuser:%s:--x\n' "${user}"
+      ;;
+    */var/lib/substrate/world-deps|*/var/lib/substrate/world-deps/bin)
+      printf 'user::rwx\ngroup::r-x\nother::---\nuser:%s:r-x\n' "${user}"
+      ;;
+    *)
+      if [[ -d "${arg}" ]]; then
+        printf 'user::rwx\ngroup::r-x\nother::---\nuser:%s:r-x\n' "${user}"
+      else
+        printf 'user::rw-\ngroup::r--\nother::---\nuser:%s:r-x\n' "${user}"
+      fi
+      ;;
+  esac
+done
+EOF
+  chmod +x "${STUB_BIN}/getfacl"
 }
 
 write_stub_install() {
@@ -315,8 +363,12 @@ write_stub_usermod() {
 #!/usr/bin/env bash
 set -euo pipefail
 log="${SUBSTRATE_TEST_GROUP_LOG:-}"
+usermod_state="${SUBSTRATE_TEST_USERMOD_STATE:-}"
 if [[ -n "${log}" ]]; then
   printf 'usermod %s\n' "$*" >>"${log}"
+fi
+if [[ -n "${usermod_state}" ]]; then
+  : > "${usermod_state}"
 fi
 exit 0
 EOF
@@ -406,6 +458,7 @@ write_stub_helpers() {
   write_stub_id
   write_stub_getent
   write_stub_groupadd
+  write_stub_getfacl
   write_stub_install
   write_stub_usermod
   write_stub_loginctl
@@ -413,7 +466,7 @@ write_stub_helpers() {
 }
 
 ensure_stub_binaries() {
-  local world_agent_bin="${REPO_ROOT}/target/${PROFILE}/world-agent"
+  local world_agent_bin="${REPO_ROOT}/target/${PROFILE}/world-service"
   local gateway_bin="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
   mkdir -p "$(dirname "${world_agent_bin}")"
 
@@ -452,7 +505,7 @@ assert_not_contains() {
 
 assert_socket_unit() {
   local fake_root="$1"
-  local unit="${fake_root}/etc/systemd/system/substrate-world-agent.socket"
+  local unit="${fake_root}/etc/systemd/system/substrate-world-service.socket"
   if [[ ! -f "${unit}" ]]; then
     fatal "socket unit missing at ${unit}"
   fi
@@ -522,11 +575,64 @@ assert_configured_eligible_proof() {
   fi
 }
 
+assert_world_deps_probe_verified() {
+  local provision_log="$1"
+  local probe_path="$2"
+  assert_contains "Verified named-user ACL bridge for substrate-smoke on runtime probe ${probe_path}." "${provision_log}" "world-deps verification should go green only on the real probe path"
+}
+
+assert_world_deps_probe_missing_warning() {
+  local provision_log="$1"
+  local probe_path="$2"
+  assert_contains "cannot yet verify the world-deps ACL bridge against runtime probe ${probe_path}" "${provision_log}" "missing probe path should not report a false-green bridge"
+  assert_contains "is not present yet" "${provision_log}" "missing probe path warning should explain the missing runtime entrypoint"
+}
+
+assert_world_deps_probe_unreachable_warning() {
+  local provision_log="$1"
+  local probe_path="$2"
+  assert_contains "current shell still cannot reach the world-scoped runtime probe ${probe_path}" "${provision_log}" "unreachable probe path should warn instead of going green"
+  assert_contains "may resolve deeper into world-deps package directories" "${provision_log}" "unreachable probe path warning should explain the deeper runtime surface"
+}
+
+prepare_world_deps_probe() {
+  local fake_root="$1"
+  local probe_mode="$2"
+  local world_deps_root="${fake_root}/var/lib/substrate/world-deps"
+  local world_deps_bin="${world_deps_root}/bin"
+  local package_bin="${world_deps_root}/packages/codex/bin"
+  local target="${package_bin}/codex"
+
+  mkdir -p "${world_deps_bin}"
+
+  case "${probe_mode}" in
+    missing)
+      return
+      ;;
+    accessible|denied)
+      mkdir -p "${package_bin}"
+      cat >"${target}" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+      chmod 0755 "${target}"
+      ln -sf ../packages/codex/bin/codex "${world_deps_bin}/codex"
+      if [[ "${probe_mode}" == "denied" ]]; then
+        chmod 000 "${target}"
+      fi
+      ;;
+    *)
+      fatal "unknown probe mode '${probe_mode}'"
+      ;;
+  esac
+}
+
 run_scenario() {
   local scenario_name="$1"
   local config_json="$2"
   local policy_json="$3"
   local assertion_mode="$4"
+  local probe_mode="$5"
 
   local scenario_root="${WORK_ROOT}/${scenario_name}"
   local fake_root="${scenario_root}/fakeroot"
@@ -537,6 +643,7 @@ run_scenario() {
   local linger_log="${logs_dir}/linger.log"
   local gateway_log="${logs_dir}/gateway.log"
   local provision_log="${logs_dir}/provision.log"
+  local usermod_state="${scenario_root}/usermod.state"
   local path_env="${STUB_BIN}:$PATH"
 
   mkdir -p "${fake_root}" "${logs_dir}" "${fake_home}"
@@ -546,21 +653,28 @@ run_scenario() {
   : > "${gateway_log}"
   : > "${provision_log}"
 
+  prepare_world_deps_probe "${fake_root}" "${probe_mode}"
+  local probe_path="${fake_root}/var/lib/substrate/world-deps/bin/codex"
+
   log "Running scenario '${scenario_name}'"
   if ! (
     cd "${REPO_ROOT}" && \
     env \
       PATH="${path_env}" \
       FAKE_ROOT="${fake_root}" \
+      SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR="${fake_root}/var/lib/substrate/world-deps/bin" \
       SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
       SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
       SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
       SUBSTRATE_TEST_GATEWAY_LOG="${gateway_log}" \
       SUBSTRATE_TEST_PRIMARY_USER="substrate-smoke" \
-      SUBSTRATE_TEST_USER_GROUPS="wheel docker" \
+      SUBSTRATE_TEST_ACTIVE_GROUPS="wheel docker" \
+      SUBSTRATE_TEST_ACCOUNT_GROUPS_BEFORE="wheel docker" \
+      SUBSTRATE_TEST_ACCOUNT_GROUPS_AFTER="wheel docker substrate" \
       SUBSTRATE_TEST_GROUP_EXISTS=0 \
       SUBSTRATE_TEST_LINGER_STATE="no" \
       SUBSTRATE_TEST_HOME="${fake_home}" \
+      SUBSTRATE_TEST_USERMOD_STATE="${usermod_state}" \
       SUBSTRATE_TEST_CONFIG_JSON="${config_json}" \
       SUBSTRATE_TEST_POLICY_JSON="${policy_json}" \
       scripts/linux/world-provision.sh --profile "${PROFILE}" --skip-build >"${provision_log}" 2>&1
@@ -579,9 +693,15 @@ run_scenario() {
   case "${assertion_mode}" in
     clean_skip)
       assert_clean_install_skip "${provision_log}" "${gateway_log}" "${fake_home}"
+      assert_world_deps_probe_missing_warning "${provision_log}" "${probe_path}"
       ;;
     eligible_run)
       assert_configured_eligible_proof "${provision_log}" "${gateway_log}" "${fake_home}"
+      assert_world_deps_probe_verified "${provision_log}" "${probe_path}"
+      ;;
+    eligible_run_probe_denied)
+      assert_configured_eligible_proof "${provision_log}" "${gateway_log}" "${fake_home}"
+      assert_world_deps_probe_unreachable_warning "${provision_log}" "${probe_path}"
       ;;
     *)
       fatal "unknown assertion mode '${assertion_mode}'"
@@ -596,13 +716,22 @@ run_scenario \
   "clean-install" \
   '{"world":{"enabled":true,"anchor_mode":"workspace","anchor_path":"","caged":true,"net":{"filter":false},"env":{"inherit_from_host":false},"deps":{"enabled":[],"inventory_mode":"merged","builtins":"enabled"}},"policy":{"mode":"observe"},"sync":{"auto_sync":false,"direction":"from_world","conflict_policy":"prefer_host","exclude":[".git/**",".substrate/**"]},"repl":{"exit_cwd":"entered","max_pty_buffered_lines":2048},"llm":{"enabled":false,"gateway":{"enabled":false,"mode":"in_world"},"routing":{"default_backend":""}},"agents":{"enabled":false,"defaults":{"execution":{"scope":"world"},"cli":{"mode":"persistent"}},"hub":{"orchestrator_agent_id":"","world_restart":{"on_drift":"auto_restart"}},"toolbox":{"enabled":false,"bind":{"transport":"uds"}}}}' \
   '{"id":"default","name":"Default Policy","world_fs":{"host_visible":true,"fail_closed":{"routing":false},"caged_required":false,"write":{"enabled":true}},"llm":{"fail_closed":{"routing":true},"require_approval":false,"allowed_backends":[],"secrets":{"env_allowed":[]}},"agents":{"allowed_backends":[],"fail_closed":{"routing":true},"host_credentials":{"read":{"allowed_backends":[]}}},"workflow":{"router":{"enabled":false,"allow_cross_workspace":false,"allowed_rule_ids":[],"allowed_workflow_ids":[],"allowed_target_workspace_ids":[]}},"net_allowed":[],"cmd_allowed":[],"cmd_denied":["rm -rf *","curl * | bash","wget * | bash"],"cmd_isolated":[],"require_approval":false,"allow_shell_operators":true,"limits":{"max_memory_mb":null,"max_cpu_percent":null,"max_runtime_ms":null,"max_egress_bytes":null},"metadata":{}}' \
-  "clean_skip"
+  "clean_skip" \
+  "missing"
 
 run_scenario \
   "configured-eligible" \
-  '{"world":{"enabled":true,"anchor_mode":"workspace","anchor_path":"","caged":true,"net":{"filter":false},"env":{"inherit_from_host":false},"deps":{"enabled":[],"inventory_mode":"merged","builtins":"enabled"}},"policy":{"mode":"observe"},"sync":{"auto_sync":false,"direction":"from_world","conflict_policy":"prefer_host","exclude":[".git/**",".substrate/**"]},"repl":{"exit_cwd":"entered","max_pty_buffered_lines":2048},"llm":{"enabled":true,"gateway":{"enabled":true,"mode":"in_world"},"routing":{"default_backend":"cli:codex"}},"agents":{"enabled":false,"defaults":{"execution":{"scope":"world"},"cli":{"mode":"persistent"}},"hub":{"orchestrator_agent_id":"","world_restart":{"on_drift":"auto_restart"}},"toolbox":{"enabled":false,"bind":{"transport":"uds"}}}}' \
-  '{"id":"default","name":"Default Policy","world_fs":{"host_visible":true,"fail_closed":{"routing":false},"caged_required":false,"write":{"enabled":true}},"llm":{"fail_closed":{"routing":true},"require_approval":false,"allowed_backends":["cli:codex"],"secrets":{"env_allowed":[]}},"agents":{"allowed_backends":[],"fail_closed":{"routing":true},"host_credentials":{"read":{"allowed_backends":["cli:codex"]}}},"workflow":{"router":{"enabled":false,"allow_cross_workspace":false,"allowed_rule_ids":[],"allowed_workflow_ids":[],"allowed_target_workspace_ids":[]}},"net_allowed":[],"cmd_allowed":[],"cmd_denied":["rm -rf *","curl * | bash","wget * | bash"],"cmd_isolated":[],"require_approval":false,"allow_shell_operators":true,"limits":{"max_memory_mb":null,"max_cpu_percent":null,"max_runtime_ms":null,"max_egress_bytes":null},"metadata":{}}' \
-  "eligible_run"
+  '{"world":{"enabled":true,"anchor_mode":"workspace","anchor_path":"","caged":true,"net":{"filter":false},"env":{"inherit_from_host":false},"deps":{"enabled":[],"inventory_mode":"merged","builtins":"enabled"}},"policy":{"mode":"observe"},"sync":{"auto_sync":false,"direction":"from_world","conflict_policy":"prefer_host","exclude":[".git/**",".substrate/**"]},"repl":{"exit_cwd":"entered","max_pty_buffered_lines":2048},"llm":{"enabled":true,"gateway":{"enabled":true,"mode":"in_world"},"routing":{"default_backend":"cli:codex-host"}},"agents":{"enabled":false,"defaults":{"execution":{"scope":"world"},"cli":{"mode":"persistent"}},"hub":{"orchestrator_agent_id":"","world_restart":{"on_drift":"auto_restart"}},"toolbox":{"enabled":false,"bind":{"transport":"uds"}}}}' \
+  '{"id":"default","name":"Default Policy","world_fs":{"host_visible":true,"fail_closed":{"routing":false},"caged_required":false,"write":{"enabled":true}},"llm":{"fail_closed":{"routing":true},"require_approval":false,"allowed_backends":["cli:codex-host"],"secrets":{"env_allowed":[]}},"agents":{"allowed_backends":[],"fail_closed":{"routing":true},"host_credentials":{"read":{"allowed_backends":["cli:codex-host"]}}},"workflow":{"router":{"enabled":false,"allow_cross_workspace":false,"allowed_rule_ids":[],"allowed_workflow_ids":[],"allowed_target_workspace_ids":[]}},"net_allowed":[],"cmd_allowed":[],"cmd_denied":["rm -rf *","curl * | bash","wget * | bash"],"cmd_isolated":[],"require_approval":false,"allow_shell_operators":true,"limits":{"max_memory_mb":null,"max_cpu_percent":null,"max_runtime_ms":null,"max_egress_bytes":null},"metadata":{}}' \
+  "eligible_run" \
+  "accessible"
+
+run_scenario \
+  "configured-eligible-probe-denied" \
+  '{"world":{"enabled":true,"anchor_mode":"workspace","anchor_path":"","caged":true,"net":{"filter":false},"env":{"inherit_from_host":false},"deps":{"enabled":[],"inventory_mode":"merged","builtins":"enabled"}},"policy":{"mode":"observe"},"sync":{"auto_sync":false,"direction":"from_world","conflict_policy":"prefer_host","exclude":[".git/**",".substrate/**"]},"repl":{"exit_cwd":"entered","max_pty_buffered_lines":2048},"llm":{"enabled":true,"gateway":{"enabled":true,"mode":"in_world"},"routing":{"default_backend":"cli:codex-host"}},"agents":{"enabled":false,"defaults":{"execution":{"scope":"world"},"cli":{"mode":"persistent"}},"hub":{"orchestrator_agent_id":"","world_restart":{"on_drift":"auto_restart"}},"toolbox":{"enabled":false,"bind":{"transport":"uds"}}}}' \
+  '{"id":"default","name":"Default Policy","world_fs":{"host_visible":true,"fail_closed":{"routing":false},"caged_required":false,"write":{"enabled":true}},"llm":{"fail_closed":{"routing":true},"require_approval":false,"allowed_backends":["cli:codex-host"],"secrets":{"env_allowed":[]}},"agents":{"allowed_backends":[],"fail_closed":{"routing":true},"host_credentials":{"read":{"allowed_backends":["cli:codex-host"]}}},"workflow":{"router":{"enabled":false,"allow_cross_workspace":false,"allowed_rule_ids":[],"allowed_workflow_ids":[],"allowed_target_workspace_ids":[]}},"net_allowed":[],"cmd_allowed":[],"cmd_denied":["rm -rf *","curl * | bash","wget * | bash"],"cmd_isolated":[],"require_approval":false,"allow_shell_operators":true,"limits":{"max_memory_mb":null,"max_cpu_percent":null,"max_runtime_ms":null,"max_egress_bytes":null},"metadata":{}}' \
+  "eligible_run_probe_denied" \
+  "denied"
 
 log "All checks passed."
 log "Artifacts: ${WORK_ROOT}"
