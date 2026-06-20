@@ -279,9 +279,10 @@ impl SessionWorld {
 
         let mut active_worlds = Vec::new();
         let mut replacing_worlds = Vec::new();
-        for entry in fs::read_dir(root_dir)
-            .with_context(|| format!("failed to read session root {}", root_dir.display()))?
-        {
+        let Some(entries) = read_session_root_dir(root_dir)? else {
+            return Ok(None);
+        };
+        for entry in entries {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(err) => {
@@ -373,9 +374,10 @@ impl SessionWorld {
     where
         F: FnMut(&Path) -> Result<Option<Self>>,
     {
-        for entry in fs::read_dir(root_dir)
-            .with_context(|| format!("failed to read session root {}", root_dir.display()))?
-        {
+        let Some(entries) = read_session_root_dir(root_dir)? else {
+            return Ok(None);
+        };
+        for entry in entries {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(err) => {
@@ -1165,6 +1167,27 @@ impl SessionWorld {
     }
 }
 
+fn read_session_root_dir(root_dir: &Path) -> Result<Option<fs::ReadDir>> {
+    match fs::read_dir(root_dir) {
+        Ok(entries) => Ok(Some(entries)),
+        Err(err)
+            if matches!(
+                err.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
+            ) =>
+        {
+            tracing::warn!(
+                error = %err,
+                root = %root_dir.display(),
+                "session root is unavailable for recovery lookup; treating as no reusable session"
+            );
+            Ok(None)
+        }
+        Err(err) => Err(err)
+            .with_context(|| format!("failed to read session root {}", root_dir.display())),
+    }
+}
+
 #[cfg(unix)]
 fn current_uid() -> u32 {
     unsafe { libc::geteuid() as u32 }
@@ -1477,6 +1500,38 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn recover_compatible_from_root_returns_none_when_root_unreadable() {
+        if nix::unistd::Uid::effective().is_root() {
+            eprintln!("skipping unreadable-root recovery test when running as root");
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir,
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+
+        let original_permissions = std::fs::metadata(&root_dir).unwrap().permissions();
+        std::fs::set_permissions(&root_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let recovered = SessionWorld::recover_compatible_from_root(&root_dir, &spec).unwrap();
+        std::fs::set_permissions(&root_dir, original_permissions).unwrap();
+
+        assert!(recovered.is_none());
+    }
+
+    #[test]
     fn shared_metadata_round_trips_for_recovery() {
         let temp = tempdir().unwrap();
         let root_dir = temp.path().join("world-root");
@@ -1538,6 +1593,45 @@ mod tests {
             })
         );
         assert_eq!(recovered.last_restart_reason, None);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn recover_shared_active_from_root_returns_none_when_root_unreadable() {
+        if nix::unistd::Uid::effective().is_root() {
+            eprintln!("skipping unreadable-root shared recovery test when running as root");
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir,
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+
+        let original_permissions = std::fs::metadata(&root_dir).unwrap().permissions();
+        std::fs::set_permissions(&root_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let recovered =
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec)
+                .unwrap();
+        std::fs::set_permissions(&root_dir, original_permissions).unwrap();
+
+        assert!(recovered.is_none());
     }
 
     #[test]
