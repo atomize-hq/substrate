@@ -2222,6 +2222,29 @@ mod gateway_runtime_binding_tests {
     }
 
     #[test]
+    fn request_preparation_accepts_realized_cli_codex_backend() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldService::new().expect("service");
+        let mut request = gateway_request(temp_dir.path());
+        request.env = Some(HashMap::from([(
+            "SUBSTRATE_LLM_DEFAULT_BACKEND".to_string(),
+            "cli:codex-host".to_string(),
+        )]));
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex-host".to_string(),
+            cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "header.payload.signature".to_string(),
+            }),
+            api_env: None,
+        });
+
+        service
+            .prepare_gateway_runtime_request(&request)
+            .expect("valid cli:codex-host payload should prepare");
+    }
+
+    #[test]
     fn non_isolated_binding_uses_synthetic_runtime_key() {
         let temp_dir = TempDir::new().unwrap();
         let service = WorldService::new().expect("service");

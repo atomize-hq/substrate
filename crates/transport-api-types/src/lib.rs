@@ -1349,7 +1349,7 @@ pub fn validate_gateway_integrated_auth_payload(
     }
 
     if let Some(cli_codex) = cli_codex {
-        if backend_id != "cli:codex" {
+        if !is_cli_codex_gateway_backend(backend_id) {
             return Err(format!(
                 "request-provided integrated auth payload for '{}' uses incompatible auth facet 'cli_codex'",
                 backend_id
@@ -1376,7 +1376,7 @@ pub fn validate_gateway_integrated_auth_payload(
     }
 
     if let Some(api_env) = api_env {
-        if !backend_id.starts_with("api:") && backend_id != "cli:claude_code" {
+        if !backend_id.starts_with("api:") && !is_cli_claude_code_gateway_backend(backend_id) {
             return Err(format!(
                 "request-provided integrated auth payload for '{}' uses incompatible auth facet 'api_env'",
                 backend_id
@@ -1416,6 +1416,20 @@ pub fn validate_gateway_integrated_auth_payload(
     }
 
     Ok(())
+}
+
+fn is_cli_codex_gateway_backend(backend_id: &str) -> bool {
+    matches!(
+        backend_id,
+        "cli:codex" | "cli:codex-host" | "cli:codex-world"
+    )
+}
+
+fn is_cli_claude_code_gateway_backend(backend_id: &str) -> bool {
+    matches!(
+        backend_id,
+        "cli:claude_code" | "cli:claude_code-host" | "cli:claude_code-world"
+    )
 }
 
 fn matches_backend_kind(value: &str) -> bool {
@@ -2206,6 +2220,22 @@ mod tests {
     }
 
     #[test]
+    fn gateway_integrated_auth_validation_accepts_realized_cli_codex_backends() {
+        for backend_id in ["cli:codex-host", "cli:codex-world"] {
+            GatewayIntegratedAuthPayloadV1 {
+                backend_id: backend_id.to_string(),
+                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                    account_id: Some("acct_test".to_string()),
+                    access_token: "header.payload.signature".to_string(),
+                }),
+                api_env: None,
+            }
+            .validate()
+            .unwrap_or_else(|err| panic!("valid {backend_id} cli_codex payload: {err}"));
+        }
+    }
+
+    #[test]
     fn gateway_integrated_auth_validation_accepts_valid_api_openai() {
         valid_api_openai_payload()
             .validate()
@@ -2223,6 +2253,24 @@ mod tests {
         }
         .validate()
         .expect("valid cli:claude_code api_env");
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_accepts_realized_cli_claude_code_backends() {
+        for backend_id in ["cli:claude_code-host", "cli:claude_code-world"] {
+            GatewayIntegratedAuthPayloadV1 {
+                backend_id: backend_id.to_string(),
+                cli_codex: None,
+                api_env: Some(GatewayApiEnvIntegratedAuthV1 {
+                    env: HashMap::from([(
+                        "ANTHROPIC_API_KEY".to_string(),
+                        "sk-ant-test".to_string(),
+                    )]),
+                }),
+            }
+            .validate()
+            .unwrap_or_else(|err| panic!("valid {backend_id} api_env payload: {err}"));
+        }
     }
 
     #[test]

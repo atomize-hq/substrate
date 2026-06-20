@@ -116,6 +116,24 @@ capture_substrate() {
   "${SUBSTRATE_BIN}" "$@"
 }
 
+run_gateway_status_pre_sync() {
+  set +e
+  run_substrate world gateway status
+  local status_rc=$?
+  set -e
+
+  if [[ ${status_rc} -eq 0 ]]; then
+    return 0
+  fi
+
+  if [[ ${status_rc} -eq 4 ]]; then
+    warn "Gateway status reported unavailable before the first sync; continuing because fresh installs may legitimately need 'substrate world gateway sync' before status becomes available."
+    return 0
+  fi
+
+  return "${status_rc}"
+}
+
 preflight_world_socket_access() {
   local host_doctor_json=""
   local host_doctor_status=0
@@ -196,7 +214,7 @@ run_substrate policy global set 'agents.world_dispatch.max_concurrent_ephemeral=
 
 log "Configured fresh install for Claude Code host-orchestrator plus world-dispatch smoke."
 preflight_world_socket_access
-run_substrate world gateway status
+run_gateway_status_pre_sync
 
 if [[ "${RUN_SYNC}" -eq 1 ]]; then
   run_substrate world gateway sync

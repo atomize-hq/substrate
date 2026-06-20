@@ -40,7 +40,11 @@ const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 const GATEWAY_BINARY_OVERRIDE_ENV: &str = "SUBSTRATE_GATEWAY_BINARY";
 const HEALTH_PATH: &str = "/health";
 const DEFAULT_BACKEND: &str = "cli:codex";
+const CLI_CODEX_HOST_BACKEND: &str = "cli:codex-host";
+const CLI_CODEX_WORLD_BACKEND: &str = "cli:codex-world";
 const CLI_CLAUDE_CODE_BACKEND: &str = "cli:claude_code";
+const CLI_CLAUDE_CODE_HOST_BACKEND: &str = "cli:claude_code-host";
+const CLI_CLAUDE_CODE_WORLD_BACKEND: &str = "cli:claude_code-world";
 const API_OPENAI_BACKEND: &str = "api:openai";
 const DEFAULT_ROUTED_MODEL: &str = "codex";
 const DEFAULT_ACTUAL_MODEL: &str = "codex-mini-latest";
@@ -159,6 +163,7 @@ enum GatewayProviderAuthConfig {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GatewayBackendBinding {
     pub(crate) backend_id: &'static str,
+    auth_bundle_backend_id: &'static str,
     pub(crate) routed_model: &'static str,
     pub(crate) actual_model: &'static str,
     pub(crate) provider_name: &'static str,
@@ -171,6 +176,7 @@ pub(crate) struct GatewayBackendBinding {
 
 const CLI_CODEX_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
     backend_id: DEFAULT_BACKEND,
+    auth_bundle_backend_id: DEFAULT_BACKEND,
     routed_model: DEFAULT_ROUTED_MODEL,
     actual_model: DEFAULT_ACTUAL_MODEL,
     provider_name: DEFAULT_PROVIDER_NAME,
@@ -196,8 +202,19 @@ const CLI_CODEX_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
     auth_kind: GatewayIntegratedAuthKind::CliCodex,
 };
 
+const CLI_CODEX_HOST_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: CLI_CODEX_HOST_BACKEND,
+    ..CLI_CODEX_BACKEND_BINDING
+};
+
+const CLI_CODEX_WORLD_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: CLI_CODEX_WORLD_BACKEND,
+    ..CLI_CODEX_BACKEND_BINDING
+};
+
 const API_OPENAI_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
     backend_id: API_OPENAI_BACKEND,
+    auth_bundle_backend_id: API_OPENAI_BACKEND,
     routed_model: OPENAI_ROUTED_MODEL,
     actual_model: OPENAI_ACTUAL_MODEL,
     provider_name: OPENAI_PROVIDER_NAME,
@@ -213,6 +230,7 @@ const API_OPENAI_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding 
 
 const CLI_CLAUDE_CODE_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
     backend_id: CLI_CLAUDE_CODE_BACKEND,
+    auth_bundle_backend_id: CLI_CLAUDE_CODE_BACKEND,
     routed_model: CLAUDE_ROUTED_MODEL,
     actual_model: CLAUDE_ACTUAL_MODEL,
     provider_name: CLAUDE_PROVIDER_NAME,
@@ -226,9 +244,23 @@ const CLI_CLAUDE_CODE_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBin
     auth_kind: GatewayIntegratedAuthKind::ApiEnv,
 };
 
+const CLI_CLAUDE_CODE_HOST_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: CLI_CLAUDE_CODE_HOST_BACKEND,
+    ..CLI_CLAUDE_CODE_BACKEND_BINDING
+};
+
+const CLI_CLAUDE_CODE_WORLD_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: CLI_CLAUDE_CODE_WORLD_BACKEND,
+    ..CLI_CLAUDE_CODE_BACKEND_BINDING
+};
+
 const GATEWAY_BACKEND_BINDINGS: &[GatewayBackendBinding] = &[
     CLI_CODEX_BACKEND_BINDING,
+    CLI_CODEX_HOST_BACKEND_BINDING,
+    CLI_CODEX_WORLD_BACKEND_BINDING,
     CLI_CLAUDE_CODE_BACKEND_BINDING,
+    CLI_CLAUDE_CODE_HOST_BACKEND_BINDING,
+    CLI_CLAUDE_CODE_WORLD_BACKEND_BINDING,
     API_OPENAI_BACKEND_BINDING,
 ];
 
@@ -1306,7 +1338,7 @@ fn resolve_api_env_auth_handoff(
     Ok(ResolvedGatewayAuthHandoff {
         bundle: GatewayAuthBundleV1 {
             schema_version: GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION,
-            backend_id: binding.backend_id.to_string(),
+            backend_id: binding.auth_bundle_backend_id.to_string(),
             fields: HashMap::from([(bundle_field.to_string(), value)]),
         },
     })
@@ -1559,6 +1591,7 @@ mod tests {
     static ENV_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
     const MISSING_CAPABILITY_BINDING: GatewayBackendBinding = GatewayBackendBinding {
         backend_id: "test:missing-capability",
+        auth_bundle_backend_id: DEFAULT_BACKEND,
         routed_model: "broken",
         actual_model: "broken",
         provider_name: "broken-provider",
@@ -1646,25 +1679,39 @@ mod tests {
         binding: &GatewayBackendBinding,
     ) -> Option<GatewayIntegratedAuthPayloadV1> {
         match binding.backend_id {
-            DEFAULT_BACKEND => Some(GatewayIntegratedAuthPayloadV1 {
-                backend_id: binding.backend_id.to_string(),
-                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
-                    account_id: Some("acct_test".to_string()),
-                    access_token: "header.payload.signature".to_string(),
-                }),
-                api_env: None,
-            }),
-            CLI_CLAUDE_CODE_BACKEND => Some(anthropic_integrated_auth_payload("sk-ant-proof")),
+            DEFAULT_BACKEND | CLI_CODEX_HOST_BACKEND | CLI_CODEX_WORLD_BACKEND => {
+                Some(GatewayIntegratedAuthPayloadV1 {
+                    backend_id: binding.backend_id.to_string(),
+                    cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                        account_id: Some("acct_test".to_string()),
+                        access_token: "header.payload.signature".to_string(),
+                    }),
+                    api_env: None,
+                })
+            }
+            CLI_CLAUDE_CODE_BACKEND
+            | CLI_CLAUDE_CODE_HOST_BACKEND
+            | CLI_CLAUDE_CODE_WORLD_BACKEND => Some(anthropic_integrated_auth_payload_for_backend(
+                binding.backend_id,
+                "sk-ant-proof",
+            )),
             API_OPENAI_BACKEND => Some(openai_integrated_auth_payload("sk-openai-test")),
             _ => None,
         }
     }
 
     fn anthropic_integrated_auth_payload(api_key: &str) -> GatewayIntegratedAuthPayloadV1 {
+        anthropic_integrated_auth_payload_for_backend(CLI_CLAUDE_CODE_BACKEND, api_key)
+    }
+
+    fn anthropic_integrated_auth_payload_for_backend(
+        backend_id: &str,
+        api_key: &str,
+    ) -> GatewayIntegratedAuthPayloadV1 {
         let mut env = HashMap::new();
         env.insert(ANTHROPIC_API_KEY_ENV.to_string(), api_key.to_string());
         GatewayIntegratedAuthPayloadV1 {
-            backend_id: CLI_CLAUDE_CODE_BACKEND.to_string(),
+            backend_id: backend_id.to_string(),
             cli_codex: None,
             api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
         }
@@ -2110,6 +2157,28 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
     }
 
     #[test]
+    fn binding_lookup_includes_realized_codex_targets() {
+        for backend_id in [CLI_CODEX_HOST_BACKEND, CLI_CODEX_WORLD_BACKEND] {
+            let binding = resolve_gateway_backend_binding(backend_id)
+                .unwrap_or_else(|| panic!("missing binding for {backend_id}"));
+            assert_eq!(binding.backend_id, backend_id);
+            assert_eq!(binding.auth_bundle_backend_id, DEFAULT_BACKEND);
+            assert_eq!(binding.provider_name, DEFAULT_PROVIDER_NAME);
+        }
+    }
+
+    #[test]
+    fn binding_lookup_includes_realized_claude_code_targets() {
+        for backend_id in [CLI_CLAUDE_CODE_HOST_BACKEND, CLI_CLAUDE_CODE_WORLD_BACKEND] {
+            let binding = resolve_gateway_backend_binding(backend_id)
+                .unwrap_or_else(|| panic!("missing binding for {backend_id}"));
+            assert_eq!(binding.backend_id, backend_id);
+            assert_eq!(binding.auth_bundle_backend_id, CLI_CLAUDE_CODE_BACKEND);
+            assert_eq!(binding.provider_name, CLAUDE_PROVIDER_NAME);
+        }
+    }
+
+    #[test]
     fn binding_lookup_returns_none_for_unbound_backend() {
         assert!(resolve_gateway_backend_binding("api:anthropic").is_none());
     }
@@ -2167,6 +2236,29 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         )
         .expect("claude auth handoff");
 
+        assert_eq!(
+            auth.bundle.fields,
+            HashMap::from([(
+                SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY.to_string(),
+                "sk-ant-proof".to_string(),
+            )])
+        );
+    }
+
+    #[test]
+    fn realized_claude_auth_handoff_uses_canonical_bundle_backend() {
+        let binding = resolve_gateway_backend_binding(CLI_CLAUDE_CODE_HOST_BACKEND)
+            .expect("realized claude binding");
+        let auth = resolve_integrated_auth_handoff(
+            binding,
+            Some(anthropic_integrated_auth_payload_for_backend(
+                CLI_CLAUDE_CODE_HOST_BACKEND,
+                "sk-ant-proof",
+            )),
+        )
+        .expect("realized claude auth handoff");
+
+        assert_eq!(auth.bundle.backend_id, CLI_CLAUDE_CODE_BACKEND);
         assert_eq!(
             auth.bundle.fields,
             HashMap::from([(
