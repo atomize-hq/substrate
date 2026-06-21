@@ -829,13 +829,19 @@ fn assert_plain_human_prompt_streams_before_summary(
     action: &str,
     expected_streamed_text: &str,
 ) {
+    enum PlainHumanPromptObservation {
+        StdoutLine(String),
+        StdoutClosed,
+        StdoutReadError(String),
+        ChildExited(std::process::ExitStatus),
+    }
+
     let mut child = fixture.spawn(args);
     let stdout = child.stdout.take().expect("stdout pipe");
-    let observed_streamed_text = Arc::new(AtomicBool::new(false));
-    let observed_streamed_text_reader = Arc::clone(&observed_streamed_text);
-    let expected_streamed_text_owned = expected_streamed_text.to_string();
-    let (line_tx, line_rx) = mpsc::channel();
-    let reader = thread::spawn(move || {
+    let stderr = child.stderr.take().expect("stderr pipe");
+    let (observation_tx, observation_rx) = mpsc::channel();
+    let stdout_tx = observation_tx.clone();
+    let stdout_reader = thread::spawn(move || {
         let mut reader = std::io::BufReader::new(stdout);
         let mut line = String::new();
 
@@ -843,7 +849,7 @@ fn assert_plain_human_prompt_streams_before_summary(
             line.clear();
             match reader.read_line(&mut line) {
                 Ok(0) => {
-                    let _ = line_tx.send(Ok(None));
+                    let _ = stdout_tx.send(PlainHumanPromptObservation::StdoutClosed);
                     break;
                 }
                 Ok(_) => {
@@ -851,27 +857,43 @@ fn assert_plain_human_prompt_streams_before_summary(
                     if trimmed.is_empty() {
                         continue;
                     }
-                    if trimmed.contains(&expected_streamed_text_owned) {
-                        observed_streamed_text_reader.store(true, Ordering::SeqCst);
-                    }
-                    if line_tx.send(Ok(Some(trimmed.to_string()))).is_err() {
+                    if stdout_tx
+                        .send(PlainHumanPromptObservation::StdoutLine(trimmed.to_string()))
+                        .is_err()
+                    {
                         break;
                     }
                 }
                 Err(err) => {
-                    let _ = line_tx.send(Err(err.to_string()));
+                    let _ = stdout_tx.send(PlainHumanPromptObservation::StdoutReadError(
+                        err.to_string(),
+                    ));
                     break;
                 }
             }
         }
     });
+    let stderr_reader = thread::spawn(move || {
+        let mut stderr = stderr;
+        let mut buffer = String::new();
+        std::io::Read::read_to_string(&mut stderr, &mut buffer).expect("read stderr");
+        buffer
+    });
+    let exit_tx = observation_tx.clone();
+    let exit_observer = thread::spawn(move || {
+        let status = child.wait().expect("wait for plain-human prompt child");
+        let _ = exit_tx.send(PlainHumanPromptObservation::ChildExited(status));
+    });
+    drop(observation_tx);
     let mut lines = Vec::new();
     let mut saw_streamed_text = false;
+    let mut saw_stdout_close = false;
+    let mut exit_status = None;
     let summary_prefix = format!("action={action} ");
 
-    loop {
-        match line_rx.recv_timeout(Duration::from_millis(25)) {
-            Ok(Ok(Some(line))) => {
+    while !saw_stdout_close || exit_status.is_none() {
+        match observation_rx.recv_timeout(Duration::from_millis(25)) {
+            Ok(PlainHumanPromptObservation::StdoutLine(line)) => {
                 if !saw_streamed_text && line.starts_with(&summary_prefix) {
                     lines.push(line);
                     panic!(
@@ -885,29 +907,28 @@ fn assert_plain_human_prompt_streams_before_summary(
 
                 lines.push(line);
             }
-            Ok(Ok(None)) => break,
-            Ok(Err(err)) => panic!("read stdout line: {err}"),
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                if !observed_streamed_text.load(Ordering::SeqCst) {
-                    if let Some(status) = child.try_wait().expect("poll plain-human prompt child") {
-                        panic!(
-                            "plain-human output must stream `{expected_streamed_text}` before command completion: status={status:?} stdout={lines:?}"
-                        );
-                    }
-                }
+            Ok(PlainHumanPromptObservation::StdoutClosed) => {
+                saw_stdout_close = true;
             }
+            Ok(PlainHumanPromptObservation::StdoutReadError(err)) => {
+                panic!("read stdout line: {err}")
+            }
+            Ok(PlainHumanPromptObservation::ChildExited(status)) => {
+                if !saw_streamed_text {
+                    panic!(
+                        "plain-human output must stream `{expected_streamed_text}` before command completion: status={status:?} stdout={lines:?}"
+                    );
+                }
+                exit_status = Some(status);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
-    reader.join().expect("join stdout reader thread");
-
-    let status = child.wait().expect("wait for plain-human prompt child");
-    let stderr = {
-        let mut stderr = String::new();
-        let mut handle = child.stderr.take().expect("stderr pipe");
-        std::io::Read::read_to_string(&mut handle, &mut stderr).expect("read stderr");
-        stderr
-    };
+    stdout_reader.join().expect("join stdout reader thread");
+    exit_observer.join().expect("join exit observer thread");
+    let status = exit_status.expect("child exit status");
+    let stderr = stderr_reader.join().expect("join stderr reader thread");
 
     assert!(
         status.success(),

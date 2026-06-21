@@ -3439,6 +3439,10 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
             })
     }
 
+    fn escape_nested_prompt_event_text(text: &str) -> String {
+        text.replace('\r', "\\r").replace('\n', "\\n")
+    }
+
     if let Some(text) = direct_prompt_event_text(data) {
         return text;
     }
@@ -3451,7 +3455,7 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
         .and_then(serde_json::Value::as_str)
         .filter(|agent| !agent.trim().is_empty())
         .unwrap_or("agent");
-    format!("[{agent}] {text}\n")
+    format!("[{agent}] {}\n", escape_nested_prompt_event_text(&text))
 }
 
 #[cfg(test)]
@@ -3686,6 +3690,18 @@ mod tests {
         }));
 
         assert_eq!(text, "[codex] startup prompt success\n");
+    }
+
+    #[test]
+    fn prompt_event_text_escapes_nested_structured_agent_messages() {
+        let text = prompt_event_text(&serde_json::json!({
+            "agent_id": "codex",
+            "data": {
+                "message": "startup\nprompt\rsuccess"
+            }
+        }));
+
+        assert_eq!(text, "[codex] startup\\nprompt\\rsuccess\n");
     }
 
     #[test]
