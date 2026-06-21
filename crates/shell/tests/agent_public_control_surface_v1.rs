@@ -822,48 +822,91 @@ fn stderr_text(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
-fn stdout_text(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
 fn assert_plain_human_prompt_streams_before_summary(
-    stdout: &str,
+    fixture: &AgentControlFixture,
+    args: &[&str],
     action: &str,
     expected_streamed_text: &str,
 ) {
-    let lines = stdout
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
+    let mut child = fixture.spawn(args);
+    let stdout = child.stdout.take().expect("stdout pipe");
+    let mut reader = std::io::BufReader::new(stdout);
+    let mut line = String::new();
+    let mut lines = Vec::new();
+    let mut saw_streamed_text_while_running = false;
+    let summary_prefix = format!("action={action} ");
+
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line).expect("read stdout line");
+        if bytes_read == 0 {
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if !saw_streamed_text_while_running && trimmed.contains(expected_streamed_text) {
+            assert!(
+                child
+                    .try_wait()
+                    .expect("poll plain-human prompt child")
+                    .is_none(),
+                "plain-human streamed text must arrive before command completion: {:?}",
+                lines
+            );
+            saw_streamed_text_while_running = true;
+        }
+
+        lines.push(trimmed.to_string());
+    }
+
+    let status = child.wait().expect("wait for plain-human prompt child");
+    let stderr = {
+        let mut stderr = String::new();
+        let mut handle = child.stderr.take().expect("stderr pipe");
+        std::io::Read::read_to_string(&mut handle, &mut stderr).expect("read stderr");
+        stderr
+    };
+
+    assert!(
+        status.success(),
+        "plain-human public {action} should succeed: stdout={lines:?}\nstderr={stderr}"
+    );
+    assert!(
+        saw_streamed_text_while_running,
+        "plain-human output must stream `{expected_streamed_text}` before command completion: {lines:?}"
+    );
+
     let streamed_index = lines
         .iter()
         .position(|line| line.contains(expected_streamed_text))
         .unwrap_or_else(|| {
             panic!(
-                "plain-human output must surface streamed text `{expected_streamed_text}`: {stdout:?}"
+                "plain-human output must surface streamed text `{expected_streamed_text}`: {lines:?}"
             )
         });
-    let summary_prefix = format!("action={action} ");
     let summary_index = lines
         .iter()
         .position(|line| line.starts_with(&summary_prefix))
         .unwrap_or_else(|| {
-            panic!("plain-human output must surface {summary_prefix:?}: {stdout:?}")
+            panic!("plain-human output must surface {summary_prefix:?}: {lines:?}")
         });
 
     assert!(
         streamed_index < summary_index,
-        "plain-human output must stream visible lines before the completion summary: {stdout:?}"
+        "plain-human output must stream visible lines before the completion summary: {lines:?}"
     );
     assert_eq!(
         summary_index,
         lines.len() - 1,
-        "plain-human completion summary must remain terminal: {stdout:?}"
+        "plain-human completion summary must remain terminal: {lines:?}"
     );
     assert!(
         lines[summary_index].contains("turn_outcome=success"),
-        "plain-human completion summary must keep the success outcome: {stdout:?}"
+        "plain-human completion summary must keep the success outcome: {lines:?}"
     );
 }
 
@@ -2032,21 +2075,19 @@ fn public_start_plain_human_streams_events_before_completion_summary() {
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
 
-    let output = fixture.run(&[
-        "agent",
+    assert_plain_human_prompt_streams_before_summary(
+        &fixture,
+        &[
+            "agent",
+            "start",
+            "--backend",
+            "cli:codex-host",
+            "--prompt",
+            "hello from start",
+        ],
         "start",
-        "--backend",
-        "cli:codex-host",
-        "--prompt",
-        "hello from start",
-    ]);
-    assert!(
-        output.status.success(),
-        "plain-human public start should succeed: {output:?}"
+        "startup prompt success",
     );
-
-    let stdout = stdout_text(&output);
-    assert_plain_human_prompt_streams_before_summary(&stdout, "start", "startup prompt success");
 }
 
 #[test]
@@ -2399,24 +2440,18 @@ fn public_turn_plain_human_streams_events_before_completion_summary() {
         .expect("start session id")
         .to_string();
 
-    let turn_output = fixture.run(&[
-        "agent",
-        "turn",
-        "--session",
-        &orchestration_session_id,
-        "--backend",
-        "cli:codex-host",
-        "--prompt",
-        "hello from turn",
-    ]);
-    assert!(
-        turn_output.status.success(),
-        "plain-human public turn should succeed: {turn_output:?}"
-    );
-
-    let stdout = stdout_text(&turn_output);
     assert_plain_human_prompt_streams_before_summary(
-        &stdout,
+        &fixture,
+        &[
+            "agent",
+            "turn",
+            "--session",
+            &orchestration_session_id,
+            "--backend",
+            "cli:codex-host",
+            "--prompt",
+            "hello from turn",
+        ],
         "turn",
         "follow-up prompt success",
     );
