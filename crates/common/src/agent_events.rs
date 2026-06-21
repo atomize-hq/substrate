@@ -8,8 +8,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 
 use crate::identity::{
-    validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementExecution,
-    PlacementPosture,
+    normalize_identity_tuple_client_id, validate_identity_tuple_and_placement_posture,
+    IdentityTuple, PlacementExecution, PlacementPosture,
 };
 
 pub const AGENT_EVENT_CHANNEL_MAX_BYTES: usize = 64;
@@ -298,8 +298,10 @@ impl AgentEvent {
 
     pub fn set_pure_agent_telemetry_identity(&mut self, client: impl Into<String>) {
         if self.identity_tuple.is_none() {
+            let client = client.into();
             self.identity_tuple = Some(IdentityTuple {
-                client: client.into(),
+                client: normalize_identity_tuple_client_id(&client)
+                    .unwrap_or_else(|| "human".to_string()),
                 router: PURE_AGENT_ROUTER.to_string(),
                 protocol: PURE_AGENT_PROTOCOL.to_string(),
                 provider: None,

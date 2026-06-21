@@ -17,6 +17,7 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
+use substrate_common::identity::normalize_identity_tuple_client_id;
 use transport_api_client::AgentClient;
 use transport_api_types::{
     GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1,
@@ -500,29 +501,7 @@ fn derive_gateway_placement_posture(
 }
 
 fn resolve_originating_client(agent_id: &str) -> String {
-    let trimmed = agent_id.trim();
-    if trimmed.is_empty() {
-        return "human".to_string();
-    }
-
-    let normalized = trimmed.to_ascii_lowercase().replace('-', "_");
-    let valid = normalized
-        .bytes()
-        .enumerate()
-        .all(|(idx, byte)| match byte {
-            b'a'..=b'z' => true,
-            b'0'..=b'9' => idx > 0,
-            b'_' => idx > 0,
-            _ => false,
-        })
-        && !normalized.ends_with('_')
-        && !normalized.contains("__");
-
-    if valid {
-        normalized
-    } else {
-        "human".to_string()
-    }
+    normalize_identity_tuple_client_id(agent_id).unwrap_or_else(|| "human".to_string())
 }
 
 fn enforce_identity_constraint(

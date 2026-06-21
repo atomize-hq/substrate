@@ -470,6 +470,61 @@ fn tuple_ids_reject_backend_grammar_uppercase_and_placeholder_tokens() {
 }
 
 #[test]
+fn pure_agent_telemetry_identity_normalizes_runtime_client_ids_for_roundtrip() {
+    let mut event = AgentEvent::message(
+        "demo-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        MessageEventKind::Status,
+        "ok",
+    );
+    event.set_pure_agent_telemetry_identity("codex-host");
+
+    let serialized = serde_json::to_value(&event).expect("serialize AgentEvent");
+    let roundtrip: AgentEvent =
+        serde_json::from_value(serialized.clone()).expect("deserialize AgentEvent");
+
+    assert_eq!(
+        serialized.pointer("/identity_tuple/client"),
+        Some(&json!("codex_host")),
+        "runtime-originated telemetry should normalize tuple client ids before publication: {serialized}"
+    );
+    assert_eq!(
+        roundtrip
+            .identity_tuple
+            .as_ref()
+            .map(|tuple| tuple.client.as_str()),
+        Some("codex_host")
+    );
+}
+
+#[test]
+fn raw_kebab_case_tuple_client_payload_is_still_rejected() {
+    let invalid = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "status",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "data": { "message": "ok" },
+        "identity_tuple": {
+            "client": "codex-host",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "host_only"
+        }
+    });
+
+    let result: Result<AgentEvent, _> = serde_json::from_value(invalid);
+    assert!(
+        result.is_err(),
+        "expected raw payload validation to keep rejecting kebab-case tuple clients"
+    );
+}
+
+#[test]
 fn direct_provider_path_requires_host_only_without_bridge_transport() {
     let invalid = json!({
         "ts": "2026-04-05T00:00:00Z",

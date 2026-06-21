@@ -1826,6 +1826,39 @@ fn world_gateway_status_prefers_allowed_env_auth_over_host_auth_file() {
 }
 
 #[test]
+fn world_gateway_status_normalizes_originating_client_with_shared_helper() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut socket = RecordedGatewayRequestSocket::start(json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        }
+    }));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env("SUBSTRATE_AGENT_ID", "codex-host")
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"status\":\"available\""));
+
+    let request = socket.recorded_request();
+    assert_eq!(
+        request.pointer("/identity_tuple/client"),
+        Some(&json!("codex_host"))
+    );
+}
+
+#[test]
 fn world_gateway_lifecycle_requests_preserve_selected_backend_without_codex_fallback() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());

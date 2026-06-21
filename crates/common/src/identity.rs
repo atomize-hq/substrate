@@ -142,6 +142,20 @@ pub fn validate_identity_tuple_and_placement_posture(
     Ok(())
 }
 
+pub fn normalize_identity_tuple_client_id(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let normalized = trimmed.to_ascii_lowercase().replace('-', "_");
+    if snake_case_id_pattern().is_match(&normalized) {
+        Some(normalized)
+    } else {
+        None
+    }
+}
+
 fn validate_required_snake_case_id(field: &str, value: &str) -> Result<(), String> {
     if value.is_empty() {
         return Err(format!("identity_tuple.{field} must not be empty"));
