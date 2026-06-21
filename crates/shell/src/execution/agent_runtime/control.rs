@@ -3400,7 +3400,17 @@ impl PublicPromptRenderer {
                 if event_kind == "stderr" {
                     let stderr = io::stderr();
                     let mut lock = stderr.lock();
-                    let _ = lock.write_all(prompt_event_text(data).as_bytes());
+                    if let Ok(event) = serde_json::from_value::<AgentEvent>(data.clone()) {
+                        let _ = writeln!(lock, "{}", format_event_line(&event));
+                    } else {
+                        let fallback = prompt_event_text(data);
+                        let fallback = if fallback.is_empty() {
+                            structured_prompt_event_fallback_text(data).unwrap_or(fallback)
+                        } else {
+                            fallback
+                        };
+                        let _ = lock.write_all(fallback.as_bytes());
+                    }
                     let _ = lock.flush();
                 } else if let Ok(event) = serde_json::from_value::<AgentEvent>(data.clone()) {
                     let stdout = io::stdout();
@@ -3913,6 +3923,59 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn capture_stderr_once(test: impl FnOnce()) -> String {
+        assert_eq!(
+            std::io::stderr().flush().map(|_| 0).unwrap_or(-1),
+            0,
+            "flush stderr before capture"
+        );
+
+        let mut pipe_fds = [0; 2];
+        assert_eq!(
+            unsafe { libc::pipe(pipe_fds.as_mut_ptr()) },
+            0,
+            "create stderr capture pipe"
+        );
+        let read_fd = pipe_fds[0];
+        let write_fd = pipe_fds[1];
+        let saved_stderr = unsafe { libc::dup(libc::STDERR_FILENO) };
+        assert!(saved_stderr >= 0, "dup stderr");
+        assert_eq!(
+            unsafe { libc::dup2(write_fd, libc::STDERR_FILENO) },
+            libc::STDERR_FILENO,
+            "redirect stderr to capture pipe"
+        );
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
+
+        assert_eq!(
+            std::io::stderr().flush().map(|_| 0).unwrap_or(-1),
+            0,
+            "flush stderr after capture"
+        );
+        assert_eq!(
+            unsafe { libc::dup2(saved_stderr, libc::STDERR_FILENO) },
+            libc::STDERR_FILENO,
+            "restore stderr after capture"
+        );
+        unsafe {
+            libc::close(saved_stderr);
+            libc::close(write_fd);
+        }
+
+        let mut output = String::new();
+        unsafe { File::from_raw_fd(read_fd) }
+            .read_to_string(&mut output)
+            .expect("read captured stderr");
+
+        if let Err(payload) = result {
+            std::panic::resume_unwind(payload);
+        }
+
+        output
+    }
+
+    #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails() {
@@ -3938,6 +4001,44 @@ mod tests {
             renderer
                 .render(&envelope)
                 .expect("render structured fallback");
+        });
+
+        assert_eq!(
+            output,
+            "[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
+        );
+        assert!(
+            !output.contains('{') && !output.contains("queued"),
+            "fallback must stay bounded and avoid dumping raw nested payloads: {output}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn public_prompt_renderer_renders_bounded_structured_stderr_fallback_when_decode_fails() {
+        let envelope = PublicPromptEnvelope::Event {
+            version: 1,
+            event_kind: "stderr".to_string(),
+            data: serde_json::json!({
+                "agent_id": "codex",
+                "kind": "task_progress",
+                "data": {
+                    "alpha": "one",
+                    "beta": "two",
+                    "gamma": "three",
+                    "delta": {
+                        "status": "queued"
+                    }
+                }
+            }),
+        };
+
+        let output = capture_stderr_once(|| {
+            let mut renderer = PublicPromptRenderer::new(false);
+            renderer
+                .render(&envelope)
+                .expect("render structured stderr fallback");
         });
 
         assert_eq!(
