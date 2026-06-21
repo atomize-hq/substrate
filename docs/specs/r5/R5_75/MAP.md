@@ -375,11 +375,14 @@ Expected smoke outcome:
 
 ### Remaining Bug Ledger (Structured Objective)
 
-This is the **single canonical list** of structured-objective bugs for `R5.75-1`. It supersedes the
-former root `STRUCTURED_OBJECTIVE_BUG_MAP.md` (now retired to a pointer). Numbering is unified on
-`Issue 1`–`Issue 8`; the older `#3`–`#7` labels used elsewhere in this map are legacy aliases mapped
-in the table. Statuses are current as of the 2026-06-20 gate re-run. **Promotion is gated on every
-`blocker` row clearing.**
+This is the **single canonical status set** of structured-objective bugs for `R5.75-1`: their
+classification (blocker / follow-on / landed) and the promotion gate. The full root-cause detail
+(per-issue code paths, evidence, research order) lives in
+`docs/specs/r5/R5_75/structured-objective-bug-map.md`; this table is the authority for *status*,
+that file is the reference for *diagnosis*. Numbering is unified
+on `Issue 1`–`Issue 8`; the older `#3`–`#7` labels used elsewhere in this map are legacy aliases
+mapped in the table. Statuses are current as of the 2026-06-20 gate re-run. **Promotion is gated on
+every `blocker` row clearing.**
 
 | Issue | Bug (one line) | Legacy alias | Primary code path | Status |
 |-------|----------------|--------------|-------------------|--------|
