@@ -20,7 +20,7 @@ Scope: this is a diagnosis map, not a fix plan. It is intended to support follow
 > | 4 — intent misclassification | Landed (`SO-2.3D`) — now unconditional (1/2/3 landed) |
 > | 5 — target prefers broad repo/dir paths | OPEN — non-blocking follow-on |
 > | 6 — success/deliverable over-upgrade | Landed (`SO-2.3D`) — now unconditional (1/2/3 landed) |
-> | 7 — legacy narrowing overwrite + downstream migration | Deferred follow-on — now ungated (1/2/3 landed) |
+> | 7 — legacy narrowing overwrite + downstream migration | Scheduled as bounded packet `R5.75-6` (gated before `R6`); deeper consumer migration a later phase |
 > | 8 — acceptance corpus blind spots | **Landed** (`orchestration-evaluate-ask-anchor` + `checkpoints.rs` regression) |
 >
 > The 2026-06-20 gate first **held** `R5.75-1` promotion (`019eb47f` anchored its goal to boilerplate:

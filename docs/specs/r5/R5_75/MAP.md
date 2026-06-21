@@ -19,6 +19,13 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 - `R5.75-1` is landed history as of 2026-06-20 (routed through
   `docs/specs/r5/R5_75/phase-1/SO/`). The current active seam is `R5.75-2` (sparse readable session
   fail-open, `crates/agent-drift-analyzer/src/input.rs`).
+- **Family tail update (2026-06-21):** because `R5.75-1` expanded into the full additive
+  structured-objective stack, the deferred Issue 7 follow-on was scoped into a bounded final packet
+  `R5.75-6` (make the effective checkpoint objective faithful to the structured goal anchor) and gated
+  before `R6`. The downstream packets `R5.75-2`…`R5.75-5` carry guardrail notes so they stay on the
+  legacy objective/comparability surface (the structured sidecar is observational; `comparison_key`
+  has no live consumer yet) and do not duplicate the objective coverage `R5.75-1` already committed.
+  The deeper full structured-native consumer migration remains a later phase.
 - **Promotion PROMOTED (2026-06-20):** the named promotion smoke first surfaced a structured-objective
   failure on a condensation gate session (`019eb47f`): the structured `Goal` spans anchored to
   boilerplate (system-instruction rows + the pasted `$code-review-and-quality` skill body), yielding
@@ -64,7 +71,9 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
   unknown, zero boilerplate `Goal` spans), and the adapted `05a56cc5…` anchors to the concrete
   `add this skill to @shared-cab-app` steer (grounded `repo_slice` target) instead of the pasted skill
   template. Issue 8 locked the fix into the corpus. Issue 5 (prose/broad target precedence) remains a
-  non-blocking follow-on; Issue 7 (downstream migration) is now unblocked but deferred.
+  non-blocking follow-on; Issue 7 (downstream migration) is now unblocked and scoped into the bounded
+  final packet `R5.75-6` (narrowing must stay faithful to the structured goal anchor), gated before
+  `R6` — the deeper full structured-native consumer migration stays a later phase.
 
 ## Required Fixes Adopted Into R5.75
 
@@ -76,6 +85,7 @@ This map includes only the fixes that were explicitly adopted as required for pr
 4. `R5.75-3` — delegated parent-visible stabilization
 5. `R5.75-4` — zero-verifier anti-flap gating for long exploratory sessions
 6. `R5.75-5` — adapted external robustness fixture family
+7. `R5.75-6` — make the effective checkpoint objective faithful to the structured goal anchor (bounded Issue 7 slice; gated before `R6`)
 
 Not adopted into this required set by default:
 
@@ -398,7 +408,7 @@ every `blocker` row clearing.**
 | 4 | Intent substring-driven (review→implement on the noun "implementation") | `#4` | `context/objective.rs::intent_for_text` | **Landed (SO-2.3D)** — now unconditional (1/2/3 landed) |
 | 5 | Target prefers broad repo/dir paths over packet/doc anchors | `#5` | `context/objective.rs::explicit_target_*` | OPEN — non-blocking follow-on |
 | 6 | `success_conditions`/`deliverables` over-upgrade weak/boilerplate evidence | `#6` | `context/objective.rs::success_conditions_from_decomposition`, `deliverables_from_decomposition`, `unknowns_for_objective` | **Landed (SO-2.3D)** — now unconditional (1/2/3 landed) |
-| 7 | Legacy narrowing/compat overlay can overwrite good structure with the wrong imperative line; downstream consumers not yet structured-native | `#7` | `checkpoint/mod.rs::narrowed_objective_summary`, `normalized_objective_text`; deferred `SO-X.1`–`X.4` | Deferred follow-on — **now ungated** (1/2/3 landed); not landed here |
+| 7 | Legacy narrowing/compat overlay can overwrite good structure with the wrong imperative line; downstream consumers not yet structured-native | `#7` | `checkpoint/mod.rs::narrowed_objective_summary`, `normalized_objective_text`; deferred `SO-X.1`–`X.4` | **Scheduled as `R5.75-6`** (bounded narrowing-faithfulness slice; gated before `R6`); deeper full consumer migration still a later phase |
 | 8 | Acceptance corpus lacks real orchestration-shaped session shapes | — | `tests/objective_acceptance.rs`, `tests/fixtures/objective_acceptance/**` | **Landed (R5.75-1 anchoring fix, 2026-06-20)** |
 
 **Blocker set for `R5.75-1` closure (cleared 2026-06-20):** Issues 1, 2, 3, and 8 are landed. The
@@ -406,8 +416,9 @@ anchoring fix scopes goal selection + evidence spans + field assembly to the sel
 surface, excludes pasted-boilerplate rows (negative `objective_score`) from goal candidacy,
 source-gates the `Goal` role to user/goal surfaces, and synthesizes a structural goal for the top
 user prompt when its phrasing misses the keyword heuristics. Issue 7 is now *ungated* (its hard
-prerequisite — 1/2/3 — is landed) but remains a deferred follow-on, not landed in this packet. Issue 5
-is the only purely non-blocking follow-on still open.
+prerequisite — 1/2/3 — is landed) and is scheduled as the bounded final packet `R5.75-6` (narrowing
+must stay faithful to the structured goal anchor), gated before `R6`; the deeper full structured-native
+consumer migration stays a later phase. Issue 5 is the only purely non-blocking follow-on still open.
 
 Notes:
 
@@ -519,11 +530,19 @@ The analyzer still hard-fails readable sessions when tool-call payloads or worki
 - keep hard-fail behavior for corrupt inputs only
 - emit at least one conservative low-confidence checkpoint for sparse readable sessions
 - use existing insufficient-evidence surfaces before widening public schema/contract
+- populate that conservative checkpoint's additive `structured_objective` honestly: leave weak fields
+  unknown via the `ObjectiveUnknown` / `objective_class=NotTaskStatement` machinery `R5.75-1` already
+  built, rather than emitting an absent or fabricated structured objective (the gate is now
+  structured-aware, so a fail-open checkpoint with no/garbage structured fields would fail it)
+- if the schema must grow at all, follow the additive-optional pattern `R5.75-1` used for
+  `structured_objective` (no `v0.6` bump, no `TaskFrame` migration)
 
 ### Primary Files
 
 - `crates/agent-drift-analyzer/src/input.rs`
 - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+- `crates/agent-drift-analyzer/src/checkpoint/{mod.rs,schema.rs}` only as needed for the fail-open
+  checkpoint to carry a conservative `structured_objective` (additive-optional, no schema bump)
 - any analyzer acceptance test that proves sparse readable fail-open behavior
 
 ### Automated Gate
@@ -548,6 +567,8 @@ Expected smoke outcome:
 - `f47b81f39f2495dd` no longer aborts the analyzer pipeline
 - analyzer emits at least one checkpoint for the sparse readable session
 - resulting output stays conservative: low-confidence / insufficient-evidence rather than fabricated strong progress
+- the emitted checkpoint's `structured_objective` is conservatively unknown (weak fields carry
+  `ObjectiveUnknown`s), consistent with the structured-aware gate `R5.75-1` added
 - the native control session still produces normal output after the contract change
 
 ### Promotion Gate
@@ -565,6 +586,10 @@ Delegated parent-visible progress remains unstable. Strong parent orchestration 
 - stop discarding parent-visible orchestration solely because planning/spec/handoff artifacts were edited
 - preserve conservative parent-visible orchestration when delegation markers are strong but child visibility is limited
 - only widen comparability/fingerprint logic if the named repros prove that reset behavior is still blocking stability after the earlier fix
+- keep comparability/reset logic on the existing legacy objective surface (`task_frame.objective`);
+  the structured `comparison_key` `R5.75-1` derives is computed but has **no live consumer yet**, so
+  do not assume it drives resets — migrating comparability onto structured state is the deferred
+  Issue 7 / `R5.75-6` work, not this packet
 
 ### Primary Files
 
@@ -614,6 +639,10 @@ Long browse/read/tool-output-heavy sessions with zero verifier density can still
 - cap or suppress troubleshooting/implementation escalation when verifier attempts, concrete source-edit progress, and explicit failure evidence are absent
 - prefer planning-convergence / insufficient-evidence for long exploratory sessions unless decisive signals appear
 - keep this analyzer-local; do not widen into `R6` scorer retuning yet
+- gate escalation on existing progress signals (verifier density, concrete edits, failure evidence);
+  the structured `primary_intent` (e.g. `review`/`research`) `R5.75-1` produces is observational only
+  and not read by `progress.rs`, so treating it as an anti-flap input is a deliberate Issue 7 /
+  `R5.75-6`-adjacent wiring decision to call out explicitly, not an implicit assumption here
 
 ### Primary Files
 
@@ -654,18 +683,27 @@ The adapted external corpus is currently useful evidence but not yet a committed
 
 ### Required Change
 
-- add a separate adapted-external acceptance family or fixture lane
-- keep it explicitly secondary to the native rollout corpus
-- cover at least the adopted external repro classes:
-  - giant pasted prompt body
-  - sparse readable / no parseable tool-call payloads
-  - long exploratory zero-verifier session
-  - delegated opaque-parent session
+- route adapted-external cases by shape into the homes that already exist, keeping them explicitly
+  secondary to the native rollout corpus (do not invent a parallel lane that duplicates them):
+  - adapted *objective-shaped* cases → the pre-existing `objective_acceptance/stretch-external/`
+    placeholder family `R5.75-1` committed (seed it; it is currently README-only)
+  - adapted *progress-shaped* cases → a separate adapted lane under `progress_acceptance`
+- cover at least the adopted external repro classes, by their correct home:
+  - giant pasted prompt body — **already covered** by the `R5.75-1` locked objective cases
+    (`orchestration-evaluate-ask-anchor`, `orchestration-marker-free-boilerplate-exclusion`); do not
+    duplicate it — cross-reference it and add an adapted `stretch-external/` variant only if it adds
+    real signal
+  - sparse readable / no parseable tool-call payloads (progress-shaped)
+  - long exploratory zero-verifier session (progress-shaped)
+  - delegated opaque-parent session (progress-shaped)
 
 ### Primary Files
 
 - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
 - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**`
+- `crates/agent-drift-analyzer/tests/objective_acceptance.rs` and
+  `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/stretch-external/**` for adapted
+  objective-shaped cases (the placeholder family `R5.75-1` committed; the harness already enumerates it)
 - any separate adapted-external acceptance test/module chosen during implementation
 - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
 - any narrow design note needed to record the secondary-fixture contract
@@ -679,7 +717,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 Add touched sentinel spot-checks only if the committed fixtures alter downstream replay expectations.
 
-### Manual Smoke Check Before Declaring R5.75 Complete
+### Manual Smoke Check Before Promoting To R5.75-6
 
 Rerun the full named smoke set:
 
@@ -707,7 +745,79 @@ Expected smoke outcome:
 
 ### Promotion Gate
 
-Do not declare `R5.75` complete until the full smoke set above is rerun after the fixture-family landing and all prior issue expectations still hold.
+Do not begin `R5.75-6` until the full smoke set above is rerun after the fixture-family landing and all prior issue expectations still hold.
+
+## R5.75-6: Make The Effective Checkpoint Objective Faithful To The Structured Goal Anchor
+
+### Problem
+
+`R5.75-1` corrected the structured objective sidecar, but the live drift/`TaskFrame` path still runs
+off the legacy narrowed objective text: `infer_task_frame` reads `context.objective.text`, which the
+checkpoint layer overlays from `narrowed_objective_summary(...)`, and the structured `comparison_key`
+has no live consumer. The bug-map repro `019eddaa-e8b2-74b2-9f45-e4ce17aaab55` shows legacy narrowing
+can still select the wrong imperative line (an optional reviewer nit) over the real ask, so drift can
+key off a wrong objective even though the structured sidecar is now correct. Retuning the `R6` scorer
+on top of a sometimes-wrong objective would build on sand. This is the **bounded, pre-`R6` slice of
+Issue 7** — not the full structured-native consumer migration.
+
+### Required Change
+
+- when a grounded structured goal span exists, the effective checkpoint objective text must stay
+  faithful to it: legacy narrowing must not override a correct structured goal with a wrong
+  imperative line
+- demote optional-nit / not-taken / review-closeout imperative bullets so they cannot win the
+  effective objective once a real ask anchored the structured goal
+- keep the change additive and analyzer-local; do **not** undertake the deeper full structured-native
+  consumer migration (`TaskFrame` / `context/working_set.rs` / `checkpoint/progress.rs` comparability
+  keyed on the structured `comparison_key`) in this packet — that stays a later phase per
+  `docs/specs/design-arch/DESIGN-r5-structured-objective-migration-and-integration.md`
+- if any structured state is wired into comparability here, it must preserve the delegated-stability
+  (`R5.75-3`) and zero-verifier anti-flap (`R5.75-4`) behaviors landed earlier in this family
+
+### Primary Files
+
+- `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+  (`checkpoint_analyses` structured overlay, `narrowed_objective_summary`, `normalized_objective_text`)
+- `crates/agent-drift-analyzer/src/context/objective.rs` (the structured goal span it must defer to)
+- `crates/agent-drift-analyzer/tests/checkpoints.rs`
+
+### Automated Gate
+
+```bash
+cargo test -p agent-drift-analyzer checkpoints -- --nocapture
+cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture
+cargo test -p agent-drift-analyzer -- --nocapture
+```
+
+Because this changes the effective objective seen by replay/operator surfaces, add the sentinel
+spot-checks before promotion:
+
+```bash
+cargo test -p agent-drift-sentinel warning_policy -- --nocapture
+cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture
+```
+
+### Manual Smoke Check Before Declaring R5.75 Complete
+
+Run native smoke on:
+
+- `019eb47f-0118-7e90-8291-30a1fb93769e`
+- `019eddaa-e8b2-74b2-9f45-e4ce17aaab55` (the wrong-imperative repro)
+
+Re-run the full named smoke set from `R5.75-5` to confirm no earlier issue regresses.
+
+Expected smoke outcome:
+
+- the effective checkpoint objective matches the structured goal anchor (the real ask), not an
+  optional-nit / closeout imperative line
+- `019eddaa-...` no longer narrows to the reviewer-nit bullet
+- delegated-stability (`R5.75-3`) and zero-verifier anti-flap (`R5.75-4`) outcomes still hold
+
+### Promotion Gate
+
+Do not declare `R5.75` complete (and do not open `R6`) until the effective checkpoint objective is
+faithful to the structured goal anchor on the named repros and no earlier `R5.75` issue regresses on
+its named smoke sessions.
 
 ## R6 Readiness Gate
 
@@ -723,6 +833,9 @@ Do not open `R6` until all of the following are true:
 - delegated parent-visible sessions stay stable and conservative under limited child visibility
 - zero-verifier exploratory sessions no longer flap into troubleshooting/dead-end overclaim
 - the adapted external robustness family is committed as a secondary acceptance wall
+- the bounded downstream-consumer gap is closed (`R5.75-6`): the effective checkpoint objective is
+  faithful to the structured goal anchor so drift no longer keys off a legacy-narrowed
+  wrong-imperative line; the deeper full structured-native consumer migration may remain a later phase
 - `cargo test -p agent-drift-analyzer -- --nocapture` is green
 - any touched sentinel spot-checks are green
 - root landing-order authority names `R6` as next only after `R5.75`
@@ -735,3 +848,7 @@ These can be considered only if the required issues above prove insufficient:
 - broad compactor normalization changes for native traces
 - opportunistic refactors not required to land the named issue
 - generalized parent-visible fingerprint redesign unless the named delegated repros prove it is still necessary after the narrower stabilization work
+- the full structured-native consumer migration — wiring `TaskFrame` / `context/working_set.rs` /
+  `checkpoint/progress.rs` comparability onto the structured objective and `comparison_key` — beyond
+  the bounded narrowing-faithfulness slice `R5.75-6` covers; that is a later phase per the migration
+  design doc, not part of this map
