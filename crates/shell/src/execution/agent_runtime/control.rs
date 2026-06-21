@@ -3850,10 +3850,7 @@ mod tests {
         }))
         .expect("structured fallback text");
 
-        assert_eq!(
-            text,
-            "[codex] task_progress: fields=protocol, uaa_event\n"
-        );
+        assert_eq!(text, "[codex] task_progress: fields=protocol, uaa_event\n");
     }
 
     #[cfg(unix)]
