@@ -950,9 +950,7 @@ fn assert_plain_human_prompt_streams_before_summary(
     let summary_index = lines
         .iter()
         .position(|line| line.starts_with(&summary_prefix))
-        .unwrap_or_else(|| {
-            panic!("plain-human output must surface {summary_prefix:?}: {lines:?}")
-        });
+        .unwrap_or_else(|| panic!("plain-human output must surface {summary_prefix:?}: {lines:?}"));
 
     assert!(
         streamed_index < summary_index,
