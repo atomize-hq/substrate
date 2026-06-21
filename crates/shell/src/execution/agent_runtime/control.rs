@@ -3408,9 +3408,15 @@ impl PublicPromptRenderer {
                     let _ = writeln!(lock, "{}", format_event_line(&event));
                     let _ = lock.flush();
                 } else {
+                    let fallback = prompt_event_text(data);
+                    let fallback = if fallback.is_empty() {
+                        structured_prompt_event_fallback_text(data).unwrap_or(fallback)
+                    } else {
+                        fallback
+                    };
                     let stdout = io::stdout();
                     let mut lock = stdout.lock();
-                    let _ = lock.write_all(prompt_event_text(data).as_bytes());
+                    let _ = lock.write_all(fallback.as_bytes());
                     let _ = lock.flush();
                 }
             }
@@ -3458,6 +3464,54 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
     format!("[{agent}] {}\n", escape_nested_prompt_event_text(&text))
 }
 
+#[cfg(unix)]
+fn structured_prompt_event_fallback_text(data: &serde_json::Value) -> Option<String> {
+    fn direct_structured_prompt_event_text(data: &serde_json::Value) -> Option<String> {
+        if let Some(message) = data.get("message").and_then(serde_json::Value::as_str) {
+            return Some(message.to_string());
+        }
+        data.get("chunk")
+            .and_then(serde_json::Value::as_str)
+            .map(|chunk| {
+                let stream = data
+                    .get("stream")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("stdout");
+                format!("{stream}: {chunk}")
+            })
+    }
+
+    fn escape_structured_prompt_event_text(text: &str) -> String {
+        text.replace('\r', "\\r").replace('\n', "\\n")
+    }
+
+    let payload = data.get("data").unwrap_or(data);
+    let rendered = if let Some(text) = direct_structured_prompt_event_text(payload) {
+        escape_structured_prompt_event_text(&text)
+    } else if payload.is_null() {
+        escape_structured_prompt_event_text(
+            data.get("kind")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("event"),
+        )
+    } else {
+        escape_structured_prompt_event_text(&payload.to_string())
+    };
+
+    if rendered.trim().is_empty() {
+        return None;
+    }
+
+    let agent = data
+        .get("agent_id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|agent| !agent.trim().is_empty());
+    Some(match agent {
+        Some(agent) => format!("[{agent}] {rendered}\n"),
+        None => format!("{rendered}\n"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -3473,7 +3527,8 @@ mod tests {
     };
     #[cfg(unix)]
     use super::{
-        handle_private_prompt_connection, private_prompt_request_channel, PublicPromptEnvelope,
+        handle_private_prompt_connection, private_prompt_request_channel,
+        structured_prompt_event_fallback_text, PublicPromptEnvelope,
     };
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::agent_runtime::{
@@ -3702,6 +3757,40 @@ mod tests {
         }));
 
         assert_eq!(text, "[codex] startup\\nprompt\\rsuccess\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn structured_prompt_event_fallback_renders_nested_payload_without_message() {
+        let text = structured_prompt_event_fallback_text(&serde_json::json!({
+            "agent_id": "codex",
+            "kind": "task_progress",
+            "data": {
+                "protocol": "substrate.agent.session",
+                "uaa_event": {
+                    "status": "queued"
+                }
+            }
+        }))
+        .expect("structured fallback text");
+
+        assert_eq!(
+            text,
+            "[codex] {\"protocol\":\"substrate.agent.session\",\"uaa_event\":{\"status\":\"queued\"}}\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn structured_prompt_event_fallback_uses_kind_when_payload_is_null() {
+        let text = structured_prompt_event_fallback_text(&serde_json::json!({
+            "agent_id": "codex",
+            "kind": "status",
+            "data": null
+        }))
+        .expect("structured fallback text");
+
+        assert_eq!(text, "[codex] status\n");
     }
 
     #[test]
