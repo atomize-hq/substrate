@@ -142,6 +142,18 @@ pub fn validate_identity_tuple_and_placement_posture(
     Ok(())
 }
 
+/// Normalizes a runtime client id into the snake_case form required by
+/// [`IdentityTuple::client`].
+///
+/// ```
+/// use substrate_common::identity::normalize_identity_tuple_client_id;
+///
+/// assert_eq!(
+///     normalize_identity_tuple_client_id(" codex-host "),
+///     Some("codex_host".to_string())
+/// );
+/// assert_eq!(normalize_identity_tuple_client_id("Codex Host"), None);
+/// ```
 pub fn normalize_identity_tuple_client_id(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
