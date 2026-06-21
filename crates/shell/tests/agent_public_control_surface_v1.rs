@@ -14,7 +14,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 use substrate_broker::Policy;
 use support::{
@@ -830,38 +831,75 @@ fn assert_plain_human_prompt_streams_before_summary(
 ) {
     let mut child = fixture.spawn(args);
     let stdout = child.stdout.take().expect("stdout pipe");
-    let mut reader = std::io::BufReader::new(stdout);
-    let mut line = String::new();
+    let observed_streamed_text = Arc::new(AtomicBool::new(false));
+    let observed_streamed_text_reader = Arc::clone(&observed_streamed_text);
+    let expected_streamed_text_owned = expected_streamed_text.to_string();
+    let (line_tx, line_rx) = mpsc::channel();
+    let reader = thread::spawn(move || {
+        let mut reader = std::io::BufReader::new(stdout);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => {
+                    let _ = line_tx.send(Ok(None));
+                    break;
+                }
+                Ok(_) => {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if trimmed.contains(&expected_streamed_text_owned) {
+                        observed_streamed_text_reader.store(true, Ordering::SeqCst);
+                    }
+                    if line_tx.send(Ok(Some(trimmed.to_string()))).is_err() {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    let _ = line_tx.send(Err(err.to_string()));
+                    break;
+                }
+            }
+        }
+    });
     let mut lines = Vec::new();
-    let mut saw_streamed_text_while_running = false;
+    let mut saw_streamed_text = false;
     let summary_prefix = format!("action={action} ");
 
     loop {
-        line.clear();
-        let bytes_read = reader.read_line(&mut line).expect("read stdout line");
-        if bytes_read == 0 {
-            break;
-        }
+        match line_rx.recv_timeout(Duration::from_millis(25)) {
+            Ok(Ok(Some(line))) => {
+                if !saw_streamed_text && line.starts_with(&summary_prefix) {
+                    lines.push(line);
+                    panic!(
+                        "plain-human output must not surface the completion summary before `{expected_streamed_text}`: {lines:?}"
+                    );
+                }
 
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
+                if !saw_streamed_text && line.contains(expected_streamed_text) {
+                    saw_streamed_text = true;
+                }
 
-        if !saw_streamed_text_while_running && trimmed.contains(expected_streamed_text) {
-            assert!(
-                child
-                    .try_wait()
-                    .expect("poll plain-human prompt child")
-                    .is_none(),
-                "plain-human streamed text must arrive before command completion: {:?}",
-                lines
-            );
-            saw_streamed_text_while_running = true;
+                lines.push(line);
+            }
+            Ok(Ok(None)) => break,
+            Ok(Err(err)) => panic!("read stdout line: {err}"),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if !observed_streamed_text.load(Ordering::SeqCst) {
+                    if let Some(status) = child.try_wait().expect("poll plain-human prompt child") {
+                        panic!(
+                            "plain-human output must stream `{expected_streamed_text}` before command completion: status={status:?} stdout={lines:?}"
+                        );
+                    }
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-
-        lines.push(trimmed.to_string());
     }
+    reader.join().expect("join stdout reader thread");
 
     let status = child.wait().expect("wait for plain-human prompt child");
     let stderr = {
@@ -876,7 +914,7 @@ fn assert_plain_human_prompt_streams_before_summary(
         "plain-human public {action} should succeed: stdout={lines:?}\nstderr={stderr}"
     );
     assert!(
-        saw_streamed_text_while_running,
+        saw_streamed_text,
         "plain-human output must stream `{expected_streamed_text}` before command completion: {lines:?}"
     );
 
