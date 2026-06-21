@@ -3466,6 +3466,9 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 
 #[cfg(unix)]
 fn structured_prompt_event_fallback_text(data: &serde_json::Value) -> Option<String> {
+    const STRUCTURED_PROMPT_EVENT_FALLBACK_KEY_LIMIT: usize = 3;
+    const STRUCTURED_PROMPT_EVENT_FALLBACK_TEXT_LIMIT: usize = 120;
+
     fn direct_structured_prompt_event_text(data: &serde_json::Value) -> Option<String> {
         if let Some(message) = data.get("message").and_then(serde_json::Value::as_str) {
             return Some(message.to_string());
@@ -3485,17 +3488,72 @@ fn structured_prompt_event_fallback_text(data: &serde_json::Value) -> Option<Str
         text.replace('\r', "\\r").replace('\n', "\\n")
     }
 
+    fn compact_structured_prompt_scalar_text(text: &str) -> Option<String> {
+        let escaped = escape_structured_prompt_event_text(text);
+        let trimmed = escaped.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let bounded = trimmed
+            .chars()
+            .take(STRUCTURED_PROMPT_EVENT_FALLBACK_TEXT_LIMIT + 1)
+            .collect::<String>();
+        let bounded_len = bounded.chars().count();
+        if bounded_len > STRUCTURED_PROMPT_EVENT_FALLBACK_TEXT_LIMIT {
+            let prefix = bounded
+                .chars()
+                .take(STRUCTURED_PROMPT_EVENT_FALLBACK_TEXT_LIMIT)
+                .collect::<String>();
+            return Some(format!("{prefix}..."));
+        }
+
+        Some(trimmed.to_string())
+    }
+
+    fn summarize_structured_prompt_payload(payload: &serde_json::Value) -> Option<String> {
+        match payload {
+            serde_json::Value::Null => None,
+            serde_json::Value::Bool(value) => Some(value.to_string()),
+            serde_json::Value::Number(value) => Some(value.to_string()),
+            serde_json::Value::String(value) => compact_structured_prompt_scalar_text(value),
+            serde_json::Value::Array(values) => Some(format!("items={}", values.len())),
+            serde_json::Value::Object(fields) => {
+                if fields.is_empty() {
+                    return Some("fields=none".to_string());
+                }
+
+                let keys = fields
+                    .keys()
+                    .take(STRUCTURED_PROMPT_EVENT_FALLBACK_KEY_LIMIT)
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                let extra = fields.len().saturating_sub(keys.len());
+                if extra > 0 {
+                    Some(format!("fields={} (+{extra} more)", keys.join(", ")))
+                } else {
+                    Some(format!("fields={}", keys.join(", ")))
+                }
+            }
+        }
+    }
+
     let payload = data.get("data").unwrap_or(data);
+    let kind = data
+        .get("kind")
+        .and_then(serde_json::Value::as_str)
+        .filter(|kind| !kind.trim().is_empty());
     let rendered = if let Some(text) = direct_structured_prompt_event_text(payload) {
         escape_structured_prompt_event_text(&text)
     } else if payload.is_null() {
-        escape_structured_prompt_event_text(
-            data.get("kind")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("event"),
-        )
+        kind.unwrap_or("event").to_string()
+    } else if let Some(summary) = summarize_structured_prompt_payload(payload) {
+        match kind {
+            Some(kind) => format!("{kind}: {summary}"),
+            None => summary,
+        }
     } else {
-        escape_structured_prompt_event_text(&payload.to_string())
+        kind.unwrap_or("structured event").to_string()
     };
 
     if rendered.trim().is_empty() {
@@ -3528,7 +3586,7 @@ mod tests {
     #[cfg(unix)]
     use super::{
         handle_private_prompt_connection, private_prompt_request_channel,
-        structured_prompt_event_fallback_text, PublicPromptEnvelope,
+        structured_prompt_event_fallback_text, PublicPromptEnvelope, PublicPromptRenderer,
     };
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::agent_runtime::{
@@ -3546,6 +3604,14 @@ mod tests {
         OrchestrationObligationRecord, ORCHESTRATOR_ROLE,
     };
     use crate::execution::config_model::AgentExecutionScope;
+    #[cfg(unix)]
+    use std::fs::File;
+    #[cfg(unix)]
+    use std::io::Read;
+    #[cfg(unix)]
+    use std::io::Write;
+    #[cfg(unix)]
+    use std::os::fd::FromRawFd;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
@@ -3776,7 +3842,7 @@ mod tests {
 
         assert_eq!(
             text,
-            "[codex] {\"protocol\":\"substrate.agent.session\",\"uaa_event\":{\"status\":\"queued\"}}\n"
+            "[codex] task_progress: fields=protocol, uaa_event\n"
         );
     }
 
@@ -3791,6 +3857,97 @@ mod tests {
         .expect("structured fallback text");
 
         assert_eq!(text, "[codex] status\n");
+    }
+
+    #[cfg(unix)]
+    fn capture_stdout_once(test: impl FnOnce()) -> String {
+        assert_eq!(
+            std::io::stdout().flush().map(|_| 0).unwrap_or(-1),
+            0,
+            "flush stdout before capture"
+        );
+
+        let mut pipe_fds = [0; 2];
+        assert_eq!(
+            unsafe { libc::pipe(pipe_fds.as_mut_ptr()) },
+            0,
+            "create stdout capture pipe"
+        );
+        let read_fd = pipe_fds[0];
+        let write_fd = pipe_fds[1];
+        let saved_stdout = unsafe { libc::dup(libc::STDOUT_FILENO) };
+        assert!(saved_stdout >= 0, "dup stdout");
+        assert_eq!(
+            unsafe { libc::dup2(write_fd, libc::STDOUT_FILENO) },
+            libc::STDOUT_FILENO,
+            "redirect stdout to capture pipe"
+        );
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
+
+        assert_eq!(
+            std::io::stdout().flush().map(|_| 0).unwrap_or(-1),
+            0,
+            "flush stdout after capture"
+        );
+        assert_eq!(
+            unsafe { libc::dup2(saved_stdout, libc::STDOUT_FILENO) },
+            libc::STDOUT_FILENO,
+            "restore stdout after capture"
+        );
+        unsafe {
+            libc::close(saved_stdout);
+            libc::close(write_fd);
+        }
+
+        let mut output = String::new();
+        unsafe { File::from_raw_fd(read_fd) }
+            .read_to_string(&mut output)
+            .expect("read captured stdout");
+
+        if let Err(payload) = result {
+            std::panic::resume_unwind(payload);
+        }
+
+        output
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails() {
+        let envelope = PublicPromptEnvelope::Event {
+            version: 1,
+            event_kind: "stdout".to_string(),
+            data: serde_json::json!({
+                "agent_id": "codex",
+                "kind": "task_progress",
+                "data": {
+                    "alpha": "one",
+                    "beta": "two",
+                    "gamma": "three",
+                    "delta": {
+                        "status": "queued"
+                    }
+                }
+            }),
+        };
+
+        let output = capture_stdout_once(|| {
+            let mut renderer = PublicPromptRenderer::new(false);
+            renderer
+                .render(&envelope)
+                .expect("render structured fallback");
+        });
+
+        assert_eq!(
+            output,
+            "[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
+        );
+        assert!(
+            !output.contains('{') && !output.contains("queued"),
+            "fallback must stay bounded and avoid dumping raw nested payloads: {output}"
+        );
     }
 
     #[test]
