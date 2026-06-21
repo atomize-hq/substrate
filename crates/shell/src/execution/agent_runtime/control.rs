@@ -3421,17 +3421,45 @@ impl PublicPromptRenderer {
 
 #[cfg(unix)]
 fn prompt_event_text(data: &serde_json::Value) -> String {
-    data.get("text")
+    fn direct_prompt_event_text(data: &serde_json::Value) -> Option<String> {
+        if let Some(text) = data.get("text").and_then(serde_json::Value::as_str) {
+            return Some(text.to_string());
+        }
+        if let Some(message) = data.get("message").and_then(serde_json::Value::as_str) {
+            return Some(message.to_string());
+        }
+        data.get("chunk")
+            .and_then(serde_json::Value::as_str)
+            .map(|chunk| {
+                let stream = data
+                    .get("stream")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("stdout");
+                format!("{stream}: {chunk}")
+            })
+    }
+
+    if let Some(text) = direct_prompt_event_text(data) {
+        return text;
+    }
+
+    let Some(text) = data.get("data").and_then(direct_prompt_event_text) else {
+        return String::new();
+    };
+    let agent = data
+        .get("agent_id")
         .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .to_string()
+        .filter(|agent| !agent.trim().is_empty())
+        .unwrap_or("agent");
+    format!("[{agent}] {text}\n")
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
-        prompt_completion_session_state, reconcile_hidden_owner_helper_start_timeout,
+        prompt_completion_session_state, prompt_event_text,
+        reconcile_hidden_owner_helper_start_timeout,
         validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
         HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
         HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
@@ -3637,6 +3665,27 @@ mod tests {
             PrivateCancelOutcome::ProtocolError,
         ];
         assert_eq!(outcomes.len(), 4);
+    }
+
+    #[test]
+    fn prompt_event_text_keeps_top_level_text_passthrough() {
+        let text = prompt_event_text(&serde_json::json!({
+            "text": "stdout chunk\n",
+        }));
+
+        assert_eq!(text, "stdout chunk\n");
+    }
+
+    #[test]
+    fn prompt_event_text_renders_nested_structured_agent_messages() {
+        let text = prompt_event_text(&serde_json::json!({
+            "agent_id": "codex",
+            "data": {
+                "message": "startup prompt success"
+            }
+        }));
+
+        assert_eq!(text, "[codex] startup prompt success\n");
     }
 
     #[test]

@@ -822,6 +822,51 @@ fn stderr_text(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
+fn stdout_text(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+fn assert_plain_human_prompt_streams_before_summary(
+    stdout: &str,
+    action: &str,
+    expected_streamed_text: &str,
+) {
+    let lines = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    let streamed_index = lines
+        .iter()
+        .position(|line| line.contains(expected_streamed_text))
+        .unwrap_or_else(|| {
+            panic!(
+                "plain-human output must surface streamed text `{expected_streamed_text}`: {stdout:?}"
+            )
+        });
+    let summary_prefix = format!("action={action} ");
+    let summary_index = lines
+        .iter()
+        .position(|line| line.starts_with(&summary_prefix))
+        .unwrap_or_else(|| {
+            panic!("plain-human output must surface {summary_prefix:?}: {stdout:?}")
+        });
+
+    assert!(
+        streamed_index < summary_index,
+        "plain-human output must stream visible lines before the completion summary: {stdout:?}"
+    );
+    assert_eq!(
+        summary_index,
+        lines.len() - 1,
+        "plain-human completion summary must remain terminal: {stdout:?}"
+    );
+    assert!(
+        lines[summary_index].contains("turn_outcome=success"),
+        "plain-human completion summary must keep the success outcome: {stdout:?}"
+    );
+}
+
 fn assert_empty_warnings(json: &Value) {
     assert_eq!(
         json.get("warnings").and_then(Value::as_array).map(Vec::len),
@@ -1982,6 +2027,30 @@ fn wait_for_shell_owned_session_ready(
 
 #[test]
 #[serial]
+fn public_start_plain_human_streams_events_before_completion_summary() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "hello from start",
+    ]);
+    assert!(
+        output.status.success(),
+        "plain-human public start should succeed: {output:?}"
+    );
+
+    let stdout = stdout_text(&output);
+    assert_plain_human_prompt_streams_before_summary(&stdout, "start", "startup prompt success");
+}
+
+#[test]
+#[serial]
 fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -2300,6 +2369,56 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         final_session.get("state").and_then(Value::as_str),
         Some("stopped"),
         "host-scoped public stop should persist a stopped parent session on clean shutdown"
+    );
+}
+
+#[test]
+#[serial]
+fn public_turn_plain_human_streams_events_before_completion_summary() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "hello from start",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "setup public start should succeed: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start_json = find_ndjson_record(&start_records, "completed");
+    let orchestration_session_id = start_json["orchestration_session_id"]
+        .as_str()
+        .expect("start session id")
+        .to_string();
+
+    let turn_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        &orchestration_session_id,
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "hello from turn",
+    ]);
+    assert!(
+        turn_output.status.success(),
+        "plain-human public turn should succeed: {turn_output:?}"
+    );
+
+    let stdout = stdout_text(&turn_output);
+    assert_plain_human_prompt_streams_before_summary(
+        &stdout,
+        "turn",
+        "follow-up prompt success",
     );
 }
 
