@@ -52,6 +52,8 @@ fn objective_acceptance_family_dirs_keep_so_5_3_committed_cases_and_other_famili
                     "concise-goal-objective-rs-review".to_owned(),
                     "instruction-surface-agents-skill-update".to_owned(),
                     "instruction-surface-available-skills-review".to_owned(),
+                    "orchestration-evaluate-ask-anchor".to_owned(),
+                    "orchestration-marker-free-boilerplate-exclusion".to_owned(),
                     "orchestration-scaffolding-field-honesty".to_owned(),
                     "plan-docs-only-phase1-plan".to_owned(),
                     "research-evaluation-wall-summary".to_owned(),
@@ -60,7 +62,7 @@ fn objective_acceptance_family_dirs_keep_so_5_3_committed_cases_and_other_famili
                     "wdap0-integ-linux-kickoff".to_owned(),
                     "wdap0-integ-macos-kickoff".to_owned(),
                 ],
-                "Packets SO-5.1 through SO-5.3 seed the locked acceptance family with WDAP, preserved instruction-surface, concise-goal, and non-implementation controls; SO-2.3D adds the review-with-implementation-noun and orchestration-scaffolding field-honesty controls"
+                "Packets SO-5.1 through SO-5.3 seed the locked acceptance family with WDAP, preserved instruction-surface, concise-goal, and non-implementation controls; SO-2.3D adds the review-with-implementation-noun and orchestration-scaffolding field-honesty controls; the R5.75-1 Issue 1/2/3 fix adds the orchestration-evaluate-ask anchoring control plus the marker-free boilerplate-exclusion control that proves the source-gate, not the corpus markers, keeps goal-shaped instruction text off the goal"
             );
             assert_eq!(
                 corpus
@@ -72,6 +74,8 @@ fn objective_acceptance_family_dirs_keep_so_5_3_committed_cases_and_other_famili
                     "concise-goal-objective-rs-review".to_owned(),
                     "instruction-surface-agents-skill-update".to_owned(),
                     "instruction-surface-available-skills-review".to_owned(),
+                    "orchestration-evaluate-ask-anchor".to_owned(),
+                    "orchestration-marker-free-boilerplate-exclusion".to_owned(),
                     "orchestration-scaffolding-field-honesty".to_owned(),
                     "plan-docs-only-phase1-plan".to_owned(),
                     "research-evaluation-wall-summary".to_owned(),
@@ -80,7 +84,7 @@ fn objective_acceptance_family_dirs_keep_so_5_3_committed_cases_and_other_famili
                     "wdap0-integ-linux-kickoff".to_owned(),
                     "wdap0-integ-macos-kickoff".to_owned(),
                 ],
-                "Packets SO-5.1 through SO-5.3 plus SO-2.3D must keep the committed locked acceptance case list deterministic"
+                "Packets SO-5.1 through SO-5.3 plus SO-2.3D and the R5.75-1 Issue 1/2/3 anchoring fix must keep the committed locked acceptance case list deterministic"
             );
         } else if family.dir_name == "design-set" {
             assert_eq!(
@@ -138,6 +142,8 @@ fn objective_acceptance_readme_documents_the_family_contract() {
         "concise-goal-objective-rs-review",
         "instruction-surface-agents-skill-update",
         "instruction-surface-available-skills-review",
+        "orchestration-evaluate-ask-anchor",
+        "orchestration-marker-free-boilerplate-exclusion",
         "orchestration-scaffolding-field-honesty",
         "plan-docs-only-phase1-plan",
         "research-evaluation-wall-summary",

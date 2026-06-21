@@ -1,0 +1,23 @@
+{
+  "rows": [
+    {
+      "kind": "developer_message",
+      "text": "Use memory by default. Review and validate every change and ensure the suite stays green and reports success. The runtime socket lives at /run/substrate.sock."
+    },
+    {
+      "kind": "user_message",
+      "user_message_role": "unknown",
+      "text": "# AGENTS.md instructions for /repo\nKeep work centered on the requested packet. Return with changed files and a recommended commit message."
+    },
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "We just landed the complete docs/specs/r5 and now I need you to use the $code-review-and-quality skill to evaluate if what was implemented landed correctly and completely"
+    },
+    {
+      "kind": "user_message",
+      "user_message_role": "unknown",
+      "text": "<skill>\n<name>code-review-and-quality</name>\nReview the diff and ensure quality. Validate that all tests pass and stay green.\n</skill>"
+    }
+  ]
+}

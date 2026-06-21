@@ -1,0 +1,30 @@
+{
+  "case_id": "orchestration-marker-free-boilerplate-exclusion",
+  "objective_class": "task_statement",
+  "primary_intent": "debug",
+  "target": {
+    "kind": "file_or_directory",
+    "display_contains": ["crates/net/src/client.rs"],
+    "paths": ["crates/net/src/client.rs"]
+  },
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "user_prompt",
+      "excerpt_contains": "Debug why crates/net/src/client.rs drops the retry header",
+      "exact_ref": {
+        "source_file_suffix": "orchestration-marker-free-boilerplate-exclusion.jsonl",
+        "event_index": 1,
+        "row_ordinal": 0
+      }
+    }
+  ],
+  "forbidden_role_promotions": [
+    {
+      "forbidden_role": "goal",
+      "source_kind": "system_instruction",
+      "excerpt_contains": "Review and validate every change"
+    }
+  ],
+  "forbidden_unknown_fields": ["target"]
+}

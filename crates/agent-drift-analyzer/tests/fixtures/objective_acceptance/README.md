@@ -36,6 +36,26 @@ locked wall.
   scaffolding row containing success/deliverable phrasing; `success_conditions` and `deliverables`
   must stay unknown rather than be pooled from the off-goal-surface boilerplate.
 
+The `R5.75-1` Issue 1/2/3 anchoring fix adds two more controls:
+
+- `orchestration-evaluate-ask-anchor/` — the minimized `019eb47f` shape: a developer scaffolding row
+  and pasted AGENTS.md / `<skill>` bodies (all carrying goal-shaped verbs, a `/run/substrate.sock`
+  path, and a cargo-style success ladder) precede the real user ask, whose phrasing ("use the
+  `$code-review-and-quality` skill to evaluate if what was implemented landed correctly and
+  completely") misses the goal-keyword heuristics. The structured objective must anchor its `goal` to
+  that user ask (`primary_intent` `review`, `target` the grounded `docs/specs/r5` doc), never promote
+  a `goal` onto the system-instruction or pasted-skill-body rows, and leave `success_conditions` /
+  `deliverables` unknown instead of pooling them from the scaffolding.
+- `orchestration-marker-free-boilerplate-exclusion/` — the robustness boundary for the anchoring
+  fix: a developer instruction row dense with goal-shaped verbs ("Review and validate every change,
+  ensure the suite stays green, and confirm the implementation is complete") but **without** the
+  `AGENTS.md` / `<skill>` corpus markers that drive the row scorer negative. The real user ask
+  ("Debug why crates/net/src/client.rs drops the retry header on the second attempt.") must still own
+  the `goal` with `primary_intent` `debug` and a grounded file target. This proves the exclusion is
+  carried by source-gating the `Goal` role to user/goal surfaces — a marker-independent mechanism —
+  not solely by the `objective_score` markers, so goal-shaped instruction text on a system/developer
+  surface can never become the goal even when it lacks the literal corpus tokens.
+
 Those controls prove Phase 1 does not overfit to WDAP alone: deliberate `AGENTS.md`, `<skill>`,
 `Available skills`, concise /goal, do not change code, docs-only, and research prompts all stay
 semantically distinct, and intent/field assembly stays grounded to the active goal surface.

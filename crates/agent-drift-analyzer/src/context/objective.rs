@@ -235,11 +235,13 @@ fn decompose_objective_rows(rows: &[CompactionRow]) -> Option<ObjectiveDecomposi
         });
     }
 
-    Some(ObjectiveDecomposition {
+    let mut decomposition = ObjectiveDecomposition {
         candidates,
         sections,
         clauses,
-    })
+    };
+    inject_structural_goal_if_absent(&mut decomposition);
+    Some(decomposition)
 }
 
 fn collect_directive_row_candidates(rows: &[CompactionRow]) -> Vec<DirectiveRowCandidate> {
@@ -672,7 +674,8 @@ fn split_section_into_clauses(section: &DecomposedObjectiveSection) -> Vec<Objec
             if text.is_empty() {
                 continue;
             }
-            let role_candidates = role_candidates_for_clause(section.kind, &text);
+            let role_candidates =
+                role_candidates_for_clause(section.kind, section.source_kind, &text);
             let clause_index = clauses.len();
             clauses.push(ObjectiveClause {
                 candidate_index: section.candidate_index,
@@ -697,7 +700,7 @@ fn split_section_into_clauses(section: &DecomposedObjectiveSection) -> Vec<Objec
             clause_index: 0,
             section_kind: section.kind,
             text: text.clone(),
-            role_candidates: role_candidates_for_clause(section.kind, &text),
+            role_candidates: role_candidates_for_clause(section.kind, section.source_kind, &text),
         });
     }
 
@@ -748,8 +751,17 @@ fn split_clause_line(line: &str) -> Vec<String> {
 
 fn role_candidates_for_clause(
     section_kind: ObjectiveSectionKind,
+    source_kind: ObjectiveSourceKind,
     text: &str,
 ) -> Vec<RoleCandidate> {
+    // Issue 3: only genuine user/goal surfaces may earn a `Goal` role. System/developer/tool rows
+    // (skill catalogs, memory policy, permission blocks, AGENTS scaffolding) can carry goal-shaped
+    // verbs ("review", "ensure", "validate") but are never the user's ask, so they must not be
+    // promoted to `Goal` even when their phrasing matches `looks_like_goal_text`.
+    let goal_eligible_source = matches!(
+        source_kind,
+        ObjectiveSourceKind::ThreadGoal | ObjectiveSourceKind::UserPrompt
+    );
     let lowered = text.to_ascii_lowercase();
     let looks_like_constraint = looks_like_constraint_text(&lowered);
     let looks_like_verification = looks_like_verification_text(&lowered);
@@ -762,7 +774,8 @@ fn role_candidates_for_clause(
 
     match section_kind {
         ObjectiveSectionKind::Scope | ObjectiveSectionKind::Mission => {
-            if !has_strong_constraint_cue
+            if goal_eligible_source
+                && !has_strong_constraint_cue
                 && (!has_explicit_verification_cue || has_mixed_goal_and_verification_cue)
             {
                 push_role_candidate(&mut candidates, ObjectiveRole::Goal, Confidence::High, 900);
@@ -835,16 +848,18 @@ fn role_candidates_for_clause(
         );
     }
 
-    if !matches!(
-        section_kind,
-        ObjectiveSectionKind::Checklist
-            | ObjectiveSectionKind::Verification
-            | ObjectiveSectionKind::Constraints
-            | ObjectiveSectionKind::Deliverables
-            | ObjectiveSectionKind::Context
-            | ObjectiveSectionKind::ToolingInstructions
-            | ObjectiveSectionKind::Boilerplate
-    ) && (lowered.starts_with("/goal ") || looks_like_goal_text(&lowered))
+    if goal_eligible_source
+        && !matches!(
+            section_kind,
+            ObjectiveSectionKind::Checklist
+                | ObjectiveSectionKind::Verification
+                | ObjectiveSectionKind::Constraints
+                | ObjectiveSectionKind::Deliverables
+                | ObjectiveSectionKind::Context
+                | ObjectiveSectionKind::ToolingInstructions
+                | ObjectiveSectionKind::Boilerplate
+        )
+        && (lowered.starts_with("/goal ") || looks_like_goal_text(&lowered))
     {
         push_role_candidate(
             &mut candidates,
@@ -1271,7 +1286,8 @@ fn assemble_structured_objective(
     verification_commands: &[String],
 ) -> StructuredObjective {
     let goal_clause = selected_goal_clause(decomposition);
-    let evidence_spans = evidence_spans_from_decomposition(decomposition);
+    let active_index = goal_clause.map(|clause| clause.candidate_index);
+    let evidence_spans = evidence_spans_from_decomposition(decomposition, active_index);
     let target = goal_clause.and_then(explicit_target_for_clause);
 
     let constraints = decomposition
@@ -1323,9 +1339,18 @@ fn assemble_structured_objective(
 }
 
 fn selected_goal_clause(decomposition: &ObjectiveDecomposition) -> Option<&ObjectiveClause> {
+    // Issues 1/2/3: the goal must come from the active mission surface, never from a pasted
+    // scaffold row that happens to contain a keyword-matched goal clause. Exclude boilerplate
+    // candidates (the row scorer already drives their `objective_score` negative — pasted AGENTS.md /
+    // `<skill>` bodies) so that, e.g. on `019eb47f`, the system-instruction and pasted-skill rows can
+    // never supply the goal, while a real "/goal update the <skill> section" ask (positive score)
+    // still can. Among the surviving (non-boilerplate) candidates the best clause-level
+    // `compatibility_score` picks the owning row, so a concrete steer ("add this skill to
+    // @shared-cab-app") still outranks an earlier pasted skill template.
     let mut candidates = decomposition
         .clauses
         .iter()
+        .filter(|clause| !candidate_is_boilerplate_surface(decomposition, clause.candidate_index))
         .filter_map(|clause| {
             let role = top_role(clause)?;
             if role.role == ObjectiveRole::Goal {
@@ -1339,14 +1364,145 @@ fn selected_goal_clause(decomposition: &ObjectiveDecomposition) -> Option<&Objec
     candidates.first().map(|(_, clause)| *clause)
 }
 
+/// A boilerplate surface is a candidate row the row scorer penalized below zero: pasted AGENTS.md
+/// instructions, `<skill>` bodies, available-skills catalogs, and the like. They must never own the
+/// goal or contribute evidence spans. Using `objective_score`'s sign (rather than text markers) keeps
+/// a genuine "/goal update the AGENTS.md / `<skill>` section" ask — which scores positive — eligible.
+fn candidate_is_boilerplate_surface(
+    decomposition: &ObjectiveDecomposition,
+    candidate_index: usize,
+) -> bool {
+    decomposition
+        .candidates
+        .get(candidate_index)
+        .map(|candidate| candidate.score.0 < 0)
+        .unwrap_or(false)
+}
+
+/// When no non-boilerplate row carries a keyword-matched goal clause (its phrasing misses
+/// `looks_like_goal_text`, e.g. "use the $x skill to evaluate if what landed is correct"), promote the
+/// top genuine user surface's primary actionable clause to `Goal`. This anchors the structured
+/// objective to the real ask instead of leaving it goalless or letting a boilerplate row win, while
+/// skipping system/boilerplate surfaces so pasted scaffolding can never become the goal.
+fn inject_structural_goal_if_absent(decomposition: &mut ObjectiveDecomposition) {
+    if selected_goal_clause(decomposition).is_some() {
+        return;
+    }
+    let Some(active_index) = structural_goal_surface_index(decomposition) else {
+        return;
+    };
+    let Some(position) = structural_goal_clause_position(decomposition, active_index) else {
+        return;
+    };
+    let role_candidates = &mut decomposition.clauses[position].role_candidates;
+    push_role_candidate(role_candidates, ObjectiveRole::Goal, Confidence::Medium, 650);
+    role_candidates.sort_by(|left, right| right.score.cmp(&left.score));
+    role_candidates.dedup_by(|left, right| left.role == right.role);
+}
+
+/// The surface that may carry a synthesized structural goal: the highest-scored genuine user/goal row
+/// that the row scorer did not penalize below zero. Candidates are pre-sorted by `objective_score`
+/// (descending), so the first match is the highest-scored eligible user surface.
+fn structural_goal_surface_index(decomposition: &ObjectiveDecomposition) -> Option<usize> {
+    decomposition
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.score.0 >= 0
+                && matches!(
+                    candidate.source_kind,
+                    ObjectiveSourceKind::ThreadGoal | ObjectiveSourceKind::UserPrompt
+                )
+        })
+        .map(|candidate| candidate.candidate_index)
+}
+
+/// The active surface's primary actionable clause for structural-goal promotion: the first clause
+/// that is not a checklist/verification/constraint/deliverable/boilerplate/tooling line **and** that
+/// states a request action. Requiring a recognized action verb keeps vague prompts ("look at the
+/// stuff above and make it better") and questions ("which docs own the acceptance wall?") honest as
+/// `NotTaskStatement` instead of fabricating a goal, while still anchoring a real ask whose phrasing
+/// missed the goal-keyword heuristics ("use the $x skill to evaluate if what landed is correct").
+fn structural_goal_clause_position(
+    decomposition: &ObjectiveDecomposition,
+    active_index: usize,
+) -> Option<usize> {
+    decomposition.clauses.iter().position(|clause| {
+        clause.candidate_index == active_index
+            && !matches!(
+                clause.section_kind,
+                ObjectiveSectionKind::Checklist
+                    | ObjectiveSectionKind::Verification
+                    | ObjectiveSectionKind::Constraints
+                    | ObjectiveSectionKind::Deliverables
+                    | ObjectiveSectionKind::Boilerplate
+                    | ObjectiveSectionKind::ToolingInstructions
+            )
+            && !matches!(
+                top_role(clause).map(|role| role.role),
+                Some(ObjectiveRole::Constraint) | Some(ObjectiveRole::Verification)
+            )
+            && clause_states_a_request_action(&clause.text)
+    })
+}
+
+/// Whether a clause contains a recognizable request-action **verb** (used as an action, not an
+/// incidental noun). Deliberately excludes noun-prone tokens such as `docs`, `tests`, `plan`, and
+/// `spec` so a question like "which docs own the acceptance wall?" is not mistaken for an ask. This is
+/// the concreteness gate for synthesizing a structural goal when keyword heuristics missed the ask.
+fn clause_states_a_request_action(text: &str) -> bool {
+    const REQUEST_ACTION_VERBS: &[&str] = &[
+        "implement",
+        "fix",
+        "debug",
+        "troubleshoot",
+        "repair",
+        "diagnose",
+        "review",
+        "inspect",
+        "audit",
+        "evaluate",
+        "assess",
+        "analyze",
+        "compare",
+        "determine",
+        "validate",
+        "verify",
+        "ensure",
+        "confirm",
+        "investigate",
+        "explore",
+        "research",
+        "refactor",
+        "migrate",
+        "integrate",
+        "build",
+        "create",
+        "add",
+        "update",
+        "wire",
+        "land",
+        "perform",
+    ];
+    action_word_tokens(text)
+        .iter()
+        .any(|token| REQUEST_ACTION_VERBS.contains(&token.as_str()))
+}
+
 fn evidence_spans_from_decomposition(
     decomposition: &ObjectiveDecomposition,
+    active_index: Option<usize>,
 ) -> Vec<ObjectiveEvidenceSpan> {
-    let mut spans = Vec::new();
-    for clause in &decomposition.clauses {
-        spans.extend(evidence_spans_for_clause(clause));
-    }
-    spans
+    // Issue 2/3: ground evidence spans to the selected goal's surface instead of pooling every clause
+    // in the session. This is what keeps `Goal` spans (and the rest) off system-instruction and
+    // pasted-skill-body rows — the structured sidecar reflects the real ask, not the scaffolding. When
+    // no goal anchored (`active_index` is `None`), no spans are emitted rather than pooling boilerplate.
+    decomposition
+        .clauses
+        .iter()
+        .filter(|clause| Some(clause.candidate_index) == active_index)
+        .flat_map(evidence_spans_for_clause)
+        .collect()
 }
 
 fn evidence_spans_for_clause(clause: &ObjectiveClause) -> Vec<ObjectiveEvidenceSpan> {
@@ -2115,7 +2271,9 @@ fn intent_from_action_words(tokens: &[String]) -> ObjectiveIntent {
         ObjectiveIntent::Implement
     } else if has(&["debug", "fix", "troubleshoot"]) {
         ObjectiveIntent::Debug
-    } else if has(&["review", "inspect", "determine", "compare", "analyze"]) {
+    } else if has(&[
+        "review", "inspect", "determine", "compare", "analyze", "evaluate", "assess", "audit",
+    ]) {
         ObjectiveIntent::Review
     } else if has(&["research", "survey"]) {
         ObjectiveIntent::Research

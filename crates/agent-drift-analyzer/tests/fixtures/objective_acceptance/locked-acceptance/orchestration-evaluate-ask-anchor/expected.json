@@ -1,0 +1,44 @@
+{
+  "case_id": "orchestration-evaluate-ask-anchor",
+  "objective_class": "task_statement",
+  "primary_intent": "review",
+  "target": {
+    "kind": "spec_or_design_doc",
+    "display_contains": ["docs/specs/r5"],
+    "paths": ["docs/specs/r5"]
+  },
+  "role_spans": [
+    {
+      "role": "goal",
+      "source_kind": "user_prompt",
+      "section_kind": "unknown_section",
+      "excerpt_contains": "evaluate if what was implemented landed correctly and completely",
+      "exact_ref": {
+        "source_file_suffix": "orchestration-evaluate-ask-anchor.jsonl",
+        "event_index": 2,
+        "row_ordinal": 0
+      }
+    }
+  ],
+  "forbidden_role_promotions": [
+    {
+      "forbidden_role": "goal",
+      "source_kind": "system_instruction",
+      "excerpt_contains": "Review and validate every change"
+    },
+    {
+      "forbidden_role": "goal",
+      "excerpt_contains": "/run/substrate.sock"
+    },
+    {
+      "forbidden_role": "goal",
+      "excerpt_contains": "Keep work centered on the requested packet"
+    },
+    {
+      "forbidden_role": "goal",
+      "excerpt_contains": "Validate that all tests pass and stay green"
+    }
+  ],
+  "required_unknown_fields": ["success_conditions", "deliverables"],
+  "forbidden_unknown_fields": ["target"]
+}

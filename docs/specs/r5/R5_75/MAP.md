@@ -1,6 +1,6 @@
 # R5.75 Map: Sequential Pre-R6 Hardening And Validation
 
-Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout, and on 2026-06-20 the `R5.75-1` named smoke gate was re-run but promotion was HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker; active seam stays `R5.75-1`), so the map reflects the current active seam and next-packet order honestly.
+Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout. On 2026-06-20 the `R5.75-1` named smoke gate was re-run and promotion was first HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker); the Issue 1/2/3 anchoring fix (plus Issue 8 corpus lock) then landed and the gate was re-run green, so `R5.75-1` is now PROMOTED and the active seam is `R5.75-2` (sparse readable session fail-open). The map reflects the current active seam and next-packet order honestly.
 
 ## Objective
 
@@ -16,16 +16,20 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 ## Current Live Routing Note (2026-06-20)
 
 - `R5.75-0` is landed history.
-- The current active seam is still `R5.75-1`, now routed through
-  `docs/specs/r5/R5_75/phase-1/SO/` rather than directly to `R5.75-2`.
-- **Promotion HELD (2026-06-20):** the named promotion smoke was re-run and surfaced a structured-
-  objective failure on a named condensation gate session (`019eb47f`): the structured `Goal` spans
-  anchor to boilerplate (system-instruction rows + the pasted `$code-review-and-quality` skill body),
-  yielding `primary_intent=implement` on a review/eval ask and `success_conditions` pooled from the
-  `AGENTS.md` cargo ladder — the sidecar is worse than the legacy narrowed string beside it. This
-  fails the spirit of the structured-aware gate, so `R5.75-2` does not begin yet. Issue 1/2/3 are
-  pulled forward from tracked follow-on to blocker. See the `R5.75-1` Remaining Bug Ledger and
-  promotion gate below.
+- `R5.75-1` is landed history as of 2026-06-20 (routed through
+  `docs/specs/r5/R5_75/phase-1/SO/`). The current active seam is `R5.75-2` (sparse readable session
+  fail-open, `crates/agent-drift-analyzer/src/input.rs`).
+- **Promotion PROMOTED (2026-06-20):** the named promotion smoke first surfaced a structured-objective
+  failure on a condensation gate session (`019eb47f`): the structured `Goal` spans anchored to
+  boilerplate (system-instruction rows + the pasted `$code-review-and-quality` skill body), yielding
+  `primary_intent=implement` on a review/eval ask and `success_conditions` pooled from the `AGENTS.md`
+  cargo ladder. This held the gate and pulled Issues 1/2/3 forward to blocker. The anchoring fix then
+  landed in `context/objective.rs` (scope goal selection + evidence spans + field assembly to the
+  selected goal's mission surface; exclude pasted-boilerplate rows from goal candidacy; source-gate
+  the `Goal` role to user/goal surfaces; synthesize a structural goal for the top user prompt when its
+  phrasing misses the keyword heuristics), with Issue 8 corpus coverage. The gate was re-run green on
+  every named session, so `R5.75-1` closed and `R5.75-2` begins. See the `R5.75-1` Remaining Bug
+  Ledger and promotion gate below.
 - The live crate already has real section/clause decomposition, preliminary structured assembly,
   and grounding follow-on work through `SO-G6`, so this is no longer just a narrow
   `normalized_objective_text(...)` stopgap.
@@ -52,13 +56,15 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
      active goal surface with symmetric `unknowns` instead of being pooled from boilerplate (`#6`). The
      two regressions are live (no longer `#[ignore]`d) and two locked acceptance cases were added.
 - The named promotion smoke (condensation repros `019eb430/47f/98e` + adapted `05a56cc5…` + the
-  `019edd98` structured-stressing session) was re-run on 2026-06-20 against a freshly built pipeline.
-  Most outcomes held (condensation string surface clean on all four; `019edd98` structured semantics
-  clean), but `019eb47f` exposed that the structured objective anchors its goal to boilerplate and
-  pools `intent`/`target`/`success_conditions` from non-goal rows. Root cause is the still-open
-  extraction-scope/pooling/permissive-goal-role seams (Issue 1/2/3; see the Remaining Bug Ledger),
-  which `SO-2.3D` never claimed to fix; they are **promoted from tracked follow-on to blocker** for
-  `R5.75-1` closure. Issue 5 (doc/packet target precedence) remains a non-blocking follow-on.
+  `019edd98` structured-stressing session) was re-run on 2026-06-20. The first pass (pre-fix) held the
+  gate: `019eb47f` anchored its goal to boilerplate and pooled `intent`/`target`/`success_conditions`
+  from non-goal rows (Issue 1/2/3). The **Issue 1/2/3 anchoring fix then landed** in
+  `context/objective.rs` and the gate was re-run **green** on every named session — `019eb47f` now
+  anchors to the evaluate/review ask (`review` intent, grounded `docs/specs/r5` target, weak fields
+  unknown, zero boilerplate `Goal` spans), and the adapted `05a56cc5…` anchors to the concrete
+  `add this skill to @shared-cab-app` steer (grounded `repo_slice` target) instead of the pasted skill
+  template. Issue 8 locked the fix into the corpus. Issue 5 (prose/broad target precedence) remains a
+  non-blocking follow-on; Issue 7 (downstream migration) is now unblocked but deferred.
 
 ## Required Fixes Adopted Into R5.75
 
@@ -386,41 +392,60 @@ every `blocker` row clearing.**
 
 | Issue | Bug (one line) | Legacy alias | Primary code path | Status |
 |-------|----------------|--------------|-------------------|--------|
-| 1 | Extraction runs over the full session compact-row pool instead of an active-objective surface | — | `context/mod.rs::assemble_context` → `extract_objective` | **OPEN — blocker** |
-| 2 | Structured fields assembled by pooling clauses from all candidate rows | — | `context/objective.rs::assemble_structured_objective`, `*_from_decomposition` | **OPEN — blocker** |
-| 3 | Goal-role detection too permissive: boilerplate/system rows receive `Goal` evidence spans | `#3` | `context/objective.rs::role_candidates_for_clause`, `looks_like_goal_text` | **OPEN — blocker** (reclassified 2026-06-20) |
-| 4 | Intent substring-driven (review→implement on the noun "implementation") | `#4` | `context/objective.rs::intent_for_text` | **Landed (SO-2.3D)** — conditional on 1/2/3 |
+| 1 | Extraction runs over the full session compact-row pool instead of an active-objective surface | — | `context/mod.rs::assemble_context` → `extract_objective` | **Landed (R5.75-1 anchoring fix, 2026-06-20)** |
+| 2 | Structured fields assembled by pooling clauses from all candidate rows | — | `context/objective.rs::assemble_structured_objective`, `*_from_decomposition` | **Landed (R5.75-1 anchoring fix, 2026-06-20)** |
+| 3 | Goal-role detection too permissive: boilerplate/system rows receive `Goal` evidence spans | `#3` | `context/objective.rs::role_candidates_for_clause`, `looks_like_goal_text` | **Landed (R5.75-1 anchoring fix, 2026-06-20)** |
+| 4 | Intent substring-driven (review→implement on the noun "implementation") | `#4` | `context/objective.rs::intent_for_text` | **Landed (SO-2.3D)** — now unconditional (1/2/3 landed) |
 | 5 | Target prefers broad repo/dir paths over packet/doc anchors | `#5` | `context/objective.rs::explicit_target_*` | OPEN — non-blocking follow-on |
-| 6 | `success_conditions`/`deliverables` over-upgrade weak/boilerplate evidence | `#6` | `context/objective.rs::success_conditions_from_decomposition`, `deliverables_from_decomposition`, `unknowns_for_objective` | **Landed (SO-2.3D)** — conditional on 1/2/3 |
-| 7 | Legacy narrowing/compat overlay can overwrite good structure with the wrong imperative line; downstream consumers not yet structured-native | `#7` | `checkpoint/mod.rs::narrowed_objective_summary`, `normalized_objective_text`; deferred `SO-X.1`–`X.4` | Deferred — **gated** follow-on |
-| 8 | Acceptance corpus lacks real orchestration-shaped session shapes | — | `tests/objective_acceptance.rs`, `tests/fixtures/objective_acceptance/**` | OPEN — pairs with the 1/2/3 fix |
+| 6 | `success_conditions`/`deliverables` over-upgrade weak/boilerplate evidence | `#6` | `context/objective.rs::success_conditions_from_decomposition`, `deliverables_from_decomposition`, `unknowns_for_objective` | **Landed (SO-2.3D)** — now unconditional (1/2/3 landed) |
+| 7 | Legacy narrowing/compat overlay can overwrite good structure with the wrong imperative line; downstream consumers not yet structured-native | `#7` | `checkpoint/mod.rs::narrowed_objective_summary`, `normalized_objective_text`; deferred `SO-X.1`–`X.4` | Deferred follow-on — **now ungated** (1/2/3 landed); not landed here |
+| 8 | Acceptance corpus lacks real orchestration-shaped session shapes | — | `tests/objective_acceptance.rs`, `tests/fixtures/objective_acceptance/**` | **Landed (R5.75-1 anchoring fix, 2026-06-20)** |
 
-**Blocker set for `R5.75-1` closure:** Issues 1, 2, 3 (with Issue 8 alongside, to lock the fix into
-the corpus). Issue 7 is *gated* — it must not land until 1/2/3 are fixed, because it wires the
-sidecar into the drift/progress signal. Issue 5 is the only purely non-blocking follow-on.
+**Blocker set for `R5.75-1` closure (cleared 2026-06-20):** Issues 1, 2, 3, and 8 are landed. The
+anchoring fix scopes goal selection + evidence spans + field assembly to the selected goal's mission
+surface, excludes pasted-boilerplate rows (negative `objective_score`) from goal candidacy,
+source-gates the `Goal` role to user/goal surfaces, and synthesizes a structural goal for the top
+user prompt when its phrasing misses the keyword heuristics. Issue 7 is now *ungated* (its hard
+prerequisite — 1/2/3 — is landed) but remains a deferred follow-on, not landed in this packet. Issue 5
+is the only purely non-blocking follow-on still open.
 
 Notes:
 
-- **Issue 4 / Issue 6 are "conditional", not unconditionally done.** `SO-2.3D` fixed the narrow
-  defects (whole-word intent derivation; active-goal-surface field scoping with symmetric
-  `unknowns`) and they hold on the locked corpus and on `019edd98`. They do **not** survive a wrong
-  goal anchor: on `019eb47f` the goal anchors to boilerplate, so intent reverts to `implement` and
-  `success_conditions` re-fill from the `AGENTS.md` cargo ladder. 4/6 are therefore only as good as
-  1/2/3. Landed regressions (live, not `#[ignore]`d) in `tests/checkpoints.rs`:
+- **Issues 1/2/3 landed (R5.75-1 anchoring fix).** `context/objective.rs`:
+  `selected_goal_clause` now excludes boilerplate candidates (`candidate_is_boilerplate_surface`,
+  keyed to the row scorer's negative `objective_score`) and picks the best clause-level goal among
+  the survivors; `role_candidates_for_clause` source-gates `Goal` to `ThreadGoal`/`UserPrompt` rows;
+  `inject_structural_goal_if_absent` promotes the top genuine user surface's primary actionable
+  clause (gated by `clause_states_a_request_action`) when no keyword goal exists; and
+  `evidence_spans_from_decomposition` grounds spans to the selected goal's candidate. Verified on the
+  gate sessions (below).
+- **Issue 4 / Issue 6 now hold unconditionally.** `SO-2.3D` fixed the narrow defects (whole-word
+  intent derivation; active-goal-surface field scoping with symmetric `unknowns`); they were
+  conditional on a correct goal anchor, which 1/2/3 now guarantee. On `019eb47f` the goal anchors to
+  the real evaluate/review ask, so `primary_intent` resolves to `review` and `success_conditions` /
+  `deliverables` stay empty with `ObjectiveUnknown`s rather than re-filling from the `AGENTS.md` cargo
+  ladder. Live regressions in `tests/checkpoints.rs`:
   `so_2_3d_review_prompt_with_implementation_noun_stays_review_intent`,
-  `so_2_3d_boilerplate_scaffolding_does_not_populate_success_or_deliverables`; locked acceptance
-  cases `review-implementation-noun-review-intent`, `orchestration-scaffolding-field-honesty`.
-- **Core diagnosis.** The extractor treats a broad *session text soup* as the surface; the design
-  wants *grounded extraction from the active mission surface* with conservative unknowns. Issue 1
-  (scope) + Issue 2 (pooling) are the spine; 3/4/5/6 are largely symptoms that fall out once
-  anchoring is correct.
-- **Suggested fix order.** (1) prove/limit candidate-row + clause scope on a failing session,
-  (2) anchor the goal before field assembly and constrain fields to that surface, (3) re-run the
-  named gate on `019eb47f` + `019edd98`, (4) extend the acceptance corpus (Issue 8) with the
-  minimized failing shapes.
-- **Evidence sessions.** `019eb47f` — boilerplate goal anchor → `implement` intent +
-  cargo-ladder `success_conditions` (Issues 1/2/3, surfacing 4/6); `019eddaa` — wrong imperative
-  "optional nit" line wins (Issue 7); `019edd98` — passes, the shape where 4/6 hold.
+  `so_2_3d_boilerplate_scaffolding_does_not_populate_success_or_deliverables`,
+  `checkpoints_anchor_structured_objective_to_evaluate_ask_over_boilerplate_pool`; locked acceptance
+  cases `review-implementation-noun-review-intent`, `orchestration-scaffolding-field-honesty`,
+  `orchestration-evaluate-ask-anchor`.
+- **Core diagnosis (confirmed).** The extractor used to treat a broad *session text soup* as the
+  surface; the fix makes it *grounded extraction from the active mission surface* with conservative
+  unknowns. Issue 1 (scope) + Issue 2 (pooling) were the spine; 3/4/6 fell out once anchoring was
+  correct, exactly as predicted.
+- **Issue 8 corpus.** Locked acceptance case `orchestration-evaluate-ask-anchor` (the minimized
+  `019eb47f` shape) plus the `checkpoints.rs` full-pipeline regression
+  `checkpoints_anchor_structured_objective_to_evaluate_ask_over_boilerplate_pool` lock the fix.
+- **Residual (non-blocking, Issue 5).** On `019eb47f` checkpoints 2/3 (the later "perform a series of
+  manual smoke checks … evaluate …" ask) the structured `target` resolves to `signal/classification/etc`
+  — a prose token misread as a path. It comes from the genuine user ask (not boilerplate, not a
+  pasted-body path, not a fabricated conceptual topic), so it satisfies the gate; tightening
+  prose-path target extraction stays tracked as Issue 5.
+- **Evidence sessions.** `019eb47f` — now anchors the goal to the evaluate ask (`review` intent,
+  grounded `docs/specs/r5` target, weak fields unknown, zero boilerplate `Goal` spans); `019eddaa` —
+  wrong imperative "optional nit" line wins (Issue 7); `019edd98` — passes, the shape where 4/6 held
+  even before the anchoring fix.
 
 ### Promotion Gate
 
@@ -436,15 +461,16 @@ Do not begin `R5.75-2` until all of the following are true:
 - the exported checkpoint surfaces `structured_objective` and the gate smoke asserts structured
   semantics (landed, `SO-Observability`),
 - the `SO-2.3D` semantic-honesty fix is landed so Issue 4/Issue 6 are fixed and their live regressions
-  plus the structured-stressing smoke are green (landed, but conditional on Issue 1/2/3 — see ledger),
-- **[OPEN — blocking as of 2026-06-20]** the structured objective is correct on every named
-  condensation gate session, not only `019edd98`: the goal anchors to the real ask with no
-  boilerplate-pooled `intent`/`target`/`success_conditions` (Issues 1/2/3; see the Remaining Bug
-  Ledger above). This is **not** satisfied on `019eb47f`; see the held decision below.
+  plus the structured-stressing smoke are green (now unconditional — Issue 1/2/3 landed; see ledger),
+- **[CLEARED 2026-06-20]** the structured objective is correct on every named condensation gate
+  session, not only `019edd98`: the goal anchors to the real ask with no boilerplate-pooled
+  `intent`/`target`/`success_conditions` (Issues 1/2/3; see the Remaining Bug Ledger above). This is
+  now satisfied on `019eb47f`; see the promotion decision below.
 
-The operational gate was re-run on 2026-06-20 against a freshly built structured-aware pipeline
-(`cargo test -p agent-drift-analyzer` and `-p agent-drift-sentinel` both green; all five smoke
-pipelines compactor→analyzer→sentinel clean). Recorded outcomes:
+The operational gate was re-run on 2026-06-20 — first against the pre-fix pipeline (which held
+`R5.75-1`), then against the fixed pipeline after the Issue 1/2/3 anchoring fix landed
+(`cargo test -p agent-drift-analyzer` and `-p agent-drift-sentinel` both green — 486 tests, 0
+failures; all five smoke pipelines compactor→analyzer→sentinel clean). Recorded outcomes after the fix:
 
 - **Condensation (string surface) — pass:** all four first-checkpoint objectives resolve to the
   concrete task ask, not a pasted scaffold body. `019eb430` → the `/goal Review the already-landed
@@ -452,31 +478,34 @@ pipelines compactor→analyzer→sentinel clean). Recorded outcomes:
   implemented landed correctly and completely`; `019eb98e` → `review what landed … and
   validate/invalidate …`; adapted `05a56cc5…` → `add this skill to @shared-cab-app` (grounded
   `repo_slice` target).
-- **Structured semantics (`019edd98`) — pass:** `primary_intent=review` on every checkpoint,
-  goal-scoped `success_conditions`/`deliverables` (empty, with symmetric `ObjectiveUnknown`s), and a
-  grounded `file_or_directory` target, never a fabricated conceptual topic.
-- **Structured semantics (`019eb47f`) — FAIL:** the structured objective anchors its `Goal` evidence
-  spans to boilerplate (system-instruction rows + the pasted `$code-review-and-quality` skill body),
-  producing `primary_intent=implement` on a review/eval ask, `target=/run/substrate.sock` (a
-  pasted-body line), and `success_conditions` pooled from the `AGENTS.md` cargo ladder. The sidecar
-  is strictly worse than the legacy narrowed string beside it.
+- **Structured semantics (`019edd98`) — pass (unchanged):** `primary_intent=review` on every
+  checkpoint, goal-scoped `success_conditions`/`deliverables` (empty, with symmetric
+  `ObjectiveUnknown`s), and a grounded `file_or_directory` target, never a fabricated conceptual topic.
+- **Structured semantics (`019eb47f`) — now PASS:** the goal anchors to the real evaluate/review ask
+  on every checkpoint. Checkpoints 0/1 (the named defect): `primary_intent=review` (was `implement`),
+  `target=docs/specs/r5` grounded spec doc (was `/run/substrate.sock`), `success_conditions` /
+  `deliverables` empty with symmetric `ObjectiveUnknown`s (was 24 cargo-ladder conditions), a single
+  goal evidence span on the user prompt, and **zero `Goal` spans on system-instruction or pasted-skill
+  rows** (was 22 system-instruction goal spans out of 541 pooled spans). Checkpoints 2/3 (the later
+  "perform … smoke checks … evaluate …" ask) likewise resolve `review` with no boilerplate-pooled
+  fields; the only residual is the `signal/classification/etc` prose-path target (Issue 5,
+  non-blocking — grounded in the genuine ask, not a pasted body).
+- **Adapted `05a56cc5…` structured — pass:** the goal anchors to the concrete steer
+  `add this skill to @shared-cab-app` with a grounded `repo_slice` target, no longer the earlier
+  pasted frontend-pro skill template.
 
-**Promotion decision: HELD (2026-06-20).** `SO-Observability`'s purpose is that a green structured-
-aware gate proves structured semantics; a named condensation gate session (`019eb47f`) still fails
-them. Root cause is the still-open extraction-scope / pooled-field-assembly / permissive-goal-role
-seams — **Issue 1/2/3** (see the Remaining Bug Ledger above), which `SO-2.3D` never claimed to fix. Those are hereby **promoted
-from tracked follow-on to a blocker** for `R5.75-1` closure: the gate must be re-run and pass on
-`019eb47f` (goal anchored to the real ask, no boilerplate-pooled `intent`/`target`/`success_conditions`)
-before `R5.75-2` may begin — and certainly before the deferred Issue 7 migration wires the sidecar into
-drift output. The earlier rationale for Issue 3 (`#3`) being non-blocking ("does not change the
-selected goal or the scoped fields") is contradicted by `019eb47f`, where boilerplate `Goal` spans
-*are* the goal surface and *do* drive the scoped fields.
+**Promotion decision: PROMOTED (2026-06-20). `R5.75-1` is closed; `R5.75-2` may begin.** The Issue
+1/2/3 anchoring fix landed in `crates/agent-drift-analyzer/src/context/objective.rs` (additive,
+analyzer-local; `checkpoint/mod.rs` narrowing and the deferred `SO-X.*` consumers untouched). The
+structured-aware gate now proves structured semantics on every named gate session, the automated
+analyzer + sentinel walls are green, and the fix is locked into the corpus (Issue 8). The deferred
+Issue 7 migration is now **unblocked** (its hard prerequisite — correct anchoring — is landed) but is
+intentionally not part of this packet.
 
-Why this is observability-only today (not yet a live drift regression): Phase 1 is additive — the
-sidecar is not yet read by the downstream drift/progress path, which still runs off the legacy
-`TaskFrame`/working-set bridge. `019eb47f` reports `flagged=no`, `progress=stalled`, drift cleared.
-The risk goes live the moment Issue 7 consumes the sidecar, so the Issue 1/2/3 fix is a hard
-prerequisite for Issue 7.
+Phase 1 remains additive: the sidecar is still not read by the downstream drift/progress path, which
+runs off the legacy `TaskFrame`/working-set bridge. The anchoring fix therefore corrects the
+structured sidecar (the gate surface) without changing live drift output; it is the hard prerequisite
+that makes the deferred Issue 7 migration safe to wire in next.
 
 ## R5.75-2: Sparse Readable Session Fail-Open
 

@@ -6,8 +6,8 @@ use std::fs;
 
 use agent_drift_analyzer::{
     AnalyzeRequest, AnalyzeResult, Confidence, ObjectiveClass, ObjectiveIntent, ObjectiveRole,
-    ObjectiveSectionKind, ObjectiveTargetKind, ProgressDimension, ProgressSignalCode,
-    ProgressStatus, SessionArchetypeLabel,
+    ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTargetKind, ProgressDimension,
+    ProgressSignalCode, ProgressStatus, SessionArchetypeLabel,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::Utf8PathBuf;
@@ -245,6 +245,116 @@ fn so_2_3d_boilerplate_scaffolding_does_not_populate_success_or_deliverables() {
         "boilerplate scaffolding must not populate deliverables: {:?}",
         structured.deliverables
     );
+}
+
+// R5.75-1 Issue 1/2/3 regression (the `019eb47f` gate shape, minimized): a user prompt whose ask
+// ("use the $code-review-and-quality skill to evaluate if what was implemented landed correctly")
+// misses the goal-keyword heuristics, preceded by system/developer scaffolding and a pasted AGENTS.md
+// user message carrying goal-shaped verbs, a `/run/substrate.sock` path, and a cargo-style success
+// ladder. The structured objective must anchor to the real ask, not pool the boilerplate: intent is
+// `review`, the target is the grounded ask path (not a pasted-body path), no `Goal` evidence span
+// lands on a system-instruction or pasted-skill-body row, and weak fields stay unknown.
+#[test]
+fn checkpoints_anchor_structured_objective_to_evaluate_ask_over_boilerplate_pool() {
+    let result = analyze_custom_rows(vec![
+        system_row(
+            0,
+            "turn-001",
+            "For sessions using the code_intel_azure profile, prefer spawned subagents with the built-in default agent type.",
+        ),
+        developer_row(
+            1,
+            "turn-001",
+            "Use memory by default. Review and validate every change and ensure the suite stays green and reports success. Always run cargo test -p foo before finishing. The runtime socket lives at /run/substrate.sock.",
+        ),
+        user_row(
+            2,
+            "turn-001",
+            "# AGENTS.md instructions for /repo\nKeep work centered on the requested packet. Return with changed files and a recommended commit message.",
+            UserMessageRole::Unknown,
+        ),
+        prompt_row(
+            3,
+            "turn-001",
+            "We just landed the complete docs/specs/r5 and now I need you to use the $code-review-and-quality skill to evaluate if what was implemented landed correctly and completely",
+        ),
+        user_row(
+            4,
+            "turn-001",
+            "<skill>\n<name>code-review-and-quality</name>\nReview the diff and ensure quality. Validate that all tests pass and stay green.\n</skill>",
+            UserMessageRole::Unknown,
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,80p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-spec.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(6, "turn-001", "Exit code: 0"),
+    ]);
+
+    let structured = result.sessions[0]
+        .checkpoints
+        .first()
+        .and_then(|checkpoint| checkpoint.structured_objective.as_ref())
+        .expect("exported structured objective");
+
+    assert_eq!(
+        structured.primary_intent,
+        ObjectiveIntent::Review,
+        "the evaluate/review ask must drive intent, not the boilerplate implement verbs"
+    );
+
+    let goal_spans = structured
+        .evidence_spans
+        .iter()
+        .filter(|span| span.role == ObjectiveRole::Goal)
+        .collect::<Vec<_>>();
+    assert!(
+        goal_spans
+            .iter()
+            .any(|span| span.excerpt.contains("evaluate if what was implemented")),
+        "the goal must anchor to the real evaluate ask; got {:?}",
+        goal_spans.iter().map(|span| &span.excerpt).collect::<Vec<_>>()
+    );
+    for span in &goal_spans {
+        assert_ne!(
+            span.source_kind,
+            ObjectiveSourceKind::SystemInstruction,
+            "no Goal span may land on a system-instruction row: {:?}",
+            span.excerpt
+        );
+        assert!(
+            !span.excerpt.contains("<skill>")
+                && !span.excerpt.contains("AGENTS.md instructions")
+                && !span.excerpt.contains("/run/substrate.sock"),
+            "no Goal span may land on pasted boilerplate: {:?}",
+            span.excerpt
+        );
+    }
+
+    // The target must be grounded in the real ask (docs/specs/r5), never the pasted-body socket path.
+    let target = structured.target.as_ref().expect("grounded target");
+    assert!(
+        target.display.contains("docs/specs/r5"),
+        "target must ground to the ask, got {:?}",
+        target.display
+    );
+    assert!(
+        !target.display.contains("/run/substrate.sock"),
+        "target must not be a pasted-body path"
+    );
+
+    // Weak fields seen only in off-goal boilerplate stay unknown rather than being pooled.
+    assert!(structured.success_conditions.is_empty());
+    assert!(structured.deliverables.is_empty());
+    let unknown_fields = structured
+        .unknowns
+        .iter()
+        .map(|unknown| unknown.field_name.as_str())
+        .collect::<Vec<_>>();
+    assert!(unknown_fields.contains(&"success_conditions"));
+    assert!(unknown_fields.contains(&"deliverables"));
 }
 
 #[test]

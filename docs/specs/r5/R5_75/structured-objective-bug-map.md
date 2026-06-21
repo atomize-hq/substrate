@@ -6,26 +6,31 @@ Purpose: capture the current best explanation for why the live structured-object
 
 Scope: this is a diagnosis map, not a fix plan. It is intended to support follow-on debugging, packetization, and future implementation prompts.
 
-> **Currency note (2026-06-20).** The body below is the original 2026-06-19 diagnosis snapshot,
-> preserved as the deep root-cause reference. The **authority for current status** is the
-> `R5.75-1 → Remaining Bug Ledger` in `docs/specs/r5/R5_75/MAP.md`. Where the snapshot below still
-> describes a defect as unfixed, cross-check the ledger. Current status as of 2026-06-20:
+> **Currency note (updated 2026-06-20, post-fix).** The body below is the original 2026-06-19
+> diagnosis snapshot, preserved as the deep root-cause reference. The **authority for current status**
+> is the `R5.75-1 → Remaining Bug Ledger` in `docs/specs/r5/R5_75/MAP.md`. Where the snapshot below
+> still describes a defect as unfixed, cross-check the ledger. Current status as of 2026-06-20 (after
+> the Issue 1/2/3 anchoring fix landed):
 >
 > | Issue | Current status |
 > |-------|----------------|
-> | 1 — extraction scope too broad | OPEN — blocker |
-> | 2 — pooled field assembly | OPEN — blocker |
-> | 3 — goal-role too permissive (boilerplate gets `Goal` spans) | OPEN — blocker |
-> | 4 — intent misclassification | Landed (`SO-2.3D`), conditional on 1/2/3 — `019edd98` now resolves `review` |
+> | 1 — extraction scope too broad | **Landed** (R5.75-1 anchoring fix) |
+> | 2 — pooled field assembly | **Landed** (R5.75-1 anchoring fix) |
+> | 3 — goal-role too permissive (boilerplate gets `Goal` spans) | **Landed** (R5.75-1 anchoring fix) |
+> | 4 — intent misclassification | Landed (`SO-2.3D`) — now unconditional (1/2/3 landed) |
 > | 5 — target prefers broad repo/dir paths | OPEN — non-blocking follow-on |
-> | 6 — success/deliverable over-upgrade | Landed (`SO-2.3D`), conditional on 1/2/3 |
-> | 7 — legacy narrowing overwrite + downstream migration | Deferred — gated follow-on |
-> | 8 — acceptance corpus blind spots | OPEN — pairs with the 1/2/3 fix |
+> | 6 — success/deliverable over-upgrade | Landed (`SO-2.3D`) — now unconditional (1/2/3 landed) |
+> | 7 — legacy narrowing overwrite + downstream migration | Deferred follow-on — now ungated (1/2/3 landed) |
+> | 8 — acceptance corpus blind spots | **Landed** (`orchestration-evaluate-ask-anchor` + `checkpoints.rs` regression) |
 >
-> The 2026-06-20 gate re-run **held** `R5.75-1` promotion: `019eb47f` still anchors its goal to
-> boilerplate (implement intent + cargo-ladder `success_conditions`), confirming Issues 1/2/3 as
-> blockers. Issues 4/6 below were described as failing in this snapshot; `SO-2.3D` since landed
-> narrow fixes for them, but they only hold when goal anchoring (1/2/3) is correct.
+> The 2026-06-20 gate first **held** `R5.75-1` promotion (`019eb47f` anchored its goal to boilerplate:
+> implement intent + cargo-ladder `success_conditions`). The Issue 1/2/3 anchoring fix then landed in
+> `crates/agent-drift-analyzer/src/context/objective.rs` — goal selection, evidence spans, and field
+> assembly are now grounded to the selected goal's mission surface; pasted-boilerplate rows (negative
+> `objective_score`) are excluded from goal candidacy; the `Goal` role is source-gated to user/goal
+> surfaces; and a structural goal is synthesized for the top user prompt when its phrasing misses the
+> keyword heuristics. The gate was re-run **green**, so `R5.75-1` is promoted to `R5.75-2`. Issues 4/6
+> (`SO-2.3D`) now hold unconditionally because the goal anchor they depend on is correct.
 
 ---
 

@@ -1,0 +1,13 @@
+{
+  "rows": [
+    {
+      "kind": "developer_message",
+      "text": "Review and validate every change, ensure the suite stays green, and confirm the implementation is complete before finishing."
+    },
+    {
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Debug why crates/net/src/client.rs drops the retry header on the second attempt."
+    }
+  ]
+}
