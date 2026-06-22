@@ -313,6 +313,17 @@ For Codex specifically:
 
 This is why the Codex mapping doc and this workspace-overlay doc remain separate.
 
+First-pass note:
+
+1. repo-visible Codex compatibility surfaces should not be used to compensate for missing
+   home-root/state projection constraints,
+2. if worker- or lane-local Codex isolation fails because non-`CODEX_HOME` discovery paths remain
+   ambient, the fix belongs first in the Codex home/auth/config mapping and generic projection
+   boundary, not in granting broader authority to workspace `.codex`,
+3. workspace-visible projection may still become a useful bounded lever for things like projected
+   MCP or skills compatibility later, but only as a subordinate compatibility surface beneath the
+   managed home-root/state model.
+
 ## Adapter-Family Stretch Goal To Preserve
 
 This document exists largely because future adapters may depend more heavily on workspace discovery than Codex does.

@@ -135,6 +135,26 @@ Examples:
 
 This layer is where agent-native compatibility happens.
 
+### First-pass note: projection boundary is broader than one native root
+
+The projected-state boundary must not be defined only by the most obvious native root such as
+`CODEX_HOME`.
+
+Why:
+
+1. some adapters can still discover relevant runtime state from launch env, alternate state-root
+   settings, keyring-backed credential stores, or workspace-local compatibility files,
+2. that can bypass worker- or lane-local projected state even while the process is still safely
+   inside one Substrate world,
+3. the resulting failure mode is not necessarily “world escaped to host,” but “sibling workers in
+   one shared world silently stop being isolated by the intended projected-state boundary.”
+
+This matters most for:
+
+1. same-backend retained workers in one authoritative shared world,
+2. future named lanes in one authoritative shared world,
+3. adapter families with more than one discovery root.
+
 ### 4. Launch-time secret handoff layer
 
 Sensitive auth material is handled separately from ordinary config projection.

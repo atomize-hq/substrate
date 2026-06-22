@@ -103,6 +103,27 @@ This design assumes current Codex behavior as follows:
 
 The mapping here is designed around that reality.
 
+### First-pass note: `CODEX_HOME` is primary, but not sufficient by itself
+
+Even with an explicit projected `CODEX_HOME`, the managed-state boundary can still be bypassed if
+other Codex-native discovery paths remain unconstrained.
+
+Important examples include:
+
+1. env-precedence for credentials or provider-related launch inputs,
+2. alternate state roots such as log or sqlite relocation,
+3. keyring-backed or automatic credential-store modes,
+4. workspace-local compatibility roots such as project `.codex` overlays,
+5. non-`CODEX_HOME` extension roots where supported.
+
+This is primarily a shared-world worker-isolation concern:
+
+1. the process may still be correctly isolated inside a Substrate world,
+2. but sibling retained workers in that shared world can still alias runtime state if these other
+   paths are left ambient,
+3. so a correct projected `CODEX_HOME` is necessary but not sufficient for worker- or
+   lane-local isolation.
+
 ## Codex Projection Layers
 
 This Codex-specific mapping divides into four Codex-facing layers under the generic framework.
@@ -300,6 +321,17 @@ It therefore has these limits:
 2. it must not be described as a parallel steady-state auth model,
 3. it must not become a permanent fallback once the gateway-front-door path is complete,
 4. later implementation planning should include explicit retirement criteria for this bridge.
+
+First-pass note:
+
+1. the current direct world-member failure mode shows that this bridge may need bounded
+   non-secret bootstrap config projection as well as auth artifacts while the direct path still
+   exists,
+2. for example, managed projected `config.toml` or equivalent model/profile bootstrap data may be
+   required to keep direct launch behavior truthful before gateway-front-door realization is
+   complete,
+3. that does not change the target architecture; it only means the transitional bridge cannot be
+   modeled as “auth-only” if current runtime reality needs more than that to start correctly.
 
 ### Keyring posture
 
