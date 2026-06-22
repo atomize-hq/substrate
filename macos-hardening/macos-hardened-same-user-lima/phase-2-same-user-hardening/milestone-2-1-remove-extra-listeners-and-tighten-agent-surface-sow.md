@@ -33,7 +33,7 @@ This milestone exists to make the listener surface match the intended contract b
 
 - Remove the default `SUBSTRATE_AGENT_TCP_PORT=61337` injection from the macOS guest service path.
 - Freeze the intended macOS listener contract as “UDS required; any retained
-  raw TCP path is breakglass/unsupported and not part of the supported or
+  raw TCP path is breakglass and not part of the supported or
   degraded-but-supported runtime contract.”
 - Update doctor, smoke, and docs so they validate or describe the hardened listener posture instead of silently tolerating the old one.
 - Identify any transport or doctor code paths that still assume guest TCP
@@ -96,9 +96,8 @@ This milestone exists to make the listener surface match the intended contract b
 - macOS doctor and smoke evidence remains green without depending on the guest TCP listener.
 - `substrate world gateway sync|status|restart` and gateway lifecycle smoke
   coverage remain green without depending on the guest TCP listener.
-- Any remaining raw TCP path on macOS is explicitly labeled
-  breakglass/unsupported rather than supported, degraded-but-supported, or
-  compatibility mode.
+- Any remaining raw TCP path on macOS is explicitly labeled breakglass or
+  compatibility-only rather than supported or degraded-but-supported mode.
 
 ## Validation / evidence plan
 

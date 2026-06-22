@@ -42,7 +42,7 @@ This milestone exists because the hardening story is incomplete until the operat
 - Classify host-side `SUBSTRATE_WORLD_SOCKET` override use as advanced/test or
   breakglass rather than the default supported Lima path.
 - Mark legacy scripts or workflows as supported, degraded-but-supported, or
-  breakglass/unsupported as appropriate.
+  breakglass as appropriate.
 
 ## Out-of-scope
 
@@ -56,8 +56,8 @@ This milestone exists because the hardening story is incomplete until the operat
   - supported: owned by Substrate and documented first
   - degraded-but-supported: retained temporarily with an explicit migration note
     and bounded expectations
-  - breakglass/unsupported: allowed for deep debugging or recovery, but not
-    part of normal setup or maintenance
+  - breakglass: allowed for deep debugging or recovery, but not part of normal
+    setup or maintenance
 - Apply that classification consistently across `README`-style docs, setup docs, troubleshooting sections, and helper-script messaging.
 - Treat `substrate world gateway sync|status|restart` and status JSON as part of
   the supported operator contract, not as optional or experimental side paths.
@@ -86,7 +86,7 @@ This milestone exists because the hardening story is incomplete until the operat
   - messaging and role should match the reclassification
 - `scripts/mac/lima-warm.sh`
   - usage/help text should reflect whether it is supported,
-    degraded-but-supported, or breakglass/unsupported
+    degraded-but-supported, or breakglass
 - `scripts/mac/smoke.sh`
   - evidence instructions should match the owned operations narrative
 
@@ -106,7 +106,7 @@ This milestone exists because the hardening story is incomplete until the operat
   `substrate world gateway sync|status|restart` and status JSON for managed
   gateway lifecycle.
 - Remaining `limactl shell` and direct guest systemctl/socket instructions are
-  explicitly labeled breakglass/unsupported.
+  explicitly labeled breakglass.
 - Any degraded-but-supported path that remains is a compatibility wrapper
   around a Substrate-owned command surface, not a raw direct guest procedure.
 - Troubleshooting sections make clear when a user should escalate from owned commands to breakglass commands.

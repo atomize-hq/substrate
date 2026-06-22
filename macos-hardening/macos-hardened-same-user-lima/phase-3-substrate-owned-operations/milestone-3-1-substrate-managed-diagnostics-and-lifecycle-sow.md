@@ -83,7 +83,7 @@ operator contract.
 - Preserve the phase-0 support taxonomy:
   - supported
   - degraded-but-supported
-  - breakglass/unsupported
+  - breakglass
 
 This milestone should also preserve already-supported shared-world/orchestration
 behavior rather than hard-coding an owned-operations story that only works for
@@ -151,7 +151,7 @@ single-session happy paths.
   workspace ingress or sync after Phase 2 mount minimization.
 - Operators can gather the primary health evidence without running raw `limactl shell substrate ...` commands.
 - Any degraded-but-supported helper path is explicitly identified as such and
-  is distinct from breakglass/unsupported flows.
+  is distinct from breakglass flows.
 - A reviewer can list the normal macOS operational commands from one doc section without cross-referencing guest-admin recipes.
 - Host-side `SUBSTRATE_WORLD_SOCKET` override use is not presented as the
   default supported Lima path.

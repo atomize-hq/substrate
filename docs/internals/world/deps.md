@@ -30,8 +30,9 @@ Substrate’s hardened world-service service runs with a restrictive systemd san
 - `ProtectSystem=strict` (rootfs is effectively read-only)
 - `ReadWritePaths=... /var/lib/substrate ... /tmp` (Substrate-owned writable surfaces)
 
-On macOS (Lima), see:
-- `scripts/mac/substrate-world-service.service`
+On macOS (Lima), see the canonical unit authority under:
+- `scripts/mac/lima/units/substrate-world-service.service.tmpl`
+- `scripts/mac/lima/units/substrate-world-service.socket`
 
 Additionally, Substrate’s world env contract sets:
 - `HOME=/root`

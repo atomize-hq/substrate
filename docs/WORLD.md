@@ -207,7 +207,8 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 - `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and renders the authoritative guest units from `scripts/mac/lima/units/substrate-world-service.service.tmpl` plus `scripts/mac/lima/units/substrate-world-service.socket` so fresh create and warm/repair load the same systemd contract. That contract writes to `/run/substrate.sock` as the only hardened default guest listener, preserves managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` remains the deeper troubleshooting helper once the routed CLI proof below has already failed.
   - The helper scripts stage the active project path into the guest-local workspace root at `/var/lib/substrate/staged-workspace/current` via `limactl copy`; broad host-home visibility and a mounted `/src` checkout are no longer the hardened default ingress path.
-  - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
+  - If full isolation writable allowlists fail with `EPERM` in the guest,
+    breakglass diagnosis can confirm the guest service has `cap_chown`:
     `limactl shell substrate systemctl show substrate-world-service.service -p CapabilityBoundingSet -p AmbientCapabilities`
 
 - Routed readiness order for an already provisioned backend
@@ -236,10 +237,10 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
   - Forwarding issues surface in shell `DEBUG` logs with the selected transport. `scripts/mac/lima-doctor.sh` mirrors doctor CLI checks after the routed proof path has already been attempted.
 
 - Validation
-  - `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` preserve routed CLI proof priority but also render the authoritative guest units from the same host-side inputs consumed by `scripts/mac/lima-warm.sh` and compare them against the loaded guest `substrate-world-service.service`/`.socket` captured via `systemctl cat`, so fresh-create and repair parity is proven explicitly instead of inferred. When verifying the opt-in netfilter posture, run those parity checks with `SUBSTRATE_WORLD_NETFILTER_ENABLE=1` so the expected render matches the requested host-side contract.
+  - `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` preserve routed CLI proof priority but also resolve canonical units through the same project-path-or-script-dir contract that `scripts/mac/lima-warm.sh` uses, render those units locally, and compare them against the loaded guest `substrate-world-service.service`/`.socket` captured via `systemctl cat`, so fresh-create and repair parity is proven explicitly instead of inferred. When verifying the opt-in netfilter posture, run those parity checks with `SUBSTRATE_WORLD_NETFILTER_ENABLE=1` so the expected render matches the requested host-side contract.
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
   - `scripts/mac/orchestration-smoke.sh` warms Lima, runs the live `world-mac-lima` backend smoke example, and then runs the macOS-targeted orchestration regression tests that cover shared-owner attach/create, replacement, lazy member launch, targeted follow-up reuse, guest-owned cancel, and shared-world mismatch rejection.
-  - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.
+  - `scripts/mac/smoke.sh --world-disabled-diagnostics` verifies the explicit world-disabled macOS diagnostics path without promoting guest-direct breakglass checks to the default proof wall.
   - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world). WSL-specific provisioning helpers are intentionally disabled in this slice.
 
 ## 4) Isolation Details (Linux)
@@ -472,7 +473,7 @@ Implemented features:
 
 - The host CLI exposes the same inventory via `substrate world cleanup`. Without flags it reports idle/active namespaces, cgroups, and host-level nft tables plus the exact manual commands needed to purge them.
 - Add `--purge` (and run as root/CAP_NET_ADMIN) to delete idle `substrate-<WORLD_ID>` netns entries, their nft tables, and matching `/sys/fs/cgroup/substrate/<WORLD_ID>` directories.
-- macOS + Lima: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`).
+- macOS + Lima breakglass: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`).
 - When purge isn't available, follow the printed instructions (`sudo ip netns exec ... nft delete table inet substrate_<WORLD_ID>`, `sudo ip netns delete ...`, `sudo rm -rf /sys/fs/cgroup/substrate/<WORLD_ID>`).
 
 ### Isolation fallback diagnostics

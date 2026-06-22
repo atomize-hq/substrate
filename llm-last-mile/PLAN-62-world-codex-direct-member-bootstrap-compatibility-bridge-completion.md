@@ -11,7 +11,7 @@ Implementation posture: complete the direct world-member compatibility bridge wi
 
 ## Objective
 
-Repair the current direct `cli:codex-world` member bootstrap gap so the existing transitional path becomes truthful enough to run on the diagnosed June 21, 2026 machine profile, while still staying visibly transitional and narrow.
+Repair the current direct `cli:codex-world` member bootstrap gap so the existing transitional path becomes truthful enough to run on the diagnosed June 21, 2026 **file-backed-auth** machine profile, while still staying visibly transitional and narrow.
 
 This plan must land:
 
@@ -27,9 +27,15 @@ The repo already has the first half of the compatibility bridge:
 
 1. shell injects a runtime-internal seed-home hint only when exact-backend policy allows host reads,
 2. `world-service` materializes an isolated `CODEX_HOME`,
-3. auth seeding proved useful but incomplete.
+3. auth seeding proved useful but incomplete on the diagnosed profile.
 
 The remaining bug is not “no auth,” and it should not be fixed by broadening the bridge into “copy host `.codex` and hope.”
+
+The current due-diligence posture to preserve is:
+
+1. official Codex docs distinguish local state roots, auth storage, configuration layers, and future extensibility surfaces,
+2. the June 21 handoffs still justify only a diagnosed-profile bridge for the current file-backed direct-member bootstrap path,
+3. therefore this slice should repair the current path honestly without turning it into a generic Codex portability or future-capability foundation.
 
 So the correct sequence is:
 
@@ -45,7 +51,7 @@ So the correct sequence is:
 ### What changes
 
 1. The direct world-member bridge stops being “auth only”; it becomes “auth plus bounded non-secret bootstrap config.”
-2. The isolated `CODEX_HOME` receives a rendered compatibility `config.toml` containing only the narrow startup subset needed for truthful model/provider selection.
+2. The isolated `CODEX_HOME` receives a rendered compatibility `config.toml` containing only the narrow **user-level** startup subset needed for truthful model/provider selection on the diagnosed profile, at minimum model plus directly coupled provider/base-URL settings if required.
 3. The bridge fails closed when it cannot derive that narrow startup subset instead of silently allowing Codex to fall back to an unsupported default model.
 4. Docs and code comments explicitly describe the bridge as transitional.
 
@@ -55,8 +61,9 @@ So the correct sequence is:
 2. Slice `59` runtime-realizability truth remains unchanged.
 3. Exact backend allowlist semantics remain unchanged.
 4. No general Codex config projection framework lands in this slice.
-5. No MCP/app-runtime/skills/plugin/workspace-overlay projection or reconciliation lands in this slice.
-6. No broader lane/retained-home persistence model lands in this slice.
+5. No replay of `~/.codex/*.config.toml` profile overlays or repo `.codex/config.toml` project config lands in this slice.
+6. No MCP/app-runtime/apps-connectors/hooks/rules/skills/plugin/custom-agent/workspace-overlay projection or reconciliation lands in this slice.
+7. No broader lane/retained-home persistence model lands in this slice.
 
 ## Implementation Order
 
@@ -65,7 +72,7 @@ So the correct sequence is:
 Goal:
 
 1. make the remaining bug and the desired bridge boundary explicit in automation,
-2. prove the slice is not merely “copy one more file somehow,”
+2. prove the slice is not merely “copy one more file somehow,” and not a claim of universal Codex truth,
 3. keep exact-backend gating pinned while implementation proceeds.
 
 Primary touch surface:
@@ -76,9 +83,9 @@ Primary touch surface:
 
 Required changes:
 
-1. add/expand world-service coverage around isolated `CODEX_HOME` preparation so the bridge contract includes bounded config rendering/materialization in addition to auth seeding,
+1. add/expand world-service coverage around isolated `CODEX_HOME` preparation so the bridge contract includes bounded config rendering/materialization in addition to auth seeding for the current file-backed bootstrap path,
 2. pin the rule that only the exact allowlisted backend may receive the internal seed-home hint,
-3. if feasible, add an assertion that the bridge does not project broader config/state artifacts.
+3. if feasible, add an assertion that the bridge does not replay profile/project config layers or project broader config/state artifacts.
 
 Verification checkpoint:
 
@@ -102,17 +109,18 @@ Primary touch surface:
 
 Required changes:
 
-1. read the host-side Codex config only from the already policy-gated seed-home source,
-2. derive the smallest non-secret bootstrap subset required for truthful model/provider startup,
+1. read the host-side Codex config only from the already policy-gated seed-home source used by the current file-backed direct-member path,
+2. derive the smallest non-secret **user-level** bootstrap subset required for truthful model/provider startup on the diagnosed profile, at minimum model plus directly coupled provider/base-URL settings if required,
 3. render that subset into isolated `CODEX_HOME/config.toml`,
 4. keep auth artifact materialization behavior intact,
-5. do not project unrelated config domains or broader home state,
-6. strip internal hints before final child spawn as the current bridge already intends.
+5. do not replay profile overlays or project config layers,
+6. do not project unrelated config domains or broader home state,
+7. strip internal hints before final child spawn as the current bridge already intends.
 
 Verification checkpoint:
 
-1. the isolated direct-member home now contains bounded compatibility config instead of relying on Codex defaults,
-2. broader config/state domains are not materialized,
+1. the isolated direct-member home now contains bounded user-level compatibility config instead of relying on Codex defaults,
+2. profile/project config layers and broader config/state domains are not materialized,
 3. the direct path remains internal and exact-backend-gated.
 
 ### Phase 2.5: Add Fail-Closed Diagnostics For Missing Bootstrap Truth
@@ -157,15 +165,16 @@ Primary touch surface:
 Required changes:
 
 1. update operator/developer docs to reflect that direct `cli:codex-world` member bootstrap currently depends on a bounded compatibility bridge,
-2. state that the bridge is transitional and should retire when gateway-front-door realization lands,
-3. rebuild/redeploy the installed runtime,
-4. rerun the live smoke floor and the exact June 21, 2026 public bootstrap smoke.
+2. state that this is the current file-backed direct-member bootstrap posture rather than a generic Codex auth portability contract,
+3. state that the bridge is transitional and should retire when gateway-front-door realization lands,
+4. rebuild/redeploy the installed runtime,
+5. rerun the live smoke floor and the exact June 21, 2026 public bootstrap smoke.
 
 Verification checkpoint:
 
 1. docs no longer imply “auth seeding alone” is the whole direct bootstrap story,
 2. the rebuilt runtime proves the smoke is fixed,
-3. nothing in the docs or code encourages reuse of this bridge for MCP/app-runtime/skills/workspace-overlay work.
+3. nothing in the docs or code encourages reuse of this bridge for MCP/app-runtime/apps-connectors/hooks/rules/skills/plugin/custom-agent/workspace-overlay work.
 
 ## Risks And Mitigations
 
@@ -174,7 +183,7 @@ Verification checkpoint:
 Mitigation:
 
 1. render a bounded startup subset instead of copying a whole `config.toml` blindly,
-2. keep broad config domains explicitly out of scope,
+2. keep profile/project config replay and broad config domains explicitly out of scope,
 3. test for narrow artifact materialization, not just for “some config file exists.”
 
 ### Risk 2: The slice creates a second steady-state authority plane
@@ -192,6 +201,14 @@ Mitigation:
 1. add fail-closed diagnostics for missing bounded startup truth,
 2. keep the live smoke proof in the closeout wall,
 3. preserve the June 21 handoffs as source authorities in the slice docs.
+
+### Risk 4: Future official Codex capability surfaces get smuggled into the bridge
+
+Mitigation:
+
+1. keep apps/connectors, hooks, rules, skills, plugins, custom agents, managed requirements/allowlists, and workspace-shared plugin state explicitly out of scope,
+2. preserve “current file-backed direct-member bootstrap path only” wording in the slice docs,
+3. stop after the diagnosed-profile repair rather than using this slice to pre-land future capability plumbing.
 
 ## Sequencing And Parallelism
 

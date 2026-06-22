@@ -314,10 +314,12 @@ and then re-run `world gateway status --json` to confirm the resulting posture.
 the already provisioned backend. The legacy `scripts/mac/lima-doctor.sh` script remains available
 for deeper troubleshooting, but the routed CLI commands are the canonical supported entry points.
 When you need to prove rendered-unit parity itself, `scripts/mac/lima-doctor.sh` and
-`scripts/mac/smoke.sh` render the canonical service/socket locally and compare them against the
-guest-loaded units captured via `systemctl cat`. Those parity checks render from the same
-host-side inputs that `scripts/mac/lima-warm.sh` consumes, so include
-`SUBSTRATE_WORLD_NETFILTER_ENABLE=1` when you need to verify the opt-in netfilter contract.
+`scripts/mac/smoke.sh` resolve canonical unit sources through the same
+project-path-or-script-dir contract that `scripts/mac/lima-warm.sh` consumes,
+render the canonical service/socket locally, and compare them against the
+guest-loaded units captured via `systemctl cat`. Include
+`SUBSTRATE_WORLD_NETFILTER_ENABLE=1` when you need to verify the opt-in
+netfilter contract.
 Same-user Lima still does not provide the Linux ownership boundary, even when these routed checks
 are green.
 

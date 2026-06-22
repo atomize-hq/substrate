@@ -6,10 +6,31 @@ if [[ "${EUID}" -eq 0 ]]; then
   exit 1
 fi
 
-SCRIPTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_PATH="${BASH_SOURCE[0]}"
+while [[ -L "${SOURCE_PATH}" ]]; do
+  SOURCE_DIR="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
+  SOURCE_PATH="$(readlink "${SOURCE_PATH}")"
+  [[ "${SOURCE_PATH}" != /* ]] && SOURCE_PATH="${SOURCE_DIR}/${SOURCE_PATH}"
+done
+SCRIPTS_ROOT="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPTS_ROOT}/../.." && pwd)"
 SUBSTRATE_BIN="${SUBSTRATE_BIN:-${REPO_ROOT}/target/debug/substrate}"
-CANONICAL_UNIT_SOURCE_DIR="${REPO_ROOT}/scripts/mac/lima/units"
+PROJECT_PATH="${SUBSTRATE_PROJECT_PATH:-$(pwd)}"
+if [[ -d "${PROJECT_PATH}" ]]; then
+  PROJECT_PATH="$(cd "${PROJECT_PATH}" && pwd)"
+else
+  PROJECT_PATH="${REPO_ROOT}"
+fi
+project_unit_source_dir="${PROJECT_PATH}/scripts/mac/lima/units"
+script_unit_source_dir="${SCRIPTS_ROOT}/lima/units"
+if [[ -d "${project_unit_source_dir}" ]]; then
+  CANONICAL_UNIT_SOURCE_DIR="${project_unit_source_dir}"
+elif [[ -d "${script_unit_source_dir}" ]]; then
+  CANONICAL_UNIT_SOURCE_DIR="${script_unit_source_dir}"
+else
+  echo "ERROR: Canonical guest unit directory not found. Expected ${project_unit_source_dir} or ${script_unit_source_dir}." >&2
+  exit 1
+fi
 VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-${LIMA_VM_NAME:-substrate}}"
 STAGED_WORKSPACE_CURRENT="${SUBSTRATE_LIMA_STAGED_WORKSPACE_CURRENT:-/var/lib/substrate/staged-workspace/current}"
 RUN_GUEST_DIRECT_BREAKGLASS="${SUBSTRATE_MAC_SMOKE_INCLUDE_GUEST_DIRECT:-0}"
@@ -19,7 +40,7 @@ LOG_DIR=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/mac/smoke.sh [--gateway-conformance | --orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
+Usage: scripts/mac/smoke.sh [--gateway-conformance | --world-disabled-diagnostics | --orchestration-conformance | --netfilter-conformance] [--log-dir DIR]
 
 This script preserves the routed macOS proof wall first:
   supported proof: `substrate host doctor [--json]`, `substrate world doctor
@@ -37,8 +58,6 @@ Options:
   --orchestration-conformance
                            Run the macOS/Lima orchestration conformance smoke
   --netfilter-conformance  Run the posture-aware Lima netfilter smoke instead of the generic smoke
-  --bedpm-installer-conformance
-                           Run the BEDPM Linux installer smoke through the Lima-backed guest path
   --log-dir DIR            Directory for doctor JSON and command transcripts (default: artifacts/mac/netfilter-smoke-<timestamp> in netfilter mode)
   -h, --help               Show this help text
 USAGE

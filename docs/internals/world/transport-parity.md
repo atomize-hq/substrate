@@ -1,128 +1,41 @@
 # Transport Parity Architecture Sketch
 
-Status: Draft (Phase W design)
-Last Updated: 2025-09-23T00:00:00Z
-Owner: Substrate Core
-Related Spike: docs/SPIKE_TRANSPORT_PARITY_PLAN.md
+Status: archived pre-hardening sketch
+Last updated: 2026-06-22
 
-## Overview
+## Why this file changed
 
-This document captures the transport architecture needed for cross-platform parity.
+This document previously described a dual-listener / `61337`-centric transport
+model that no longer matches current repo truth for the hardened macOS
+same-user Lima path.
 
-- Host binaries (`substrate-shell`, `host-proxy`, tooling)
-  communicate only through the `transport-api-client` transport abstraction.
-- The Windows forwarder mediates between host Named Pipes and the world
-  agent running in WSL.
-- `world-service` exposes both its canonical Unix domain socket and a
-  gated loopback TCP listener.
-- Telemetry records the active transport in every span to aid
-  troubleshooting and parity verification.
-- macOS transport auto‑selects: VSock when available (via `vsock-proxy`),
-  otherwise UDS via SSH, with TCP as a fallback. The Unix connector is used
-  when SSH‑forwarded UDS is selected.
+Do **not** use this file as live transport authority.
 
-## Component Relationships (ASCII Diagram)
+## Current live authority
 
-```text
-+-------------------+            +-----------------------+
-| Host CLI (all OS) |--HTTP----->| transport-api-client      |
-| substrate, proxy  |            | - Connector trait     |
-+-------------------+            | - Endpoint enum       |
-                                  +-----------+-----------+
-                                              |
-       +--------------------+-----------------+--------------------+
-       |                    |                                      |
-  (Linux / macOS hosts)    (Windows host)                  (Future)
-  UDS Connector              Named Pipe Connector             Vsock Connector
-  hyperlocal client          named pipe + HTTP bridge         (planned vsock connector)
-       |                    v
-       |        +----------------------------+
-       |        | Windows Forwarder          |
-       |        | - Named Pipe listener      |
-       |        | - Bridge to TCP/UDS        |
-       |        +---------+------------------+
-       |                  |
-       v                  v
-+-------------+    +-------------------+
-| world-service |    | world-service       |
-| Unix socket |    | Loopback TCP      |
-| /run/...    |    | 127.0.0.1:<port> |
-+-------------+    +-------------------+
-        \____________________  _____________________/
-                             \/
-                     Telemetry (transport.mode)
-```
+Use these instead:
 
-## Connector State Transitions
+1. `crates/world-mac-lima/src/transport.rs`
+2. `crates/world-mac-lima/src/forwarding.rs`
+3. `crates/shell/src/execution/platform_world/mod.rs`
+4. `crates/shell/src/execution/platform/macos.rs`
+5. `docs/WORLD.md`
+6. `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-03-canonical-guest-endpoint-and-transport-contract.md`
+7. `macos-hardening/macos-hardened-same-user-lima/spec/SPEC-04-pty-non-pty-doctor-and-readiness-transport-convergence.md`
 
-1. **Initialization**
-   - Determine platform plus operator configuration (CLI flags, env vars,
-     config files).
-   - Map to `Endpoint::Unix`, `Endpoint::NamedPipe`, or `Endpoint::Tcp`.
-   - Construct the connector and register telemetry metadata.
-2. **Request Lifecycle**
-   - Build HTTP request with shared headers.
-   - Dispatch via connector; on success record transport metadata on the
-     span.
-   - On error, retry (per policy) or propagate with transport context for
-     diagnostics.
-3. **Shutdown**
-   - Dispose of resources (close pipe handles, drop sockets).
-   - Forwarder stops gracefully, closing Named Pipe to avoid stale handles.
+## Current truth summary
 
-## Forwarder Target Selection
+1. The canonical guest endpoint is `/run/substrate.sock`.
+2. macOS transport constants are centralized in
+   `crates/world-mac-lima/src/transport.rs`.
+3. Host-visible `127.0.0.1:17788` is compatibility-facing naming and VSock
+   host reachability when VSock forwarding is active; it is not proof of a
+   guest raw TCP listener.
+4. Automatic SSH TCP fallback is intentionally skipped when the guest agent is
+   UDS-only.
+5. macOS doctor/readiness code still owns additional probing and breakglass
+   fallback logic beyond the selected-transport authority in
+   `platform_world/mod.rs`.
 
-- Configuration file: `%LOCALAPPDATA%/Substrate/forwarder.toml`.
-
-  ```toml
-  [target]
-  mode = "tcp"           # other option: "uds"
-  tcp_port = 61337
-  uds_path = "/run/substrate.sock"
-  ```
-
-- Environment override: `SUBSTRATE_FORWARDER_TARGET=tcp|uds` for testing.
-- Logging: startup emits JSON fields with `target_mode` (e.g. `tcp` or `uds`)
-  and `target` (e.g. `127.0.0.1:61337` or `/run/substrate.sock`).
-
-### Windows Host Path Defaults
-
-- Default host → forwarder path is the Windows named pipe `\\.\pipe\substrate-agent`.
-- Client → forwarder can optionally use host TCP during soak/validation by
-  setting `SUBSTRATE_FORWARDER_TCP=1` or `SUBSTRATE_FORWARDER_TCP_ADDR=host:port`.
-- Forwarder → agent (inside WSL) defaults to loopback TCP `127.0.0.1:61337`
-  (enabled by systemd unit via `SUBSTRATE_AGENT_TCP_PORT`).
-
-## World Service Dual Listener
-
-- Unix socket remains `/run/substrate.sock` with permissions 0666 inside
-  the world.
-- Loopback TCP listener turns on when `SUBSTRATE_AGENT_TCP_PORT` is
-  present.
-- Security guardrail: bind only to `127.0.0.1` and validate the port
-  before starting.
-- Systemd snippet:
-
-  ```ini
-  [Service]
-  Environment="SUBSTRATE_AGENT_TCP_PORT=61337"
-  ```
-
-## Telemetry Integration
-
-- `transport.mode` holds `named_pipe`, `unix`, or `tcp`.
-- Optional `transport.endpoint` provides sanitized path, pipe, or port
-  information.
-- Smoke suites assert the expected mode on each platform.
-
-## Open Items
-
-- Vsock connector design (post-spike follow-up).
-- CI integration to run connector integration tests on each platform.
-
-## References
-
-- docs/SPIKE_TRANSPORT_PARITY_PLAN.md
-- docs/project_management/logs/windows_always_world.md
-- docs/dev/wsl_world_setup.md (update pending)
-- docs/dev/windows_host_transport_plan.md (Windows host integration addendum)
+If a future session needs a fresh internal transport deep-dive, create a new
+doc from current repo truth rather than reviving the older `61337` model.

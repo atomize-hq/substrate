@@ -1,99 +1,70 @@
-# Spec Scaffold: `macos-hardened-same-user-lima`
+# Spec Index: `macos-hardened-same-user-lima`
 
-Status: draft scaffold  
-Last updated: 2026-06-11
+Status: current slice authority index
+Last updated: 2026-06-22
 
 ## Purpose
 
-Provide the execution-layer document structure for landing
-`macos-hardened-same-user-lima` in repo-native spec-driven form.
+Index the committed slice stack for `macos-hardened-same-user-lima` and make
+the current authority order explicit.
 
-The existing feature and phase docs remain the program-level authority. This
-directory is where the bounded execution artifacts should live:
+The `spec/` scaffold is no longer hypothetical. `SPEC-01` through `SPEC-12`
+already exist in this directory.
 
-- execution guidance in [`../EXECUTION-RUBRIC.md`](../EXECUTION-RUBRIC.md),
-- shared `DESIGN-*` inputs,
-- numbered `SPEC-*` slices,
-- companion `PLAN-*` and `TASKS-*` docs.
+## Current authority order
 
-## Directory layout
+For planning or closeout questions, use this order:
 
-```text
-spec/
-├── README.md
-└── design/
-    ├── README.md
-    ├── DESIGN-supported-mode-and-breakglass-taxonomy.md
-    ├── DESIGN-macos-lima-transport-contract.md
-    ├── DESIGN-macos-policy-input-parity.md
-    ├── DESIGN-macos-ingress-and-mount-contract.md
-    ├── DESIGN-macos-guest-unit-source-of-truth.md
-    └── DESIGN-macos-operator-lifecycle-and-diagnostics-contract.md
-```
+1. [`../README.md`](../README.md) for feature-level current truth
+2. relevant `spec/design/DESIGN-*` docs for cross-slice contracts
+3. the relevant committed `SPEC-*`
+4. its paired `PLAN-*`
+5. its paired `TASKS-*`
+6. top-level operator docs when the question is about live user-facing posture
 
-Future slice docs should also live here:
+`../ROADMAP.md` is now historical / retrospective framing, not the live
+instruction to create the scaffold.
 
-```text
-SPEC-01-...
-PLAN-01.md
-TASKS-01.md
-SPEC-02-...
-PLAN-02.md
-TASKS-02.md
-...
-```
+## Directory contents
 
-## Roles
+### Design docs
 
-### `design/`
+Cross-slice contract sources:
 
-Cross-slice contract documents. Use these when a decision affects multiple
-future slices or multiple phase/milestone areas.
+- `design/DESIGN-supported-mode-and-breakglass-taxonomy.md`
+- `design/DESIGN-macos-lima-transport-contract.md`
+- `design/DESIGN-macos-policy-input-parity.md`
+- `design/DESIGN-macos-ingress-and-mount-contract.md`
+- `design/DESIGN-macos-guest-unit-source-of-truth.md`
+- `design/DESIGN-macos-operator-lifecycle-and-diagnostics-contract.md`
 
-### `SPEC-*`
+### Slice docs
 
-One honest implementation seam per spec. A spec should be specific enough to
-implement but narrow enough to review without reopening the entire program.
+Committed local slices:
 
-### `PLAN-*`
+1. `SPEC-01` / `PLAN-01` / `TASKS-01`
+2. `SPEC-02` / `PLAN-02` / `TASKS-02`
+3. `SPEC-03` / `PLAN-03` / `TASKS-03`
+4. `SPEC-04` / `PLAN-04` / `TASKS-04`
+5. `SPEC-05` / `PLAN-05` / `TASKS-05`
+6. `SPEC-06` / `PLAN-06` / `TASKS-06`
+7. `SPEC-07` / `PLAN-07` / `TASKS-07`
+8. `SPEC-08` / `PLAN-08` / `TASKS-08`
+9. `SPEC-09` / `PLAN-09` / `TASKS-09`
+10. `SPEC-10` / `PLAN-10` / `TASKS-10`
+11. `SPEC-11` / `PLAN-11` / `TASKS-11`
+12. `SPEC-12` / `PLAN-12` / `TASKS-12`
 
-Packet sequencing, dependency order, drift-resolution decisions, and
-verification checkpoints for the corresponding `SPEC-*`.
+## How to interpret slice truth
 
-### `TASKS-*`
-
-Session-sized execution checklists for the corresponding `PLAN-*`.
-
-## Proposed slice order
-
-This scaffold currently assumes the roadmap sequence documented in
-[`../ROADMAP.md`](../ROADMAP.md):
-
-1. Slice `01`: supported mode and support taxonomy
-2. Slice `02`: Lima version floor and breakglass contract
-3. Slice `03`: canonical guest endpoint and transport contract
-4. Slice `04`: routed consumer parity for PTY, non-PTY, doctor, and readiness
-5. Slice `05`: backend policy input parity
-6. Slice `06`: routed-path-first readiness/doctor/smoke truth
-7. Slice `07`: remove default extra listener surface
-8. Slice `08`: ingress inventory and narrowed mount contract
-9. Slice `09`: ingress implementation and/or Substrate-managed sync path
-10. Slice `10`: guest unit/service source of truth and sandbox unification
-11. Slice `11`: Substrate-owned lifecycle and diagnostics contract
-12. Slice `12`: breakglass reclassification and docs cutover
-
-## Phase gate
-
-Before writing the first `SPEC-*`:
-
-1. review the existing phase/milestone docs,
-2. review [`../EXECUTION-RUBRIC.md`](../EXECUTION-RUBRIC.md),
-3. review the initial `DESIGN-*` docs in this directory,
-4. confirm whether any proposed slice needs to be split further based on live
-   repo truth.
+- The slice stack captures the intended dependency order and acceptance gates.
+- If a slice doc overstates current implementation reality, live repo truth and
+  updated closeout wording should win.
+- Packet/prompt artifacts under `PROMPTS-*` are useful delegation helpers, but
+  they are not the primary authority over the matching `SPEC/PLAN/TASKS`.
 
 ## Related docs
 
+- [Feature overview](../README.md)
 - [Execution Rubric](../EXECUTION-RUBRIC.md)
 - [Roadmap](../ROADMAP.md)
-- [Design docs](./design/README.md)

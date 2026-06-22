@@ -57,7 +57,7 @@ healthy.
 - Align `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` to validate the
   routed Substrate path first.
 - Update readiness-oriented doc sections so direct guest commands are marked as
-  breakglass/unsupported for readiness validation rather than the happy path.
+  breakglass for readiness validation rather than the happy path.
 - Ensure readiness evidence covers transport selection, policy application, and
   PTY/non-PTY routed behavior.
 
@@ -149,8 +149,7 @@ Current normalization of direct guest administration:
 - `scripts/mac/smoke.sh` proves routed PTY and non-PTY behavior plus doctor
   readiness against the canonical transport contract while preserving the
   already-landed gateway lifecycle smoke proof.
-- Direct guest commands remain documented only as breakglass/unsupported
-  procedures.
+- Direct guest commands remain documented only as breakglass procedures.
 - The docs explicitly state that same-user Lima still does not provide the Linux
   ownership boundary, even after readiness parity is achieved.
 - Host-side `SUBSTRATE_WORLD_SOCKET` override use is not documented as the

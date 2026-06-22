@@ -19,26 +19,27 @@ Status: draft for review
 
 ASSUMPTIONS I'M MAKING:
 
-1. The active June 21, 2026 world-Codex failure is no longer a world-binding gap, a stale deployment gap, or a missing guest-runtime-binary gap; it is the direct member bootstrap gap proven in the linked handoffs.
+1. The active June 21, 2026 world-Codex failure is no longer best explained by a world-binding gap, a stale deployment gap, or a missing guest-runtime-binary gap; the linked handoffs instead narrow it to the direct member bootstrap seam.
 2. The current direct `cli:codex-world` member-dispatch path will remain in place for at least one bounded transitional slice, so the next honest work is to make that path truthful enough to run without pretending it is the long-term gateway-front-door architecture.
-3. The repo does not yet have a fully Substrate-owned Codex model/provider inventory surface ready to replace host Codex config as the source for the direct-path compatibility bootstrap, so this slice may temporarily derive a **narrow non-secret bootstrap subset** from host Codex config only as a compatibility bridge.
-4. This slice must not widen into general Codex config projection. In particular, it must not project or reconcile MCP servers, app runtimes, skills/plugins, workspace `.codex` overlays, logs, sessions, rollout state, caches, or daemon files.
-5. Auth authority remains separate from ordinary config projection. This slice may preserve the existing direct-member auth compatibility bridge, but it must not redefine the target architecture away from Substrate-owned auth delivery through the in-world gateway seam.
-6. Slice `59` guest-runtime delivery and exact-backend allowlist behavior remain the already-landed floor; this slice must preserve those truths rather than reopen them.
+3. The best current diagnosis from the June 21, 2026 handoffs is machine-profile-specific rather than universal Codex truth: on the diagnosed file-backed-auth machine profile, isolated `CODEX_HOME` plus seeded `auth.json` was enough for `codex login status`, while isolated `CODEX_HOME` plus seeded `auth.json` and user-level `config.toml` made `codex exec` succeed.
+4. The repo does not yet have a fully Substrate-owned Codex model/provider inventory surface ready to replace host Codex config as the source for the direct-path compatibility bootstrap, so this slice may temporarily derive a **narrow non-secret user-level bootstrap subset** from host Codex config only as a compatibility bridge for the current file-backed direct-member bootstrap path.
+5. This slice must not widen into general Codex config projection. In particular, it must not project or reconcile MCP servers, app runtimes, apps/connectors, hooks, rules, skills/plugins, custom agents, workspace `.codex` overlays, profile overlays, managed requirements/allowlists, logs, sessions, rollout state, caches, daemon files, or workspace-shared plugin state.
+6. Auth authority remains separate from ordinary config projection. This slice may preserve the existing direct-member auth compatibility bridge, but it must not redefine the target architecture away from Substrate-owned auth delivery through the in-world gateway seam.
+7. Slice `59` guest-runtime delivery and exact-backend allowlist behavior remain the already-landed floor; this slice must preserve those truths rather than reopen them.
 
 If any of these are wrong, correct them before implementation.
 
 ## Objective
 
-Complete the **bounded transitional compatibility bridge** for direct `cli:codex-world` member launch so the current world-member path stops failing on machine profiles where:
+Complete the **bounded transitional compatibility bridge** for direct `cli:codex-world` member launch so the current world-member path stops failing on the diagnosed June 21, 2026 file-backed-auth machine profile where:
 
 1. isolated `CODEX_HOME` with seeded `auth.json` is enough for `codex login status`,
 2. but the same isolated home still fails `codex exec` because the default fallback model is unsupported,
-3. and the missing input is narrow non-secret bootstrap config rather than additional auth material.
+3. and the best current diagnosis is that the missing input is narrow non-secret bootstrap config rather than additional auth material.
 
 This slice must answer:
 
-1. what exact non-secret Codex bootstrap config is allowed to cross the host-to-world compatibility boundary for the direct member path,
+1. what narrow non-secret **user-level** Codex bootstrap config is allowed to cross the host-to-world compatibility boundary for the current file-backed direct member path,
 2. how that config is materialized into isolated `CODEX_HOME` without promoting host `~/.codex` to architectural authority,
 3. how the direct bridge stays exact-backend-gated and compatibility-only,
 4. what fail-closed behavior applies when the bridge cannot derive a truthful bootstrap config,
@@ -147,7 +148,7 @@ fn render_codex_bootstrap_config(
     seed_home: &Path,
     target_home: &Path,
 ) -> Result<(), anyhow::Error> {
-    let bootstrap = read_bootstrap_model_subset(seed_home)
+    let bootstrap = read_bootstrap_startup_subset(seed_home)
         .context("read bounded Codex bootstrap config from host seed home")?;
 
     write_bootstrap_config_toml(target_home, &bootstrap)
@@ -168,7 +169,7 @@ Frameworks and test levels:
 
 Coverage expectations for this slice:
 
-1. prove the direct member path no longer behaves as “auth only,”
+1. prove the direct member path on the diagnosed profile no longer behaves as “auth only,”
 2. prove the bridge stays narrow and internal,
 3. prove exact-backend gating remains intact,
 4. prove the live public bootstrap smoke succeeds after rebuild/redeploy.
@@ -185,17 +186,20 @@ If an automated test cannot faithfully execute external Codex behavior hermetica
   - keep the slice bounded to the direct `cli:codex-world` member bootstrap bridge
   - keep auth and non-secret bootstrap config conceptually separate even if both materialize into isolated `CODEX_HOME`
   - keep exact backend allowlist truth authoritative for host credential/config reads
-  - materialize only the minimum non-secret bootstrap config required to preserve truthful model/provider startup
+  - materialize only the minimum non-secret **user-level** bootstrap config required to preserve truthful startup on the diagnosed profile, at minimum model plus directly coupled provider/base-URL settings if required
   - document the bridge as transitional and attach explicit retirement intent
 - Ask first:
   - adding any compatibility artifact beyond `auth.json`, optional `.credentials.json`, and a bounded rendered `config.toml`
+  - replaying Codex profile overlays such as `~/.codex/*.config.toml`
+  - replaying project config such as repo `.codex/config.toml`
   - changing the gateway auth-handoff architecture
   - widening into generic projection framework code, workspace overlays, or cross-adapter abstractions
   - persisting retained writable Codex state beyond the current direct-launch need
 - Never:
   - treat host `~/.codex` as the new steady-state authority model
-  - copy whole Codex home trees, logs, sessions, caches, rollout state, daemon state, or workspace `.codex`
-  - silently project MCP/app-runtime/skills/plugin config through this bridge
+  - copy whole Codex home trees, logs, sessions, caches, rollout state, daemon state, profile overlays, or repo workspace `.codex`
+  - silently project MCP/app-runtime/apps-connectors/hooks/rules/skills/plugin/custom-agent config or state through this bridge
+  - replay plugin-bundled MCP servers, plugin-bundled hooks, managed requirements/allowlists, or workspace-shared plugin state through this bridge
   - expose `SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME` as a public supported contract
   - weaken fail-closed exact-backend policy gating to “world scope implies host-read permission”
 
@@ -206,16 +210,17 @@ This slice is complete only when all of the following are true:
 1. direct `cli:codex-world` member launch no longer falls back to an unsupported default model solely because isolated `CODEX_HOME` lacks non-secret bootstrap config,
 2. the isolated home contains only the bounded compatibility artifacts required by this slice:
    - seeded auth artifacts already allowed by current bridge policy,
-   - and a **bounded rendered compatibility `config.toml`** containing only the model/provider bootstrap subset required for truthful startup,
-3. the implementation does **not** copy or project MCP/app-runtime/skills/workspace-overlay state through the direct member bridge,
-4. exact-backend allowlist behavior remains unchanged: no `cli:codex-world` host-read permission means no bridge materialization,
-5. when the bridge cannot derive truthful bootstrap config, the path fails closed with a direct explanation rather than silently letting Codex choose an unsupported default,
-6. targeted tests are green and the rebuilt installed runtime passes the live June 21, 2026 public bootstrap smoke, including creation of `from_the_world_worker.md`,
-7. docs/comments/spec text explicitly mark this as a compatibility bridge that later retires behind the gateway-front-door realization.
+   - and a **bounded rendered compatibility `config.toml`** containing at minimum the model setting plus any directly coupled user-level provider/base-URL settings required for truthful startup on the diagnosed profile,
+3. the implementation does **not** replay `~/.codex/*.config.toml` profile overlays or repo `.codex/config.toml` project config through the direct member bridge,
+4. the implementation does **not** copy or project MCP/app-runtime/apps-connectors/hooks/rules/skills/custom-agent/plugin/workspace-overlay state through the direct member bridge,
+5. exact-backend allowlist behavior remains unchanged: no `cli:codex-world` host-read permission means no bridge materialization,
+6. when the bridge cannot derive truthful bootstrap config, the path fails closed with a direct explanation rather than silently letting Codex choose an unsupported default,
+7. targeted tests are green and the rebuilt installed runtime passes the live June 21, 2026 public bootstrap smoke, including creation of `from_the_world_worker.md`,
+8. docs/comments/spec text explicitly mark this as a compatibility bridge that later retires behind the gateway-front-door realization.
 
 ## Open Questions
 
-1. Beyond top-level `model`, which directly related non-secret provider/profile keys must be preserved for truthful startup on the current supported Codex line?
-   - Default for this spec: preserve only the smallest non-secret subset required for the direct member path to honor the same startup model/provider choice; do not widen farther in this slice.
+1. Beyond top-level `model`, which directly related non-secret **user-level** provider/base-URL keys must be preserved for truthful startup on the current supported Codex line and the diagnosed profile?
+   - Default for this spec: preserve only the smallest non-secret subset required for the direct member path to honor the same startup model/provider choice on the diagnosed profile; do not assume the universal exact minimal subset is already known, and do not widen into profile overlays or project config replay in this slice.
 2. Can a hermetic automated test prove the external unsupported-default-model behavior, or should the slice stop at unit-tested materialization plus manual smoke proof?
    - Default for this spec: do both if practical, but do not block the slice on a fully hermetic external-process proof if the unit/materialization tests and live smoke close the bug honestly.

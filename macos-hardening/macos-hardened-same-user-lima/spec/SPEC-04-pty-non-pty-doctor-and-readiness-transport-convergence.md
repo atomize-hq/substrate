@@ -54,7 +54,7 @@ ASSUMPTIONS I'M MAKING:
    still depends on current official Lima forwarding, SSH, `limactl shell`,
    and VZ semantics.
 5. Live repo truth still contains shell-side transport-consumer duplication that
-   this slice must resolve:
+   this slice was intended to reduce, but not every residual split was removed:
    - `crates/shell/src/execution/platform/macos.rs` still probes the managed
      host socket path directly, then host TCP `17788`, then falls back to
      in-guest `limactl shell` + `curl`,
@@ -63,8 +63,9 @@ ASSUMPTIONS I'M MAKING:
      readiness,
    - `crates/shell/src/execution/routing/dispatch/world_ops.rs` still has its
      own PTY WebSocket connection ladder,
-   - these consumers do not yet read as one obvious shared shell-side transport
-     behavior, even when they already consult `PlatformWorldContext`.
+  - these consumers still do not read as one fully collapsed shared shell-side
+    transport behavior, even when they already consult
+    `PlatformWorldContext`.
 6. This slice may touch shell runtime code and tests, but should not widen into
    backend policy semantics, top-level docs, helper scripts, or repo-wide
    operator wording unless a direct contradiction forces it and the expansion is
@@ -135,7 +136,8 @@ Live repo truth shows the remaining gap clearly:
 4. `crates/shell/src/execution/platform/macos.rs` still performs doctor and
    readiness proof by probing `~/.substrate/sock/agent.sock`, then host TCP
    `17788`, then direct guest `curl` through `limactl shell`, which means the
-   runtime evidence path can diverge from the selected transport contract.
+   runtime evidence path still partially diverges from the selected transport
+   contract and must be documented as such.
 5. Slice `03` deliberately left top-level docs and helper scripts alone, so if
    Slice `04` does not converge these runtime consumers first, Slice `06` would
    be forced to rewrite readiness docs around behavior that is still internally

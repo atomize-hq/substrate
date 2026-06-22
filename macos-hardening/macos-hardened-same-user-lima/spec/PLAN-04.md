@@ -128,10 +128,11 @@ Dependency order:
 
 ### What this slice changes
 
-1. It creates or clarifies one shell-side helper/behavior layer for selected
+1. It clarifies the primary shell-side helper/behavior layer for selected
    transport use.
-2. It removes direct transport-ladder duplication from the affected PTY and
-   persistent-session consumers.
+2. It reduces direct transport-ladder duplication in the affected PTY and
+   persistent-session consumers without pretending every macOS-specific
+   readiness branch disappeared.
 3. It makes doctor/readiness runtime code attempt the selected transport first.
 4. It keeps override and compatibility behavior explicit rather than implicit.
 
@@ -151,7 +152,7 @@ Dependency order:
 Goal:
 
 1. confirm the authority stack and official Lima source set,
-2. decide the single shell-side helper boundary for transport consumers,
+2. decide the primary shell-side helper boundary for transport consumers,
 3. inventory which PTY, persistent-session, and doctor/readiness paths still
    duplicate transport behavior.
 

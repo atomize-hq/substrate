@@ -11,7 +11,7 @@ Status: draft for review
 These tasks assume:
 
 1. Slice `59` runtime-realizability truth remains the landed floor,
-2. the June 21, 2026 handoffs correctly diagnosed the remaining direct-member failure as missing narrow non-secret bootstrap config rather than missing guest runtime or missing world binding,
+2. the June 21, 2026 handoffs provide the best current diagnosis for the remaining direct-member failure on the diagnosed file-backed-auth machine profile: missing narrow non-secret user-level bootstrap config rather than missing guest runtime or missing world binding,
 3. the three DESIGN docs remain architectural inputs only; this slice is still a bounded compatibility repair, not the implementation of the generic projection framework.
 
 Do not begin implementation until the spec and plan are accepted.
@@ -31,13 +31,13 @@ Do not begin a later packet until the prior packet checkpoint is green.
 Session goal:
 
 1. freeze the current bug boundary in automation,
-2. prove the bridge now needs narrow config as well as auth,
+2. prove the bridge now needs narrow config as well as auth on the diagnosed file-backed direct-member path,
 3. keep exact-backend policy gating pinned before implementation widens the seam.
 
 ### Tasks
 
 - [ ] Task 1.1: Expand world-service bootstrap coverage for bounded config materialization
-  - Acceptance: `member_runtime` coverage explicitly exercises isolated `CODEX_HOME` preparation with auth seeding plus bounded config rendering/materialization semantics, rather than treating auth-only materialization as the full contract.
+  - Acceptance: `member_runtime` coverage explicitly exercises isolated `CODEX_HOME` preparation for the current file-backed direct-member bootstrap path with auth seeding plus bounded user-level config rendering/materialization semantics, rather than treating auth-only materialization as the full contract, and it does not replay profile overlays or repo project config layers.
   - Verify:
     - `cargo test -p world-service prepare_codex_runtime_env -- --nocapture`
   - Files:
@@ -73,24 +73,24 @@ Session goal:
 ### Tasks
 
 - [ ] Task 2.1: Derive and render the narrow non-secret Codex startup subset
-  - Acceptance: the direct member path reads only from the already policy-gated host seed-home source, derives the smallest non-secret model/provider startup subset required for truthful direct launch, and renders that subset into isolated `CODEX_HOME/config.toml` instead of copying broader Codex home/config state.
+  - Acceptance: the direct member path reads only from the already policy-gated host seed-home source, derives the smallest non-secret **user-level** startup subset required for truthful direct launch on the diagnosed profile, and renders that subset into isolated `CODEX_HOME/config.toml` instead of copying broader Codex home/config state; at minimum this preserves model plus directly coupled provider/base-URL settings if required by the diagnosed profile, and it does not replay `~/.codex/*.config.toml` profile overlays or repo `.codex/config.toml`.
   - Verify:
     - `cargo test -p world-service prepare_codex_runtime_env -- --nocapture`
-    - `rg -n "config\\.toml|model|provider|profile" /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/src/member_runtime.rs`
+    - `rg -n "config\\.toml|model|provider|base_url|profile" /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/src/member_runtime.rs`
   - Files:
     - [`crates/world-service/src/member_runtime.rs`](../crates/world-service/src/member_runtime.rs)
     - [`crates/world-service/Cargo.toml`](../crates/world-service/Cargo.toml) only if a minimal parsing/rendering dependency is required
 
 - [ ] Task 2.2: Keep the bridge internal and bounded
-  - Acceptance: the implementation still strips `SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME` before child spawn, still materializes only the bounded direct-launch compatibility artifacts, and does not project MCP/app-runtime/skills/workspace-overlay state through the bridge.
+  - Acceptance: the implementation still strips `SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME` before child spawn, still materializes only the bounded direct-launch compatibility artifacts, does not replay profile/project config layers, and does not project MCP/app-runtime/apps-connectors/hooks/rules/skills/custom-agent/plugin/workspace-overlay state through the bridge, including plugin-bundled MCP servers, plugin-bundled hooks, managed requirements/allowlists, or workspace-shared plugin state.
   - Verify:
     - `cargo test -p world-service prepare_codex_runtime_env -- --nocapture`
-    - `rg -n "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME|mcp|skills|plugin|workspace \\.codex|app-runtime" /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/src/member_runtime.rs`
+    - `rg -n "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME|mcp|skills|plugin|workspace \\.codex|app-runtime|hooks|rules|agents|requirements" /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/src/member_runtime.rs`
   - Files:
     - [`crates/world-service/src/member_runtime.rs`](../crates/world-service/src/member_runtime.rs)
 
 - [ ] Task 2.3: Add explanation-ready fail-closed diagnostics for missing bounded startup truth
-  - Acceptance: when the bridge cannot derive the required bounded startup subset, the direct member path fails with a direct explanation rather than silently allowing Codex to fall back to an unsupported default model under isolated `CODEX_HOME`.
+  - Acceptance: when the bridge cannot derive the required bounded startup subset for the diagnosed profile, the direct member path fails with a direct explanation rather than silently allowing Codex to fall back to an unsupported default model under isolated `CODEX_HOME`.
   - Verify:
     - `cargo test -p world-service prepare_codex_runtime_env -- --nocapture`
     - targeted world-service test name(s) added for the failure branch, if separate from the existing helper test
@@ -103,7 +103,7 @@ Session goal:
 Packet 2 is complete only when:
 
 1. isolated direct-member homes receive bounded startup config instead of depending on Codex defaults,
-2. broader config/state domains are still absent from the bridge,
+2. profile/project config replay and broader config/state domains are still absent from the bridge,
 3. missing bounded startup truth fails closed with a specific explanation,
 4. the implementation still reads as a transitional direct-member seam rather than a generic projection framework.
 
@@ -120,7 +120,7 @@ Session goal:
 ### Tasks
 
 - [ ] Task 3.1: Update direct-member operator/developer docs with bounded bridge posture
-  - Acceptance: docs explain that direct `cli:codex-world` member bootstrap currently depends on a bounded compatibility bridge that includes narrow non-secret startup config in addition to auth seeding, and they do not imply this is the final steady-state architecture.
+  - Acceptance: docs explain that direct `cli:codex-world` member bootstrap currently depends on a bounded compatibility bridge for the current file-backed direct-member path that includes narrow non-secret startup config in addition to auth seeding, and they do not imply this is the final steady-state architecture or a generic future-capability foundation.
   - Verify:
     - `rg -n "cli:codex-world|CODEX_HOME|compatibility bridge|gateway" /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md`
   - Files:
@@ -166,4 +166,4 @@ After each packet:
 1. confirm its checkpoint is satisfied,
 2. confirm the slice has not widened into broader Codex projection work,
 3. confirm the gateway-front-door target architecture is still preserved,
-4. confirm future MCP/app-runtime/skills/workspace-overlay work remains out of scope.
+4. confirm future MCP/app-runtime/apps-connectors/hooks/rules/skills/plugin/custom-agent/workspace-overlay work remains out of scope.

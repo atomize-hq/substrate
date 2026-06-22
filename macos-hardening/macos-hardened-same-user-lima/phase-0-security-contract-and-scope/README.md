@@ -1,145 +1,52 @@
 # Phase 0: Security Contract and Scope
 
-Status: Draft  
-Last updated: 2026-06-11
+Status: landed contract authority
+Last updated: 2026-06-22
 
-## Purpose / outcome
+## Purpose
 
-Freeze the security and support contract for hardened same-user Lima before later phases change backend behavior, provisioning, or operator docs. The outcome of phase 0 is one unambiguous planning baseline for what macOS should guarantee, what it cannot guarantee, which already-landed CLI surfaces are the supported baseline, and which existing direct guest workflows are breakglass only.
+Record the **frozen contract** that later runtime and docs work already landed
+against:
 
-## Why this phase exists
+1. same-user Lima is supported only as a same-user model,
+2. the normal operator path is Substrate-owned commands first,
+3. guest-direct and override flows are exceptions, not the default story,
+4. the taxonomy labels are fixed as `supported`, `degraded-but-supported`, and
+   `breakglass`.
 
-The current macOS backend is already close enough to Linux behavior that implementation changes are tempting, but the repo still lacks a locked contract for several disagreements:
+## What Phase 0 landed
 
-- The repo already has canonical operator surfaces in `substrate host doctor`, `substrate world doctor`, and `substrate world gateway sync|status|restart`, but the hardening docs still talk as if those surfaces are mostly future work.
-- The code still claims Linux-like policy semantics while `MacLimaBackend` synthesizes a permissive policy snapshot in `crates/world-mac-lima/src/lib.rs`.
-- The shell-side routed request builders already forward resolved `policy_snapshot`, `world_network`, and `world_fs_mode`, so the unresolved policy gap must be scoped to backend-mediated Lima behavior and bootstrap/ensure-session paths.
-- The Lima profile and setup docs still normalize broad host mounts and manual guest administration.
-- The repo already supports shared-world/orchestration flows on the Lima-backed path, while `SUBSTRATE_WORLD_SOCKET` remains an advanced/test/breakglass bypass rather than the normal same-user operator path.
+Phase 0 established the feature-wide contract that later slices reused:
 
-If phase 0 is skipped, later work risks hardening one layer while another layer keeps the older, looser support story.
+1. `substrate host doctor`, `substrate world doctor`, and
+   `substrate world gateway sync|status|restart` were treated as already-landed
+   baseline operator surfaces rather than future inventions.
+2. `SUBSTRATE_WORLD_SOCKET` override use and direct guest administration were
+   frozen as non-default flows.
+3. the same-user non-parity boundary with Linux was made explicit.
 
-## Phase 0 contract, stated plainly
+## What remains authoritative from this phase
 
-Milestone `0.1` freezes the supported same-user Lima posture before milestone
-`0.2` adds version-floor and breakglass-contract detail:
+Read these first for contract wording:
 
-1. one macOS host user owns the Substrate process, the Lima VM lifecycle, and
-   the host forwarding artifacts,
-2. the supported operator path starts with Substrate-owned commands, especially
-   `substrate host doctor`, `substrate world doctor`, and
-   `substrate world gateway sync|status|restart`,
-3. guest-local Linux-like execution behavior remains an implementation goal,
-   but the host-side ownership model stays explicitly non-equivalent to Linux.
+1. [`../spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md`](../spec/design/DESIGN-supported-mode-and-breakglass-taxonomy.md)
+2. [`milestone-0-1-target-mode-and-support-contract-sow.md`](./milestone-0-1-target-mode-and-support-contract-sow.md)
+3. [`milestone-0-2-lima-version-and-breakglass-contract-sow.md`](./milestone-0-2-lima-version-and-breakglass-contract-sow.md)
 
-The same non-parity claims must remain impossible to miss throughout phase 0:
+## What this phase does **not** claim
 
-1. same-user Lima is not a privilege boundary against the owning host user,
-2. host-side ownership is not equivalent to Linux multi-user socket ownership,
-3. direct guest administration and direct `limactl shell` use are not the
-   normal operator path,
-4. host-side `SUBSTRATE_WORLD_SOCKET` override use is not the default
-   Lima-backed path.
+1. Linux-equivalent host ownership isolation
+2. a privilege boundary against the owning macOS user
+3. that direct `limactl shell`, guest `systemctl`, guest `journalctl`,
+   guest socket `curl`, or `SUBSTRATE_WORLD_SOCKET` override use are normal
+   operator steps
 
-Phase 0 also inherits the Slice `01` support taxonomy exactly as:
+## Current downstream authority
 
-1. `supported`
-2. `degraded-but-supported`
-3. `breakglass`
+This phase is no longer the place to describe current runtime gaps as if they
+are still open. For current landed behavior, defer to:
 
-Milestone `0.1` freezes those labels for feature-local planning and milestone
-`0.2` can refine version-floor and breakglass rules without inventing a new
-support classification scheme.
-
-## In-scope
-
-- Define the target security posture for same-user Lima.
-- Define the support boundary versus Linux parity claims.
-- Define the baseline CLI/operator surfaces that are already supported.
-- Define breakglass operator rules, including the status of `SUBSTRATE_WORLD_SOCKET` and direct `limactl shell` procedures.
-- Define the versioning and environment assumptions that later implementation can rely on.
-- Produce milestone SOWs that later code phases can execute against.
-
-## Out-of-scope
-
-- Editing runtime code, provisioning scripts, or top-level docs outside this phase directory.
-- Closing the current transport, policy, mount, or docs gaps in this phase.
-- Replacing Lima, redesigning the entire macOS backend, or solving multi-user host isolation.
-
-## Architectural approach
-
-Phase 0 uses two planning milestones:
-
-1. `milestone-0-1-target-mode-and-support-contract-sow.md`
-   - names the supported mode
-   - names the non-goals
-   - freezes the Linux-versus-macOS claims we will and will not make
-   - treats existing doctor/gateway/shared-world surfaces as baseline
-2. `milestone-0-2-lima-version-and-breakglass-contract-sow.md`
-   - defines required Lima/runtime assumptions
-   - defines which direct guest workflows remain available only for breakglass
-   - refines the already-frozen breakglass treatment for direct guest workflows and host-side `SUBSTRATE_WORLD_SOCKET` override use
-   - defines which Substrate-owned workflows must remain the normal operator path
-
-This phase is complete when later implementation can treat the phase docs as authoritative inputs instead of rediscovering support posture from scattered code comments and setup guides.
-
-## Dependencies / sequencing
-
-- Depends on the current macOS state captured in:
-  - `crates/world-mac-lima/src/lib.rs`
-  - `crates/world-mac-lima/src/forwarding.rs`
-  - `crates/world-mac-lima/src/transport.rs`
-  - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-  - `crates/shell/src/repl/async_repl.rs`
-  - `crates/shell/src/builtins/world_gateway.rs`
-  - `scripts/mac/lima-warm.sh`
-  - `scripts/mac/lima/substrate.yaml`
-  - `docs/WORLD.md`
-  - `docs/reference/world/platforms/macos-lima-setup.md`
-  - `scripts/mac/lima-doctor.sh`
-  - `scripts/mac/smoke.sh`
-  - `scripts/mac/orchestration-smoke.sh`
-- Milestone 0.1 must land conceptually before milestone 0.2, because the version and breakglass contract depend on the chosen target mode.
-- No later hardening phase should describe doctor/gateway/shared-world support as future-only work after phase 0 is accepted.
-
-## Concrete repo surfaces and file pointers
-
-- Policy snapshot injection and backend policy no-op: `crates/world-mac-lima/src/lib.rs`
-- Forwarding endpoint and transport fallback behavior: `crates/world-mac-lima/src/forwarding.rs`, `crates/world-mac-lima/src/transport.rs`
-- Shell-side routed request/world input propagation: `crates/shell/src/execution/routing/dispatch/world_ops.rs`, `crates/shell/src/repl/async_repl.rs`, `crates/shell/src/builtins/world_gateway.rs`
-- Lima guest image, mounts, and unit definitions: `scripts/mac/lima/substrate.yaml`
-- Provisioning and lifecycle commands: `scripts/mac/lima-warm.sh`
-- Troubleshooting and smoke entry points: `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, `scripts/mac/orchestration-smoke.sh`
-- Operator-facing macOS setup and world architecture docs: `docs/reference/world/platforms/macos-lima-setup.md`, `docs/WORLD.md`, `docs/USAGE.md`
-
-## Deliverables
-
-- Phase overview README.
-- Milestone 0.1 SOW.
-- Milestone 0.2 SOW.
-- A phase-local issue ledger, embedded in those SOWs, that later implementation phases can use as their scope baseline.
-
-## Acceptance criteria
-
-- The phase documents define one supported same-user Lima posture and reject vague "Linux parity except where different" language.
-- The phase documents treat `substrate host doctor`, `substrate world doctor`, and `substrate world gateway sync|status|restart` as already-landed operator surfaces.
-- The phase documents distinguish `supported`, `degraded-but-supported`, and `breakglass` flows consistently, including `SUBSTRATE_WORLD_SOCKET` and direct guest administration.
-- The phase documents scope unresolved policy parity claims to `MacLimaBackend` and backend-mediated Lima paths.
-- The milestone ordering is clear enough that a future implementation owner can start with milestone 0.1 decisions and then execute 0.2 without reopening scope.
-
-## Validation / evidence plan
-
-- Review the phase docs against the cited repo surfaces and confirm each claimed gap is observable today.
-- Require sign-off from backend, security, and docs owners before phase completion.
-- Use current CLI/smoke/orchestration surfaces as the baseline evidence set:
-  - `substrate host doctor --json`
-  - `substrate world doctor --json`
-  - `substrate world gateway status --json`
-  - `scripts/mac/smoke.sh`
-  - `scripts/mac/orchestration-smoke.sh`
-
-## Risks / open questions
-
-- Some breakglass workflows are still embedded in normal setup docs, so reclassification will create short-term friction for operators.
-- The right Lima version floor may force changes in forwarding assumptions, especially around `vsock-proxy` availability and SSH config stability.
-- The project may need an ADR later if phase-0 decisions materially narrow the macOS support matrix.
+1. [`../README.md`](../README.md)
+2. [`../../docs/WORLD.md`](../../docs/WORLD.md)
+3. [`../../docs/reference/world/platforms/macos-lima-setup.md`](../../docs/reference/world/platforms/macos-lima-setup.md)
+4. committed `SPEC-*`, `PLAN-*`, and `TASKS-*` files under [`../spec/`](../spec/)
