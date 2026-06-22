@@ -2450,7 +2450,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_member_dispatch_skips_internal_seed_home_when_only_other_backend_is_allowlisted() {
+    fn codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted_only_for_exact_backend() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let home = temp_dir.path().display().to_string();
         with_env_var("HOME", &home, || {
