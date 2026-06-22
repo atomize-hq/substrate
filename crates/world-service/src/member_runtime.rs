@@ -1178,6 +1178,48 @@ mod tests {
     }
 
     #[test]
+    fn prepare_codex_runtime_env_does_not_materialize_user_or_profile_config_yet() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let seed_home = temp_dir.path().join("seed-home");
+        fs::create_dir_all(&seed_home).expect("create seed home");
+        fs::write(
+            seed_home.join("auth.json"),
+            r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+        )
+        .expect("write auth");
+        fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n")
+            .expect("write user config");
+        fs::write(
+            seed_home.join("engineering.config.toml"),
+            "model = \"gpt-5.5\"\n",
+        )
+        .expect("write profile overlay");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+        let mut runtime_env = BTreeMap::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            seed_home.display().to_string(),
+        )]);
+
+        prepare_codex_runtime_env(&mut runtime_env, &launcher_dir).expect("seed auth only");
+
+        let codex_home = launcher_dir.join("codex-home");
+        assert!(
+            !codex_home.join("config.toml").exists(),
+            "Packet 1 pins auth-only bootstrap: user config.toml must not be materialized yet"
+        );
+        assert!(
+            !codex_home.join("engineering.config.toml").exists(),
+            "Packet 1 pins auth-only bootstrap: profile overlays must not be replayed yet"
+        );
+        assert!(
+            !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            "internal seed env must be removed before spawning the member runtime"
+        );
+    }
+
+    #[test]
     fn prepare_codex_runtime_env_requires_auth_json_when_seed_home_is_declared() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let seed_home = temp_dir.path().join("seed-home");

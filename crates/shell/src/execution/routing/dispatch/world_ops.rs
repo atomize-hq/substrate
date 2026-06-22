@@ -2450,6 +2450,31 @@ mod tests {
     }
 
     #[test]
+    fn codex_member_dispatch_skips_internal_seed_home_when_only_other_backend_is_allowlisted() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let home = temp_dir.path().display().to_string();
+        with_env_var("HOME", &home, || {
+            let mut env_map = std::collections::HashMap::<String, String>::new();
+            let policy = substrate_broker::Policy {
+                agents_host_credentials_read_allowed_backends: vec!["cli:codex-host".to_string()],
+                ..substrate_broker::Policy::default()
+            };
+
+            maybe_inject_codex_auth_seed_home_for_policy(
+                &mut env_map,
+                MemberRuntimeBackendKindV1::Codex,
+                "cli:codex-world",
+                &policy,
+            );
+
+            assert!(
+                !env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+                "seed home injection must stay pinned to the exact allowlisted backend"
+            );
+        });
+    }
+
+    #[test]
     fn preserve_world_project_dir_override_records_logical_root() {
         let _env_guard = crate::execution::world_env_guard();
         let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
