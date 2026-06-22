@@ -7338,6 +7338,7 @@ dependencies = [
  "transport-api-core",
  "transport-api-types",
  "unified-agent-api",
+ "unified-agent-api-codex",
  "uuid",
  "world",
  "world-api",

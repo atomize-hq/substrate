@@ -32,6 +32,7 @@ const MEMBER_ROLE: &str = "member";
 const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
 const CANCELLED_MESSAGE: &str = "cancelled";
 const SESSION_RESUME_EXTENSION_V1: &str = "agent_api.session.resume.v1";
+const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 
 #[derive(Clone, Default)]
 pub(crate) struct MemberRuntimeManager {
@@ -117,6 +118,12 @@ impl MemberRuntimeManager {
             .into_iter()
             .chain(prepared_launcher.env.iter().cloned())
             .collect::<BTreeMap<_, _>>();
+        let mut runtime_env = runtime_env;
+        prepare_runtime_env_for_member_backend(
+            &mut runtime_env,
+            dispatch.resolved_runtime.backend_kind,
+            &prepared_launcher.launcher_dir,
+        )?;
 
         let prompt_fulfillment = PromptFulfillmentBridge::for_member_backend(
             &dispatch.resolved_runtime.backend_kind,
@@ -547,6 +554,45 @@ struct PreparedMemberRuntimeLauncher {
     launcher_path: std::path::PathBuf,
     launcher_dir: std::path::PathBuf,
     env: Vec<(String, String)>,
+}
+
+fn prepare_runtime_env_for_member_backend(
+    runtime_env: &mut BTreeMap<String, String>,
+    backend_kind: MemberRuntimeBackendKindV1,
+    launcher_dir: &Path,
+) -> Result<()> {
+    match backend_kind {
+        MemberRuntimeBackendKindV1::Codex => {
+            prepare_codex_runtime_env(runtime_env, launcher_dir)?;
+        }
+        MemberRuntimeBackendKindV1::ClaudeCode => {}
+    }
+    Ok(())
+}
+
+fn prepare_codex_runtime_env(
+    runtime_env: &mut BTreeMap<String, String>,
+    launcher_dir: &Path,
+) -> Result<()> {
+    let Some(seed_home_raw) = runtime_env.remove(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+    else {
+        return Ok(());
+    };
+
+    let seed_home = Path::new(seed_home_raw.trim());
+    let codex_home = launcher_dir.join("codex-home");
+    let layout = codex::CodexHomeLayout::new(codex_home.clone());
+    layout.materialize(true)?;
+    layout.seed_auth_from(
+        seed_home,
+        codex::AuthSeedOptions {
+            require_auth: true,
+            require_credentials: false,
+            ..codex::AuthSeedOptions::default()
+        },
+    )?;
+    runtime_env.insert("CODEX_HOME".to_string(), codex_home.display().to_string());
+    Ok(())
 }
 
 fn prepare_member_runtime_launcher(
@@ -1064,6 +1110,7 @@ fn missing_retained_slot_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn sample_submit_turn_request() -> MemberTurnSubmitRequestV1 {
         MemberTurnSubmitRequestV1 {
@@ -1087,6 +1134,68 @@ mod tests {
             world_id: "world_123",
             world_generation: 7,
         }
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_seeds_isolated_home_and_removes_internal_seed_env() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let seed_home = temp_dir.path().join("seed-home");
+        fs::create_dir_all(&seed_home).expect("create seed home");
+        fs::write(
+            seed_home.join("auth.json"),
+            r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+        )
+        .expect("write auth");
+        fs::write(seed_home.join(".credentials.json"), "{}").expect("write credentials");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+        let expected_codex_home = launcher_dir.join("codex-home").display().to_string();
+
+        let mut runtime_env = BTreeMap::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            seed_home.display().to_string(),
+        )]);
+
+        prepare_codex_runtime_env(&mut runtime_env, &launcher_dir).expect("seed auth");
+
+        let codex_home = launcher_dir.join("codex-home");
+        assert_eq!(
+            runtime_env.get("CODEX_HOME").map(String::as_str),
+            Some(expected_codex_home.as_str())
+        );
+        assert!(
+            !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            "internal seed env must be removed before spawning the member runtime"
+        );
+        assert_eq!(
+            fs::read_to_string(codex_home.join("auth.json")).expect("seeded auth"),
+            r#"{"account_id":"acct_test","access_token":"token_test"}"#
+        );
+        assert!(
+            codex_home.join(".credentials.json").is_file(),
+            "optional credentials file should be copied when present"
+        );
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_requires_auth_json_when_seed_home_is_declared() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let seed_home = temp_dir.path().join("seed-home");
+        fs::create_dir_all(&seed_home).expect("create seed home");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+        let mut runtime_env = BTreeMap::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            seed_home.display().to_string(),
+        )]);
+
+        let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+            .expect_err("missing auth.json must fail closed");
+        assert!(
+            err.to_string().contains("auth.json"),
+            "unexpected error: {err:#}"
+        );
     }
 
     #[test]

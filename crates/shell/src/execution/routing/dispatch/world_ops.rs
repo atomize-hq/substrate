@@ -46,6 +46,7 @@ use world_api::WorldBackend;
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
 const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
+const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
 
 fn inject_process_trace_env(
@@ -151,6 +152,55 @@ fn ensure_world_deps_bin_on_path(env_map: &mut std::collections::HashMap<String,
     } else {
         env_map.insert("PATH".to_string(), format!("{bin}:{current}"));
     }
+}
+
+fn resolve_host_codex_seed_home() -> Option<std::path::PathBuf> {
+    dirs::home_dir()
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+        .or_else(|| std::env::var_os("USERPROFILE").map(std::path::PathBuf::from))
+        .map(|home| home.join(".codex"))
+}
+
+fn maybe_inject_codex_auth_seed_home_for_policy(
+    env_map: &mut std::collections::HashMap<String, String>,
+    backend_kind: MemberRuntimeBackendKindV1,
+    backend_id: &str,
+    effective_policy: &substrate_broker::Policy,
+) {
+    if backend_kind != MemberRuntimeBackendKindV1::Codex {
+        return;
+    }
+    if !effective_policy
+        .agents_host_credentials_read_allowed_backends
+        .iter()
+        .any(|candidate| candidate == backend_id)
+    {
+        return;
+    }
+    let Some(seed_home) = resolve_host_codex_seed_home() else {
+        return;
+    };
+    env_map.insert(
+        SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+        seed_home.display().to_string(),
+    );
+}
+
+fn maybe_inject_codex_auth_seed_home_for_member_dispatch(
+    env_map: &mut std::collections::HashMap<String, String>,
+    dispatch: &MemberDispatchTransportRequest,
+    cwd_path: &std::path::Path,
+) -> anyhow::Result<()> {
+    let (effective_policy, _) =
+        substrate_broker::resolve_effective_policy_with_explain(cwd_path, false)
+            .map_err(|err| crate::execution::config_model::user_error(err.to_string()))?;
+    maybe_inject_codex_auth_seed_home_for_policy(
+        env_map,
+        dispatch.backend_kind,
+        &dispatch.backend_id,
+        &effective_policy,
+    );
+    Ok(())
 }
 
 /// Collect filesystem diff and network scopes from world backend
@@ -1194,6 +1244,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         &mut env_map,
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
+    maybe_inject_codex_auth_seed_home_for_member_dispatch(&mut env_map, dispatch, &cwd_path)?;
     preserve_world_project_dir_override(&mut env_map, &cwd_path);
     let request = build_execute_request(ExecuteRequestInput {
         profile: current_world_request_profile(),
@@ -2251,8 +2302,9 @@ mod tests {
     use super::{
         build_execute_request, build_member_dispatch_payload, current_world_request_profile,
         emit_stream_chunk, ensure_world_deps_bin_on_path, extract_process_telemetry_from_ws_exit,
-        preserve_world_project_dir_override, process_agent_stream_body, ExecuteRequestInput,
-        MemberDispatchTransportRequest, BASE64, WORLD_PROJECT_DIR_OVERRIDE_ENV,
+        maybe_inject_codex_auth_seed_home_for_policy, preserve_world_project_dir_override,
+        process_agent_stream_body, ExecuteRequestInput, MemberDispatchTransportRequest, BASE64,
+        SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV, WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
     use crate::execution::agent_events::{
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
@@ -2338,6 +2390,59 @@ mod tests {
             env_map.get("PATH").map(String::as_str),
             Some("/tmp/custom-bin:/usr/local/bin:/usr/bin")
         );
+    }
+
+    #[test]
+    fn codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let codex_home = temp_dir.path().join(".codex");
+        std::fs::create_dir_all(&codex_home).expect("create seed home");
+        let home = temp_dir.path().display().to_string();
+        let expected_seed_home = codex_home.display().to_string();
+
+        with_env_var("HOME", &home, || {
+            let mut env_map = std::collections::HashMap::<String, String>::new();
+            let policy = substrate_broker::Policy {
+                agents_host_credentials_read_allowed_backends: vec!["cli:codex-world".to_string()],
+                ..substrate_broker::Policy::default()
+            };
+
+            maybe_inject_codex_auth_seed_home_for_policy(
+                &mut env_map,
+                MemberRuntimeBackendKindV1::Codex,
+                "cli:codex-world",
+                &policy,
+            );
+
+            assert_eq!(
+                env_map
+                    .get(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+                    .map(String::as_str),
+                Some(expected_seed_home.as_str())
+            );
+        });
+    }
+
+    #[test]
+    fn codex_member_dispatch_skips_internal_seed_home_when_backend_is_not_allowlisted() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let home = temp_dir.path().display().to_string();
+        with_env_var("HOME", &home, || {
+            let mut env_map = std::collections::HashMap::<String, String>::new();
+            let policy = substrate_broker::Policy::default();
+
+            maybe_inject_codex_auth_seed_home_for_policy(
+                &mut env_map,
+                MemberRuntimeBackendKindV1::Codex,
+                "cli:codex-world",
+                &policy,
+            );
+
+            assert!(
+                !env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+                "unexpected seed home injection without backend allowlist"
+            );
+        });
     }
 
     #[test]

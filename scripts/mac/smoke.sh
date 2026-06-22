@@ -302,6 +302,7 @@ agents:
     read:
       allowed_backends:
         - "cli:codex-host"
+        - "cli:codex-world"
 
 net_allowed: []
 cmd_allowed: []

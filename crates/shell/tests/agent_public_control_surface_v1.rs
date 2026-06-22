@@ -2284,6 +2284,10 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         "start prompt must enumerate the frozen host-tool vocabulary: {start_stdin:?}"
     );
     assert!(
+        start_stdin.contains("host-only sessions cannot bootstrap the first binding through these tools"),
+        "start prompt must disclose that fresh world-dispatch tools need an existing authoritative world binding: {start_stdin:?}"
+    );
+    assert!(
         !start_stdin.contains("Enter persistent Substrate host orchestrator mode."),
         "start prompt must not be wrapped in hidden host bootstrap instructions: {start_stdin:?}"
     );
@@ -2387,6 +2391,10 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     assert!(
         turn_stdin.contains("Substrate host toolbox contract:"),
         "follow-up turns must keep the host toolbox contract disclosed at the prompt boundary: {turn_stdin:?}"
+    );
+    assert!(
+        turn_stdin.contains("host-only sessions cannot bootstrap the first binding through these tools"),
+        "follow-up turns must keep the world-binding precondition visible at the prompt boundary: {turn_stdin:?}"
     );
     assert_eq!(
         turn_env
