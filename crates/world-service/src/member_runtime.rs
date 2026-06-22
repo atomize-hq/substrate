@@ -566,6 +566,7 @@ struct CodexSeedHomeConfig {
     model_provider: Option<String>,
     provider: Option<String>,
     base_url: Option<String>,
+    openai_base_url: Option<String>,
     #[serde(default)]
     model_providers: BTreeMap<String, CodexSeedProviderRoutingConfig>,
     #[serde(default)]
@@ -594,6 +595,8 @@ struct CodexStartupSubset {
     provider: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    openai_base_url: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     model_providers: BTreeMap<String, CodexBaseUrlConfig>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -678,6 +681,7 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
     let model_provider = normalize_non_empty_value(parsed.model_provider);
     let provider = normalize_non_empty_value(parsed.provider);
     let base_url = normalize_non_empty_value(parsed.base_url);
+    let openai_base_url = normalize_non_empty_value(parsed.openai_base_url);
 
     let mut model_providers = BTreeMap::new();
     if let Some(provider_name) = model_provider.as_deref() {
@@ -716,6 +720,7 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
         model_provider,
         provider,
         base_url,
+        openai_base_url,
         model_providers,
         providers,
     })
@@ -1375,6 +1380,7 @@ mod tests {
             r#"
 model = "gpt-5.4"
 model_provider = "compat-openai"
+openai_base_url = "https://api.openai-proxy.example.invalid/v1"
 
 [model_providers.compat-openai]
 base_url = "https://gateway.example.invalid/v1"
@@ -1422,7 +1428,7 @@ mode = "should-not-copy"
             .expect("rendered bounded startup config");
         assert_eq!(
             rendered,
-            "model = \"gpt-5.4\"\nmodel_provider = \"compat-openai\"\n\n[model_providers.compat-openai]\nbase_url = \"https://gateway.example.invalid/v1\"\n"
+            "model = \"gpt-5.4\"\nmodel_provider = \"compat-openai\"\nopenai_base_url = \"https://api.openai-proxy.example.invalid/v1\"\n\n[model_providers.compat-openai]\nbase_url = \"https://gateway.example.invalid/v1\"\n"
         );
         assert!(
             !rendered.contains("mcp_servers"),
