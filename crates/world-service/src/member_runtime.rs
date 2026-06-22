@@ -32,6 +32,7 @@ use crate::prompt_fulfillment::PromptFulfillmentBridge;
 const MEMBER_ROLE: &str = "member";
 const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
 const CANCELLED_MESSAGE: &str = "cancelled";
+const ADD_DIRS_EXTENSION_V1: &str = "agent_api.exec.add_dirs.v1";
 const SESSION_RESUME_EXTENSION_V1: &str = "agent_api.session.resume.v1";
 const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 
@@ -57,7 +58,8 @@ struct ActiveMemberRuntime {
     backend_id: String,
     backend_kind: MemberRuntimeBackendKindV1,
     binary_path: std::path::PathBuf,
-    working_dir: std::path::PathBuf,
+    workspace_dir: std::path::PathBuf,
+    process_working_dir: std::path::PathBuf,
     env: BTreeMap<String, String>,
     binding: SharedWorldBindingSnapshot,
     protocol: serde_json::Value,
@@ -124,6 +126,11 @@ impl MemberRuntimeManager {
             .chain(launcher_env.into_iter())
             .collect::<BTreeMap<_, _>>();
         let mut runtime_env = runtime_env;
+        let process_working_dir = member_runtime_process_working_dir(
+            dispatch.resolved_runtime.backend_kind,
+            &placement.working_dir,
+            &launcher_dir,
+        );
         let mut prepared_launcher_dir = Some(launcher_dir.clone());
         if let Err(err) = prepare_runtime_env_for_member_backend(
             &mut runtime_env,
@@ -155,13 +162,17 @@ impl MemberRuntimeManager {
                 .into());
             }
         };
+        let launch_extensions = member_runtime_workspace_access_extensions(
+            dispatch.resolved_runtime.backend_kind,
+            &placement.working_dir,
+        );
         let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
             .run_control(AgentWrapperRunRequest {
                 prompt: initial_prompt,
-                working_dir: Some(placement.working_dir.clone()),
+                working_dir: Some(process_working_dir.clone()),
                 timeout: None,
                 env: runtime_env.clone(),
-                extensions: BTreeMap::new(),
+                extensions: launch_extensions,
             })
             .await
         {
@@ -182,7 +193,8 @@ impl MemberRuntimeManager {
             backend_id: dispatch.backend_id.clone(),
             backend_kind: dispatch.resolved_runtime.backend_kind,
             binary_path: actual_binary,
-            working_dir: placement.working_dir.clone(),
+            workspace_dir: placement.working_dir.clone(),
+            process_working_dir,
             env: runtime_env,
             binding: binding.clone(),
             protocol: json!(dispatch.protocol),
@@ -286,7 +298,10 @@ impl MemberRuntimeManager {
             &active.backend_kind,
             active.binary_path.clone(),
         )?;
-        let mut extensions = BTreeMap::new();
+        let mut extensions = member_runtime_workspace_access_extensions(
+            active.backend_kind,
+            &active.workspace_dir,
+        );
         extensions.insert(
             SESSION_RESUME_EXTENSION_V1.to_string(),
             json!({
@@ -298,7 +313,7 @@ impl MemberRuntimeManager {
         let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
             .run_control(AgentWrapperRunRequest {
                 prompt: req.prompt.clone(),
-                working_dir: Some(active.working_dir.clone()),
+                working_dir: Some(active.process_working_dir.clone()),
                 timeout: None,
                 env: active.env.clone(),
                 extensions,
@@ -792,6 +807,34 @@ fn normalize_non_empty_value(value: Option<String>) -> Option<String> {
         let trimmed = value.trim();
         (!trimmed.is_empty()).then(|| trimmed.to_string())
     })
+}
+
+fn member_runtime_process_working_dir(
+    backend_kind: MemberRuntimeBackendKindV1,
+    workspace_dir: &Path,
+    launcher_dir: &Path,
+) -> std::path::PathBuf {
+    match backend_kind {
+        // Keep Codex out of the trusted repo cwd so repo-local `.codex` layers cannot piggyback
+        // onto the bounded user-level bridge. Workspace access is re-granted via add_dirs.
+        MemberRuntimeBackendKindV1::Codex => launcher_dir.to_path_buf(),
+        MemberRuntimeBackendKindV1::ClaudeCode => workspace_dir.to_path_buf(),
+    }
+}
+
+fn member_runtime_workspace_access_extensions(
+    backend_kind: MemberRuntimeBackendKindV1,
+    workspace_dir: &Path,
+) -> BTreeMap<String, serde_json::Value> {
+    match backend_kind {
+        MemberRuntimeBackendKindV1::Codex => BTreeMap::from([(
+            ADD_DIRS_EXTENSION_V1.to_string(),
+            json!({
+                "dirs": [workspace_dir.display().to_string()],
+            }),
+        )]),
+        MemberRuntimeBackendKindV1::ClaudeCode => BTreeMap::new(),
+    }
 }
 
 fn prepare_member_runtime_launcher(
@@ -1667,6 +1710,65 @@ base_url = "https://gateway.example.invalid/v1"
         assert!(
             !launcher_dir.exists(),
             "cleanup must remove prepared launcher artifacts on fail-closed exits"
+        );
+    }
+
+    #[test]
+    fn codex_member_runtime_launch_shape_uses_safe_cwd_and_explicit_workspace_add_dirs() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let workspace_dir = temp_dir.path().join("workspace");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+        let process_working_dir = member_runtime_process_working_dir(
+            MemberRuntimeBackendKindV1::Codex,
+            &workspace_dir,
+            &launcher_dir,
+        );
+        let extensions = member_runtime_workspace_access_extensions(
+            MemberRuntimeBackendKindV1::Codex,
+            &workspace_dir,
+        );
+
+        assert_eq!(
+            process_working_dir, launcher_dir,
+            "Codex retained sessions must not use the trusted repo as cwd"
+        );
+        assert_eq!(
+            extensions.get(ADD_DIRS_EXTENSION_V1),
+            Some(&json!({
+                "dirs": [workspace_dir.display().to_string()],
+            })),
+            "Codex retained sessions must regain workspace access only via add_dirs"
+        );
+    }
+
+    #[test]
+    fn claude_member_runtime_launch_shape_keeps_workspace_cwd_without_add_dirs() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let workspace_dir = temp_dir.path().join("workspace");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+        let process_working_dir = member_runtime_process_working_dir(
+            MemberRuntimeBackendKindV1::ClaudeCode,
+            &workspace_dir,
+            &launcher_dir,
+        );
+        let extensions = member_runtime_workspace_access_extensions(
+            MemberRuntimeBackendKindV1::ClaudeCode,
+            &workspace_dir,
+        );
+
+        assert_eq!(
+            process_working_dir, workspace_dir,
+            "non-Codex backends should keep their existing workspace cwd behavior"
+        );
+        assert!(
+            extensions.is_empty(),
+            "non-Codex backends should not inherit Codex add_dirs behavior"
         );
     }
 
