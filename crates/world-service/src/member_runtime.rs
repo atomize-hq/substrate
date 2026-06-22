@@ -655,8 +655,7 @@ fn prepare_codex_runtime_env(
         .remove(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
         .ok_or_else(|| {
             anyhow!(
-                "direct cli:codex-world compatibility bridge requires {}; without the already-gated seed-home source this Packet 2 seam would otherwise launch against the real workspace with ambient repo-local .codex still active",
-                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV
+                "direct cli:codex-world compatibility bridge requires the policy-gated bootstrap seed source; without that bounded bridge input this Packet 2 seam would otherwise launch against the real workspace with ambient repo-local .codex still active"
             )
         })?;
 
@@ -1696,7 +1695,7 @@ mode = "should-not-copy"
             .expect_err("missing seed-home bridge must fail closed");
         let message = err.to_string();
         assert!(
-            message.contains(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            message.contains("policy-gated bootstrap seed source"),
             "unexpected error: {err:#}"
         );
         assert!(
@@ -1706,6 +1705,10 @@ mode = "should-not-copy"
         assert!(
             message.contains("ambient repo-local .codex still active"),
             "unexpected error: {err:#}"
+        );
+        assert!(
+            !message.contains(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            "unexpected error leaked internal bridge env var name: {err:#}"
         );
         assert!(
             !runtime_env.contains_key("CODEX_HOME"),
