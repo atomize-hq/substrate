@@ -46,6 +46,7 @@ use world_api::WorldBackend;
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
 const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
+#[cfg(any(target_os = "linux", test))]
 const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
 
@@ -154,6 +155,7 @@ fn ensure_world_deps_bin_on_path(env_map: &mut std::collections::HashMap<String,
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn resolve_host_codex_seed_home() -> Option<std::path::PathBuf> {
     dirs::home_dir()
         .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
@@ -161,6 +163,7 @@ fn resolve_host_codex_seed_home() -> Option<std::path::PathBuf> {
         .map(|home| home.join(".codex"))
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn maybe_inject_codex_auth_seed_home_for_policy(
     env_map: &mut std::collections::HashMap<String, String>,
     backend_kind: MemberRuntimeBackendKindV1,
@@ -186,6 +189,7 @@ fn maybe_inject_codex_auth_seed_home_for_policy(
     );
 }
 
+#[cfg(target_os = "linux")]
 fn maybe_inject_codex_auth_seed_home_for_member_dispatch(
     env_map: &mut std::collections::HashMap<String, String>,
     dispatch: &MemberDispatchTransportRequest,

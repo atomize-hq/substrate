@@ -518,7 +518,7 @@ agents:
     .expect("write codex agent file");
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_member_runtime_policy(home_substrate: &Path, require_world: bool) {
     write_member_runtime_policy_with_member_backend(
         home_substrate,

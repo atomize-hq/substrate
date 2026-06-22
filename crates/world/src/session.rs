@@ -1281,6 +1281,13 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    fn running_as_root() -> bool {
+        // SAFETY: geteuid reads the effective uid of the current process and does not require
+        // any additional invariants from Rust.
+        unsafe { libc::geteuid() == 0 }
+    }
+
     #[cfg(target_os = "linux")]
     fn test_world(temp: &TempDir, isolate_network: bool) -> SessionWorld {
         let project_dir = temp.path().join("project");
@@ -1503,7 +1510,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn recover_compatible_from_root_returns_none_when_root_unreadable() {
-        if nix::unistd::Uid::effective().is_root() {
+        if running_as_root() {
             eprintln!("skipping unreadable-root recovery test when running as root");
             return;
         }
@@ -1599,7 +1606,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn recover_shared_active_from_root_returns_none_when_root_unreadable() {
-        if nix::unistd::Uid::effective().is_root() {
+        if running_as_root() {
             eprintln!("skipping unreadable-root shared recovery test when running as root");
             return;
         }
