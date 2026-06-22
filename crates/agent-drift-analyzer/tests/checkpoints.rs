@@ -392,6 +392,40 @@ fn checkpoints_emit_conservative_session_progress_placeholders() {
 }
 
 #[test]
+fn checkpoints_keep_sparse_readable_sessions_at_insufficient_evidence() {
+    let result = analyze_custom_rows(vec![
+        steer_row(
+            0,
+            "turn-001",
+            "/goal Implement only Packet R5.75-2.3 in crates/agent-drift-analyzer/tests/checkpoints.rs.",
+        ),
+        user_row(
+            1,
+            "turn-001",
+            "<skill>\n<name>incremental-implementation</name>\n<path>/Users/spensermcconnell/.agents/skills/incremental-implementation/SKILL.md</path>\nRead first:\n- docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-spec.md\n- docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-tasks.md\n</skill>",
+            UserMessageRole::Unknown,
+        ),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert!(
+        !checkpoints.is_empty(),
+        "sparse readable sessions should still emit checkpoints"
+    );
+    for checkpoint in checkpoints {
+        let progress = checkpoint
+            .session_progress
+            .as_ref()
+            .expect("session progress");
+        assert_eq!(
+            progress.status,
+            ProgressStatus::InsufficientEvidence,
+            "sparse readable session must stay conservative"
+        );
+    }
+}
+
+#[test]
 fn checkpoints_compute_turn_timing_from_turn_slice_boundaries() {
     let mut bundle = load_sample_bundle();
     for row in &mut bundle.archival_rows {
