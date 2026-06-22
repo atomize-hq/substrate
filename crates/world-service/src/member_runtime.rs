@@ -681,42 +681,34 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
 
     let mut model_providers = BTreeMap::new();
     if let Some(provider_name) = model_provider.as_deref() {
-        if let Some(selected) = parsed.model_providers.get(provider_name) {
-            ensure_supported_provider_routing_shape(
-                &config_path,
-                "model_providers",
-                provider_name,
-                selected,
-            )?;
-            if let Some(selected_base_url) = normalize_non_empty_value(selected.base_url.clone()) {
-                model_providers.insert(
-                    provider_name.to_string(),
-                    CodexBaseUrlConfig {
-                        base_url: Some(selected_base_url),
-                    },
-                );
-            }
-        }
+        let selected_base_url = require_selected_provider_base_url(
+            &config_path,
+            "model_providers",
+            provider_name,
+            parsed.model_providers.get(provider_name),
+        )?;
+        model_providers.insert(
+            provider_name.to_string(),
+            CodexBaseUrlConfig {
+                base_url: Some(selected_base_url),
+            },
+        );
     }
 
     let mut providers = BTreeMap::new();
     if let Some(provider_name) = provider.as_deref() {
-        if let Some(selected) = parsed.providers.get(provider_name) {
-            ensure_supported_provider_routing_shape(
-                &config_path,
-                "providers",
-                provider_name,
-                selected,
-            )?;
-            if let Some(selected_base_url) = normalize_non_empty_value(selected.base_url.clone()) {
-                providers.insert(
-                    provider_name.to_string(),
-                    CodexBaseUrlConfig {
-                        base_url: Some(selected_base_url),
-                    },
-                );
-            }
-        }
+        let selected_base_url = require_selected_provider_base_url(
+            &config_path,
+            "providers",
+            provider_name,
+            parsed.providers.get(provider_name),
+        )?;
+        providers.insert(
+            provider_name.to_string(),
+            CodexBaseUrlConfig {
+                base_url: Some(selected_base_url),
+            },
+        );
     }
 
     Ok(CodexStartupSubset {
@@ -750,6 +742,27 @@ fn ensure_supported_provider_routing_shape(
         "direct cli:codex-world compatibility bridge found unsupported provider routing fields under [{routing_family}.{provider_name}] in {}; Packet 2 only supports base_url for the selected provider block, so isolated CODEX_HOME would otherwise receive incomplete routing config ({unsupported_fields})",
         config_path.display()
     ))
+}
+
+fn require_selected_provider_base_url(
+    config_path: &Path,
+    routing_family: &str,
+    provider_name: &str,
+    selected: Option<&CodexSeedProviderRoutingConfig>,
+) -> Result<String> {
+    let selected = selected.ok_or_else(|| {
+        anyhow!(
+            "direct cli:codex-world compatibility bridge could not derive truthful startup routing from {}; {routing_family}.{provider_name} is selected but its coupled provider block is missing, so isolated CODEX_HOME would otherwise receive an incomplete provider selection",
+            config_path.display()
+        )
+    })?;
+    ensure_supported_provider_routing_shape(config_path, routing_family, provider_name, selected)?;
+    normalize_non_empty_value(selected.base_url.clone()).ok_or_else(|| {
+        anyhow!(
+            "direct cli:codex-world compatibility bridge could not derive truthful startup routing from {}; [{routing_family}.{provider_name}] must provide a supported non-empty base_url for the selected provider, so isolated CODEX_HOME would otherwise receive an incomplete provider selection",
+            config_path.display()
+        )
+    })
 }
 
 fn normalize_non_empty_value(value: Option<String>) -> Option<String> {
@@ -1546,6 +1559,60 @@ base_url = "https://gateway.example.invalid/v1"
                 "unexpected error: {err:#}"
             );
             assert!(message.contains("wire_api"), "unexpected error: {err:#}");
+            assert!(
+                !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+                "internal seed env must still be removed on fail-closed provider routing errors"
+            );
+        }
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_fails_closed_when_selected_provider_block_is_missing_or_has_no_supported_base_url(
+    ) {
+        for (selection, provider_table_header, provider_body, expected_message_fragment) in [
+            (
+                "model_provider = \"compat-openai\"",
+                "[model_providers.other-provider]",
+                "base_url = \"https://gateway.example.invalid/v1\"\n",
+                "coupled provider block is missing",
+            ),
+            (
+                "provider = \"compat-openai\"",
+                "[providers.compat-openai]",
+                "",
+                "must provide a supported non-empty base_url",
+            ),
+        ] {
+            let temp_dir = tempfile::tempdir().expect("temp dir");
+            let seed_home = temp_dir.path().join("seed-home");
+            fs::create_dir_all(&seed_home).expect("create seed home");
+            fs::write(
+                seed_home.join("auth.json"),
+                r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+            )
+            .expect("write auth");
+            fs::write(
+                seed_home.join("config.toml"),
+                format!(
+                    "model = \"gpt-5.4\"\n{selection}\n\n{provider_table_header}\n{provider_body}",
+                ),
+            )
+            .expect("write incomplete provider routing config");
+            let launcher_dir = temp_dir.path().join("launcher");
+            fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+            let mut runtime_env = BTreeMap::from([(
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+                seed_home.display().to_string(),
+            )]);
+
+            let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+                .expect_err("selected provider routing truth must fail closed");
+            let message = err.to_string();
+            assert!(
+                message.contains(expected_message_fragment),
+                "unexpected error: {err:#}"
+            );
             assert!(
                 !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
                 "internal seed env must still be removed on fail-closed provider routing errors"
