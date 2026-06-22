@@ -135,6 +135,7 @@ impl MemberRuntimeManager {
         if let Err(err) = prepare_runtime_env_for_member_backend(
             &mut runtime_env,
             dispatch.resolved_runtime.backend_kind,
+            &placement.working_dir,
             &launcher_dir,
         ) {
             cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
@@ -298,26 +299,12 @@ impl MemberRuntimeManager {
             &active.backend_kind,
             active.binary_path.clone(),
         )?;
-        let mut extensions = member_runtime_workspace_access_extensions(
-            active.backend_kind,
-            &active.workspace_dir,
-        );
-        extensions.insert(
-            SESSION_RESUME_EXTENSION_V1.to_string(),
-            json!({
-                "selector": "id",
-                "id": uaa_session_id,
-            }),
-        );
-
         let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
-            .run_control(AgentWrapperRunRequest {
-                prompt: req.prompt.clone(),
-                working_dir: Some(active.process_working_dir.clone()),
-                timeout: None,
-                env: active.env.clone(),
-                extensions,
-            })
+            .run_control(build_submitted_turn_run_request(
+                active.as_ref(),
+                req.prompt.clone(),
+                &uaa_session_id,
+            ))
             .await
         {
             Ok(control) => control,
@@ -618,6 +605,11 @@ struct CodexBaseUrlConfig {
     base_url: Option<String>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct CodexProjectTrustConfig {
+    trust_level: String,
+}
+
 #[derive(Debug, Serialize)]
 struct CodexStartupSubset {
     model: String,
@@ -633,16 +625,19 @@ struct CodexStartupSubset {
     model_providers: BTreeMap<String, CodexBaseUrlConfig>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     providers: BTreeMap<String, CodexBaseUrlConfig>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    projects: BTreeMap<String, CodexProjectTrustConfig>,
 }
 
 fn prepare_runtime_env_for_member_backend(
     runtime_env: &mut BTreeMap<String, String>,
     backend_kind: MemberRuntimeBackendKindV1,
+    workspace_dir: &Path,
     launcher_dir: &Path,
 ) -> Result<()> {
     match backend_kind {
         MemberRuntimeBackendKindV1::Codex => {
-            prepare_codex_runtime_env(runtime_env, launcher_dir)?;
+            prepare_codex_runtime_env(runtime_env, workspace_dir, launcher_dir)?;
         }
         MemberRuntimeBackendKindV1::ClaudeCode => {}
     }
@@ -651,6 +646,7 @@ fn prepare_runtime_env_for_member_backend(
 
 fn prepare_codex_runtime_env(
     runtime_env: &mut BTreeMap<String, String>,
+    workspace_dir: &Path,
     launcher_dir: &Path,
 ) -> Result<()> {
     let Some(seed_home_raw) = runtime_env.remove(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
@@ -670,13 +666,17 @@ fn prepare_codex_runtime_env(
             ..codex::AuthSeedOptions::default()
         },
     )?;
-    write_codex_startup_subset(seed_home, &layout)?;
+    write_codex_startup_subset(seed_home, workspace_dir, &layout)?;
     runtime_env.insert("CODEX_HOME".to_string(), codex_home.display().to_string());
     Ok(())
 }
 
-fn write_codex_startup_subset(seed_home: &Path, layout: &codex::CodexHomeLayout) -> Result<()> {
-    let startup_subset = read_codex_startup_subset(seed_home)?;
+fn write_codex_startup_subset(
+    seed_home: &Path,
+    workspace_dir: &Path,
+    layout: &codex::CodexHomeLayout,
+) -> Result<()> {
+    let startup_subset = read_codex_startup_subset(seed_home, workspace_dir)?;
     let rendered = toml::to_string(&startup_subset)
         .context("render bounded Codex startup subset for isolated CODEX_HOME")?;
     fs::write(layout.config_path(), rendered).with_context(|| {
@@ -688,7 +688,7 @@ fn write_codex_startup_subset(seed_home: &Path, layout: &codex::CodexHomeLayout)
     Ok(())
 }
 
-fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
+fn read_codex_startup_subset(seed_home: &Path, workspace_dir: &Path) -> Result<CodexStartupSubset> {
     let config_path = seed_home.join("config.toml");
     let raw = fs::read_to_string(&config_path).with_context(|| {
         format!(
@@ -747,6 +747,13 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
         );
     }
 
+    let projects = BTreeMap::from([(
+        workspace_dir.display().to_string(),
+        CodexProjectTrustConfig {
+            trust_level: "untrusted".to_string(),
+        },
+    )]);
+
     Ok(CodexStartupSubset {
         model,
         model_provider,
@@ -755,6 +762,7 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
         openai_base_url,
         model_providers,
         providers,
+        projects,
     })
 }
 
@@ -812,12 +820,13 @@ fn normalize_non_empty_value(value: Option<String>) -> Option<String> {
 fn member_runtime_process_working_dir(
     backend_kind: MemberRuntimeBackendKindV1,
     workspace_dir: &Path,
-    launcher_dir: &Path,
+    _launcher_dir: &Path,
 ) -> std::path::PathBuf {
     match backend_kind {
-        // Keep Codex out of the trusted repo cwd so repo-local `.codex` layers cannot piggyback
-        // onto the bounded user-level bridge. Workspace access is re-granted via add_dirs.
-        MemberRuntimeBackendKindV1::Codex => launcher_dir.to_path_buf(),
+        // Keep Codex cwd aligned with the real workspace so repo-root and relative-path
+        // semantics stay truthful, but mark that workspace untrusted in the isolated
+        // user-level config so repo-local `.codex` layers cannot piggyback on this bridge.
+        MemberRuntimeBackendKindV1::Codex => workspace_dir.to_path_buf(),
         MemberRuntimeBackendKindV1::ClaudeCode => workspace_dir.to_path_buf(),
     }
 }
@@ -858,6 +867,30 @@ fn prepare_member_runtime_launcher(
 fn cleanup_prepared_launcher_dir(launcher_dir: &mut Option<std::path::PathBuf>) {
     if let Some(launcher_dir) = launcher_dir.take() {
         let _ = fs::remove_dir_all(launcher_dir);
+    }
+}
+
+fn build_submitted_turn_run_request(
+    active: &ActiveMemberRuntime,
+    prompt: String,
+    uaa_session_id: &str,
+) -> AgentWrapperRunRequest {
+    let mut extensions =
+        member_runtime_workspace_access_extensions(active.backend_kind, &active.workspace_dir);
+    extensions.insert(
+        SESSION_RESUME_EXTENSION_V1.to_string(),
+        json!({
+            "selector": "id",
+            "id": uaa_session_id,
+        }),
+    );
+
+    AgentWrapperRunRequest {
+        prompt,
+        working_dir: Some(active.process_working_dir.clone()),
+        timeout: None,
+        env: active.env.clone(),
+        extensions,
     }
 }
 
@@ -1388,7 +1421,9 @@ mod tests {
     fn prepare_codex_runtime_env_seeds_isolated_home_and_removes_internal_seed_env() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let seed_home = temp_dir.path().join("seed-home");
+        let workspace_dir = temp_dir.path().join("workspace");
         fs::create_dir_all(&seed_home).expect("create seed home");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
         fs::write(
             seed_home.join("auth.json"),
             r#"{"account_id":"acct_test","access_token":"token_test"}"#,
@@ -1406,7 +1441,8 @@ mod tests {
             seed_home.display().to_string(),
         )]);
 
-        prepare_codex_runtime_env(&mut runtime_env, &launcher_dir).expect("seed auth");
+        prepare_codex_runtime_env(&mut runtime_env, &workspace_dir, &launcher_dir)
+            .expect("seed auth");
 
         let codex_home = launcher_dir.join("codex-home");
         assert_eq!(
@@ -1423,7 +1459,10 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(codex_home.join("config.toml")).expect("rendered config"),
-            "model = \"gpt-5.4\"\n"
+            format!(
+                "model = \"gpt-5.4\"\n\n[projects.\"{}\"]\ntrust_level = \"untrusted\"\n",
+                workspace_dir.display()
+            )
         );
         assert!(
             codex_home.join(".credentials.json").is_file(),
@@ -1486,7 +1525,7 @@ mode = "should-not-copy"
             seed_home.display().to_string(),
         )]);
 
-        prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+        prepare_codex_runtime_env(&mut runtime_env, &workspace_dir, &launcher_dir)
             .expect("seed auth and bounded startup subset");
 
         let codex_home = launcher_dir.join("codex-home");
@@ -1494,7 +1533,18 @@ mode = "should-not-copy"
             .expect("rendered bounded startup config");
         assert_eq!(
             rendered,
-            "model = \"gpt-5.4\"\nmodel_provider = \"compat-openai\"\nopenai_base_url = \"https://api.openai-proxy.example.invalid/v1\"\n\n[model_providers.compat-openai]\nbase_url = \"https://gateway.example.invalid/v1\"\n"
+            format!(
+                concat!(
+                    "model = \"gpt-5.4\"\n",
+                    "model_provider = \"compat-openai\"\n",
+                    "openai_base_url = \"https://api.openai-proxy.example.invalid/v1\"\n\n",
+                    "[model_providers.compat-openai]\n",
+                    "base_url = \"https://gateway.example.invalid/v1\"\n\n",
+                    "[projects.\"{}\"]\n",
+                    "trust_level = \"untrusted\"\n"
+                ),
+                workspace_dir.display()
+            )
         );
         assert!(
             !rendered.contains("mcp_servers"),
@@ -1511,6 +1561,18 @@ mode = "should-not-copy"
         assert!(
             !rendered.contains("requirements"),
             "bounded startup subset must not project managed requirements state"
+        );
+        let parsed: toml::Value = rendered.parse().expect("parse rendered bounded startup config");
+        assert_eq!(
+            parsed
+                .get("projects")
+                .and_then(toml::Value::as_table)
+                .and_then(|projects| projects.get(&workspace_dir.display().to_string()))
+                .and_then(toml::Value::as_table)
+                .and_then(|project| project.get("trust_level"))
+                .and_then(toml::Value::as_str),
+            Some("untrusted"),
+            "isolated CODEX_HOME must mark the real workspace untrusted so repo-local .codex cannot apply"
         );
         assert!(
             !codex_home.join("engineering.config.toml").exists(),
@@ -1530,7 +1592,9 @@ mode = "should-not-copy"
     fn prepare_codex_runtime_env_requires_auth_json_when_seed_home_is_declared() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let seed_home = temp_dir.path().join("seed-home");
+        let workspace_dir = temp_dir.path().join("workspace");
         fs::create_dir_all(&seed_home).expect("create seed home");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
         let launcher_dir = temp_dir.path().join("launcher");
         fs::create_dir_all(&launcher_dir).expect("create launcher dir");
 
@@ -1539,7 +1603,7 @@ mode = "should-not-copy"
             seed_home.display().to_string(),
         )]);
 
-        let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+        let err = prepare_codex_runtime_env(&mut runtime_env, &workspace_dir, &launcher_dir)
             .expect_err("missing auth.json must fail closed");
         assert!(
             err.to_string().contains("auth.json"),
@@ -1551,7 +1615,9 @@ mode = "should-not-copy"
     fn prepare_codex_runtime_env_fails_closed_when_startup_model_cannot_be_derived() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let seed_home = temp_dir.path().join("seed-home");
+        let workspace_dir = temp_dir.path().join("workspace");
         fs::create_dir_all(&seed_home).expect("create seed home");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
         fs::write(
             seed_home.join("auth.json"),
             r#"{"account_id":"acct_test","access_token":"token_test"}"#,
@@ -1573,7 +1639,7 @@ base_url = "https://gateway.example.invalid/v1"
             seed_home.display().to_string(),
         )]);
 
-        let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+        let err = prepare_codex_runtime_env(&mut runtime_env, &workspace_dir, &launcher_dir)
             .expect_err("missing startup model must fail closed");
         let message = err.to_string();
         assert!(
@@ -1602,7 +1668,9 @@ base_url = "https://gateway.example.invalid/v1"
         ] {
             let temp_dir = tempfile::tempdir().expect("temp dir");
             let seed_home = temp_dir.path().join("seed-home");
+            let workspace_dir = temp_dir.path().join("workspace");
             fs::create_dir_all(&seed_home).expect("create seed home");
+            fs::create_dir_all(&workspace_dir).expect("create workspace dir");
             fs::write(
                 seed_home.join("auth.json"),
                 r#"{"account_id":"acct_test","access_token":"token_test"}"#,
@@ -1623,7 +1691,7 @@ base_url = "https://gateway.example.invalid/v1"
                 seed_home.display().to_string(),
             )]);
 
-            let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+            let err = prepare_codex_runtime_env(&mut runtime_env, &workspace_dir, &launcher_dir)
                 .expect_err("unsupported selected provider routing shape must fail closed");
             let message = err.to_string();
             assert!(
@@ -1657,7 +1725,9 @@ base_url = "https://gateway.example.invalid/v1"
         ] {
             let temp_dir = tempfile::tempdir().expect("temp dir");
             let seed_home = temp_dir.path().join("seed-home");
+            let workspace_dir = temp_dir.path().join("workspace");
             fs::create_dir_all(&seed_home).expect("create seed home");
+            fs::create_dir_all(&workspace_dir).expect("create workspace dir");
             fs::write(
                 seed_home.join("auth.json"),
                 r#"{"account_id":"acct_test","access_token":"token_test"}"#,
@@ -1678,7 +1748,7 @@ base_url = "https://gateway.example.invalid/v1"
                 seed_home.display().to_string(),
             )]);
 
-            let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+            let err = prepare_codex_runtime_env(&mut runtime_env, &workspace_dir, &launcher_dir)
                 .expect_err("selected provider routing truth must fail closed");
             let message = err.to_string();
             assert!(
@@ -1714,7 +1784,7 @@ base_url = "https://gateway.example.invalid/v1"
     }
 
     #[test]
-    fn codex_member_runtime_launch_shape_uses_safe_cwd_and_explicit_workspace_add_dirs() {
+    fn codex_member_runtime_launch_shape_keeps_workspace_cwd_and_explicit_workspace_add_dirs() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let workspace_dir = temp_dir.path().join("workspace");
         let launcher_dir = temp_dir.path().join("launcher");
@@ -1732,15 +1802,15 @@ base_url = "https://gateway.example.invalid/v1"
         );
 
         assert_eq!(
-            process_working_dir, launcher_dir,
-            "Codex retained sessions must not use the trusted repo as cwd"
+            process_working_dir, workspace_dir,
+            "Codex retained sessions must preserve the real workspace cwd for truthful relative-path semantics"
         );
         assert_eq!(
             extensions.get(ADD_DIRS_EXTENSION_V1),
             Some(&json!({
                 "dirs": [workspace_dir.display().to_string()],
             })),
-            "Codex retained sessions must regain workspace access only via add_dirs"
+            "Codex retained sessions must still declare workspace access explicitly via add_dirs"
         );
     }
 
