@@ -437,7 +437,7 @@ fn validate_dedupe_refs(
 fn validate_surface(
     archival_rows: &[CompactionRow],
     compact_rows: &[CompactionRow],
-    dedupe_groups: &[DedupeGroup],
+    _dedupe_groups: &[DedupeGroup],
 ) -> Result<AnalyzerSurface, InputError> {
     let literal_objective_rows = compact_rows.iter().any(|row| {
         matches!(
@@ -456,8 +456,7 @@ fn validate_surface(
         .any(|row| {
             parse_tool_payload(&row.text).is_some() || !extract_path_hints(&row.text).is_empty()
         });
-    let repetition_preserved =
-        archival_rows.len() >= compact_rows.len() && !dedupe_groups.is_empty();
+    let repetition_preserved = archival_rows.len() >= compact_rows.len();
     let stable_row_refs = archival_rows
         .iter()
         .map(RowRef::from_row)
@@ -473,16 +472,6 @@ fn validate_surface(
     if !literal_objective_rows {
         return Err(InputError::InsufficientContract {
             reason: "no literal user/developer/system rows survived normalization".to_string(),
-        });
-    }
-    if !truth_artifact_hints {
-        return Err(InputError::InsufficientContract {
-            reason: "no path-like hints survived in directive text".to_string(),
-        });
-    }
-    if !working_set_hints || !tool_argument_json {
-        return Err(InputError::InsufficientContract {
-            reason: "tool-call argument payloads are not parseable enough to infer command families and working-set paths".to_string(),
         });
     }
     if !repetition_preserved {

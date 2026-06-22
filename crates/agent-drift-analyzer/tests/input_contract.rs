@@ -4,6 +4,8 @@ mod support;
 
 use std::fs;
 
+use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
+use camino::Utf8PathBuf;
 use support::{load_sample_bundle, BundleFixture};
 
 #[test]
@@ -67,6 +69,53 @@ fn input_contract_uses_source_file_id_instead_of_inline_source_file() {
         .compact_rows
         .iter()
         .all(|row| row.turn_id.as_deref() == Some("turn-001")));
+}
+
+#[test]
+fn input_contract_allows_sparse_tool_payload_surface_when_objective_rows_and_path_hints_survive() {
+    let fixture = BundleFixture::from_compact_rows(vec![
+        CompactionRow {
+            source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+            source_kind: SourceKind::CodexRolloutJsonl,
+            session_id: Some("session-alpha".to_string()),
+            turn_id: Some("turn-001".to_string()),
+            event_index: 0,
+            line_number: 1,
+            row_ordinal: 0,
+            timestamp: None,
+            kind: CompactionKind::UserMessage,
+            user_message_role: Some(UserMessageRole::Prompt),
+            dedupe_identity: None,
+            text: "/goal Audit crates/agent-drift-analyzer/src/input.rs using docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-spec.md".to_string(),
+            canonical_text: "/goal Audit crates/agent-drift-analyzer/src/input.rs using docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-spec.md".to_string(),
+            text_hash_hex: "hash-goal".to_string(),
+        },
+        CompactionRow {
+            source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+            source_kind: SourceKind::CodexRolloutJsonl,
+            session_id: Some("session-alpha".to_string()),
+            turn_id: Some("turn-001".to_string()),
+            event_index: 1,
+            line_number: 2,
+            row_ordinal: 0,
+            timestamp: None,
+            kind: CompactionKind::SystemMessage,
+            user_message_role: None,
+            dedupe_identity: None,
+            text: "Use crates/agent-drift-analyzer/src/lib.rs as the read-only checkpoint surface.".to_string(),
+            canonical_text: "Use crates/agent-drift-analyzer/src/lib.rs as the read-only checkpoint surface.".to_string(),
+            text_hash_hex: "hash-system".to_string(),
+        },
+    ]);
+
+    let bundle = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect("sparse tool payload bundle should load");
+    assert!(bundle.surface.literal_objective_rows);
+    assert!(bundle.surface.truth_artifact_hints);
+    assert!(!bundle.surface.working_set_hints);
+    assert!(!bundle.surface.tool_argument_json);
+    assert!(bundle.surface.repetition_preserved);
+    assert!(bundle.surface.stable_row_refs);
 }
 
 #[test]
