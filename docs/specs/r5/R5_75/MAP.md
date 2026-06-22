@@ -1,6 +1,6 @@
 # R5.75 Map: Sequential Pre-R6 Hardening And Validation
 
-Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout. On 2026-06-20 the `R5.75-1` named smoke gate was re-run and promotion was first HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker); the Issue 1/2/3 anchoring fix (plus Issue 8 corpus lock) then landed and the gate was re-run green, so `R5.75-1` is now PROMOTED and the active seam is `R5.75-2` (sparse readable session fail-open). The map reflects the current active seam and next-packet order honestly.
+Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout. On 2026-06-20 the `R5.75-1` named smoke gate was re-run and promotion was first HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker); the Issue 1/2/3 anchoring fix (plus Issue 8 corpus lock) then landed and the gate was re-run green, so `R5.75-1` was promoted and `R5.75-2` became active. On 2026-06-22 the `R5.75-2` named smoke gate and closeout wall were run green, so `R5.75-2` is now PROMOTED and the active seam is `R5.75-3` (delegated parent-visible stabilization). The map reflects the current active seam and next-packet order honestly.
 
 ## Objective
 
@@ -13,12 +13,14 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 3. The adapted Hugging Face export corpus remains secondary robustness evidence only; it is useful for hardening but does not redefine native Codex rollout semantics.
 4. `R5.5` landed meaningful improvements, but the validation handoff proved the family is not yet ready to declare “fully landed and R6-ready.”
 
-## Current Live Routing Note (2026-06-20)
+## Current Live Routing Note (2026-06-22)
 
 - `R5.75-0` is landed history.
 - `R5.75-1` is landed history as of 2026-06-20 (routed through
-  `docs/specs/r5/R5_75/phase-1/SO/`). The current active seam is `R5.75-2` (sparse readable session
-  fail-open, `crates/agent-drift-analyzer/src/input.rs`).
+  `docs/specs/r5/R5_75/phase-1/SO/`).
+- `R5.75-2` is landed history as of 2026-06-22 (`crates/agent-drift-analyzer/src/input.rs`,
+  sparse readable session fail-open). The current active seam is `R5.75-3` (delegated
+  parent-visible stabilization, `crates/agent-drift-analyzer/src/checkpoint/progress.rs`).
 - **Family tail update (2026-06-21):** because `R5.75-1` expanded into the full additive
   structured-objective stack, the deferred Issue 7 follow-on was scoped into a bounded final packet
   `R5.75-6` (make the effective checkpoint objective faithful to the structured goal anchor) and gated
@@ -574,6 +576,15 @@ Expected smoke outcome:
 ### Promotion Gate
 
 Do not begin `R5.75-3` until the sparse adapted repro fail-opens cleanly and the native control session proves the relaxed contract did not break ordinary analyzer runs.
+
+**Promotion decision: PROMOTED (2026-06-22). `R5.75-2` is closed; `R5.75-3` may begin.** The sparse
+readable fail-open split is landed in the analyzer input contract and the closeout gate re-ran green:
+the adapted repro `f47b81f39f2495dd` now runs compactor → analyzer → sentinel without aborting and
+emits one conservative checkpoint (`ProgressStatus::InsufficientEvidence`, structured objective weak
+fields unknown), while the native control `019eb430-6f9a-7a03-9a63-cb451b654795` still produces its
+ordinary three-checkpoint output with no new warnings. The full analyzer wall plus touched sentinel
+spot-checks (`warning_policy`, `live_end_to_end`) are green, so the routing advances to
+`R5.75-3` next.
 
 ## R5.75-3: Delegated Parent-Visible Stabilization
 
