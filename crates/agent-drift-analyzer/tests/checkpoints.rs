@@ -408,21 +408,50 @@ fn checkpoints_keep_sparse_readable_sessions_at_insufficient_evidence() {
     ]);
 
     let checkpoints = &result.sessions[0].checkpoints;
-    assert!(
-        !checkpoints.is_empty(),
-        "sparse readable sessions should still emit checkpoints"
+    assert_eq!(
+        checkpoints.len(),
+        1,
+        "the minimized sparse-readable fixture must emit exactly one checkpoint"
     );
-    for checkpoint in checkpoints {
-        let progress = checkpoint
-            .session_progress
-            .as_ref()
-            .expect("session progress");
-        assert_eq!(
-            progress.status,
-            ProgressStatus::InsufficientEvidence,
-            "sparse readable session must stay conservative"
-        );
-    }
+
+    let checkpoint = &checkpoints[0];
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        archetype.label,
+        SessionArchetypeLabel::Planning,
+        "the sparse-readable fixture must stay non-troubleshooting"
+    );
+    assert!(
+        !checkpoint.flagged,
+        "the sparse-readable fixture must stay non-escalatory"
+    );
+    assert!(
+        checkpoint.drift_scores.iter().all(|score| !score.flagged),
+        "the sparse-readable fixture must not produce flagged drift scores"
+    );
+    assert_eq!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence,
+        "sparse readable session must stay conservative"
+    );
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::PlanningConvergence,
+        "the sparse-readable fixture must stay on the planning posture"
+    );
+    assert_eq!(
+        progress.confidence,
+        Confidence::Low,
+        "the sparse-readable fixture must stay low-confidence"
+    );
 }
 
 #[test]
