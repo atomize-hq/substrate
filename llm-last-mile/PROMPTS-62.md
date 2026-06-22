@@ -24,7 +24,8 @@ Skill availability note:
    - `/Users/spensermcconnell/.agents/skills/incremental-implementation/SKILL.md`
    - `/Users/spensermcconnell/.agents/skills/code-review-and-quality/SKILL.md`
 3. The fresh parent session should still verify that both skills are available before spawning workers.
-4. If either required skill is unavailable, the orchestration agent must stop immediately and report the missing dependency instead of silently substituting a different workflow.
+4. If either required skill alias is unavailable, the parent session must load the skill doc from the resolved path above and explicitly preserve that workflow in worker instructions; do not silently omit the skill discipline.
+5. If the resolved skill path is also unavailable, stop immediately and report the missing dependency instead of silently substituting a different workflow.
 
 These are ready-to-paste prompts for fresh parent sessions. Each prompt is grounded in the live Slice `62` spec/plan/tasks stack and preserves the packet boundary: this slice is a bounded compatibility-bridge repair for the direct `cli:codex-world` member path, not a generic Codex projection framework and not future MCP/app-runtime/apps-connectors/hooks/rules/skills/plugin/custom-agent/workspace-overlay work.
 
@@ -50,16 +51,17 @@ Mission:
 Required orchestration loop:
 1. Verify the fresh parent session has both required skills available: `$incremental-implementation` and `$code-review-and-quality`.
 2. Read SPEC-62, PLAN-62, and TASKS-62 before dispatching any worker.
-3. Inspect `git status --short` and preserve unrelated dirt; stage and commit only packet-relevant files.
-4. Spawn a fresh GPT-5.4 subagent on high for implementation.
-5. The implementation subagent prompt must begin with `/goal ` and must explicitly instruct the worker to use `$incremental-implementation`.
-6. When implementation completes and Packet 1 verification is green, run any parent-side rechecks you need, run GitNexus detect-changes before commit if any production code changed, and commit the implementation changes before review.
-7. Spawn a fresh GPT-5.4 subagent on high for review.
-8. The review subagent must explicitly use `$code-review-and-quality`.
-9. If the review subagent flags issues, spawn a new fresh GPT-5.4 subagent on high to fix only those findings.
-10. The fix subagent prompt must begin with `/goal ` and must explicitly instruct the worker to use `$incremental-implementation`.
-11. After each fix round, rerun the relevant verification, run GitNexus detect-changes before commit if any production code changed, commit the fixes, and then rerun a fresh GPT-5.4 high review subagent.
-12. Repeat until review-clean.
+3. If `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` is absent in the parent session, remap all repo paths to the matching checkout at `/home/spenser/__Active_code/substrate`, report the remap once, and keep the remapped path consistent across all workers.
+4. Inspect `git status --short` and preserve unrelated dirt; stage and commit only packet-relevant files.
+5. Spawn a fresh GPT-5.4 subagent on high for implementation.
+6. The implementation subagent prompt must begin with `/goal ` and must explicitly instruct the worker to use `$incremental-implementation`.
+7. When implementation completes and Packet 1 verification is green, run any parent-side rechecks you need, run GitNexus detect-changes before commit if any production code changed, and commit the implementation changes before review.
+8. Spawn a fresh GPT-5.4 subagent on high for review.
+9. The review subagent must explicitly use `$code-review-and-quality`.
+10. If the review subagent flags issues, spawn a new fresh GPT-5.4 subagent on high to fix only those findings.
+11. The fix subagent prompt must begin with `/goal ` and must explicitly instruct the worker to use `$incremental-implementation`.
+12. After each fix round, rerun the relevant verification, run GitNexus detect-changes before commit if any production code changed, commit the fixes, and then rerun a fresh GPT-5.4 high review subagent.
+13. Repeat until review-clean.
 
 Commit policy:
 - Commit after implementation before review.
@@ -93,17 +95,17 @@ Out of scope:
 Implementation worker requirements:
 - Spawn a fresh GPT-5.4 subagent on high.
 - Implementation subagent prompt:
-  /goal Implement TASKS-62 Packet 1 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-62.md first. Work only on Task 1.1 and Task 1.2. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Add the minimum coverage needed to prove the direct member bridge contract is bounded auth-plus-config behavior rather than auth alone, while keeping exact-backend allowlist truth pinned. Do not widen into Packet 2 or Packet 3. Run `cargo test -p world-service prepare_codex_runtime_env -- --nocapture` and `cargo test -p shell codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted -- --nocapture`. Do not commit. Final message must state whether Packet 1 is checkpoint-green, what files changed, what GitNexus impact results were found, what verification ran, whether Packet 2 is unblocked, and whether any out-of-scope widening pressure was discovered.
+  /goal Implement TASKS-62 Packet 1 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-62.md first. If that repo path is absent, remap consistently to /home/spenser/__Active_code/substrate and report the remap once. Work only on Task 1.1 and Task 1.2. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Add the minimum coverage needed to prove the current direct member bridge contract honestly: auth seeding occurs, the internal hint is stripped, exact-backend allowlist truth is preserved, and config/profile/project artifacts are not replayed or materialized yet on this seam. Do not widen into Packet 2 or Packet 3. Run `cargo test -p world-service prepare_codex_runtime_env -- --nocapture` and `cargo test -p shell codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted -- --nocapture`. Do not commit. Final message must state whether Packet 1 is checkpoint-green, what files changed, what GitNexus impact results were found, what verification ran, whether Packet 2 is unblocked, and whether any out-of-scope widening pressure was discovered.
 
 Review worker requirements:
 - Spawn a fresh GPT-5.4 subagent on high.
 - Review subagent prompt:
-  Review the committed Slice 62 Packet 1 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-62.md. Review only Packet 1 and the live diff. Focus on correctness of the test pinning, exact-backend gating preservation, packet-boundary discipline, and whether broader projection work was smuggled in. Report findings first with explicit severities. State clearly whether Packet 1 is review-clean or requires changes.
+  Review the committed Slice 62 Packet 1 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. If that repo path is absent, remap consistently to /home/spenser/__Active_code/substrate and report the remap once. Ground the review in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-62.md. Review only Packet 1 and the live diff. Focus on correctness of the negative proof, exact-backend gating preservation, packet-boundary discipline, and whether broader projection work was smuggled in. Report findings first with explicit severities. State clearly whether Packet 1 is review-clean or requires changes.
 
 Fix worker requirements:
 - If review finds issues, spawn a fresh GPT-5.4 subagent on high.
 - Fix subagent prompt:
-  /goal Address only the required Slice 62 Packet 1 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read the review findings plus /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-62.md. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Fix only the flagged Packet 1 issues without widening scope. Re-run `cargo test -p world-service prepare_codex_runtime_env -- --nocapture` and `cargo test -p shell codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted -- --nocapture`. Do not commit. Final message must state which findings were fixed, what verification ran, whether Packet 1 is checkpoint-green, and whether another review round is required.
+  /goal Address only the required Slice 62 Packet 1 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read the review findings plus /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-62-world-codex-direct-member-bootstrap-compatibility-bridge-completion.md, and /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-62.md. If that repo path is absent, remap consistently to /home/spenser/__Active_code/substrate and report the remap once. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Fix only the flagged Packet 1 issues without widening scope. Re-run `cargo test -p world-service prepare_codex_runtime_env -- --nocapture` and `cargo test -p shell codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted -- --nocapture`. Do not commit. Final message must state which findings were fixed, what verification ran, whether Packet 1 is checkpoint-green, and whether another review round is required.
 
 Verification and commit requirements for the parent session:
 - After implementation and after each fix round, run:
@@ -114,7 +116,7 @@ Verification and commit requirements for the parent session:
 - Run GitNexus detect-changes before each commit if any non-test code changed.
 
 Packet 1 checkpoint:
-- world-service tests pin that the bridge includes bounded config behavior rather than auth alone
+- world-service tests pin that the current bridge is auth-seeding-only and does not yet replay/materialize bounded config behavior
 - shell tests still pin exact-backend allowlist truth
 - the slice boundary is tight enough that Packet 2 cannot hide broader config projection inside the same seam
 

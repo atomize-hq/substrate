@@ -169,16 +169,22 @@ Frameworks and test levels:
 
 Coverage expectations for this slice:
 
-1. prove the direct member path on the diagnosed profile no longer behaves as “auth only,”
+1. before bounded config materialization lands, pin the current direct-member seam honestly as auth-seeding-only plus explicit absence of config replay/materialization,
 2. prove the bridge stays narrow and internal,
 3. prove exact-backend gating remains intact,
-4. prove the live public bootstrap smoke succeeds after rebuild/redeploy.
+4. after bounded config materialization lands, prove the direct member path on the diagnosed profile no longer behaves as “auth only,”
+5. prove the live public bootstrap smoke succeeds after rebuild/redeploy.
 
 If an automated test cannot faithfully execute external Codex behavior hermetically, at minimum the slice must still:
 
 1. unit-test bounded config rendering/materialization semantics,
 2. preserve the documented isolated-home proof in manual verification,
 3. and avoid claiming broader automation coverage than actually exists.
+
+Incremental packet note:
+
+1. Packet 1 is a negative-proof packet: it should pin the current auth-seeding seam, internal-hint stripping, exact-backend gating, and the current absence of config replay/materialization without changing live bootstrap behavior.
+2. Packet 2 is the first packet that should change live bootstrap behavior by adding bounded user-level config materialization and fail-closed diagnostics.
 
 ## Boundaries
 

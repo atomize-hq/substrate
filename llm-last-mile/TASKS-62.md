@@ -31,13 +31,13 @@ Do not begin a later packet until the prior packet checkpoint is green.
 Session goal:
 
 1. freeze the current bug boundary in automation,
-2. prove the bridge now needs narrow config as well as auth on the diagnosed file-backed direct-member path,
+2. prove the current seam is still auth-seeding-only and does not yet replay config on the diagnosed file-backed direct-member path,
 3. keep exact-backend policy gating pinned before implementation widens the seam.
 
 ### Tasks
 
 - [ ] Task 1.1: Expand world-service bootstrap coverage for bounded config materialization
-  - Acceptance: `member_runtime` coverage explicitly exercises isolated `CODEX_HOME` preparation for the current file-backed direct-member bootstrap path with auth seeding plus bounded user-level config rendering/materialization semantics, rather than treating auth-only materialization as the full contract, and it does not replay profile overlays or repo project config layers.
+  - Acceptance: `member_runtime` coverage explicitly exercises isolated `CODEX_HOME` preparation for the current file-backed direct-member bootstrap path and proves the current contract honestly: auth seeding occurs, the internal seed-home env is removed before child spawn, optional `.credentials.json` still behaves as today, and user-level/profile/project config artifacts are not replayed or materialized yet.
   - Verify:
     - `cargo test -p world-service prepare_codex_runtime_env -- --nocapture`
   - Files:
@@ -56,7 +56,7 @@ Session goal:
 
 Packet 1 is complete only when:
 
-1. world-service tests pin that the bridge includes bounded config behavior rather than auth alone,
+1. world-service tests pin that the current bridge is auth-seeding-only and does not yet replay/materialize bounded config behavior,
 2. shell tests still pin exact-backend allowlist truth,
 3. the slice boundary is tight enough that Packet 2 cannot hide broader config projection inside the same seam.
 

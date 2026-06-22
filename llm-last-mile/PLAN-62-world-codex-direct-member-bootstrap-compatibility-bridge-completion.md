@@ -40,11 +40,12 @@ The current due-diligence posture to preserve is:
 So the correct sequence is:
 
 1. pin the bridge boundary in tests,
-2. add the smallest non-secret bootstrap config rendering needed for truthful model/provider startup,
-3. fail closed if that narrow bootstrap subset cannot be derived,
-4. update docs/guardrails so the slice is clearly transitional,
-5. rebuild and prove the live smoke,
-6. then stop before any generic projection, workspace-overlay, or future capability widening.
+2. prove in automation that the current seam is still auth-seeding-only and does not yet replay config,
+3. add the smallest non-secret bootstrap config rendering needed for truthful model/provider startup,
+4. fail closed if that narrow bootstrap subset cannot be derived,
+5. update docs/guardrails so the slice is clearly transitional,
+6. rebuild and prove the live smoke,
+7. then stop before any generic projection, workspace-overlay, or future capability widening.
 
 ## Locked Decisions
 
@@ -72,7 +73,7 @@ So the correct sequence is:
 Goal:
 
 1. make the remaining bug and the desired bridge boundary explicit in automation,
-2. prove the slice is not merely “copy one more file somehow,” and not a claim of universal Codex truth,
+2. pin the current direct-member seam honestly as auth-seeding-only rather than silently pre-landing Packet 2 behavior,
 3. keep exact-backend gating pinned while implementation proceeds.
 
 Primary touch surface:
@@ -83,13 +84,13 @@ Primary touch surface:
 
 Required changes:
 
-1. add/expand world-service coverage around isolated `CODEX_HOME` preparation so the bridge contract includes bounded config rendering/materialization in addition to auth seeding for the current file-backed bootstrap path,
+1. add/expand world-service coverage around isolated `CODEX_HOME` preparation so the bridge contract proves current behavior: auth seeding occurs, internal hints are stripped, and config/profile/project artifacts are not replayed or materialized yet on the current file-backed bootstrap path,
 2. pin the rule that only the exact allowlisted backend may receive the internal seed-home hint,
-3. if feasible, add an assertion that the bridge does not replay profile/project config layers or project broader config/state artifacts.
+3. if feasible, add an assertion that the current seam ignores `config.toml` even when the seed home contains one, so Packet 2 becomes the first bounded behavior change rather than an implicit widening of Packet 1.
 
 Verification checkpoint:
 
-1. test coverage distinguishes auth-only materialization from bounded auth-plus-config materialization,
+1. test coverage distinguishes the current auth-only seam from the future bounded auth-plus-config seam,
 2. exact-backend shell gating remains green,
 3. the failing direct path is pinned tightly enough that later widening cannot hide inside the same seam.
 
