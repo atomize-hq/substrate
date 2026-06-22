@@ -46,6 +46,7 @@ transport-api-types = { path = "../transport-api-types" }
 world-api = { path = "../world-api" }
 substrate-broker = { path = "../broker" }
 codex = { package = "unified-agent-api-codex", version = "=0.3.7" }
+toml = "0.8"
 
 # Local dependencies moved into main [dependencies] for cross-platform builds
 

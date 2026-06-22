@@ -2,13 +2,14 @@ use agent_api::{
     AgentWrapperCancelHandle, AgentWrapperCompletion, AgentWrapperError, AgentWrapperEvent,
     AgentWrapperEventKind, AgentWrapperRunControl, AgentWrapperRunRequest,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use axum::{
     body::{boxed, Bytes, StreamBody},
     http::StatusCode,
     response::Response,
 };
 use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -556,6 +557,39 @@ struct PreparedMemberRuntimeLauncher {
     env: Vec<(String, String)>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct CodexSeedHomeConfig {
+    model: Option<String>,
+    model_provider: Option<String>,
+    provider: Option<String>,
+    base_url: Option<String>,
+    #[serde(default)]
+    model_providers: BTreeMap<String, CodexBaseUrlConfig>,
+    #[serde(default)]
+    providers: BTreeMap<String, CodexBaseUrlConfig>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct CodexBaseUrlConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    base_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct CodexStartupSubset {
+    model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    base_url: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    model_providers: BTreeMap<String, CodexBaseUrlConfig>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    providers: BTreeMap<String, CodexBaseUrlConfig>,
+}
+
 fn prepare_runtime_env_for_member_backend(
     runtime_env: &mut BTreeMap<String, String>,
     backend_kind: MemberRuntimeBackendKindV1,
@@ -591,8 +625,93 @@ fn prepare_codex_runtime_env(
             ..codex::AuthSeedOptions::default()
         },
     )?;
+    write_codex_startup_subset(seed_home, &layout)?;
     runtime_env.insert("CODEX_HOME".to_string(), codex_home.display().to_string());
     Ok(())
+}
+
+fn write_codex_startup_subset(seed_home: &Path, layout: &codex::CodexHomeLayout) -> Result<()> {
+    let startup_subset = read_codex_startup_subset(seed_home)?;
+    let rendered = toml::to_string(&startup_subset)
+        .context("render bounded Codex startup subset for isolated CODEX_HOME")?;
+    fs::write(layout.config_path(), rendered).with_context(|| {
+        format!(
+            "write bounded Codex startup subset into isolated CODEX_HOME at {}",
+            layout.config_path().display()
+        )
+    })?;
+    Ok(())
+}
+
+fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
+    let config_path = seed_home.join("config.toml");
+    let raw = fs::read_to_string(&config_path).with_context(|| {
+        format!(
+            "direct cli:codex-world compatibility bridge could not derive bounded startup config from {}; config.toml is missing or unreadable, so isolated CODEX_HOME would otherwise fall back to Codex defaults",
+            config_path.display()
+        )
+    })?;
+    let parsed: CodexSeedHomeConfig = toml::from_str(&raw).with_context(|| {
+        format!(
+            "direct cli:codex-world compatibility bridge could not parse bounded startup config from {}; config.toml must contain a top-level model for truthful isolated startup",
+            config_path.display()
+        )
+    })?;
+
+    let model = normalize_non_empty_value(parsed.model).ok_or_else(|| {
+        anyhow!(
+            "direct cli:codex-world compatibility bridge could not derive a bounded startup model from {}; isolated CODEX_HOME would otherwise fall back to an unsupported default model",
+            config_path.display()
+        )
+    })?;
+
+    let model_provider = normalize_non_empty_value(parsed.model_provider);
+    let provider = normalize_non_empty_value(parsed.provider);
+    let base_url = normalize_non_empty_value(parsed.base_url);
+
+    let mut model_providers = BTreeMap::new();
+    if let Some(provider_name) = model_provider.as_deref() {
+        if let Some(selected) = parsed.model_providers.get(provider_name) {
+            if let Some(selected_base_url) = normalize_non_empty_value(selected.base_url.clone()) {
+                model_providers.insert(
+                    provider_name.to_string(),
+                    CodexBaseUrlConfig {
+                        base_url: Some(selected_base_url),
+                    },
+                );
+            }
+        }
+    }
+
+    let mut providers = BTreeMap::new();
+    if let Some(provider_name) = provider.as_deref() {
+        if let Some(selected) = parsed.providers.get(provider_name) {
+            if let Some(selected_base_url) = normalize_non_empty_value(selected.base_url.clone()) {
+                providers.insert(
+                    provider_name.to_string(),
+                    CodexBaseUrlConfig {
+                        base_url: Some(selected_base_url),
+                    },
+                );
+            }
+        }
+    }
+
+    Ok(CodexStartupSubset {
+        model,
+        model_provider,
+        provider,
+        base_url,
+        model_providers,
+        providers,
+    })
+}
+
+fn normalize_non_empty_value(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
 }
 
 fn prepare_member_runtime_launcher(
@@ -1146,6 +1265,8 @@ mod tests {
             r#"{"account_id":"acct_test","access_token":"token_test"}"#,
         )
         .expect("write auth");
+        fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n")
+            .expect("write startup config");
         fs::write(seed_home.join(".credentials.json"), "{}").expect("write credentials");
         let launcher_dir = temp_dir.path().join("launcher");
         fs::create_dir_all(&launcher_dir).expect("create launcher dir");
@@ -1171,6 +1292,10 @@ mod tests {
             fs::read_to_string(codex_home.join("auth.json")).expect("seeded auth"),
             r#"{"account_id":"acct_test","access_token":"token_test"}"#
         );
+        assert_eq!(
+            fs::read_to_string(codex_home.join("config.toml")).expect("rendered config"),
+            "model = \"gpt-5.4\"\n"
+        );
         assert!(
             codex_home.join(".credentials.json").is_file(),
             "optional credentials file should be copied when present"
@@ -1178,7 +1303,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_codex_runtime_env_does_not_materialize_user_or_profile_config_yet() {
+    fn prepare_codex_runtime_env_materializes_bounded_user_startup_subset_only() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let seed_home = temp_dir.path().join("seed-home");
         fs::create_dir_all(&seed_home).expect("create seed home");
@@ -1187,8 +1312,29 @@ mod tests {
             r#"{"account_id":"acct_test","access_token":"token_test"}"#,
         )
         .expect("write auth");
-        fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n")
-            .expect("write user config");
+        fs::write(
+            seed_home.join("config.toml"),
+            r#"
+model = "gpt-5.4"
+model_provider = "compat-openai"
+
+[model_providers.compat-openai]
+base_url = "https://gateway.example.invalid/v1"
+
+[mcp_servers.hidden]
+command = "should-not-copy"
+
+[hooks.pre_exec]
+command = "should-not-copy"
+
+[agents.helper]
+prompt = "should-not-copy"
+
+[requirements]
+mode = "should-not-copy"
+"#,
+        )
+        .expect("write user config");
         fs::write(
             seed_home.join("engineering.config.toml"),
             "model = \"gpt-5.5\"\n",
@@ -1210,20 +1356,39 @@ mod tests {
             seed_home.display().to_string(),
         )]);
 
-        prepare_codex_runtime_env(&mut runtime_env, &launcher_dir).expect("seed auth only");
+        prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+            .expect("seed auth and bounded startup subset");
 
         let codex_home = launcher_dir.join("codex-home");
+        let rendered = fs::read_to_string(codex_home.join("config.toml"))
+            .expect("rendered bounded startup config");
+        assert_eq!(
+            rendered,
+            "model = \"gpt-5.4\"\nmodel_provider = \"compat-openai\"\n\n[model_providers.compat-openai]\nbase_url = \"https://gateway.example.invalid/v1\"\n"
+        );
         assert!(
-            !codex_home.join("config.toml").exists(),
-            "Packet 1 pins auth-only bootstrap: user config.toml must not be materialized yet"
+            !rendered.contains("mcp_servers"),
+            "bounded startup subset must not project MCP configuration"
+        );
+        assert!(
+            !rendered.contains("hooks"),
+            "bounded startup subset must not project hook configuration"
+        );
+        assert!(
+            !rendered.contains("agents"),
+            "bounded startup subset must not project custom agent configuration"
+        );
+        assert!(
+            !rendered.contains("requirements"),
+            "bounded startup subset must not project managed requirements state"
         );
         assert!(
             !codex_home.join("engineering.config.toml").exists(),
-            "Packet 1 pins auth-only bootstrap: profile overlays must not be replayed yet"
+            "Packet 2 must not replay profile overlays into isolated CODEX_HOME"
         );
         assert!(
             !codex_home.join(".codex").join("config.toml").exists(),
-            "Packet 1 pins auth-only bootstrap: repo project config must not be materialized yet"
+            "Packet 2 must not replay repo project config into isolated CODEX_HOME"
         );
         assert!(
             !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
@@ -1249,6 +1414,49 @@ mod tests {
         assert!(
             err.to_string().contains("auth.json"),
             "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_fails_closed_when_startup_model_cannot_be_derived() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let seed_home = temp_dir.path().join("seed-home");
+        fs::create_dir_all(&seed_home).expect("create seed home");
+        fs::write(
+            seed_home.join("auth.json"),
+            r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+        )
+        .expect("write auth");
+        fs::write(
+            seed_home.join("config.toml"),
+            r#"
+[model_providers.compat-openai]
+base_url = "https://gateway.example.invalid/v1"
+"#,
+        )
+        .expect("write incomplete config");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+        let mut runtime_env = BTreeMap::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            seed_home.display().to_string(),
+        )]);
+
+        let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+            .expect_err("missing startup model must fail closed");
+        let message = err.to_string();
+        assert!(
+            message.contains("could not derive a bounded startup model"),
+            "unexpected error: {err:#}"
+        );
+        assert!(
+            message.contains("unsupported default model"),
+            "unexpected error: {err:#}"
+        );
+        assert!(
+            !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            "internal seed env must still be removed on fail-closed startup subset errors"
         );
     }
 
