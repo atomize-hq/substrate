@@ -114,30 +114,47 @@ impl MemberRuntimeManager {
         placement: LinuxWorldPlacementContext,
     ) -> Result<Response> {
         let actual_binary = validate_member_runtime_binary(&dispatch)?;
-        let prepared_launcher = prepare_member_runtime_launcher(&actual_binary, &placement)?;
+        let PreparedMemberRuntimeLauncher {
+            launcher_path,
+            launcher_dir,
+            env: launcher_env,
+        } = prepare_member_runtime_launcher(&actual_binary, &placement)?;
         let runtime_env = env
             .into_iter()
-            .chain(prepared_launcher.env.iter().cloned())
+            .chain(launcher_env.into_iter())
             .collect::<BTreeMap<_, _>>();
         let mut runtime_env = runtime_env;
+        let mut prepared_launcher_dir = Some(launcher_dir.clone());
         if let Err(err) = prepare_runtime_env_for_member_backend(
             &mut runtime_env,
             dispatch.resolved_runtime.backend_kind,
-            &prepared_launcher.launcher_dir,
+            &launcher_dir,
         ) {
-            let _ = fs::remove_dir_all(&prepared_launcher.launcher_dir);
+            cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
             return Err(err);
         }
 
-        let prompt_fulfillment = PromptFulfillmentBridge::for_member_backend(
+        let prompt_fulfillment = match PromptFulfillmentBridge::for_member_backend(
             &dispatch.resolved_runtime.backend_kind,
-            prepared_launcher.launcher_path.clone(),
-        )?;
-        let initial_prompt = dispatch.initial_prompt.clone().ok_or_else(|| {
-            crate::service::BadRequestError::new(
-                "member_dispatch.initial_prompt is required for launch-time first turn".to_string(),
-            )
-        })?;
+            launcher_path,
+        ) {
+            Ok(prompt_fulfillment) => prompt_fulfillment,
+            Err(err) => {
+                cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
+                return Err(err);
+            }
+        };
+        let initial_prompt = match dispatch.initial_prompt.clone() {
+            Some(initial_prompt) => initial_prompt,
+            None => {
+                cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
+                return Err(crate::service::BadRequestError::new(
+                    "member_dispatch.initial_prompt is required for launch-time first turn"
+                        .to_string(),
+                )
+                .into());
+            }
+        };
         let AgentWrapperRunControl { handle, cancel } = match prompt_fulfillment
             .run_control(AgentWrapperRunRequest {
                 prompt: initial_prompt,
@@ -150,7 +167,7 @@ impl MemberRuntimeManager {
         {
             Ok(control) => control,
             Err(err) => {
-                let _ = fs::remove_dir_all(&prepared_launcher.launcher_dir);
+                cleanup_prepared_launcher_dir(&mut prepared_launcher_dir);
                 return Err(map_wrapper_error(err));
             }
         };
@@ -174,7 +191,7 @@ impl MemberRuntimeManager {
             bootstrap_last_signal: Mutex::new(None),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
-            launcher_dir: Some(prepared_launcher.launcher_dir),
+            launcher_dir: prepared_launcher_dir.take(),
         });
         if let Err(err) = self.register_member(active.clone()) {
             active.bootstrap_cancel.cancel();
@@ -793,6 +810,12 @@ fn prepare_member_runtime_launcher(
         launcher_dir,
         env: launcher.env,
     })
+}
+
+fn cleanup_prepared_launcher_dir(launcher_dir: &mut Option<std::path::PathBuf>) {
+    if let Some(launcher_dir) = launcher_dir.take() {
+        let _ = fs::remove_dir_all(launcher_dir);
+    }
 }
 
 fn frame_from_wrapper_event(
@@ -1624,6 +1647,27 @@ base_url = "https://gateway.example.invalid/v1"
                 "internal seed env must still be removed on fail-closed provider routing errors"
             );
         }
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_cleanup_prepared_launcher_dir_removes_directory_once() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+        fs::write(launcher_dir.join("auth.json"), "{}").expect("write launcher artifact");
+
+        let mut cleanup_slot = Some(launcher_dir.clone());
+        cleanup_prepared_launcher_dir(&mut cleanup_slot);
+        cleanup_prepared_launcher_dir(&mut cleanup_slot);
+
+        assert!(
+            cleanup_slot.is_none(),
+            "cleanup must clear the launcher slot"
+        );
+        assert!(
+            !launcher_dir.exists(),
+            "cleanup must remove prepared launcher artifacts on fail-closed exits"
+        );
     }
 
     #[test]
