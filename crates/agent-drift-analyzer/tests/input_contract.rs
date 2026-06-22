@@ -4,7 +4,9 @@ mod support;
 
 use std::fs;
 
-use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
+use agent_session_compactor::{
+    CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
+};
 use camino::Utf8PathBuf;
 use support::{load_sample_bundle, BundleFixture};
 
@@ -116,6 +118,188 @@ fn input_contract_allows_sparse_tool_payload_surface_when_objective_rows_and_pat
     assert!(!bundle.surface.tool_argument_json);
     assert!(bundle.surface.repetition_preserved);
     assert!(bundle.surface.stable_row_refs);
+}
+
+#[test]
+fn input_contract_allows_sparse_path_hint_surface_when_objective_rows_survive_without_tool_calls() {
+    let fixture = BundleFixture::from_compact_rows(vec![CompactionRow {
+        source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some("session-alpha".to_string()),
+        turn_id: Some("turn-001".to_string()),
+        event_index: 0,
+        line_number: 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind: CompactionKind::UserMessage,
+        user_message_role: Some(UserMessageRole::Prompt),
+        dedupe_identity: None,
+        text: "Explain how the retry behavior works and summarize the tradeoffs.".to_string(),
+        canonical_text: "Explain how the retry behavior works and summarize the tradeoffs."
+            .to_string(),
+        text_hash_hex: "hash-conceptual-ask".to_string(),
+    }]);
+
+    let bundle = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect("sparse path-hint bundle should load");
+    assert!(bundle.surface.literal_objective_rows);
+    assert!(!bundle.surface.truth_artifact_hints);
+    assert!(!bundle.surface.working_set_hints);
+    assert!(!bundle.surface.tool_argument_json);
+    assert!(bundle.surface.repetition_preserved);
+    assert!(bundle.surface.stable_row_refs);
+}
+
+#[test]
+fn input_contract_allows_clean_no_duplicate_bundle_when_archival_covers_compact_rows() {
+    let compact_rows = vec![CompactionRow {
+        source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some("session-alpha".to_string()),
+        turn_id: Some("turn-001".to_string()),
+        event_index: 0,
+        line_number: 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind: CompactionKind::UserMessage,
+        user_message_role: Some(UserMessageRole::Prompt),
+        dedupe_identity: None,
+        text: "/goal Review crates/agent-drift-analyzer/src/input.rs and summarize the contract split."
+            .to_string(),
+        canonical_text:
+            "/goal Review crates/agent-drift-analyzer/src/input.rs and summarize the contract split."
+                .to_string(),
+        text_hash_hex: "hash-clean-no-duplicate".to_string(),
+    }];
+    let fixture = BundleFixture::from_rows(compact_rows.clone(), compact_rows, Vec::new());
+
+    let bundle =
+        agent_drift_analyzer::input::load_bundle(&fixture.input_dir).expect("clean bundle loads");
+    assert!(bundle.surface.literal_objective_rows);
+    assert!(bundle.surface.repetition_preserved);
+    assert!(bundle.surface.stable_row_refs);
+    assert!(bundle.dedupe_groups.is_empty());
+}
+
+#[test]
+fn input_contract_fails_on_unstable_archival_row_refs_with_exact_variant() {
+    let row = CompactionRow {
+        source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some("session-alpha".to_string()),
+        turn_id: Some("turn-001".to_string()),
+        event_index: 0,
+        line_number: 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind: CompactionKind::UserMessage,
+        user_message_role: Some(UserMessageRole::Prompt),
+        dedupe_identity: None,
+        text: "/goal Review the sparse readable contract.".to_string(),
+        canonical_text: "/goal Review the sparse readable contract.".to_string(),
+        text_hash_hex: "hash-unstable-ref".to_string(),
+    };
+    let fixture = BundleFixture::from_rows(vec![row.clone(), row.clone()], vec![row], Vec::new());
+
+    let error = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect_err("unstable row refs should fail");
+    assert!(matches!(
+        error,
+        agent_drift_analyzer::input::InputError::InsufficientContract { ref reason }
+        if reason == "row references are not unique and stable"
+    ));
+}
+
+#[test]
+fn input_contract_fails_on_missing_dedupe_representative_with_exact_variant() {
+    let row = CompactionRow {
+        source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some("session-alpha".to_string()),
+        turn_id: Some("turn-001".to_string()),
+        event_index: 0,
+        line_number: 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind: CompactionKind::UserMessage,
+        user_message_role: Some(UserMessageRole::Prompt),
+        dedupe_identity: None,
+        text: "/goal Review the sparse readable contract.".to_string(),
+        canonical_text: "/goal Review the sparse readable contract.".to_string(),
+        text_hash_hex: "hash-missing-dedupe-rep".to_string(),
+    };
+    let missing_row = RowRef {
+        source_file: row.source_file.clone(),
+        event_index: 99,
+        row_ordinal: 0,
+    };
+    let fixture = BundleFixture::from_rows(
+        vec![row.clone()],
+        vec![row.clone()],
+        vec![DedupeGroup {
+            kind: row.kind,
+            canonical_text_hash_hex: "missing-row".to_string(),
+            representative: missing_row.clone(),
+            duplicates: Vec::new(),
+        }],
+    );
+
+    let error = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect_err("missing dedupe representative should fail");
+    assert!(matches!(
+        error,
+        agent_drift_analyzer::input::InputError::MissingDedupeRepresentative { ref row }
+        if row == &missing_row
+    ));
+}
+
+#[test]
+fn input_contract_fails_when_archival_rows_do_not_cover_compact_rows_with_exact_variant() {
+    let first_row = CompactionRow {
+        source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some("session-alpha".to_string()),
+        turn_id: Some("turn-001".to_string()),
+        event_index: 0,
+        line_number: 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind: CompactionKind::UserMessage,
+        user_message_role: Some(UserMessageRole::Prompt),
+        dedupe_identity: None,
+        text: "/goal Review the sparse readable contract.".to_string(),
+        canonical_text: "/goal Review the sparse readable contract.".to_string(),
+        text_hash_hex: "hash-archival-cover-0".to_string(),
+    };
+    let second_row = CompactionRow {
+        source_file: Utf8PathBuf::from("/tmp/session-alpha/rollout.jsonl"),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some("session-alpha".to_string()),
+        turn_id: Some("turn-001".to_string()),
+        event_index: 1,
+        line_number: 2,
+        row_ordinal: 0,
+        timestamp: None,
+        kind: CompactionKind::SystemMessage,
+        user_message_role: None,
+        dedupe_identity: None,
+        text: "Keep the regression scoped to tests only.".to_string(),
+        canonical_text: "Keep the regression scoped to tests only.".to_string(),
+        text_hash_hex: "hash-archival-cover-1".to_string(),
+    };
+    let fixture = BundleFixture::from_rows(
+        vec![first_row.clone()],
+        vec![first_row, second_row],
+        Vec::new(),
+    );
+
+    let error = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect_err("archival rows must cover compact rows");
+    assert!(matches!(
+        error,
+        agent_drift_analyzer::input::InputError::InsufficientContract { ref reason }
+        if reason == "archival rows do not preserve repetition beyond the compacted view"
+    ));
 }
 
 #[test]

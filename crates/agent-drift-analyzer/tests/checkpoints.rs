@@ -455,6 +455,77 @@ fn checkpoints_keep_sparse_readable_sessions_at_insufficient_evidence() {
 }
 
 #[test]
+fn checkpoints_anchor_sparse_readable_goal_to_steer_and_keep_weak_fields_unknown() {
+    let result = analyze_custom_rows(vec![
+        steer_row(
+            0,
+            "turn-001",
+            "Review only the already-landed packet, findings-first, do not change code.",
+        ),
+        user_row(
+            1,
+            "turn-001",
+            "<skill>\n<name>incremental-implementation</name>\n<path>/Users/spensermcconnell/.agents/skills/incremental-implementation/SKILL.md</path>\nRead first:\n- docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-spec.md\n- docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-tasks.md\n\n## Verification\n- cargo test -p agent-drift-analyzer checkpoints -- --nocapture\n\n## Return with\n- changed files\n- residual risks\n- recommended commit message\n</skill>",
+            UserMessageRole::Unknown,
+        ),
+    ]);
+
+    let checkpoints = &result.sessions[0].checkpoints;
+    assert_eq!(
+        checkpoints.len(),
+        1,
+        "the minimized sparse-readable fixture must emit exactly one checkpoint"
+    );
+
+    let checkpoint = &checkpoints[0];
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+    assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+
+    let structured = checkpoint
+        .structured_objective
+        .as_ref()
+        .expect("exported structured objective");
+    assert_eq!(structured.primary_intent, ObjectiveIntent::Review);
+    assert!(structured.success_conditions.is_empty());
+    assert!(structured.deliverables.is_empty());
+    assert!(structured.target.is_none());
+
+    let goal_spans = structured
+        .evidence_spans
+        .iter()
+        .filter(|span| span.role == ObjectiveRole::Goal)
+        .collect::<Vec<_>>();
+    assert!(
+        goal_spans
+            .iter()
+            .any(|span| span.excerpt.contains("Review only the already-landed packet")),
+        "the goal must anchor to the steer ask; got {:?}",
+        goal_spans.iter().map(|span| &span.excerpt).collect::<Vec<_>>()
+    );
+    assert!(
+        goal_spans.iter().all(|span| {
+            !span.excerpt.contains("<skill>")
+                && !span.excerpt.contains("recommended commit message")
+                && !span.excerpt.contains("cargo test -p agent-drift-analyzer checkpoints")
+        }),
+        "goal spans must never anchor to pasted skill boilerplate: {:?}",
+        goal_spans.iter().map(|span| &span.excerpt).collect::<Vec<_>>()
+    );
+
+    let unknown_fields = structured
+        .unknowns
+        .iter()
+        .map(|unknown| unknown.field_name.as_str())
+        .collect::<Vec<_>>();
+    assert!(unknown_fields.contains(&"target"));
+    assert!(unknown_fields.contains(&"success_conditions"));
+    assert!(unknown_fields.contains(&"deliverables"));
+}
+
+#[test]
 fn checkpoints_compute_turn_timing_from_turn_slice_boundaries() {
     let mut bundle = load_sample_bundle();
     for row in &mut bundle.archival_rows {
