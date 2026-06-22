@@ -127,7 +127,7 @@ This is the concrete materialization needed by the chosen adapter.
 Examples:
 
 1. home-root files,
-2. project-root overlays,
+2. workspace-root overlays,
 3. generated config fragments,
 4. app-runtime registries,
 5. launch env,
@@ -161,16 +161,16 @@ Examples:
 2. auth/session/history/log/cache state,
 3. MCP server registries and app-runtime registries when the adapter stores them under home state.
 
-### 2. Project-root projection
+### 2. Workspace-root projection
 
-Used for adapter-native state discovered from cwd/repo-local overlays.
+Used for adapter-native state discovered from workspace-local overlays.
 
 Examples:
 
-1. project `.codex/config.toml`,
+1. workspace `.codex/config.toml`,
 2. future `.claude/**`,
 3. `.mcp.json`,
-4. project-local skills or plugin overlays.
+4. workspace-local skills or plugin overlays.
 
 Hard rule:
 
@@ -262,7 +262,7 @@ The framework must keep these separate.
 1. logical inventories,
 2. lane-local enablement and overrides,
 3. retained projected home roots,
-4. retained project-root overlays,
+4. retained workspace-root overlays,
 5. non-secret app/runtime registries when policy allows them to persist.
 
 ### Request-time projection examples
@@ -382,7 +382,7 @@ Default direction:
 
 1. retained projected homes should live outside the ordinary workspace tree unless a later design explicitly proves otherwise,
 2. scratch/runtime state should remain outside repo-sync surfaces by default,
-3. any project-root projection that does exist must be deliberately scoped and treated as compatibility surface, not as a dumping ground for all retained runtime state.
+3. any workspace-root projection that does exist must be deliberately scoped and treated as compatibility surface, not as a dumping ground for all retained runtime state.
 
 This avoids:
 
@@ -406,7 +406,7 @@ For the first implementation-bearing slice that follows this design, the intende
 This framework is intentionally generic. It should be followed by at least:
 
 1. a Codex-specific mapping doc that defines how this framework maps into `CODEX_HOME`, provider/profile posture, MCP/app-runtime projection, and world auth/gateway realization,
-2. a future project-overlay design for adapters that depend on repo-local config discovery beyond home-root state.
+2. [DESIGN-workspace-scoped-adapter-overlay-model.md](./DESIGN-workspace-scoped-adapter-overlay-model.md) for adapters that depend on workspace-local config discovery beyond home-root state.
 
 ## Open Design Tensions To Preserve
 
@@ -414,6 +414,6 @@ The next DESIGN docs should answer, not erase, these tensions:
 
 1. when a projected native file may be mutable,
 2. whether remembered MCP/app approvals may persist and at what scope,
-3. how much project-local `.codex` compatibility should exist,
+3. how much workspace-local `.codex` compatibility should exist,
 4. when retained-worker projection should be promoted to first-class named-lane projection,
-5. how non-Codex adapters with project-root discovery fit the same framework cleanly.
+5. how non-Codex adapters with workspace-root discovery fit the same framework cleanly.

@@ -71,7 +71,7 @@ This design does not:
 3. define non-Codex adapter mappings,
 4. promise the exact implementation slice that retires the current direct seed-home compatibility bridge,
 5. solve app-server-first product UX or IDE integration in this document,
-6. define the final project-overlay contract for adapters that depend on repo-local config discovery beyond home-root state,
+6. define the final workspace-overlay contract for adapters that depend on workspace-local config discovery beyond home-root state,
 7. declare that placement-qualified identity cleanup is fully resolved in this document.
 
 ## Core Principle
@@ -185,12 +185,12 @@ The world runtime may still rebase `HOME` for world isolation and generic proces
 
 ### 3. Workspace-root projection is compatibility-only
 
-Codex-related project overlays such as project `.codex/config.toml` should be treated as compatibility surfaces, not primary authority.
+Codex-related workspace overlays such as workspace `.codex/config.toml` should be treated as compatibility surfaces, not primary authority.
 
 Default direction:
 
 1. Substrate-owned logical inventories remain the only architectural source of truth for config, policy, and allowed runtime posture,
-2. project `.codex` compatibility, if present at all, is import/export/overlay territory beneath that authority rather than a second source of truth,
+2. workspace `.codex` compatibility, if present at all, is import/export/overlay territory beneath that authority rather than a second source of truth,
 3. a projected Codex home must not require repo-root `.codex` writes in v1,
 4. later slices may define bounded compatibility import or export behavior, but they must not grant project `.codex` authority parity with Substrate-owned inventories.
 
@@ -425,7 +425,7 @@ This design preserves room for at least:
 
 1. scratch/ephemeral Codex homes,
 2. retained per-worker or future per-lane Codex homes,
-3. later explicit per-project retained homes,
+3. later explicit per-workspace retained homes,
 4. later stronger cross-session retained-home models if separately justified.
 
 It does not endorse a shared user/global retained world home in v1.
@@ -472,13 +472,13 @@ For the first implementation-bearing Codex-specific slice after this design:
 4. durable writable Codex homes must be explicit and remain outside workspace sync surfaces,
 5. gateway-front-door auth delivery is the target steady state and compatibility home-auth projection is transitional only,
 6. Codex-native mutable writes do not become authority by default,
-7. project `.codex` compatibility, if it exists, remains strictly subordinate to Substrate-owned inventories.
+7. workspace `.codex` compatibility, if it exists, remains strictly subordinate to Substrate-owned inventories.
 
 ## Follow-On Design Dependencies
 
 This document should be followed by:
 
-1. a future project-overlay design for adapters that depend on repo-local discovery beyond home-root projection,
+1. [DESIGN-workspace-scoped-adapter-overlay-model.md](./DESIGN-workspace-scoped-adapter-overlay-model.md) for adapters that depend on workspace-local discovery beyond home-root projection,
 2. later implementation SPECs that choose the first bounded Codex mapping slice,
 3. possible future design work for explicit reconciliation of selected mutable Codex-native writes.
 
@@ -488,7 +488,7 @@ The next numbered SPECs should answer, not erase, these tensions:
 
 1. when retained writable Codex homes become necessary beyond scratch-by-default posture,
 2. whether remembered MCP/app approvals may persist and at what scope,
-3. whether project `.codex/config.toml` remains compatibility-only or gains a bounded managed role,
+3. whether workspace `.codex/config.toml` remains compatibility-only or gains a bounded managed role,
 4. how keyring-derived auth, if ever needed, is bridged without reintroducing ambient host discovery,
 5. how app-server daemon state should be treated when app-server UX becomes a first-class product surface,
 6. when retained-worker ownership should be promoted to first-class named-lane ownership,
