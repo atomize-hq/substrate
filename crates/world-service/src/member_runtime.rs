@@ -649,10 +649,16 @@ fn prepare_codex_runtime_env(
     workspace_dir: &Path,
     launcher_dir: &Path,
 ) -> Result<()> {
-    let Some(seed_home_raw) = runtime_env.remove(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
-    else {
-        return Ok(());
-    };
+    let authoritative_project_dir =
+        codex_authoritative_project_dir(runtime_env, workspace_dir).to_path_buf();
+    let seed_home_raw = runtime_env
+        .remove(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+        .ok_or_else(|| {
+            anyhow!(
+                "direct cli:codex-world compatibility bridge requires {}; without the already-gated seed-home source this Packet 2 seam would otherwise launch against the real workspace with ambient repo-local .codex still active",
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV
+            )
+        })?;
 
     let seed_home = Path::new(seed_home_raw.trim());
     let codex_home = launcher_dir.join("codex-home");
@@ -666,9 +672,22 @@ fn prepare_codex_runtime_env(
             ..codex::AuthSeedOptions::default()
         },
     )?;
-    write_codex_startup_subset(seed_home, workspace_dir, &layout)?;
+    write_codex_startup_subset(seed_home, &authoritative_project_dir, &layout)?;
     runtime_env.insert("CODEX_HOME".to_string(), codex_home.display().to_string());
     Ok(())
+}
+
+fn codex_authoritative_project_dir<'a>(
+    runtime_env: &'a BTreeMap<String, String>,
+    workspace_dir: &'a Path,
+) -> &'a Path {
+    runtime_env
+        .get(crate::service::WORLD_PROJECT_DIR_OVERRIDE_ENV)
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(Path::new)
+        .unwrap_or(workspace_dir)
 }
 
 fn write_codex_startup_subset(
@@ -1585,6 +1604,112 @@ mode = "should-not-copy"
         assert!(
             !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
             "internal seed env must be removed before spawning the member runtime"
+        );
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_marks_authoritative_project_root_untrusted_when_override_is_present(
+    ) {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let seed_home = temp_dir.path().join("seed-home");
+        let project_root = temp_dir.path().join("workspace");
+        let nested_cwd = project_root.join("nested").join("pkg");
+        let project_codex_dir = project_root.join(".codex");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&seed_home).expect("create seed home");
+        fs::create_dir_all(&nested_cwd).expect("create nested cwd");
+        fs::create_dir_all(&project_codex_dir).expect("create project codex dir");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+        fs::write(
+            seed_home.join("auth.json"),
+            r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+        )
+        .expect("write auth");
+        fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n")
+            .expect("write startup config");
+        fs::write(
+            project_codex_dir.join("config.toml"),
+            "model = \"gpt-5.6\"\n",
+        )
+        .expect("write project config");
+
+        let mut runtime_env = BTreeMap::from([
+            (
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+                seed_home.display().to_string(),
+            ),
+            (
+                crate::service::WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+                project_root.display().to_string(),
+            ),
+        ]);
+
+        prepare_codex_runtime_env(&mut runtime_env, &nested_cwd, &launcher_dir)
+            .expect("seed auth and bounded startup subset");
+
+        let rendered = fs::read_to_string(launcher_dir.join("codex-home").join("config.toml"))
+            .expect("rendered bounded startup config");
+        let parsed: toml::Value = rendered.parse().expect("parse rendered config");
+        let projects = parsed
+            .get("projects")
+            .and_then(toml::Value::as_table)
+            .expect("rendered projects table");
+        assert_eq!(
+            projects.len(),
+            1,
+            "only the authoritative project root should be demoted in isolated CODEX_HOME"
+        );
+        assert_eq!(
+            projects
+                .get(&project_root.display().to_string())
+                .and_then(toml::Value::as_table)
+                .and_then(|project| project.get("trust_level"))
+                .and_then(toml::Value::as_str),
+            Some("untrusted"),
+            "repo-root trust demotion must use SUBSTRATE_WORLD_PROJECT_DIR when launch cwd is nested"
+        );
+        assert!(
+            !projects.contains_key(&nested_cwd.display().to_string()),
+            "effective nested cwd must not become the trust-demotion key"
+        );
+        assert!(
+            !launcher_dir
+                .join("codex-home")
+                .join(".codex")
+                .join("config.toml")
+                .exists(),
+            "Packet 2 must still not replay repo project config into isolated CODEX_HOME"
+        );
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_fails_closed_when_seed_home_bridge_is_missing() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let workspace_dir = temp_dir.path().join("workspace");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+        let mut runtime_env = BTreeMap::new();
+
+        let err = prepare_codex_runtime_env(&mut runtime_env, &workspace_dir, &launcher_dir)
+            .expect_err("missing seed-home bridge must fail closed");
+        let message = err.to_string();
+        assert!(
+            message.contains(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            "unexpected error: {err:#}"
+        );
+        assert!(
+            message.contains("Packet 2 seam"),
+            "unexpected error: {err:#}"
+        );
+        assert!(
+            message.contains("ambient repo-local .codex still active"),
+            "unexpected error: {err:#}"
+        );
+        assert!(
+            !runtime_env.contains_key("CODEX_HOME"),
+            "fail-closed bridge errors must not materialize isolated CODEX_HOME"
         );
     }
 
