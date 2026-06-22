@@ -1,7 +1,9 @@
 # Tasks: Agent Drift Analyzer Sparse Readable Session Fail-Open (R5.75-2)
 
-Status: draft task ledger created on 2026-06-21 from the `R5.75-2` SPEC/PLAN in this directory, after
-reproducing the abort on the live crate. This is the active implementation queue for `R5.75-2`.
+Status: task ledger created on 2026-06-21 from the `R5.75-2` SPEC/PLAN in this directory, after
+reproducing the abort on the live crate. Packet implementation/validation closed on 2026-06-22:
+`R5.75-2` is landed history and `R5.75-3` is now the active seam. This ledger is preserved as the
+closeout record for what landed in `R5.75-2`.
 
 Packet prerequisite rule: this packet names `R5.75-1` as landed. Verify it in live code/tests before
 editing (it is, as of commit `68216bf02` — the structured-objective anchoring fix). If a named
@@ -24,7 +26,9 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 ## R5.75-2.1: Characterize Downstream Behavior (Investigation, No Committed Code)
 
-- [ ] Task R5.75-2.1.1: Determine what the analysis path emits for a de-aborted sparse session.
+- [x] Task R5.75-2.1.1: Determine what the analysis path emits for a de-aborted sparse session. **Done** —
+      investigation recorded here on 2026-06-22; the downstream path self-conservatizes, so
+      `R5.75-2.3` stayed assertion-only.
   - Acceptance: a recorded finding (in this ledger) of whether `analyze_loaded_bundle` /
     `checkpoint_analyses` scores `f47b81f39f2495dd` **conservatively on its own**
     (`ProgressStatus::InsufficientEvidence`) when `validate_surface` does not abort, or whether it
@@ -56,7 +60,9 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 ## R5.75-2.2: Split validate_surface (Corruption Hard-Fail vs Sparse Fail-Open)
 
-- [ ] Task R5.75-2.2.1: Stop aborting on the sparse-but-readable conditions, and split `repetition_preserved`.
+- [x] Task R5.75-2.2.1: Stop aborting on the sparse-but-readable conditions, and split `repetition_preserved`. **Done** —
+      landed in `b4743a45b` (`validate_surface` now fail-opens the sparse path/tool-payload axes and
+      keeps only the archival-coverage half of `repetition_preserved` as the hard-fail invariant).
   - Acceptance: `validate_surface` no longer returns `Err` for the path-hint
     (`truth_artifact_hints`) and tool-payload (`working_set_hints` / `tool_argument_json`) conditions
     — each independently, neither gated on the other; it returns `Ok(AnalyzerSurface { … })` with those
@@ -76,7 +82,9 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 ## R5.75-2.3: Guarantee The Conservative Checkpoint
 
-- [ ] Task R5.75-2.3.1: Ensure a sparse session yields a conservative checkpoint.
+- [x] Task R5.75-2.3.1: Ensure a sparse session yields a conservative checkpoint. **Done** —
+      completed as assertion-only in `2400b1f93` / `7d4ca8060`; no production `analyze_loaded_bundle`
+      cap was needed because the de-aborted path already emitted `ProgressStatus::InsufficientEvidence`.
   - Acceptance: a de-aborted sparse session emits ≥1 checkpoint whose status is
     `ProgressStatus::InsufficientEvidence` (the status field, not merely a low `Confidence`), never a
     troubleshooting/strong-progress posture. If R5.75-2.1 showed the pipeline already self-conservatizes,
@@ -89,7 +97,9 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 ## R5.75-2.4: Regressions
 
-- [ ] Task R5.75-2.4.1: Complete the input-contract matrix (do not re-add R5.75-2.2's tool-payload test).
+- [x] Task R5.75-2.4.1: Complete the input-contract matrix (do not re-add R5.75-2.2's tool-payload test). **Done** —
+      completed in `2400b1f93` / `7d4ca8060` / `7fd3cef4f`; the sparse path-hint axis, clean
+      no-duplicate bundle, and corrupt-bundle exact-variant regressions are committed and green.
   - Acceptance: building on R5.75-2.2's tool-payload-axis proof, `tests/input_contract.rs` adds: (a') the
     path-hint axis — a readable bundle with an objective row but no path hints and no tool calls (the
     conceptual-ask shape) — returns `Ok`; (b) a clean **no-duplicate** bundle (objective rows present,
@@ -101,7 +111,9 @@ prerequisite were missing, stop and report it instead of compensating inside thi
   - Files:
     - `crates/agent-drift-analyzer/tests/input_contract.rs`
 
-- [ ] Task R5.75-2.4.2: Conservative-checkpoint regression.
+- [x] Task R5.75-2.4.2: Conservative-checkpoint regression. **Done** —
+      completed in `2400b1f93` / `7d4ca8060` / `7fd3cef4f`; `tests/checkpoints.rs` locks the sparse
+      readable fixture to a conservative `InsufficientEvidence` checkpoint.
   - Acceptance: `tests/checkpoints.rs` proves a sparse readable session (steer ask + pasted `<skill>`
     body + no tool calls, the minimized `f47b81f39f2495dd` shape) emits ≥1 checkpoint (this minimized
     fixture yields exactly one) whose status is `ProgressStatus::InsufficientEvidence`, with a
@@ -113,7 +125,10 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 ## R5.75-2.5: Smoke And Closeout
 
-- [ ] Task R5.75-2.5.1: Named smoke — adapted fail-open + native control.
+- [x] Task R5.75-2.5.1: Named smoke — adapted fail-open + native control. **Done** —
+      closeout notes in `b45cbf47e` and the promoted map entry record the named smoke: adapted repro
+      `f47b81f39f2495dd` no longer aborts and native control `019eb430-6f9a-7a03-9a63-cb451b654795`
+      remains normal.
   - Acceptance: the adapted repro `f47b81f39f2495dd` runs compactor→analyzer→sentinel without aborting
     and emits ≥1 conservative checkpoint; the native control `019eb430-6f9a-7a03-9a63-cb451b654795`
     still produces normal output.
@@ -122,7 +137,9 @@ prerequisite were missing, stop and report it instead of compensating inside thi
   - Files:
     - none (smoke only; outputs under `target/r5_75-smoke/R5.75-2/`)
 
-- [ ] Task R5.75-2.5.2: Full + touched sentinel walls, then MAP status update.
+- [x] Task R5.75-2.5.2: Full + touched sentinel walls, then MAP status update. **Done** —
+      the full analyzer wall plus touched sentinel spot-checks were run green and `docs/specs/r5/R5_75/MAP.md`
+      was updated in `e44fcf645` to promote `R5.75-2` and route active work to `R5.75-3`.
   - Acceptance: the full analyzer wall and the touched sentinel spot-checks are green; the `R5.75-2`
     packet in the MAP is updated (promotion status + routing note pointing to `R5.75-3` as the next
     active seam).
