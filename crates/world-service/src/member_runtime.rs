@@ -1580,7 +1580,9 @@ mode = "should-not-copy"
             !rendered.contains("requirements"),
             "bounded startup subset must not project managed requirements state"
         );
-        let parsed: toml::Value = rendered.parse().expect("parse rendered bounded startup config");
+        let parsed: toml::Value = rendered
+            .parse()
+            .expect("parse rendered bounded startup config");
         assert_eq!(
             parsed
                 .get("projects")
