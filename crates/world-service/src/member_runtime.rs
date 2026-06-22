@@ -120,11 +120,14 @@ impl MemberRuntimeManager {
             .chain(prepared_launcher.env.iter().cloned())
             .collect::<BTreeMap<_, _>>();
         let mut runtime_env = runtime_env;
-        prepare_runtime_env_for_member_backend(
+        if let Err(err) = prepare_runtime_env_for_member_backend(
             &mut runtime_env,
             dispatch.resolved_runtime.backend_kind,
             &prepared_launcher.launcher_dir,
-        )?;
+        ) {
+            let _ = fs::remove_dir_all(&prepared_launcher.launcher_dir);
+            return Err(err);
+        }
 
         let prompt_fulfillment = PromptFulfillmentBridge::for_member_backend(
             &dispatch.resolved_runtime.backend_kind,
