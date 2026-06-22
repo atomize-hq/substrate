@@ -1194,7 +1194,15 @@ mod tests {
             "model = \"gpt-5.5\"\n",
         )
         .expect("write profile overlay");
-        let launcher_dir = temp_dir.path().join("launcher");
+        let workspace_dir = temp_dir.path().join("workspace");
+        let project_codex_dir = workspace_dir.join(".codex");
+        fs::create_dir_all(&project_codex_dir).expect("create project codex dir");
+        fs::write(
+            project_codex_dir.join("config.toml"),
+            "model = \"gpt-5.6\"\n",
+        )
+        .expect("write project config");
+        let launcher_dir = workspace_dir.join("launcher");
         fs::create_dir_all(&launcher_dir).expect("create launcher dir");
 
         let mut runtime_env = BTreeMap::from([(
@@ -1212,6 +1220,10 @@ mod tests {
         assert!(
             !codex_home.join("engineering.config.toml").exists(),
             "Packet 1 pins auth-only bootstrap: profile overlays must not be replayed yet"
+        );
+        assert!(
+            !codex_home.join(".codex").join("config.toml").exists(),
+            "Packet 1 pins auth-only bootstrap: repo project config must not be materialized yet"
         );
         assert!(
             !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
