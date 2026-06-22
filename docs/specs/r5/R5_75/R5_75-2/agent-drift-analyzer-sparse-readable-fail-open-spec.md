@@ -13,7 +13,8 @@ the promotion gate; this SPEC/PLAN/TASKS family owns the implementation contract
 
 1. **Fail-open is scoped to the two "sparse-but-readable" conditions**, not a general relaxation of
    `validate_surface`:
-   - `truth_artifact_hints` (no path-like hints survived in directive text), and
+   - `truth_artifact_hints` (no path-like hints survived in **any compact-row text** — the live check
+     scans all compact rows, not only directive rows), and
    - `working_set_hints` / `tool_argument_json` (no parseable tool-call payloads — both are false when
      a readable session simply has zero `tool_call` rows, which is the confirmed `f47b81f39f2495dd`
      case).
@@ -23,26 +24,38 @@ the promotion gate; this SPEC/PLAN/TASKS family owns the implementation contract
    ask ("explain how the retry path works") with no paths and no tool calls is also a legitimate
    readable session, so gating on `truth_artifact_hints` would wrongly abort it. Coupling the two (only
    failing open when both are sparse) is rejected because it would leave `f47b81f39f2495dd` aborting.
-2. **Everything else stays hard-fail.** `repetition_preserved` and `stable_row_refs` are structural
-   integrity (dedupe/ref corruption), and the upstream `InputError` variants
-   (`UnsupportedSchemaVersion`, `MissingArtifact`, `DuplicateSourceFile*`, `UnknownSourceFileId`,
-   `UnknownTurnIdRef`, `NoSessions`, `UnstableOrdering`, `MissingDedupeRepresentative`) are corruption.
-   None of these are relaxed in this packet.
+2. **Corruption / integrity stays hard-fail — but `repetition_preserved` is split (resolved decision
+   below).** The live check is `archival_rows.len() >= compact_rows.len() && !dedupe_groups.is_empty()`.
+   Only the first half is an integrity invariant (compaction cannot emit more rows than the source) and
+   stays hard-fail; the `!dedupe_groups.is_empty()` half is **not** corruption — a bundle with no
+   duplicate rows legitimately yields zero dedupe groups (and our own conceptual-ask sparse axis may
+   have none), so it must not abort. Dedupe-*reference* integrity is already enforced separately by
+   `MissingDedupeRepresentative` / `validate_dedupe_refs`, so dropping the emptiness coupling does not
+   weaken corruption detection. The remaining hard-fails are: `stable_row_refs`, the archival-coverage
+   invariant (`archival >= compact`), and the upstream `InputError` variants (`UnsupportedSchemaVersion`,
+   `MissingArtifact`, `DuplicateSourceFile*`, `UnknownSourceFileId`, `UnknownTurnIdRef`, `NoSessions`,
+   `UnstableOrdering`, `MissingDedupeRepresentative`).
 3. **`literal_objective_rows` stays hard-fail in this packet (resolved decision below).** This is the
-   *floor* of "readable": with zero directive rows there is no ask to anchor a conservative checkpoint
-   to, and "every user/developer/system row dropped in normalization" is ambiguous between a genuinely
-   empty session and a degenerate import — so the conservative choice is to not analyze. The canonical
-   sparse case (and the repro) retains objective rows above this floor.
-4. **The conservative checkpoint reuses existing surfaces — no schema bump.**
-   `ProgressStatus::InsufficientEvidence` (`checkpoint/schema.rs`) and `Confidence::Low` already exist,
-   and `R5.75-1` already gives honestly-unknown structured objectives via `ObjectiveUnknown` /
-   `objective_class=NotTaskStatement`. The fail-open path must lean on these, not introduce new public
-   enum variants or bump the `v0.6`/`v0.2` schema versions.
-5. **`AnalyzerSurface` is additive and currently validation-only.** It is computed in `validate_surface`,
-   returned on `InputBundle.surface`, and **not read by `analyze_loaded_bundle`** today. The fix keeps
-   it additive: the sparse case returns `Ok(AnalyzerSurface { working_set_hints: false, … })` instead of
-   `Err`, and the analysis path consults the surface (or per-session sparsity) **only if** smoke shows
-   the existing pipeline over-claims on a sparse session.
+   *directive-row floor* of "readable": the live check is "at least one non-empty user/developer/system
+   row" (it does not prove a real *objective* survived, only a directive row). With zero directive rows
+   there is no ask to anchor a conservative checkpoint to, and "every directive row dropped in
+   normalization" is ambiguous between a genuinely empty session and a degenerate import — so the
+   conservative choice is to not analyze. The canonical sparse case (and the repro) retains directive
+   rows above this floor.
+4. **The conservative checkpoint reuses existing surfaces — no schema bump.** The contract is the
+   `ProgressStatus::InsufficientEvidence` status specifically (a distinct field from `Confidence`; a
+   low-confidence `Mixed`/`Stalled` result is **not** the same contract). `InsufficientEvidence`
+   (`checkpoint/schema.rs`) already exists, and `R5.75-1` already gives honestly-unknown structured
+   objectives via `ObjectiveUnknown` / `objective_class=NotTaskStatement`. The fail-open path must lean
+   on these, not introduce new public enum variants or bump the `v0.6`/`v0.2` schema versions.
+5. **Per-session sparsity, not the bundle-wide surface.** `AnalyzerSurface` is computed in
+   `validate_surface` **across all compact rows**, returned as a single bundle-wide `InputBundle.surface`
+   field, and **not read by `analyze_loaded_bundle`** today. The bundle-wide surface is fine for the
+   abort/no-abort *gate*, but the per-session conservative-checkpoint decision must be derived from
+   **that session's own rows** in the analysis loop — never by threading the one bundle-wide
+   `AnalyzerSurface`, which in a multi-session bundle would cap the wrong session or let one session's
+   tool activity mask another's sparsity. The change stays additive (no `AnalyzerSurface` field added,
+   no schema bump).
 6. **The conservative checkpoint's structured objective anchors to the real readable ask, not pasted
    boilerplate.** On `f47b81f39f2495dd` the real ask is the `steer` row; the 24KB `<skill>` body is
    boilerplate (negative `objective_score`, excluded by the `R5.75-1` anchoring fix). Weak fields stay
@@ -57,7 +70,7 @@ If any of these assumptions drift, update this spec before implementation.
 Stop the analyzer from hard-aborting an entire readable session bundle when the only thing missing is
 parseable tool-call payloads or path hints. Split structurally-invalid (corrupt) bundle failures —
 which must still hard-fail — from semantically-sparse-but-readable bundles, and for the sparse case
-emit at least one conservative, low-confidence checkpoint instead of returning an error.
+emit at least one conservative `InsufficientEvidence` checkpoint instead of returning an error.
 
 Primary users:
 
@@ -72,8 +85,9 @@ This packet succeeds when:
 
 1. the adapted repro `f47b81f39f2495dd` no longer aborts: `analyze_bundle` returns `Ok` and the
    analyzer emits at least one checkpoint;
-2. the emitted checkpoint is conservative — `ProgressStatus::InsufficientEvidence` (or equivalently
-   low-confidence), never a fabricated strong-progress or troubleshooting posture;
+2. the emitted checkpoint is conservative — its progress status is `ProgressStatus::InsufficientEvidence`
+   (the status field specifically, not merely a low `Confidence`), never a fabricated strong-progress or
+   troubleshooting posture;
 3. the checkpoint's `structured_objective` is honest: anchored to the real readable ask where one
    exists (the steer on `f47b81f39f2495dd`), with weak fields carrying `ObjectiveUnknown`s;
 4. genuinely corrupt bundles still hard-fail with the existing `InputError` variants;
@@ -162,10 +176,14 @@ keep corruption checks returning `Err` exactly as before. The split should read 
 buckets, not a softened single check.
 
 ```rust
-// Corruption → hard-fail (unchanged): structural integrity the analyzer cannot trust.
-if !repetition_preserved {
+// Corruption / integrity → hard-fail: structural invariants the analyzer cannot trust.
+// NOTE the repetition_preserved split: only the archival-coverage half is an invariant.
+// `!dedupe_groups.is_empty()` is NOT corruption (a no-duplicate bundle legitimately has none),
+// so it is dropped from the hard-fail. Dedupe-ref integrity is still caught by
+// MissingDedupeRepresentative / validate_dedupe_refs upstream.
+if archival_rows.len() < compact_rows.len() {
     return Err(InputError::InsufficientContract {
-        reason: "archival rows do not preserve repetition beyond the compacted view".to_string(),
+        reason: "archival rows do not cover the compacted view".to_string(),
     });
 }
 if !stable_row_refs {
@@ -175,8 +193,9 @@ if !stable_row_refs {
 }
 
 // Sparse-but-readable → fail open: record the weakness on the surface, do not abort.
-// working_set_hints / tool_argument_json / truth_artifact_hints may all be false here; the
-// downstream analysis stays conservative (InsufficientEvidence) rather than the bundle aborting.
+// working_set_hints / tool_argument_json / truth_artifact_hints may all be false here, and
+// dedupe_groups may be empty; the per-session analysis stays conservative (InsufficientEvidence)
+// rather than the bundle aborting.
 Ok(AnalyzerSurface {
     literal_objective_rows,
     truth_artifact_hints,
@@ -190,8 +209,13 @@ Ok(AnalyzerSurface {
 Conventions for this packet:
 
 - Keep `AnalyzerSurface` additive: same fields, same types; the sparse case just stops being an `Err`.
-- Reuse `ProgressStatus::InsufficientEvidence` / `Confidence::Low`; do not invent a new conservative enum.
-- Keep corruption hard-fails verbatim so the `input_contract` wall stays meaningful.
+- Pin the conservative contract to the `ProgressStatus::InsufficientEvidence` status (a distinct field
+  from `Confidence`); do not invent a new conservative enum.
+- Keep the remaining corruption hard-fails (`stable_row_refs`, archival-coverage, dedupe-ref integrity,
+  schema/artifact/ordering) verbatim so the `input_contract` wall stays meaningful; only the
+  `dedupe_groups`-emptiness half of `repetition_preserved` stops aborting.
+- Derive the conservative decision per session (from that session's rows), not from the bundle-wide
+  `AnalyzerSurface`.
 - Let the existing objective extraction (post-`R5.75-1`) produce the conservative checkpoint's objective;
   do not special-case objective text in the fail-open path.
 
@@ -202,12 +226,15 @@ Conventions for this packet:
      tool-call payloads** (the `f47b81f39f2495dd` shape) returns `Ok` instead of `InsufficientContract`;
    - the path-hint axis: a readable bundle with an objective row but **no path hints and no tool calls**
      (the conceptual-ask shape) also returns `Ok`;
-   - a corrupt bundle (unstable/duplicate row refs, broken dedupe, bad schema) still returns the exact
-     existing `InputError` variant.
+   - a corrupt bundle (non-unique/unstable row refs, a dedupe-audit entry referencing a missing archival
+     row, bad schema, `archival < compact`) still returns the exact existing `InputError` variant;
+   - a clean **no-duplicate** bundle (objective rows present, `dedupe_groups` empty) returns `Ok` — proof
+     the `repetition_preserved` split landed and the dedupe-emptiness half no longer aborts.
 
 2. **Conservative-checkpoint regression** (`tests/checkpoints.rs`)
    - a sparse readable session emits at least one checkpoint;
-   - its progress status is `InsufficientEvidence` (no troubleshooting/strong-progress escalation);
+   - its progress status is `ProgressStatus::InsufficientEvidence` (the status field, not just a low
+     `Confidence`; no troubleshooting/strong-progress escalation);
    - its `structured_objective` anchors to the real ask with weak fields unknown.
 
 3. **Native control**
@@ -223,17 +250,18 @@ Conventions for this packet:
 - **Always:**
   - verify `R5.75-1` is landed in live code/tests before editing (it is, as of commit `68216bf02`); if a
     named prerequisite were missing, stop and report rather than compensating here;
-  - keep corruption checks (`repetition_preserved`, `stable_row_refs`, schema/artifact/dedupe/ordering)
-    hard-failing with their existing `InputError` variants and messages;
+  - keep the corruption/integrity checks (`stable_row_refs`, the archival-coverage invariant,
+    dedupe-ref integrity via `MissingDedupeRepresentative`, schema/artifact/ordering) hard-failing with
+    their existing `InputError` variants and messages;
   - keep `AnalyzerSurface` and the public bundle schema additive (no version bump);
-  - emit a conservative checkpoint via existing insufficient-evidence surfaces;
+  - emit a conservative checkpoint via existing insufficient-evidence surfaces, decided per session;
   - run the focused checkpoint + input-contract walls before calling the packet complete.
 
 - **Ask first:**
   - relaxing `literal_objective_rows` to fail-open (currently hard-fail per Assumption 3);
-  - threading `AnalyzerSurface` into `analyze_loaded_bundle` to cap confidence (only if smoke shows the
-    pipeline over-claims on a sparse session);
-  - any change to the conservative checkpoint's exported shape beyond setting status/confidence.
+  - whether the per-session conservative cap needs production code in `analyze_loaded_bundle` at all
+    (only if the R5.75-2.1 probe shows the de-aborted pipeline over-claims on a sparse session);
+  - any change to the conservative checkpoint's exported shape beyond setting the conservative status.
 
 - **Never:**
   - widen or version-bump the public bundle/checkpoint schema to accommodate the fail-open;
@@ -247,10 +275,10 @@ Conventions for this packet:
 1. `load_bundle` returns `Ok` for the sparse-but-readable class (no parseable tool-call payloads and/or
    no path hints, objective rows present); `analyze_bundle` on `f47b81f39f2495dd` returns `Ok` and emits
    ≥1 checkpoint.
-2. That checkpoint is `ProgressStatus::InsufficientEvidence` / low-confidence with a structured objective
-   anchored to the real ask and weak fields unknown.
+2. That checkpoint's status is `ProgressStatus::InsufficientEvidence` (the status field, not merely a low
+   `Confidence`) with a structured objective anchored to the real ask and weak fields unknown.
 3. Corrupt bundles still hard-fail with their existing `InputError` variants (proven by retained
-   `input_contract` cases).
+   `input_contract` cases), while a clean no-duplicate bundle (empty `dedupe_groups`) returns `Ok`.
 4. The native control `019eb430` is unchanged.
 5. `cargo test -p agent-drift-analyzer -- --nocapture` and the touched sentinel spot-checks are green;
    no schema version bumped.
@@ -268,10 +296,25 @@ Conventions for this packet:
    `f47b81f39f2495dd` repro aborting (its truth axis is not sparse), and keeping `truth_artifact_hints`
    as a gate would wrongly abort a legitimate conceptual-ask session (objective row, no paths, no tool
    calls). Both axes get an independent fail-open regression shape.
+3. **Resolved (2026-06-21, from the Codex review): split `repetition_preserved`.** The live check
+   `archival_rows.len() >= compact_rows.len() && !dedupe_groups.is_empty()` couples a real integrity
+   invariant with a non-invariant. Keep the archival-coverage half (`archival >= compact`) as a
+   hard-fail; drop `!dedupe_groups.is_empty()` from the hard-fail because a bundle with no duplicate rows
+   legitimately produces zero dedupe groups (and the conceptual-ask sparse axis may have none, so leaving
+   it would re-abort that axis at this check). Dedupe-*reference* integrity is unaffected — it is still
+   enforced by `MissingDedupeRepresentative` / `validate_dedupe_refs` — so genuine ref/dedupe corruption
+   still hard-fails.
+4. **Resolved (2026-06-21, from the Codex review): the conservative decision is per session, not
+   bundle-wide.** `AnalyzerSurface` is one bundle-wide field computed across all compact rows; the
+   per-session conservative-checkpoint cap is derived from each session's own rows in the analysis loop.
+   Threading the single bundle-wide surface would cap the wrong session or mask sparsity in a
+   multi-session bundle.
 
 ## Open Questions
 
-1. Does the existing analysis pipeline already produce a conservative checkpoint for a tool-call-free
-   session once `load_bundle` stops aborting, or must `analyze_loaded_bundle` read `bundle.surface` to
-   cap confidence? (Resolve empirically in PLAN step R5.75-2.1 before writing the conservative-checkpoint
-   code.)
+1. Once `load_bundle` stops aborting, does the existing analysis pipeline score a tool-call-free session
+   **conservatively on its own**, or does it **over-claim** (e.g. troubleshooting/strong-progress)? The
+   pipeline is known to emit ≥1 checkpoint for any non-empty session — `checkpoint_windows` returns at
+   least one window — so "emits nothing" is not a realistic outcome; the open question is over-claim vs
+   self-conservative. (Resolve empirically in PLAN step R5.75-2.1 before writing the per-session
+   conservative cap.)

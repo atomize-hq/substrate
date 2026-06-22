@@ -9,10 +9,13 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 ## R5.75-2.0: Docs Lock
 
-- [ ] Task R5.75-2.0.1: Commit the SPEC/PLAN/TASKS family.
-  - Acceptance: `docs/specs/r5/R5_75/R5_75-2/` contains the spec, plan, and this tasks ledger, and they
-    record the corruption-vs-sparse split, the reuse of `InsufficientEvidence`/`Confidence::Low`, and
-    the additive-only (no schema bump) boundary.
+- [x] Task R5.75-2.0.1: Commit the SPEC/PLAN/TASKS family. **Done** — committed in `92b0a930a` and
+      revised in the Codex-review pass (per-session decision, `repetition_preserved` split,
+      `InsufficientEvidence`-status contract, packet-boundary cleanups).
+  - Acceptance: `docs/specs/r5/R5_75/R5_75-2/` contains the spec, plan, this tasks ledger, and the
+    packet-prompts, and they record the corruption-vs-sparse split (incl. the `repetition_preserved`
+    split), the `ProgressStatus::InsufficientEvidence` status contract, the per-session conservative
+    decision, and the additive-only (no schema bump) boundary.
   - Verify: Manual review against the `R5.75-2` packet in `docs/specs/r5/R5_75/MAP.md` and live `input.rs`.
   - Files:
     - `docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-spec.md`
@@ -23,9 +26,11 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 - [ ] Task R5.75-2.1.1: Determine what the analysis path emits for a de-aborted sparse session.
   - Acceptance: a recorded finding (in this ledger) of whether `analyze_loaded_bundle` /
-    `checkpoint_analyses` already emits ≥1 conservative (`InsufficientEvidence` / low-confidence)
-    checkpoint for `f47b81f39f2495dd` when `validate_surface` does not abort, or whether it emits
-    nothing / over-claims. Resolves Spec Open Question 1 and sizes Task R5.75-2.3.1.
+    `checkpoint_analyses` scores `f47b81f39f2495dd` **conservatively on its own**
+    (`ProgressStatus::InsufficientEvidence`) when `validate_surface` does not abort, or whether it
+    **over-claims**. The pipeline emits ≥1 window for any non-empty session, so "emits nothing" is not a
+    realistic outcome — frame the finding as over-claim vs self-conservative. Resolves Spec Open
+    Question 1 and sizes Task R5.75-2.3.1.
   - Verify: local experiment (temporary `validate_surface` relax or a hand-built sparse bundle unit
     test) run against the repro; the experiment is reverted — no code from this task is committed.
   - Files:
@@ -34,49 +39,57 @@ prerequisite were missing, stop and report it instead of compensating inside thi
 
 ## R5.75-2.2: Split validate_surface (Corruption Hard-Fail vs Sparse Fail-Open)
 
-- [ ] Task R5.75-2.2.1: Stop aborting on the sparse-but-readable conditions.
+- [ ] Task R5.75-2.2.1: Stop aborting on the sparse-but-readable conditions, and split `repetition_preserved`.
   - Acceptance: `validate_surface` no longer returns `Err` for the path-hint
     (`truth_artifact_hints`) and tool-payload (`working_set_hints` / `tool_argument_json`) conditions
     — each independently, neither gated on the other; it returns `Ok(AnalyzerSurface { … })` with those
-    flags `false`. `repetition_preserved`, `stable_row_refs`, `literal_objective_rows`, and all upstream
-    `InputError` variants still return their existing errors verbatim. `AnalyzerSurface` shape is
-    unchanged (no new fields, no schema bump).
+    flags `false`. **`repetition_preserved` is split**: the archival-coverage half (`archival >=
+    compact`) stays a hard-fail, but the `!dedupe_groups.is_empty()` half is dropped so a no-duplicate
+    bundle no longer aborts. `stable_row_refs`, `literal_objective_rows` (directive-row floor),
+    archival-coverage, and all upstream `InputError` variants (incl. `MissingDedupeRepresentative`)
+    still return their existing errors. `AnalyzerSurface` shape is unchanged (no new fields, no schema
+    bump). Add the minimal tool-payload-axis `input_contract` proof here (TDD); the full matrix is
+    R5.75-2.4.
   - Verify:
     - `cargo test -p agent-drift-analyzer --test input_contract -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/src/input.rs`
+    - `crates/agent-drift-analyzer/tests/input_contract.rs` (minimal tool-payload-axis proof only)
 
 ## R5.75-2.3: Guarantee The Conservative Checkpoint
 
-- [ ] Task R5.75-2.3.1: Ensure a sparse session yields one conservative checkpoint.
-  - Acceptance: a de-aborted sparse session emits ≥1 checkpoint with `ProgressStatus::InsufficientEvidence`
-    (or equivalently low-confidence), never a troubleshooting/strong-progress posture. If R5.75-2.1
-    showed the pipeline already self-conservatizes, this task is assertion-only (no source change); else
-    `analyze_loaded_bundle` reads `bundle.surface` to cap confidence using existing surfaces only.
+- [ ] Task R5.75-2.3.1: Ensure a sparse session yields a conservative checkpoint.
+  - Acceptance: a de-aborted sparse session emits ≥1 checkpoint whose status is
+    `ProgressStatus::InsufficientEvidence` (the status field, not merely a low `Confidence`), never a
+    troubleshooting/strong-progress posture. If R5.75-2.1 showed the pipeline already self-conservatizes,
+    this task is assertion-only (no source change); else `analyze_loaded_bundle` applies a **per-session**
+    cap derived from that session's own rows (never the bundle-wide `AnalyzerSurface`), using existing
+    surfaces only.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
-    - `crates/agent-drift-analyzer/src/lib.rs` (only if the probe showed over-claiming)
+    - `crates/agent-drift-analyzer/src/lib.rs` (only if the probe showed over-claiming; per-session, not bundle.surface)
 
 ## R5.75-2.4: Regressions
 
-- [ ] Task R5.75-2.4.1: Input-contract split regression (both sparsity axes + corruption).
-  - Acceptance: `tests/input_contract.rs` proves (a) the tool-payload axis — a readable bundle with
-    objective rows + path hints but zero parseable tool-call payloads (the `f47b81f39f2495dd` shape) —
-    returns `Ok` from `load_bundle`; (a') the path-hint axis — a readable bundle with an objective row
-    but no path hints and no tool calls (the conceptual-ask shape) — also returns `Ok`; and (b) a
-    corrupt bundle (unstable/duplicate row refs or broken dedupe) still returns the exact existing
-    `InputError` variant. The split must be provable, not just the relaxation, and each sparsity axis is
-    pinned independently.
+- [ ] Task R5.75-2.4.1: Complete the input-contract matrix (do not re-add R5.75-2.2's tool-payload test).
+  - Acceptance: building on R5.75-2.2's tool-payload-axis proof, `tests/input_contract.rs` adds: (a') the
+    path-hint axis — a readable bundle with an objective row but no path hints and no tool calls (the
+    conceptual-ask shape) — returns `Ok`; (b) a clean **no-duplicate** bundle (objective rows present,
+    `dedupe_groups` empty) returns `Ok`, locking the `repetition_preserved` split; and (c) a corrupt
+    bundle (non-unique/unstable row refs, a dedupe-audit entry referencing a missing archival row, or
+    `archival < compact`) still returns the exact existing `InputError` variant. Each sparsity axis is
+    pinned independently; the split must be provable, not just the relaxation.
   - Verify: `cargo test -p agent-drift-analyzer --test input_contract -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/input_contract.rs`
 
 - [ ] Task R5.75-2.4.2: Conservative-checkpoint regression.
   - Acceptance: `tests/checkpoints.rs` proves a sparse readable session (steer ask + pasted `<skill>`
-    body + no tool calls, the minimized `f47b81f39f2495dd` shape) emits exactly one checkpoint that is
-    `InsufficientEvidence`, with a `structured_objective` anchored to the steer ask and weak fields
-    (`success_conditions` / `deliverables` / `target`) unknown — never anchored to the `<skill>` body.
+    body + no tool calls, the minimized `f47b81f39f2495dd` shape) emits ≥1 checkpoint (this minimized
+    fixture yields exactly one) whose status is `ProgressStatus::InsufficientEvidence`, with a
+    `structured_objective` anchored to the steer ask and weak fields (`success_conditions` /
+    `deliverables` / `target`) unknown — never anchored to the `<skill>` body.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`

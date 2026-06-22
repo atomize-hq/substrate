@@ -36,7 +36,7 @@ Packet authority:
 - AGENTS.md
 
 Packet `R5.75-2.1` scope only:
-- determine, empirically, what `analyze_loaded_bundle` / `checkpoint_analyses` emits for the adapted session `f47b81f39f2495dd` IF `validate_surface` did not abort: does it already emit >=1 conservative (`InsufficientEvidence` / low-confidence) checkpoint, or does it emit nothing / over-claim?
+- determine, empirically, what `analyze_loaded_bundle` / `checkpoint_analyses` emits for the adapted session `f47b81f39f2495dd` IF `validate_surface` did not abort: does it score the session **conservatively on its own** (status `ProgressStatus::InsufficientEvidence`) or does it **over-claim**? The pipeline emits >=1 window for any non-empty session, so "emits nothing" is not a realistic outcome — frame the finding as over-claim vs self-conservative
 - this is investigation only: any temporary `validate_surface` relaxation (or a hand-built sparse-bundle unit test) used to observe behavior MUST be reverted; no production code is committed by this packet
 - record the finding in the tasks ledger under Task `R5.75-2.1.1`; it resolves Spec Open Question 1 and sizes Packet `R5.75-2.3`
 
@@ -81,9 +81,9 @@ Do this:
 - read crates/agent-drift-analyzer/src/input.rs (validate_surface), src/lib.rs (analyze_loaded_bundle), and src/checkpoint/mod.rs
 - temporarily make validate_surface NOT abort on the sparse conditions (truth_artifact_hints and working_set_hints/tool_argument_json), OR build a hand-crafted sparse bundle unit test, to observe downstream behavior
 - run the analyzer against the existing adapted bundle for session f47b81f39f2495dd (compactor output under target/ranga-validation/, or recompact per the SPEC Commands section)
-- observe: does analyze_loaded_bundle / checkpoint_analyses emit >=1 checkpoint, and is it conservative (ProgressStatus::InsufficientEvidence / low-confidence), or does it over-claim / emit nothing?
+- observe: is the checkpoint conservative (status ProgressStatus::InsufficientEvidence), or does it over-claim (troubleshooting/strong-progress)? A non-empty session always yields >=1 window, so "emits nothing" is not expected
 - REVERT the temporary relaxation/experiment fully (git status must show no production-source diff)
-- record the finding in docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-tasks.md under Task R5.75-2.1.1, stating clearly whether Packet R5.75-2.3 will be assertion-only or must thread bundle.surface into analyze_loaded_bundle
+- record the finding in docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-tasks.md under Task R5.75-2.1.1, stating clearly whether Packet R5.75-2.3 will be assertion-only or must add a per-session conservative cap in analyze_loaded_bundle (derived from each session's own rows, NOT the bundle-wide AnalyzerSurface)
 
 GitNexus: run impact analysis before any temporary symbol edit; run gitnexus_detect_changes() before handing back.
 
@@ -160,9 +160,10 @@ Packet authority:
 
 Packet `R5.75-2.2` scope only:
 - in `crates/agent-drift-analyzer/src/input.rs::validate_surface`, stop returning `Err` for the two sparse-but-readable conditions — the path-hint check (`truth_artifact_hints`) and the tool-payload pair (`working_set_hints` / `tool_argument_json`) — each independently, neither gated on the other; return `Ok(AnalyzerSurface { … })` with those flags `false`
-- keep `repetition_preserved`, `stable_row_refs`, `literal_objective_rows`, and every upstream `InputError` variant returning their existing errors and messages verbatim (corruption + the readable floor stay hard-fail)
+- **split `repetition_preserved`**: keep the archival-coverage half (`archival_rows.len() >= compact_rows.len()`) as a hard-fail; drop the `!dedupe_groups.is_empty()` half so a no-duplicate bundle no longer aborts (a clean session legitimately has zero dedupe groups). Dedupe-*reference* integrity is unaffected — `MissingDedupeRepresentative` / `validate_dedupe_refs` still hard-fail
+- keep `stable_row_refs`, the archival-coverage invariant, `literal_objective_rows` (directive-row floor), and every upstream `InputError` variant returning their existing errors and messages verbatim
 - keep `AnalyzerSurface` shape unchanged: no new fields, no public schema/version bump
-- per `$incremental-implementation`, add the minimal `tests/input_contract.rs` case proving the split for at least the tool-payload axis (the `f47b81f39f2495dd` shape returns `Ok`); the full two-axis + corruption locked set is consolidated in Packet `R5.75-2.4`
+- per `$incremental-implementation`, add the minimal `tests/input_contract.rs` case proving the split for the tool-payload axis (the `f47b81f39f2495dd` shape returns `Ok`); the full matrix (path-hint axis, no-duplicate-bundle `Ok`, corruption hard-fail) is consolidated in Packet `R5.75-2.4`
 
 Primary files for this packet:
 - crates/agent-drift-analyzer/src/input.rs
@@ -204,7 +205,8 @@ Use the `$incremental-implementation` skill.
 
 You are landing only Packet R5.75-2.2 — the validate_surface corruption-vs-sparse split:
 - stop returning Err for truth_artifact_hints and for the working_set_hints/tool_argument_json pair, each independently; return Ok(AnalyzerSurface { … }) with those flags false
-- keep repetition_preserved, stable_row_refs, literal_objective_rows, and all upstream InputError variants failing exactly as today (verbatim messages)
+- split repetition_preserved: keep the archival-coverage half (archival_rows.len() >= compact_rows.len()) as a hard-fail, but drop the !dedupe_groups.is_empty() half so a no-duplicate bundle no longer aborts. Do NOT weaken dedupe-ref integrity — MissingDedupeRepresentative / validate_dedupe_refs still hard-fail
+- keep stable_row_refs, the archival-coverage invariant, literal_objective_rows, and all upstream InputError variants failing exactly as today (verbatim messages)
 - AnalyzerSurface shape is unchanged: no new fields, no schema/version bump
 - add the minimal tests/input_contract.rs case proving the tool-payload-axis sparse bundle now returns Ok (the f47b81f39f2495dd shape: objective rows + path hints + zero parseable tool calls)
 
@@ -241,7 +243,8 @@ Review only Packet R5.75-2.2 from:
 
 Focus:
 - the two sparse conditions (truth_artifact_hints; working_set_hints/tool_argument_json) now fail open independently, and the repro shape returns Ok
-- corruption checks (repetition_preserved, stable_row_refs) and literal_objective_rows still hard-fail with their exact existing InputError variants/messages
+- repetition_preserved is split correctly: archival-coverage half still hard-fails, but the dedupe-emptiness half no longer aborts (a no-duplicate bundle returns Ok); dedupe-ref integrity (MissingDedupeRepresentative / validate_dedupe_refs) is NOT weakened
+- stable_row_refs, the archival-coverage invariant, and literal_objective_rows still hard-fail with their exact existing InputError variants/messages
 - AnalyzerSurface shape and the public schema are unchanged (no version bump, no new fields)
 - whether the packet stayed scoped to validate_surface + a minimal input_contract proof, with no leakage into R5.75-2.3/R5.75-2.4 scope
 - whether the verification story is sufficient and honest
@@ -297,9 +300,9 @@ Packet authority:
 - AGENTS.md
 
 Packet `R5.75-2.3` scope only:
-- guarantee a sparse readable session emits >=1 checkpoint with `ProgressStatus::InsufficientEvidence` (or equivalently low-confidence), never a troubleshooting/strong-progress posture
+- guarantee a sparse readable session emits >=1 checkpoint whose status is `ProgressStatus::InsufficientEvidence` (the status field specifically, not merely a low `Confidence`), never a troubleshooting/strong-progress posture
 - if the Packet `R5.75-2.1` finding showed the de-aborted pipeline already self-conservatizes: this packet is assertion-only (no source change; the checkpoints regression in `R5.75-2.4` locks it) — confirm and record that
-- else: thread `bundle.surface` (or per-session sparsity) into `crates/agent-drift-analyzer/src/lib.rs::analyze_loaded_bundle` to cap a sparse session to `InsufficientEvidence` / `Confidence::Low`, reusing EXISTING surfaces only
+- else: add a **per-session** conservative cap in `crates/agent-drift-analyzer/src/lib.rs::analyze_loaded_bundle` so a sparse session's checkpoint status caps to `ProgressStatus::InsufficientEvidence`, deriving the sparsity signal from **that session's own rows** (NEVER the single bundle-wide `AnalyzerSurface`, which would cap the wrong session in a multi-session bundle), reusing EXISTING surfaces only
 - objective text for the conservative checkpoint comes from the existing extractor (post-`R5.75-1`); do not special-case objective assembly here
 
 Primary files for this packet:
@@ -342,7 +345,7 @@ Use the `$incremental-implementation` skill.
 
 FIRST read the Packet R5.75-2.1 finding in the tasks doc:
 - if it says the de-aborted pipeline already emits a conservative InsufficientEvidence checkpoint, this packet is assertion-only: add nothing to src; confirm the conservative outcome (a checkpoints assertion is fine) and record that no implementation commit was needed
-- if it says the pipeline over-claims or emits nothing, thread bundle.surface (or per-session sparsity) into crates/agent-drift-analyzer/src/lib.rs::analyze_loaded_bundle so a sparse session caps to ProgressStatus::InsufficientEvidence / Confidence::Low using EXISTING surfaces only — no new enum, no schema bump
+- if it says the pipeline over-claims, add a per-session conservative cap in crates/agent-drift-analyzer/src/lib.rs::analyze_loaded_bundle so a sparse session's checkpoint status caps to ProgressStatus::InsufficientEvidence — derive the sparsity per session from that session's own rows, NOT from the single bundle-wide AnalyzerSurface — using EXISTING surfaces only; no new enum, no schema bump
 
 Constraints:
 - objective text comes from the existing extractor (post-R5.75-1); do not special-case objective assembly
@@ -376,9 +379,9 @@ Review only Packet R5.75-2.3 from:
 - AGENTS.md
 
 Focus:
-- a sparse readable session emits exactly one conservative checkpoint (InsufficientEvidence / low-confidence), never troubleshooting/strong-progress
-- if surface threading was used, it reuses existing surfaces only — no new enum, no schema/version bump, no AnalyzerSurface field change
-- the decision (assertion-only vs threaded) matches the recorded R5.75-2.1 finding
+- a sparse readable session emits >=1 conservative checkpoint (the minimized fixture yields exactly one) whose status is ProgressStatus::InsufficientEvidence, never troubleshooting/strong-progress
+- if a per-session cap was added, it derives sparsity from each session's own rows (NOT the bundle-wide AnalyzerSurface) and reuses existing surfaces only — no new enum, no schema/version bump, no AnalyzerSurface field change
+- the decision (assertion-only vs per-session cap) matches the recorded R5.75-2.1 finding
 - no objective-extraction special-casing crept in
 - verification story is sufficient and honest
 
@@ -432,9 +435,9 @@ Packet authority:
 - docs/specs/r5/R5_75/MAP.md
 - AGENTS.md
 
-Packet `R5.75-2.4` scope only (tests only; no production code change):
-- `tests/input_contract.rs`: lock all three cases — (a) tool-payload axis (objective rows + path hints + zero parseable tool calls, the `f47b81f39f2495dd` shape) returns `Ok`; (a') path-hint axis (objective row + no paths + no tool calls, the conceptual-ask shape) returns `Ok`; (b) a corrupt bundle (unstable/duplicate row refs or broken dedupe) still returns the exact existing `InputError` variant. Each sparsity axis pinned independently.
-- `tests/checkpoints.rs`: a sparse readable session (steer ask + pasted `<skill>` body + no tool calls — the minimized `f47b81f39f2495dd` shape) emits exactly one `InsufficientEvidence` checkpoint whose `structured_objective` anchors to the steer ask, with `success_conditions`/`deliverables`/`target` unknown, never anchored to the `<skill>` body (cross-checks the `R5.75-1` anchoring fix)
+Packet `R5.75-2.4` scope only (tests only; no production code change). Complete the matrix R5.75-2.2 began — do NOT re-add R5.75-2.2's tool-payload-axis test:
+- `tests/input_contract.rs`: add (a') the path-hint axis (objective row + no paths + no tool calls, the conceptual-ask shape) returns `Ok`; (b) a clean **no-duplicate** bundle (objective rows present, `dedupe_groups` empty) returns `Ok`, locking the `repetition_preserved` split; and (c) a corrupt bundle (non-unique/unstable row refs, a dedupe-audit entry referencing a missing archival row, or `archival < compact`) still returns the exact existing `InputError` variant. (R5.75-2.2 already proved the tool-payload axis.) Each sparsity axis pinned independently.
+- `tests/checkpoints.rs`: a sparse readable session (steer ask + pasted `<skill>` body + no tool calls — the minimized `f47b81f39f2495dd` shape) emits >=1 checkpoint (this minimized fixture yields exactly one) whose status is `ProgressStatus::InsufficientEvidence` and whose `structured_objective` anchors to the steer ask, with `success_conditions`/`deliverables`/`target` unknown, never anchored to the `<skill>` body (cross-checks the `R5.75-1` anchoring fix)
 
 Primary files for this packet:
 - crates/agent-drift-analyzer/tests/input_contract.rs
@@ -474,9 +477,9 @@ Implementation subagent prompt to send:
 
 Use the `$incremental-implementation` skill.
 
-You are landing only Packet R5.75-2.4 — locking regressions, tests only, no production source change:
-- tests/input_contract.rs: (a) tool-payload axis sparse bundle (objective rows + path hints + zero parseable tool calls) returns Ok; (a') path-hint axis sparse bundle (objective row + no paths + no tool calls) returns Ok; (b) a corrupt bundle (unstable/duplicate row refs or broken dedupe) still returns the exact existing InputError variant. Pin each sparsity axis independently.
-- tests/checkpoints.rs: a sparse readable session (steer ask + pasted <skill> body + no tool calls, the minimized f47b81f39f2495dd shape) emits exactly one InsufficientEvidence checkpoint whose structured_objective anchors to the steer ask with success_conditions/deliverables/target unknown — never the <skill> body
+You are landing only Packet R5.75-2.4 — completing the locked regression matrix, tests only, no production source change. R5.75-2.2 already proved the tool-payload axis; do NOT re-add that test. Add the rest:
+- tests/input_contract.rs: (a') path-hint axis sparse bundle (objective row + no paths + no tool calls) returns Ok; (b) a clean no-duplicate bundle (objective rows present, dedupe_groups empty) returns Ok, locking the repetition_preserved split; (c) a corrupt bundle (non-unique/unstable row refs, a dedupe-audit entry referencing a missing archival row, or archival < compact) still returns the exact existing InputError variant. Pin each sparsity axis independently.
+- tests/checkpoints.rs: a sparse readable session (steer ask + pasted <skill> body + no tool calls, the minimized f47b81f39f2495dd shape) emits >=1 checkpoint (this minimized fixture yields exactly one) whose status is ProgressStatus::InsufficientEvidence and whose structured_objective anchors to the steer ask with success_conditions/deliverables/target unknown — never the <skill> body
 
 Read first:
 - docs/specs/r5/R5_75/R5_75-2/agent-drift-analyzer-sparse-readable-fail-open-spec.md (Testing Strategy, Success Criteria)
