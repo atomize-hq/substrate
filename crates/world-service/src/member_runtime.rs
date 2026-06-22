@@ -564,9 +564,16 @@ struct CodexSeedHomeConfig {
     provider: Option<String>,
     base_url: Option<String>,
     #[serde(default)]
-    model_providers: BTreeMap<String, CodexBaseUrlConfig>,
+    model_providers: BTreeMap<String, CodexSeedProviderRoutingConfig>,
     #[serde(default)]
-    providers: BTreeMap<String, CodexBaseUrlConfig>,
+    providers: BTreeMap<String, CodexSeedProviderRoutingConfig>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+struct CodexSeedProviderRoutingConfig {
+    base_url: Option<String>,
+    #[serde(default, flatten)]
+    unsupported_fields: BTreeMap<String, toml::Value>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -672,6 +679,12 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
     let mut model_providers = BTreeMap::new();
     if let Some(provider_name) = model_provider.as_deref() {
         if let Some(selected) = parsed.model_providers.get(provider_name) {
+            ensure_supported_provider_routing_shape(
+                &config_path,
+                "model_providers",
+                provider_name,
+                selected,
+            )?;
             if let Some(selected_base_url) = normalize_non_empty_value(selected.base_url.clone()) {
                 model_providers.insert(
                     provider_name.to_string(),
@@ -686,6 +699,12 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
     let mut providers = BTreeMap::new();
     if let Some(provider_name) = provider.as_deref() {
         if let Some(selected) = parsed.providers.get(provider_name) {
+            ensure_supported_provider_routing_shape(
+                &config_path,
+                "providers",
+                provider_name,
+                selected,
+            )?;
             if let Some(selected_base_url) = normalize_non_empty_value(selected.base_url.clone()) {
                 providers.insert(
                     provider_name.to_string(),
@@ -705,6 +724,29 @@ fn read_codex_startup_subset(seed_home: &Path) -> Result<CodexStartupSubset> {
         model_providers,
         providers,
     })
+}
+
+fn ensure_supported_provider_routing_shape(
+    config_path: &Path,
+    routing_family: &str,
+    provider_name: &str,
+    selected: &CodexSeedProviderRoutingConfig,
+) -> Result<()> {
+    if selected.unsupported_fields.is_empty() {
+        return Ok(());
+    }
+
+    let unsupported_fields = selected
+        .unsupported_fields
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    Err(anyhow!(
+        "direct cli:codex-world compatibility bridge found unsupported provider routing fields under [{routing_family}.{provider_name}] in {}; Packet 2 only supports base_url for the selected provider block, so isolated CODEX_HOME would otherwise receive incomplete routing config ({unsupported_fields})",
+        config_path.display()
+    ))
 }
 
 fn normalize_non_empty_value(value: Option<String>) -> Option<String> {
@@ -1458,6 +1500,54 @@ base_url = "https://gateway.example.invalid/v1"
             !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
             "internal seed env must still be removed on fail-closed startup subset errors"
         );
+    }
+
+    #[test]
+    fn prepare_codex_runtime_env_fails_closed_when_selected_provider_uses_unsupported_routing_shape(
+    ) {
+        for (selection, provider_table_header) in [
+            (
+                "model_provider = \"compat-openai\"",
+                "[model_providers.compat-openai]",
+            ),
+            ("provider = \"compat-openai\"", "[providers.compat-openai]"),
+        ] {
+            let temp_dir = tempfile::tempdir().expect("temp dir");
+            let seed_home = temp_dir.path().join("seed-home");
+            fs::create_dir_all(&seed_home).expect("create seed home");
+            fs::write(
+                seed_home.join("auth.json"),
+                r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+            )
+            .expect("write auth");
+            fs::write(
+                seed_home.join("config.toml"),
+                format!(
+                    "model = \"gpt-5.4\"\n{selection}\n\n{provider_table_header}\nbase_url = \"https://gateway.example.invalid/v1\"\nwire_api = \"responses\"\n",
+                ),
+            )
+            .expect("write unsupported provider routing config");
+            let launcher_dir = temp_dir.path().join("launcher");
+            fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+
+            let mut runtime_env = BTreeMap::from([(
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+                seed_home.display().to_string(),
+            )]);
+
+            let err = prepare_codex_runtime_env(&mut runtime_env, &launcher_dir)
+                .expect_err("unsupported selected provider routing shape must fail closed");
+            let message = err.to_string();
+            assert!(
+                message.contains("unsupported provider routing fields"),
+                "unexpected error: {err:#}"
+            );
+            assert!(message.contains("wire_api"), "unexpected error: {err:#}");
+            assert!(
+                !runtime_env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+                "internal seed env must still be removed on fail-closed provider routing errors"
+            );
+        }
     }
 
     #[test]
