@@ -36,6 +36,23 @@ prerequisite were missing, stop and report it instead of compensating inside thi
   - Files:
     - (read-only) `crates/agent-drift-analyzer/src/lib.rs`,
       `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+  - Finding (2026-06-22): **self-conservatizes**. With a temporary local probe that removed only the
+    two sparse aborts in `validate_surface` (`truth_artifact_hints` and
+    `working_set_hints`/`tool_argument_json`) and then reran the existing adapted repro bundle for
+    `f47b81f39f2495dd`, the analyzer emitted exactly **one** checkpoint, not zero, and that
+    checkpoint's progress status was **`ProgressStatus::InsufficientEvidence`** (summary:
+    `Progress status distribution: advancing=0, mixed=0, stalled=0, regressing=0, insufficient_evidence=1`).
+    The summary/checkpoint also stayed non-escalatory (`flagged=no`, drift=`none`, progress
+    `status=insufficient_evidence dimension=planning_convergence confidence=low`), so the downstream
+    path does **not** over-claim troubleshooting/strong-progress once the sparse abort is removed.
+    Therefore **Packet `R5.75-2.3` is assertion-only**: it should lock this existing conservative
+    behavior in tests, **not** add a new per-session conservative cap in `analyze_loaded_bundle`.
+    Investigation run:
+    `cargo run -p agent-session-compactor -- --codex-home "$(pwd)/target/ranga-validation/codex-home" --session-id f47b81f39f2495dd --output-dir target/r5_75-smoke/R5.75-2/f47b81f39f2495dd/compactor`
+    then (after the temporary local relax)
+    `cargo run -p agent-drift-analyzer -- --input-dir target/r5_75-smoke/R5.75-2/f47b81f39f2495dd/compactor --output-dir target/r5_75-smoke/R5.75-2/f47b81f39f2495dd/analyzer`.
+    The temporary source relaxation was then fully reverted; no production-source diff remains from
+    this task.
 
 ## R5.75-2.2: Split validate_surface (Corruption Hard-Fail vs Sparse Fail-Open)
 
