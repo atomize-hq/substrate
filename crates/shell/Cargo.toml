@@ -52,6 +52,9 @@ toml = "0.8"
 substrate-trace = { version = "0.2.8", path = "../trace" }
 substrate-replay = { version = "0.1.0", path = "../replay" }
 substrate-graph = { version = "0.1.0", path = "../substrate-graph" }
+handbook-engine = { workspace = true }
+handbook-pipeline = { workspace = true }
+handbook-flow = { workspace = true }
 tokio = { version = "1.32", features = ["rt", "signal", "sync", "time", "io-util", "io-std"] }
 tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
 futures = "0.3"

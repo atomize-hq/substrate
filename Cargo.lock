@@ -2400,6 +2400,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "granit-parser"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e354bf0eb3279a16e8f92fc1ba6ddd4420953fc064140b010844d21874b58113"
+dependencies = [
+ "arraydeque",
+ "smallvec",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2446,6 +2456,42 @@ dependencies = [
  "cfg-if",
  "crunchy",
  "zerocopy",
+]
+
+[[package]]
+name = "handbook-engine"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "503221ba84b7b0054be62466400b580ee60a254f573426f7d21f601b4346e351"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_yaml_bw",
+ "sha2",
+]
+
+[[package]]
+name = "handbook-flow"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b2533981ace3e38143733d9a1920bb705c460157b733056cbd988843cffa768"
+dependencies = [
+ "handbook-engine",
+]
+
+[[package]]
+name = "handbook-pipeline"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8880d94bdf48541389078ad75e8937aedbbcbad0cf1a5f1821269239c0a1610"
+dependencies = [
+ "handbook-engine",
+ "libc",
+ "serde",
+ "serde_json",
+ "serde_yaml_bw",
+ "sha2",
+ "time",
 ]
 
 [[package]]
@@ -4963,6 +5009,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml_bw"
+version = "2.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9559c696727e20fa0f661a1db638c7ae1be73419de8e1aed2642b796096ab53"
+dependencies = [
+ "base64 0.22.1",
+ "granit-parser",
+ "indexmap",
+ "itoa",
+ "num-traits",
+ "regex",
+ "serde",
+ "unsafe-libyaml-norway",
+ "zmij",
+]
+
+[[package]]
 name = "serial"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5108,6 +5171,9 @@ dependencies = [
  "fs2",
  "futures",
  "gethostname",
+ "handbook-engine",
+ "handbook-flow",
+ "handbook-pipeline",
  "http-body-util",
  "hyper 0.14.32",
  "hyper 1.9.0",
@@ -6382,6 +6448,12 @@ name = "unsafe-libyaml"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
+
+[[package]]
+name = "unsafe-libyaml-norway"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39abd59bf32521c7f2301b52d05a6a2c975b6003521cbd0c6dc1582f0a22104"
 
 [[package]]
 name = "untrusted"
