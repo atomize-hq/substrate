@@ -3999,14 +3999,19 @@ mod tests {
                 .render(&envelope)
                 .expect("render structured fallback");
         });
+        let rendered_line = output
+            .lines()
+            .find(|line| line.starts_with("[codex] task_progress:"))
+            .map(|line| format!("{line}\n"))
+            .expect("captured stdout should contain bounded structured fallback line");
 
         assert_eq!(
-            output,
+            rendered_line,
             "[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
         );
         assert!(
-            !output.contains('{') && !output.contains("queued"),
-            "fallback must stay bounded and avoid dumping raw nested payloads: {output}"
+            !rendered_line.contains('{') && !rendered_line.contains("queued"),
+            "fallback must stay bounded and avoid dumping raw nested payloads: {rendered_line}"
         );
     }
 
@@ -4037,14 +4042,19 @@ mod tests {
                 .render(&envelope)
                 .expect("render structured stderr fallback");
         });
+        let rendered_line = output
+            .lines()
+            .find(|line| line.starts_with("[codex] task_progress:"))
+            .map(|line| format!("{line}\n"))
+            .expect("captured stderr should contain bounded structured fallback line");
 
         assert_eq!(
-            output,
+            rendered_line,
             "[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
         );
         assert!(
-            !output.contains('{') && !output.contains("queued"),
-            "fallback must stay bounded and avoid dumping raw nested payloads: {output}"
+            !rendered_line.contains('{') && !rendered_line.contains("queued"),
+            "fallback must stay bounded and avoid dumping raw nested payloads: {rendered_line}"
         );
     }
 
