@@ -3238,7 +3238,7 @@ mod tests {
     }
 
     #[test]
-    fn build_session_progress_falls_back_when_only_aborted_verifier_probe_is_present() {
+    fn build_session_progress_keeps_aborted_verifier_probe_cases_on_conservative_planning_lane() {
         let analysis = last_analysis(vec![
             prompt_row(
                 0,
@@ -3305,8 +3305,20 @@ mod tests {
         );
 
         assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
-        assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
-        assert_has_signal(&progress, ProgressSignalCode::WorkingSetDiffused);
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_has_signal(&progress, ProgressSignalCode::CandidateSetExpanded);
+        assert!(
+            progress
+                .counter_evidence
+                .iter()
+                .any(|evidence| evidence.reason == ZERO_VERIFIER_ANTI_FLAP_REASON),
+            "expected aborted verifier probes to keep the conservative anti-flap counter evidence, got {:?}",
+            progress
+                .counter_evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>(),
+        );
     }
 
     #[test]
