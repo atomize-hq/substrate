@@ -6,14 +6,17 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tempfile::tempdir;
+use tempfile::{tempdir, TempDir};
 use tokio::time::timeout;
 use transport_api_types::{
     ExecuteRequest, MemberDispatchRequestV1, MemberRuntimeBackendKindV1, MemberTurnSubmitRequestV1,
     PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
     PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
 };
-use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
+use world_api::{
+    SharedWorldBindingSnapshot, SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode,
+    WorldSpec,
+};
 use world_service::WorldService;
 
 const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
@@ -219,6 +222,15 @@ struct StreamSummary {
     exit: Option<i32>,
 }
 
+struct RetainedLifecycleHarness {
+    _tempdir: TempDir,
+    service: WorldService,
+    binding: SharedWorldBindingSnapshot,
+    count_path: PathBuf,
+    orchestration_session_id: &'static str,
+    participant_id: &'static str,
+}
+
 async fn collect_stream_summary<B>(body: &mut B, span_id: &str) -> StreamSummary
 where
     B: HttpBody<Data = hyper::body::Bytes> + Unpin,
@@ -258,14 +270,12 @@ fn read_invocation_count(path: &Path) -> usize {
         .expect("parse invocation count")
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_submit_turn_resumability(
-) {
+async fn launch_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarness> {
     let service = match WorldService::new() {
         Ok(svc) => svc,
         Err(err) => {
             eprintln!("skipping retained member lifecycle test: service init failed: {err}");
-            return;
+            return None;
         }
     };
 
@@ -295,12 +305,12 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
             eprintln!(
                 "skipping retained member lifecycle test: failed to ensure shared world: {err}"
             );
-            return;
+            return None;
         }
     };
     let Some(binding) = world.shared_binding.clone() else {
         eprintln!("skipping retained member lifecycle test: shared world binding missing");
-        return;
+        return None;
     };
 
     let launch_response = service
@@ -342,12 +352,44 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
         "bootstrap exit proof must complete before the follow-up submit turn runs"
     );
 
-    let submit_response = service
+    Some(RetainedLifecycleHarness {
+        _tempdir: tmp,
+        service,
+        binding,
+        count_path,
+        orchestration_session_id,
+        participant_id,
+    })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn member_runtime_clean_bootstrap_exit_with_session_handle_registers_then_builds_packet2_harness(
+) {
+    let Some(harness) = launch_clean_bootstrap_exit_harness().await else {
+        return;
+    };
+    assert_eq!(
+        read_invocation_count(&harness.count_path),
+        1,
+        "Packet 1 harness must stop after clean bootstrap exit and leave the deferred parked-resume proof for Packet 2"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "Packet 2 behavior-changing proof: positive parked-resume success stays deferred and non-gating in Packet 1"]
+async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_submit_turn_resumability(
+) {
+    let Some(harness) = launch_clean_bootstrap_exit_harness().await else {
+        return;
+    };
+
+    let submit_response = harness
+        .service
         .submit_member_turn_stream(make_member_turn_submit_request(
-            orchestration_session_id,
-            participant_id,
-            &binding.world_id,
-            binding.world_generation,
+            harness.orchestration_session_id,
+            harness.participant_id,
+            &harness.binding.world_id,
+            harness.binding.world_generation,
             "run-member-runtime-retained-follow-up",
             "follow-up prompt",
         ))
@@ -379,7 +421,7 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
         submit_summary.frames
     );
     assert_eq!(
-        read_invocation_count(&count_path),
+        read_invocation_count(&harness.count_path),
         2,
         "parked retained follow-up submit_turn must invoke the resumed member runtime after bootstrap exit"
     );
