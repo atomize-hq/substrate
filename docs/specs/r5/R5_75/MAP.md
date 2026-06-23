@@ -1,6 +1,6 @@
 # R5.75 Map: Sequential Pre-R6 Hardening And Validation
 
-Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout. On 2026-06-20 the `R5.75-1` named smoke gate was re-run and promotion was first HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker); the Issue 1/2/3 anchoring fix (plus Issue 8 corpus lock) then landed and the gate was re-run green, so `R5.75-1` was promoted and `R5.75-2` became active. On 2026-06-22 the `R5.75-2` named smoke gate and closeout wall were run green, so `R5.75-2` is now PROMOTED and the active seam is `R5.75-3` (delegated parent-visible stabilization). The map reflects the current active seam and next-packet order honestly.
+Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout. On 2026-06-20 the `R5.75-1` named smoke gate was re-run and promotion was first HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker); the Issue 1/2/3 anchoring fix (plus Issue 8 corpus lock) then landed and the gate was re-run green, so `R5.75-1` was promoted and `R5.75-2` became active. On 2026-06-22 the `R5.75-2` named smoke gate and closeout wall were run green, so `R5.75-2` was promoted and `R5.75-3` became active. On 2026-06-23 the full `R5.75-3` wall was revalidated at HEAD: the native delegated real-rollout fixture was committed, the bounded parent-visible carry/reset follow-on landed, all analyzer gates were green, and the named native/adapted delegated smoke sessions held their conservative parent-visible expectations. `R5.75-3` is therefore PROMOTED and the active seam is now `R5.75-4`. The map reflects the current active seam and next-packet order honestly.
 
 ## Objective
 
@@ -19,13 +19,22 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 - `R5.75-1` is landed history as of 2026-06-20 (routed through
   `docs/specs/r5/R5_75/phase-1/SO/`).
 - `R5.75-2` is landed history as of 2026-06-22 (`crates/agent-drift-analyzer/src/input.rs`,
-  sparse readable session fail-open). The current active seam is `R5.75-3` (delegated
-  parent-visible stabilization, `crates/agent-drift-analyzer/src/checkpoint/progress.rs`).
-- **R5.75-3 update (2026-06-23):** the planning-artifact stabilization packet work and the fast
-  delegated-parent regressions are now landed/review-clean in the active `R5.75-3` family
-  (`e2db37c8f`, `5bcb8fb52`, `0a5301b3b` in `progress.rs` + `tests/checkpoints.rs`), but
-  `R5.75-3` remains the active family until the later `3.4+` deliverables and promotion gate close
-  out.
+  sparse readable session fail-open).
+- `R5.75-3` is landed history as of 2026-06-23
+  (`crates/agent-drift-analyzer/src/checkpoint/progress.rs`,
+  `crates/agent-drift-analyzer/tests/checkpoints.rs`,
+  `crates/agent-drift-analyzer/tests/progress_acceptance.rs`, and
+  `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019eb970-3543-7ab1-a5d6-2a62c00c7185/**`).
+  The current active seam is `R5.75-4` (zero-verifier anti-flap gate,
+  `crates/agent-drift-analyzer/src/checkpoint/progress.rs`).
+- **R5.75-3 promotion update (2026-06-23):** the earlier note that only the planning-artifact
+  stabilization and fast delegated-parent regressions had landed was stale. The active family also
+  closed its remaining packet-owned work: the first native delegated real-rollout proof was promoted
+  into committed `progress_acceptance` coverage (`678d1e80c`), the bounded legacy-surface
+  parent-visible carry/reset follow-on landed in `progress.rs` (`5bcb8fb52`, `0a5301b3b`), and a
+  final conservative-stalled-posture fix landed after the native smoke rerun (`5002edb80`). With the
+  analyzer gates green and the named native/adapted smoke sessions rerun green, `R5.75-3` is now
+  promoted and `R5.75-4` may begin.
 - **Family tail update (2026-06-21):** because `R5.75-1` expanded into the full additive
   structured-objective stack, the deferred Issue 7 follow-on was scoped into a bounded final packet
   `R5.75-6` (make the effective checkpoint objective faithful to the structured goal anchor) and gated
@@ -643,6 +652,14 @@ Expected smoke outcome:
 ### Promotion Gate
 
 Do not begin `R5.75-4` until the three native delegated repros and the one adapted delegated repro hold a conservative but stable parent-visible interpretation.
+
+**Promotion decision: PROMOTED (2026-06-23). `R5.75-3` is closed; `R5.75-4` may begin.** The
+planning-artifact stabilization and fast delegated-parent regression work landed first, then the
+first native delegated real-rollout proof was committed into `progress_acceptance`, the bounded
+legacy-objective carry/reset follow-on closed the remaining parent-visible comparability gap without
+widening into structured-state migration, all three analyzer gates were rerun green, and the named
+native/adapted delegated smoke sessions held the packet-local conservative parent-visible bar at
+`target/r5_75-smoke/R5.75-3/...`.
 
 ## R5.75-4: Zero-Verifier Anti-Flap Gate
 
