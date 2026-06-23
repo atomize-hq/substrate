@@ -342,7 +342,7 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
         "bootstrap exit proof must complete before the follow-up submit turn runs"
     );
 
-    let err = service
+    let submit_response = service
         .submit_member_turn_stream(make_member_turn_submit_request(
             orchestration_session_id,
             participant_id,
@@ -352,17 +352,36 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
             "follow-up prompt",
         ))
         .await
-        .expect_err(
-            "Packet 1 pins the bootstrap registration seam only; later resumability is Packet 2/3 work",
+        .expect(
+            "parked retained worker should remain resumable for a later submit_turn after bootstrap exits cleanly",
         );
+    let mut submit_body = submit_response.into_body();
+    let mut submit_buffer = Vec::new();
+    let submit_start = next_optional_stream_frame_value(&mut submit_body, &mut submit_buffer)
+        .await
+        .expect("expected submit_turn start frame");
+    let submit_span_id = frame_start_span_id(&submit_start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {submit_start:?}"));
+    let submit_summary = collect_stream_summary(&mut submit_body, &submit_span_id).await;
+    assert_eq!(
+        submit_summary.exit,
+        Some(0),
+        "parked retained follow-up submit_turn must exit cleanly; frames: {:?}",
+        submit_summary.frames
+    );
     assert!(
-        err.to_string().contains("is not retained"),
-        "post-bootstrap submit_turn should still expose the unfixed retained seam directly: {err}"
+        submit_summary
+            .frames
+            .iter()
+            .any(|frame| frame.to_string().contains("follow-up prompt success")),
+        "parked retained follow-up submit_turn must surface the resumed follow-up output; frames: {:?}",
+        submit_summary.frames
     );
     assert_eq!(
         read_invocation_count(&count_path),
-        1,
-        "Packet 1 must not require a resumed follow-up invocation before the runtime fix lands"
+        2,
+        "parked retained follow-up submit_turn must invoke the resumed member runtime after bootstrap exit"
     );
 }
 
