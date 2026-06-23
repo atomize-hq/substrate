@@ -3010,6 +3010,60 @@ fn checkpoints_keep_zero_verifier_exploration_on_conservative_planning_lane() {
 }
 
 #[test]
+fn checkpoints_keep_explicit_non_verifier_failures_on_troubleshooting_lane() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot the packet smoke failure conservatively before planning a fix.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"python scripts/repro_packet_smoke.py","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 1\nerror: packet smoke still fails before the target step",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Reproduce the same smoke failure conservatively before widening scope.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"python scripts/repro_packet_smoke.py","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            5,
+            "turn-002",
+            "Exit code: 1\nerror: packet smoke still fails before the target step",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Troubleshooting);
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+}
+
+#[test]
 fn checkpoints_mark_implementation_wall_advancement_with_concentrated_edits() {
     let result = analyze_custom_rows(vec![
         prompt_row(
