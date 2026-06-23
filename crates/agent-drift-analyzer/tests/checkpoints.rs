@@ -2943,6 +2943,73 @@ fn checkpoints_mark_broad_planning_meander_as_stalled() {
 }
 
 #[test]
+fn checkpoints_keep_zero_verifier_exploration_on_conservative_planning_lane() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Keep exploring the packet docs before deciding whether there is a real bug.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/MAP.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 1"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-spec.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 1"),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Keep scanning the exploratory evidence before escalating to troubleshooting.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-plan.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(7, "turn-002", "Exit code: 1"),
+        tool_call_row(
+            8,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-tasks.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(9, "turn-002", "Exit code: 1"),
+        tool_call_row(
+            10,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/structured-objective-bug-map.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(11, "turn-002", "Exit code: 1"),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+    ));
+    assert!(
+        progress.confidence <= Confidence::Medium,
+        "zero-verifier exploratory progress should stay conservative: {:?}",
+        progress.confidence
+    );
+}
+
+#[test]
 fn checkpoints_mark_implementation_wall_advancement_with_concentrated_edits() {
     let result = analyze_custom_rows(vec![
         prompt_row(

@@ -56,6 +56,23 @@ pub(crate) fn build_session_progress(
         }
     };
 
+    if session_archetype.label == SessionArchetypeLabel::Troubleshooting
+        && progress.dimension == ProgressDimension::TroubleshootingFrontier
+        && progress.status == ProgressStatus::InsufficientEvidence
+        && analysis.interval.verification_attempts.is_empty()
+        && !has_verification_like_command_attempts(analysis)
+        && source_edits(analysis).is_empty()
+    {
+        let planning_progress =
+            assess_planning_progress(analysis, ProgressDimension::PlanningConvergence);
+        if !matches!(
+            planning_progress.status,
+            ProgressStatus::Advancing | ProgressStatus::Mixed
+        ) {
+            progress = planning_progress;
+        }
+    }
+
     progress = apply_delegation_caps(analysis, progress);
     finalize_progress(progress)
 }
@@ -71,6 +88,20 @@ fn default_dimension(label: SessionArchetypeLabel) -> ProgressDimension {
             ProgressDimension::VerificationCloseoutNarrowing
         }
     }
+}
+
+fn has_verification_like_command_attempts(analysis: &CheckpointAnalysis) -> bool {
+    analysis.interval.command_attempts.iter().any(|attempt| {
+        matches!(
+            attempt.role,
+            CommandAttemptRole::Compile
+                | CommandAttemptRole::Test
+                | CommandAttemptRole::Lint
+                | CommandAttemptRole::FormatCheck
+                | CommandAttemptRole::Build
+                | CommandAttemptRole::Replay
+        )
+    })
 }
 
 fn parent_visible_orchestration_progress(
