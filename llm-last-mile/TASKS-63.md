@@ -38,13 +38,14 @@ Do not begin a later packet until the prior packet checkpoint is green.
 Session goal:
 
 1. reproduce the actual bug where bootstrap exits after surfacing resumable identity,
-2. lock success to retained continuity surviving that exit,
-3. lock failure to the inverse case where no resumable handle was surfaced.
+2. lock failure to the inverse case where no resumable handle was surfaced,
+3. establish the regression harness that will later prove the positive parked-resume success condition,
+4. keep the packet reviewable and green without requiring the runtime fix.
 
 ### Tasks
 
 - [ ] Task 1.1: Add focused `world-service` lifecycle regression coverage for bootstrap-exit parked resume
-  - Acceptance: `member_runtime` coverage explicitly proves the joined seam in runtime terms: a retained worker registers, surfaces resumable session identity, exits bootstrap cleanly, remains resumable for a later submit-turn, and the inverse no-session-handle path fails closed instead of pretending parked continuity.
+  - Acceptance: `member_runtime` coverage honestly proves the joined seam in runtime terms up to the current packet boundary: a retained worker registers, surfaces resumable session identity, exits bootstrap cleanly, the later submit-turn seam is exposed through a reusable regression harness without requiring the runtime fix to pass yet, and the inverse no-session-handle path fails closed instead of pretending parked continuity.
   - Verify:
     - `cargo test -p world-service bootstrap_completion_with_session_handle_emits_registered_then_exit -- --nocapture`
     - `cargo test -p world-service member_runtime -- --nocapture`
@@ -57,9 +58,10 @@ Session goal:
 Packet 1 is complete only when:
 
 1. the active lifecycle seam reproduces in automation,
-2. the positive parked-resume success condition is explicit,
-3. the no-session-handle inverse case is pinned,
-4. the proof does not depend on bootstrap process liveness being artificially held open.
+2. the no-session-handle inverse case is pinned,
+3. the regression harness for the later positive parked-resume proof is in place,
+4. the proof does not depend on bootstrap process liveness being artificially held open,
+5. the packet does not require the positive parked-resume success case to pass yet.
 
 Do not start Packet 2 until Packet 1 is reviewed and green.
 
@@ -69,7 +71,8 @@ Session goal:
 
 1. stop treating bootstrap exit as retained-worker deletion,
 2. keep the runtime change minimal and local to `world-service`,
-3. preserve exact retained slot ownership semantics.
+3. preserve exact retained slot ownership semantics,
+4. become the first packet allowed to change runtime behavior so the positive parked-resume case can pass.
 
 ### Tasks
 
@@ -96,7 +99,8 @@ Packet 2 is complete only when:
 1. retained continuity survives clean bootstrap exit,
 2. no duplicate retained-slot or stale-owner drift is introduced,
 3. bootstrap resource cleanup no longer implies retained closeout,
-4. no new persisted parked field has been added without explicit review.
+4. the positive parked-resume success case becomes green for the first time,
+5. no new persisted parked field has been added without explicit review.
 
 Do not start Packet 3 until Packet 2 verification is green.
 

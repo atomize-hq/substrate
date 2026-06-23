@@ -89,13 +89,14 @@ If implementation evidence forces a different choice, that should update the pla
 
 ## Implementation Order
 
-### Phase 1: Freeze The Lifecycle Failure In World-Service Tests
+### Phase 1: Freeze The Negative Proof And Regression Harness In World-Service Tests
 
 Goal:
 
 1. make the actual bug reproducible where bootstrap exits cleanly after surfacing resumable identity,
-2. pin the success condition to retained continuity surviving that exit,
-3. avoid hiding the bug behind shell-only routing tests.
+2. pin the fail-closed inverse where no resumable handle was surfaced,
+3. establish the harness that will later prove the positive parked-resume success condition once runtime behavior changes land,
+4. avoid hiding the bug behind shell-only routing tests.
 
 Primary touch surface:
 
@@ -104,7 +105,7 @@ Primary touch surface:
 
 Required changes:
 
-1. add focused coverage for the lifecycle seam: retained registration, surfaced session handle, clean bootstrap exit, later submit-turn acceptance,
+1. add focused coverage for the lifecycle seam: retained registration, surfaced session handle, clean bootstrap exit, and an honest post-bootstrap follow-up seam that demonstrates where resumability currently breaks,
 2. preserve existing exact-identity mismatch coverage,
 3. add the fail-closed inverse: if resumable session identity was never surfaced, bootstrap exit must not promise parked-resumable continuity,
 4. keep the test honest about bootstrap process exit rather than using only `ReadyAndHoldUntilCancel` style stubs.
@@ -112,8 +113,9 @@ Required changes:
 Verification checkpoint:
 
 1. the failing seam reproduces before the runtime fix,
-2. the positive success condition is explicit,
-3. the negative no-session-handle case is also pinned.
+2. the negative no-session-handle case is pinned,
+3. the harness for the later positive parked-resume proof is in place,
+4. the phase does not require the positive parked-resume success case to pass yet.
 
 ### Phase 2: Separate Retained Registry Ownership From Active Process Ownership
 
@@ -121,7 +123,8 @@ Goal:
 
 1. make retained continuity independent of bootstrap-process liveness once resumable identity exists,
 2. keep the implementation minimal and local to `world-service`,
-3. avoid introducing broader lifecycle infrastructure than this seam needs.
+3. make this the first behavior-changing phase that turns the positive parked-resume case green,
+4. avoid introducing broader lifecycle infrastructure than this seam needs.
 
 Primary touch surface:
 
@@ -139,7 +142,8 @@ Verification checkpoint:
 
 1. a retained worker with surfaced resumable identity still exists in runtime registry after bootstrap exit,
 2. no duplicate retained slot or stale-owner drift is introduced,
-3. bootstrap resource cleanup still occurs where appropriate without destroying retained continuity.
+3. bootstrap resource cleanup still occurs where appropriate without destroying retained continuity,
+4. the positive parked-resume proof goes green for the first time in this phase.
 
 ### Phase 3: Make Submitted-Turn Resume Work Against Parked Retained Workers
 
