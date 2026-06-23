@@ -97,7 +97,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-4.2: Land The Analyzer-Local Anti-Flap Guard
 
-- [ ] Task R5.75-4.2.1: Add the minimal analyzer-local rule that keeps zero-verifier exploratory
+- [x] Task R5.75-4.2.1: Add the minimal analyzer-local rule that keeps zero-verifier exploratory
       sessions conservative when decisive evidence is absent.
   - Acceptance: `crates/agent-drift-analyzer/src/checkpoint/progress.rs` prefers a conservative
     `planning_convergence` / `insufficient_evidence` posture for long browse/read/tool-output-heavy
@@ -115,10 +115,16 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-23): the analyzer-local guard landed in
+    `crates/agent-drift-analyzer/src/checkpoint/progress.rs` across commits `600ece8df`,
+    `3fc9c4675`, `f770f20be`, `2022d7a3d`, and `1ff94d076`. The live packet behavior now keeps long
+    zero-verifier exploratory intervals on the conservative `planning_convergence` lane unless
+    verifier-backed, concrete-edit, or explicit-failure evidence truly exists, while preserving the
+    delegated `parent_visible_orchestration` bar required by `R5.75-3`.
 
 ## R5.75-4.3: Fast Checkpoint Regressions
 
-- [ ] Task R5.75-4.3.1: Add or refresh fast regressions that prove both conservatism and non-regression.
+- [x] Task R5.75-4.3.1: Add or refresh fast regressions that prove both conservatism and non-regression.
   - Acceptance: `crates/agent-drift-analyzer/tests/checkpoints.rs` proves all of the following:
     - zero-verifier broad-scan / read-output exploratory sessions stay low-confidence and conservative,
     - real verifier-backed or explicit-failure-backed troubleshooting still advances when it should,
@@ -130,10 +136,17 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
+  - Closeout note (2026-06-23): the fast regression wall landed in
+    `crates/agent-drift-analyzer/tests/checkpoints.rs` (`ac989b17e`) and now locks the packet
+    boundary explicitly: `checkpoints_keep_zero_verifier_exploration_on_conservative_planning_lane`,
+    `checkpoints_keep_diffused_probe_failures_on_conservative_planning_lane`,
+    `checkpoints_keep_repeated_empty_probe_misses_on_conservative_planning_lane`, and the paired
+    troubleshooting/delegation non-regression checks prove the anti-flap rule stays conservative
+    without erasing real verifier-backed troubleshooting or delegated parent-visible semantics.
 
 ## R5.75-4.4: Bounded Semantic Acceptance Proof (Only If Needed)
 
-- [ ] Task R5.75-4.4.1: Add a bounded `progress_acceptance` proof only if fast regressions alone would
+- [x] Task R5.75-4.4.1: Add a bounded `progress_acceptance` proof only if fast regressions alone would
       leave the packet without an honest committed semantic wall.
   - Acceptance: if needed, the packet adds or refines one bounded semantic proof in
     `crates/agent-drift-analyzer/tests/progress_acceptance.rs` while keeping the corpus honest:
@@ -149,6 +162,11 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - one existing bounded progress-acceptance fixture directory or README entry only if the packet
       truly needs it
+  - Closeout note (2026-06-23): the packet did need one bounded semantic proof, and it landed
+    narrowly in `crates/agent-drift-analyzer/tests/progress_acceptance.rs` plus the committed
+    `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-zero-verifier-anti-flap/**`
+    fixture (`5fa4855c5`). The corpus remains bounded, no adapted committed fixture-family expansion
+    was added here, and the proof stays packet-local to zero-verifier anti-flap behavior.
 
 ## R5.75-4.5: Automated Validation Gates
 
@@ -172,7 +190,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-4.6: Adapted Smoke Review
 
-- [ ] Task R5.75-4.6.1: Re-run canonical zero-verifier witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185`, then confirm the packet-owned
+- [x] Task R5.75-4.6.1: Re-run canonical zero-verifier witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185`, then confirm the packet-owned
       conservative bar holds at live smoke.
   - Acceptance:
     - `097d97e914ca220f` stays boring/conservative and does not surface troubleshooting-frontier or
@@ -185,10 +203,20 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - no committed implementation files required; evidence recorded under
       `target/r5_75-smoke/R5.75-4/<session-id>/`
+  - Closeout note (2026-06-23): the adapted smoke reruns saved under `target/r5_75-smoke/R5.75-4/`
+    hold the packet-owned bar. `097d97e914ca220f` now reports
+    `troubleshooting_frontier=0, planning_convergence=8` in `summary.md`, and checkpoints `0007-0008`
+    stay on conservative `planning_convergence` with anti-flap limiting evidence instead of
+    troubleshooting posture. `da59436e63915185` now reports
+    `troubleshooting_frontier=0, planning_convergence=22, parent_visible_orchestration=5`; the
+    earlier exploratory stretch at checkpoints `0017-0023` stays on conservative
+    `planning_convergence`, while checkpoints `0024-0028` preserve the late delegated
+    `parent_visible_orchestration` bar from `R5.75-3`. No remaining non-packet-owned blocker was
+    surfaced by the saved smoke outputs.
 
 ## R5.75-4.7: MAP Promotion And Routing Update
 
-- [ ] Task R5.75-4.7.1: Update the main `R5.75` routing hub only after the packet has actually closed.
+- [x] Task R5.75-4.7.1: Update the main `R5.75` routing hub only after the packet has actually closed.
   - Acceptance: `docs/specs/r5/R5_75/MAP.md` is updated only after Tasks `R5.75-4.1` through
     `R5.75-4.6` are complete and records all of the following honestly:
     - `R5.75-4` is promoted history,
@@ -200,3 +228,8 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     saved smoke outputs under `target/r5_75-smoke/R5.75-4/`.
   - Files:
     - `docs/specs/r5/R5_75/MAP.md`
+  - Closeout note (2026-06-23): after reconciling Tasks `R5.75-4.2`, `R5.75-4.3`, `R5.75-4.4`, and
+    `R5.75-4.6` against live repo truth, `docs/specs/r5/R5_75/MAP.md` now records `R5.75-4` as
+    promoted history, names `097d97e914ca220f` and `da59436e63915185` as the promotion smoke
+    witnesses, preserves the bounded `synthetic-zero-verifier-anti-flap` proof note, and routes the
+    family forward with `R5.75-5` as the active next seam. This closeout is docs-only.
