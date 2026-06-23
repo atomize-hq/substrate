@@ -2186,6 +2186,172 @@ PATCH","workdir":"/repo"}"#,
 }
 
 #[test]
+fn checkpoints_keep_visible_child_result_plus_parent_spec_and_handoff_refinement_parent_visible() {
+    for (label, artifact_path) in [
+        (
+            "spec",
+            "docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-spec.md",
+        ),
+        (
+            "handoff",
+            ".codex/handoffs/2026-06-23-r5-75-3-parent-visible.md",
+        ),
+    ] {
+        let inspect_command = format!("sed -n '1,80p' {artifact_path}");
+        let edit_command = format!(
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {artifact_path}\n*** End Patch\nPATCH"
+        );
+        let result = analyze_custom_rows(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Coordinate delegated findings while refining the packet plan myself.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "spawn_agent",
+                r#"{"goal":"inspect packet R5-4"}"#,
+            ),
+            tool_call_row(
+                2,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"printf 'child rollout ' && sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                &format!(r#"{{"command":"{inspect_command}","workdir":"/repo"}}"#),
+            ),
+            tool_call_row(
+                4,
+                "turn-001",
+                "functions.apply_patch",
+                &format!(r#"{{"command":"{edit_command}","workdir":"/repo"}}"#),
+            ),
+        ]);
+        let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+        let progress = checkpoint
+            .session_progress
+            .as_ref()
+            .expect("session progress");
+
+        assert_eq!(
+            progress.dimension,
+            ProgressDimension::ParentVisibleOrchestration,
+            "{label} refinement should stay on the parent-visible lane",
+        );
+        assert_eq!(
+            progress.status,
+            ProgressStatus::Mixed,
+            "{label} refinement should preserve conservative mixed progress",
+        );
+        assert_eq!(
+            progress.confidence,
+            Confidence::Medium,
+            "{label} refinement should not inflate beyond medium confidence",
+        );
+        assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+        assert!(!progress.supporting_evidence.is_empty());
+        assert!(!progress.counter_evidence.is_empty());
+        assert_evidence_contains(
+            &progress.supporting_evidence,
+            "parent incorporated visible delegated results into a plan/spec/handoff artifact",
+        );
+        assert_evidence_contains(
+            &progress.counter_evidence,
+            "delegation visibility limited progress confidence",
+        );
+    }
+}
+
+#[test]
+fn checkpoints_keep_opaque_parent_spec_and_handoff_refinement_conservative() {
+    for (label, artifact_path) in [
+        (
+            "spec",
+            "docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-spec.md",
+        ),
+        (
+            "handoff",
+            ".codex/handoffs/2026-06-23-r5-75-3-parent-visible.md",
+        ),
+    ] {
+        let inspect_command = format!("sed -n '1,80p' {artifact_path}");
+        let edit_command = format!(
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {artifact_path}\n*** End Patch\nPATCH"
+        );
+        let result = analyze_custom_rows(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Coordinate delegated findings while refining the packet plan myself.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "spawn_agent",
+                r#"{"goal":"inspect packet R5-4"}"#,
+            ),
+            developer_row(
+                2,
+                "turn-001",
+                "Child session id 019ea555-5555-7555-8555-555555555555 remains in a separate rollout file.",
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "wait_agent",
+                "{\"session_id\":\"019ea555-5555-7555-8555-555555555555\"}",
+            ),
+            tool_call_row(
+                4,
+                "turn-001",
+                "functions.shell_command",
+                &format!(r#"{{"command":"{inspect_command}","workdir":"/repo"}}"#),
+            ),
+            tool_call_row(
+                5,
+                "turn-001",
+                "functions.apply_patch",
+                &format!(r#"{{"command":"{edit_command}","workdir":"/repo"}}"#),
+            ),
+        ]);
+        let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+        let progress = checkpoint
+            .session_progress
+            .as_ref()
+            .expect("session progress");
+
+        assert_eq!(
+            progress.dimension,
+            ProgressDimension::ParentVisibleOrchestration,
+            "{label} refinement should stay on the conservative parent-visible lane",
+        );
+        assert!(matches!(
+            progress.status,
+            ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+        ));
+        assert_eq!(
+            progress.confidence,
+            Confidence::Low,
+            "{label} refinement must keep opaque child visibility capped low",
+        );
+        assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+        assert!(
+            !matches!(progress.status, ProgressStatus::Mixed),
+            "{label} refinement must not overclaim opaque child progress",
+        );
+        assert_evidence_contains(
+            &progress.counter_evidence,
+            "delegation visibility limited progress confidence",
+        );
+    }
+}
+
+#[test]
 fn checkpoints_keep_opaque_parent_verification_and_vcs_parent_visible() {
     let result = analyze_custom_rows(vec![
         prompt_row(
