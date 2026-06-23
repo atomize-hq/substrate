@@ -98,7 +98,9 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
         `Get-Content`, `Get-ChildItem`, and `.\.venv\Scripts\python`, and the existing prohibition on
         fabricating positive opaque-child progress.
   - Verify: run the native/adapted smoke commands from the companion spec and inspect
-    `summary.md` + the first `checkpoints.jsonl` rows for each session.
+    `summary.md` + the characterization-relevant `checkpoints.jsonl` rows for each session;
+    for adapted witness `da59436e63915185`, explicitly inspect late checkpoints 25-26 because
+    that is where the packet-owned `parent_visible_orchestration` characterization appears.
   - Files:
     - no committed implementation files required; evidence recorded in this ledger and under
       `target/r5_75-smoke/R5.75-3/<session-id>/`

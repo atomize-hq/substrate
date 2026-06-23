@@ -279,7 +279,10 @@ This packet uses four validation layers:
        `019eb917-9531-74e0-897d-ad8d362138ec`,
        `019eb970-3543-7ab1-a5d6-2a62c00c7185`
      - adapted session `da59436e63915185`
-   - inspect `summary.md` and the first `checkpoints.jsonl` rows, not just command exit status
+   - inspect `summary.md` and the characterization-relevant `checkpoints.jsonl` rows, not just
+     command exit status; for adapted witness `da59436e63915185`, explicitly inspect late
+     checkpoints 25-26 because that is where the packet-owned parent-visible characterization is
+     evidenced
 
 ## Boundaries
 
@@ -291,7 +294,9 @@ This packet uses four validation layers:
   - keep child-visibility limitations visible as limiting/counter evidence
   - keep comparability/reset logic on the legacy objective surface in this packet
   - use named native sessions as the primary behavior authority
-  - inspect `summary.md` and early `checkpoints.jsonl` rows during smoke review
+  - inspect `summary.md` and the characterization-relevant `checkpoints.jsonl` rows during smoke
+    review; when the adapted witness is in play, explicitly include late checkpoints 25-26 for
+    `da59436e63915185`
 - Ask first:
   - adding more than the bounded delegated real-case expansion needed for this packet
   - converting `da59436e63915185` into a committed adapted fixture family before `R5.75-5`
