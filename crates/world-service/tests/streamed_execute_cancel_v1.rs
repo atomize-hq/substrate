@@ -16,6 +16,8 @@ use transport_api_types::{
 use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
 use world_service::WorldService;
 
+const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
+
 fn minimal_policy_snapshot() -> PolicySnapshotV3 {
     PolicySnapshotV3 {
         schema_version: 3,
@@ -135,7 +137,7 @@ fn make_member_turn_submit_request(
 
 fn write_fake_member_runtime(temp: &Path) -> std::path::PathBuf {
     let path = temp.join("fake-member-runtime.sh");
-    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM HUP QUIT\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-member-cancel\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-member-cancel\",\"turn_id\":\"turn-member-cancel\"}\\r\\n'\nwhile :; do sleep 1; done\n";
+    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM HUP QUIT\nif [ \"${1-}\" = \"--version\" ]; then\n  printf 'codex 1.2.3\\n'\n  exit 0\nfi\nif [ \"${1-}\" = \"features\" ] && [ \"${2-}\" = \"list\" ]; then\n  if [ \"${3-}\" = \"--json\" ]; then\n    printf '{\"features\":[\"add_dir\"]}\\n'\n  else\n    printf 'add_dir\\n'\n  fi\n  exit 0\nfi\nif [ \"${1-}\" = \"--help\" ]; then\n  printf 'Usage: codex --add-dir\\n'\n  exit 0\nfi\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-member-cancel\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-member-cancel\",\"turn_id\":\"turn-member-cancel\"}\\r\\n'\nwhile :; do sleep 1; done\n";
     fs::write(&path, body).expect("write fake member runtime");
     let mut perms = fs::metadata(&path)
         .expect("fake member runtime metadata")
@@ -653,6 +655,14 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
     let tmp = tempdir().expect("tempdir");
     let codex_member_binary = write_fake_member_runtime(tmp.path());
     let claude_member_binary = write_fake_claude_member_runtime(tmp.path());
+    let seed_home = tmp.path().join("seed-home");
+    fs::create_dir_all(&seed_home).expect("create seed home");
+    fs::write(
+        seed_home.join("auth.json"),
+        r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+    )
+    .expect("write seed auth");
+    fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n").expect("write seed config");
     let orchestration_session_id = "orch-streamed-member-backend-slots";
     let world_spec = WorldSpec {
         reuse_session: true,
@@ -681,7 +691,7 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         return;
     };
 
-    let codex_request = make_member_dispatch_request_with_backend(
+    let mut codex_request = make_member_dispatch_request_with_backend(
         tmp.path(),
         &codex_member_binary,
         &binding.world_id,
@@ -692,6 +702,13 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         "cli:codex",
         MemberRuntimeBackendKindV1::Codex,
     );
+    codex_request
+        .env
+        .get_or_insert_with(HashMap::new)
+        .insert(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            seed_home.display().to_string(),
+        );
     let codex_response = service
         .execute_stream(codex_request)
         .await
@@ -745,7 +762,7 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         &claude_span_id,
     );
 
-    let duplicate_request = make_member_dispatch_request_with_backend(
+    let mut duplicate_request = make_member_dispatch_request_with_backend(
         tmp.path(),
         &codex_member_binary,
         &binding.world_id,
@@ -756,6 +773,13 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         "cli:codex",
         MemberRuntimeBackendKindV1::Codex,
     );
+    duplicate_request
+        .env
+        .get_or_insert_with(HashMap::new)
+        .insert(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            seed_home.display().to_string(),
+        );
     let duplicate_err = service
         .execute_stream(duplicate_request)
         .await
