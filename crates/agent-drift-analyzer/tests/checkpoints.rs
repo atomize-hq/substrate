@@ -2264,6 +2264,10 @@ fn checkpoints_keep_visible_child_result_plus_parent_spec_and_handoff_refinement
             &progress.counter_evidence,
             "delegation visibility limited progress confidence",
         );
+        assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+        assert_absent_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert_absent_progress_signal(progress, ProgressSignalCode::PreviouslyCleanScopeBroken);
+        assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
     }
 }
 
@@ -2348,6 +2352,10 @@ fn checkpoints_keep_opaque_parent_spec_and_handoff_refinement_conservative() {
             &progress.counter_evidence,
             "delegation visibility limited progress confidence",
         );
+        assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+        assert_absent_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert_absent_progress_signal(progress, ProgressSignalCode::PreviouslyCleanScopeBroken);
+        assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
     }
 }
 
@@ -3007,6 +3015,10 @@ fn checkpoints_keep_zero_verifier_exploration_on_conservative_planning_lane() {
         "zero-verifier exploratory progress should stay conservative: {:?}",
         progress.confidence
     );
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert_absent_progress_signal(progress, ProgressSignalCode::PreviouslyCleanScopeBroken);
+    assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
 }
 
 #[test]
@@ -3074,6 +3086,10 @@ fn checkpoints_keep_diffused_probe_failures_on_conservative_planning_lane() {
         "diffused exploratory probe failures should stay conservative: {:?}",
         progress.confidence
     );
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert_absent_progress_signal(progress, ProgressSignalCode::PreviouslyCleanScopeBroken);
+    assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
 }
 
 #[test]
@@ -3140,6 +3156,14 @@ fn checkpoints_keep_repeated_empty_probe_misses_on_conservative_planning_lane() 
         progress.confidence <= Confidence::Medium,
         "repeated empty probe misses should stay conservative: {:?}",
         progress.confidence
+    );
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    assert_absent_progress_signal(progress, ProgressSignalCode::FailureSignatureRepeated);
+    assert_absent_progress_signal(progress, ProgressSignalCode::PreviouslyCleanScopeBroken);
+    assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
+    assert_evidence_contains(
+        &progress.counter_evidence,
+        "lacked verifier-backed or explicit failure evidence",
     );
 }
 
