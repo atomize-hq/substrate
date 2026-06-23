@@ -115,6 +115,59 @@ while :; do sleep 1; done
     path
 }
 
+fn write_overlay_write_member_runtime(temp: &Path) -> PathBuf {
+    let path = temp.join("fake-member-runtime-overlay-write.sh");
+    let body = r#"#!/bin/sh
+set -eu
+
+proof_path="${PLACEMENT_PROOF_PATH:?}"
+abs_host_target="${ABS_HOST_TARGET:?}"
+cgroup_procs="${EXPECTED_CGROUP_PROCS:?}"
+attached=0
+attempt=0
+while [ "$attempt" -lt 100 ]; do
+  if [ -f "$cgroup_procs" ] && grep -qx "$$" "$cgroup_procs"; then
+    attached=1
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.05
+done
+
+relative_file="from_member_runtime.txt"
+printf 'hello from the member runtime\n' > "$relative_file"
+
+abs_status=0
+abs_output=""
+if abs_output=$(printf 'host-absolute write should fail\n' > "$abs_host_target" 2>&1); then
+  abs_status=0
+else
+  abs_status=$?
+fi
+
+{
+  printf 'cwd=%s\n' "$(pwd)"
+  printf 'attached=%s\n' "$attached"
+  printf 'relative_file=%s\n' "$relative_file"
+  printf 'relative_exists=%s\n' "$( [ -f "$relative_file" ] && printf 1 || printf 0 )"
+  printf 'abs_status=%s\n' "$abs_status"
+  printf 'abs_output=%s\n' "$abs_output"
+} > "$proof_path"
+
+printf '{"type":"thread.started","thread_id":"thread-member-world-placement"}\r\n'
+printf '{"type":"turn.started","thread_id":"thread-member-world-placement","turn_id":"turn-member-world-placement"}\r\n'
+while :; do sleep 1; done
+"#;
+    fs::write(&path, body).expect("write fake member runtime");
+    let mut perms = fs::metadata(&path)
+        .expect("fake member runtime metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake member runtime permissions");
+    path
+}
+
 async fn next_stream_frame_value<B>(body: &mut B, buffer: &mut Vec<u8>) -> Value
 where
     B: HttpBody<Data = hyper::body::Bytes> + Unpin,
@@ -296,6 +349,166 @@ async fn member_runtime_launches_inside_authoritative_overlay_and_cgroup() {
         parse_proof_value(&proof, "attached"),
         Some("1"),
         "member runtime pid should be attached to the authoritative session cgroup"
+    );
+
+    let cancel = service
+        .execute_cancel(ExecuteCancelRequestV1 {
+            span_id: span_id.clone(),
+            sig: "INT".to_string(),
+        })
+        .await
+        .expect("member execute_cancel should succeed");
+    assert!(cancel.delivered, "expected member cancel delivery");
+
+    loop {
+        let frame = next_stream_frame_value(&mut body, &mut buffer).await;
+        if is_event_frame(&frame)
+            || is_stream_chunk_frame(&frame)
+            || frame_start_span_id(&frame).is_some()
+        {
+            continue;
+        }
+        if let Some((exit, exit_span)) = frame_exit(&frame) {
+            assert_eq!(exit_span, span_id);
+            assert_eq!(exit, 130, "SIGINT exit should follow shell convention");
+            break;
+        }
+        if let Some(message) = frame_error_message(&frame) {
+            panic!("unexpected member streamed error: {message}");
+        }
+        panic!("unexpected member streamed frame: {frame:?}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn member_runtime_full_isolation_keeps_relative_writes_in_overlay_and_rejects_host_absolute_paths(
+) {
+    let service = match WorldService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping member overlay write proof test: service init failed: {err}");
+            return;
+        }
+    };
+
+    let tmp = tempdir().expect("tempdir");
+    let nested = tmp.path().join("nested");
+    fs::create_dir_all(&nested).expect("create nested cwd");
+    let member_binary = write_overlay_write_member_runtime(tmp.path());
+
+    let world_spec = WorldSpec {
+        reuse_session: true,
+        reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+            orchestration_session_id: "orch-member-runtime-overlay-write".to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        }),
+        isolate_network: false,
+        limits: world_api::ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains: Vec::new(),
+        project_dir: tmp.path().to_path_buf(),
+        always_isolate: true,
+        fs_mode: substrate_common::WorldFsMode::Writable,
+        backend_policy: None,
+    };
+    let (world, overlay_root) = match service.ensure_session_overlay_root(&world_spec) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!(
+                "skipping member overlay write proof test: failed to prepare overlay root: {err}"
+            );
+            return;
+        }
+    };
+    let binding = world
+        .shared_binding
+        .clone()
+        .expect("shared world binding should exist once authoritative world is prepared");
+    let cgroup_procs = service
+        .session_cgroup_path(&world)
+        .expect("session cgroup path should resolve once authoritative world is prepared")
+        .join("cgroup.procs");
+    let proof_path = tmp.path().join("overlay-write-proof.txt");
+    let absolute_host_target = tmp.path().join("host-absolute-target.txt");
+
+    let mut env = HashMap::new();
+    env.insert(
+        WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+        tmp.path().display().to_string(),
+    );
+    env.insert(
+        "PLACEMENT_PROOF_PATH".to_string(),
+        proof_path.display().to_string(),
+    );
+    env.insert(
+        "EXPECTED_CGROUP_PROCS".to_string(),
+        cgroup_procs.display().to_string(),
+    );
+    env.insert(
+        "ABS_HOST_TARGET".to_string(),
+        absolute_host_target.display().to_string(),
+    );
+    let request = make_member_dispatch_request(
+        &nested,
+        &member_binary,
+        &binding.world_id,
+        binding.world_generation,
+        env,
+    );
+
+    let response = match service.execute_stream(request).await {
+        Ok(response) => response,
+        Err(err) => {
+            panic!(
+                "member overlay write proof test failed to establish streamed execute placement: {err}"
+            );
+        }
+    };
+
+    let mut body = response.into_body();
+    let mut buffer = Vec::new();
+
+    let start = next_stream_frame_value(&mut body, &mut buffer).await;
+    let span_id = frame_start_span_id(&start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {start:?}"));
+
+    let proof = wait_for_proof_file(&proof_path).await;
+    let expected_cwd = overlay_root.join("nested");
+    let overlay_relative = expected_cwd.join("from_member_runtime.txt");
+    let host_relative = nested.join("from_member_runtime.txt");
+
+    assert_eq!(
+        parse_proof_value(&proof, "cwd"),
+        Some(expected_cwd.display().to_string().as_str()),
+        "member runtime should observe the authoritative overlay cwd for relative writes"
+    );
+    assert_eq!(
+        parse_proof_value(&proof, "attached"),
+        Some("1"),
+        "member runtime pid should be attached to the authoritative session cgroup"
+    );
+    assert_eq!(
+        parse_proof_value(&proof, "relative_exists"),
+        Some("1"),
+        "relative write should succeed inside the authoritative overlay cwd"
+    );
+    assert!(
+        overlay_relative.exists(),
+        "relative write must land inside the authoritative overlay view"
+    );
+    assert!(
+        !host_relative.exists(),
+        "relative write must not appear on host before workspace sync reconciliation"
+    );
+    assert!(
+        !absolute_host_target.exists(),
+        "absolute host-path write must not escape the authoritative overlay"
+    );
+    assert_ne!(
+        parse_proof_value(&proof, "abs_status"),
+        Some("0"),
+        "absolute host-path write must fail inside full isolation"
     );
 
     let cancel = service

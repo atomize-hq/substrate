@@ -102,8 +102,11 @@ Manual smoke floor:
 Manual closeout smoke:
 
 ```bash
-# Re-run the exact public bootstrap smoke from the June 21, 2026 user transcript
-# and confirm that from_the_world_worker.md is created.
+# Re-run the exact public bootstrap smoke from the June 21, 2026 user transcript.
+# In full-isolation worlds, ask the worker to create the file by relative path from the
+# workspace root, then reconcile pending world changes back to host before checking the file:
+#   substrate workspace sync --direction from_world
+# Confirm that from_the_world_worker.md exists on host after reconciliation.
 ```
 
 ## Project Structure
@@ -221,7 +224,7 @@ This slice is complete only when all of the following are true:
 4. the implementation does **not** copy or project MCP/app-runtime/apps-connectors/hooks/rules/skills/custom-agent/plugin/workspace-overlay state through the direct member bridge,
 5. exact-backend allowlist behavior remains unchanged: no `cli:codex-world` host-read permission means no bridge materialization,
 6. when the bridge cannot derive truthful bootstrap config, the path fails closed with a direct explanation rather than silently letting Codex choose an unsupported default,
-7. targeted tests are green and the rebuilt installed runtime passes the live June 21, 2026 public bootstrap smoke, including creation of `from_the_world_worker.md`,
+7. targeted tests are green and the rebuilt installed runtime passes the live June 21, 2026 public bootstrap smoke, including creation of `from_the_world_worker.md` after the normal world pending-diff reconciliation step when the active policy uses full isolation,
 8. docs/comments/spec text explicitly mark this as a compatibility bridge that later retires behind the gateway-front-door realization.
 
 ## Open Questions
