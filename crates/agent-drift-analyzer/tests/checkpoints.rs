@@ -1932,7 +1932,6 @@ fn checkpoints_reset_parent_visible_comparability_when_delegated_objective_chang
         .session_progress
         .as_ref()
         .expect("session progress");
-
     assert_eq!(
         progress.dimension,
         ProgressDimension::ParentVisibleOrchestration
@@ -2138,6 +2137,73 @@ PATCH","workdir":"/repo"}"#,
     assert_evidence_contains(
         &progress.counter_evidence,
         "delegation visibility limited progress confidence",
+    );
+}
+
+#[test]
+fn checkpoints_keep_opaque_parent_verification_and_vcs_parent_visible() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Coordinate delegated work without overclaiming child progress.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "update_plan",
+            r#"{"plan":[{"step":"Coordinate delegated work","status":"in_progress"}]}"#,
+        ),
+        developer_row(
+            2,
+            "turn-001",
+            "Child session id 019ea666-6666-7666-8666-666666666666 remains in a separate rollout file.",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "spawn_agent",
+            r#"{"goal":"inspect packet R5-4"}"#,
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "wait_agent",
+            "{\"session_id\":\"019ea666-6666-7666-8666-666666666666\"}",
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"git status --short && git diff --stat","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            6,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"set -euo pipefail
+npx gitnexus impact parent_visible_orchestration_progress --repo /repo
+cargo test -p agent-drift-analyzer checkpoints -- --nocapture","workdir":"/repo"}"#,
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+    ));
+    assert_eq!(progress.confidence, Confidence::Low);
+    assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+    assert!(
+        !matches!(progress.status, ProgressStatus::Mixed),
+        "opaque child visibility must stay conservative"
     );
 }
 

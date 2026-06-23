@@ -89,10 +89,14 @@ fn parent_visible_orchestration_progress(
     let orchestration_attempts = parent_visible_orchestration_attempts(analysis);
     let synthesis_attempts = parent_visible_synthesis_attempts(analysis);
     let visible_child_surface = has_visible_child_surface(analysis);
+    let prior_parent_visible = previous_checkpoint_was_comparable_parent_visible(analysis);
+    let comparable_parent_visible_followup =
+        analysis.interval.command_attempts.is_empty() && prior_parent_visible;
     let parent_visible_synthesis_case = visible_child_surface
         && !synthesis_attempts.is_empty()
         && source_edits(analysis).is_empty();
     if !parent_visible_synthesis_case
+        && !comparable_parent_visible_followup
         && ((orchestration_attempts.is_empty() && synthesis_attempts.is_empty())
             || !has_parent_visible_orchestration_evidence(analysis, visibility))
     {
@@ -136,7 +140,6 @@ fn parent_visible_orchestration_progress(
         &orchestration_attempts,
         &synthesis_attempts,
     );
-    let prior_parent_visible = previous_checkpoint_was_comparable_parent_visible(analysis);
     let status = if parent_synthesis {
         ProgressStatus::Mixed
     } else if prior_parent_visible {
@@ -151,7 +154,7 @@ fn parent_visible_orchestration_progress(
         ChildWorkVisibility::None => Confidence::Low,
     };
 
-    Some(if status == ProgressStatus::InsufficientEvidence {
+    let progress = if status == ProgressStatus::InsufficientEvidence {
         insufficient_progress(
             ProgressDimension::ParentVisibleOrchestration,
             Some(limiting_signal),
@@ -165,7 +168,9 @@ fn parent_visible_orchestration_progress(
             vec![limiting_signal],
             child_opaque_limiting_evidence,
         )
-    })
+    };
+
+    Some(progress)
 }
 
 fn assess_troubleshooting_progress(
@@ -1822,7 +1827,7 @@ fn has_parent_visible_orchestration_evidence(
     visibility: ChildWorkVisibility,
 ) -> bool {
     let orchestration_attempts = parent_visible_orchestration_attempts(analysis);
-    !analysis.interval.command_attempts.is_empty()
+    let has_evidence = !analysis.interval.command_attempts.is_empty()
         && !orchestration_attempts.is_empty()
         && source_edits(analysis).is_empty()
         && analysis
@@ -1830,14 +1835,25 @@ fn has_parent_visible_orchestration_evidence(
             .command_attempts
             .iter()
             .all(|attempt| {
-                is_parent_visible_attempt(attempt, Some(visibility))
+                !is_parent_visible_disqualifying_attempt(attempt)
                     || is_parent_visible_artifact_refinement(attempt)
             })
         && match visibility {
             ChildWorkVisibility::Opaque => true,
             ChildWorkVisibility::Partial => true,
             ChildWorkVisibility::None => false,
-        }
+        };
+
+    has_evidence
+}
+
+fn is_parent_visible_disqualifying_attempt(attempt: &CommandAttempt) -> bool {
+    matches!(
+        attempt.role,
+        CommandAttemptRole::Edit
+            | CommandAttemptRole::DependencyMutation
+            | CommandAttemptRole::FormatWrite
+    ) && !is_parent_visible_artifact_refinement(attempt)
 }
 
 fn effective_child_work_visibility(analysis: &CheckpointAnalysis) -> ChildWorkVisibility {
@@ -1861,17 +1877,6 @@ fn has_visible_child_surface(analysis: &CheckpointAnalysis) -> bool {
                 .reason
                 .contains("delegation child rollout surface links child/subagent work")
         })
-}
-
-fn is_parent_visible_attempt(
-    attempt: &CommandAttempt,
-    visibility: Option<ChildWorkVisibility>,
-) -> bool {
-    matches!(
-        attempt.role,
-        CommandAttemptRole::Orchestration | CommandAttemptRole::Read
-    ) || matches!(visibility, Some(ChildWorkVisibility::Partial))
-        && is_parent_visible_synthesis_attempt(attempt)
 }
 
 fn is_parent_visible_synthesis_attempt(attempt: &CommandAttempt) -> bool {
@@ -1955,12 +1960,37 @@ fn has_parent_visible_synthesis(
 
 fn previous_checkpoint_was_comparable_parent_visible(analysis: &CheckpointAnalysis) -> bool {
     let analyses = super::checkpoint_analyses(&analysis.current.window);
-    analyses.iter().rev().nth(1).is_some_and(|previous| {
-        has_parent_visible_orchestration_evidence(
-            previous,
-            effective_child_work_visibility(previous),
-        ) && !parent_visible_comparability_reset(analysis, previous)
-    })
+    analyses
+        .iter()
+        .rev()
+        .skip(1)
+        .take_while(|previous| {
+            !parent_visible_comparability_reset(analysis, previous)
+                || parent_visible_followup_without_new_attempts(analysis, previous)
+        })
+        .find_map(|previous| {
+            if has_parent_visible_orchestration_evidence(
+                previous,
+                effective_child_work_visibility(previous),
+            ) {
+                Some(true)
+            } else if previous.interval.command_attempts.is_empty() {
+                None
+            } else {
+                Some(false)
+            }
+        })
+        .unwrap_or(false)
+}
+
+fn parent_visible_followup_without_new_attempts(
+    newer: &CheckpointAnalysis,
+    older: &CheckpointAnalysis,
+) -> bool {
+    newer.interval.command_attempts.is_empty()
+        && newer.delegation.topology == older.delegation.topology
+        && effective_child_work_visibility(newer) == effective_child_work_visibility(older)
+        && has_visible_child_surface(newer) == has_visible_child_surface(older)
 }
 
 fn parent_visible_comparability_reset(
@@ -2881,6 +2911,58 @@ AssertionError: expected advancing"#,
                 .map(|evidence| evidence.reason.as_str())
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn parent_visible_progress_carries_across_multiple_empty_followups() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Coordinate delegated work without overclaiming child progress.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "spawn_agent",
+                r#"{"goal":"inspect packet R5-4"}"#,
+            ),
+            tool_call_row(
+                2,
+                "turn-001",
+                "wait_agent",
+                "{\"session_id\":\"019ea777-7777-7777-8777-777777777777\"}",
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"git status --short && git diff --stat","workdir":"/repo"}"#,
+            ),
+            prompt_row(
+                4,
+                "turn-002",
+                "/goal The delegated implementation is done; correct the public wording without widening scope.",
+            ),
+            prompt_row(
+                5,
+                "turn-003",
+                "/goal Confirm the same delegated packet status one more time.",
+            ),
+        ]);
+
+        let progress = parent_visible_orchestration_progress(
+            &analysis,
+            SessionArchetypeLabel::Planning,
+        )
+        .expect("parent-visible followup progress");
+
+        assert_eq!(
+            progress.dimension,
+            ProgressDimension::ParentVisibleOrchestration
+        );
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_eq!(progress.confidence, Confidence::Low);
     }
 
     fn last_analysis(rows: Vec<CompactionRow>) -> CheckpointAnalysis {
