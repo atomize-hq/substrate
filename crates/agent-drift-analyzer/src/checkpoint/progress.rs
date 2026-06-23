@@ -1991,6 +1991,8 @@ fn parent_visible_followup_without_new_attempts(
         && newer.delegation.topology == older.delegation.topology
         && effective_child_work_visibility(newer) == effective_child_work_visibility(older)
         && has_visible_child_surface(newer) == has_visible_child_surface(older)
+        && normalize_task_text(&newer.current.task_frame.objective)
+            == normalize_task_text(&older.current.task_frame.objective)
 }
 
 fn parent_visible_comparability_reset(
@@ -2942,12 +2944,12 @@ AssertionError: expected advancing"#,
             prompt_row(
                 4,
                 "turn-002",
-                "/goal The delegated implementation is done; correct the public wording without widening scope.",
+                "/goal Coordinate delegated work without overclaiming child progress.",
             ),
             prompt_row(
                 5,
                 "turn-003",
-                "/goal Confirm the same delegated packet status one more time.",
+                "/goal Coordinate delegated work without overclaiming child progress.",
             ),
         ]);
 

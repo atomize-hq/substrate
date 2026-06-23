@@ -1944,6 +1944,51 @@ fn checkpoints_reset_parent_visible_comparability_when_delegated_objective_chang
 }
 
 #[test]
+fn checkpoints_do_not_carry_parent_visible_status_across_changed_goal_empty_followup() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Coordinate delegated work on checkpoint/progress.rs without overclaiming child progress.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "spawn_agent",
+            "{\"goal\":\"fix crates/agent-drift-analyzer/src/checkpoint/progress.rs\"}",
+        ),
+        developer_row(
+            2,
+            "turn-001",
+            "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "wait_agent",
+            "{\"session_id\":\"019ea333-3333-7333-8333-333333333333\"}",
+        ),
+        prompt_row(
+            4,
+            "turn-002",
+            "/goal Coordinate delegated work on checkpoint/export.rs without overclaiming child progress.",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "/goal Coordinate delegated work on checkpoint/export.rs without overclaiming child progress."
+    );
+    assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+    assert_ne!(progress.status, ProgressStatus::Stalled);
+}
+
+#[test]
 fn checkpoints_keep_parent_visible_synthesis_capped_under_partial_child_visibility() {
     let result = analyze_custom_rows(vec![
         prompt_row(
