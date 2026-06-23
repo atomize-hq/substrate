@@ -23,7 +23,7 @@ verifier-backed troubleshooting signals and the delegated parent-visible stabili
 3. Structured `primary_intent` is explicitly not a live input here. If the fix would require wiring
    structured state into progress selection, stop and route that as a later packet instead of smuggling
    `R5.75-6`-adjacent work into this one.
-4. Adapted exploratory sessions `097d97e914ca220f` and `da59436e63915185` are required smoke gates,
+4. Canonical zero-verifier exploratory witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185` are required smoke gates,
    but adapted committed fixture-family work still belongs to `R5.75-5`. Any committed acceptance proof
    in this packet must stay bounded to existing native/synthetic corpus structure unless a narrowly
    justified packet-local case is required.
@@ -47,7 +47,7 @@ consumer migration.
 
 ```text
 docs lock (this SPEC / PLAN / TASKS)
-  -> characterize the two adapted exploratory smoke witnesses
+  -> characterize the canonical zero-verifier exploratory witness and the mixed delegated/exploratory smoke witness
   -> land analyzer-local anti-flap guard in progress.rs
   -> add fast checkpoint regressions that prove both conservatism and non-regression
   -> optionally add one bounded progress_acceptance proof if needed
@@ -90,14 +90,14 @@ explicitly deferred / out of scope:
 ## Implementation Order
 
 1. Commit the docs triplet so the packet boundary is explicit before any implementation work begins.
-2. Characterize `097d97e914ca220f` and `da59436e63915185`, recording exact packet-local expectations in
+2. Characterize canonical zero-verifier exploratory witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185`, recording exact packet-local expectations in
    the tasks ledger before claiming to know what the fix is.
 3. Land the minimal analyzer-local anti-flap rule in `crates/agent-drift-analyzer/src/checkpoint/progress.rs`.
 4. Add or refresh fast regressions in `crates/agent-drift-analyzer/tests/checkpoints.rs`.
 5. Only if the packet would otherwise lack an honest committed semantic proof, add one bounded
    `progress_acceptance` update that stays inside the existing corpus contract.
 6. Run the automated gate ladder.
-7. Re-run the adapted exploratory smoke sessions and inspect `summary.md` plus `checkpoints.jsonl`.
+7. Re-run the canonical zero-verifier exploratory smoke witness and mixed delegated/exploratory smoke witness, then inspect `summary.md` plus `checkpoints.jsonl`.
 8. Update `docs/specs/r5/R5_75/MAP.md` only after the smoke gate is satisfied and the packet is truly
    promoted.
 

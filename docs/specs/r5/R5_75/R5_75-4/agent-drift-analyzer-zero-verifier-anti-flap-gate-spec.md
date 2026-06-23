@@ -24,7 +24,7 @@ Users of this packet are engineers and operators who read `session_progress`, `s
   - analyzer-local anti-flap gating in `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
   - fast checkpoint regressions for zero-verifier exploratory behavior
   - bounded `progress_acceptance` updates only if needed to encode the packet honestly without starting the adapted fixture-family packet early
-  - manual smoke review of adapted exploratory sessions `097d97e914ca220f` and `da59436e63915185`
+  - manual smoke review of canonical zero-verifier exploratory witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185`
   - preserving the `R5.75-3` delegated parent-visible stability bar while applying the new conservative gate
 - **Out of scope**
   - scorer retuning or `dead_end_thrash` redesign (`R6`)
@@ -153,7 +153,7 @@ crates/agent-drift-analyzer/tests/progress_acceptance.rs
   the adapted fixture-family packet.
 
 target/r5_75-smoke/R5.75-4/<session-id>/
-  Manual smoke outputs for the adapted exploratory sessions used to promote the packet.
+  Manual smoke outputs for canonical zero-verifier exploratory witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185` used to promote the packet.
 ```
 
 ## Code Style

@@ -33,7 +33,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     structured `primary_intent` rule, packet-boundary prohibitions, and packet-prompt exclusion all
     preserved exactly for the pre-implementation pass.
 
-## R5.75-4.1: Characterize The Named Exploratory Adapted Repros
+## R5.75-4.1: Characterize The Canonical Zero-Verifier And Mixed Delegated/Exploratory Adapted Repros
 
 - [ ] Task R5.75-4.1.1: Run the adapted smoke witnesses and record exact packet-local expectations
       before changing code.
@@ -123,7 +123,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-4.6: Adapted Smoke Review
 
-- [ ] Task R5.75-4.6.1: Re-run the two adapted exploratory witnesses and confirm the packet-owned
+- [ ] Task R5.75-4.6.1: Re-run canonical zero-verifier witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185`, then confirm the packet-owned
       conservative bar holds at live smoke.
   - Acceptance:
     - `097d97e914ca220f` stays boring/conservative and does not surface troubleshooting-frontier or
@@ -143,7 +143,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Acceptance: `docs/specs/r5/R5_75/MAP.md` is updated only after Tasks `R5.75-4.1` through
     `R5.75-4.6` are complete and records all of the following honestly:
     - `R5.75-4` is promoted history,
-    - the adapted exploratory smoke witnesses used for promotion,
+    - canonical zero-verifier exploratory witness `097d97e914ca220f` and mixed delegated/exploratory witness `da59436e63915185` used for promotion,
     - the packet-local anti-flap result,
     - any bounded `progress_acceptance` proof that landed, and
     - `R5.75-5` is now the active next seam.
