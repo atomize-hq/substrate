@@ -32,7 +32,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-3.1: Characterize The Named Delegated Repros
 
-- [ ] Task R5.75-3.1.1: Run the named native/adapted delegated smoke sessions and record exact packet
+- [x] Task R5.75-3.1.1: Run the named native/adapted delegated smoke sessions and record exact packet
       expectations before changing code.
   - Acceptance: this ledger records the current/expected lane, progress status, confidence band, and
     limiting/supporting evidence expectations for:
@@ -46,6 +46,57 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
       `019eb917-9531-74e0-897d-ad8d362138ec` as conservative delegated-parent stability witnesses, and
     - `da59436e63915185` as the adapted smoke witness whose anti-flap behavior beyond this parent-visible
       stability bar remains owned by `R5.75-4`.
+  - Observed packet-local expectations from the 2026-06-22 smoke rerun:
+    - `019eb907-95c4-73e1-843e-e337d1e93cb9`
+      - current smoke: all four checkpoints stayed in `planning_convergence`
+        (`stalled` once, then `insufficient_evidence`; confidence `low`) even though the summary records
+        `delegating_parent` / `opaque` delegation markers.
+      - packet-local expectation: this remains a conservative delegated-parent witness, so closeout smoke
+        should move the delegated block into `parent_visible_orchestration` with only `low` confidence and
+        either `insufficient_evidence` or `stalled` status, not a stronger child-progress claim.
+      - supporting evidence to preserve: visible `spawn_agent` / `wait_agent` / `close_agent` markers and
+        the summary's "delegation topology kept orchestration evidence in the visible parent prefix"
+        support.
+      - limiting evidence to preserve: opaque child visibility and repeated "explicit delegation markers
+        lacked child visibility/context evidence across command families: git, sed, rg", which must keep
+        the lane conservative.
+    - `019eb917-9531-74e0-897d-ad8d362138ec`
+      - current smoke: checkpoint 1 stayed `single_agent`, then checkpoints 2-3 became
+        `delegating_parent` / `opaque` but still held `planning_convergence` with `stalled` status
+        (confidence `medium` then `low`).
+      - packet-local expectation: once delegation starts, this remains a conservative delegated-parent
+        witness and should hold a `parent_visible_orchestration` lane at `low` confidence with a
+        `stalled` posture rather than collapsing back to generic planning-only noise.
+      - supporting evidence to preserve: visible `spawn_agent` / `wait_agent` markers on the delegated
+        portion of the session.
+      - limiting evidence to preserve: opaque child visibility plus repeated "explicit delegation markers
+        lacked child visibility/context evidence across command families: npx, sed, git" and the existing
+        "repeated broad planning scan without convergence artifact" counter-evidence.
+    - `019eb970-3543-7ab1-a5d6-2a62c00c7185`
+      - current smoke: checkpoints 2-5 already hold `mixed / parent_visible_orchestration / medium`
+        after an initial `insufficient_evidence / troubleshooting_frontier / low` checkpoint and before a
+        final `insufficient_evidence / planning_convergence / low` cooldown checkpoint.
+      - packet-local expectation: this is the packet's positive-proof case and must keep a stable
+        `parent_visible_orchestration` cluster with `mixed` status and `medium` confidence; it is the
+        default first real-rollout fixture candidate for committed `progress_acceptance`.
+      - supporting evidence to preserve: `delegating_parent` / `partial` delegation, visible
+        `spawn_agent` / `wait_agent` markers, and summary evidence that the parent session linked child
+        rollout surfaces.
+      - limiting evidence to preserve: partial child visibility and the summary's
+        "delegation visibility limited progress confidence" counter-evidence, so the packet does not
+        overclaim direct child execution progress.
+    - `da59436e63915185`
+      - current smoke: the run stayed mostly `insufficient_evidence` across planning/troubleshooting
+        lanes, but checkpoints 25-26 reached `parent_visible_orchestration` (`insufficient_evidence`
+        then `stalled`, confidence `low`) under `delegating_parent` / `opaque`.
+      - packet-local expectation: this adapted witness should hold only a conservative
+        `parent_visible_orchestration` lane with `low` confidence and `insufficient_evidence`-or-`stalled`
+        status; anti-flap tightening beyond that remains explicitly deferred to `R5.75-4`.
+      - supporting evidence to preserve: dense late-session `spawn_agent` / `wait_agent` markers that
+        surface parent-visible delegation.
+      - limiting evidence to preserve: opaque child visibility, repeated lack of child context across
+        `Get-Content`, `Get-ChildItem`, and `.\.venv\Scripts\python`, and the existing prohibition on
+        fabricating positive opaque-child progress.
   - Verify: run the native/adapted smoke commands from the companion spec and inspect
     `summary.md` + the first `checkpoints.jsonl` rows for each session.
   - Files:
