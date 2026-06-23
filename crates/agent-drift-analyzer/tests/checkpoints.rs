@@ -3077,6 +3077,188 @@ fn checkpoints_keep_diffused_probe_failures_on_conservative_planning_lane() {
 }
 
 #[test]
+fn checkpoints_keep_repeated_empty_probe_misses_on_conservative_planning_lane() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot the packet smoke conservatively before deciding whether there is a real bug.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/MAP.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-spec.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 0"),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Keep probing the exploratory smoke evidence before escalating to a real troubleshooting lane.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"rg -n \"⭐|🎉|👋\" D:/Downloads/Shared cab-Flutter/lib/features","workdir":"/repo"}"#,
+        ),
+        tool_output_row(7, "turn-002", "Exit code: 1\nWall time: 0.4 seconds\nOutput:\n"),
+        tool_call_row(
+            8,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"where.exe flutter 2>$null","workdir":"/repo"}"#,
+        ),
+        tool_output_row(9, "turn-002", "Exit code: 1\nWall time: 0.4 seconds\nOutput:\n"),
+        tool_call_row(
+            10,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"$candidates=@('C:/src/flutter/bin/flutter.bat','C:/flutter/bin/flutter.bat'); foreach($p in $candidates){ if(Test-Path -LiteralPath $p){$p} }","workdir":"/repo"}"#,
+        ),
+        tool_output_row(11, "turn-002", "Exit code: 1\nWall time: 0.4 seconds\nOutput:\n"),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+    ));
+    assert!(
+        progress.confidence <= Confidence::Medium,
+        "repeated empty probe misses should stay conservative: {:?}",
+        progress.confidence
+    );
+}
+
+#[test]
+fn checkpoints_keep_exploratory_fetch_failures_on_conservative_planning_lane() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Keep exploring external evidence conservatively before escalating to a real troubleshooting lane.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"python -c \"import importlib.util; print({'imageio': importlib.util.find_spec('imageio') is not None})\"","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0\n{'imageio': True}"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"Get-ChildItem -LiteralPath 'D:/Explainable_VRU_Research_Final' -Recurse -File -Include *.mp4","workdir":"/repo","timeout_ms":30000}"#,
+        ),
+        tool_output_row(
+            4,
+            "turn-001",
+            "Exit code: 124\nWall time: 30 seconds\nOutput:\ncommand timed out after 30029 milliseconds",
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"$url='https://huggingface.co/example.mp4'; Invoke-WebRequest -Uri $url -OutFile out.mp4 -UseBasicParsing -TimeoutSec 20","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            6,
+            "turn-001",
+            "Exit code: 1\nWall time: 1.2 seconds\nOutput:\nInvoke-WebRequest : Entry not found",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+    ));
+    assert!(
+        progress.confidence <= Confidence::Medium,
+        "exploratory fetch failures should stay conservative: {:?}",
+        progress.confidence
+    );
+}
+
+#[test]
+fn checkpoints_keep_failed_read_only_python_probes_on_conservative_planning_lane() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Keep exploring the review evidence conservatively before escalating to a real troubleshooting lane.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"$i=0; Get-Content 'D:/Explainable_VRU_Research_Final/paper_main.tex' | ForEach-Object { $i++; '{0,4}: {1}' -f $i, $_ }","workdir":"D:/Explainable_VRU_Research_Final","timeout_ms":10000}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0\n   1: \\documentclass[conference]{IEEEtran}"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"python -c \"from pathlib import Path; t=Path('D:/Explainable_VRU_Research_Final/paper_main.tex').read_text(encoding='utf-8'); print({'brace_balance': t.count('{')-t.count('}'), 'begin_count': t.count('\\\\begin{'), 'end_count': t.count('\\\\end{')})\"","workdir":"D:/Explainable_VRU_Research_Final","timeout_ms":20000}"#,
+        ),
+        tool_output_row(
+            4,
+            "turn-001",
+            "Exit code: 1\nWall time: 0.6 seconds\nOutput:\nTraceback (most recent call last):\nSyntaxError: unexpected EOF while parsing",
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"python -c \"import ast, pathlib; [ast.parse(pathlib.Path(p).read_text(encoding='utf-8')) for p in ['D:/Explainable_VRU_Research_Final/kitti_full_arf.py','D:/Explainable_VRU_Research_Final/simulation_engine.py']]; print('syntax ok')\"","workdir":"D:/Explainable_VRU_Research_Final","timeout_ms":20000}"#,
+        ),
+        tool_output_row(6, "turn-001", "Exit code: 0\nsyntax ok"),
+        tool_call_row(
+            7,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"Select-String -Path 'D:/Explainable_VRU_Research_Final/*.py','D:/Explainable_VRU_Research_Final/*.tex' -Pattern 'significant|proof|production'","workdir":"D:/Explainable_VRU_Research_Final","timeout_ms":10000}"#,
+        ),
+        tool_output_row(8, "turn-001", "Exit code: 1\nWall time: 0.5 seconds\nOutput:\nINFO: Could not find files for the given pattern(s)."),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+    ));
+    assert!(
+        progress.confidence <= Confidence::Medium,
+        "failed read-only python probes should stay conservative: {:?}",
+        progress.confidence
+    );
+}
+
+#[test]
 fn checkpoints_keep_explicit_non_verifier_failures_on_troubleshooting_lane() {
     let result = analyze_custom_rows(vec![
         prompt_row(
@@ -3128,6 +3310,82 @@ fn checkpoints_keep_explicit_non_verifier_failures_on_troubleshooting_lane() {
         ProgressDimension::TroubleshootingFrontier
     );
     assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+}
+
+#[test]
+fn checkpoints_keep_diffused_explicit_failure_backed_sessions_on_troubleshooting_frontier() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot the packet smoke failure conservatively before planning a fix.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"python scripts/repro_packet_smoke.py","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            2,
+            "turn-001",
+            "Exit code: 1\nerror: packet smoke still fails before the target step",
+        ),
+        prompt_row(
+            3,
+            "turn-002",
+            "/goal Reproduce the same packet smoke failure conservatively before widening scope.",
+        ),
+        tool_call_row(
+            4,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-plan.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(5, "turn-002", "Exit code: 0"),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-tasks.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(7, "turn-002", "Exit code: 0"),
+        tool_call_row(
+            8,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/structured-objective-bug-map.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(9, "turn-002", "Exit code: 0"),
+        tool_call_row(
+            10,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"python scripts/repro_packet_smoke.py","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            11,
+            "turn-002",
+            "Exit code: 1\nerror: packet smoke still fails before the target step",
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(archetype.label, SessionArchetypeLabel::Troubleshooting);
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+    assert!(progress.counter_evidence.is_empty());
 }
 
 #[test]

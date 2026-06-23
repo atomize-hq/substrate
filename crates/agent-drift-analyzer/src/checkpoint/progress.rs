@@ -24,6 +24,8 @@ use super::{
 const MAX_PROGRESS_EVIDENCE_ITEMS: usize = 8;
 const DELEGATION_LIMITING_CONFIDENCE_REASON: &str =
     "delegation visibility limited progress confidence";
+const ZERO_VERIFIER_ANTI_FLAP_REASON: &str =
+    "diffused exploratory activity lacked verifier-backed or explicit failure evidence";
 
 pub(crate) fn build_session_progress(
     analysis: &CheckpointAnalysis,
@@ -59,17 +61,19 @@ pub(crate) fn build_session_progress(
     if session_archetype.label == SessionArchetypeLabel::Troubleshooting
         && progress.dimension == ProgressDimension::TroubleshootingFrontier
         && progress.status == ProgressStatus::InsufficientEvidence
-        && analysis.interval.verification_attempts.is_empty()
+        && verifier_failure_evidence(analysis).is_empty()
         && source_edits(analysis).is_empty()
-        && working_set_is_diffused(analysis)
+        && zero_verifier_exploratory_interval(analysis)
     {
-        let planning_progress =
-            assess_planning_progress(analysis, ProgressDimension::PlanningConvergence);
-        if !matches!(
-            planning_progress.status,
-            ProgressStatus::Advancing | ProgressStatus::Mixed
-        ) {
-            progress = planning_progress;
+        if explicit_failure_evidence(analysis).is_empty() {
+            let planning_progress =
+                assess_planning_progress(analysis, ProgressDimension::PlanningConvergence);
+            if !matches!(
+                planning_progress.status,
+                ProgressStatus::Advancing | ProgressStatus::Mixed
+            ) {
+                progress = annotate_zero_verifier_fallback(analysis, planning_progress);
+            }
         }
     }
 
@@ -88,6 +92,276 @@ fn default_dimension(label: SessionArchetypeLabel) -> ProgressDimension {
             ProgressDimension::VerificationCloseoutNarrowing
         }
     }
+}
+
+fn explicit_failure_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
+    let repeated_failure_row_keys = analysis
+        .repetition
+        .repeated_failure_loops
+        .iter()
+        .flat_map(|failure_loop| failure_loop.evidence.iter())
+        .map(evidence_row_key)
+        .collect::<BTreeSet<_>>();
+    let compact_rows_by_key = analysis
+        .interval
+        .compact_rows
+        .iter()
+        .map(|row| {
+            (
+                (row.source_file.clone(), row.event_index, row.row_ordinal),
+                row,
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    analysis
+        .interval
+        .command_attempts
+        .iter()
+        .filter(|attempt| {
+            attempt.outcome == AttemptOutcome::Failed
+                && !matches!(
+                    attempt.role,
+                    CommandAttemptRole::Read
+                        | CommandAttemptRole::VcsInspection
+                        | CommandAttemptRole::Orchestration
+                )
+        })
+        .flat_map(|attempt| {
+            let repeated = attempt.output_rows.iter().any(|row| {
+                repeated_failure_row_keys.contains(&(
+                    row.source_file.clone(),
+                    row.event_index,
+                    row.row_ordinal,
+                ))
+            });
+            if repeated {
+                if touches_only_unrelated_paths(analysis, attempt)
+                    || attempt_is_nondiagnostic_probe_failure(attempt, &compact_rows_by_key)
+                {
+                    return Vec::new();
+                }
+                return attempt_evidence(
+                    attempt,
+                    "decisive repeated failure evidence kept the interval on the troubleshooting frontier",
+                );
+            }
+            if !touches_only_unrelated_paths(analysis, attempt)
+                && !attempt_is_nondiagnostic_probe_failure(attempt, &compact_rows_by_key)
+            {
+                return attempt_evidence(
+                    attempt,
+                    "explicit failure evidence kept the interval on the troubleshooting frontier",
+                );
+            }
+            Vec::new()
+        })
+        .collect()
+}
+
+fn verifier_failure_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
+    let compact_rows_by_key = analysis
+        .interval
+        .compact_rows
+        .iter()
+        .map(|row| {
+            (
+                (row.source_file.clone(), row.event_index, row.row_ordinal),
+                row,
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    analysis
+        .interval
+        .command_attempts
+        .iter()
+        .filter(|attempt| {
+            matches!(
+                attempt.role,
+                CommandAttemptRole::Compile
+                    | CommandAttemptRole::Test
+                    | CommandAttemptRole::Lint
+                    | CommandAttemptRole::FormatCheck
+                    | CommandAttemptRole::Build
+                    | CommandAttemptRole::Replay
+            )
+        })
+        .flat_map(|attempt| match attempt.outcome {
+            AttemptOutcome::Failed
+                if !attempt_is_nondiagnostic_probe_failure(attempt, &compact_rows_by_key) =>
+            {
+                attempt_evidence(
+                    attempt,
+                    "verification failure evidence kept the interval on the troubleshooting frontier",
+                )
+            }
+            AttemptOutcome::Failed => Vec::new(),
+            AttemptOutcome::Unknown
+                if !attempt_has_output_matching(attempt, &compact_rows_by_key, |text| {
+                    text.contains("aborted by user")
+                }) =>
+            {
+                attempt_evidence(
+                    attempt,
+                    "unresolved verifier outcome kept the interval on the troubleshooting frontier",
+                )
+            }
+            AttemptOutcome::Clean | AttemptOutcome::Unknown => Vec::new(),
+        })
+        .collect()
+}
+
+fn attempt_is_nondiagnostic_probe_failure(
+    attempt: &CommandAttempt,
+    compact_rows_by_key: &BTreeMap<(camino::Utf8PathBuf, usize, usize), &agent_session_compactor::CompactionRow>,
+) -> bool {
+    attempt_has_output_matching(attempt, compact_rows_by_key, |text| {
+        let body = text.split_once("Output:\n").map(|(_, body)| body).unwrap_or(text);
+        let body = body.trim();
+        is_probe_discovery_attempt(attempt)
+            || body.is_empty()
+            || body.contains("Could not find files for the given pattern(s).")
+            || body.contains("command timed out after")
+            || body.contains("Entry not found")
+            || (attempt.raw_command.contains("compileall")
+                && (body.contains("PermissionError") || body.contains("Access is denied")))
+    })
+}
+
+fn is_probe_discovery_attempt(attempt: &CommandAttempt) -> bool {
+    matches!(attempt.role, CommandAttemptRole::Read | CommandAttemptRole::VcsInspection)
+        || matches!(
+            attempt.family.as_str(),
+            "rg"
+                | "grep"
+                | "Select-String"
+                | "where.exe"
+                | "Get-ChildItem"
+                | "Get-Command"
+                | "Test-Path"
+                | "Invoke-WebRequest"
+        )
+        || is_read_only_python_probe(attempt)
+        || (attempt.family == "git" && attempt.raw_command.contains(" status"))
+}
+
+fn is_read_only_python_probe(attempt: &CommandAttempt) -> bool {
+    let family = attempt.family.to_ascii_lowercase();
+    let raw_command = attempt.raw_command.to_ascii_lowercase();
+    if !(family == "python"
+        || family == "python3"
+        || family.ends_with("python.exe")
+        || family.ends_with("/python")
+        || family.ends_with("\\python")
+        || family.ends_with("/python.exe")
+        || family.ends_with("\\python.exe"))
+    {
+        return false;
+    }
+
+    if !(raw_command.contains(" -c ")
+        || raw_command.contains(" -c\"")
+        || raw_command.contains(" -c'")
+        || raw_command.contains("<<'py'")
+        || raw_command.contains("<<\"py\"")
+        || raw_command.contains("<<py"))
+    {
+        return false;
+    }
+
+    let read_only_markers = [
+        ".read_text(",
+        "ast.parse(",
+        "importlib.util.find_spec(",
+        "brace_balance",
+        "begin_count",
+        "end_count",
+    ];
+    let mutating_markers = [
+        ".write_text(",
+        ".write_bytes(",
+        ".mkdir(",
+        "makedirs(",
+        "json.dump(",
+        "to_csv(",
+        "savefig(",
+        "shutil.copy",
+        "shutil.move",
+        "rename(",
+        "unlink(",
+        "rmtree(",
+    ];
+
+    read_only_markers
+        .iter()
+        .any(|marker| raw_command.contains(marker))
+        && !mutating_markers
+            .iter()
+            .any(|marker| raw_command.contains(marker))
+}
+
+fn attempt_has_output_matching(
+    attempt: &CommandAttempt,
+    compact_rows_by_key: &BTreeMap<(camino::Utf8PathBuf, usize, usize), &agent_session_compactor::CompactionRow>,
+    predicate: impl Fn(&str) -> bool,
+) -> bool {
+    attempt.output_rows.iter().any(|row| {
+        compact_rows_by_key
+            .get(&(row.source_file.clone(), row.event_index, row.row_ordinal))
+            .map(|compact_row| predicate(&compact_row.text))
+            .unwrap_or(false)
+    })
+}
+
+fn annotate_zero_verifier_fallback(
+    analysis: &CheckpointAnalysis,
+    mut planning_progress: SessionProgress,
+) -> SessionProgress {
+    let fallback_evidence = merge_evidence(vec![
+        analysis
+            .interval
+            .command_attempts
+            .iter()
+            .flat_map(|attempt| attempt_evidence(attempt, ZERO_VERIFIER_ANTI_FLAP_REASON))
+            .collect(),
+        task_frame_evidence(analysis, ZERO_VERIFIER_ANTI_FLAP_REASON),
+        previous_task_frame_evidence(analysis, ZERO_VERIFIER_ANTI_FLAP_REASON),
+    ]);
+    if fallback_evidence.is_empty() {
+        return planning_progress;
+    }
+
+    if planning_progress.status == ProgressStatus::InsufficientEvidence
+        && planning_progress.signals.is_empty()
+        && planning_progress.counter_evidence.is_empty()
+    {
+        if !working_set_is_diffused(analysis) {
+            return insufficient_progress(
+                planning_progress.dimension,
+                None,
+                Some(fallback_evidence),
+            );
+        }
+        return insufficient_progress(
+            planning_progress.dimension,
+            Some(progress_signal(
+                ProgressSignalCode::WorkingSetDiffused,
+                SignalPolarity::Limiting,
+                SignalStrength::Moderate,
+                "diffused exploratory activity stayed conservative because verifier-backed or explicit failure evidence was absent",
+                None,
+                Some(set_preview(&working_set(
+                    &analysis.current.task_frame.working_set_paths,
+                ))),
+                fallback_evidence.clone(),
+            )),
+            Some(fallback_evidence),
+        );
+    }
+
+    planning_progress.counter_evidence.extend(fallback_evidence);
+    planning_progress
 }
 
 fn parent_visible_orchestration_progress(
@@ -2167,6 +2441,27 @@ fn working_set_is_diffused(analysis: &CheckpointAnalysis) -> bool {
     working_set_diffused(&previous, &current)
 }
 
+fn zero_verifier_exploratory_interval(analysis: &CheckpointAnalysis) -> bool {
+    if working_set_is_diffused(analysis) {
+        return true;
+    }
+
+    let current = working_set(&analysis.current.task_frame.working_set_paths);
+    if current.len() < 8 {
+        return false;
+    }
+
+    analysis
+        .interval
+        .command_attempts
+        .iter()
+        .filter(|attempt| {
+            attempt.role == CommandAttemptRole::Read || is_probe_discovery_attempt(attempt)
+        })
+        .count()
+        >= 2
+}
+
 fn touches_only_unrelated_paths(analysis: &CheckpointAnalysis, attempt: &CommandAttempt) -> bool {
     let current_working_set = working_set(&analysis.current.task_frame.working_set_paths);
     !attempt.paths.iter().any(|path| {
@@ -2791,6 +3086,282 @@ mod tests {
         assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
         assert_has_signal(&progress, ProgressSignalCode::FailureCountReduced);
         assert_has_signal(&progress, ProgressSignalCode::FailingScopeEdited);
+    }
+
+    #[test]
+    fn annotate_zero_verifier_fallback_exposes_counter_evidence_for_empty_conservative_path() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot the packet smoke conservatively before planning a fix.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/MAP.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(2, "turn-001", "Exit code: 0"),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-spec.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(4, "turn-001", "Exit code: 0"),
+            prompt_row(
+                5,
+                "turn-002",
+                "/goal Troubleshoot the same packet smoke conservatively while checking broader exploratory evidence before planning a fix.",
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"where.exe flutter 2>$null","workdir":"/repo"}"#,
+            ),
+            tool_output_row(7, "turn-002", "Exit code: 1"),
+            tool_call_row(
+                8,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-plan.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(9, "turn-002", "Exit code: 0"),
+            tool_call_row(
+                10,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-tasks.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(11, "turn-002", "Exit code: 0"),
+            tool_call_row(
+                12,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"& 'C:/tools/flutter/bin/flutter.bat' analyze","workdir":"D:/Downloads/Shared cab-Flutter","timeout_ms":120000}"#,
+            ),
+            tool_output_row(13, "turn-002", "Wall time: 9134.2 seconds\naborted by user"),
+        ]);
+
+        let progress = annotate_zero_verifier_fallback(
+            &analysis,
+            insufficient_progress(ProgressDimension::PlanningConvergence, None, None),
+        );
+
+        assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+        assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+        assert_has_signal(&progress, ProgressSignalCode::WorkingSetDiffused);
+        assert!(
+            progress
+                .counter_evidence
+                .iter()
+                .any(|evidence| evidence.reason == ZERO_VERIFIER_ANTI_FLAP_REASON),
+            "expected zero-verifier anti-flap counter evidence, got {:?}",
+            progress
+                .counter_evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn build_session_progress_falls_back_when_only_clean_verifiers_back_diffused_exploration() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot the exploratory packet evidence conservatively before deciding whether there is a real bug.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/MAP.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(2, "turn-001", "Exit code: 0"),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-spec.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(4, "turn-001", "Exit code: 0"),
+            prompt_row(
+                5,
+                "turn-002",
+                "/goal Keep checking broader exploratory evidence before escalating to a real troubleshooting lane.",
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"python -c \"import ast, pathlib; [ast.parse(pathlib.Path(p).read_text(encoding='utf-8')) for p in ['D:/Explainable_VRU_Research_Final/kitti_full_arf.py','D:/Explainable_VRU_Research_Final/simulation_engine.py']]; print('syntax ok')\"","workdir":"D:/Explainable_VRU_Research_Final","timeout_ms":20000}"#,
+            ),
+            tool_output_row(7, "turn-002", "Exit code: 0\nsyntax ok"),
+            tool_call_row(
+                8,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"python -c \"from pathlib import Path; t=Path('D:/Explainable_VRU_Research_Final/paper_main.tex').read_text(encoding='utf-8'); print({'brace_balance': t.count('{')-t.count('}')})\"","workdir":"D:/Explainable_VRU_Research_Final","timeout_ms":20000}"#,
+            ),
+            tool_output_row(9, "turn-002", "Exit code: 0\n{'brace_balance': 0}"),
+        ]);
+
+        let progress = build_session_progress(
+            &analysis,
+            &SessionArchetype {
+                label: SessionArchetypeLabel::Troubleshooting,
+                confidence: Confidence::High,
+                supporting_evidence: Vec::new(),
+                counter_evidence: Vec::new(),
+            },
+        );
+
+        assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+        assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+        assert_has_signal(&progress, ProgressSignalCode::WorkingSetDiffused);
+        assert!(
+            progress
+                .counter_evidence
+                .iter()
+                .any(|evidence| evidence.reason == ZERO_VERIFIER_ANTI_FLAP_REASON),
+            "expected clean verifier probes to keep the conservative fallback evidence, got {:?}",
+            progress
+                .counter_evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn build_session_progress_falls_back_when_only_aborted_verifier_probe_is_present() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot the packet smoke conservatively before planning a fix.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/MAP.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(2, "turn-001", "Exit code: 0"),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-spec.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(4, "turn-001", "Exit code: 0"),
+            prompt_row(
+                5,
+                "turn-002",
+                "/goal Troubleshoot the same packet smoke conservatively while checking broader exploratory evidence before planning a fix.",
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"where.exe flutter 2>$null","workdir":"/repo"}"#,
+            ),
+            tool_output_row(7, "turn-002", "Exit code: 1"),
+            tool_call_row(
+                8,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-plan.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(9, "turn-002", "Exit code: 0"),
+            tool_call_row(
+                10,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-tasks.md","workdir":"/repo"}"#,
+            ),
+            tool_output_row(11, "turn-002", "Exit code: 0"),
+            tool_call_row(
+                12,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"& 'C:/tools/flutter/bin/flutter.bat' analyze","workdir":"D:/Downloads/Shared cab-Flutter","timeout_ms":120000}"#,
+            ),
+            tool_output_row(13, "turn-002", "Wall time: 9134.2 seconds\naborted by user"),
+        ]);
+
+        let progress = build_session_progress(
+            &analysis,
+            &SessionArchetype {
+                label: SessionArchetypeLabel::Troubleshooting,
+                confidence: Confidence::High,
+                supporting_evidence: Vec::new(),
+                counter_evidence: Vec::new(),
+            },
+        );
+
+        assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+        assert_eq!(progress.status, ProgressStatus::InsufficientEvidence);
+        assert_has_signal(&progress, ProgressSignalCode::WorkingSetDiffused);
+    }
+
+    #[test]
+    fn build_session_progress_keeps_failed_verifier_evidence_on_troubleshooting_frontier() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot the packet smoke failure conservatively before planning a fix.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+            ),
+            prompt_row(
+                3,
+                "turn-002",
+                "/goal Re-run the same troubleshooting verifier before widening scope.",
+            ),
+            tool_call_row(
+                4,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                5,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+            ),
+        ]);
+
+        let progress = build_session_progress(
+            &analysis,
+            &SessionArchetype {
+                label: SessionArchetypeLabel::Troubleshooting,
+                confidence: Confidence::High,
+                supporting_evidence: Vec::new(),
+                counter_evidence: Vec::new(),
+            },
+        );
+
+        assert_eq!(
+            progress.dimension,
+            ProgressDimension::TroubleshootingFrontier
+        );
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
     }
 
     #[test]
