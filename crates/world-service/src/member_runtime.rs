@@ -63,12 +63,16 @@ struct ActiveMemberRuntime {
     env: BTreeMap<String, String>,
     binding: SharedWorldBindingSnapshot,
     protocol: serde_json::Value,
-    bootstrap_span_id: String,
-    bootstrap_cancel: AgentWrapperCancelHandle,
-    bootstrap_last_signal: Mutex<Option<String>>,
+    bootstrap: Mutex<Option<ActiveBootstrapRuntime>>,
     active_turn_span_id: Mutex<Option<String>>,
     uaa_session_id: Mutex<Option<String>>,
-    launcher_dir: Option<std::path::PathBuf>,
+}
+
+struct ActiveBootstrapRuntime {
+    span_id: String,
+    cancel: Option<AgentWrapperCancelHandle>,
+    last_signal: Option<String>,
+    launcher_dir: std::path::PathBuf,
 }
 
 struct ActiveSubmittedTurn {
@@ -199,18 +203,20 @@ impl MemberRuntimeManager {
             env: runtime_env,
             binding: binding.clone(),
             protocol: json!(dispatch.protocol),
-            bootstrap_span_id: span_id.clone(),
-            bootstrap_cancel: cancel,
-            bootstrap_last_signal: Mutex::new(None),
+            bootstrap: Mutex::new(Some(ActiveBootstrapRuntime {
+                span_id: span_id.clone(),
+                cancel: Some(cancel),
+                last_signal: None,
+                launcher_dir: prepared_launcher_dir
+                    .take()
+                    .expect("prepared launcher dir must exist while bootstrap is active"),
+            })),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
-            launcher_dir: prepared_launcher_dir.take(),
         });
         if let Err(err) = self.register_member(active.clone()) {
-            active.bootstrap_cancel.cancel();
-            if let Some(launcher_dir) = active.launcher_dir.as_ref() {
-                let _ = fs::remove_dir_all(launcher_dir);
-            }
+            active.cancel_bootstrap();
+            active.close_bootstrap();
             return Err(err);
         }
 
@@ -262,6 +268,11 @@ impl MemberRuntimeManager {
                     manager.remember_uaa_session_id(&participant_id, session_id);
                 }
             }
+            let preserve_retained_member = completion
+                .as_ref()
+                .ok()
+                .is_some_and(|completion| exit_code_from_status(&completion.status) == 0)
+                && active.uaa_session_id().is_some();
             for frame in frames_from_completion(
                 &context,
                 &binding,
@@ -275,7 +286,7 @@ impl MemberRuntimeManager {
                 let _ = tx.send(frame);
             }
 
-            manager.unregister_member(&participant_id);
+            manager.finish_bootstrap(&participant_id, preserve_retained_member);
         });
 
         stream_response(rx)
@@ -382,6 +393,7 @@ impl MemberRuntimeManager {
 
     pub(crate) fn cancel(&self, span_id: &str, sig: &str) -> Result<bool> {
         validate_cancel_signal(sig)?;
+        let normalized_signal = sig.trim().to_ascii_uppercase();
 
         let submitted_turn = self
             .active_turns_by_span_id
@@ -391,29 +403,26 @@ impl MemberRuntimeManager {
             .cloned();
         if let Some(submitted_turn) = submitted_turn {
             if let Ok(mut guard) = submitted_turn.last_signal.lock() {
-                *guard = Some(sig.trim().to_ascii_uppercase());
+                *guard = Some(normalized_signal.clone());
             }
             submitted_turn.cancel.cancel();
             return Ok(true);
         }
 
-        let bootstrap = self
+        let active_members = self
             .active_members
             .read()
             .expect("member runtime registry lock poisoned")
             .by_participant_id
             .values()
-            .find(|active| active.bootstrap_span_id == span_id)
-            .cloned();
-        let Some(bootstrap) = bootstrap else {
-            return Ok(false);
-        };
-
-        if let Ok(mut guard) = bootstrap.bootstrap_last_signal.lock() {
-            *guard = Some(sig.trim().to_ascii_uppercase());
+            .cloned()
+            .collect::<Vec<_>>();
+        for active in active_members {
+            if active.cancel_bootstrap_if_span_matches(span_id, normalized_signal.as_str()) {
+                return Ok(true);
+            }
         }
-        bootstrap.bootstrap_cancel.cancel();
-        Ok(true)
+        Ok(false)
     }
 
     fn register_member(&self, active: Arc<ActiveMemberRuntime>) -> Result<()> {
@@ -449,10 +458,24 @@ impl MemberRuntimeManager {
             if let Some(active) = guard.by_participant_id.remove(participant_id) {
                 let retained_key = RetainedMemberKey::from_active(active.as_ref());
                 guard.by_retained_key.remove(&retained_key);
-                if let Some(launcher_dir) = active.launcher_dir.as_ref() {
-                    let _ = fs::remove_dir_all(launcher_dir);
-                }
+                active.close_bootstrap();
             }
+        }
+    }
+
+    fn finish_bootstrap(&self, participant_id: &str, preserve_retained_member: bool) {
+        let active = self
+            .active_members
+            .read()
+            .ok()
+            .and_then(|guard| guard.by_participant_id.get(participant_id).cloned());
+        let Some(active) = active else {
+            return;
+        };
+
+        active.close_bootstrap();
+        if !preserve_retained_member {
+            self.unregister_member(participant_id);
         }
     }
 
@@ -1324,10 +1347,46 @@ impl ActiveMemberRuntime {
     }
 
     fn bootstrap_last_signal(&self) -> Option<String> {
-        self.bootstrap_last_signal
+        self.bootstrap
             .lock()
             .ok()
-            .and_then(|guard| guard.clone())
+            .and_then(|guard| guard.as_ref().and_then(|bootstrap| bootstrap.last_signal.clone()))
+    }
+
+    fn cancel_bootstrap(&self) {
+        if let Ok(guard) = self.bootstrap.lock() {
+            if let Some(bootstrap) = guard.as_ref() {
+                if let Some(cancel) = bootstrap.cancel.as_ref() {
+                    cancel.cancel();
+                }
+            }
+        }
+    }
+
+    fn cancel_bootstrap_if_span_matches(&self, span_id: &str, signal: &str) -> bool {
+        let Ok(mut guard) = self.bootstrap.lock() else {
+            return false;
+        };
+        let Some(bootstrap) = guard.as_mut() else {
+            return false;
+        };
+        if bootstrap.span_id != span_id {
+            return false;
+        }
+
+        bootstrap.last_signal = Some(signal.to_string());
+        if let Some(cancel) = bootstrap.cancel.as_ref() {
+            cancel.cancel();
+        }
+        true
+    }
+
+    fn close_bootstrap(&self) {
+        if let Ok(mut guard) = self.bootstrap.lock() {
+            if let Some(bootstrap) = guard.take() {
+                let _ = fs::remove_dir_all(&bootstrap.launcher_dir);
+            }
+        }
     }
 
     fn submit_context(&self, run_id: String) -> MemberStreamContext {
@@ -1433,6 +1492,45 @@ mod tests {
             world_id: "world_123",
             world_generation: 7,
         }
+    }
+
+    fn sample_active_member_runtime(
+        temp_dir: &tempfile::TempDir,
+        bootstrap_span_id: &str,
+    ) -> Arc<ActiveMemberRuntime> {
+        let workspace_dir = temp_dir.path().join("workspace");
+        let process_working_dir = temp_dir.path().join("process");
+        let binary_path = temp_dir.path().join("member-runtime");
+        let launcher_dir = temp_dir.path().join("launcher");
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::create_dir_all(&process_working_dir).expect("create process dir");
+        fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+        fs::write(&binary_path, "#!/bin/sh\nexit 0\n").expect("write binary");
+
+        Arc::new(ActiveMemberRuntime {
+            agent_id: "codex_world".to_string(),
+            participant_id: "ash_member".to_string(),
+            orchestration_session_id: "orch_123".to_string(),
+            orchestrator_participant_id: "ash_orchestrator".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            backend_kind: MemberRuntimeBackendKindV1::Codex,
+            binary_path,
+            workspace_dir,
+            process_working_dir,
+            env: BTreeMap::new(),
+            binding: sample_world_binding(),
+            protocol: json!("substrate.agent.session"),
+            bootstrap: Mutex::new(Some(ActiveBootstrapRuntime {
+                span_id: bootstrap_span_id.to_string(),
+                cancel: None,
+                last_signal: None,
+                launcher_dir,
+            })),
+            active_turn_span_id: Mutex::new(None),
+            uaa_session_id: Mutex::new(None),
+        })
     }
 
     #[test]
@@ -2333,6 +2431,78 @@ base_url = "https://gateway.example.invalid/v1"
             err.to_string()
                 .contains("expected ash_member_existing, got ash_member_other"),
             "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn finish_bootstrap_preserves_retained_slot_when_session_handle_exists() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let active = sample_active_member_runtime(&temp_dir, "spn_bootstrap");
+        active.remember_uaa_session_id("uaa_session".to_string());
+        let manager = MemberRuntimeManager::new();
+        manager
+            .register_member(active.clone())
+            .expect("register retained member");
+
+        manager.finish_bootstrap(&active.participant_id, true);
+
+        let guard = manager
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        assert!(
+            guard.by_participant_id.contains_key(&active.participant_id),
+            "retained member should survive clean bootstrap exit once resumable identity exists"
+        );
+        assert_eq!(
+            guard.by_retained_key.get(&RetainedMemberKey::from_active(active.as_ref())),
+            Some(&active.participant_id),
+            "retained slot ownership should stay exact after bootstrap cleanup"
+        );
+        drop(guard);
+        assert!(
+            active.bootstrap.lock().expect("bootstrap lock").is_none(),
+            "preserved retained member should infer parked truth by clearing the active bootstrap slot"
+        );
+        assert!(
+            !temp_dir.path().join("launcher").exists(),
+            "bootstrap cleanup should still remove launcher artifacts"
+        );
+    }
+
+    #[test]
+    fn finish_bootstrap_unregisters_member_without_resumable_identity() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let active = sample_active_member_runtime(&temp_dir, "spn_bootstrap");
+        let manager = MemberRuntimeManager::new();
+        manager
+            .register_member(active.clone())
+            .expect("register retained member");
+
+        manager.finish_bootstrap(&active.participant_id, false);
+
+        let guard = manager
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        assert!(
+            !guard.by_participant_id.contains_key(&active.participant_id),
+            "bootstrap without resumable identity must still close out retained continuity"
+        );
+        assert!(
+            !guard
+                .by_retained_key
+                .contains_key(&RetainedMemberKey::from_active(active.as_ref())),
+            "retained slot must be removed when continuity was never surfaced"
+        );
+        drop(guard);
+        assert!(
+            active.bootstrap.lock().expect("bootstrap lock").is_none(),
+            "terminal bootstrap cleanup should also clear the active bootstrap slot"
+        );
+        assert!(
+            !temp_dir.path().join("launcher").exists(),
+            "terminal bootstrap cleanup should still remove launcher artifacts"
         );
     }
 }
