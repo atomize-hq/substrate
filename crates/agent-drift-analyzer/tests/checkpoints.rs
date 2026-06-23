@@ -3010,6 +3010,73 @@ fn checkpoints_keep_zero_verifier_exploration_on_conservative_planning_lane() {
 }
 
 #[test]
+fn checkpoints_keep_diffused_probe_failures_on_conservative_planning_lane() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Troubleshoot the packet smoke conservatively before deciding whether there is a real bug.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/MAP.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,120p' docs/specs/r5/R5_75/R5_75-4/agent-drift-analyzer-zero-verifier-anti-flap-gate-spec.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 0"),
+        prompt_row(
+            5,
+            "turn-002",
+            "/goal Keep probing the exploratory smoke evidence before escalating to a real troubleshooting lane.",
+        ),
+        tool_call_row(
+            6,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"where.exe flutter 2>$null","workdir":"/repo"}"#,
+        ),
+        tool_output_row(7, "turn-002", "Exit code: 1"),
+        tool_call_row(
+            8,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"Get-ChildItem -Path 'D:/' -Recurse -Filter flutter.bat -ErrorAction SilentlyContinue | Select-Object -First 20 -ExpandProperty FullName","workdir":"/repo","timeout_ms":120000}"#,
+        ),
+        tool_output_row(9, "turn-002", "Exit code: 0"),
+        tool_call_row(
+            10,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"& 'C:/tools/flutter/bin/flutter.bat' analyze","workdir":"D:/Downloads/Shared cab-Flutter","timeout_ms":120000}"#,
+        ),
+        tool_output_row(11, "turn-002", "Wall time: 9134.2 seconds\naborted by user"),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+    ));
+    assert!(
+        progress.confidence <= Confidence::Medium,
+        "diffused exploratory probe failures should stay conservative: {:?}",
+        progress.confidence
+    );
+}
+
+#[test]
 fn checkpoints_keep_explicit_non_verifier_failures_on_troubleshooting_lane() {
     let result = analyze_custom_rows(vec![
         prompt_row(

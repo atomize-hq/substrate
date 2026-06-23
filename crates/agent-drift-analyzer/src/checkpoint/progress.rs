@@ -60,9 +60,8 @@ pub(crate) fn build_session_progress(
         && progress.dimension == ProgressDimension::TroubleshootingFrontier
         && progress.status == ProgressStatus::InsufficientEvidence
         && analysis.interval.verification_attempts.is_empty()
-        && !has_verification_like_command_attempts(analysis)
         && source_edits(analysis).is_empty()
-        && !has_explicit_failure_evidence(analysis)
+        && working_set_is_diffused(analysis)
     {
         let planning_progress =
             assess_planning_progress(analysis, ProgressDimension::PlanningConvergence);
@@ -89,27 +88,6 @@ fn default_dimension(label: SessionArchetypeLabel) -> ProgressDimension {
             ProgressDimension::VerificationCloseoutNarrowing
         }
     }
-}
-
-fn has_verification_like_command_attempts(analysis: &CheckpointAnalysis) -> bool {
-    analysis.interval.command_attempts.iter().any(|attempt| {
-        matches!(
-            attempt.role,
-            CommandAttemptRole::Compile
-                | CommandAttemptRole::Test
-                | CommandAttemptRole::Lint
-                | CommandAttemptRole::FormatCheck
-                | CommandAttemptRole::Build
-                | CommandAttemptRole::Replay
-        )
-    })
-}
-
-fn has_explicit_failure_evidence(analysis: &CheckpointAnalysis) -> bool {
-    analysis.interval.command_attempts.iter().any(|attempt| {
-        attempt.outcome == AttemptOutcome::Failed
-            && !matches!(attempt.role, CommandAttemptRole::Read)
-    })
 }
 
 fn parent_visible_orchestration_progress(
