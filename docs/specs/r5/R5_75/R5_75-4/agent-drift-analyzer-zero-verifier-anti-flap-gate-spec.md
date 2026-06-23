@@ -220,8 +220,9 @@ Conventions to preserve:
    with low confidence unless decisive verifier/failure/edit signals appear.
 2. `097d97e914ca220f` no longer surfaces troubleshooting-frontier or equivalent strong failure posture
    unless the smoke evidence shows real verifier/failure signals.
-3. `da59436e63915185` preserves its packet-owned conservative delegated-parent behavior from `R5.75-3`
-   while no longer flapping into unrelated stronger failure posture elsewhere in the run.
+3. `da59436e63915185` preserves the `R5.75-3`-owned conservative delegated
+   `parent_visible_orchestration` behavior where delegation evidence justifies it, and `R5.75-4`
+   only preserves that bar while eliminating unrelated stronger failure posture elsewhere in the run.
 4. Fast checkpoint regressions encode both sides of the boundary: conservative exploratory sessions stay
    conservative, while real verifier-backed troubleshooting still advances.
 5. Any `progress_acceptance` update stays bounded and does not prematurely turn `R5.75-4` into the

@@ -700,9 +700,9 @@ Run adapted smoke on:
 
 Expected smoke outcome:
 
-- zero-verifier exploratory sessions stay boring and conservative
-- no troubleshooting-frontier or equivalent strong failure posture appears unless verifier/failure evidence truly exists
-- low-confidence planning / insufficient-evidence remains the default outcome when the session mostly reads, browses, or emits tool output without proof work
+- `097d97e914ca220f` stays the canonical zero-verifier exploratory witness: boring and conservative, with no troubleshooting-frontier or equivalent strong failure posture unless verifier/failure evidence truly exists
+- `da59436e63915185` is treated explicitly as the mixed delegated/exploratory witness: it must preserve the conservative delegated `parent_visible_orchestration` bar from `R5.75-3` where delegation evidence exists, while losing unrelated stronger overclaim elsewhere in the run
+- low-confidence planning / insufficient-evidence remains the default outcome when a session mostly reads, browses, or emits tool output without proof work outside any separately justified delegated parent-visible block
 
 ### Promotion Gate
 
