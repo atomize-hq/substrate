@@ -168,6 +168,7 @@ running -> invalidated
    - the worker is intentionally paused by control directive or runtime policy and is not currently executing.
 5. `parked`
    - the worker remains valid and resumable, but no active turn is executing and it is waiting for later continuation.
+   - this includes clean bootstrap or turn exit after authoritative retained identity plus resumable session identity (for example surfaced `uaa_session_id`) have already been surfaced.
 6. `completed`
    - the worker finished its retained mission phase successfully and is terminally done.
 7. `failed`
@@ -211,13 +212,30 @@ parked -> stopped
 parked -> invalidated
 ```
 
+### Bootstrap exit handoff
+
+Bootstrap process exit is not by itself a retained-lifecycle closeout.
+
+When bootstrap has already surfaced:
+
+1. authoritative retained worker identity, and
+2. resumable session identity (for example surfaced `uaa_session_id`),
+
+then clean bootstrap exit means:
+
+1. the retained worker transitions `running -> parked`,
+2. later `continue` against that parked retained worker remains part of the contract,
+3. runtime realization must not equate bootstrap exec exit with retained-worker deletion.
+
 ### Retained invariants
 
 1. a stable `participant_id` exists,
-2. later `continue` targeting is part of the contract,
-3. worker events may create durable host attention obligations,
-4. exact backend, world binding, and lineage remain authoritative routing inputs,
-5. the worker may request fork or recommend fork if policy and launch-time permissions allow it.
+2. if authoritative retained identity plus resumable session identity have been surfaced, retained continuity is owned by that surfaced identity tuple rather than by continued liveness of the bootstrap process alone,
+3. later `continue` targeting, including against parked retained workers after clean bootstrap exit, is part of the contract,
+4. worker events may create durable host attention obligations,
+5. exact backend, world binding, and lineage remain authoritative routing inputs,
+6. runtime realization must not delete or unregister a retained worker merely because bootstrap exec exited cleanly,
+7. the worker may request fork or recommend fork if policy and launch-time permissions allow it.
 
 ## Worker State Versus Host Posture
 
@@ -277,7 +295,8 @@ Means:
 1. the worker is valid and resumable,
 2. no unresolved blocking host response is required,
 3. no active turn is executing,
-4. later explicit continuation is allowed.
+4. later explicit continuation is allowed,
+5. clean bootstrap exit after surfaced retained identity plus resumable session identity is a handoff into this state rather than retained-worker destruction.
 
 ### `paused`
 
@@ -306,7 +325,8 @@ That means:
 
 1. partial results do not imply lifecycle completion,
 2. only explicit terminal lifecycle transitions close the retained worker,
-3. a retained worker may produce multiple result-bearing messages before entering `completed` or `stopped`.
+3. a retained worker may produce multiple result-bearing messages before entering `completed` or `stopped`,
+4. bootstrap or other turn-level process exit is not itself retained-worker closeout once authoritative retained identity plus resumable session identity have been surfaced.
 
 ## Cancellation and Stopping
 
