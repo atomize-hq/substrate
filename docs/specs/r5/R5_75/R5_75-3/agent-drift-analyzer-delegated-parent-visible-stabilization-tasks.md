@@ -1,7 +1,9 @@
 # Tasks: Agent Drift Analyzer Delegated Parent-Visible Stabilization (R5.75-3)
 
 Status: draft task ledger created on 2026-06-22 after `R5.75-2` was promoted and `R5.75-3` became the
-active seam in `docs/specs/r5/R5_75/MAP.md`.
+active seam in `docs/specs/r5/R5_75/MAP.md`; updated on 2026-06-23 after the planning-artifact
+stabilization and fast delegated-parent regression work landed review-clean while the later `R5.75-3`
+packets remained open.
 
 Keep each task narrow, reviewable, and scoped to delegated parent-visible stabilization. Do not widen
 into generalized fingerprint redesign, adapted committed fixture-family work, or structured-state
@@ -12,7 +14,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-3.0: Docs Lock
 
-- [ ] Task R5.75-3.0.1: Commit the SPEC/PLAN/TASKS family for `R5.75-3`.
+- [x] Task R5.75-3.0.1: Commit the SPEC/PLAN/TASKS family for `R5.75-3`.
   - Acceptance: `docs/specs/r5/R5_75/R5_75-3/` contains the spec, plan, and this tasks ledger, and
     they record:
     - the packet's analyzer-local scope,
@@ -29,6 +31,8 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-spec.md`
     - `docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-plan.md`
     - `docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-tasks.md`
+  - Closeout note (2026-06-22): docs triplet landed before code changes and remains the live packet
+    authority for `R5.75-3`.
 
 ## R5.75-3.1: Characterize The Named Delegated Repros
 
@@ -107,7 +111,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-3.2: Stop Dropping Parent-Visible Progress On Planning Artifact Edits
 
-- [ ] Task R5.75-3.2.1: Stabilize the parent-visible path when the parent edits plan/spec/handoff
+- [x] Task R5.75-3.2.1: Stabilize the parent-visible path when the parent edits plan/spec/handoff
       artifacts.
   - Acceptance: `crates/agent-drift-analyzer/src/checkpoint/progress.rs` no longer returns to generic
     planning-only handling solely because `plan_artifact_edits(analysis)` is non-empty when delegation
@@ -119,10 +123,14 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-23): landed through the packet-scoped implementation/review/fix loop in
+    `e2db37c8f`, `5bcb8fb52`, and `0a5301b3b`. The required checkpoint wall is green, the named native
+    and adapted delegated smoke reruns were re-run under `target/r5_75-smoke/R5.75-3/`, and the final
+    fresh review returned APPROVE for the current committed state.
 
 ## R5.75-3.3: Fast Delegated-Parent Regressions
 
-- [ ] Task R5.75-3.3.1: Add/refresh fast checkpoint regressions for delegated parent-visible stability.
+- [x] Task R5.75-3.3.1: Add/refresh fast checkpoint regressions for delegated parent-visible stability.
   - Acceptance: `crates/agent-drift-analyzer/tests/checkpoints.rs` proves all of the following:
     - planning/spec/handoff edits do not erase the delegated parent-visible lane when delegation
       evidence is otherwise strong,
@@ -135,6 +143,10 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
+  - Closeout note (2026-06-23): the fast delegated-parent regression set now covers the landed
+    planning-artifact stabilization, conservative opaque-child handling, empty-followup parent-visible
+    carry when the delegated goal is unchanged, and the changed-goal reset guard that prevents stale
+    parent-visible carry across a new delegated objective.
 
 ## R5.75-3.4: Promote The First Native Delegated Real-Rollout Fixture
 

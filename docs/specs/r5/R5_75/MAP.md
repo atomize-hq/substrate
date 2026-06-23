@@ -21,6 +21,11 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 - `R5.75-2` is landed history as of 2026-06-22 (`crates/agent-drift-analyzer/src/input.rs`,
   sparse readable session fail-open). The current active seam is `R5.75-3` (delegated
   parent-visible stabilization, `crates/agent-drift-analyzer/src/checkpoint/progress.rs`).
+- **R5.75-3 update (2026-06-23):** the planning-artifact stabilization packet work and the fast
+  delegated-parent regressions are now landed/review-clean in the active `R5.75-3` family
+  (`e2db37c8f`, `5bcb8fb52`, `0a5301b3b` in `progress.rs` + `tests/checkpoints.rs`), but
+  `R5.75-3` remains the active family until the later `3.4+` deliverables and promotion gate close
+  out.
 - **Family tail update (2026-06-21):** because `R5.75-1` expanded into the full additive
   structured-objective stack, the deferred Issue 7 follow-on was scoped into a bounded final packet
   `R5.75-6` (make the effective checkpoint objective faithful to the structured goal anchor) and gated

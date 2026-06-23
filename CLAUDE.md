@@ -1376,7 +1376,7 @@ Do not attempt to edit, create, or delete files in these directories. If Claude 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **substrate** (30540 symbols, 60434 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **97a0-substrate** (30613 symbols, 60543 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -1399,10 +1399,10 @@ This project is indexed by GitNexus as **substrate** (30540 symbols, 60434 relat
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/substrate/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/substrate/clusters` | All functional areas |
-| `gitnexus://repo/substrate/processes` | All execution flows |
-| `gitnexus://repo/substrate/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/97a0-substrate/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/97a0-substrate/clusters` | All functional areas |
+| `gitnexus://repo/97a0-substrate/processes` | All execution flows |
+| `gitnexus://repo/97a0-substrate/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 
