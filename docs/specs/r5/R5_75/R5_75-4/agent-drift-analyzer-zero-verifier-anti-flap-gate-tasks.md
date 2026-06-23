@@ -152,7 +152,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-4.5: Automated Validation Gates
 
-- [ ] Task R5.75-4.5.1: Run the packet's automated validation wall.
+- [x] Task R5.75-4.5.1: Run the packet's automated validation wall.
   - Acceptance:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` is green
     - `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture` is green
@@ -163,6 +163,12 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `cargo test -p agent-drift-analyzer -- --nocapture`
   - Files:
     - no additional implementation files; verification-only step
+  - Closeout note (2026-06-23): rerun green at `5fa4855c55a7a3716a9360882e804190cf24e248`:
+    `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`,
+    `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture`, and
+    `cargo test -p agent-drift-analyzer -- --nocapture`. No packet-scoped code, test, or fixture
+    change was needed from the wall itself, so the validation outcome here is an honest no-op beyond
+    recording the green rerun in this ledger.
 
 ## R5.75-4.6: Adapted Smoke Review
 
