@@ -16,6 +16,7 @@ Included cases:
 - `synthetic-planning-advancing` — committed bundle-shaped planning narrowing proof.
 - `synthetic-implementation-advancing` — committed bundle-shaped implementation verification-wall proof.
 - `synthetic-parent-visible-opaque` — committed delegated guardrail proof that limits progress claims to `parent_visible_orchestration`.
+- `synthetic-zero-verifier-anti-flap` — committed bundle-shaped zero-verifier anti-flap proof that keeps exploratory probe misses on `planning_convergence` / `insufficient_evidence` instead of escalating into troubleshooting overclaim.
 
 Excluded cases:
 

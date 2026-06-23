@@ -1,0 +1,24 @@
+{
+  "schema_version": "v0.2",
+  "generated_at": "2026-06-23T00:00:00Z",
+  "codex_home": "/tmp/.codex",
+  "output_dir": "/tmp/synthetic-zero-verifier-anti-flap/compactor",
+  "discovered_file_count": 1,
+  "archival_row_count": 12,
+  "compact_row_count": 12,
+  "dedupe_group_count": 1,
+  "session_ids": [
+    "synthetic-zero-verifier-anti-flap"
+  ],
+  "files": [
+    {
+      "id": 0,
+      "path": "/tmp/synthetic-zero-verifier-anti-flap/rollout.jsonl",
+      "session_id": "synthetic-zero-verifier-anti-flap",
+      "turns": [
+        "turn-001",
+        "turn-002"
+      ]
+    }
+  ]
+}

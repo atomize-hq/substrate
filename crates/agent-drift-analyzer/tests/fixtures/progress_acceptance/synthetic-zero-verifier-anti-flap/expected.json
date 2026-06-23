@@ -1,0 +1,26 @@
+{
+  "case_id": "synthetic-zero-verifier-anti-flap",
+  "fixture_kind": "synthetic_bundle_shaped",
+  "source_artifact": "Synthetic bundle-shaped zero-verifier anti-flap case derived from checkpoints_keep_repeated_empty_probe_misses_on_conservative_planning_lane in crates/agent-drift-analyzer/tests/checkpoints.rs.",
+  "notes": "Synthetic bundle-shaped zero-verifier anti-flap proof that keeps exploratory probe misses on a conservative planning lane instead of escalating to troubleshooting_frontier.",
+  "selected_checkpoint": {
+    "ordinal": 2,
+    "archetype": "planning",
+    "dimension": "planning_convergence",
+    "status": "insufficient_evidence",
+    "confidence_min": "low",
+    "confidence_max": "low",
+    "required_signal_codes": [],
+    "forbidden_signal_codes": [
+      "failure_frontier_advanced",
+      "failure_signature_repeated",
+      "previously_clean_scope_broken",
+      "verification_clean"
+    ],
+    "supporting_evidence_min": 0,
+    "counter_evidence_min": 0,
+    "decisive_evidence": [],
+    "counter_evidence": [],
+    "why_not_other_dimensions": []
+  }
+}
