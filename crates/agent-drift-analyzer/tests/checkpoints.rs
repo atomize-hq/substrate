@@ -2012,7 +2012,7 @@ AssertionError: expected advancing"#,
 }
 
 #[test]
-fn checkpoints_keep_visible_child_result_plus_parent_plan_refinement_in_planning() {
+fn checkpoints_keep_visible_child_result_plus_parent_plan_refinement_parent_visible() {
     let result = analyze_custom_rows(vec![
         prompt_row(
             0,
@@ -2054,11 +2054,90 @@ PATCH","workdir":"/repo"}"#,
         .as_ref()
         .expect("session progress");
 
-    assert_eq!(progress.dimension, ProgressDimension::PlanningConvergence);
-    assert_progress_signal(progress, ProgressSignalCode::PlanArtifactCreated);
-    assert_ne!(
+    assert_eq!(
         progress.dimension,
         ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(progress.status, ProgressStatus::Mixed);
+    assert_eq!(progress.confidence, Confidence::Medium);
+    assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+    assert!(!progress.supporting_evidence.is_empty());
+    assert!(!progress.counter_evidence.is_empty());
+    assert_evidence_contains(
+        &progress.supporting_evidence,
+        "parent incorporated visible delegated results into a plan/spec/handoff artifact",
+    );
+    assert_evidence_contains(
+        &progress.counter_evidence,
+        "delegation visibility limited progress confidence",
+    );
+}
+
+#[test]
+fn checkpoints_keep_opaque_parent_plan_refinement_conservative() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "/goal Coordinate delegated findings while refining the packet plan myself.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "spawn_agent",
+            r#"{"goal":"inspect packet R5-4"}"#,
+        ),
+        developer_row(
+            2,
+            "turn-001",
+            "Child session id 019ea555-5555-7555-8555-555555555555 remains in a separate rollout file.",
+        ),
+        tool_call_row(
+            3,
+            "turn-001",
+            "wait_agent",
+            "{\"session_id\":\"019ea555-5555-7555-8555-555555555555\"}",
+        ),
+        tool_call_row(
+            4,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '170,230p' docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md","workdir":"/repo"}"#,
+        ),
+        tool_call_row(
+            5,
+            "turn-001",
+            "functions.apply_patch",
+            r#"{"command":"apply_patch <<'PATCH'
+*** Begin Patch
+*** Update File: docs/specs/r5/agent-drift-analyzer-session-progress-r5-plan.md
+*** End Patch
+PATCH","workdir":"/repo"}"#,
+        ),
+    ]);
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert!(matches!(
+        progress.status,
+        ProgressStatus::InsufficientEvidence | ProgressStatus::Stalled
+    ));
+    assert_eq!(progress.confidence, Confidence::Low);
+    assert_progress_signal(progress, ProgressSignalCode::DelegationVisibilityLimited);
+    assert!(
+        !matches!(progress.status, ProgressStatus::Mixed),
+        "opaque child visibility must stay conservative"
+    );
+    assert_evidence_contains(
+        &progress.counter_evidence,
+        "delegation visibility limited progress confidence",
     );
 }
 

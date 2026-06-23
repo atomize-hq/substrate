@@ -85,11 +85,6 @@ fn parent_visible_orchestration_progress(
     ) {
         return None;
     }
-    if archetype_label == SessionArchetypeLabel::Planning
-        && !plan_artifact_edits(analysis).is_empty()
-    {
-        return None;
-    }
 
     let orchestration_attempts = parent_visible_orchestration_attempts(analysis);
     let synthesis_attempts = parent_visible_synthesis_attempts(analysis);
@@ -135,8 +130,12 @@ fn parent_visible_orchestration_progress(
         limiting_evidence,
     );
 
-    let parent_synthesis =
-        has_parent_visible_synthesis(&orchestration_attempts, &synthesis_attempts);
+    let parent_synthesis = has_parent_visible_synthesis(
+        visibility,
+        visible_child_surface,
+        &orchestration_attempts,
+        &synthesis_attempts,
+    );
     let prior_parent_visible = previous_checkpoint_was_comparable_parent_visible(analysis);
     let status = if parent_synthesis {
         ProgressStatus::Mixed
@@ -1822,22 +1821,20 @@ fn has_parent_visible_orchestration_evidence(
     analysis: &CheckpointAnalysis,
     visibility: ChildWorkVisibility,
 ) -> bool {
+    let orchestration_attempts = parent_visible_orchestration_attempts(analysis);
     !analysis.interval.command_attempts.is_empty()
+        && !orchestration_attempts.is_empty()
         && source_edits(analysis).is_empty()
         && analysis
             .interval
             .command_attempts
             .iter()
-            .all(|attempt| is_parent_visible_attempt(attempt, Some(visibility)))
+            .all(|attempt| {
+                is_parent_visible_attempt(attempt, Some(visibility))
+                    || is_parent_visible_artifact_refinement(attempt)
+            })
         && match visibility {
-            ChildWorkVisibility::Opaque => {
-                parent_visible_synthesis_attempts(analysis).is_empty()
-                    || parent_visible_orchestration_attempts(analysis)
-                        .iter()
-                        .any(|attempt| {
-                            matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1")
-                        })
-            }
+            ChildWorkVisibility::Opaque => true,
             ChildWorkVisibility::Partial => true,
             ChildWorkVisibility::None => false,
         }
@@ -1893,6 +1890,14 @@ fn is_parent_visible_synthesis_attempt(attempt: &CommandAttempt) -> bool {
             .any(|path| is_plan_artifact_path(path) || is_closeout_artifact_path(path)))
 }
 
+fn is_parent_visible_artifact_refinement(attempt: &CommandAttempt) -> bool {
+    attempt.role == CommandAttemptRole::Edit
+        && attempt
+            .paths
+            .iter()
+            .any(|path| is_plan_artifact_path(path) || is_closeout_artifact_path(path))
+}
+
 fn parent_visible_orchestration_attempts(analysis: &CheckpointAnalysis) -> Vec<&CommandAttempt> {
     analysis
         .interval
@@ -1935,13 +1940,17 @@ fn parent_visible_synthesis_evidence(attempts: &[&CommandAttempt]) -> Vec<Eviden
 }
 
 fn has_parent_visible_synthesis(
+    visibility: ChildWorkVisibility,
+    visible_child_surface: bool,
     orchestration_attempts: &[&CommandAttempt],
     synthesis_attempts: &[&CommandAttempt],
 ) -> bool {
-    !synthesis_attempts.is_empty()
-        || orchestration_attempts
-            .iter()
-            .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1"))
+    matches!(visibility, ChildWorkVisibility::Partial)
+        && visible_child_surface
+        && (!synthesis_attempts.is_empty()
+            || orchestration_attempts
+                .iter()
+                .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1")))
 }
 
 fn previous_checkpoint_was_comparable_parent_visible(analysis: &CheckpointAnalysis) -> bool {
