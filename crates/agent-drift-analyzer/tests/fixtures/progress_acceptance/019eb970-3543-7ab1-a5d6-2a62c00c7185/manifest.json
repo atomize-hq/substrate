@@ -1,0 +1,23 @@
+{
+  "schema_version": "v0.2",
+  "generated_at": "2026-06-23T02:33:32.634038Z",
+  "codex_home": "/Users/spensermcconnell/.codex",
+  "output_dir": "target/r5_75-smoke/R5.75-3/019eb970-3543-7ab1-a5d6-2a62c00c7185/compactor",
+  "discovered_file_count": 1,
+  "archival_row_count": 445,
+  "compact_row_count": 341,
+  "dedupe_group_count": 23,
+  "session_ids": [
+    "019eb970-3543-7ab1-a5d6-2a62c00c7185"
+  ],
+  "files": [
+    {
+      "id": 0,
+      "path": "/Users/spensermcconnell/.codex/sessions/2026/06/11/rollout-2026-06-11T21-26-39-019eb970-3543-7ab1-a5d6-2a62c00c7185.jsonl",
+      "session_id": "019eb970-3543-7ab1-a5d6-2a62c00c7185",
+      "turns": [
+        "019eb970-4a70-7863-b802-07dd3bc0dbd6"
+      ]
+    }
+  ]
+}

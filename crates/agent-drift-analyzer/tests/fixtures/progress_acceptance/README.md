@@ -9,6 +9,7 @@ Included cases:
 - `019e899c-453f-71f2-a99d-155848c7b081` — annotated real-rollout troubleshooting advancement.
 - `019e940c-a91b-7fe0-a967-b0bdd595b581` — annotated real-rollout planning meander/stall.
 - `019e8b42-42bd-7b10-baae-3265edb65f4b` — annotated real-rollout verification closeout narrowing.
+- `019eb970-3543-7ab1-a5d6-2a62c00c7185` — annotated real-rollout delegated parent-visible positive proof that stays guardrail-only under limited child visibility.
 - `real-implementation-advancing-019e894a-ord6` — annotated real-rollout implementation verification-wall advancement.
 - `real-closeout-conservative-019e767c-ord3` — annotated real-rollout closeout/review checkpoint that stays `insufficient_evidence` instead of overclaiming narrowing.
 - `real-reopen-regressing-019e894a-ord7` — annotated real-rollout reopen/re-verify checkpoint that regresses honestly after a previously clean verifier breaks again.

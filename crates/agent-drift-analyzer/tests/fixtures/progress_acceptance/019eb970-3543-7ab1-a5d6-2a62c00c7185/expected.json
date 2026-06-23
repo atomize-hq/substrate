@@ -1,0 +1,40 @@
+{
+  "case_id": "019eb970-3543-7ab1-a5d6-2a62c00c7185",
+  "fixture_kind": "annotated_real_rollout",
+  "source_rollout_id": "019eb970-3543-7ab1-a5d6-2a62c00c7185",
+  "source_artifact": "target/r5_75-smoke/R5.75-3/019eb970-3543-7ab1-a5d6-2a62c00c7185/compactor",
+  "notes": "First committed native delegated real-rollout proof for Packet R5.75-3.4; selected checkpoint stays guardrail-only and preserves parent-visible orchestration under limited child visibility.",
+  "screening": {
+    "delegated": true,
+    "child_visibility": "visible"
+  },
+  "selected_checkpoint": {
+    "ordinal": 4,
+    "archetype": "troubleshooting",
+    "dimension": "parent_visible_orchestration",
+    "status": "mixed",
+    "confidence_min": "medium",
+    "confidence_max": "medium",
+    "required_signal_codes": [
+      "delegation_visibility_limited"
+    ],
+    "forbidden_signal_codes": [
+      "verification_clean",
+      "residual_scope_shrank"
+    ],
+    "supporting_evidence_min": 2,
+    "counter_evidence_min": 2,
+    "decisive_evidence": [
+      "Visible delegation markers and linked child rollout surfaces kept orchestration evidence in the parent-visible prefix.",
+      "Parent-owned verification followed visible delegated results while confidence remained capped by limited child visibility."
+    ],
+    "counter_evidence": [
+      "Partial child visibility limited progress confidence, so this case remains a conservative delegated guardrail proof rather than a positive child-progress claim.",
+      "No direct child-visible clean verifier or residual-scope retirement evidence exists at the selected checkpoint."
+    ],
+    "why_not_other_dimensions": [
+      "Not troubleshooting_frontier because the decisive movement is the stable parent-visible delegation lane, not a newly grounded failure-frontier repair claim.",
+      "Not implementation_verification_wall or verification_closeout_narrowing because the visible evidence is orchestration-only and does not justify direct child-progress or closeout overclaims."
+    ]
+  }
+}

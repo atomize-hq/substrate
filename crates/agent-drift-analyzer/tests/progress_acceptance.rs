@@ -9,10 +9,11 @@ use agent_drift_analyzer::{
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 
-const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 9] = [
+const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 10] = [
     "019e899c-453f-71f2-a99d-155848c7b081",
     "019e8b42-42bd-7b10-baae-3265edb65f4b",
     "019e940c-a91b-7fe0-a967-b0bdd595b581",
+    "019eb970-3543-7ab1-a5d6-2a62c00c7185",
     "real-closeout-conservative-019e767c-ord3",
     "real-implementation-advancing-019e894a-ord6",
     "real-reopen-regressing-019e894a-ord7",
@@ -215,12 +216,12 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
     }
 
     assert_eq!(
-        annotated_real_rollout_count, 6,
-        "Packet R5.5-4 must keep the committed corpus shape of exactly 6 annotated real-rollout cases"
+        annotated_real_rollout_count, 7,
+        "Packet R5-7 progress corpus must keep the committed shape of exactly 7 annotated real-rollout cases"
     );
     assert_eq!(
         synthetic_bundle_shaped_count, 3,
-        "Packet R5.5-4 must keep the committed corpus shape of exactly 3 synthetic bundle-shaped support cases"
+        "Packet R5-7 progress corpus must keep the committed shape of exactly 3 synthetic bundle-shaped support cases"
     );
 
     for (excluded_case_id, reason) in PROGRESS_ACCEPTANCE_EXCLUDED_CASES {
