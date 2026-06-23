@@ -35,7 +35,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-4.1: Characterize The Canonical Zero-Verifier And Mixed Delegated/Exploratory Adapted Repros
 
-- [ ] Task R5.75-4.1.1: Run the adapted smoke witnesses and record exact packet-local expectations
+- [x] Task R5.75-4.1.1: Run the adapted smoke witnesses and record exact packet-local expectations
       before changing code.
   - Acceptance: this ledger records the current/expected lane, progress status, confidence band, and
     decisive/counter-evidence expectations for:
@@ -51,6 +51,49 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - no committed implementation files required; evidence recorded in this ledger and under
       `target/r5_75-smoke/R5.75-4/<session-id>/`
+  - Closeout note (2026-06-23): prerequisite `R5.75-4.0` was confirmed landed first in live history
+    (`15724b12a`, `c0f2df9c7`, `79dedb3cd`) before the adapted smoke reruns. The packet-local
+    expectations recorded from the live smoke are:
+    - `097d97e914ca220f` (canonical long exploratory zero-verifier witness):
+      - observed current behavior: `summary.md` reports `verification_density=0.00`, `write=0`,
+        `progress dimension distribution: troubleshooting_frontier=2, planning_convergence=6`, and
+        the overclaim localizes to checkpoints `0007-0008`.
+      - decisive checkpoints:
+        - `0005-0006` are the honest conservative baseline: lane `planning_convergence`, status
+          `stalled`, confidence `medium`, with decisive support
+          `earlier planning working set was more focused` +
+          `planning working set expanded instead of narrowing`, and decisive counter-evidence
+          `repeated broad planning scan without convergence artifact`.
+        - `0007-0008` are the current packet-owned overclaim: lane `troubleshooting_frontier`, status
+          `insufficient_evidence`, confidence `low`, with troubleshooting archetype confidence
+          `high -> low` driven by repeated failure evidence / renewed inspection despite zero verifier
+          density and no source edits.
+      - packet-local expectation to preserve in `R5.75-4`: keep this witness on the conservative
+        planning lane (`planning_convergence`, low-to-medium confidence, `insufficient_evidence` or
+        `stalled`) unless future checkpoints show decisive verifier-backed, concrete source-edit, or
+        explicit failure proof stronger than the current broad-scan counter-evidence.
+    - `da59436e63915185` (mixed delegated/exploratory witness):
+      - observed current behavior: `summary.md` reports `verification_density=0.00`,
+        `progress dimension distribution: troubleshooting_frontier=7, planning_convergence=15,
+        implementation_verification_wall=1, parent_visible_orchestration=5`, and the packet-owned
+        overclaim localizes to checkpoints `0017-0023` before the late delegated-parent-visible band.
+      - decisive checkpoints:
+        - `0017-0023` are the exploratory overclaim to remove: lane `troubleshooting_frontier`,
+          status `insufficient_evidence`, confidence `low`, with dead-end-thrash history
+          `30 -> 20 historical_only` driven by repeated failure evidence despite zero verifier density
+          and no direct child-proof progress.
+        - `0024-0028` are the `R5.75-3` bar to preserve: lane `parent_visible_orchestration`,
+          confidence `low`, statuses `insufficient_evidence` (`0024`, `0025`, `0027`) and
+          `stalled` (`0026`, `0028`). The decisive support/counter-evidence here is the existing
+          child-opaque delegation language:
+          `only parent-visible orchestration evidence was available for progress assessment` versus
+          `child-opaque delegation limited direct child progress claims` and
+          `delegation visibility limited progress confidence`.
+      - packet-local expectation to preserve in `R5.75-4`: remove the earlier exploratory
+        troubleshooting-frontier stretch, but keep the late delegated interval on the conservative
+        `parent_visible_orchestration` lane with low confidence and the same child-opaque delegation
+        limiting evidence rather than upgrading it to a stronger troubleshooting or implementation
+        posture.
 
 ## R5.75-4.2: Land The Analyzer-Local Anti-Flap Guard
 
