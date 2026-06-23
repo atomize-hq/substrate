@@ -1,7 +1,10 @@
 # Plan: Agent Drift Analyzer Delegated Parent-Visible Stabilization (R5.75-3)
 
 Status: draft plan created on 2026-06-22 from `docs/specs/r5/R5_75/MAP.md`, the delegated
-`progress_acceptance` corpus contract, and the adjacent `R5.75` packet patterns.
+`progress_acceptance` corpus contract, and the adjacent `R5.75` packet patterns; updated on
+2026-06-23 after packet closeout. `R5.75-3` is now promoted history and `R5.75-4` is the active
+next seam, but this plan remains the historical implementation authority for what landed in
+`R5.75-3`.
 
 ## Objective
 

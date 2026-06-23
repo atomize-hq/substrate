@@ -2,7 +2,9 @@
 
 Status: orchestration prompts created on 2026-06-22 against the live
 `docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-tasks.md`
-ledger.
+ledger; retained as historical packet prompts after `R5.75-3` was promoted on 2026-06-23. Do not
+use this file as live execution authority unless the packet is explicitly being reopened; use
+`docs/specs/r5/R5_75/MAP.md` plus the current SPEC/PLAN/TASKS ledger first.
 
 Each prompt below is self-contained: paste one into a fresh session to land exactly one `R5.75-3`
 packet through a GPT-5.4 high implementation -> commit -> review -> fix -> commit loop until

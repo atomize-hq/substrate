@@ -1,9 +1,11 @@
 # Tasks: Agent Drift Analyzer Delegated Parent-Visible Stabilization (R5.75-3)
 
 Status: draft task ledger created on 2026-06-22 after `R5.75-2` was promoted and `R5.75-3` became the
-active seam in `docs/specs/r5/R5_75/MAP.md`; updated on 2026-06-23 after the planning-artifact
-stabilization and fast delegated-parent regression work landed review-clean while the later `R5.75-3`
-packets remained open.
+active seam in `docs/specs/r5/R5_75/MAP.md`; updated on 2026-06-23 after the packet closed
+truthfully. The planning-artifact stabilization, fast delegated-parent regressions, committed native
+delegated real-rollout proof, bounded carry/reset follow-on, analyzer gates, and named
+native/adapted smoke reruns are all now landed or rerun green, so `R5.75-3` is promoted history and
+`R5.75-4` is the active next seam.
 
 Keep each task narrow, reviewable, and scoped to delegated parent-visible stabilization. Do not widen
 into generalized fingerprint redesign, adapted committed fixture-family work, or structured-state
@@ -150,7 +152,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-3.4: Promote The First Native Delegated Real-Rollout Fixture
 
-- [ ] Task R5.75-3.4.1: Admit the first native delegated real-rollout proof into the committed
+- [x] Task R5.75-3.4.1: Admit the first native delegated real-rollout proof into the committed
       `progress_acceptance` corpus.
   - Acceptance: by default,
     `019eb970-3543-7ab1-a5d6-2a62c00c7185` becomes a committed `annotated_real_rollout` delegated case
@@ -167,10 +169,14 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/README.md`
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/019eb970-3543-7ab1-a5d6-2a62c00c7185/**`
+  - Closeout note (2026-06-23): landed in `678d1e80c`. `019eb970-3543-7ab1-a5d6-2a62c00c7185` is now
+    a committed `annotated_real_rollout` delegated case in the bounded `progress_acceptance` corpus,
+    the README/corpus-count contract was updated honestly, and delegated cases remain guardrail-only
+    in `R5`.
 
 ## R5.75-3.5: Conditional Comparability Follow-On (Only If Needed)
 
-- [ ] Task R5.75-3.5.1: Apply one narrow parent-visible comparability-reset tweak only if the named
+- [x] Task R5.75-3.5.1: Apply one narrow parent-visible comparability-reset tweak only if the named
       repros still fail for that reason after Task `R5.75-3.2`.
   - Acceptance: only if the post-stabilization rerun shows that the remaining failure is specifically
     over-broad parent-visible comparability reset behavior, apply one additive tweak to
@@ -185,10 +191,15 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-23): the packet-owned bounded follow-on was needed and stayed narrow. The
+    legacy-surface parent-visible carry/reset behavior landed in `5bcb8fb52` and `0a5301b3b`,
+    preserving carry across empty comparable delegated followups while resetting when the delegated
+    objective changes. No structured-state comparability migration or generalized fingerprint redesign
+    was pulled into this packet.
 
 ## R5.75-3.6: Automated Validation Gates
 
-- [ ] Task R5.75-3.6.1: Run the packet's automated validation wall.
+- [x] Task R5.75-3.6.1: Run the packet's automated validation wall.
   - Acceptance:
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` is green
     - `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture` is green
@@ -199,10 +210,14 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `cargo test -p agent-drift-analyzer -- --nocapture`
   - Files:
     - no additional implementation files; verification-only step
+  - Closeout note (2026-06-23): rerun green at `5002edb808dd00082fa4c9173ca036e9a4588655`:
+    `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`,
+    `cargo test -p agent-drift-analyzer --test progress_acceptance -- --nocapture`, and
+    `cargo test -p agent-drift-analyzer -- --nocapture`.
 
 ## R5.75-3.7: Named Native Smoke Review
 
-- [ ] Task R5.75-3.7.1: Re-run the three named native delegated sessions and inspect the packet-owned
+- [x] Task R5.75-3.7.1: Re-run the three named native delegated sessions and inspect the packet-owned
       outputs manually.
   - Acceptance:
     - `019eb970-3543-7ab1-a5d6-2a62c00c7185` remains the positive proof that the parent-visible path
@@ -218,10 +233,17 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
       - `sed -n '1,5p' "$ANALYZER_OUT/checkpoints.jsonl"`
   - Files:
     - no new implementation files; manual smoke evidence only
+  - Closeout note (2026-06-23): the named native smoke rerun under `target/r5_75-smoke/R5.75-3/`
+    held the packet-local expectations. `019eb970-3543-7ab1-a5d6-2a62c00c7185` remained the positive
+    proof (`parent_visible_orchestration`, `mixed`, `medium` across the core delegated block), while
+    `019eb907-95c4-73e1-843e-e337d1e93cb9` and `019eb917-9531-74e0-897d-ad8d362138ec` stayed in the
+    conservative delegated-parent lane instead of collapsing into generic planning-only noise. One
+    final packet-scoped fix, `5002edb80`, restored the expected conservative stalled posture for
+    opaque broad-scan parent-visible followups before the final green rerun.
 
 ## R5.75-3.8: Named Adapted Smoke Review And Packet-Boundary Audit
 
-- [ ] Task R5.75-3.8.1: Re-run adapted delegated witness `da59436e63915185` and confirm the packet
+- [x] Task R5.75-3.8.1: Re-run adapted delegated witness `da59436e63915185` and confirm the packet
       boundary stays honest.
   - Acceptance:
     - `da59436e63915185` holds the explicit parent-visible stability bar recorded by Task `R5.75-3.1`,
@@ -235,6 +257,11 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
       - `sed -n '1,5p' "$ANALYZER_OUT/checkpoints.jsonl"`
   - Files:
     - no new implementation files; manual smoke evidence only
+  - Closeout note (2026-06-23): the adapted rerun under
+    `target/r5_75-smoke/R5.75-3/da59436e63915185/` stayed on the packet-owned conservative
+    `parent_visible_orchestration` bar at the late delegated checkpoints, without overclaiming
+    opaque-child progress. Residual anti-flap / zero-verifier concerns remain explicitly deferred to
+    `R5.75-4`.
 
 ## Hard Gate For R5.75-3
 
@@ -257,3 +284,8 @@ Automated green status alone does not satisfy this packet.
 Do not promote to `R5.75-4` until every task above is complete and the native/adapted smoke review
 proves the named delegated sessions all hold a conservative but stable parent-visible interpretation
 that matches the characterization recorded for this packet.
+
+**Promotion decision: PROMOTED (2026-06-23).** Every packet task above is now complete. The first
+native delegated real-rollout proof is committed, the bounded carry/reset follow-on stayed narrow,
+all analyzer gates reran green, and the named native/adapted delegated smoke sessions all held the
+recorded conservative parent-visible interpretation. `R5.75-4` is now the active next seam.

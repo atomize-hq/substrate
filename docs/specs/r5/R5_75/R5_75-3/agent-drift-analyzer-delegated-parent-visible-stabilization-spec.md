@@ -1,8 +1,9 @@
 # Spec: Agent Drift Analyzer Delegated Parent-Visible Stabilization (R5.75-3)
 
 Status: draft spec created on 2026-06-22 after `R5.75-2` was promoted in
-`docs/specs/r5/R5_75/MAP.md`. This spec is the implementation authority for the active `R5.75-3`
-packet.
+`docs/specs/r5/R5_75/MAP.md`; updated on 2026-06-23 after packet closeout. `R5.75-3` is now
+promoted history and `R5.75-4` is the active next seam, but this spec remains the implementation
+authority for what landed in `R5.75-3`.
 
 Authority order for this packet:
 `docs/specs/r5/R5_75/MAP.md` (the `R5.75-3` packet) owns landing order, named smoke sessions, and the
@@ -13,8 +14,8 @@ current behavior.
 
 ## Assumptions I'm Making
 
-1. **`R5.75-3` is the active seam** because `R5.75-2` is now promoted in the live
-   `docs/specs/r5/R5_75/MAP.md` routing note.
+1. **`R5.75-3` was the active seam when this packet was drafted** because `R5.75-2` had just been
+   promoted in the live `docs/specs/r5/R5_75/MAP.md` routing note.
 2. **This packet stays analyzer-local to delegated parent-visible stabilization in `progress.rs`.**
    It does not widen into compactor changes, public schema changes, or downstream migration onto the
    structured `comparison_key`; comparability/reset logic stays on the legacy
@@ -60,8 +61,8 @@ Primary users:
 
 1. maintainers reading delegated-parent checkpoints and `summary.md` output to understand real
    orchestration progress,
-2. the bounded `progress_acceptance` semantic corpus, which currently excludes live delegated cases
-   because the analyzer does not yet surface them deterministically enough,
+2. the bounded `progress_acceptance` semantic corpus, which this packet widened to include the first
+   committed live delegated case while keeping delegated proof guardrail-only in `R5`,
 3. later `R5.75-4` and `R5.75-6` packets, which need stable delegated-parent classification before
    anti-flap and objective-faithfulness follow-ons land.
 
@@ -201,8 +202,8 @@ crates/agent-drift-analyzer/tests/checkpoints.rs
   Fast synthetic/bundle-shaped delegated-parent regressions and comparability-reset checks.
 
 crates/agent-drift-analyzer/tests/progress_acceptance.rs
-  Bounded semantic wall for session_progress; currently excludes delegated real-rollout fixtures that this packet
-  is expected to stabilize enough to admit.
+  Bounded semantic wall for session_progress; now includes the first committed delegated real-rollout
+  fixture admitted by this packet.
 
 crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/README.md
   Corpus contract, included/excluded case rationale, and delegated-case guardrails.
