@@ -90,6 +90,8 @@ fn parent_visible_orchestration_progress(
     let synthesis_attempts = parent_visible_synthesis_attempts(analysis);
     let visible_child_surface = has_visible_child_surface(analysis);
     let prior_parent_visible = previous_checkpoint_was_comparable_parent_visible(analysis);
+    let conservative_stall_evidence =
+        parent_visible_conservative_stall_evidence(analysis, visibility);
     let comparable_parent_visible_followup =
         analysis.interval.command_attempts.is_empty() && prior_parent_visible;
     let parent_visible_synthesis_case = visible_child_surface
@@ -142,7 +144,7 @@ fn parent_visible_orchestration_progress(
     );
     let status = if parent_synthesis {
         ProgressStatus::Mixed
-    } else if prior_parent_visible {
+    } else if prior_parent_visible || !conservative_stall_evidence.is_empty() {
         ProgressStatus::Stalled
     } else {
         ProgressStatus::InsufficientEvidence
@@ -166,11 +168,40 @@ fn parent_visible_orchestration_progress(
             ProgressDimension::ParentVisibleOrchestration,
             confidence,
             vec![limiting_signal],
-            child_opaque_limiting_evidence,
+            merge_evidence(vec![
+                child_opaque_limiting_evidence,
+                conservative_stall_evidence,
+            ]),
         )
     };
 
     Some(progress)
+}
+
+fn parent_visible_conservative_stall_evidence(
+    analysis: &CheckpointAnalysis,
+    visibility: ChildWorkVisibility,
+) -> Vec<EvidenceRef> {
+    if visibility != ChildWorkVisibility::Opaque || !plan_artifact_edits(analysis).is_empty() {
+        return Vec::new();
+    }
+
+    let read_attempts = analysis
+        .interval
+        .command_attempts
+        .iter()
+        .filter(|attempt| attempt.role == CommandAttemptRole::Read)
+        .collect::<Vec<_>>();
+    if read_attempts.len() < 2 || !working_set_is_diffused(analysis) {
+        return Vec::new();
+    }
+
+    read_attempts
+        .into_iter()
+        .flat_map(|attempt| {
+            attempt_evidence(attempt, "repeated broad planning scan without convergence artifact")
+        })
+        .collect()
 }
 
 fn assess_troubleshooting_progress(
@@ -2965,6 +2996,97 @@ AssertionError: expected advancing"#,
         );
         assert_eq!(progress.status, ProgressStatus::Stalled);
         assert_eq!(progress.confidence, Confidence::Low);
+    }
+
+    #[test]
+    fn opaque_parent_visible_broad_scans_stay_stalled_without_child_progress() {
+        let analysis = last_analysis(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Coordinate delegated work without overclaiming child progress.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,80p' docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-spec.md","workdir":"/repo"}"#,
+            ),
+            prompt_row(
+                2,
+                "turn-002",
+                "/goal Coordinate delegated work without overclaiming child progress.",
+            ),
+            tool_call_row(
+                3,
+                "turn-002",
+                "spawn_agent",
+                r#"{"goal":"inspect delegated packet R5-75"}"#,
+            ),
+            tool_call_row(
+                4,
+                "turn-002",
+                "wait_agent",
+                r#"{"session_id":"019ea333-3333-7333-8333-333333333333"}"#,
+            ),
+            tool_call_row(
+                5,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,80p' docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-plan.md","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,80p' docs/specs/r5/R5_75/R5_75-3/agent-drift-analyzer-delegated-parent-visible-stabilization-tasks.md","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                7,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"rg -n \"parent_visible_orchestration|delegation\" crates/agent-drift-analyzer/src/checkpoint/progress.rs crates/agent-drift-analyzer/tests/checkpoints.rs","workdir":"/repo"}"#,
+            ),
+        ]);
+
+        assert_eq!(
+            analysis.delegation.topology,
+            Some(DelegationTopology::DelegatingParent)
+        );
+        assert_eq!(
+            effective_child_work_visibility(&analysis),
+            ChildWorkVisibility::Opaque
+        );
+
+        let progress = parent_visible_orchestration_progress(
+            &analysis,
+            SessionArchetypeLabel::Planning,
+        )
+        .expect("parent-visible orchestration progress");
+
+        assert_eq!(
+            progress.dimension,
+            ProgressDimension::ParentVisibleOrchestration
+        );
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_eq!(progress.confidence, Confidence::Low);
+        assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
+        assert!(
+            progress
+                .counter_evidence
+                .iter()
+                .any(|evidence| {
+                    evidence
+                        .reason
+                        .contains("repeated broad planning scan without convergence artifact")
+                }),
+            "expected broad-scan stall evidence in counter_evidence, got {:?}",
+            progress
+                .counter_evidence
+                .iter()
+                .map(|evidence| evidence.reason.as_str())
+                .collect::<Vec<_>>(),
+        );
     }
 
     fn last_analysis(rows: Vec<CompactionRow>) -> CheckpointAnalysis {
