@@ -1,7 +1,7 @@
 # Tasks: Agent Drift Analyzer Adapted External Robustness Fixture Family (R5.75-5)
 
-Status: draft task ledger created on 2026-06-23 after `R5.75-4` was promoted and the live
-`docs/specs/r5/R5_75/MAP.md` named `R5.75-5` as the active seam.
+Status: docs lock finalized on 2026-06-23 after verifying that `R5.75-4` is promoted and the live
+`docs/specs/r5/R5_75/MAP.md` names `R5.75-5` as the active seam.
 
 Keep each task narrow, reviewable, and scoped to the adapted external robustness fixture family. Do not
 widen into new analyzer semantic retuning, `R5.75-6`, or `R6`.
@@ -27,9 +27,11 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `docs/specs/r5/R5_75/R5_75-5/agent-drift-analyzer-adapted-external-robustness-fixture-family-plan.md`
     - `docs/specs/r5/R5_75/R5_75-5/agent-drift-analyzer-adapted-external-robustness-fixture-family-tasks.md`
   - Closeout note (2026-06-23): the docs-only SPEC/PLAN/TASKS authority lock is committed for
-    `R5.75-5`, preserving the primary-vs-secondary authority boundary, shape-routing rules, missing
-    fixture-manifest restoration requirement, and packet-prompt exclusion for the pre-implementation
-    pass.
+    `R5.75-5` after cross-checking `docs/specs/r5/R5_75/MAP.md`, the live
+    `progress_acceptance` / `objective_acceptance` harnesses, the saved adapted smoke roots from
+    `R5.75-1` through `R5.75-4`, and the `target/ranga-validation/` corpus. It preserves the
+    primary-vs-secondary authority boundary, shape-routing rules, missing fixture-manifest
+    restoration requirement, and packet-prompt exclusion for the pre-implementation pass.
 
 ## R5.75-5.1: Audit And Route The Adopted Adapted Sessions
 

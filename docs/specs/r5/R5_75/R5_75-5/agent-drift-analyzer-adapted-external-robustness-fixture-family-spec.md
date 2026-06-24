@@ -1,9 +1,9 @@
 # Spec: Agent Drift Analyzer Adapted External Robustness Fixture Family (R5.75-5)
 
-Status: draft spec created on 2026-06-23 after `R5.75-4` was promoted in
-`docs/specs/r5/R5_75/MAP.md`, using the live `R5.75` map, the current
-`progress_acceptance` / `objective_acceptance` harnesses, the existing
-`target/ranga-validation/` adapted sample corpus, and the current fixture README contracts.
+Status: docs lock finalized on 2026-06-23 after verifying Task `R5.75-5.0.1` against
+`docs/specs/r5/R5_75/MAP.md`, the current `progress_acceptance` / `objective_acceptance`
+harnesses, the existing `target/ranga-validation/` adapted sample corpus, and the current fixture
+README contracts.
 
 ## Assumptions I'm Making
 
@@ -91,7 +91,9 @@ Success means:
   - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
 - Source adapted evidence roots:
   - `target/ranga-validation/runs/<session-id>/compactor/`
+  - `target/r5_75-smoke/r5_75-1/<session-id>/`
   - `target/r5_75-smoke/R5.75-2/<session-id>/`
+  - `target/r5_75-smoke/R5.75-3/<session-id>/`
   - `target/r5_75-smoke/R5.75-4/<session-id>/`
 
 No new runtime dependency, no analyzer-scoring redesign, and no native-authority downgrade belong in

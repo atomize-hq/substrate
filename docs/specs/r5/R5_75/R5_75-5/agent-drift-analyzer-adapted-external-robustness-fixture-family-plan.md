@@ -1,6 +1,6 @@
 # Plan: Agent Drift Analyzer Adapted External Robustness Fixture Family (R5.75-5)
 
-Status: draft plan created on 2026-06-23 after re-reading the live `R5.75-5` packet in
+Status: docs lock finalized on 2026-06-23 after re-reading the live `R5.75-5` packet in
 `docs/specs/r5/R5_75/MAP.md`, the current `progress_acceptance` and `objective_acceptance`
 contracts, and the available adapted corpus under `target/ranga-validation/`.
 
