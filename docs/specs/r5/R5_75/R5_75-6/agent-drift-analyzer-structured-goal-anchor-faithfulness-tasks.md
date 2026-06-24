@@ -1,6 +1,6 @@
 # Tasks: Agent Drift Analyzer Structured Goal Anchor Faithfulness (R5.75-6)
 
-Status: docs lock finalized on 2026-06-24 after verifying that `R5.75-5` is promoted and the live
+Status: Task `R5.75-6.0.1` docs lock finalized on 2026-06-24 after verifying that `R5.75-5` is promoted and the live
 `docs/specs/r5/R5_75/MAP.md` names `R5.75-6` as the active seam.
 
 Keep each task narrow, reviewable, and scoped to the bounded Issue 7 bridge repair. Do not widen
@@ -29,10 +29,11 @@ compensating inside `R5.75-6`.
     - `docs/specs/r5/R5_75/R5_75-6/agent-drift-analyzer-structured-goal-anchor-faithfulness-spec.md`
     - `docs/specs/r5/R5_75/R5_75-6/agent-drift-analyzer-structured-goal-anchor-faithfulness-plan.md`
     - `docs/specs/r5/R5_75/R5_75-6/agent-drift-analyzer-structured-goal-anchor-faithfulness-tasks.md`
-  - Closeout note (2026-06-24): the docs-only SPEC/PLAN/TASKS authority lock is committed for
-    `R5.75-6` after cross-checking the active map routing, the Issue 7 diagnosis, the current
-    checkpoint compatibility overlay in `checkpoint/mod.rs`, the current `infer_task_frame(...)`
-    consumer, and the migration doc that defers the broader structured-native cutover.
+  - Closeout note (2026-06-24): this task is a docs-only landing. The SPEC/PLAN/TASKS authority lock
+    is committed for `R5.75-6` after cross-checking the active map routing, the Issue 7 diagnosis,
+    the current checkpoint compatibility overlay in `checkpoint/mod.rs`, the current
+    `infer_task_frame(...)` consumer, and the migration doc that defers the broader
+    structured-native cutover. Implementation tasks `R5.75-6.1+` remain open.
 
 ## R5.75-6.1: Repair The Bounded Compatibility Bridge
 

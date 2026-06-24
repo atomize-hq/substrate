@@ -1,6 +1,6 @@
 # Spec: Agent Drift Analyzer Structured Goal Anchor Faithfulness (R5.75-6)
 
-Status: docs lock finalized on 2026-06-24 after re-reading the live `R5.75-6` packet in
+Status: Task `R5.75-6.0.1` docs lock finalized on 2026-06-24 after re-reading the live `R5.75-6` packet in
 `docs/specs/r5/R5_75/MAP.md`, the Issue 7 diagnosis in
 `docs/specs/r5/R5_75/structured-objective-bug-map.md`, the current checkpoint/objective bridge in
 `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, the current task-frame consumer in
