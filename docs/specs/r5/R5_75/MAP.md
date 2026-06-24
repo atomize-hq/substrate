@@ -1,6 +1,6 @@
 # R5.75 Map: Sequential Pre-R6 Hardening And Validation
 
-Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout. On 2026-06-20 the `R5.75-1` named smoke gate was re-run and promotion was first HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker); the Issue 1/2/3 anchoring fix (plus Issue 8 corpus lock) then landed and the gate was re-run green, so `R5.75-1` was promoted and `R5.75-2` became active. On 2026-06-22 the `R5.75-2` named smoke gate and closeout wall were run green, so `R5.75-2` was promoted and `R5.75-3` became active. On 2026-06-23 the full `R5.75-3` wall was revalidated at HEAD: the native delegated real-rollout fixture was committed, the bounded parent-visible carry/reset follow-on landed, all analyzer gates were green, and the named native/adapted delegated smoke sessions held their conservative parent-visible expectations. Later on 2026-06-23 the substantive `R5.75-4` zero-verifier anti-flap implementation, bounded proof, automated gates, and adapted smoke reruns were confirmed green at HEAD; the live `R5.75-4` packet ledger has now been reconciled to that repo truth, so `R5.75-4` is promoted history and `R5.75-5` is the active seam. The map reflects that routing state honestly.
+Status: draft map created on 2026-06-12 to turn the adopted post-`R5.5` fix list into a one-issue-at-a-time landing order with explicit promotion gates and manual smoke checks between landings; reconciled on 2026-06-17 against the live `R5.75-1` structured-objective phase-1 stack and updated on 2026-06-18 after `SO-2.3B-refine` closeout. On 2026-06-20 the `R5.75-1` named smoke gate was re-run and promotion was first HELD (a structured-objective failure on `019eb47f` pulled Issue 1/2/3 forward as a blocker); the Issue 1/2/3 anchoring fix (plus Issue 8 corpus lock) then landed and the gate was re-run green, so `R5.75-1` was promoted and `R5.75-2` became active. On 2026-06-22 the `R5.75-2` named smoke gate and closeout wall were run green, so `R5.75-2` was promoted and `R5.75-3` became active. On 2026-06-23 the full `R5.75-3` wall was revalidated at HEAD: the native delegated real-rollout fixture was committed, the bounded parent-visible carry/reset follow-on landed, all analyzer gates were green, and the named native/adapted delegated smoke sessions held their conservative parent-visible expectations. Later on 2026-06-23 the substantive `R5.75-4` zero-verifier anti-flap implementation, bounded proof, automated gates, and adapted smoke reruns were confirmed green at HEAD; the live `R5.75-4` packet ledger has now been reconciled to that repo truth. On 2026-06-24 the adapted external robustness fixture family was then audited closed at HEAD: the live fixture-manifest contract and three adapted progress fixtures were already committed, the adapted objective candidate remained an explicit no-op, the analyzer acceptance wall stayed green, and the full native + adapted smoke rerun under `target/r5_75-smoke/R5.75-5/` held the packet-owned expectations. `R5.75-5` is therefore promoted history and `R5.75-6` is now the active seam. The map reflects that routing state honestly.
 
 ## Objective
 
@@ -13,7 +13,7 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 3. The adapted Hugging Face export corpus remains secondary robustness evidence only; it is useful for hardening but does not redefine native Codex rollout semantics.
 4. `R5.5` landed meaningful improvements, but the validation handoff proved the family is not yet ready to declare “fully landed and R6-ready.”
 
-## Current Live Routing Note (2026-06-23)
+## Current Live Routing Note (2026-06-24)
 
 - `R5.75-0` is landed history.
 - `R5.75-1` is landed history as of 2026-06-20 (routed through
@@ -32,8 +32,15 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
   `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-zero-verifier-anti-flap/**`.
   Promotion used the adapted smoke witnesses `097d97e914ca220f` and `da59436e63915185`, which hold
   the packet's conservative anti-flap expectations under `target/r5_75-smoke/R5.75-4/`.
-- `R5.75-5` is the active seam as of 2026-06-23. The next work is the adapted external robustness
-  fixture family; do not start `R5.75-6` or `R6` before that packet closes.
+- `R5.75-5` is landed history as of 2026-06-24. The packet restored the live
+  `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md` authority doc, committed the
+  bounded adapted secondary lane in `crates/agent-drift-analyzer/tests/progress_acceptance.rs` plus
+  the three adapted fixture directories for `f47b81f39f2495dd`, `097d97e914ca220f`, and
+  `da59436e63915185`, kept objective-shaped candidate `05a56cc51632982b` as an explicit
+  placeholder-only no-op under `stretch-external/`, and reran the full native + adapted smoke set
+  under `target/r5_75-smoke/R5.75-5/`.
+- `R5.75-6` is the active seam as of 2026-06-24. Do not start `R6` before the bounded
+  structured-goal-anchor faithfulness packet closes.
 - **R5.75-3 promotion update (2026-06-23):** the earlier note that only the planning-artifact
   stabilization and fast delegated-parent regressions had landed was stale. The active family also
   closed its remaining packet-owned work: the first native delegated real-rollout proof was promoted
@@ -61,6 +68,20 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
   delegated/exploratory witness kept checkpoints `0017-0023` on conservative `planning_convergence`
   and preserved the late delegated-parent-visible band at checkpoints `0024-0028`. With the packet
   ledger now reconciled, `R5.75-4` is promoted and `R5.75-5` is active next.
+- **R5.75-5 promotion update (2026-06-24):** the adapted external robustness fixture family is now
+  honestly promoted. The live fixture authority contract was restored in
+  `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md` (`dc3da7b32`,
+  `ecb07637f`), the bounded adapted progress lane landed in
+  `tests/progress_acceptance.rs` plus the committed fixture roots
+  `adapted-sparse-readable-f47b81f39f2495dd/**`,
+  `adapted-zero-verifier-097d97e914ca220f/**`, and
+  `adapted-parent-visible-da59436e63915185/**` (`d0541ebb2`), and the adapted objective candidate
+  `05a56cc51632982b` stayed a documented placeholder-only no-op because it still exposes a later
+  retargeting/objective-semantics follow-on rather than a packet-owned robustness regression
+  (`34b3b02c1`, `b9270076c`). The analyzer verification wall was then rerun green at HEAD
+  (`f4c4d2910`), and the full native + adapted smoke rerun under `target/r5_75-smoke/R5.75-5/`
+  held every earlier packet expectation plus the new secondary-fixture claims (`09c67f072`), so
+  `R5.75-6` is now active next.
 - **Promotion PROMOTED (2026-06-20):** the named promotion smoke first surfaced a structured-objective
   failure on a condensation gate session (`019eb47f`): the structured `Goal` spans anchored to
   boilerplate (system-instruction rows + the pasted `$code-review-and-quality` skill body), yielding
@@ -813,6 +834,17 @@ Expected smoke outcome:
 ### Promotion Gate
 
 Do not begin `R5.75-6` until the full smoke set above is rerun after the fixture-family landing and all prior issue expectations still hold.
+
+**Promotion decision: PROMOTED (2026-06-24). `R5.75-5` is closed; `R5.75-6` may begin.** The live
+fixture-manifest authority doc was restored in `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`,
+the bounded adapted progress lane landed in `tests/progress_acceptance.rs` plus the three committed
+adapted fixture roots, and `05a56cc51632982b` remained an explicit placeholder-only no-op under
+`objective_acceptance/stretch-external/` because it still points at a later
+retargeting/objective-semantics issue instead of a packet-owned robustness regression. The analyzer
+acceptance wall stayed green at current HEAD, and the full native + adapted smoke rerun under
+`target/r5_75-smoke/R5.75-5/...` held the earlier `R5.75-1` through `R5.75-4` expectations while
+keeping the adapted cases clearly secondary to the native authority corpus. The routing hub now
+matches that live repo truth, so the family advances to `R5.75-6`.
 
 ## R5.75-6: Make The Effective Checkpoint Objective Faithful To The Structured Goal Anchor
 
