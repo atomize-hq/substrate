@@ -218,13 +218,26 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-5.4: Objective Stretch-External Decision
 
-- [ ] Task R5.75-5.4.1: Decide whether `05a56cc51632982b` earns one bounded `stretch-external`
+- [x] Task R5.75-5.4.1: Decide whether `05a56cc51632982b` earns one bounded `stretch-external`
       objective case.
   - Acceptance: one of the following is true, and the ledger/doc wording makes the choice explicit:
     - **Add one case:** `05a56cc51632982b` contributes net-new objective robustness signal beyond
       `R5.75-1`'s locked corpus, so one bounded `stretch-external` fixture lands with exact rationale, or
     - **No-op honestly:** `05a56cc51632982b` adds no net-new signal, so `stretch-external/` remains
       placeholder-only and the packet records the explicit cross-reference/no-op rationale.
+  - Decision recorded on 2026-06-23: **No-op honestly.**
+    - The candidate overlaps the locked instruction-surface controls
+      `instruction-surface-agents-skill-update/` and
+      `instruction-surface-available-skills-review/`.
+    - It also overlaps the locked scaffolding/anchoring controls
+      `orchestration-scaffolding-field-honesty/` and
+      `orchestration-evaluate-ask-anchor/`.
+    - The only remaining uncovered behavior is later-turn prompt-vs-steer retargeting: the audited
+      analyzer output under `target/ranga-validation/runs/05a56cc51632982b/analyzer/checkpoints.jsonl`
+      still keeps the early pasted `$skill-creator ...` prompt as `task_frame.objective` even after
+      the later scrollytelling steer retargets the work. Admitting the case would therefore expose a
+      fresh objective-semantics gap rather than freeze an already-owned robustness regression, which
+      is out of scope for this fixture/harness/docs packet.
   - Verify:
     - `cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture`
     - manual comparison against the locked objective cases:

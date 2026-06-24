@@ -11,9 +11,13 @@ Authority boundary:
 - `design-set/` is bounded supporting control coverage, not a second primary wall.
 - `stretch-external/` is the adapted external **secondary robustness** lane only. It must not widen
   the native locked corpus unless a later packet proves genuine net-new objective signal.
-- Packet `R5.75-5.2` keeps `stretch-external/` placeholder-only: adapted case `05a56cc51632982b`
-  is cross-referenced there as a candidate, but it is not admitted into the committed objective
-  corpus by this docs-only slice.
+- Packet `R5.75-5.4` re-audits `05a56cc51632982b` and still keeps `stretch-external/`
+  placeholder-only: the case overlaps the already-locked instruction-surface / scaffolding boundary
+  covered by `instruction-surface-agents-skill-update/`,
+  `instruction-surface-available-skills-review/`, `orchestration-scaffolding-field-honesty/`, and
+  `orchestration-evaluate-ask-anchor/`, while the only uncovered behavior is a later-turn
+  prompt-vs-steer retargeting problem that would require fresh objective-semantics work rather than
+  bounded robustness confirmation.
 
 The committed root must stay bounded to:
 
