@@ -6590,9 +6590,29 @@ async fn start_remote_member_runtime_with_prepared(
                                     &mut orchestration_guard,
                                     &mut manifest_guard,
                                 );
-                            } else if shutdown_for_events.load(Ordering::SeqCst)
-                                || matches!(exit, 0 | 129 | 130 | 131 | 143)
+                            } else if shutdown_for_events.load(Ordering::SeqCst) {
+                                if manifest_guard.handle.state
+                                    == AgentRuntimeSessionState::Invalidated
+                                {
+                                    orchestration_guard.touch_active();
+                                } else {
+                                    manifest_guard
+                                        .transition_state(AgentRuntimeSessionState::Stopped);
+                                    manifest_guard
+                                        .mark_terminal_state("world-scoped member session stopped");
+                                    orchestration_guard.touch_active();
+                                }
+                            } else if exit == 0
+                                && manifest_guard.internal.uaa_session_id.is_some()
+                                && manifest_guard.handle.state.is_live()
                             {
+                                // Packet 4 retained-member follow-up relies on a clean bootstrap
+                                // exit parking into resumable continuity once the backend session
+                                // handle has been surfaced, rather than terminal closeout.
+                                manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+                                manifest_guard.touch_heartbeat();
+                                orchestration_guard.touch_active();
+                            } else if matches!(exit, 129 | 130 | 131 | 143) {
                                 if manifest_guard.handle.state
                                     == AgentRuntimeSessionState::Invalidated
                                 {

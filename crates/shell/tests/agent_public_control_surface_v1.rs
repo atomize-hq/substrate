@@ -5624,6 +5624,16 @@ fn world_member_bootstrap_fails_closed_with_remediation_when_codex_world_keeps_h
 #[test]
 #[serial]
 fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
+    // Packet 4 proof is intentionally mixed REPL/private + public:
+    // the REPL path creates the exact retained world member first, then the
+    // public control surface follows up on that same retained participant.
+    // This is not proof of pure public root
+    // `substrate agent start --backend cli:codex-world --scope world` ->
+    // public `substrate agent turn --backend cli:codex-world`.
+    // SPEC-30 keeps that root-start path host-first without eager world-member
+    // slot allocation at start return, and
+    // `public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth`
+    // remains the authority for that boundary.
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory_with_member_backend_and_world_dispatch(
@@ -5663,6 +5673,10 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
         Duration::from_secs(5),
     );
 
+    // `ReadyAndExit` is the Packet 4 bootstrap model here: the private REPL
+    // turn surfaces the retained participant plus resumable session handle and
+    // then exits cleanly, so later proof must come from typed submit follow-up
+    // rather than a still-live bootstrap process.
     repl.send_line("::cli:codex-world member targeted first turn");
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
     let live_members = wait_for_live_world_member_count(
@@ -5773,7 +5787,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
             .pointer("/internal/uaa_session_id")
             .and_then(Value::as_str),
         Some("session-public-world-turn"),
-        "public routing must retain the surfaced session handle after bootstrap exits cleanly"
+        "public routing must retain the surfaced session handle after the mixed REPL/private bootstrap turn exits cleanly"
     );
 
     let guard = records.lock().expect("lock world-service records");
