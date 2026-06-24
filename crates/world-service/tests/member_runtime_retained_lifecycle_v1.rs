@@ -144,6 +144,26 @@ fn write_clean_bootstrap_then_resume_member_runtime(temp: &Path) -> (PathBuf, Pa
     (path, count_path)
 }
 
+fn write_clean_bootstrap_fail_submit_turn_then_resume_member_runtime(
+    temp: &Path,
+) -> (PathBuf, PathBuf) {
+    let path = temp.join("member-runtime-clean-bootstrap-fail-submit-turn-then-resume.sh");
+    let count_path = temp.join("member-runtime-clean-bootstrap-fail-submit-turn-then-resume.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\nif [ \"${{1-}}\" = \"--version\" ]; then\n  printf 'codex 1.2.3\\n'\n  exit 0\nfi\nif [ \"${{1-}}\" = \"features\" ] && [ \"${{2-}}\" = \"list\" ]; then\n  if [ \"${{3-}}\" = \"--json\" ]; then\n    printf '{{\"features\":[\"add_dir\"]}}\\n'\n  else\n    printf 'add_dir\\n'\n  fi\n  exit 0\nfi\nif [ \"${{1-}}\" = \"--help\" ]; then\n  printf 'Usage: codex --add-dir\\n'\n  exit 0\nfi\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/member-runtime-fail-then-resume-$count.args\"\ncat > \"$SCRIPT_DIR/member-runtime-fail-then-resume-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-member-retained\"}}\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-member-retained\",\"turn_id\":\"turn-1\"}}\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-member-retained\",\"turn_id\":\"turn-1\"}}\\n'\n  exit 0\nfi\nif [ \"$count\" -eq 2 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-member-retained\"}}\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-member-retained\",\"turn_id\":\"turn-2\"}}\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-member-retained\",\"turn_id\":\"turn-2\",\"item_id\":\"msg-2\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt failure\"}}}}\\n'\n  exit 17\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-member-retained\"}}\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-member-retained\",\"turn_id\":\"turn-3\"}}\\n'\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-member-retained\",\"turn_id\":\"turn-3\",\"item_id\":\"msg-3\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success after failure\"}}}}\\n'\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-member-retained\",\"turn_id\":\"turn-3\"}}\\n'\nexit 0\n",
+        count_path.display(),
+        temp.display()
+    );
+    fs::write(&path, body).expect("write fail-then-resume member runtime");
+    let mut perms = fs::metadata(&path)
+        .expect("fail-then-resume member runtime metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fail-then-resume member runtime permissions");
+    (path, count_path)
+}
+
 fn write_member_runtime_without_session_handle(temp: &Path) -> (PathBuf, PathBuf) {
     let path = temp.join("member-runtime-without-session-handle.sh");
     let count_path = temp.join("member-runtime-without-session-handle.count");
@@ -270,7 +290,14 @@ fn read_invocation_count(path: &Path) -> usize {
         .expect("parse invocation count")
 }
 
-async fn launch_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarness> {
+type MemberRuntimeScriptWriter = fn(&Path) -> (PathBuf, PathBuf);
+
+async fn launch_retained_lifecycle_harness(
+    write_member_runtime: MemberRuntimeScriptWriter,
+    orchestration_session_id: &'static str,
+    participant_id: &'static str,
+    run_id: &str,
+) -> Option<RetainedLifecycleHarness> {
     let service = match WorldService::new() {
         Ok(svc) => svc,
         Err(err) => {
@@ -281,9 +308,7 @@ async fn launch_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarnes
 
     let tmp = tempdir().expect("tempdir");
     let seed_home = write_seed_home(tmp.path());
-    let (member_binary, count_path) = write_clean_bootstrap_then_resume_member_runtime(tmp.path());
-    let orchestration_session_id = "orch-member-runtime-retained-clean-exit";
-    let participant_id = "ash_member_runtime_retained_clean_exit";
+    let (member_binary, count_path) = write_member_runtime(tmp.path());
     let world_spec = WorldSpec {
         reuse_session: true,
         reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
@@ -322,7 +347,7 @@ async fn launch_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarnes
             binding.world_generation,
             orchestration_session_id,
             participant_id,
-            "run-member-runtime-retained-bootstrap",
+            run_id,
         ))
         .await
         .expect("member launch should succeed");
@@ -362,27 +387,31 @@ async fn launch_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarnes
     })
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn member_runtime_clean_bootstrap_exit_with_session_handle_registers_then_builds_packet2_harness(
-) {
-    let Some(harness) = launch_clean_bootstrap_exit_harness().await else {
-        return;
-    };
-    assert_eq!(
-        read_invocation_count(&harness.count_path),
-        1,
-        "Packet 1 harness must stop after clean bootstrap exit and leave the deferred parked-resume proof for Packet 2"
-    );
+async fn launch_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarness> {
+    launch_retained_lifecycle_harness(
+        write_clean_bootstrap_then_resume_member_runtime,
+        "orch-member-runtime-retained-clean-exit",
+        "ash_member_runtime_retained_clean_exit",
+        "run-member-runtime-retained-bootstrap",
+    )
+    .await
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "Packet 2 behavior-changing proof: positive parked-resume success stays deferred and non-gating in Packet 1"]
-async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_submit_turn_resumability(
-) {
-    let Some(harness) = launch_clean_bootstrap_exit_harness().await else {
-        return;
-    };
+async fn launch_failed_submit_turn_harness() -> Option<RetainedLifecycleHarness> {
+    launch_retained_lifecycle_harness(
+        write_clean_bootstrap_fail_submit_turn_then_resume_member_runtime,
+        "orch-member-runtime-retained-failed-turn",
+        "ash_member_runtime_retained_failed_turn",
+        "run-member-runtime-retained-failed-turn-bootstrap",
+    )
+    .await
+}
 
+async fn submit_turn_summary(
+    harness: &RetainedLifecycleHarness,
+    run_id: &str,
+    prompt: &str,
+) -> StreamSummary {
     let submit_response = harness
         .service
         .submit_member_turn_stream(make_member_turn_submit_request(
@@ -390,13 +419,11 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
             harness.participant_id,
             &harness.binding.world_id,
             harness.binding.world_generation,
-            "run-member-runtime-retained-follow-up",
-            "follow-up prompt",
+            run_id,
+            prompt,
         ))
         .await
-        .expect(
-            "parked retained worker should remain resumable for a later submit_turn after bootstrap exits cleanly",
-        );
+        .expect("submitted turn should succeed");
     let mut submit_body = submit_response.into_body();
     let mut submit_buffer = Vec::new();
     let submit_start = next_optional_stream_frame_value(&mut submit_body, &mut submit_buffer)
@@ -405,7 +432,35 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
     let submit_span_id = frame_start_span_id(&submit_start)
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| panic!("expected start frame, got {submit_start:?}"));
-    let submit_summary = collect_stream_summary(&mut submit_body, &submit_span_id).await;
+    collect_stream_summary(&mut submit_body, &submit_span_id).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn member_runtime_clean_bootstrap_exit_with_session_handle_registers_then_leaves_parked_worker_ready_for_follow_up(
+) {
+    let Some(harness) = launch_clean_bootstrap_exit_harness().await else {
+        return;
+    };
+    assert_eq!(
+        read_invocation_count(&harness.count_path),
+        1,
+        "bootstrap harness must stop after clean exit and leave the parked retained worker ready for Packet 3 follow-up proofs"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_submit_turn_resumability(
+) {
+    let Some(harness) = launch_clean_bootstrap_exit_harness().await else {
+        return;
+    };
+
+    let submit_summary = submit_turn_summary(
+        &harness,
+        "run-member-runtime-retained-follow-up",
+        "follow-up prompt",
+    )
+    .await;
     assert_eq!(
         submit_summary.exit,
         Some(0),
@@ -424,6 +479,60 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_requires_later_
         read_invocation_count(&harness.count_path),
         2,
         "parked retained follow-up submit_turn must invoke the resumed member runtime after bootstrap exit"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn member_runtime_non_zero_submitted_turn_exit_cleans_active_turn_slot_without_deleting_retained_worker(
+) {
+    let Some(harness) = launch_failed_submit_turn_harness().await else {
+        return;
+    };
+
+    let failed_turn_summary = submit_turn_summary(
+        &harness,
+        "run-member-runtime-retained-failed-follow-up",
+        "follow-up prompt that fails",
+    )
+    .await;
+    assert_eq!(
+        failed_turn_summary.exit,
+        Some(17),
+        "non-zero submitted turn should surface its failure exit without implicitly closing retained continuity; frames: {:?}",
+        failed_turn_summary.frames
+    );
+    assert_eq!(
+        read_invocation_count(&harness.count_path),
+        2,
+        "the failed submitted turn should run exactly once before the recovery follow-up"
+    );
+
+    let resumed_turn_summary = submit_turn_summary(
+        &harness,
+        "run-member-runtime-retained-recovery-follow-up",
+        "follow-up prompt after failure",
+    )
+    .await;
+    assert_eq!(
+        resumed_turn_summary.exit,
+        Some(0),
+        "a later submitted turn should still resume the retained worker after a non-zero turn exit; frames: {:?}",
+        resumed_turn_summary.frames
+    );
+    assert!(
+        resumed_turn_summary
+            .frames
+            .iter()
+            .any(|frame| frame
+                .to_string()
+                .contains("follow-up prompt success after failure")),
+        "retained follow-up after a failed turn must surface resumed output instead of acting like the worker was deleted; frames: {:?}",
+        resumed_turn_summary.frames
+    );
+    assert_eq!(
+        read_invocation_count(&harness.count_path),
+        3,
+        "non-zero submitted turn exit must clear active-turn bookkeeping without unregistering the retained worker"
     );
 }
 
