@@ -5642,9 +5642,9 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
         &socket_path,
         StreamBehavior::Normal,
-        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+        vec![MemberDispatchStreamScript::ReadyAndExit {
             session_handle_id: "session-public-world-turn".to_string(),
-            exit_code_on_cancel: 130,
+            exit_code: 0,
         }],
     );
     let records = server.records();
@@ -5663,26 +5663,18 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
         Duration::from_secs(5),
     );
 
-    let first_world_turn_offset = repl_output_len(&repl);
     repl.send_line("::cli:codex-world member targeted first turn");
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
-    wait_for_output_after(
-        &repl,
-        "substrate>",
-        first_world_turn_offset,
-        Duration::from_secs(5),
-    )
-    .expect("prompt after initial world turn");
-
-    let owner_pid = fixture.load_orchestration_session(&orchestration_session_id)["shell_owner_pid"]
-        .as_u64()
-        .expect("owner pid") as u32;
     let live_members = wait_for_live_world_member_count(
         &fixture,
         &orchestration_session_id,
         1,
         Duration::from_secs(5),
     );
+
+    let owner_pid = fixture.load_orchestration_session(&orchestration_session_id)["shell_owner_pid"]
+        .as_u64()
+        .expect("owner pid") as u32;
     let member = &live_members[0];
     let member_participant_id = member
         .get("participant_id")
@@ -5776,12 +5768,23 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
         Some("codex"),
         "world member persistence must keep canonical runtime-family spelling separate from alias identity"
     );
+    assert_eq!(
+        live_members[0]
+            .pointer("/internal/uaa_session_id")
+            .and_then(Value::as_str),
+        Some("session-public-world-turn"),
+        "public routing must retain the surfaced session handle after bootstrap exits cleanly"
+    );
 
     let guard = records.lock().expect("lock world-service records");
     assert_eq!(
         guard.member_turn_submit_requests.len(),
         1,
         "public world follow-up must submit exactly one typed member turn request: {guard:#?}"
+    );
+    assert!(
+        guard.execute_cancel_requests.is_empty(),
+        "bootstrap-exit follow-up proof must not rely on a held-open member runtime being cancelled later: {guard:#?}"
     );
     let submit = &guard.member_turn_submit_requests[0];
     assert_eq!(submit.orchestration_session_id, orchestration_session_id);
