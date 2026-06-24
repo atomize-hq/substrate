@@ -1,7 +1,8 @@
 # Tasks: Agent Drift Analyzer Structured Goal Anchor Faithfulness (R5.75-6)
 
-Status: Task `R5.75-6.0.1` docs lock finalized on 2026-06-24 after verifying that `R5.75-5` is promoted and the live
-`docs/specs/r5/R5_75/MAP.md` names `R5.75-6` as the active seam.
+Status: Packet `R5.75-6` closed on 2026-06-24 after the bounded bridge/regression landings, the
+full carried-forward smoke rerun under `target/r5_75-smoke/R5.75-6/`, and the live
+`docs/specs/r5/R5_75/MAP.md` promotion that marked `R5.75` complete and `R6` next.
 
 Keep each task narrow, reviewable, and scoped to the bounded Issue 7 bridge repair. Do not widen
 into the deferred structured-native consumer migration, new adapted-fixture work, or `R6` scorer
@@ -29,15 +30,16 @@ compensating inside `R5.75-6`.
     - `docs/specs/r5/R5_75/R5_75-6/agent-drift-analyzer-structured-goal-anchor-faithfulness-spec.md`
     - `docs/specs/r5/R5_75/R5_75-6/agent-drift-analyzer-structured-goal-anchor-faithfulness-plan.md`
     - `docs/specs/r5/R5_75/R5_75-6/agent-drift-analyzer-structured-goal-anchor-faithfulness-tasks.md`
-  - Closeout note (2026-06-24): this task is a docs-only landing. The SPEC/PLAN/TASKS authority lock
-    is committed for `R5.75-6` after cross-checking the active map routing, the Issue 7 diagnosis,
-    the current checkpoint compatibility overlay in `checkpoint/mod.rs`, the current
+  - Closeout note (2026-06-24): this task is the docs-only authority lock for `R5.75-6`. The
+    SPEC/PLAN/TASKS triplet was committed after cross-checking the active map routing, the Issue 7
+    diagnosis, the current checkpoint compatibility overlay in `checkpoint/mod.rs`, the current
     `infer_task_frame(...)` consumer, and the migration doc that defers the broader
-    structured-native cutover. Implementation tasks `R5.75-6.1+` remain open.
+    structured-native cutover. The implementation and closeout tasks below are now reconciled to the
+    packet's landed 2026-06-24 closeout state.
 
 ## R5.75-6.1: Repair The Bounded Compatibility Bridge
 
-- [ ] Task R5.75-6.1.1: Make the checkpoint compatibility bridge defer to the grounded structured goal
+- [x] Task R5.75-6.1.1: Make the checkpoint compatibility bridge defer to the grounded structured goal
       anchor when it exists.
   - Acceptance:
     - when `context.objective.structured` contains grounded `Goal` evidence, the effective objective
@@ -55,7 +57,7 @@ compensating inside `R5.75-6`.
     - optionally `crates/agent-drift-analyzer/src/context/objective.rs` only if a shared grounding
       helper is required
 
-- [ ] Task R5.75-6.1.2: Demote optional reviewer nits and similar non-goal imperative bullets so they
+- [x] Task R5.75-6.1.2: Demote optional reviewer nits and similar non-goal imperative bullets so they
       cannot become the effective objective after a real ask is already anchored.
   - Acceptance:
     - the specific wrong-imperative class from `019eddaa-e8b2-74b2-9f45-e4ce17aaab55` is blocked,
@@ -71,7 +73,7 @@ compensating inside `R5.75-6`.
 
 ## R5.75-6.2: Add Durable Regression Coverage
 
-- [ ] Task R5.75-6.2.1: Add a minimized checkpoint regression for the wrong-imperative follow-up
+- [x] Task R5.75-6.2.1: Add a minimized checkpoint regression for the wrong-imperative follow-up
       shape.
   - Acceptance:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs` contains a minimized repro modeled on
@@ -84,7 +86,7 @@ compensating inside `R5.75-6`.
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R5.75-6.2.2: Add or preserve a fallback guard so the packet does not over-disable legacy
+- [x] Task R5.75-6.2.2: Add or preserve a fallback guard so the packet does not over-disable legacy
       narrowing when structured grounding is absent.
   - Acceptance:
     - either an existing regression still proves fallback behavior after the bridge repair, or a new
@@ -98,7 +100,7 @@ compensating inside `R5.75-6`.
 
 ## R5.75-6.3: Prove No Automated Downstream Regressions
 
-- [ ] Task R5.75-6.3.1: Rerun the progress acceptance wall after the bridge repair.
+- [x] Task R5.75-6.3.1: Rerun the progress acceptance wall after the bridge repair.
   - Acceptance:
     - `progress_acceptance` stays green,
     - no earlier `R5.75-3` / `R5.75-4` / `R5.75-5` packet-owned expectation regresses because the
@@ -109,7 +111,7 @@ compensating inside `R5.75-6`.
     - no source changes required for closeout; if the run exposes a true packet-owned regression,
       keep fixes inside the bounded `R5.75-6` bridge seam or stop and re-scope
 
-- [ ] Task R5.75-6.3.2: Rerun the full analyzer wall and sentinel spot-checks.
+- [x] Task R5.75-6.3.2: Rerun the full analyzer wall and sentinel spot-checks.
   - Acceptance:
     - `cargo test -p agent-drift-analyzer -- --nocapture` is green,
     - `cargo test -p agent-drift-sentinel warning_policy -- --nocapture` is green,
@@ -122,7 +124,7 @@ compensating inside `R5.75-6`.
 
 ## R5.75-6.4: Manual Smoke And Honest Closeout
 
-- [ ] Task R5.75-6.4.1: Rerun native smoke for the wrong-imperative repro and the anchored-review
+- [x] Task R5.75-6.4.1: Rerun native smoke for the wrong-imperative repro and the anchored-review
       witness.
   - Acceptance:
     - `target/r5_75-smoke/R5.75-6/019eddaa-e8b2-74b2-9f45-e4ce17aaab55/` is regenerated and reviewed,
@@ -136,7 +138,7 @@ compensating inside `R5.75-6`.
     - `target/r5_75-smoke/R5.75-6/019eddaa-e8b2-74b2-9f45-e4ce17aaab55/**`
     - `target/r5_75-smoke/R5.75-6/019eb47f-0118-7e90-8291-30a1fb93769e/**`
 
-- [ ] Task R5.75-6.4.2: Rerun the full named `R5.75-5` smoke set and close the family honestly.
+- [x] Task R5.75-6.4.2: Rerun the full named `R5.75-5` smoke set and close the family honestly.
   - Acceptance:
     - the full carried-forward native + adapted smoke set is rerun under `target/r5_75-smoke/R5.75-6/`,
     - no earlier `R5.75-1` through `R5.75-5` expectation regresses,

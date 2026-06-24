@@ -42,9 +42,10 @@ Finish the remaining analyzer-semantic hardening required before `R6` scorer wor
 - `R5.75-6` is landed history as of 2026-06-24. The packet kept the bounded compatibility bridge
   faithful to the structured goal anchor in
   `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, tightened the packet-local wrong-imperative
-  regressions in `crates/agent-drift-analyzer/tests/checkpoints.rs`, and left the packet scope
-  intentionally analyzer-local after the bounded review follow-ons in `context/objective.rs`. The
-  native smoke witnesses `019eddaa-e8b2-74b2-9f45-e4ce17aaab55` and
+  regressions in `crates/agent-drift-analyzer/tests/checkpoints.rs`, and stayed intentionally
+  analyzer-local without a net landed packet delta in
+  `crates/agent-drift-analyzer/src/context/objective.rs`. The native smoke witnesses
+  `019eddaa-e8b2-74b2-9f45-e4ce17aaab55` and
   `019eb47f-0118-7e90-8291-30a1fb93769e` held their expected anchors under
   `target/r5_75-smoke/R5.75-6/`, and the full carried-forward `R5.75-5` smoke set re-ran there
   without changing any earlier witness outcomes.
@@ -885,7 +886,8 @@ Issue 7** — not the full structured-native consumer migration.
 
 - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
   (`checkpoint_analyses` structured overlay, `narrowed_objective_summary`, `normalized_objective_text`)
-- `crates/agent-drift-analyzer/src/context/objective.rs` (the structured goal span it must defer to)
+- `crates/agent-drift-analyzer/src/context/objective.rs`
+  (the structured goal span authority it must defer to; no final `R5.75-6` packet delta landed here)
 - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
 ### Automated Gate
@@ -927,16 +929,17 @@ faithful to the structured goal anchor on the named repros and no earlier `R5.75
 its named smoke sessions.
 
 **Promotion decision: PROMOTED (2026-06-24). `R5.75-6` is closed and the `R5.75` family is
-complete.** The committed bridge/review follow-on stack in `checkpoint/mod.rs`,
-`tests/checkpoints.rs`, and `context/objective.rs` stayed intact at HEAD; the wrong-imperative
-native repro `019eddaa-e8b2-74b2-9f45-e4ce17aaab55` now keeps its effective checkpoint objective on
-`Please validate that has all landed correctly/completely.` instead of the deferred reviewer nit,
-while the anchored-review native witness `019eb47f-0118-7e90-8291-30a1fb93769e` still anchors to
-its review/evaluate ask. The full carried-forward native + adapted smoke set was then re-run under
-`target/r5_75-smoke/R5.75-6/`; every `R5.75-5` witness matched its earlier first-checkpoint
-objective/progress/distribution surface exactly, so no prior packet regressed. With the bounded
-Issue 7 slice smoke-proven and the earlier family witnesses unchanged, `R5.75` is honestly closed
-and `R6` is the next seam.
+complete.** The committed final packet delta stayed bounded to `checkpoint/mod.rs` and
+`tests/checkpoints.rs` at HEAD; `context/objective.rs` remained the structured-goal authority that
+the bridge defers to, but it was not part of the final landed `R5.75-6` delta. The
+wrong-imperative native repro `019eddaa-e8b2-74b2-9f45-e4ce17aaab55` now keeps its effective
+checkpoint objective on `Please validate that has all landed correctly/completely.` instead of the
+deferred reviewer nit, while the anchored-review native witness
+`019eb47f-0118-7e90-8291-30a1fb93769e` still anchors to its review/evaluate ask. The full
+carried-forward native + adapted smoke set was then re-run under `target/r5_75-smoke/R5.75-6/`;
+every `R5.75-5` witness matched its earlier first-checkpoint objective/progress/distribution
+surface exactly, so no prior packet regressed. With the bounded Issue 7 slice smoke-proven and the
+earlier family witnesses unchanged, `R5.75` is honestly closed and `R6` is the next seam.
 
 ## R6 Readiness Gate
 
