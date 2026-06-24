@@ -69,21 +69,24 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
       - shape: objective-shaped, not progress-shaped
       - source evidence:
         `target/ranga-validation/runs/05a56cc51632982b/compactor/rows.compact.jsonl` and
-        `target/ranga-validation/runs/05a56cc51632982b/analyzer/checkpoints.jsonl` still condense the
-        first objective to `add this skill to @shared-cab-app`
-      - cited saved smoke:
+        `target/ranga-validation/runs/05a56cc51632982b/analyzer/checkpoints.jsonl` still carry the
+        pasted `$skill-creator` body as `task_frame.objective`; that raw adapted analyzer output does
+        not yet expose a structured `@shared-cab-app` objective on its own
+      - cited saved smoke for the anchored interpretation:
         `target/r5_75-smoke/r5_75-1/05a56cc51632982b/analyzer/summary.md` and
         `target/r5_75-smoke/r5_75-1/05a56cc51632982b/analyzer/checkpoints.jsonl`
       - correct home: no committed progress fixture; only a bounded
         `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/stretch-external/` case if a
         later packet proves net-new value
       - objective-signal decision: **does not add net-new signal beyond the locked `R5.75-1`
-        corpus**. The general pasted-scaffold anchoring rule is already locked by
-        `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/locked-acceptance/orchestration-evaluate-ask-anchor/**`,
-        and the adapted-style workspace-target ask is already covered in
-        `crates/agent-drift-analyzer/tests/checkpoints.rs` by the `workspace_ref` target case plus
+        corpus as a new locked-corpus admission in this packet**. The locked corpus already covers the
+        general pasted-scaffold anchoring rule via
+        `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/locked-acceptance/orchestration-evaluate-ask-anchor/**`.
+        The more specific adapted workspace-target shape is only supplemental non-corpus coverage in
+        `crates/agent-drift-analyzer/tests/checkpoints.rs` via the `workspace_ref` target case plus
         `checkpoints_prefer_concrete_workspace_action_steer_over_earlier_skill_body`. Keep
-        `stretch-external/` placeholder-only until Packet `R5.75-5.4` says otherwise.
+        `stretch-external/` placeholder-only until Packet `R5.75-5.4` decides whether that mixed
+        evidence warrants one bounded committed external case.
     - `f47b81f39f2495dd`
       - shape: progress-shaped sparse-readable adapted robustness case
       - source evidence:
