@@ -1379,6 +1379,34 @@ fn participant_is_authoritative_live(manifest: &Value) -> bool {
 }
 
 #[cfg(target_os = "linux")]
+fn participant_is_bootstrap_exited_parked_world_member(manifest: &Value) -> bool {
+    manifest.get("state").and_then(Value::as_str) == Some("ready")
+        && manifest
+            .pointer("/internal/uaa_session_id")
+            .and_then(Value::as_str)
+            .is_some()
+        && manifest
+            .pointer("/internal/control_owner_retained")
+            .and_then(Value::as_bool)
+            == Some(false)
+        && manifest
+            .pointer("/internal/event_stream_active")
+            .and_then(Value::as_bool)
+            == Some(false)
+        && manifest
+            .pointer("/internal/completion_observer_retained")
+            .and_then(Value::as_bool)
+            == Some(false)
+        && manifest
+            .pointer("/internal/ownership_valid")
+            .and_then(Value::as_bool)
+            == Some(false)
+        && manifest
+            .pointer("/internal/terminal_observed_at")
+            .is_none_or(Value::is_null)
+}
+
+#[cfg(target_os = "linux")]
 fn authoritative_live_world_member_manifests_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -1394,7 +1422,22 @@ fn authoritative_live_world_member_manifests_for_session(
 }
 
 #[cfg(target_os = "linux")]
-fn wait_for_live_world_member_count(
+fn bootstrap_exited_parked_world_member_manifests_for_session(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<Value> {
+    session_participant_manifests(substrate_home, orchestration_session_id)
+        .into_iter()
+        .filter(|manifest| manifest.get("role").and_then(Value::as_str) == Some("member"))
+        .filter(|manifest| {
+            manifest.pointer("/execution/scope").and_then(Value::as_str) == Some("world")
+        })
+        .filter(participant_is_bootstrap_exited_parked_world_member)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_bootstrap_exited_parked_world_member_count(
     fixture: &AgentControlFixture,
     orchestration_session_id: &str,
     expected_count: usize,
@@ -1402,18 +1445,26 @@ fn wait_for_live_world_member_count(
 ) -> Vec<Value> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        let members = authoritative_live_world_member_manifests_for_session(
+        let parked_members = bootstrap_exited_parked_world_member_manifests_for_session(
             &fixture.substrate_home,
             orchestration_session_id,
         );
-        if members.len() == expected_count {
-            return members;
+        let live_members = authoritative_live_world_member_manifests_for_session(
+            &fixture.substrate_home,
+            orchestration_session_id,
+        );
+        if parked_members.len() == expected_count && live_members.is_empty() {
+            return parked_members;
         }
         std::thread::sleep(Duration::from_millis(25));
     }
 
     panic!(
-        "timed out waiting for authoritative live world member count == {expected_count}; got {:?}",
+        "timed out waiting for parked bootstrap-exited world member count == {expected_count}; parked={:?} live={:?}",
+        bootstrap_exited_parked_world_member_manifests_for_session(
+            &fixture.substrate_home,
+            orchestration_session_id
+        ),
         authoritative_live_world_member_manifests_for_session(
             &fixture.substrate_home,
             orchestration_session_id
@@ -2104,6 +2155,70 @@ fn wait_for_output_after(
         std::thread::sleep(Duration::from_millis(10));
     }
     None
+}
+
+#[cfg(target_os = "linux")]
+fn compact_transport_fragment(id: &str) -> String {
+    let normalized = id
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>();
+    if normalized.len() <= 12 {
+        return normalized;
+    }
+
+    format!(
+        "{}{}",
+        &normalized[..6],
+        &normalized[normalized.len() - 6..]
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn private_prompt_transport_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    let session_fragment = compact_transport_fragment(orchestration_session_id);
+    let participant_fragment = compact_transport_fragment(participant_id);
+    let socket_name = format!("{session_fragment}-{participant_fragment}.prompt.sock");
+    let preferred = substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("handles")
+        .join("prompt")
+        .join(&socket_name);
+    if preferred.as_os_str().len() > 100 {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-hub-prompt")
+            .join(socket_name);
+    }
+    preferred
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_private_prompt_transport_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    timeout: Duration,
+) -> PathBuf {
+    let path =
+        private_prompt_transport_path(substrate_home, orchestration_session_id, participant_id);
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if path.exists() {
+            return path;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    panic!(
+        "timed out waiting for private prompt transport {}; session manifests={:#?}",
+        path.display(),
+        session_participant_manifests(substrate_home, orchestration_session_id),
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -5679,7 +5794,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     // rather than a still-live bootstrap process.
     repl.send_line("::cli:codex-world member targeted first turn");
     wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(5));
-    let live_members = wait_for_live_world_member_count(
+    let parked_members = wait_for_bootstrap_exited_parked_world_member_count(
         &fixture,
         &orchestration_session_id,
         1,
@@ -5689,12 +5804,18 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     let owner_pid = fixture.load_orchestration_session(&orchestration_session_id)["shell_owner_pid"]
         .as_u64()
         .expect("owner pid") as u32;
-    let member = &live_members[0];
+    let member = &parked_members[0];
     let member_participant_id = member
         .get("participant_id")
         .and_then(Value::as_str)
         .expect("member participant_id")
         .to_string();
+    wait_for_private_prompt_transport_path(
+        &fixture.substrate_home,
+        &orchestration_session_id,
+        &member_participant_id,
+        Duration::from_secs(5),
+    );
     let member_orchestrator_participant_id = member
         .get("orchestrator_participant_id")
         .and_then(Value::as_str)
@@ -5761,29 +5882,29 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     );
 
     wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(5));
-    let live_members = wait_for_live_world_member_count(
+    let parked_members = wait_for_bootstrap_exited_parked_world_member_count(
         &fixture,
         &orchestration_session_id,
         1,
         Duration::from_secs(5),
     );
     assert_eq!(
-        live_members[0].get("agent_id").and_then(Value::as_str),
+        parked_members[0].get("agent_id").and_then(Value::as_str),
         Some("codex-world")
     );
     assert_eq!(
-        live_members[0].get("backend_id").and_then(Value::as_str),
+        parked_members[0].get("backend_id").and_then(Value::as_str),
         Some("cli:codex-world")
     );
     assert_eq!(
-        live_members[0]
+        parked_members[0]
             .pointer("/internal/resolved_agent_kind")
             .and_then(Value::as_str),
         Some("codex"),
         "world member persistence must keep canonical runtime-family spelling separate from alias identity"
     );
     assert_eq!(
-        live_members[0]
+        parked_members[0]
             .pointer("/internal/uaa_session_id")
             .and_then(Value::as_str),
         Some("session-public-world-turn"),

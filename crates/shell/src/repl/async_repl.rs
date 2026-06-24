@@ -6060,6 +6060,53 @@ fn live_member_for_generation(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+fn parked_member_runtime_matches_generation(
+    startup_context: &RuntimeOrchestrationContext,
+    descriptor: &RuntimeSelectionDescriptor,
+    world_generation: u64,
+    manifest_snapshot: &AgentRuntimeParticipantRecord,
+) -> bool {
+    if manifest_snapshot.handle.role != MEMBER_ROLE
+        || manifest_snapshot.handle.execution.scope
+            != crate::execution::config_model::AgentExecutionScope::World
+        || manifest_snapshot.handle.orchestration_session_id
+            != startup_context.orchestration_session_id()
+        || manifest_snapshot.handle.backend_id != descriptor.backend_id
+        || manifest_snapshot.handle.world_generation != Some(world_generation)
+        || manifest_snapshot.internal.uaa_session_id.is_none()
+        || manifest_snapshot.internal.terminal_observed_at.is_some()
+        || manifest_snapshot.is_authoritative_live()
+    {
+        return false;
+    }
+
+    let orchestration_snapshot = startup_context.snapshot();
+    if !manifest_snapshot.matches_authoritative_parent_world_binding(&orchestration_snapshot) {
+        return false;
+    }
+
+    startup_context
+        .store
+        .load_participant(&manifest_snapshot.handle.participant_id)
+        .ok()
+        .flatten()
+        .is_some_and(|persisted| {
+            persisted.handle.participant_id == manifest_snapshot.handle.participant_id
+                && persisted.handle.role == MEMBER_ROLE
+                && persisted.handle.execution.scope
+                    == crate::execution::config_model::AgentExecutionScope::World
+                && persisted.handle.orchestration_session_id
+                    == orchestration_snapshot.orchestration_session_id
+                && persisted.handle.backend_id == descriptor.backend_id
+                && persisted.handle.world_generation == Some(world_generation)
+                && persisted.internal.uaa_session_id == manifest_snapshot.internal.uaa_session_id
+                && persisted.internal.terminal_observed_at.is_none()
+                && !persisted.is_authoritative_live()
+                && persisted.matches_authoritative_parent_world_binding(&orchestration_snapshot)
+        })
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn prepare_member_runtime_startup_for_descriptor(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: RuntimeSelectionDescriptor,
@@ -6607,8 +6654,9 @@ async fn start_remote_member_runtime_with_prepared(
                                 && manifest_guard.handle.state.is_live()
                             {
                                 // Packet 4 retained-member follow-up relies on a clean bootstrap
-                                // exit parking into resumable continuity once the backend session
-                                // handle has been surfaced, rather than terminal closeout.
+                                // exit preserving resumable continuity without pretending the
+                                // bootstrap control boundary is still authoritative-live.
+                                manifest_guard.release_runtime_ownership();
                                 manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
                                 manifest_guard.touch_heartbeat();
                                 orchestration_guard.touch_active();
@@ -7117,10 +7165,17 @@ async fn ensure_member_runtime_ready_for_descriptor(
                 == startup_context.orchestration_session_id()
             && manifest_snapshot.handle.backend_id == descriptor.backend_id
             && manifest_snapshot.handle.world_generation == Some(world_session.world_generation)
-            && manifest_snapshot.is_authoritative_live()
-            && exact_live_member.as_ref().is_some_and(|participant| {
-                participant.handle.participant_id == manifest_snapshot.handle.participant_id
-            })
+            && ((manifest_snapshot.is_authoritative_live()
+                && exact_live_member.as_ref().is_some_and(|participant| {
+                    participant.handle.participant_id == manifest_snapshot.handle.participant_id
+                }))
+                || (exact_live_member.is_none()
+                    && parked_member_runtime_matches_generation(
+                        startup_context,
+                        &descriptor,
+                        world_session.world_generation,
+                        &manifest_snapshot,
+                    )))
         {
             return Ok(false);
         }
@@ -7967,6 +8022,24 @@ fn unstable_retained_startup_message(runtime_role: &str) -> String {
     }
 }
 
+fn clean_bootstrap_exited_parked_member_ready(
+    manifest: &AgentRuntimeSessionManifest,
+    runtime_role: &str,
+) -> bool {
+    runtime_role == MEMBER_ROLE
+        && manifest.handle.role == MEMBER_ROLE
+        && manifest.handle.execution.scope
+            == crate::execution::config_model::AgentExecutionScope::World
+        && manifest.handle.state == AgentRuntimeSessionState::Ready
+        && manifest.internal.uaa_session_id.is_some()
+        && !manifest.internal.control_owner_retained
+        && !manifest.internal.event_stream_active
+        && !manifest.internal.completion_observer_retained
+        && !manifest.internal.ownership_valid
+        && manifest.internal.terminal_observed_at.is_none()
+        && manifest.internal.last_error_message.is_none()
+}
+
 async fn revalidate_retained_startup_after_running(
     orchestration_session: &Arc<Mutex<OrchestrationSessionRecord>>,
     manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
@@ -7990,8 +8063,12 @@ async fn revalidate_retained_startup_after_running(
             let startup_prompt_completed = startup_prompt
                 .as_ref()
                 .is_some_and(|record| record.state == StartupPromptStreamState::Completed);
+            let clean_bootstrap_exited_parked =
+                clean_bootstrap_exited_parked_member_ready(&manifest_guard, runtime_role);
 
-            if matches!(
+            if clean_bootstrap_exited_parked {
+                StartupStability::Stable
+            } else if matches!(
                 manifest_guard.handle.state,
                 AgentRuntimeSessionState::Failed
                     | AgentRuntimeSessionState::Invalidated
@@ -8015,7 +8092,7 @@ async fn revalidate_retained_startup_after_running(
             } else if startup_prompt_completed {
                 StartupStability::Stable
             } else if Instant::now() >= deadline {
-                if manifest_guard.has_valid_ownership() {
+                if manifest_guard.has_valid_ownership() || clean_bootstrap_exited_parked {
                     StartupStability::Stable
                 } else {
                     StartupStability::Failed(
