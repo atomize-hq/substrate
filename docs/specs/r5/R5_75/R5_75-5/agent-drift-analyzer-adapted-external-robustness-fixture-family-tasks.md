@@ -272,7 +272,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-5.6: Full Native + Adapted Smoke Review
 
-- [ ] Task R5.75-5.6.1: Re-run the full named smoke set and confirm all earlier packet expectations
+- [x] Task R5.75-5.6.1: Re-run the full named smoke set and confirm all earlier packet expectations
       still hold together after the fixture-family landing.
   - Acceptance:
     - all six named native smoke sessions still hold the packet expectations from `R5.75-1` through
@@ -289,6 +289,28 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - no committed implementation files required; evidence recorded under
       `target/r5_75-smoke/R5.75-5/<session-id>/`
     - this tasks ledger
+  - Closeout note (2026-06-24): reran the exact companion-spec smoke loops into
+    `target/r5_75-smoke/R5.75-5/<session-id>/` (`CODEX_HOME="$HOME/.codex"` for native sessions,
+    `CODEX_HOME="$(pwd)/target/ranga-validation/codex-home"` for adapted sessions) and re-read each
+    session's `analyzer/summary.md` plus the relevant `analyzer/checkpoints.jsonl` rows. Native
+    verdicts: `019eb430-6f9a-7a03-9a63-cb451b654795` stayed byte-identical to the saved `R5.75-2`
+    control smoke; `019eb47f-0118-7e90-8291-30a1fb93769e` and
+    `019eb98e-3c16-7ba0-92f9-0085654b470c` stayed byte-identical to the saved `r5_75-1`
+    structured-objective smoke; `019eb907-95c4-73e1-843e-e337d1e93cb9` and
+    `019eb917-9531-74e0-897d-ad8d362138ec` stayed byte-identical to the saved `R5.75-3`
+    delegated smoke; `019eb970-3543-7ab1-a5d6-2a62c00c7185` preserved the packet-owned positive
+    delegated proof band (`checkpoints 0002-0006` remain on conservative
+    `parent_visible_orchestration`, with the same flagged late checkpoint) and differed only at
+    `checkpoint 0001`, which now reads `stalled/planning_convergence` instead of the earlier saved
+    `insufficient_evidence/troubleshooting_frontier`. Adapted verdicts:
+    `05a56cc51632982b` stayed byte-identical to the saved `r5_75-1` secondary objective smoke and
+    remains supplemental/manual only; `f47b81f39f2495dd` stayed byte-identical to the saved
+    `R5.75-2` sparse-readable smoke; `097d97e914ca220f` stayed byte-identical to the saved
+    `R5.75-4` zero-verifier smoke; and `da59436e63915185` stayed byte-identical to the saved
+    `R5.75-4` mixed delegated/exploratory smoke, including the late conservative
+    `parent_visible_orchestration` band at checkpoints `0024-0028`. No code or fixture changes were
+    required; this closeout is a docs/evidence update only, and `R5.75-5.7` remains the step that
+    decides whether the main `MAP.md` can be promoted.
 
 ## R5.75-5.7: MAP Promotion And Routing Update
 
