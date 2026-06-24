@@ -69,7 +69,7 @@ The `R5.75-1` Issue 1/2/3 anchoring fix adds two more controls:
 Those controls prove Phase 1 does not overfit to WDAP alone: deliberate `AGENTS.md`, `<skill>`,
 `Available skills`, concise /goal, do not change code, docs-only, and research prompts all stay
 semantically distinct, and intent/field assembly stays grounded to the active goal surface.
-`stretch-external/` remains placeholder-only until an adapted external case clears the net-new
+stretch-external/ remains placeholder-only until an adapted external case clears the net-new
 signal bar beyond the locked native corpus. The harness must enumerate every committed
 `<case-id>/raw.json` and `<case-id>/expected.json` entry deterministically.
 
