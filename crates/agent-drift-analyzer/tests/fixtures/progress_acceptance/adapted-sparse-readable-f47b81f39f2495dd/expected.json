@@ -1,0 +1,36 @@
+{
+  "case_id": "adapted-sparse-readable-f47b81f39f2495dd",
+  "fixture_kind": "annotated_adapted_external",
+  "source_rollout_id": "f47b81f39f2495dd",
+  "source_artifact": "target/ranga-validation/runs/f47b81f39f2495dd/compactor",
+  "notes": "Adapted external secondary robustness case for Packet R5.75-2 sparse-readable fail-open; preserves the conservative planning outcome without elevating adapted evidence to primary semantic authority.",
+  "selected_checkpoint": {
+    "ordinal": 1,
+    "archetype": "planning",
+    "dimension": "planning_convergence",
+    "status": "insufficient_evidence",
+    "confidence_min": "low",
+    "confidence_max": "low",
+    "required_signal_codes": [],
+    "forbidden_signal_codes": [
+      "failure_frontier_advanced",
+      "failure_signature_repeated",
+      "previously_clean_scope_broken",
+      "verification_clean"
+    ],
+    "supporting_evidence_min": 0,
+    "counter_evidence_min": 0,
+    "decisive_evidence": [
+      "The adapted sparse-readable session stays on a conservative planning checkpoint instead of aborting analysis.",
+      "No verifier-backed or failure-frontier evidence appears that would justify a stronger progress claim."
+    ],
+    "counter_evidence": [
+      "The source session is adapted external evidence, so it remains secondary robustness instead of primary semantic authority.",
+      "Weak structured fields remain intentionally unknown rather than being inferred from pasted scaffolding."
+    ],
+    "why_not_other_dimensions": [
+      "Not troubleshooting_frontier because the sparse-readable witness preserves conservative non-failure posture rather than grounding a repair frontier.",
+      "Not implementation_verification_wall or verification_closeout_narrowing because the bundle contains no verifier-backed implementation or closeout evidence."
+    ]
+  }
+}

@@ -9,7 +9,7 @@ use agent_drift_analyzer::{
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 
-const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 11] = [
+const NATIVE_PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 7] = [
     "019e899c-453f-71f2-a99d-155848c7b081",
     "019e8b42-42bd-7b10-baae-3265edb65f4b",
     "019e940c-a91b-7fe0-a967-b0bdd595b581",
@@ -17,6 +17,32 @@ const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 11] = [
     "real-closeout-conservative-019e767c-ord3",
     "real-implementation-advancing-019e894a-ord6",
     "real-reopen-regressing-019e894a-ord7",
+];
+
+const ADAPTED_EXTERNAL_PROGRESS_CASE_IDS: [&str; 3] = [
+    "adapted-sparse-readable-f47b81f39f2495dd",
+    "adapted-zero-verifier-097d97e914ca220f",
+    "adapted-parent-visible-da59436e63915185",
+];
+
+const SYNTHETIC_PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 4] = [
+    "synthetic-implementation-advancing",
+    "synthetic-parent-visible-opaque",
+    "synthetic-zero-verifier-anti-flap",
+    "synthetic-planning-advancing",
+];
+
+const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 14] = [
+    "019e899c-453f-71f2-a99d-155848c7b081",
+    "019e8b42-42bd-7b10-baae-3265edb65f4b",
+    "019e940c-a91b-7fe0-a967-b0bdd595b581",
+    "019eb970-3543-7ab1-a5d6-2a62c00c7185",
+    "real-closeout-conservative-019e767c-ord3",
+    "real-implementation-advancing-019e894a-ord6",
+    "real-reopen-regressing-019e894a-ord7",
+    "adapted-sparse-readable-f47b81f39f2495dd",
+    "adapted-zero-verifier-097d97e914ca220f",
+    "adapted-parent-visible-da59436e63915185",
     "synthetic-implementation-advancing",
     "synthetic-parent-visible-opaque",
     "synthetic-zero-verifier-anti-flap",
@@ -47,6 +73,7 @@ const PROGRESS_FIXTURE_ROOT: &str = concat!(
 #[serde(rename_all = "snake_case")]
 enum FixtureKind {
     AnnotatedRealRollout,
+    AnnotatedAdaptedExternal,
     SyntheticBundleShaped,
 }
 
@@ -160,6 +187,7 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
     .collect::<Vec<_>>();
 
     let mut annotated_real_rollout_count = 0usize;
+    let mut annotated_adapted_external_count = 0usize;
     let mut synthetic_bundle_shaped_count = 0usize;
     for case_id in PROGRESS_ACCEPTANCE_CASE_IDS {
         let case = ProgressAcceptanceFixture::load(case_id);
@@ -169,60 +197,84 @@ fn progress_acceptance_corpus_stays_bounded_and_contains_real_rollout_proof() {
             expected_case_entries,
             "progress acceptance case {case_id} must contain exactly the committed Packet R5-7 fixture contract files"
         );
-        if case.expected.fixture_kind == FixtureKind::AnnotatedRealRollout {
-            annotated_real_rollout_count += 1;
-            let expected_json: serde_json::Value =
-                read_json(case.input_dir.join("expected.json").as_ref());
-            assert!(
-                case.expected.source_rollout_id.is_some(),
-                "annotated real-rollout case {case_id} must record source_rollout_id"
-            );
-            let screening = case.expected.screening.as_ref().unwrap_or_else(|| {
-                panic!("annotated real-rollout case {case_id} must record screening metadata")
-            });
-            assert!(
-                !screening.delegated || screening.child_visibility != ChildVisibility::NotApplicable,
-                "delegated real-rollout case {case_id} must not use not_applicable child_visibility"
-            );
-            assert_selected_checkpoint_has_array_field(
-                &expected_json,
-                case_id,
-                "required_signal_codes",
-            );
-            assert_selected_checkpoint_has_array_field(
-                &expected_json,
-                case_id,
-                "forbidden_signal_codes",
-            );
-            assert_selected_checkpoint_has_array_field(&expected_json, case_id, "counter_evidence");
-            assert!(
-                !case
-                    .expected
-                    .selected_checkpoint
-                    .decisive_evidence
-                    .is_empty(),
-                "annotated real-rollout case {case_id} must record decisive_evidence"
-            );
-            assert!(
-                !case
-                    .expected
-                    .selected_checkpoint
-                    .why_not_other_dimensions
-                    .is_empty(),
-                "annotated real-rollout case {case_id} must explain why alternative dimensions were not chosen"
-            );
-        } else {
-            synthetic_bundle_shaped_count += 1;
+        match case.expected.fixture_kind {
+            FixtureKind::AnnotatedRealRollout => {
+                annotated_real_rollout_count += 1;
+                let expected_json: serde_json::Value =
+                    read_json(case.input_dir.join("expected.json").as_ref());
+                assert!(
+                    case.expected.source_rollout_id.is_some(),
+                    "annotated real-rollout case {case_id} must record source_rollout_id"
+                );
+                let screening = case.expected.screening.as_ref().unwrap_or_else(|| {
+                    panic!("annotated real-rollout case {case_id} must record screening metadata")
+                });
+                assert!(
+                    !screening.delegated || screening.child_visibility != ChildVisibility::NotApplicable,
+                    "delegated real-rollout case {case_id} must not use not_applicable child_visibility"
+                );
+                assert_selected_checkpoint_has_array_field(
+                    &expected_json,
+                    case_id,
+                    "required_signal_codes",
+                );
+                assert_selected_checkpoint_has_array_field(
+                    &expected_json,
+                    case_id,
+                    "forbidden_signal_codes",
+                );
+                assert_selected_checkpoint_has_array_field(
+                    &expected_json,
+                    case_id,
+                    "counter_evidence",
+                );
+                assert!(
+                    !case
+                        .expected
+                        .selected_checkpoint
+                        .decisive_evidence
+                        .is_empty(),
+                    "annotated real-rollout case {case_id} must record decisive_evidence"
+                );
+                assert!(
+                    !case
+                        .expected
+                        .selected_checkpoint
+                        .why_not_other_dimensions
+                        .is_empty(),
+                    "annotated real-rollout case {case_id} must explain why alternative dimensions were not chosen"
+                );
+            }
+            FixtureKind::AnnotatedAdaptedExternal => {
+                annotated_adapted_external_count += 1;
+            }
+            FixtureKind::SyntheticBundleShaped => {
+                synthetic_bundle_shaped_count += 1;
+            }
         }
     }
 
     assert_eq!(
-        annotated_real_rollout_count, 7,
-        "Packet R5-7 progress corpus must keep the committed shape of exactly 7 annotated real-rollout cases"
+        annotated_real_rollout_count,
+        NATIVE_PROGRESS_ACCEPTANCE_CASE_IDS.len(),
+        "Packet R5-7 progress corpus must keep the committed shape of exactly {} annotated real-rollout cases",
+        NATIVE_PROGRESS_ACCEPTANCE_CASE_IDS.len()
+    );
+    assert!(
+        annotated_real_rollout_count >= 1,
+        "Packet R5-7 progress corpus must keep at least one annotated real-rollout case as the primary semantic anchor"
     );
     assert_eq!(
-        synthetic_bundle_shaped_count, 4,
-        "Packet R5-7 progress corpus must keep the committed shape of exactly 4 synthetic bundle-shaped support cases"
+        annotated_adapted_external_count,
+        ADAPTED_EXTERNAL_PROGRESS_CASE_IDS.len(),
+        "Packet R5.75-5 adapted external progress lane must keep the committed shape of exactly {} secondary robustness cases",
+        ADAPTED_EXTERNAL_PROGRESS_CASE_IDS.len()
+    );
+    assert_eq!(
+        synthetic_bundle_shaped_count,
+        SYNTHETIC_PROGRESS_ACCEPTANCE_CASE_IDS.len(),
+        "Packet R5-7 progress corpus must keep the committed shape of exactly {} synthetic bundle-shaped support cases",
+        SYNTHETIC_PROGRESS_ACCEPTANCE_CASE_IDS.len()
     );
 
     for (excluded_case_id, reason) in PROGRESS_ACCEPTANCE_EXCLUDED_CASES {

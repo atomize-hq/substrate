@@ -1,0 +1,38 @@
+{
+  "case_id": "adapted-zero-verifier-097d97e914ca220f",
+  "fixture_kind": "annotated_adapted_external",
+  "source_rollout_id": "097d97e914ca220f",
+  "source_artifact": "target/ranga-validation/runs/097d97e914ca220f/compactor",
+  "notes": "Adapted external secondary robustness case for Packet R5.75-4 zero-verifier anti-flap behavior; preserves a conservative planning lane and prevents exploratory scan churn from reappearing as troubleshooting overclaim.",
+  "selected_checkpoint": {
+    "ordinal": 6,
+    "archetype": "planning",
+    "dimension": "planning_convergence",
+    "status": "stalled",
+    "confidence_min": "medium",
+    "confidence_max": "medium",
+    "required_signal_codes": [
+      "candidate_set_expanded"
+    ],
+    "forbidden_signal_codes": [
+      "failure_frontier_advanced",
+      "failure_signature_repeated",
+      "previously_clean_scope_broken",
+      "verification_clean"
+    ],
+    "supporting_evidence_min": 4,
+    "counter_evidence_min": 3,
+    "decisive_evidence": [
+      "Repeated broad planning scans keep the session on planning_convergence rather than escalating into a troubleshooting frontier claim.",
+      "The adapted witness preserves the zero-verifier anti-flap outcome by keeping the visible posture conservative and planning-scoped."
+    ],
+    "counter_evidence": [
+      "Repeated broad planning scans still lack a convergence artifact, so the case stays stalled rather than advancing.",
+      "Adapted external evidence remains secondary robustness only and cannot replace native primary authority."
+    ],
+    "why_not_other_dimensions": [
+      "Not troubleshooting_frontier because the packet-owned anti-flap rule forbids turning verifier-free exploratory churn into a failure-repair overclaim.",
+      "Not implementation_verification_wall or verification_closeout_narrowing because the bundle contains no verifier-backed implementation or closeout progress."
+    ]
+  }
+}

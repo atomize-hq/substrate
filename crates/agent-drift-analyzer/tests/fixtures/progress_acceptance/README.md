@@ -9,8 +9,8 @@ Authority boundary:
 - **Native annotated real-rollout cases** are the primary semantic acceptance authority here.
 - **Synthetic bundle-shaped cases** are committed supporting coverage only.
 - **Adapted external cases** belong to a bounded **secondary robustness** lane only. Packet
-  `R5.75-5.2` updates that contract, but this docs-only slice does not yet commit the adapted case
-  directories under this root.
+  `R5.75-5.3` admits them one by one under this root without promoting them to primary semantic
+  authority.
 - Objective-shaped adapted evidence does not belong here; it may only be considered in
   `../objective_acceptance/stretch-external/` if it clears the net-new-signal bar beyond the locked
   native objective corpus.
@@ -32,7 +32,7 @@ Included synthetic support cases:
 - `synthetic-parent-visible-opaque` — committed delegated guardrail proof that limits progress claims to `parent_visible_orchestration`.
 - `synthetic-zero-verifier-anti-flap` — committed bundle-shaped zero-verifier anti-flap proof that keeps exploratory probe misses on `planning_convergence` / `insufficient_evidence` instead of escalating into troubleshooting overclaim.
 
-Reserved adapted secondary cases for Packet `R5.75-5` (not committed in this docs-only slice):
+Committed adapted secondary cases for Packet `R5.75-5`:
 
 - `adapted-sparse-readable-f47b81f39f2495dd` — secondary robustness for the `R5.75-2`
   sparse-readable conservative outcome.

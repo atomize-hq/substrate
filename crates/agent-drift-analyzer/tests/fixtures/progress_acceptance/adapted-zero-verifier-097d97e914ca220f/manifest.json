@@ -1,0 +1,23 @@
+{
+  "schema_version": "v0.2",
+  "generated_at": "2026-06-12T12:23:43.054021Z",
+  "codex_home": "/Users/spensermcconnell/.codex/worktrees/97a0/substrate/target/ranga-validation/codex-home",
+  "output_dir": "/Users/spensermcconnell/.codex/worktrees/97a0/substrate/target/ranga-validation/runs/097d97e914ca220f/compactor",
+  "discovered_file_count": 1,
+  "archival_row_count": 251,
+  "compact_row_count": 214,
+  "dedupe_group_count": 35,
+  "session_ids": [
+    "097d97e914ca220f"
+  ],
+  "files": [
+    {
+      "id": 0,
+      "path": "/Users/spensermcconnell/.codex/worktrees/97a0/substrate/target/ranga-validation/codex-home/sessions/2026/02/01/rollout-ranga-097d97e914ca220f.jsonl",
+      "session_id": "097d97e914ca220f",
+      "turns": [
+        "turn-097d97e914ca220f-1"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "case_id": "adapted-parent-visible-da59436e63915185",
+  "fixture_kind": "annotated_adapted_external",
+  "source_rollout_id": "da59436e63915185",
+  "source_artifact": "target/ranga-validation/runs/da59436e63915185/compactor",
+  "notes": "Adapted external secondary robustness case for the combined Packet R5.75-3 and R5.75-4 delegated parent-visible guardrail; preserves the late parent-visible lane while keeping child-visibility limits explicit and conservative.",
+  "selected_checkpoint": {
+    "ordinal": 28,
+    "archetype": "troubleshooting",
+    "dimension": "parent_visible_orchestration",
+    "status": "stalled",
+    "confidence_min": "low",
+    "confidence_max": "low",
+    "required_signal_codes": [
+      "delegation_visibility_limited"
+    ],
+    "forbidden_signal_codes": [
+      "failure_frontier_advanced",
+      "verification_clean",
+      "residual_scope_shrank"
+    ],
+    "supporting_evidence_min": 8,
+    "counter_evidence_min": 8,
+    "decisive_evidence": [
+      "The late delegated interval stays on parent_visible_orchestration even after the exploratory overclaim path was removed.",
+      "Only parent-visible orchestration evidence is available, so the adapted witness remains a guardrail-limited secondary robustness proof."
+    ],
+    "counter_evidence": [
+      "Child-opaque delegation still limits direct child progress claims and keeps confidence capped.",
+      "Adapted external evidence remains secondary robustness only and cannot replace native delegated real-rollout authority."
+    ],
+    "why_not_other_dimensions": [
+      "Not troubleshooting_frontier because the combined R5.75-3 and R5.75-4 behavior keeps the late delegated interval on parent_visible_orchestration instead of reviving an exploratory failure-repair overclaim.",
+      "Not implementation_verification_wall or verification_closeout_narrowing because no child-visible verifier or closeout evidence justifies a stronger delegated progress claim."
+    ]
+  }
+}

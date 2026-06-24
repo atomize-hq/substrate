@@ -74,13 +74,14 @@ lane:
    - packet-owned expectation: preserve the combined `R5.75-3` / `R5.75-4` delegated
      parent-visible guardrail behavior
 
-Current truth for this docs-only slice:
+Current truth after Tasks `R5.75-5.3.2` through `R5.75-5.3.4`:
 
-- this lane is **defined but not yet committed** under
+- `adapted-sparse-readable-f47b81f39f2495dd` is now committed under
   `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**`
-- no adapted external case counts toward the current primary semantic acceptance wall yet
-- when these cases land, they must stay explicitly labeled secondary in fixture metadata, README
-  language, and test/harness messaging
+- `adapted-zero-verifier-097d97e914ca220f` is now also committed under that secondary lane
+- `adapted-parent-visible-da59436e63915185` is now also committed under that secondary lane
+- no adapted external case counts toward the primary semantic acceptance wall; these remain
+  secondary robustness only
 
 The adapted objective-shaped session `05a56cc51632982b` is intentionally **not** part of this
 progress lane. Its only eligible home is the objective-side
