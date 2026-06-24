@@ -6072,14 +6072,60 @@ fn checkpoints_context_objective_keeps_review_goal_but_leaves_weak_target_unknow
 fn checkpoints_keep_grounded_validate_readiness_goal_over_optional_reviewer_nit() {
     let validate_ask = "Please validate that has all landed correctly/completely.";
     let readiness_followup =
-        "Then confirm/deny we are ready to spec/plan/tasks out Packet 4 next.";
+        "Then validate whether we are ready to spec/plan/tasks out Packet 4 so we can continue on with implementation.";
     let validate_readiness_ask = format!("{validate_ask}\n{readiness_followup}");
     let prompt = format!(
-        r#"Packet 3.6 is implementation-complete and review-clean.
+        r#"we have landed Packet 3 detailed here docs/research/cycle-stage-registry-refactor-map.md :
 
-Optional reviewer nits not taken:
-- add extra task-local grep checks for transition routing / outcome/final-marker meaning
-- normalize one blocked-semantics wording instance
+Packet 3.6 is implementation-complete and review-clean.
+
+  I stayed orchestration-only: delegated implementation/fix rounds to fresh subagents, inspected each diff myself,
+  reran verification as needed, and kept separate commits per round.
+
+  Commits created, in order
+
+  1. 12807dc — Close Packet 3 with review-ready proof wall
+  2. 43e3164 — Tighten Packet 3 closeout scope and deferrals
+  3. a4e8718 — Clarify Packet 3 closeout boundaries and dry-run proof
+  4. f71f1d4 — Resolve Packet status ledger contradiction
+
+  Verification commands run
+
+  - git diff --check
+  - .agents/skills/cycle/bin/cycle validate --project-root "$PWD"
+  - .agents/skills/cycle/bin/cycle next --project-root "$PWD" --dry-run --no-auto-continue
+  - Packet 3.6 doc rg checks for:
+      - Packet 4
+      - transition routing
+      - outcome/final-marker meaning
+      - blocked semantics
+
+  Important precision note
+
+  - The dry-run command is not stderr-clean in this source checkout.
+  - It exits 0 and prints the dry-run confirmation, but still emits:
+      - rsync(...): error: mkstempsock: Invalid argument
+
+  - Packet 3.6 docs now record that honestly as an exit-0 smoke proof, not a clean stderr-free proof.
+
+  Non-blocking follow-ups intentionally deferred
+
+  - Packet 4 work remains deferred:
+      - transition routing
+      - outcome/final-marker meaning
+      - blocked semantics
+      - validator-semantic cutover
+
+  - LangGraph remains deferred.
+  - The higher-level horizon above objective remains deferred.
+  - Optional reviewer nits not taken:
+      - add extra task-local grep checks for transition routing / outcome/final-marker meaning
+      - normalize one blocked-semantics wording instance
+
+  So the final state is: Packet 3.6 landed, commits separated correctly, verification wall recorded honestly, and
+  review is clean.
+
+---
 
 {validate_ask}
 {readiness_followup}"#
@@ -6097,6 +6143,8 @@ Optional reviewer nits not taken:
 
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
     assert_eq!(checkpoint.task_frame.objective, validate_readiness_ask);
+    assert!(checkpoint.task_frame.objective.contains(validate_ask));
+    assert!(checkpoint.task_frame.objective.contains(readiness_followup));
     assert!(
         !checkpoint
             .task_frame
