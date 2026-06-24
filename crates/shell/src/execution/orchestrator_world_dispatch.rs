@@ -4315,7 +4315,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     use substrate_common::agent_events::AgentEventKind;
     #[cfg(target_os = "linux")]
-    use tempfile::tempdir;
+    use tempfile::{tempdir, TempDir};
     #[cfg(target_os = "linux")]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     #[cfg(target_os = "linux")]
@@ -4328,6 +4328,8 @@ mod tests {
         MemberRuntimeBackendKindV1, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
         PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
     };
+    #[cfg(target_os = "linux")]
+    use world::SessionWorld;
     #[cfg(target_os = "linux")]
     use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
     #[cfg(target_os = "linux")]
@@ -5247,9 +5249,35 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str =
+        "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
+
+    #[cfg(target_os = "linux")]
+    fn write_test_codex_seed_home(temp: &Path) -> std::path::PathBuf {
+        let seed_home = temp.join("codex-seed-home");
+        fs::create_dir_all(&seed_home).expect("create Codex seed home");
+        fs::write(
+            seed_home.join("auth.json"),
+            r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+        )
+        .expect("write bounded Codex auth seed");
+        fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n")
+            .expect("write bounded Codex config seed");
+        seed_home
+    }
+
+    #[cfg(target_os = "linux")]
+    fn override_shared_world_root_for_test() -> (TempDir, impl Drop) {
+        let shared_root = tempdir().expect("shared world root tempdir");
+        let guard = SessionWorld::override_shared_root_dir_for_tests(shared_root.path().into());
+        (shared_root, guard)
+    }
+
+    #[cfg(target_os = "linux")]
     fn make_member_dispatch_execute_request(
         cwd: &Path,
         binary_path: &Path,
+        seed_home: &Path,
         world_id: &str,
         world_generation: u64,
         run_id: &str,
@@ -5258,6 +5286,10 @@ mod tests {
         env.insert(
             "SUBSTRATE_WORLD_EXEC_FORCE_DIRECT".to_string(),
             "1".to_string(),
+        );
+        env.insert(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            seed_home.display().to_string(),
         );
 
         ExecuteRequest {
@@ -5555,7 +5587,7 @@ mod tests {
         let path = temp.join("fake-continue-world-worker-runtime.sh");
         let state_file = temp.join("continue-world-worker.count");
         let body = format!(
-            "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM HUP QUIT\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-real\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nif [ \"$count\" -eq 2 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-real\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-2\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-2\",\"item_id\":\"msg-2\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"reply from live runtime\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-2\",\"last_item_id\":\"msg-2\"}}\\r\\n'\n  exit 0\nfi\nif [ \"$count\" -eq 3 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-real\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-3\"}}\\r\\n'\n  printf '{{\"type\":\"item.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-3\",\"item_id\":\"cmd-3\",\"status\":\"in_progress\",\"item_type\":\"command_execution\",\"content\":{{\"command\":\"echo hi\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-3\",\"last_item_id\":\"cmd-3\"}}\\r\\n'\n  exit 0\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-real\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-4\"}}\\r\\n'\nprintf '{{\"type\":\"turn.failed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-4\",\"error\":{{\"message\":\"boom\"}}}}\\r\\n'\nexit 1\n",
+            "#!/bin/sh\nSTATE_FILE='{}'\nif [ \"${{1-}}\" = \"--version\" ]; then\n  printf 'codex 1.2.3\\n'\n  exit 0\nfi\nif [ \"${{1-}}\" = \"features\" ] && [ \"${{2-}}\" = \"list\" ]; then\n  if [ \"${{3-}}\" = \"--json\" ]; then\n    printf '{{\"features\":[\"add_dir\"]}}\\n'\n  else\n    printf 'add_dir\\n'\n  fi\n  exit 0\nfi\nif [ \"${{1-}}\" = \"--help\" ]; then\n  printf 'Usage: codex --add-dir\\n'\n  exit 0\nfi\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM HUP QUIT\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-real\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nif [ \"$count\" -eq 2 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-real\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-2\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-2\",\"item_id\":\"msg-2\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"reply from live runtime\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-2\",\"last_item_id\":\"msg-2\"}}\\r\\n'\n  exit 0\nfi\nif [ \"$count\" -eq 3 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-real\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-3\"}}\\r\\n'\n  printf '{{\"type\":\"item.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-3\",\"item_id\":\"cmd-3\",\"status\":\"in_progress\",\"item_type\":\"command_execution\",\"content\":{{\"command\":\"echo hi\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-3\",\"last_item_id\":\"cmd-3\"}}\\r\\n'\n  exit 0\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-real\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-4\"}}\\r\\n'\nprintf '{{\"type\":\"turn.failed\",\"thread_id\":\"thread-real\",\"turn_id\":\"turn-4\",\"error\":{{\"message\":\"boom\"}}}}\\r\\n'\nexit 1\n",
             state_file.display()
         );
         fs::write(&path, body).expect("write fake continue runtime");
@@ -12504,15 +12536,13 @@ agents:
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn continue_world_worker_classifies_real_retained_member_turn_streams() {
         let _env_guard = world_env_guard();
-        let service = match WorldService::new() {
-            Ok(service) => service,
-            Err(err) => {
-                eprintln!("skipping continue_world_worker e2e test: service init failed: {err}");
-                return;
-            }
-        };
+        let (_shared_root, _shared_root_guard) = override_shared_world_root_for_test();
+        let service = WorldService::new().unwrap_or_else(|err| {
+            panic!("continue_world_worker e2e test: service init failed: {err:#}")
+        });
 
         let temp = tempdir().expect("tempdir");
+        let seed_home = write_test_codex_seed_home(temp.path());
         let runtime_path = write_fake_continue_world_worker_runtime(temp.path());
         let world_spec = WorldSpec {
             reuse_session: true,
@@ -12529,24 +12559,26 @@ agents:
             fs_mode: substrate_common::WorldFsMode::Writable,
             backend_policy: None,
         };
-        let world = match service.ensure_session_world(&world_spec) {
-            Ok(world) => world,
-            Err(err) => {
-                eprintln!(
-                    "skipping continue_world_worker e2e test: failed to ensure shared world: {err}"
-                );
-                return;
-            }
-        };
+        let world = service
+            .ensure_session_world(&world_spec)
+            .unwrap_or_else(|err| {
+                panic!("continue_world_worker e2e test: failed to ensure shared world: {err:#}")
+            });
+        let metadata_path = _shared_root.path().join(&world.id).join("session.json");
+        assert!(
+            metadata_path.is_file(),
+            "shared world metadata should live under the test-local root: {}",
+            metadata_path.display()
+        );
         let Some(binding) = world.shared_binding.clone() else {
-            eprintln!("skipping continue_world_worker e2e test: shared world binding missing");
-            return;
+            panic!("continue_world_worker e2e test: shared world binding missing");
         };
 
         let launch = service
             .execute_stream(make_member_dispatch_execute_request(
                 temp.path(),
                 &runtime_path,
+                &seed_home,
                 &binding.world_id,
                 binding.world_generation,
                 "run-bootstrap",
@@ -12738,17 +12770,13 @@ agents:
     #[serial]
     async fn continue_world_worker_dispatch_returns_real_typed_internal_outcome() {
         let _env_guard = world_env_guard();
-        let service = match WorldService::new() {
-            Ok(service) => service,
-            Err(err) => {
-                eprintln!(
-                    "skipping continue_world_worker dispatch test: service init failed: {err:#}"
-                );
-                return;
-            }
-        };
+        let (_shared_root, _shared_root_guard) = override_shared_world_root_for_test();
+        let service = WorldService::new().unwrap_or_else(|err| {
+            panic!("continue_world_worker dispatch test: service init failed: {err:#}")
+        });
 
         let temp = tempdir().expect("tempdir");
+        let seed_home = write_test_codex_seed_home(temp.path());
         let runtime_path = write_fake_continue_world_worker_runtime(temp.path());
         let world_spec = WorldSpec {
             reuse_session: true,
@@ -12765,24 +12793,28 @@ agents:
             fs_mode: substrate_common::WorldFsMode::Writable,
             backend_policy: None,
         };
-        let world = match service.ensure_session_world(&world_spec) {
-            Ok(world) => world,
-            Err(err) => {
-                eprintln!(
-                    "skipping continue_world_worker dispatch test: failed to ensure shared world: {err:#}"
-                );
-                return;
-            }
-        };
+        let world = service
+            .ensure_session_world(&world_spec)
+            .unwrap_or_else(|err| {
+                panic!(
+                    "continue_world_worker dispatch test: failed to ensure shared world: {err:#}"
+                )
+            });
+        let metadata_path = _shared_root.path().join(&world.id).join("session.json");
+        assert!(
+            metadata_path.is_file(),
+            "shared world metadata should live under the test-local root: {}",
+            metadata_path.display()
+        );
         let Some(binding) = world.shared_binding.clone() else {
-            eprintln!("skipping continue_world_worker dispatch test: shared world binding missing");
-            return;
+            panic!("continue_world_worker dispatch test: shared world binding missing");
         };
 
         let launch = service
             .execute_stream(make_member_dispatch_execute_request(
                 temp.path(),
                 &runtime_path,
+                &seed_home,
                 &binding.world_id,
                 binding.world_generation,
                 "run-bootstrap",

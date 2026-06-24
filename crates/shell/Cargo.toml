@@ -91,6 +91,7 @@ proptest = "1.4"
 toml = "0.8"
 parking_lot = "0.12"
 hyper014 = { package = "hyper", version = "0.14" }
+world = { version = "0.1.1", path = "../world", features = ["test-support"] }
 world-service = { path = "../world-service" }
 
 [build-dependencies]

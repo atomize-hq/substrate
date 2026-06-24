@@ -39,3 +39,6 @@ which = "6"
 
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+test-support = []

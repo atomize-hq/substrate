@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
+#[cfg(feature = "test-support")]
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use world_api::{
     ExecResult, FsDiff, SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerSpec,
@@ -14,6 +16,28 @@ use world_api::{
 };
 
 const SESSION_METADATA_FILE_NAME: &str = "session.json";
+
+#[cfg(feature = "test-support")]
+fn shared_root_dir_override() -> &'static Mutex<Option<PathBuf>> {
+    static OVERRIDE: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
+    OVERRIDE.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub struct SharedRootDirOverrideGuard {
+    previous: Option<PathBuf>,
+}
+
+#[cfg(feature = "test-support")]
+impl Drop for SharedRootDirOverrideGuard {
+    fn drop(&mut self) {
+        let mut slot = shared_root_dir_override()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *slot = self.previous.take();
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -85,7 +109,26 @@ struct OverlayExecutionContext<'a> {
 
 impl SessionWorld {
     pub(crate) fn shared_root_dir() -> PathBuf {
+        #[cfg(feature = "test-support")]
+        if let Some(path) = shared_root_dir_override()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+        {
+            return path;
+        }
+
         PathBuf::from("/tmp/substrate-worlds")
+    }
+
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn override_shared_root_dir_for_tests(root_dir: PathBuf) -> SharedRootDirOverrideGuard {
+        let mut slot = shared_root_dir_override()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = slot.replace(root_dir);
+        SharedRootDirOverrideGuard { previous }
     }
 
     /// Ensure a session world is started and return it.
