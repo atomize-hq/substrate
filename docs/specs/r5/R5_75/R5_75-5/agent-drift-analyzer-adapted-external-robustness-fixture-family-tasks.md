@@ -35,7 +35,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-5.1: Audit And Route The Adopted Adapted Sessions
 
-- [ ] Task R5.75-5.1.1: Re-read the adopted adapted sample ids and record their correct homes before
+- [x] Task R5.75-5.1.1: Re-read the adopted adapted sample ids and record their correct homes before
       committing any fixture.
   - Acceptance: this ledger records the routing outcome for:
     - `05a56cc51632982b`
@@ -59,6 +59,78 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `da59436e63915185` should map to delegated parent-visible progress robustness (`R5.75-3`)
     - `05a56cc51632982b` should only enter `stretch-external/` if it adds signal beyond the existing
       `R5.75-1` locked objective cases
+  - Closeout note (2026-06-23): prerequisite `R5.75-5.0` was confirmed landed first from this
+    packet family's own docs lock: `docs/specs/r5/R5_75/R5_75-5/agent-drift-analyzer-adapted-external-robustness-fixture-family-spec.md`
+    records `Status: docs lock finalized on 2026-06-23`, this ledger already marks Task
+    `R5.75-5.0.1` done, and `git log -- docs/specs/r5/R5_75/R5_75-5` shows
+    `e042428ee docs: finalize R5.75-5 docs lock`.
+  - Routing outcome (2026-06-23 evidence audit):
+    - `05a56cc51632982b`
+      - shape: objective-shaped, not progress-shaped
+      - source evidence:
+        `target/ranga-validation/runs/05a56cc51632982b/compactor/rows.compact.jsonl` and
+        `target/ranga-validation/runs/05a56cc51632982b/analyzer/checkpoints.jsonl` still condense the
+        first objective to `add this skill to @shared-cab-app`
+      - cited saved smoke:
+        `target/r5_75-smoke/r5_75-1/05a56cc51632982b/analyzer/summary.md` and
+        `target/r5_75-smoke/r5_75-1/05a56cc51632982b/analyzer/checkpoints.jsonl`
+      - correct home: no committed progress fixture; only a bounded
+        `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/stretch-external/` case if a
+        later packet proves net-new value
+      - objective-signal decision: **does not add net-new signal beyond the locked `R5.75-1`
+        corpus**. The general pasted-scaffold anchoring rule is already locked by
+        `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/locked-acceptance/orchestration-evaluate-ask-anchor/**`,
+        and the adapted-style workspace-target ask is already covered in
+        `crates/agent-drift-analyzer/tests/checkpoints.rs` by the `workspace_ref` target case plus
+        `checkpoints_prefer_concrete_workspace_action_steer_over_earlier_skill_body`. Keep
+        `stretch-external/` placeholder-only until Packet `R5.75-5.4` says otherwise.
+    - `f47b81f39f2495dd`
+      - shape: progress-shaped sparse-readable adapted robustness case
+      - source evidence:
+        `target/ranga-validation/runs/f47b81f39f2495dd/compactor/summary.md` and
+        `target/ranga-validation/runs/f47b81f39f2495dd/compactor/rows.compact.jsonl` show the
+        minimized steer ask + pasted `<skill>` body shape; the saved source artifact predates the
+        fail-open landing, so its packet-owned analyzer expectation must come from the cited
+        post-`R5.75-2` smoke
+      - cited saved smoke:
+        `target/r5_75-smoke/R5.75-2/f47b81f39f2495dd/analyzer/summary.md` and
+        `target/r5_75-smoke/R5.75-2/f47b81f39f2495dd/analyzer/checkpoints.jsonl`
+      - correct home:
+        `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-sparse-readable-f47b81f39f2495dd/**`
+      - packet-owned expectation to encode: `R5.75-2` only — analyzer does not abort, the selected
+        checkpoint stays conservative on `planning_convergence`, `ProgressStatus::InsufficientEvidence`
+        remains explicit, and weak structured fields stay honest/unknown.
+    - `097d97e914ca220f`
+      - shape: progress-shaped zero-verifier exploratory adapted robustness case
+      - source evidence:
+        `target/ranga-validation/runs/097d97e914ca220f/compactor/summary.md` and
+        `target/ranga-validation/runs/097d97e914ca220f/analyzer/summary.md` show the long
+        exploratory zero-verifier session shape that previously surfaced a
+        `troubleshooting_frontier=2` overclaim band
+      - cited saved smoke:
+        `target/r5_75-smoke/R5.75-4/097d97e914ca220f/analyzer/summary.md` and
+        `target/r5_75-smoke/R5.75-4/097d97e914ca220f/analyzer/checkpoints.jsonl`
+      - correct home:
+        `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-zero-verifier-097d97e914ca220f/**`
+      - packet-owned expectation to encode: `R5.75-4` only — the selected checkpoint stays on
+        conservative `planning_convergence`, and the old troubleshooting-frontier overclaim must not
+        return.
+    - `da59436e63915185`
+      - shape: progress-shaped mixed delegated/exploratory adapted robustness case
+      - source evidence:
+        `target/ranga-validation/runs/da59436e63915185/compactor/summary.md` and
+        `target/ranga-validation/runs/da59436e63915185/analyzer/summary.md` show the broad mixed
+        session whose raw adapted run still contains both exploratory and late delegated bands
+      - cited saved smoke:
+        `target/r5_75-smoke/R5.75-3/da59436e63915185/analyzer/checkpoints.jsonl`,
+        `target/r5_75-smoke/R5.75-4/da59436e63915185/analyzer/summary.md`, and
+        `target/r5_75-smoke/R5.75-4/da59436e63915185/analyzer/checkpoints.jsonl`
+      - correct home:
+        `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-parent-visible-da59436e63915185/**`
+      - packet-owned expectation to encode: combined `R5.75-3` / `R5.75-4` behavior — the earlier
+        exploratory overclaim stays removed, while the late delegated interval remains conservative
+        `parent_visible_orchestration` with explicit limiting/counter-evidence around child
+        visibility.
 
 ## R5.75-5.2: Restore The Fixture Authority Contract
 
