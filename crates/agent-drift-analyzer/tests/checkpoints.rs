@@ -6177,12 +6177,6 @@ Packet 3.6 is implementation-complete and review-clean.
         "expected readiness follow-up in goal evidence spans, got {:?}",
         goal_excerpts
     );
-    assert!(!structured.evidence_spans.iter().any(|span| {
-        span.role == ObjectiveRole::Goal
-            && span
-                .excerpt
-                .contains("add extra task-local grep checks for transition routing / outcome/final-marker meaning")
-    }));
 }
 
 #[test]
@@ -6444,6 +6438,30 @@ fn checkpoints_extract_inline_use_skill_review_clause_from_single_line_prompt() 
         checkpoint.task_frame.objective,
         "use the $code-review-and-quality skill to evaluate if what was implemented laned correctly and completely"
     );
+}
+
+#[test]
+fn checkpoints_fall_back_to_primary_candidate_text_when_structured_primary_goal_is_unknown() {
+    let prompt =
+        "## Questions to ask\n- Which packet follows SO-G2?\n- Which docs own the acceptance wall?";
+    let result = analyze_custom_rows(vec![prompt_row(0, "turn-001", prompt)]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(checkpoint.task_frame.objective, prompt);
+
+    let structured = checkpoint
+        .structured_objective
+        .as_ref()
+        .expect("structured objective");
+    assert!(structured.target.is_none());
+    assert!(structured
+        .unknowns
+        .iter()
+        .any(|unknown| unknown.field_name == "primary_goal"));
+    assert!(structured
+        .evidence_spans
+        .iter()
+        .all(|span| span.role != ObjectiveRole::Goal));
 }
 
 #[test]

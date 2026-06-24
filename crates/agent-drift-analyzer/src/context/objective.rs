@@ -767,7 +767,6 @@ fn role_candidates_for_clause(
     let looks_like_verification = looks_like_verification_text(&lowered);
     let has_strong_constraint_cue = has_strong_constraint_cue(&lowered);
     let has_explicit_verification_cue = has_explicit_verification_cue(text, &lowered);
-    let has_explicit_validate_goal_cue = explicit_validate_goal_cue(&lowered);
     let has_mixed_goal_and_verification_cue = looks_like_goal_text(&lowered)
         && has_explicit_verification_cue
         && (text.contains(',') || lowered.contains(" and ") || lowered.contains(" then "));
@@ -862,16 +861,11 @@ fn role_candidates_for_clause(
         )
         && (lowered.starts_with("/goal ") || looks_like_goal_text(&lowered))
     {
-        let (confidence, score) = if has_explicit_validate_goal_cue {
-            (Confidence::High, 875)
-        } else {
-            (Confidence::Medium, 650)
-        };
         push_role_candidate(
             &mut candidates,
             ObjectiveRole::Goal,
-            confidence,
-            score,
+            Confidence::Medium,
+            650,
         );
     }
     if looks_like_constraint {
@@ -919,12 +913,6 @@ fn role_candidates_for_clause(
     candidates.sort_by(|left, right| right.score.cmp(&left.score));
     candidates.dedup_by(|left, right| left.role == right.role);
     candidates
-}
-
-fn explicit_validate_goal_cue(text: &str) -> bool {
-    text.starts_with("please validate")
-        || text.starts_with("validate whether")
-        || text.starts_with("then validate whether")
 }
 
 fn push_role_candidate(
@@ -984,12 +972,6 @@ fn compatibility_score(
     if looks_like_boilerplate_text(&lowered) && !explicitly_targets_instruction_surface(&lowered) {
         score -= 250;
     }
-    if clause_looks_like_subordinate_additive_followup(decomposition, clause) {
-        score -= 700;
-    }
-    if clause_looks_like_optional_reviewer_nit(clause) {
-        score -= 900;
-    }
     if decomposition
         .section_for_clause(clause)
         .map(|section| section.confidence == Confidence::High)
@@ -999,37 +981,6 @@ fn compatibility_score(
     }
 
     score + clause.text.len().min(180) as i32
-}
-
-fn clause_looks_like_subordinate_additive_followup(
-    decomposition: &ObjectiveDecomposition,
-    clause: &ObjectiveClause,
-) -> bool {
-    let lowered = clause.text.to_ascii_lowercase();
-    if !["add ", "normalize ", "tighten ", "wire ", "update ", "fix "]
-        .iter()
-        .any(|needle| lowered.starts_with(needle))
-    {
-        return false;
-    }
-
-    let Some(previous_clause) = decomposition.clauses.iter().find(|candidate| {
-        candidate.candidate_index == clause.candidate_index
-            && candidate.section_index == clause.section_index
-            && candidate.clause_index + 1 == clause.clause_index
-    }) else {
-        return false;
-    };
-
-    top_role(previous_clause)
-        .map(|role| role.role == ObjectiveRole::Goal)
-        .unwrap_or(false)
-        && clause_text_looks_like_goal_continuation(&previous_clause.text)
-}
-
-fn clause_looks_like_optional_reviewer_nit(clause: &ObjectiveClause) -> bool {
-    let lowered = clause.text.to_ascii_lowercase();
-    lowered.starts_with("add extra ") || lowered.starts_with("normalize one ")
 }
 
 fn source_priority(source_kind: ObjectiveSourceKind) -> i32 {
@@ -1335,7 +1286,8 @@ fn assemble_structured_objective(
     verification_commands: &[String],
 ) -> StructuredObjective {
     let goal_clause = selected_goal_clause(decomposition);
-    let evidence_spans = evidence_spans_from_decomposition(decomposition, goal_clause);
+    let active_index = goal_clause.map(|clause| clause.candidate_index);
+    let evidence_spans = evidence_spans_from_decomposition(decomposition, active_index);
     let target = goal_clause.and_then(explicit_target_for_clause);
 
     let constraints = decomposition
@@ -1539,9 +1491,8 @@ fn clause_states_a_request_action(text: &str) -> bool {
 
 fn evidence_spans_from_decomposition(
     decomposition: &ObjectiveDecomposition,
-    goal_clause: Option<&ObjectiveClause>,
+    active_index: Option<usize>,
 ) -> Vec<ObjectiveEvidenceSpan> {
-    let active_index = goal_clause.map(|clause| clause.candidate_index);
     // Issue 2/3: ground evidence spans to the selected goal's surface instead of pooling every clause
     // in the session. This is what keeps `Goal` spans (and the rest) off system-instruction and
     // pasted-skill-body rows — the structured sidecar reflects the real ask, not the scaffolding. When
@@ -1550,56 +1501,20 @@ fn evidence_spans_from_decomposition(
         .clauses
         .iter()
         .filter(|clause| Some(clause.candidate_index) == active_index)
-        .flat_map(|clause| evidence_spans_for_clause(clause, goal_clause))
+        .flat_map(evidence_spans_for_clause)
         .collect()
 }
 
-fn evidence_spans_for_clause(
-    clause: &ObjectiveClause,
-    goal_clause: Option<&ObjectiveClause>,
-) -> Vec<ObjectiveEvidenceSpan> {
+fn evidence_spans_for_clause(clause: &ObjectiveClause) -> Vec<ObjectiveEvidenceSpan> {
     clause
         .role_candidates
         .iter()
         .filter(|role| {
-            if role.role == ObjectiveRole::Goal {
-                return goal_evidence_clause_is_anchor_or_continuation(clause, goal_clause);
-            }
-
             role.role != ObjectiveRole::OtherRole
                 || matches!(clause.section_kind, ObjectiveSectionKind::Deliverables)
         })
         .map(|role| evidence_span_for_role(clause, role))
         .collect()
-}
-
-fn goal_evidence_clause_is_anchor_or_continuation(
-    clause: &ObjectiveClause,
-    goal_clause: Option<&ObjectiveClause>,
-) -> bool {
-    let Some(goal_clause) = goal_clause else {
-        return false;
-    };
-
-    if clause.candidate_index != goal_clause.candidate_index
-        || clause.section_index != goal_clause.section_index
-    {
-        return false;
-    }
-
-    clause.clause_index == goal_clause.clause_index
-        || (clause.clause_index + 1 == goal_clause.clause_index
-            && clause_text_looks_like_goal_continuation(&goal_clause.text))
-        || (clause.clause_index > goal_clause.clause_index
-            && clause_text_looks_like_goal_continuation(&clause.text))
-}
-
-fn clause_text_looks_like_goal_continuation(text: &str) -> bool {
-    let lowered = text.trim().to_ascii_lowercase();
-    lowered.starts_with("then ")
-        || lowered.starts_with("after that ")
-        || lowered.starts_with("also ")
-        || lowered.starts_with("and ")
 }
 
 fn evidence_span_for_clause(clause: &ObjectiveClause) -> ObjectiveEvidenceSpan {
