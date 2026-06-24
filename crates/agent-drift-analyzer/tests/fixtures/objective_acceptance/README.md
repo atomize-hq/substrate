@@ -15,9 +15,10 @@ Authority boundary:
   placeholder-only: the case overlaps the already-locked instruction-surface / scaffolding boundary
   covered by `instruction-surface-agents-skill-update/`,
   `instruction-surface-available-skills-review/`, `orchestration-scaffolding-field-honesty/`, and
-  `orchestration-evaluate-ask-anchor/`, while the only uncovered behavior is a later-turn
-  prompt-vs-steer retargeting problem that would require fresh objective-semantics work rather than
-  bounded robustness confirmation.
+  `orchestration-evaluate-ask-anchor/`, while the only uncovered behavior lives in the preserved
+  adapted artifact under `target/ranga-validation/runs/05a56cc51632982b/...` rather than the
+  current live analyzer. Any future promotion would need a separate retargeting-semantics packet,
+  not bounded robustness confirmation.
 
 The committed root must stay bounded to:
 
