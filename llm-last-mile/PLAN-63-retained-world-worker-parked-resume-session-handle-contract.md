@@ -197,30 +197,36 @@ Verification checkpoint:
 2. explicit terminal closeout still removes resumability,
 3. turn-slot cleanup and retained continuity no longer imply each other.
 
-### Phase 5: Keep One Shell/Public Regression For Routing Truth
+### Phase 5: Keep One Shell/Public Regression For Already-Created Retained World-Member Follow-Up Truth
 
 Goal:
 
 1. prove shell/control-plane routing still aligns with the repaired world-service lifecycle seam,
-2. avoid over-investing in shell-side changes when the root bug is runtime-side,
-3. keep one durable public proof wall for the exact-target contract.
+2. keep Packet 4 scoped to public follow-up over an already-created exact retained world-member participant with surfaced resumable identity,
+3. cross-check Packet 4 against [`SPEC-30-public-world-scoped-agent-start-and-capability-flags.md`](./SPEC-30-public-world-scoped-agent-start-and-capability-flags.md), which freezes public `--scope world` root start as host-first and explicitly does **not** eagerly allocate a world-member slot at `start` return,
+4. keep one durable public proof wall for the exact-target contract without reinterpreting root-start projection as retained-member allocation truth.
 
 Primary touch surface:
 
 1. `crates/shell/tests/agent_public_control_surface_v1.rs`
-2. shell source only if the public regression uncovers a narrow mismatch that must be corrected
+2. `crates/shell/src/execution/orchestrator_world_dispatch.rs` only if a narrow routing mismatch is uncovered
 
 Required changes:
 
-1. extend or add one Linux public regression so a retained worker can be followed up after bootstrap has exited, not only while a member runtime is artificially held open,
-2. keep the assertion focused on exact-target routing and successful submitted-turn delivery,
-3. preserve the current shell-side authoritative targeting and durable participant/session-handle truth.
+1. extend or relabel one Linux shell/public regression so an already-created retained world member can be followed up after bootstrap has exited, not only while a member runtime is artificially held open,
+2. treat `public_turn_routes_linux_world_member_follow_up_through_typed_submit_path` as acceptable Packet 4 proof **only** for exact retained-member public follow-up because it first creates the retained world member through the REPL/private path and then exercises public follow-up over that exact participant,
+3. state explicitly that the mixed REPL/public regression is **not** proof of pure public root `substrate agent start --backend cli:codex-world --scope world` -> public `substrate agent turn --backend cli:codex-world`,
+4. keep the assertion focused on exact-target routing and successful submitted-turn delivery once the retained world-member slot already exists,
+5. defer any pure-public startup-stabilization idea in `agents_cmd.rs` / `agent_runtime/control.rs` to a later spec/plan change if a higher authority ever changes the frozen Slice 30 host-first root-start contract,
+6. preserve the current shell-side authoritative targeting and durable participant/session-handle truth without reintroducing bootstrap-process or prompt-transport liveness as authoritative continuity truth.
 
 Verification checkpoint:
 
-1. the public routing test proves `continue_world_worker` still targets the exact retained participant after parked handoff,
+1. the public routing test proves `continue_world_worker` still targets the exact retained participant after parked handoff once that retained world-member slot already exists,
 2. shell-side exact-target validation remains unchanged,
-3. the repaired seam is proven without reopening broader shell lifecycle design.
+3. the mixed REPL/public regression is documented as acceptable Packet 4 proof for exact retained-member follow-up, not as proof of pure public root start -> turn,
+4. the frozen Slice 30 host-first root-start regression (`public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth`) remains authoritative for the rule that public world start does not eagerly allocate a world-member slot,
+5. the repaired seam is proven without reopening broader shell lifecycle design.
 
 ## Risks And Mitigations
 

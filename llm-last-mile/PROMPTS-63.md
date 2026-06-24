@@ -245,6 +245,7 @@ You are the parent/orchestration session. Stay orchestration-only: do not implem
 
 Use these source docs as authority:
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-63-retained-world-worker-parked-resume-session-handle-contract.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-30-public-world-scoped-agent-start-and-capability-flags.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-63-retained-world-worker-parked-resume-session-handle-contract.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-63.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-world-worker-lifecycle-model.md
@@ -348,6 +349,7 @@ You are the parent/orchestration session. Stay orchestration-only: do not implem
 
 Use these source docs as authority:
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-63-retained-world-worker-parked-resume-session-handle-contract.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-30-public-world-scoped-agent-start-and-capability-flags.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-63-retained-world-worker-parked-resume-session-handle-contract.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-63.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-world-worker-lifecycle-model.md
@@ -356,8 +358,8 @@ Use these source docs as authority:
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/handoffs/2026-06-22-211455-spec-62-world-worker-retained-debug.md
 
 Mission:
-- Land Packet 4 only: Keep One Shell/Public Regression For Exact-Target Routing Truth.
-- Keep the work bounded to Task 4.1 in TASKS-63.
+- Land Packet 4 only: Keep One Shell/Public Regression For Already-Created Retained World-Member Follow-Up Truth.
+- Keep the work bounded to Task 4.1 and Task 4.2 in TASKS-63.
 - Do not start Packet 5.
 
 Required orchestration loop:
@@ -389,35 +391,40 @@ Before editing:
 4. Stay strictly within Packet 4 scope.
 
 Packet 4 scope:
-- Task 4.1: Extend one Linux public regression across the bootstrap-exits-then-resume seam.
+- Task 4.1: Extend one Linux public regression across the bootstrap-exits-then-resume seam for public follow-up over an already-created exact retained world-member participant.
+- Task 4.2: Keep pure-public root `substrate agent start --backend cli:codex-world --scope world` -> public `substrate agent turn --backend cli:codex-world` out of this packet unless a higher authority changes Slice 30.
 
 Locked defaults to preserve:
 - keep one shell/public regression only
-- avoid widening into shell-side lifecycle redesign
 - exact-target routing truth must stay aligned with repaired `world-service` lifecycle semantics
+- public `--scope world` root start remains host-first per SPEC-30 and does not eagerly allocate a world-member slot at `start` return
+- treat the mixed REPL/public regression as acceptable proof for retained-member public follow-up, not as proof of pure public root start -> turn
 
 Out of scope:
 - Packet 5 or later packets except stating whether Packet 5 is unblocked
+- changing the Slice 30 host-first public root-start contract
+- claiming that pure public root `start -> turn` is already part of Packet 4
 - broader shell lifecycle redesign
 - `SPEC-62` bootstrap compatibility, config/auth projection, workspace sync, router/inbox redesign, or unrelated worker behavior
 
 Implementation worker requirements:
 - Spawn a fresh GPT-5.4 subagent on high.
 - Implementation subagent prompt:
-  /goal Implement TASKS-63 Packet 4 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read SPEC-63, PLAN-63, TASKS-63, DESIGN-world-worker-lifecycle-model.md, and the listed handoffs first. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Work only on Task 4.1. Extend exactly one Linux public regression so `continue_world_worker` proves exact-target routing and success after the retained worker has exited bootstrap and entered parked/resumable posture; do not rely solely on held-open member runtime behavior. Keep shell-side changes minimal and only if a narrow routing mismatch is uncovered. Run `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture` and `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`. Do not commit. Final message must state whether Packet 4 is checkpoint-green, what files changed, what GitNexus impact results were found, what verification ran, and whether Packet 5 is unblocked.
+  /goal Implement TASKS-63 Packet 4 only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read SPEC-63, SPEC-30, PLAN-63, TASKS-63, DESIGN-world-worker-lifecycle-model.md, and the listed handoffs first. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Work only on Task 4.1 and Task 4.2. Keep the packet scoped to public follow-up over an already-created exact retained world-member participant with surfaced resumable identity. Treat `public_turn_routes_linux_world_member_follow_up_through_typed_submit_path` as acceptable proof only for that retained-member public follow-up contract because it first creates the retained world member through the REPL/private path and then exercises public follow-up over that exact participant. State explicitly in any prompt/doc/test wording you touch that this mixed REPL/public regression is not proof of pure public root `substrate agent start --backend cli:codex-world --scope world` -> public `substrate agent turn --backend cli:codex-world`. Preserve SPEC-30's frozen host-first rule that public world start does not eagerly allocate a world-member slot at `start` return. Extend or relabel exactly one Linux public regression so `continue_world_worker` proves exact-target routing and success after the retained worker has exited bootstrap and entered parked/resumable posture; do not rely solely on held-open member runtime behavior. Keep shell-side changes minimal and only if a narrow routing mismatch is uncovered, and do not widen into a pure-public startup-stabilization fix unless a higher authority first changes Slice 30. Run `cargo test -p shell public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth -- --nocapture`, `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture`, and `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`. Do not commit. Final message must state whether Packet 4 is checkpoint-green, what files changed, what GitNexus impact results were found, what verification ran, whether the mixed REPL/public proof remained correctly scoped, and whether Packet 5 is unblocked.
 
 Review worker requirements:
 - Spawn a fresh GPT-5.4 subagent on high.
 - Review subagent prompt:
-  /goal Review the committed Slice 63 Packet 4 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in SPEC-63, PLAN-63, TASKS-63, DESIGN-world-worker-lifecycle-model.md, and the listed handoffs. Review only Packet 4 and the live diff. Focus on correctness of the public regression, exact-target routing truth, minimal shell-side scope, and whether broader shell lifecycle redesign was smuggled in. Report findings first with explicit severities. State clearly whether Packet 4 is review-clean or requires changes.
+  /goal Review the committed Slice 63 Packet 4 change in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in SPEC-63, SPEC-30, PLAN-63, TASKS-63, DESIGN-world-worker-lifecycle-model.md, and the listed handoffs. Review only Packet 4 and the live diff. Focus on correctness of the public regression for already-created retained-member follow-up, exact-target routing truth, whether the mixed REPL/public regression is framed honestly as acceptable proof for retained-member public follow-up but not pure public root start -> turn, and whether broader shell lifecycle redesign or a Slice 30 contract change was smuggled in. Report findings first with explicit severities. State clearly whether Packet 4 is review-clean or requires changes.
 
 Fix worker requirements:
 - If review finds issues, spawn a fresh GPT-5.4 subagent on high.
 - Fix subagent prompt:
-  /goal Address only the required Slice 63 Packet 4 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read the review findings plus SPEC-63, PLAN-63, TASKS-63, DESIGN-world-worker-lifecycle-model.md, and the listed handoffs. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Fix only the flagged Packet 4 issues without widening scope. Re-run `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture` and `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`. Do not commit. Final message must state which findings were fixed, what verification ran, whether Packet 4 is checkpoint-green, and whether another review round is required.
+  /goal Address only the required Slice 63 Packet 4 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read the review findings plus SPEC-63, SPEC-30, PLAN-63, TASKS-63, DESIGN-world-worker-lifecycle-model.md, and the listed handoffs. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Fix only the flagged Packet 4 issues without widening scope. Preserve the boundary that Packet 4 is about public follow-up over an already-created retained world-member slot, not pure public root start -> turn. Re-run `cargo test -p shell public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth -- --nocapture`, `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture`, and `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`. Do not commit. Final message must state which findings were fixed, what verification ran, whether Packet 4 is checkpoint-green, and whether another review round is required.
 
 Verification and commit requirements for the parent session:
 - After implementation and after each fix round, run:
+  - `cargo test -p shell public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth -- --nocapture`
   - `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture`
   - `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`
   - `git diff --stat`
@@ -425,7 +432,9 @@ Verification and commit requirements for the parent session:
 - Run `gitnexus_detect_changes()` before each commit if any non-test code changed.
 
 Packet 4 checkpoint:
-- the public regression proves exact-target routing across parked handoff
+- the public regression proves exact-target routing across parked handoff for public follow-up over an already-created retained world-member slot
+- the mixed REPL/public regression is explicitly treated as acceptable proof for retained-member public follow-up and not as proof of pure public root start -> turn
+- SPEC-30 remains authoritative that public `--scope world` root start is host-first and does not eagerly allocate a world-member slot
 - shell-side exact-target validation remains unchanged
 - no broader shell lifecycle redesign has been introduced
 
@@ -434,6 +443,7 @@ Final response requirements:
 - List exact verification commands run and whether they passed.
 - Report GitNexus impact-analysis results for edited production symbols.
 - Report GitNexus detect-changes results before each commit if it was required.
+- State whether the mixed REPL/public proof remained correctly scoped.
 - State whether Packet 5 is unblocked.
 - If anything is not green, say explicitly that Packet 5 must not begin.
 ```
@@ -447,6 +457,7 @@ You are the parent/orchestration session. Stay orchestration-only: do not implem
 
 Use these source docs as authority:
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-63-retained-world-worker-parked-resume-session-handle-contract.md
+- /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/SPEC-30-public-world-scoped-agent-start-and-capability-flags.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-63-retained-world-worker-parked-resume-session-handle-contract.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/TASKS-63.md
 - /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/DESIGN-world-worker-lifecycle-model.md
@@ -487,22 +498,24 @@ Packet 5 scope:
 Out of scope:
 - speculative cleanup after a green validation wall
 - widening the slice to absorb unrelated failures
+- changing the Slice 30 host-first public root-start contract
+- reinterpreting the mixed REPL/public Packet 4 proof as proof of pure public root `substrate agent start --backend cli:codex-world --scope world` -> public `substrate agent turn --backend cli:codex-world`
 - `SPEC-62` bootstrap compatibility, config/auth projection, workspace sync, router/inbox redesign, or unrelated worker behavior
 
 Validation worker requirements:
 - Spawn a fresh GPT-5.4 subagent on high.
 - Validation subagent prompt:
-  /goal Execute TASKS-63 Packet 5 validation only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read SPEC-63, PLAN-63, TASKS-63, and DESIGN-world-worker-lifecycle-model.md first. Do not make code changes unless the parent session later sends you back for a fix round. Run only the Packet 5 validation wall and report results precisely: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p world-service bootstrap_completion_with_session_handle_emits_registered_then_exit -- --nocapture`, `cargo test -p world-service find_submit_target_rejects_participant_id_drift_for_retained_slot -- --nocapture`, `cargo test -p world-service member_runtime -- --nocapture`, `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture`, and `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`. Final message must state whether Packet 5 is green, list exact command outcomes, identify any failures as in-scope vs out-of-scope candidates, and state whether a fix loop is necessary.
+  /goal Execute TASKS-63 Packet 5 validation only in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read SPEC-63, SPEC-30, PLAN-63, TASKS-63, and DESIGN-world-worker-lifecycle-model.md first. Do not make code changes unless the parent session later sends you back for a fix round. Run only the Packet 5 validation wall and report results precisely: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p world-service bootstrap_completion_with_session_handle_emits_registered_then_exit -- --nocapture`, `cargo test -p world-service find_submit_target_rejects_participant_id_drift_for_retained_slot -- --nocapture`, `cargo test -p world-service member_runtime -- --nocapture`, `cargo test -p shell public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth -- --nocapture`, `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture`, and `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`. Final message must state whether Packet 5 is green, list exact command outcomes, identify any failures as in-scope vs out-of-scope candidates, state whether the mixed REPL/public Packet 4 proof remained correctly scoped, and state whether a fix loop is necessary.
 
 Review worker requirements if validation fails:
 - Spawn a fresh GPT-5.4 subagent on high.
 - Review subagent prompt:
-  /goal Review the failed Slice 63 Packet 5 validation state in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in SPEC-63, PLAN-63, TASKS-63, and DESIGN-world-worker-lifecycle-model.md. Review only whether the failing verification belongs to Slice 63 scope and whether a fix is required before closeout. Report findings first with explicit severities. State clearly whether the failure is in-scope for Slice 63 or should be reported without widening scope.
+  /goal Review the failed Slice 63 Packet 5 validation state in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $code-review-and-quality. Ground the review in SPEC-63, SPEC-30, PLAN-63, TASKS-63, and DESIGN-world-worker-lifecycle-model.md. Review only whether the failing verification belongs to Slice 63 scope, whether the corrected Packet 4 proof boundary was preserved, and whether a fix is required before closeout. Report findings first with explicit severities. State clearly whether the failure is in-scope for Slice 63 or should be reported without widening scope.
 
 Fix worker requirements if review confirms an in-scope issue:
 - Spawn a fresh GPT-5.4 subagent on high.
 - Fix subagent prompt:
-  /goal Address only the required in-scope Slice 63 Packet 5 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read the review findings plus SPEC-63, PLAN-63, TASKS-63, and DESIGN-world-worker-lifecycle-model.md. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Fix only the flagged in-scope Slice 63 issues without widening scope. Re-run the exact failing Packet 5 verification commands plus any dependent checks needed to prove green. Do not commit. Final message must state which findings were fixed, what verification ran, whether Packet 5 is green, and whether another review round is required.
+  /goal Address only the required in-scope Slice 63 Packet 5 review findings in /Users/spensermcconnell/__Active_Code/atomize-hq/substrate using $incremental-implementation. Re-read the review findings plus SPEC-63, SPEC-30, PLAN-63, TASKS-63, and DESIGN-world-worker-lifecycle-model.md. If GitNexus says the index is stale, run `npx gitnexus analyze` first. Before editing any production Rust symbol, run GitNexus impact analysis and report the blast radius; if GitNexus reports HIGH or CRITICAL risk, stop and report before editing. Fix only the flagged in-scope Slice 63 issues without widening scope. Preserve the corrected Packet 4 boundary: public follow-up over an already-created retained world-member slot is in scope; pure public root start -> turn is not. Re-run the exact failing Packet 5 verification commands plus any dependent checks needed to prove green. Do not commit. Final message must state which findings were fixed, what verification ran, whether Packet 5 is green, whether the mixed REPL/public Packet 4 proof remained correctly scoped, and whether another review round is required.
 
 Verification and commit requirements for the parent session:
 - Always run or confirm the full Packet 5 wall:
@@ -511,6 +524,7 @@ Verification and commit requirements for the parent session:
   - `cargo test -p world-service bootstrap_completion_with_session_handle_emits_registered_then_exit -- --nocapture`
   - `cargo test -p world-service find_submit_target_rejects_participant_id_drift_for_retained_slot -- --nocapture`
   - `cargo test -p world-service member_runtime -- --nocapture`
+  - `cargo test -p shell public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth -- --nocapture`
   - `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture`
   - `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`
 - If an in-scope fix round occurs and any non-test code changed, run `gitnexus_detect_changes()` before commit.
@@ -519,6 +533,8 @@ Verification and commit requirements for the parent session:
 Packet 5 checkpoint:
 - the world-service lifecycle seam is proven green
 - the shell/public exact-target proof is green
+- the Slice 30 host-first public root-start guardrail remains green
+- the mixed REPL/public Packet 4 proof remains correctly scoped as retained-member follow-up proof and not pure public root start -> turn proof
 - the slice did not widen into `SPEC-62` bootstrap compatibility, config/auth projection, workspace sync, router/inbox redesign, or unrelated worker behavior
 
 Final response requirements:
@@ -526,5 +542,6 @@ Final response requirements:
 - List exact verification commands run and whether they passed.
 - If no code changed, say explicitly that no commit was created because Packet 5 was validation-only.
 - If an in-scope fix round occurred, report GitNexus impact-analysis results for edited production symbols and `gitnexus_detect_changes()` results before each commit.
+- State whether the mixed REPL/public Packet 4 proof remained correctly scoped.
 - If anything remains red, state explicitly whether it is in-scope blocked work or out-of-scope follow-up.
 ```

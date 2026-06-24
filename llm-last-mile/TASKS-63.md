@@ -28,7 +28,7 @@ This slice should be implemented as five sequential packets:
 1. pin the lifecycle seam in `world-service` tests,
 2. separate retained registry ownership from bootstrap-process ownership,
 3. make parked submitted-turn resume work and keep turn failure separate from worker death,
-4. keep one shell/public regression for exact-target routing truth,
+4. keep one shell/public regression for exact-target routing truth over an already-created retained world-member slot,
 5. run the final validation wall.
 
 Do not begin a later packet until the prior packet checkpoint is green.
@@ -143,18 +143,21 @@ Packet 3 is complete only when:
 
 Do not start Packet 4 until Packet 3 verification is green.
 
-## Packet 4: Keep One Shell/Public Regression For Exact-Target Routing Truth
+## Packet 4: Keep One Shell/Public Regression For Already-Created Retained World-Member Follow-Up Truth
 
 Session goal:
 
 1. prove the repaired runtime seam still aligns with shell/control-plane targeting,
-2. avoid widening the fix into a shell-side lifecycle redesign,
-3. keep one durable public proof wall.
+2. restore Packet 4 to public follow-up over an already-created exact retained world-member participant with surfaced resumable identity,
+3. keep Packet 4 aligned with [`SPEC-30-public-world-scoped-agent-start-and-capability-flags.md`](./SPEC-30-public-world-scoped-agent-start-and-capability-flags.md), which freezes public `--scope world` root start as host-first and does **not** eagerly allocate a world-member slot at `start` return,
+4. keep one durable public proof wall.
 
 ### Tasks
 
 - [ ] Task 4.1: Extend one Linux public regression across the bootstrap-exits-then-resume seam
-  - Acceptance: one shell/public regression proves that `continue_world_worker` still targets the exact retained participant and succeeds after the retained worker has already exited bootstrap and entered parked/resumable posture; the regression must not rely solely on a held-open member runtime.
+  - Acceptance: one shell/public regression proves that public follow-up against an already-created exact retained world-member participant succeeds after that retained worker has already exited bootstrap and entered parked/resumable posture; the regression must not rely solely on a held-open member runtime.
+  - Contract note: `public_turn_routes_linux_world_member_follow_up_through_typed_submit_path` is acceptable Packet 4 proof because it first creates the retained world member through the REPL/private path and then exercises public follow-up over that exact retained participant.
+  - Non-proof note: this mixed REPL/public regression is **not** proof of pure public root `substrate agent start --backend cli:codex-world --scope world` -> public `substrate agent turn --backend cli:codex-world`; Slice 30 keeps that root-start path host-first without eager world-member-slot allocation, as frozen by `public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth`.
   - Verify:
     - `cargo test -p shell resolve_internal_continue_world_dispatch_target_returns_exact_retained_worker -- --nocapture`
     - `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`
@@ -162,15 +165,25 @@ Session goal:
     - [`crates/shell/tests/agent_public_control_surface_v1.rs`](../crates/shell/tests/agent_public_control_surface_v1.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) only if a narrow routing mismatch is uncovered
 
+- [ ] Task 4.2: Keep pure-public startup-stabilization out of this packet unless a higher authority changes Slice 30
+  - Acceptance: Packet 4 does **not** claim or prove that pure public root `substrate agent start --backend cli:codex-world --scope world` immediately enables public `substrate agent turn --backend cli:codex-world`; any future change to that host-first/public-root-start contract requires a higher-authority spec/plan update first, not a silent Packet 4 widening. The current packet remains limited to exact retained-member public follow-up truth once the slot already exists.
+  - Verify:
+    - `cargo test -p shell public_root_start_world_scope_starts_attached_host_session_with_world_binding_truth -- --nocapture`
+    - `cargo test -p shell public_turn_routes_linux_world_member_follow_up_through_typed_submit_path -- --nocapture`
+  - Files:
+    - [`crates/shell/tests/agent_public_control_surface_v1.rs`](../crates/shell/tests/agent_public_control_surface_v1.rs)
+
 ### Packet 4 Checkpoint
 
 Packet 4 is complete only when:
 
-1. the public regression proves exact-target routing across parked handoff,
-2. shell-side exact-target validation remains unchanged,
-3. no broader shell lifecycle redesign has been introduced.
+1. the public regression proves exact-target routing across parked handoff for public follow-up over an already-created retained world-member slot,
+2. the repo documents that the mixed REPL/public regression is acceptable Packet 4 proof for exact retained-member follow-up, but **not** proof of pure public root start -> turn,
+3. Slice 30 remains authoritative that public `--scope world` root start is host-first and does not eagerly allocate a world-member slot,
+4. shell-side exact-target validation remains unchanged,
+5. no broader shell lifecycle redesign has been introduced.
 
-Do not start Packet 5 until Packet 4 verification is green.
+Do not start Packet 5 until the corrected Packet 4 proof wall is green, even if Packets 1-3 are already green elsewhere.
 
 ## Packet 5: Final Validation Wall
 
