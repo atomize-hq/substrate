@@ -3137,40 +3137,9 @@ fn born_unattached_status_projection(
     })
 }
 
-fn status_visible_parked_retained_world_member(
-    session: &OrchestrationSessionRecord,
-    participant: &AgentRuntimeParticipantRecord,
-) -> bool {
-    participant.handle.role == MEMBER_ROLE
-        && participant.handle.execution.scope == AgentExecutionScope::World
-        && participant.handle.state.is_live()
-        && participant.matches_authoritative_parent_world_binding(session)
-        && participant.internal.uaa_session_id.is_some()
-        && participant.internal.terminal_observed_at.is_none()
-        && !participant.internal.control_owner_retained
-        && !participant.internal.event_stream_active
-        && !participant.internal.completion_observer_retained
-        && !participant.internal.ownership_valid
-        && !participant.is_authoritative_live()
-}
-
 fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<SessionProjection> {
-    let mut participants = session.status_visible_participants();
-    let mut visible_ids = participants
-        .iter()
-        .map(|participant| participant.handle.participant_id.clone())
-        .collect::<BTreeSet<_>>();
-    for participant in &session.participants {
-        if visible_ids.contains(&participant.handle.participant_id) {
-            continue;
-        }
-        if status_visible_parked_retained_world_member(&session.session, participant) {
-            visible_ids.insert(participant.handle.participant_id.clone());
-            participants.push(participant.clone());
-        }
-    }
-
-    let mut projections = participants
+    let mut projections = session
+        .status_visible_participants()
         .into_iter()
         .map(|participant| live_participant_status_projection(&session.session, &participant))
         .collect::<Vec<_>>();

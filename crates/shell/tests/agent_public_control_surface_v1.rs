@@ -4216,37 +4216,6 @@ fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestr
         ts,
     );
 
-    let parked_status_output = fixture.run(&["agent", "status", "--json"]);
-    assert!(
-        parked_status_output.status.success(),
-        "parked status must succeed before same-session follow-up control flow: {parked_status_output:?}"
-    );
-    let parked_status_json = parse_json_output(&parked_status_output);
-    let parked_status_row = find_status_session_by_orchestration_session_id(
-        status_sessions(&parked_status_json),
-        orchestration_session_id,
-    );
-    assert_eq!(
-        parked_status_row.get("source_kind").and_then(Value::as_str),
-        Some("live_runtime")
-    );
-    assert_eq!(
-        parked_status_row.get("posture").and_then(Value::as_str),
-        Some("parked_resumable")
-    );
-    assert!(
-        parked_status_row
-            .get("attached_participant_id")
-            .is_some_and(Value::is_null),
-        "parked status rows must preserve detached ownership as explicit null: {parked_status_row}"
-    );
-    assert_eq!(
-        parked_status_row
-            .get("pending_inbox_count")
-            .and_then(Value::as_u64),
-        Some(0)
-    );
-
     let turn_output = fixture.run(&[
         "agent",
         "turn",
@@ -5930,50 +5899,6 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
     assert_eq!(submit.world_generation, world_generation);
     assert_eq!(submit.prompt, "continue in world");
     drop(guard);
-
-    let status_output = fixture.run(&["agent", "status", "--json"]);
-    assert!(
-        status_output.status.success(),
-        "public status must stay available after retained world follow-up delivery: {status_output:?}"
-    );
-    let status_json = parse_json_output(&status_output);
-    let status_row = status_sessions(&status_json)
-        .iter()
-        .find(|session| {
-            session
-                .get("orchestration_session_id")
-                .and_then(Value::as_str)
-                == Some(orchestration_session_id.as_str())
-                && session.get("participant_id").and_then(Value::as_str)
-                    == Some(member_participant_id.as_str())
-        })
-        .unwrap_or_else(|| {
-            panic!(
-                "missing retained world status row for session {} participant {}: {:?}",
-                orchestration_session_id,
-                member_participant_id,
-                status_sessions(&status_json)
-            )
-        });
-    assert_eq!(
-        status_row.get("posture").and_then(Value::as_str),
-        Some("active_attached")
-    );
-    assert_eq!(
-        status_row
-            .get("attached_participant_id")
-            .and_then(Value::as_str),
-        Some(owner_participant_id.as_str()),
-        "public control projection must remain attached to the authoritative owner while status surfaces the retained worker row"
-    );
-    assert_eq!(
-        status_row.get("world_id").and_then(Value::as_str),
-        Some(world_id.as_str())
-    );
-    assert_eq!(
-        status_row.get("world_generation").and_then(Value::as_u64),
-        Some(world_generation)
-    );
 
     assert!(
         String::from_utf8_lossy(&turn_output.stdout)
