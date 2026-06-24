@@ -138,7 +138,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-5.2: Restore The Fixture Authority Contract
 
-- [ ] Task R5.75-5.2.1: Restore/create the live fixture-manifest authority doc and update the README
+- [x] Task R5.75-5.2.1: Restore/create the live fixture-manifest authority doc and update the README
       contract for the new secondary lane.
   - Acceptance:
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md` exists in the live docs tree,
@@ -156,10 +156,17 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/README.md`
     - `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/README.md`
     - `crates/agent-drift-analyzer/tests/fixtures/objective_acceptance/stretch-external/README.md`
+  - Closeout note (2026-06-24): this task had already landed on 2026-06-23 via
+    `dc3da7b32` (`docs: restore R5 progress fixture authority contract`) and
+    `ecb07637f` (`fix: address R5.75-5.2 review findings`). The live
+    `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md` authority doc is restored
+    to the active docs tree, the progress/objective fixture READMEs now keep native authority versus
+    adapted secondary robustness explicit, and `stretch-external/` remains truthfully
+    placeholder-only unless a later objective packet proves net-new signal.
 
 ## R5.75-5.3: Commit The Adapted Progress Secondary Lane
 
-- [ ] Task R5.75-5.3.1: Add the explicit adapted-external secondary lane to the progress acceptance
+- [x] Task R5.75-5.3.1: Add the explicit adapted-external secondary lane to the progress acceptance
       harness.
   - Acceptance:
     - `progress_acceptance.rs` distinguishes:
@@ -174,8 +181,13 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
   - Files:
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/README.md`
+  - Closeout note (2026-06-24): this task had already landed on 2026-06-23 in `d0541ebb2`
+    (`test: add adapted external progress acceptance fixtures`). The live
+    `progress_acceptance.rs` harness now distinguishes native annotated real-rollout authority,
+    adapted external secondary robustness, and synthetic support cases explicitly, while the
+    companion README keeps the lane boundary and native-anchor requirement review-visible.
 
-- [ ] Task R5.75-5.3.2: Commit the sparse-readable adapted progress case.
+- [x] Task R5.75-5.3.2: Commit the sparse-readable adapted progress case.
   - Acceptance: one adapted fixture directory and expectation file are committed for
     `f47b81f39f2495dd`, and they encode the packet-owned `R5.75-2` expectation:
     - analyzer does not abort,
@@ -188,8 +200,12 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-sparse-readable-f47b81f39f2495dd/**`
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
+  - Closeout note (2026-06-24): this task had already landed on 2026-06-23 in `d0541ebb2`.
+    The committed `adapted-sparse-readable-f47b81f39f2495dd/**` fixture now preserves the
+    `R5.75-2` sparse-readable conservative outcome as explicit secondary robustness rather than
+    primary authority.
 
-- [ ] Task R5.75-5.3.3: Commit the zero-verifier exploratory adapted progress case.
+- [x] Task R5.75-5.3.3: Commit the zero-verifier exploratory adapted progress case.
   - Acceptance: one adapted fixture directory and expectation file are committed for
     `097d97e914ca220f`, and they encode the packet-owned `R5.75-4` expectation:
     - the selected checkpoint stays on conservative planning posture,
@@ -201,8 +217,12 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-zero-verifier-097d97e914ca220f/**`
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
+  - Closeout note (2026-06-24): this task had already landed on 2026-06-23 in `d0541ebb2`.
+    The committed `adapted-zero-verifier-097d97e914ca220f/**` fixture now preserves the `R5.75-4`
+    anti-flap conservative planning posture without letting the exploratory overclaim return, and it
+    remains labeled secondary robustness only.
 
-- [ ] Task R5.75-5.3.4: Commit the delegated parent-visible adapted progress case.
+- [x] Task R5.75-5.3.4: Commit the delegated parent-visible adapted progress case.
   - Acceptance: one adapted fixture directory and expectation file are committed for
     `da59436e63915185`, and they encode the packet-owned `R5.75-3` / `R5.75-4` expectation:
     - the exploratory overclaim stays removed,
@@ -215,6 +235,12 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-parent-visible-da59436e63915185/**`
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `docs/specs/r5/agent-drift-analyzer-session-progress-r5-fixtures.md`
+  - Closeout note (2026-06-24): this task had already landed on 2026-06-23 in `d0541ebb2`.
+    The committed `adapted-parent-visible-da59436e63915185/**` fixture keeps the combined
+    `R5.75-3` / `R5.75-4` delegated-parent-visible expectation explicit: the exploratory overclaim
+    stays removed, the late delegated interval remains conservative
+    `parent_visible_orchestration`, and child-visibility limits remain counter-evidence rather than a
+    promotion shortcut.
 
 ## R5.75-5.4: Objective Stretch-External Decision
 
@@ -314,7 +340,7 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
 
 ## R5.75-5.7: MAP Promotion And Routing Update
 
-- [ ] Task R5.75-5.7.1: Update the main `R5.75` routing hub only after the packet has actually closed.
+- [x] Task R5.75-5.7.1: Update the main `R5.75` routing hub only after the packet has actually closed.
   - Acceptance:
     - `docs/specs/r5/R5_75/MAP.md` is updated only after Tasks `R5.75-5.1` through `R5.75-5.6` are
       honestly complete
@@ -325,3 +351,10 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - manual review against the saved smoke outputs and green acceptance walls
   - Files:
     - `docs/specs/r5/R5_75/MAP.md`
+  - Closeout note (2026-06-24): the MAP promotion itself had already landed in `1be26d43e`
+    (`docs: promote R5.75-5 and route R5.75-6`), but the packet ledger still left
+    `R5.75-5.2.1` and `R5.75-5.3.1` through `R5.75-5.3.4` unchecked. After reconciling those earlier
+    packet tasks against their committed evidence (`dc3da7b32`, `ecb07637f`, `d0541ebb2`) plus the
+    already-recorded `R5.75-5.4`/`5.5`/`5.6` closeouts, the existing
+    `docs/specs/r5/R5_75/MAP.md` promotion is now backed by a completed ledger state. No further MAP
+    wording change was required; this closeout is the docs-only routing-authority reconciliation.
