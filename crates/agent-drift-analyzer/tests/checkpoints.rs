@@ -6070,72 +6070,22 @@ fn checkpoints_context_objective_keeps_review_goal_but_leaves_weak_target_unknow
 
 #[test]
 fn checkpoints_keep_grounded_validate_readiness_goal_over_optional_reviewer_nit() {
-    let prompt = r#"we have landed Packet 3 detailed here docs/research/cycle-stage-registry-refactor-map.md :
+    let validate_ask = "Please validate that has all landed correctly/completely.";
+    let readiness_followup =
+        "Then confirm/deny we are ready to spec/plan/tasks out Packet 4 next.";
+    let validate_readiness_ask = format!("{validate_ask}\n{readiness_followup}");
+    let prompt = format!(
+        r#"Packet 3.6 is implementation-complete and review-clean.
 
-Packet 3.6 is implementation-complete and review-clean.
+Optional reviewer nits not taken:
+- add extra task-local grep checks for transition routing / outcome/final-marker meaning
+- normalize one blocked-semantics wording instance
 
-  I stayed orchestration-only: delegated implementation/fix rounds to fresh subagents, inspected each diff myself,
-  reran verification as needed, and kept separate commits per round.
-
-  Commits created, in order
-
-  1. 12807dc — Close Packet 3 with review-ready proof wall
-  2. 43e3164 — Tighten Packet 3 closeout scope and deferrals
-  3. a4e8718 — Clarify Packet 3 closeout boundaries and dry-run proof
-  4. f71f1d4 — Resolve Packet status ledger contradiction
-
-  Verification commands run
-
-  - git diff --check
-  - python3 -m py_compile .agents/skills/cycle/scripts/*.py
-  - node scripts/cycle-stage-registry-loader-verify.mjs
-  - node scripts/cycle-stage-registry-execution-surface-verify.mjs
-  - node scripts/cycle-stage-registry-execution-surface-verify.mjs --case successor-objective-auto-start
-  - node scripts/cycle-stage-skills-readonly-verify.mjs
-  - .agents/skills/cycle/bin/cycle render --project-root "$PWD"
-  - .agents/skills/cycle/bin/cycle validate --project-root "$PWD"
-  - .agents/skills/cycle/bin/cycle next --project-root "$PWD" --dry-run --no-auto-continue
-  - node scripts/cycle-managed-repo-contract-verify.mjs
-  - node scripts/smoke-check.mjs
-  - Packet 3.6 doc rg checks for:
-      - Packet 4
-      - transition routing
-      - outcome/final-marker meaning
-      - blocked semantics
-      - validator-semantic cutover
-      - LangGraph
-      - higher-level horizon above \objective``
-
-  Important precision note
-
-  - The dry-run command is not stderr-clean in this source checkout.
-  - It exits 0 and prints the dry-run confirmation, but still emits:
-      - rsync(...): error: mkstempsock: Invalid argument
-
-  - Packet 3.6 docs now record that honestly as an exit-0 smoke proof, not a clean stderr-free proof.
-
-  Non-blocking follow-ups intentionally deferred
-
-  - Packet 4 work remains deferred:
-      - transition routing
-      - outcome/final-marker meaning
-      - blocked semantics
-      - validator-semantic cutover
-
-  - LangGraph remains deferred.
-  - The higher-level horizon above objective remains deferred.
-  - Optional reviewer nits not taken:
-      - add extra task-local grep checks for transition routing / outcome/final-marker meaning
-      - normalize one blocked-semantics wording instance
-
-  So the final state is: Packet 3.6 landed, commits separated correctly, verification wall recorded honestly, and
-  review is clean.
-
----
-
-Please validate that has all landed correctly/completely and then we need to turn our attenten to Packet 4 and confirm/deny we are ready to spec/plan/tasks out Packet 4 so we can continue on with implementation"#;
+{validate_ask}
+{readiness_followup}"#
+    );
     let result = analyze_custom_rows(vec![
-        prompt_row(0, "turn-001", prompt),
+        prompt_row(0, "turn-001", &prompt),
         tool_call_row(
             1,
             "turn-001",
@@ -6146,10 +6096,7 @@ Please validate that has all landed correctly/completely and then we need to tur
     ]);
 
     let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
-    assert_eq!(
-        checkpoint.task_frame.objective,
-        "Please validate that has all landed correctly/completely."
-    );
+    assert_eq!(checkpoint.task_frame.objective, validate_readiness_ask);
     assert!(
         !checkpoint
             .task_frame
