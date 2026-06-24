@@ -58,6 +58,7 @@ struct ActiveMemberRuntime {
     backend_id: String,
     backend_kind: MemberRuntimeBackendKindV1,
     binary_path: std::path::PathBuf,
+    launcher_dir: std::path::PathBuf,
     workspace_dir: std::path::PathBuf,
     process_working_dir: std::path::PathBuf,
     env: BTreeMap<String, String>,
@@ -72,7 +73,6 @@ struct ActiveBootstrapRuntime {
     span_id: String,
     cancel: Option<AgentWrapperCancelHandle>,
     last_signal: Option<String>,
-    launcher_dir: std::path::PathBuf,
 }
 
 struct ActiveSubmittedTurn {
@@ -198,6 +198,9 @@ impl MemberRuntimeManager {
             backend_id: dispatch.backend_id.clone(),
             backend_kind: dispatch.resolved_runtime.backend_kind,
             binary_path: actual_binary,
+            launcher_dir: prepared_launcher_dir
+                .take()
+                .expect("prepared launcher dir must exist while bootstrap is active"),
             workspace_dir: placement.working_dir.clone(),
             process_working_dir,
             env: runtime_env,
@@ -207,9 +210,6 @@ impl MemberRuntimeManager {
                 span_id: span_id.clone(),
                 cancel: Some(cancel),
                 last_signal: None,
-                launcher_dir: prepared_launcher_dir
-                    .take()
-                    .expect("prepared launcher dir must exist while bootstrap is active"),
             })),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
@@ -217,6 +217,7 @@ impl MemberRuntimeManager {
         if let Err(err) = self.register_member(active.clone()) {
             active.cancel_bootstrap();
             active.close_bootstrap();
+            active.cleanup_launcher_dir();
             return Err(err);
         }
 
@@ -459,6 +460,7 @@ impl MemberRuntimeManager {
                 let retained_key = RetainedMemberKey::from_active(active.as_ref());
                 guard.by_retained_key.remove(&retained_key);
                 active.close_bootstrap();
+                active.cleanup_launcher_dir();
             }
         }
     }
@@ -473,8 +475,9 @@ impl MemberRuntimeManager {
             return;
         };
 
-        active.close_bootstrap();
-        if !preserve_retained_member {
+        if preserve_retained_member {
+            active.close_bootstrap();
+        } else {
             self.unregister_member(participant_id);
         }
     }
@@ -1383,10 +1386,12 @@ impl ActiveMemberRuntime {
 
     fn close_bootstrap(&self) {
         if let Ok(mut guard) = self.bootstrap.lock() {
-            if let Some(bootstrap) = guard.take() {
-                let _ = fs::remove_dir_all(&bootstrap.launcher_dir);
-            }
+            guard.take();
         }
+    }
+
+    fn cleanup_launcher_dir(&self) {
+        let _ = fs::remove_dir_all(&self.launcher_dir);
     }
 
     fn submit_context(&self, run_id: String) -> MemberStreamContext {
@@ -1502,9 +1507,11 @@ mod tests {
         let process_working_dir = temp_dir.path().join("process");
         let binary_path = temp_dir.path().join("member-runtime");
         let launcher_dir = temp_dir.path().join("launcher");
+        let codex_home = launcher_dir.join("codex-home");
         fs::create_dir_all(&workspace_dir).expect("create workspace dir");
         fs::create_dir_all(&process_working_dir).expect("create process dir");
         fs::create_dir_all(&launcher_dir).expect("create launcher dir");
+        fs::create_dir_all(&codex_home).expect("create codex home");
         fs::write(&binary_path, "#!/bin/sh\nexit 0\n").expect("write binary");
 
         Arc::new(ActiveMemberRuntime {
@@ -1517,16 +1524,19 @@ mod tests {
             backend_id: "cli:codex".to_string(),
             backend_kind: MemberRuntimeBackendKindV1::Codex,
             binary_path,
+            launcher_dir: launcher_dir.clone(),
             workspace_dir,
             process_working_dir,
-            env: BTreeMap::new(),
+            env: BTreeMap::from([(
+                "CODEX_HOME".to_string(),
+                codex_home.display().to_string(),
+            )]),
             binding: sample_world_binding(),
             protocol: json!("substrate.agent.session"),
             bootstrap: Mutex::new(Some(ActiveBootstrapRuntime {
                 span_id: bootstrap_span_id.to_string(),
                 cancel: None,
                 last_signal: None,
-                launcher_dir,
             })),
             active_turn_span_id: Mutex::new(None),
             uaa_session_id: Mutex::new(None),
@@ -2465,8 +2475,12 @@ base_url = "https://gateway.example.invalid/v1"
             "preserved retained member should infer parked truth by clearing the active bootstrap slot"
         );
         assert!(
-            !temp_dir.path().join("launcher").exists(),
-            "bootstrap cleanup should still remove launcher artifacts"
+            temp_dir.path().join("launcher").exists(),
+            "parked retained workers must keep launcher artifacts for later submit_turn resume"
+        );
+        assert!(
+            temp_dir.path().join("launcher").join("codex-home").exists(),
+            "parked retained workers must keep isolated CODEX_HOME for later resume"
         );
     }
 
