@@ -1,9 +1,11 @@
 # Fixture Manifest: Agent Drift Analyzer Session Progress R5
 
-Status: restored to the live docs tree on 2026-06-23 by Packet `R5.75-5.2`. Packet `R5-7` and
-Packet `R5.5-4` still define the currently committed native/synthetic progress corpus, while
-Packet `R5.75-5` adds the contract for a bounded adapted external **secondary** lane. This docs
-slice records that authority boundary honestly before any adapted fixture directories land.
+Status: restored to the live docs tree on 2026-06-23 by Packet `R5.75-5.2`. The committed
+native/synthetic progress corpus was seeded by Packet `R5-7` and Packet `R5.5-4`, then expanded by
+later `R5.75` landings that added the delegated real-rollout proof
+`019eb970-3543-7ab1-a5d6-2a62c00c7185` (commit `678d1e80c`) and the synthetic zero-verifier
+anti-flap support case. `R5.75-5.2` restores this live authority doc and locks the adapted
+external **secondary** lane contract before any adapted fixture directories land.
 
 ## Purpose
 
