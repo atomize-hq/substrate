@@ -12742,7 +12742,7 @@ agents:
             Ok(service) => service,
             Err(err) => {
                 eprintln!(
-                    "skipping continue_world_worker dispatch test: service init failed: {err}"
+                    "skipping continue_world_worker dispatch test: service init failed: {err:#}"
                 );
                 return;
             }
@@ -12769,7 +12769,7 @@ agents:
             Ok(world) => world,
             Err(err) => {
                 eprintln!(
-                    "skipping continue_world_worker dispatch test: failed to ensure shared world: {err}"
+                    "skipping continue_world_worker dispatch test: failed to ensure shared world: {err:#}"
                 );
                 return;
             }
