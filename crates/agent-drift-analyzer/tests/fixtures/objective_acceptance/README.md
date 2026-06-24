@@ -5,6 +5,16 @@ Packet `SO-4.2` now commits the **expected-shape contract** for future cases, an
 `SO-5.3` seed the first committed corpus. The harness must evaluate structured correctness from
 fixture metadata rather than reducing success to one exact objective string.
 
+Authority boundary:
+
+- `locked-acceptance/` is the native primary objective authority.
+- `design-set/` is bounded supporting control coverage, not a second primary wall.
+- `stretch-external/` is the adapted external **secondary robustness** lane only. It must not widen
+  the native locked corpus unless a later packet proves genuine net-new objective signal.
+- Packet `R5.75-5.2` keeps `stretch-external/` placeholder-only: adapted case `05a56cc51632982b`
+  is cross-referenced there as a candidate, but it is not admitted into the committed objective
+  corpus by this docs-only slice.
+
 The committed root must stay bounded to:
 
 - `README.md`
@@ -59,7 +69,8 @@ The `R5.75-1` Issue 1/2/3 anchoring fix adds two more controls:
 Those controls prove Phase 1 does not overfit to WDAP alone: deliberate `AGENTS.md`, `<skill>`,
 `Available skills`, concise /goal, do not change code, docs-only, and research prompts all stay
 semantically distinct, and intent/field assembly stays grounded to the active goal surface.
-stretch-external/ remains placeholder-only. The harness must enumerate every committed
+`stretch-external/` remains placeholder-only until an adapted external case clears the net-new
+signal bar beyond the locked native corpus. The harness must enumerate every committed
 `<case-id>/raw.json` and `<case-id>/expected.json` entry deterministically.
 
 ## Case contract
