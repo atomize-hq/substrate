@@ -1350,10 +1350,11 @@ impl ActiveMemberRuntime {
     }
 
     fn bootstrap_last_signal(&self) -> Option<String> {
-        self.bootstrap
-            .lock()
-            .ok()
-            .and_then(|guard| guard.as_ref().and_then(|bootstrap| bootstrap.last_signal.clone()))
+        self.bootstrap.lock().ok().and_then(|guard| {
+            guard
+                .as_ref()
+                .and_then(|bootstrap| bootstrap.last_signal.clone())
+        })
     }
 
     fn cancel_bootstrap(&self) {
@@ -1527,10 +1528,7 @@ mod tests {
             launcher_dir: launcher_dir.clone(),
             workspace_dir,
             process_working_dir,
-            env: BTreeMap::from([(
-                "CODEX_HOME".to_string(),
-                codex_home.display().to_string(),
-            )]),
+            env: BTreeMap::from([("CODEX_HOME".to_string(), codex_home.display().to_string())]),
             binding: sample_world_binding(),
             protocol: json!("substrate.agent.session"),
             bootstrap: Mutex::new(Some(ActiveBootstrapRuntime {
@@ -2465,7 +2463,9 @@ base_url = "https://gateway.example.invalid/v1"
             "retained member should survive clean bootstrap exit once resumable identity exists"
         );
         assert_eq!(
-            guard.by_retained_key.get(&RetainedMemberKey::from_active(active.as_ref())),
+            guard
+                .by_retained_key
+                .get(&RetainedMemberKey::from_active(active.as_ref())),
             Some(&active.participant_id),
             "retained slot ownership should stay exact after bootstrap cleanup"
         );

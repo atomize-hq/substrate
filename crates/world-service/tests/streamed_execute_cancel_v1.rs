@@ -702,13 +702,10 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         "cli:codex",
         MemberRuntimeBackendKindV1::Codex,
     );
-    codex_request
-        .env
-        .get_or_insert_with(HashMap::new)
-        .insert(
-            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
-            seed_home.display().to_string(),
-        );
+    codex_request.env.get_or_insert_with(HashMap::new).insert(
+        SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+        seed_home.display().to_string(),
+    );
     let codex_response = service
         .execute_stream(codex_request)
         .await
