@@ -237,7 +237,19 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
 
     for (index, window) in checkpoint_windows(session).into_iter().enumerate() {
         let mut context = assemble_context(&window);
-        if let Some(objective) = narrowed_objective_summary(&window.compact_rows) {
+        let narrowed_objective = narrowed_objective_summary(&window.compact_rows);
+        if let (Some(anchor_text), Some(narrowed)) = (
+            grounded_structured_goal_anchor_text(&window.compact_rows, &context.objective),
+            narrowed_objective.as_ref(),
+        ) {
+            if should_prefer_grounded_goal_anchor(&anchor_text, &narrowed.text) {
+                context.objective.text = anchor_text;
+            } else if context.objective.structured.is_some() {
+                context.objective = context.objective.with_compatibility_display_from(narrowed);
+            } else {
+                context.objective = narrowed.clone();
+            }
+        } else if let Some(objective) = narrowed_objective {
             if context.objective.structured.is_some() {
                 context.objective = context
                     .objective
@@ -2142,6 +2154,198 @@ fn is_synthetic_user_message(row: &CompactionRow) -> bool {
     row.text.contains("AGENTS.md instructions")
         || row.text.contains("<skill>")
         || row.text.contains("Available skills")
+}
+
+fn grounded_structured_goal_anchor_text(
+    rows: &[CompactionRow],
+    objective: &ObjectiveSummary,
+) -> Option<String> {
+    let structured = objective.structured.as_ref()?;
+    if structured.objective_class != ObjectiveClass::TaskStatement
+        || structured
+            .unknowns
+            .iter()
+            .any(|unknown| unknown.field_name == "primary_goal")
+    {
+        return None;
+    }
+
+    let anchor_span = structured
+        .evidence_spans
+        .iter()
+        .filter(|span| span.role == ObjectiveRole::Goal)
+        .filter(|span| {
+            matches!(
+                span.source_kind,
+                ObjectiveSourceKind::ThreadGoal | ObjectiveSourceKind::UserPrompt
+            )
+        })
+        .max_by_key(|span| grounded_goal_anchor_score(span))?;
+
+    if grounded_goal_anchor_score(anchor_span) < 700 {
+        return None;
+    }
+
+    let anchor_text = rows
+        .iter()
+        .find(|row| {
+            row.event_index == anchor_span.row.event_index
+                && row.row_ordinal == anchor_span.row.row_ordinal
+                && row.source_file == anchor_span.row.source_file
+        })
+        .and_then(|row| paragraph_containing_excerpt(&row.text, &anchor_span.excerpt))
+        .map(|paragraph| normalized_objective_text(&paragraph))
+        .filter(|text| !text.trim().is_empty())
+        .unwrap_or_else(|| anchor_span.excerpt.trim().to_string());
+
+    (!anchor_text.is_empty()).then_some(anchor_text)
+}
+
+fn should_prefer_grounded_goal_anchor(anchor_text: &str, narrowed_text: &str) -> bool {
+    anchor_text_looks_grounded_goal(anchor_text)
+        && narrowed_objective_looks_subordinate(narrowed_text)
+}
+
+fn anchor_text_looks_grounded_goal(text: &str) -> bool {
+    let lowered = text.to_ascii_lowercase();
+    lowered.starts_with("/goal ")
+        || [
+            "please validate",
+            "confirm/deny",
+            "determine whether",
+            "evaluate if",
+            "need you to",
+            "want you to",
+            "findings-first",
+            "review ",
+            "validate ",
+        ]
+        .iter()
+        .any(|needle| lowered.contains(needle))
+}
+
+fn narrowed_objective_looks_subordinate(text: &str) -> bool {
+    let lowered = text.trim().to_ascii_lowercase();
+    if lowered.is_empty() {
+        return false;
+    }
+
+    if [
+        "review is clean",
+        "implementation-complete",
+        "future work only",
+        "after that, report the changed files",
+        "report the changed files",
+        "return with changed files",
+        "optional reviewer nits",
+        "non-blocking follow-ups",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
+    {
+        return true;
+    }
+
+    ["add ", "normalize ", "tighten ", "wire ", "update ", "fix "]
+        .iter()
+        .any(|needle| lowered.starts_with(needle))
+}
+
+fn grounded_goal_anchor_score(span: &ObjectiveEvidenceSpan) -> i32 {
+    let mut score = match span.source_kind {
+        ObjectiveSourceKind::ThreadGoal => 900,
+        ObjectiveSourceKind::UserPrompt => 600,
+        ObjectiveSourceKind::AssistantContext => 100,
+        ObjectiveSourceKind::SystemInstruction
+        | ObjectiveSourceKind::ToolOutput
+        | ObjectiveSourceKind::UnknownSource => -500,
+    };
+
+    score += match span.confidence {
+        Confidence::High => 250,
+        Confidence::Medium => 125,
+        Confidence::Low => 0,
+    };
+
+    score += match span.section_kind {
+        ObjectiveSectionKind::Scope | ObjectiveSectionKind::Mission => 200,
+        ObjectiveSectionKind::Checklist | ObjectiveSectionKind::Verification => -400,
+        ObjectiveSectionKind::Boilerplate | ObjectiveSectionKind::ToolingInstructions => -500,
+        ObjectiveSectionKind::Constraints
+        | ObjectiveSectionKind::Deliverables
+        | ObjectiveSectionKind::Context
+        | ObjectiveSectionKind::UnknownSection => 0,
+    };
+
+    let lowered = span.excerpt.to_ascii_lowercase();
+    if lowered.starts_with("/goal ") {
+        score += 700;
+    }
+    if [
+        "please validate",
+        "confirm/deny",
+        "determine whether",
+        "evaluate if",
+        "review whether",
+        "validate whether",
+        "are we ready",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
+    {
+        score += 700;
+    }
+    if ["need you to", "want you to", "please ", "findings-first"]
+        .iter()
+        .any(|needle| lowered.contains(needle))
+    {
+        score += 250;
+    }
+    if [
+        "implementation-complete",
+        "review-clean",
+        "review is clean",
+        "orchestration-only",
+        "optional reviewer nits",
+        "not taken",
+        "future work",
+        "deferred",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
+    {
+        score -= 500;
+    }
+    if lowered.contains("cargo ")
+        || lowered.contains(" --")
+        || lowered.contains("\"$pwd\"")
+        || lowered.starts_with(".agents/")
+    {
+        score -= 700;
+    }
+    if ["add ", "normalize ", "tighten ", "wire ", "update ", "fix "]
+        .iter()
+        .any(|needle| lowered.starts_with(needle))
+    {
+        score -= 350;
+    }
+    if lowered.ends_with("is clean.") || lowered.ends_with("review-clean.") {
+        score -= 350;
+    }
+
+    score + span.clause_index.unwrap_or_default() as i32
+}
+
+fn paragraph_containing_excerpt(text: &str, excerpt: &str) -> Option<String> {
+    let excerpt = excerpt.trim();
+    if excerpt.is_empty() {
+        return None;
+    }
+
+    text.split("\n\n")
+        .map(str::trim)
+        .find(|paragraph| paragraph.contains(excerpt))
+        .map(|paragraph| paragraph.to_string())
 }
 
 fn narrowed_objective_summary(rows: &[CompactionRow]) -> Option<ObjectiveSummary> {

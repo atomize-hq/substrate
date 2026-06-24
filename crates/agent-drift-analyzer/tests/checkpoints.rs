@@ -315,7 +315,10 @@ fn checkpoints_anchor_structured_objective_to_evaluate_ask_over_boilerplate_pool
             .iter()
             .any(|span| span.excerpt.contains("evaluate if what was implemented")),
         "the goal must anchor to the real evaluate ask; got {:?}",
-        goal_spans.iter().map(|span| &span.excerpt).collect::<Vec<_>>()
+        goal_spans
+            .iter()
+            .map(|span| &span.excerpt)
+            .collect::<Vec<_>>()
     );
     for span in &goal_spans {
         assert_ne!(
@@ -499,20 +502,28 @@ fn checkpoints_anchor_sparse_readable_goal_to_steer_and_keep_weak_fields_unknown
         .filter(|span| span.role == ObjectiveRole::Goal)
         .collect::<Vec<_>>();
     assert!(
+        goal_spans.iter().any(|span| span
+            .excerpt
+            .contains("Review only the already-landed packet")),
+        "the goal must anchor to the steer ask; got {:?}",
         goal_spans
             .iter()
-            .any(|span| span.excerpt.contains("Review only the already-landed packet")),
-        "the goal must anchor to the steer ask; got {:?}",
-        goal_spans.iter().map(|span| &span.excerpt).collect::<Vec<_>>()
+            .map(|span| &span.excerpt)
+            .collect::<Vec<_>>()
     );
     assert!(
         goal_spans.iter().all(|span| {
             !span.excerpt.contains("<skill>")
                 && !span.excerpt.contains("recommended commit message")
-                && !span.excerpt.contains("cargo test -p agent-drift-analyzer checkpoints")
+                && !span
+                    .excerpt
+                    .contains("cargo test -p agent-drift-analyzer checkpoints")
         }),
         "goal spans must never anchor to pasted skill boilerplate: {:?}",
-        goal_spans.iter().map(|span| &span.excerpt).collect::<Vec<_>>()
+        goal_spans
+            .iter()
+            .map(|span| &span.excerpt)
+            .collect::<Vec<_>>()
     );
 
     let unknown_fields = structured
@@ -6055,6 +6066,108 @@ fn checkpoints_context_objective_keeps_review_goal_but_leaves_weak_target_unknow
         .unknowns
         .iter()
         .any(|unknown| unknown.field_name == "target"));
+}
+
+#[test]
+fn checkpoints_keep_grounded_validate_readiness_goal_over_optional_reviewer_nit() {
+    let prompt = r#"we have landed Packet 3 detailed here docs/research/cycle-stage-registry-refactor-map.md :
+
+Packet 3.6 is implementation-complete and review-clean.
+
+  I stayed orchestration-only: delegated implementation/fix rounds to fresh subagents, inspected each diff myself,
+  reran verification as needed, and kept separate commits per round.
+
+  Commits created, in order
+
+  1. 12807dc — Close Packet 3 with review-ready proof wall
+  2. 43e3164 — Tighten Packet 3 closeout scope and deferrals
+  3. a4e8718 — Clarify Packet 3 closeout boundaries and dry-run proof
+  4. f71f1d4 — Resolve Packet status ledger contradiction
+
+  Verification commands run
+
+  - git diff --check
+  - python3 -m py_compile .agents/skills/cycle/scripts/*.py
+  - node scripts/cycle-stage-registry-loader-verify.mjs
+  - node scripts/cycle-stage-registry-execution-surface-verify.mjs
+  - node scripts/cycle-stage-registry-execution-surface-verify.mjs --case successor-objective-auto-start
+  - node scripts/cycle-stage-skills-readonly-verify.mjs
+  - .agents/skills/cycle/bin/cycle render --project-root "$PWD"
+  - .agents/skills/cycle/bin/cycle validate --project-root "$PWD"
+  - .agents/skills/cycle/bin/cycle next --project-root "$PWD" --dry-run --no-auto-continue
+  - node scripts/cycle-managed-repo-contract-verify.mjs
+  - node scripts/smoke-check.mjs
+  - Packet 3.6 doc rg checks for:
+      - Packet 4
+      - transition routing
+      - outcome/final-marker meaning
+      - blocked semantics
+      - validator-semantic cutover
+      - LangGraph
+      - higher-level horizon above \objective``
+
+  Important precision note
+
+  - The dry-run command is not stderr-clean in this source checkout.
+  - It exits 0 and prints the dry-run confirmation, but still emits:
+      - rsync(...): error: mkstempsock: Invalid argument
+
+  - Packet 3.6 docs now record that honestly as an exit-0 smoke proof, not a clean stderr-free proof.
+
+  Non-blocking follow-ups intentionally deferred
+
+  - Packet 4 work remains deferred:
+      - transition routing
+      - outcome/final-marker meaning
+      - blocked semantics
+      - validator-semantic cutover
+
+  - LangGraph remains deferred.
+  - The higher-level horizon above objective remains deferred.
+  - Optional reviewer nits not taken:
+      - add extra task-local grep checks for transition routing / outcome/final-marker meaning
+      - normalize one blocked-semantics wording instance
+
+  So the final state is: Packet 3.6 landed, commits separated correctly, verification wall recorded honestly, and
+  review is clean.
+
+---
+
+Please validate that has all landed correctly/completely and then we need to turn our attenten to Packet 4 and confirm/deny we are ready to spec/plan/tasks out Packet 4 so we can continue on with implementation"#;
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,260p' docs/research/cycle-stage-registry-refactor-map.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "Please validate that has all landed correctly/completely."
+    );
+    assert!(
+        !checkpoint
+            .task_frame
+            .objective
+            .contains("add extra task-local grep checks"),
+        "optional reviewer nit must not become the effective objective"
+    );
+
+    let structured = checkpoint
+        .structured_objective
+        .as_ref()
+        .expect("structured objective");
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && span
+                .excerpt
+                .contains("Please validate that has all landed correctly/completely")
+    }));
 }
 
 #[test]
