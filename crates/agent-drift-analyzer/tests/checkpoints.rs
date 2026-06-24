@@ -6157,11 +6157,31 @@ Packet 3.6 is implementation-complete and review-clean.
         .structured_objective
         .as_ref()
         .expect("structured objective");
-    assert!(structured.evidence_spans.iter().any(|span| {
+    let goal_excerpts = structured
+        .evidence_spans
+        .iter()
+        .filter(|span| span.role == ObjectiveRole::Goal)
+        .map(|span| span.excerpt.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        goal_excerpts
+            .iter()
+            .any(|excerpt| excerpt.contains(validate_ask)),
+        "expected validate ask in goal evidence spans, got {:?}",
+        goal_excerpts
+    );
+    assert!(
+        goal_excerpts
+            .iter()
+            .any(|excerpt| excerpt.contains(readiness_followup)),
+        "expected readiness follow-up in goal evidence spans, got {:?}",
+        goal_excerpts
+    );
+    assert!(!structured.evidence_spans.iter().any(|span| {
         span.role == ObjectiveRole::Goal
             && span
                 .excerpt
-                .contains("Please validate that has all landed correctly/completely")
+                .contains("add extra task-local grep checks for transition routing / outcome/final-marker meaning")
     }));
 }
 
@@ -6424,6 +6444,50 @@ fn checkpoints_extract_inline_use_skill_review_clause_from_single_line_prompt() 
         checkpoint.task_frame.objective,
         "use the $code-review-and-quality skill to evaluate if what was implemented laned correctly and completely"
     );
+}
+
+#[test]
+fn checkpoints_keep_legacy_inline_narrowing_when_structured_target_stays_unknown() {
+    let prompt = "We just completed implementing the entire handbook extraction phase set and I need you to review what landed in the codebase vs the planning docs and intended end state and validate/invalidate if it landed correctly and completely";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", prompt),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' HANDBOOK_ENGINE_EXTRACTION_PLAN.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0"),
+        tool_call_row(
+            3,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/handbook-engine-extraction-slice-map.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(4, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(
+        checkpoint.task_frame.objective,
+        "review what landed in the codebase vs the planning docs and intended end state and validate/invalidate if it landed correctly and completely"
+    );
+
+    let structured = checkpoint
+        .structured_objective
+        .as_ref()
+        .expect("structured objective");
+    assert!(structured.target.is_none());
+    assert!(structured
+        .unknowns
+        .iter()
+        .any(|unknown| unknown.field_name == "target"));
+    assert!(structured.evidence_spans.iter().any(|span| {
+        span.role == ObjectiveRole::Goal
+            && span
+                .excerpt
+                .contains("review what landed in the codebase vs the planning docs")
+    }));
 }
 
 #[test]
