@@ -503,7 +503,16 @@ async fn submit_member_turn_cancel_releases_active_slot_for_next_turn() {
         return;
     };
 
-    let launch_request = make_member_dispatch_request_with_backend(
+    let seed_home = tmp.path().join("seed-home");
+    fs::create_dir_all(&seed_home).expect("create seed home");
+    fs::write(
+        seed_home.join("auth.json"),
+        r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+    )
+    .expect("write seed auth");
+    fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n").expect("write seed config");
+
+    let mut launch_request = make_member_dispatch_request_with_backend(
         tmp.path(),
         &codex_member_binary,
         &binding.world_id,
@@ -513,6 +522,10 @@ async fn submit_member_turn_cancel_releases_active_slot_for_next_turn() {
         "run-member-submit-bootstrap",
         backend_id,
         MemberRuntimeBackendKindV1::Codex,
+    );
+    launch_request.env.get_or_insert_with(HashMap::new).insert(
+        SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+        seed_home.display().to_string(),
     );
     let launch_response = service
         .execute_stream(launch_request)
