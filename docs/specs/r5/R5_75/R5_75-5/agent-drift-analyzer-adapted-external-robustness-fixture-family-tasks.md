@@ -68,10 +68,11 @@ editing. If the prerequisite is missing, stop and report it instead of compensat
     - `05a56cc51632982b`
       - shape: objective-shaped, not progress-shaped
       - source evidence:
-        `target/ranga-validation/runs/05a56cc51632982b/compactor/rows.compact.jsonl` and
-        `target/ranga-validation/runs/05a56cc51632982b/analyzer/checkpoints.jsonl` still carry the
-        pasted `$skill-creator` body as `task_frame.objective`; that raw adapted analyzer output does
-        not yet expose a structured `@shared-cab-app` objective on its own
+        `target/ranga-validation/runs/05a56cc51632982b/compactor/rows.compact.jsonl` shows the
+        pasted `frontend-pro` body plus the later steer row `add this skill to @shared-cab-app`,
+        while `target/ranga-validation/runs/05a56cc51632982b/analyzer/checkpoints.jsonl` is the file
+        that carries the pasted `$skill-creator` body as `task_frame.objective`; that raw adapted
+        analyzer output does not yet expose a structured `@shared-cab-app` objective on its own
       - cited saved smoke for the anchored interpretation:
         `target/r5_75-smoke/r5_75-1/05a56cc51632982b/analyzer/summary.md` and
         `target/r5_75-smoke/r5_75-1/05a56cc51632982b/analyzer/checkpoints.jsonl`
