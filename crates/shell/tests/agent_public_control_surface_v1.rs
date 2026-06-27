@@ -3474,10 +3474,9 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
         pid_is_alive(resumed_owner_pid),
         "reattach must leave a live owner loop"
     );
-    let reattach_stdin = fixture.read_fake_codex_stdin(1);
     assert!(
-        reattach_stdin.trim().is_empty(),
-        "reattach must not send a hidden bootstrap prompt or any other user prompt payload: {reattach_stdin:?}"
+        !fixture.fake_codex_stdin_path(1).exists(),
+        "reattach must not launch a backend control turn or send any hidden prompt payload"
     );
 
     fixture.reset_fake_codex_state();
@@ -3587,22 +3586,25 @@ fn public_reattach_uses_persisted_attach_continuity_selector_for_resume_args() {
     ]);
     assert!(
         output.status.success(),
-        "public reattach should resume from the persisted attach contract: {output:?}"
+        "public reattach should restore from the persisted attach contract: {output:?}"
     );
 
-    let args = fixture.read_fake_codex_args(1);
     assert!(
-        args.iter().any(|arg| arg == "resume"),
-        "reattach must issue a resume-backed invocation: {args:?}"
+        !fixture.fake_codex_args_path(1).exists(),
+        "reattach must not launch a backend resume invocation just to restore ownership"
     );
-    assert!(
-        args.iter()
-            .any(|arg| arg == "uaa-sess_resume_contract_args"),
-        "reattach must use the persisted continuity selector from host_attach_contract: {args:?}"
-    );
-    assert!(
-        !args.iter().any(|arg| arg == "uaa-ambient-detached"),
-        "reattach must not recover continuity from the detached participant snapshot: {args:?}"
+    let participant_id = parse_json_output(&output)["participant_id"]
+        .as_str()
+        .expect("reattach participant id")
+        .to_string();
+    let participant = fixture.load_participant("sess_resume_contract_args", &participant_id);
+    assert_eq!(
+        participant
+            .get("internal")
+            .and_then(|value| value.get("uaa_session_id"))
+            .and_then(Value::as_str),
+        Some("uaa-sess_resume_contract_args"),
+        "reattach must preserve the persisted attach continuity for later prompt-bearing turns"
     );
 
     let owner_pid = fixture.load_orchestration_session("sess_resume_contract_args")
@@ -3730,7 +3732,7 @@ fn public_reattach_settles_outstanding_auto_attach_claims_and_blocks_duplicate_l
 
 #[test]
 #[serial]
-fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume() {
+fn public_reattach_fails_closed_when_persisted_attach_contract_disables_continuity_attach() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
@@ -3791,11 +3793,11 @@ fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume()
     ]);
     assert!(
         !output.status.success(),
-        "public reattach must fail closed when durable attach truth disables resume: {output:?}"
+        "public reattach must fail closed when durable attach truth disables continuity attach: {output:?}"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("durable host attach contract does not allow resume"),
+        stderr.contains("durable host attach contract does not allow continuity attach"),
         "reattach denial must explain the persisted attach capability gate: {output:?}"
     );
     assert!(
@@ -3812,6 +3814,63 @@ fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume()
         obligation.get("attach_claim_owner").and_then(Value::as_str),
         None,
         "manual reattach plan-build failure must not leave a durable attach claim behind"
+    );
+}
+
+#[test]
+#[serial]
+fn public_reattach_fails_closed_for_terminal_session_even_when_continuity_metadata_remains() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_terminal_continuity";
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        Some("ash_terminal_continuity"),
+        "active",
+        None,
+        None,
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_terminal_continuity",
+        "codex",
+        orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-ambient-detached"),
+        None,
+        ts,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        !output.status.success(),
+        "public reattach must fail closed for terminal public posture even if continuity metadata remains: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("session_not_reattachable"),
+        "terminal reattach denial must report detached-posture gating: {output:?}"
+    );
+    assert!(
+        stderr.contains("Terminal"),
+        "terminal reattach denial must report the resolved non-reattachable posture: {output:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(1).exists(),
+        "terminal reattach denial must fail before launching the backend runtime"
     );
 }
 

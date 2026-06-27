@@ -651,7 +651,10 @@ pub(crate) fn build_auto_attach_launch_plan(
             AttachModePreference::ContinuityPreferred
         }
     };
-    if attach_contract.continuity_uaa_session_id.is_none() {
+    let continuity_uaa_session_id = attach_contract
+        .public_attach_continuity_session_id()
+        .map(ToOwned::to_owned);
+    if continuity_uaa_session_id.is_none() {
         match attach_contract.attach_launch_knobs.attach_mode_preference {
             crate::execution::agent_runtime::orchestration_session::HostAttachModePreference::ContinuityRequired => {
                 anyhow::bail!(
@@ -700,7 +703,7 @@ pub(crate) fn build_auto_attach_launch_plan(
             lease_token: Uuid::now_v7().to_string(),
             run_id: Uuid::now_v7().to_string(),
             resumed_from_participant_id: Some(participant.handle.participant_id.clone()),
-            internal_uaa_session_id: attach_contract.continuity_uaa_session_id.clone(),
+            internal_uaa_session_id: continuity_uaa_session_id,
         },
         host_attach_contract: Some(attach_contract),
         startup_prompt: None,
@@ -1782,6 +1785,38 @@ agents:
                 err.to_string()
                     .contains("persisted host attach contract no longer has continuity required"),
                 "error should explain missing persisted continuity truth: {err:#}"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn auto_attach_launch_plan_fails_closed_when_continuity_selector_is_blank() {
+        with_store(|store| {
+            let (mut session, participant) = detached_orchestrator(
+                "sess_auto_attach_blank_continuity",
+                "ash_auto_attach_blank_source",
+            );
+            let mut contract = session
+                .host_attach_contract()
+                .cloned()
+                .expect("attach contract");
+            contract.continuity_uaa_session_id = Some(" \t  \n ".to_string());
+            session.host_attach_contract = Some(contract);
+
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist session");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = build_auto_attach_launch_plan(store, "sess_auto_attach_blank_continuity")
+                .expect_err("blank continuity selector must fail closed");
+            assert!(
+                err.to_string()
+                    .contains("persisted host attach contract no longer has continuity required"),
+                "error should treat blank continuity selector the same as missing continuity: {err:#}"
             );
         });
     }

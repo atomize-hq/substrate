@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(target_os = "linux", test))]
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
+#[cfg(any(target_os = "linux", test))]
+use world_api::SharedWorldBindingState;
 
 use substrate_common::paths as substrate_paths;
 
@@ -265,22 +267,22 @@ impl DurableInboxItemRecord {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PublicControlAction {
-    Resume,
     Fork,
     Stop,
 }
 
-impl PublicControlAction {
-    fn requires_attach_contract(self) -> bool {
-        matches!(self, Self::Resume | Self::Fork)
-    }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PublicAttachAction {
+    Reattach,
+    DetachedTurn,
+}
 
-    fn requires_continuity_contract(self) -> bool {
-        matches!(self, Self::Resume)
-    }
-
-    fn rejects_live_owner(self) -> bool {
-        matches!(self, Self::Resume)
+impl PublicAttachAction {
+    fn continuity_label(self) -> &'static str {
+        match self {
+            Self::Reattach => "control-only reattach",
+            Self::DetachedTurn => "detached turn recovery",
+        }
     }
 }
 
@@ -300,6 +302,22 @@ impl ResolvedPublicControlTarget {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct ResolvedPublicAttachTarget {
+    pub session: OrchestrationSessionRecord,
+    pub active_participant: AgentRuntimeParticipantRecord,
+    #[allow(dead_code)]
+    pub session_posture: PublicSessionPosture,
+    pub host_attach_contract: Option<HostAttachContract>,
+}
+
+impl ResolvedPublicAttachTarget {
+    #[allow(dead_code)]
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalWorldDispatchCaller {
     pub session: OrchestrationSessionRecord,
     pub caller_participant: AgentRuntimeParticipantRecord,
@@ -310,6 +328,49 @@ impl ResolvedInternalWorldDispatchCaller {
     pub(crate) fn orchestration_session_id(&self) -> &str {
         &self.session.orchestration_session_id
     }
+}
+
+#[cfg(any(target_os = "linux", test))]
+const SHARED_WORLD_METADATA_ROOT: &str = "/tmp/substrate-worlds";
+
+#[cfg(any(target_os = "linux", test))]
+const SHARED_WORLD_METADATA_FILE: &str = "session.json";
+
+#[cfg(any(target_os = "linux", test))]
+#[cfg(test)]
+const SHARED_WORLD_METADATA_ROOT_TEST_ENV: &str = "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT";
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum SharedWorldMetadataOwnerMode {
+    #[default]
+    Generic,
+    SharedOrchestration,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+struct SharedWorldMetadataRecord {
+    world_id: String,
+    #[serde(default)]
+    owner_mode: SharedWorldMetadataOwnerMode,
+    #[serde(default)]
+    orchestration_session_id: Option<String>,
+    #[serde(default)]
+    world_generation: Option<u64>,
+    #[serde(default)]
+    binding_state: Option<SharedWorldBindingState>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn shared_world_metadata_root() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = std::env::var_os(SHARED_WORLD_METADATA_ROOT_TEST_ENV) {
+        return PathBuf::from(root);
+    }
+
+    PathBuf::from(SHARED_WORLD_METADATA_ROOT)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -623,6 +684,14 @@ impl Drop for ActiveEphemeralWorldTaskGuard {
 #[derive(Clone, Debug)]
 pub(crate) struct AgentRuntimeStateStore {
     substrate_home: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+struct ResolvedPublicSessionAuthority {
+    session: OrchestrationSessionRecord,
+    participant: AgentRuntimeParticipantRecord,
+    session_posture: PublicSessionPosture,
+    host_attach_contract: Option<HostAttachContract>,
 }
 
 impl AgentRuntimeStateStore {
@@ -1286,26 +1355,7 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         action: PublicControlAction,
     ) -> Result<ResolvedPublicControlTarget> {
-        let Some(record) = self.load_session(orchestration_session_id)? else {
-            return Err(self.public_session_selector_error(orchestration_session_id));
-        };
-        let resolved = resolve_authoritative_session_control(&record, orchestration_session_id)?;
-
-        if session_requires_linux_first_public_control_posture(&record)
-            && !cfg!(target_os = "linux")
-        {
-            anyhow::bail!(
-                "unsupported_platform_or_posture: orchestration session {} requires Linux world-sensitive control posture",
-                orchestration_session_id
-            );
-        }
-
-        if action.rejects_live_owner() && resolved.session_posture == PublicSessionPosture::Active {
-            anyhow::bail!(
-                "session_already_owned: orchestration session {} already has a live retained owner",
-                orchestration_session_id
-            );
-        }
+        let resolved = self.resolve_public_session_authority(orchestration_session_id)?;
         if matches!(action, PublicControlAction::Stop)
             && resolved.session_posture == PublicSessionPosture::Terminal
         {
@@ -1314,25 +1364,15 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id
             );
         }
-        let host_attach_contract = resolved.session.host_attach_contract().cloned();
-        if action.requires_attach_contract() && host_attach_contract.is_none() {
+        if matches!(action, PublicControlAction::Fork) && resolved.host_attach_contract.is_none() {
             anyhow::bail!(
                 "owner_unreachable: orchestration session {} is missing durable host attach contract state",
                 orchestration_session_id
             );
         }
-        if matches!(action, PublicControlAction::Resume)
-            && host_attach_contract
-                .as_ref()
-                .is_some_and(|contract| !contract.supports_resume())
-        {
-            anyhow::bail!(
-                "owner_unreachable: orchestration session {} durable host attach contract does not allow resume",
-                orchestration_session_id
-            );
-        }
         if matches!(action, PublicControlAction::Fork)
-            && host_attach_contract
+            && resolved
+                .host_attach_contract
                 .as_ref()
                 .is_some_and(|contract| !contract.supports_fork())
         {
@@ -1342,7 +1382,8 @@ impl AgentRuntimeStateStore {
             );
         }
         if matches!(action, PublicControlAction::Stop)
-            && host_attach_contract
+            && resolved
+                .host_attach_contract
                 .as_ref()
                 .is_some_and(|contract| !contract.supports_stop())
         {
@@ -1351,25 +1392,13 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id
             );
         }
-        if action.requires_continuity_contract()
-            && host_attach_contract
-                .as_ref()
-                .is_none_or(|contract| !contract.has_continuity_selector())
-        {
-            anyhow::bail!(
-                "owner_unreachable: orchestration session {} no longer has continuity required for control-only reattach",
-                orchestration_session_id
-            );
-        }
-        if (matches!(action, PublicControlAction::Resume)
-            || matches!(
-                (action, resolved.session_posture),
-                (
-                    PublicControlAction::Stop,
-                    PublicSessionPosture::DetachedReattachable
-                )
-            ))
-            && !resolved.participant.is_resume_eligible()
+        if matches!(
+            (action, resolved.session_posture),
+            (
+                PublicControlAction::Stop,
+                PublicSessionPosture::DetachedReattachable
+            )
+        ) && !resolved.participant.is_resume_eligible()
         {
             anyhow::bail!(
                 "owner_unreachable: orchestration session {} no longer has a resume-eligible retained owner",
@@ -1395,7 +1424,66 @@ impl AgentRuntimeStateStore {
             session: resolved.session,
             active_participant: resolved.participant,
             session_posture: resolved.session_posture,
-            host_attach_contract,
+            host_attach_contract: resolved.host_attach_contract,
+        })
+    }
+
+    pub(crate) fn resolve_public_attach_target(
+        &self,
+        orchestration_session_id: &str,
+        action: PublicAttachAction,
+    ) -> Result<ResolvedPublicAttachTarget> {
+        let resolved = self.resolve_public_session_authority(orchestration_session_id)?;
+
+        if resolved.session_posture == PublicSessionPosture::Active {
+            anyhow::bail!(
+                "session_already_owned: orchestration session {} already has a live retained owner",
+                orchestration_session_id
+            );
+        }
+        let host_attach_contract = resolved.host_attach_contract.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "owner_unreachable: orchestration session {} is missing durable host attach contract state",
+                orchestration_session_id
+            )
+        })?;
+        if !host_attach_contract.supports_public_attach_continuity() {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} durable host attach contract does not allow continuity attach",
+                orchestration_session_id
+            );
+        }
+        if host_attach_contract
+            .public_attach_continuity_session_id()
+            .is_none()
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} no longer has continuity required for {}",
+                orchestration_session_id,
+                action.continuity_label()
+            );
+        }
+        if !resolved.participant.is_public_attach_continuity_source() {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} no longer has a retained owner that can supply continuity for {}",
+                orchestration_session_id,
+                action.continuity_label()
+            );
+        }
+        if resolved.session_posture != PublicSessionPosture::DetachedReattachable {
+            anyhow::bail!(
+                "session_not_reattachable: orchestration session {} must be in detached reattachable posture before {} (resolved posture: {:?})",
+                orchestration_session_id,
+                action.continuity_label(),
+                resolved.session_posture
+            );
+        }
+
+        Ok(ResolvedPublicAttachTarget {
+            session: resolved.session,
+            active_participant: resolved.participant,
+            session_posture: resolved.session_posture,
+            host_attach_contract: resolved.host_attach_contract,
         })
     }
 
@@ -1424,6 +1512,32 @@ impl AgentRuntimeStateStore {
         Ok(ResolvedInternalWorldDispatchCaller {
             session: resolved.session,
             caller_participant: resolved.participant,
+        })
+    }
+
+    fn resolve_public_session_authority(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<ResolvedPublicSessionAuthority> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            return Err(self.public_session_selector_error(orchestration_session_id));
+        };
+        let resolved = resolve_authoritative_session_control(&record, orchestration_session_id)?;
+
+        if session_requires_linux_first_public_control_posture(&record)
+            && !cfg!(target_os = "linux")
+        {
+            anyhow::bail!(
+                "unsupported_platform_or_posture: orchestration session {} requires Linux world-sensitive control posture",
+                orchestration_session_id
+            );
+        }
+
+        Ok(ResolvedPublicSessionAuthority {
+            host_attach_contract: resolved.session.host_attach_contract().cloned(),
+            session: resolved.session,
+            participant: resolved.participant,
+            session_posture: resolved.session_posture,
         })
     }
 
@@ -3598,6 +3712,177 @@ impl AgentRuntimeStateStore {
         self.persist_parent_session_snapshot(session)
     }
 
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn recover_active_shared_world_binding_from_local_metadata(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<super::AgentRuntimeParticipantWorldBinding>> {
+        fn is_permission_denied(err: &anyhow::Error) -> bool {
+            err.chain().any(|cause| {
+                cause
+                    .downcast_ref::<io::Error>()
+                    .is_some_and(|io_err| io_err.kind() == io::ErrorKind::PermissionDenied)
+            })
+        }
+
+        if orchestration_session_id.trim().is_empty() {
+            return Ok(None);
+        }
+
+        fn fallback_or_fail_closed(
+            store: &AgentRuntimeStateStore,
+            orchestration_session_id: &str,
+            blocked_path: &Path,
+            err: anyhow::Error,
+        ) -> Result<Option<super::AgentRuntimeParticipantWorldBinding>> {
+            if let Some(binding) = store
+                .recover_active_shared_world_binding_from_authoritative_live_participants(
+                    orchestration_session_id,
+                )?
+            {
+                return Ok(Some(binding));
+            }
+
+            Err(err).with_context(|| {
+                format!(
+                    "shared_world_binding_repair_metadata_unreadable: cannot read {} and found no authoritative live world binding for orchestration session {}",
+                    blocked_path.display(),
+                    orchestration_session_id
+                )
+            })
+        }
+
+        let root = shared_world_metadata_root();
+        let Some(entries) = (match safe_read_dir(&root) {
+            Ok(entries) => entries,
+            Err(err) if is_permission_denied(&err) => {
+                return fallback_or_fail_closed(self, orchestration_session_id, &root, err);
+            }
+            Err(err) => return Err(err),
+        }) else {
+            return Ok(None);
+        };
+
+        let mut matches = Vec::new();
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                    return fallback_or_fail_closed(
+                        self,
+                        orchestration_session_id,
+                        &root,
+                        err.into(),
+                    );
+                }
+                Err(err) => {
+                    return Err(err).with_context(|| format!("failed to read {}", root.display()));
+                }
+            };
+            let metadata_path = entry.path().join(SHARED_WORLD_METADATA_FILE);
+            if !metadata_path.is_file() {
+                continue;
+            }
+
+            let Some(metadata) =
+                (match read_regular_json_if_exists::<SharedWorldMetadataRecord>(&metadata_path) {
+                    Ok(metadata) => metadata,
+                    Err(err) if is_permission_denied(&err) => {
+                        return fallback_or_fail_closed(
+                            self,
+                            orchestration_session_id,
+                            &metadata_path,
+                            err,
+                        );
+                    }
+                    Err(_) => continue,
+                })
+            else {
+                continue;
+            };
+            if metadata.owner_mode != SharedWorldMetadataOwnerMode::SharedOrchestration
+                || metadata.orchestration_session_id.as_deref() != Some(orchestration_session_id)
+                || metadata.binding_state != Some(SharedWorldBindingState::Active)
+            {
+                continue;
+            }
+
+            let world_generation = match metadata.world_generation {
+                Some(world_generation) => world_generation,
+                None => continue,
+            };
+            if metadata.world_id.trim().is_empty() {
+                continue;
+            }
+
+            matches.push(super::AgentRuntimeParticipantWorldBinding {
+                world_id: metadata.world_id,
+                world_generation,
+            });
+        }
+
+        match matches.len() {
+            0 => Ok(None),
+            1 => Ok(matches.pop()),
+            _ => anyhow::bail!(
+                "ambiguous_shared_world_binding: multiple active shared-world bindings were found for orchestration session {}",
+                orchestration_session_id
+            ),
+        }
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn recover_active_shared_world_binding_from_authoritative_live_participants(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<super::AgentRuntimeParticipantWorldBinding>> {
+        let mut matches = BTreeSet::new();
+        for participant in self.list_live_participants_for_session(orchestration_session_id)? {
+            if participant.handle.role != MEMBER_ROLE
+                || participant.handle.execution.scope != AgentExecutionScope::World
+            {
+                continue;
+            }
+
+            let world_id = participant.handle.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "corrupt_shared_world_binding_repair_authority: live retained worker {} is missing world_id",
+                    participant.handle.participant_id
+                )
+            })?;
+            let world_generation = participant.handle.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "corrupt_shared_world_binding_repair_authority: live retained worker {} is missing world_generation",
+                    participant.handle.participant_id
+                )
+            })?;
+            if world_id.trim().is_empty() {
+                anyhow::bail!(
+                    "corrupt_shared_world_binding_repair_authority: live retained worker {} has an empty world_id",
+                    participant.handle.participant_id
+                );
+            }
+
+            matches.insert((world_id, world_generation));
+        }
+
+        match matches.len() {
+            0 => Ok(None),
+            1 => {
+                let (world_id, world_generation) =
+                    matches.into_iter().next().expect("single binding");
+                Ok(Some(super::AgentRuntimeParticipantWorldBinding {
+                    world_id,
+                    world_generation,
+                }))
+            }
+            _ => anyhow::bail!(
+                "ambiguous_shared_world_binding: multiple authoritative live world bindings were found for orchestration session {}",
+                orchestration_session_id
+            ),
+        }
+    }
+
     pub(crate) fn clear_orchestration_session_world_binding(
         &self,
         session: &mut OrchestrationSessionRecord,
@@ -4943,13 +5228,13 @@ pub(crate) fn valid_detached_host_continuity_posture(
     if session.attached_participant_id().is_some() || participant.attached_client_present() {
         return None;
     }
-    if !participant.is_resume_eligible() {
+    if !participant.is_public_attach_continuity_source() {
         return None;
     }
-    if !contract.supports_resume() || !contract.supports_continuity_attach() {
+    if !contract.supports_public_attach_continuity() {
         return None;
     }
-    if require_internal_session_id && !contract.has_continuity_selector() {
+    if require_internal_session_id && contract.public_attach_continuity_session_id().is_none() {
         return None;
     }
 
@@ -4990,10 +5275,10 @@ fn recoverable_stale_host_attachment(
     {
         return false;
     }
-    if owner_process_is_alive(participant) || !participant.is_resume_eligible() {
+    if owner_process_is_alive(participant) || !participant.is_public_attach_continuity_source() {
         return false;
     }
-    if !contract.supports_resume() || !contract.supports_continuity_attach() {
+    if !contract.supports_public_attach_continuity() {
         return false;
     }
     if record.participants.iter().any(|candidate| {
@@ -5007,7 +5292,7 @@ fn recoverable_stale_host_attachment(
         return false;
     }
 
-    !require_internal_session_id || contract.has_continuity_selector()
+    !require_internal_session_id || contract.public_attach_continuity_session_id().is_some()
 }
 
 fn session_authoritative_participant_id(session: &OrchestrationSessionRecord) -> Option<&str> {
@@ -5119,6 +5404,8 @@ pub(crate) fn born_unattached_status_anchor(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
     use std::sync::{Arc, Barrier};
 
@@ -5434,9 +5721,45 @@ mod tests {
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
         let temp = TempDir::new().expect("tempdir");
         std::env::set_var("SUBSTRATE_HOME", temp.path());
+        std::env::set_var(
+            SHARED_WORLD_METADATA_ROOT_TEST_ENV,
+            temp.path().join("shared-worlds"),
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
+        std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
         std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn write_shared_world_metadata_for_test(
+        world_id: &str,
+        orchestration_session_id: &str,
+        world_generation: u64,
+        binding_state: SharedWorldBindingState,
+    ) -> PathBuf {
+        let metadata_dir = shared_world_metadata_root().join(world_id);
+        fs::create_dir_all(&metadata_dir).expect("shared world metadata dir");
+        let metadata_path = metadata_dir.join(SHARED_WORLD_METADATA_FILE);
+        fs::write(
+            &metadata_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "world_id": world_id,
+                "project_dir": "/tmp",
+                "isolate_network": true,
+                "always_isolate": true,
+                "allowed_domains": [],
+                "cgroup_path": "/tmp",
+                "started_at_unix_millis": 0,
+                "owner_mode": "shared_orchestration",
+                "orchestration_session_id": orchestration_session_id,
+                "world_generation": world_generation,
+                "binding_state": binding_state,
+            }))
+            .expect("serialize shared world metadata"),
+        )
+        .expect("write shared world metadata");
+        metadata_dir
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -7348,6 +7671,187 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn recover_active_shared_world_binding_from_local_metadata_prefers_unique_active_binding() {
+        with_store(|store| {
+            let world_id = format!("wld_state_store_metadata_{}", uuid::Uuid::now_v7());
+            let metadata_dir = write_shared_world_metadata_for_test(
+                &world_id,
+                "sess_metadata",
+                7,
+                SharedWorldBindingState::Active,
+            );
+
+            let binding = store
+                .recover_active_shared_world_binding_from_local_metadata("sess_metadata")
+                .expect("recover shared world binding")
+                .expect("shared world binding should exist");
+
+            assert_eq!(binding.world_id, world_id);
+            assert_eq!(binding.world_generation, 7);
+
+            fs::remove_dir_all(metadata_dir).expect("remove shared world metadata dir");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn recover_active_shared_world_binding_from_local_metadata_rejects_ambiguous_active_bindings() {
+        with_store(|store| {
+            let world_id_a = format!("wld_state_store_metadata_a_{}", uuid::Uuid::now_v7());
+            let world_id_b = format!("wld_state_store_metadata_b_{}", uuid::Uuid::now_v7());
+            let metadata_dir_a = write_shared_world_metadata_for_test(
+                &world_id_a,
+                "sess_metadata_ambiguous",
+                7,
+                SharedWorldBindingState::Active,
+            );
+            let metadata_dir_b = write_shared_world_metadata_for_test(
+                &world_id_b,
+                "sess_metadata_ambiguous",
+                8,
+                SharedWorldBindingState::Active,
+            );
+
+            let err = store
+                .recover_active_shared_world_binding_from_local_metadata("sess_metadata_ambiguous")
+                .expect_err("ambiguous shared world bindings must fail closed");
+
+            assert!(
+                err.to_string().contains("ambiguous_shared_world_binding"),
+                "unexpected ambiguity error: {err:#}"
+            );
+
+            fs::remove_dir_all(metadata_dir_a).expect("remove shared world metadata dir a");
+            fs::remove_dir_all(metadata_dir_b).expect("remove shared world metadata dir b");
+        });
+    }
+
+    #[cfg(unix)]
+    fn set_test_dir_mode(path: &Path, mode: u32) {
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+            .expect("set shared world metadata root permissions");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn recover_active_shared_world_binding_from_local_metadata_falls_back_to_live_participant_when_root_is_unreadable(
+    ) {
+        with_store(|store| {
+            let metadata_root = shared_world_metadata_root();
+            fs::create_dir_all(&metadata_root).expect("create shared world metadata root");
+
+            let orchestrator =
+                live_orchestrator("codex", "sess_metadata_permission_denied", "ash_orch");
+            let mut member = live_member(
+                "codex",
+                "sess_metadata_permission_denied",
+                "ash_member",
+                "ash_orch",
+            );
+            member.handle.world_id = Some("world-live-fallback".to_string());
+            member.handle.world_generation = Some(11);
+
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            set_test_dir_mode(&metadata_root, 0o000);
+            let recovered = store.recover_active_shared_world_binding_from_local_metadata(
+                "sess_metadata_permission_denied",
+            );
+            set_test_dir_mode(&metadata_root, 0o700);
+
+            let binding = recovered
+                .expect("recover shared world binding")
+                .expect("shared world binding should fall back to live participant");
+            assert_eq!(binding.world_id, "world-live-fallback");
+            assert_eq!(binding.world_generation, 11);
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn recover_active_shared_world_binding_from_local_metadata_fails_closed_when_root_is_unreadable_and_no_live_fallback(
+    ) {
+        with_store(|store| {
+            let metadata_root = shared_world_metadata_root();
+            fs::create_dir_all(&metadata_root).expect("create shared world metadata root");
+
+            set_test_dir_mode(&metadata_root, 0o000);
+            let recovered = store.recover_active_shared_world_binding_from_local_metadata(
+                "sess_metadata_permission_denied_missing_fallback",
+            );
+            set_test_dir_mode(&metadata_root, 0o700);
+
+            let err = recovered.expect_err("unreadable metadata without fallback must fail closed");
+            assert!(
+                err.to_string()
+                    .contains("shared_world_binding_repair_metadata_unreadable"),
+                "unexpected permission-denied error: {err:#}"
+            );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn recover_active_shared_world_binding_from_local_metadata_rejects_ambiguous_live_fallback_bindings(
+    ) {
+        with_store(|store| {
+            let metadata_root = shared_world_metadata_root();
+            fs::create_dir_all(&metadata_root).expect("create shared world metadata root");
+
+            let orchestrator = live_orchestrator(
+                "codex",
+                "sess_metadata_permission_denied_ambiguous",
+                "ash_orch",
+            );
+            let mut member_a = live_member(
+                "codex",
+                "sess_metadata_permission_denied_ambiguous",
+                "ash_member_a",
+                "ash_orch",
+            );
+            member_a.handle.world_id = Some("world-live-a".to_string());
+            member_a.handle.world_generation = Some(11);
+            let mut member_b = live_member(
+                "codex",
+                "sess_metadata_permission_denied_ambiguous",
+                "ash_member_b",
+                "ash_orch",
+            );
+            member_b.handle.world_id = Some("world-live-b".to_string());
+            member_b.handle.world_generation = Some(12);
+
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store
+                .persist_participant(&member_a)
+                .expect("persist member a");
+            store
+                .persist_participant(&member_b)
+                .expect("persist member b");
+
+            set_test_dir_mode(&metadata_root, 0o000);
+            let recovered = store.recover_active_shared_world_binding_from_local_metadata(
+                "sess_metadata_permission_denied_ambiguous",
+            );
+            set_test_dir_mode(&metadata_root, 0o700);
+
+            let err = recovered.expect_err("ambiguous live fallback must fail closed");
+            assert!(
+                err.to_string().contains("ambiguous_shared_world_binding"),
+                "unexpected ambiguity error: {err:#}"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn list_invalidated_participants_reads_authoritative_tombstones_only() {
         with_store(|store| {
             let mut participant =
@@ -7501,7 +8005,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_public_control_target_resume_rejects_already_owned_sessions() {
+    fn resolve_public_attach_target_reattach_rejects_already_owned_sessions() {
         with_store(|store| {
             let participant = live_orchestrator("codex", "sess_resume_live", "ash_selected");
             let parent = active_parent(&participant);
@@ -7513,15 +8017,15 @@ mod tests {
                 .expect("persist participant");
 
             let err = store
-                .resolve_public_control_target("sess_resume_live", PublicControlAction::Resume)
-                .expect_err("live retained ownership must reject public resume");
+                .resolve_public_attach_target("sess_resume_live", PublicAttachAction::Reattach)
+                .expect_err("live retained ownership must reject control-only reattach");
             assert!(err.to_string().contains("session_already_owned"));
         });
     }
 
     #[test]
     #[serial_test::serial]
-    fn resolve_public_control_target_allows_resume_for_parked_session() {
+    fn resolve_public_attach_target_allows_detached_turn_for_parked_session() {
         with_store(|store| {
             let participant = detached_orchestrator("codex", "sess_resume_parked", "ash_detached");
             let mut parent = active_parent(&participant);
@@ -7534,8 +8038,11 @@ mod tests {
                 .expect("persist participant");
 
             let target = store
-                .resolve_public_control_target("sess_resume_parked", PublicControlAction::Resume)
-                .expect("parked session should remain resumable");
+                .resolve_public_attach_target(
+                    "sess_resume_parked",
+                    PublicAttachAction::DetachedTurn,
+                )
+                .expect("parked session should remain attachable for detached turns");
             assert_eq!(
                 target.active_participant.handle.participant_id,
                 "ash_detached"
@@ -7545,14 +8052,35 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_public_control_target_requires_continuity_for_resume_but_not_fork() {
+    fn resolve_public_attach_target_rejects_terminal_session_even_with_continuity_metadata() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_terminal_attach", "ash_dead");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist active parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist detached participant");
+
+            let err = store
+                .resolve_public_attach_target("sess_terminal_attach", PublicAttachAction::Reattach)
+                .expect_err("terminal public posture must fail closed for public reattach");
+            assert!(err.to_string().contains("session_not_reattachable"));
+            assert!(err.to_string().contains("Terminal"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_attach_target_requires_continuity_but_fork_does_not() {
         with_store(|store| {
             let participant =
                 detached_orchestrator("codex", "sess_missing_internal", "ash_detached");
             let mut participant = participant;
             participant.internal.uaa_session_id = None;
             participant.internal.resume_eligible = false;
-            let parent = active_parent(&participant);
+            let parent = parked_parent(&participant);
             store
                 .persist_orchestration_session(&parent)
                 .expect("persist parent");
@@ -7560,10 +8088,10 @@ mod tests {
                 .persist_participant(&participant)
                 .expect("persist participant");
 
-            let resume_err = store
-                .resolve_public_control_target("sess_missing_internal", PublicControlAction::Resume)
-                .expect_err("resume must require continuity");
-            assert!(resume_err.to_string().contains("owner_unreachable"));
+            let attach_err = store
+                .resolve_public_attach_target("sess_missing_internal", PublicAttachAction::Reattach)
+                .expect_err("reattach must require continuity");
+            assert!(attach_err.to_string().contains("owner_unreachable"));
 
             let fork_target = store
                 .resolve_public_control_target("sess_missing_internal", PublicControlAction::Fork)
@@ -7586,11 +8114,11 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_public_control_target_uses_persisted_continuity_truth() {
+    fn resolve_public_attach_target_uses_persisted_continuity_truth() {
         with_store(|store| {
             let participant =
                 detached_orchestrator("codex", "sess_persisted_resume", "ash_detached");
-            let parent = active_parent(&participant);
+            let parent = parked_parent(&participant);
             let mut participant = participant;
             participant.internal.uaa_session_id = None;
 
@@ -7602,7 +8130,7 @@ mod tests {
                 .expect("persist participant");
 
             let target = store
-                .resolve_public_control_target("sess_persisted_resume", PublicControlAction::Resume)
+                .resolve_public_attach_target("sess_persisted_resume", PublicAttachAction::Reattach)
                 .expect("persisted contract continuity should remain authoritative");
             assert_eq!(
                 target
@@ -7616,7 +8144,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_public_control_target_respects_persisted_resume_narrowing() {
+    fn resolve_public_attach_target_respects_persisted_continuity_attach_narrowing() {
         with_store(|store| {
             let participant = detached_orchestrator("codex", "sess_resume_denied", "ash_detached");
             let mut parent = parked_parent(&participant);
@@ -7635,9 +8163,9 @@ mod tests {
                 .expect("persist participant");
 
             let err = store
-                .resolve_public_control_target("sess_resume_denied", PublicControlAction::Resume)
-                .expect_err("resume must honor persisted capability narrowing");
-            assert!(err.to_string().contains("does not allow resume"));
+                .resolve_public_attach_target("sess_resume_denied", PublicAttachAction::Reattach)
+                .expect_err("attach planning must honor persisted capability narrowing");
+            assert!(err.to_string().contains("does not allow continuity attach"));
         });
     }
 

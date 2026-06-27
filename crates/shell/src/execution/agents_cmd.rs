@@ -47,9 +47,9 @@ use crate::execution::agent_runtime::{
     validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
     AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
     DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
-    HostExecutionClientStart, PublicControlAction, PublicTurnTargetKind, ResolvedLaunchContract,
-    MANUAL_REATTACH_ATTACH_RESTORED_REASON, MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE,
-    PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    HostExecutionClientStart, PublicAttachAction, PublicControlAction, PublicTurnTargetKind,
+    ResolvedLaunchContract, MANUAL_REATTACH_ATTACH_RESTORED_REASON, MEMBER_ROLE, NESTED_ROUTER,
+    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentDoctorArgs, AgentOwnerHelperArgs,
@@ -739,12 +739,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
 
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
     let store = AgentRuntimeStateStore::new()?;
-    let plan = build_attach_launch_plan(
-        &args.session,
-        DispatchCallerKind::HumanReattach,
-        OwnerHelperMode::Attach,
-        false,
-    )?;
+    let plan = build_attach_launch_plan(&args.session, AttachLaunchIntent::Reattach)?;
     let claimed_auto_attach = match store
         .claim_session_auto_attach(&args.session, "manual::reattach")
         .map_err(runtime_start_error)?
@@ -1510,16 +1505,83 @@ fn persist_resolved_start_attach_contract(
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttachLaunchIntent {
+    Reattach,
+    DetachedTurn,
+}
+
+struct PublicAttachRuntimeContinuity {
+    source_participant_id: String,
+    continuity_session_id: String,
+}
+
+impl AttachLaunchIntent {
+    fn caller_kind(self) -> DispatchCallerKind {
+        match self {
+            Self::Reattach => DispatchCallerKind::HumanReattach,
+            Self::DetachedTurn => DispatchCallerKind::HumanTurn,
+        }
+    }
+
+    fn owner_helper_mode(self) -> OwnerHelperMode {
+        match self {
+            Self::Reattach => OwnerHelperMode::Attach,
+            Self::DetachedTurn => OwnerHelperMode::ResumeOneTurn,
+        }
+    }
+
+    fn public_attach_action(self) -> PublicAttachAction {
+        match self {
+            Self::Reattach => PublicAttachAction::Reattach,
+            Self::DetachedTurn => PublicAttachAction::DetachedTurn,
+        }
+    }
+
+    fn has_prompt_payload(self) -> bool {
+        matches!(self, Self::DetachedTurn)
+    }
+
+    fn continuity_label(self) -> &'static str {
+        match self {
+            Self::Reattach => "control-only reattach",
+            Self::DetachedTurn => "detached turn recovery",
+        }
+    }
+}
+
+fn build_public_attach_runtime_continuity(
+    orchestration_session_id: &str,
+    target: &crate::execution::agent_runtime::state_store::ResolvedPublicAttachTarget,
+    attach_contract: &HostAttachContract,
+    intent: AttachLaunchIntent,
+) -> Result<PublicAttachRuntimeContinuity> {
+    let continuity_session_id = attach_contract
+        .public_attach_continuity_session_id()
+        .ok_or_else(|| {
+            config_model::user_error(format!(
+                "owner_unreachable: orchestration session {} no longer has continuity required for {}",
+                orchestration_session_id,
+                intent.continuity_label()
+            ))
+        })?;
+
+    Ok(PublicAttachRuntimeContinuity {
+        source_participant_id: target.active_participant.handle.participant_id.clone(),
+        continuity_session_id: continuity_session_id.to_string(),
+    })
+}
+
 fn build_attach_launch_plan(
     orchestration_session_id: &str,
-    caller_kind: DispatchCallerKind,
-    mode: OwnerHelperMode,
-    has_prompt_payload: bool,
+    intent: AttachLaunchIntent,
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
     let store = AgentRuntimeStateStore::new()?;
-    let target = store
-        .resolve_public_control_target(orchestration_session_id, PublicControlAction::Resume)
+    let mut target = store
+        .resolve_public_attach_target(orchestration_session_id, intent.public_attach_action())
         .map_err(|err| config_model::user_error(err.to_string()))?;
+    #[cfg(target_os = "linux")]
+    refresh_public_attach_target_world_binding(&store, &mut target)?;
     let attach_contract = target.host_attach_contract.clone().ok_or_else(|| {
         config_model::user_error(format!(
             "owner_unreachable: orchestration session {} is missing durable host attach contract state",
@@ -1527,20 +1589,26 @@ fn build_attach_launch_plan(
         ))
     })?;
     let envelope = build_persisted_attach_dispatch_envelope(
-        caller_kind,
+        intent.caller_kind(),
         orchestration_session_id,
         &attach_contract.backend_id,
         HostExecutionClientStart::StartNow,
         AttachModePreference::ContinuityRequired,
-        has_prompt_payload,
+        intent.has_prompt_payload(),
     );
     let resolved = resolve_persisted_host_attach_contract(&envelope, &attach_contract)
         .map_err(|err| dispatch_resolution_user_error("owner_unreachable", err))?;
     let descriptor = materialize_runtime_descriptor(&resolved)
         .map_err(|err| runtime_materialization_user_error("owner_unreachable", err.reason))?;
+    let attach_runtime_continuity = build_public_attach_runtime_continuity(
+        orchestration_session_id,
+        &target,
+        &attach_contract,
+        intent,
+    )?;
 
     Ok(HiddenOwnerHelperLaunchPlan {
-        mode,
+        mode: intent.owner_helper_mode(),
         descriptor: (&descriptor).into(),
         session: HiddenOwnerHelperSessionPlan {
             orchestration_session_id: target.session.orchestration_session_id.clone(),
@@ -1553,10 +1621,8 @@ fn build_attach_launch_plan(
             participant_id: format!("ash_{}", Uuid::now_v7()),
             lease_token: Uuid::now_v7().to_string(),
             run_id: Uuid::now_v7().to_string(),
-            resumed_from_participant_id: Some(
-                target.active_participant.handle.participant_id.clone(),
-            ),
-            internal_uaa_session_id: attach_contract.continuity_uaa_session_id.clone(),
+            resumed_from_participant_id: Some(attach_runtime_continuity.source_participant_id),
+            internal_uaa_session_id: Some(attach_runtime_continuity.continuity_session_id),
         },
         host_attach_contract: Some(attach_contract),
         startup_prompt: None,
@@ -1568,12 +1634,7 @@ fn build_attach_launch_plan(
 fn build_resumed_turn_launch_plan(
     orchestration_session_id: &str,
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
-    build_attach_launch_plan(
-        orchestration_session_id,
-        DispatchCallerKind::HumanTurn,
-        OwnerHelperMode::ResumeOneTurn,
-        true,
-    )
+    build_attach_launch_plan(orchestration_session_id, AttachLaunchIntent::DetachedTurn)
 }
 
 #[derive(Clone, Debug)]
@@ -1585,9 +1646,11 @@ struct ForkSuccessorAllocation {
 
 fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccessorAllocation> {
     let store = AgentRuntimeStateStore::new()?;
-    let target = store
+    let mut target = store
         .resolve_public_control_target(orchestration_session_id, PublicControlAction::Fork)
         .map_err(|err| config_model::user_error(err.to_string()))?;
+    #[cfg(target_os = "linux")]
+    refresh_public_control_target_world_binding(&store, &mut target)?;
     let attach_contract = target.host_attach_contract.clone().ok_or_else(|| {
         config_model::user_error(format!(
             "owner_unreachable: orchestration session {} is missing durable host attach contract state",
@@ -1665,6 +1728,53 @@ fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccess
         backend_id: attach_contract.backend_id,
         source_orchestration_session_id: target.session.orchestration_session_id,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn refresh_public_session_world_binding(
+    store: &AgentRuntimeStateStore,
+    session: &mut OrchestrationSessionRecord,
+) -> Result<()> {
+    let Some(current_binding) = session.authoritative_world_binding() else {
+        return Ok(());
+    };
+    let Some(authoritative_binding) = store
+        .recover_active_shared_world_binding_from_local_metadata(
+            &session.orchestration_session_id,
+        )?
+    else {
+        return Ok(());
+    };
+    if authoritative_binding == current_binding {
+        return Ok(());
+    }
+
+    store.set_orchestration_session_world_binding(
+        session,
+        authoritative_binding.world_id,
+        authoritative_binding.world_generation,
+    )?;
+    store.invalidate_stale_world_members_for_session(
+        &session.orchestration_session_id,
+        authoritative_binding.world_generation,
+    )?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn refresh_public_control_target_world_binding(
+    store: &AgentRuntimeStateStore,
+    target: &mut crate::execution::agent_runtime::state_store::ResolvedPublicControlTarget,
+) -> Result<()> {
+    refresh_public_session_world_binding(store, &mut target.session)
+}
+
+#[cfg(target_os = "linux")]
+fn refresh_public_attach_target_world_binding(
+    store: &AgentRuntimeStateStore,
+    target: &mut crate::execution::agent_runtime::state_store::ResolvedPublicAttachTarget,
+) -> Result<()> {
+    refresh_public_session_world_binding(store, &mut target.session)
 }
 
 #[cfg(unix)]
@@ -4111,8 +4221,11 @@ mod tests {
     };
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope};
     use serial_test::serial;
+    use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    const SHARED_WORLD_METADATA_ROOT_TEST_ENV: &str = "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT";
 
     struct EnvVarGuard {
         key: &'static str,
@@ -4213,8 +4326,13 @@ mod tests {
     fn with_state_store<T>(test: impl FnOnce(&AgentRuntimeStateStore) -> T) -> T {
         let temp = TempDir::new().expect("tempdir");
         let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", temp.path());
+        let _shared_world_root_guard = EnvVarGuard::set(
+            SHARED_WORLD_METADATA_ROOT_TEST_ENV,
+            temp.path().join("shared-worlds").as_path(),
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
         let result = test(&store);
+        std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
         std::env::remove_var("SUBSTRATE_HOME");
         result
     }
@@ -4257,6 +4375,40 @@ mod tests {
         orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
         orchestration.mark_parked_resumable("owner detached cleanly");
         (orchestration, participant)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn write_shared_world_metadata_for_test(
+        world_id: &str,
+        orchestration_session_id: &str,
+        world_generation: u64,
+    ) -> PathBuf {
+        let metadata_dir = PathBuf::from(
+            std::env::var(SHARED_WORLD_METADATA_ROOT_TEST_ENV)
+                .expect("shared world metadata root override"),
+        )
+        .join(world_id);
+        fs::create_dir_all(&metadata_dir).expect("shared world metadata dir");
+        let metadata_path = metadata_dir.join("session.json");
+        fs::write(
+            &metadata_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "world_id": world_id,
+                "project_dir": "/workspace",
+                "isolate_network": true,
+                "always_isolate": true,
+                "allowed_domains": [],
+                "cgroup_path": "/tmp",
+                "started_at_unix_millis": 0,
+                "owner_mode": "shared_orchestration",
+                "orchestration_session_id": orchestration_session_id,
+                "world_generation": world_generation,
+                "binding_state": "active",
+            }))
+            .expect("serialize shared world metadata"),
+        )
+        .expect("write shared world metadata");
+        metadata_dir
     }
 
     fn eligible_obligation(
@@ -4551,6 +4703,85 @@ mod tests {
                 OrchestrationObligationAttachState::Eligible
             );
             assert_eq!(obligation.attach_claim_owner, None);
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn build_attach_launch_plan_distinguishes_reattach_from_detached_turn_modes() {
+        with_state_store(|store| {
+            let orchestration_session_id = "sess_attach_intents";
+            let (session, participant) =
+                detached_orchestrator(orchestration_session_id, "ash_attach_intents");
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist detached session");
+            store
+                .persist_participant(&participant)
+                .expect("persist detached participant");
+
+            let reattach_plan =
+                build_attach_launch_plan(orchestration_session_id, AttachLaunchIntent::Reattach)
+                    .expect("build reattach plan");
+            assert_eq!(reattach_plan.mode, OwnerHelperMode::Attach);
+            assert_eq!(reattach_plan.startup_prompt, None);
+
+            let detached_turn_plan = build_resumed_turn_launch_plan(orchestration_session_id)
+                .expect("build detached-turn attach plan");
+            assert_eq!(detached_turn_plan.mode, OwnerHelperMode::ResumeOneTurn);
+            assert_eq!(
+                detached_turn_plan
+                    .participant
+                    .resumed_from_participant_id
+                    .as_deref(),
+                Some("ash_attach_intents")
+            );
+            assert_eq!(
+                detached_turn_plan
+                    .participant
+                    .internal_uaa_session_id
+                    .as_deref()
+                    .map(|value| !value.is_empty()),
+                Some(true)
+            );
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn build_attach_launch_plan_refreshes_stale_shared_world_binding_from_local_metadata() {
+        with_state_store(|store| {
+            let orchestration_session_id = "sess_attach_binding_refresh";
+            let (mut session, participant) =
+                detached_orchestrator(orchestration_session_id, "ash_attach_binding_refresh");
+            session.set_world_binding("wld_stale_binding", 0);
+            store
+                .persist_orchestration_session(&session)
+                .expect("persist detached session");
+            store
+                .persist_participant(&participant)
+                .expect("persist detached participant");
+
+            let world_id = format!("wld_attach_binding_refresh_{}", Uuid::now_v7());
+            let metadata_dir =
+                write_shared_world_metadata_for_test(&world_id, orchestration_session_id, 0);
+
+            let plan =
+                build_attach_launch_plan(orchestration_session_id, AttachLaunchIntent::Reattach)
+                    .expect("build attach launch plan");
+
+            assert_eq!(plan.session.world_id.as_deref(), Some(world_id.as_str()));
+            assert_eq!(plan.session.world_generation, Some(0));
+            let persisted = store
+                .load_orchestration_session(orchestration_session_id)
+                .expect("load orchestration session")
+                .expect("orchestration session should persist");
+            assert_eq!(persisted.world_id.as_deref(), Some(world_id.as_str()));
+            assert_eq!(persisted.world_generation, Some(0));
+
+            fs::remove_dir_all(metadata_dir).expect("remove shared world metadata dir");
         });
     }
 

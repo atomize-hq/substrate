@@ -2891,7 +2891,9 @@ async fn execute_run_world_task_stream(
     let response = client
         .execute_stream(execute_request)
         .await
-        .context("failed to launch run_world_task over world member dispatch")?;
+        .map_err(|err| {
+            anyhow::anyhow!("failed to launch run_world_task over world member dispatch: {err:#}")
+        })?;
 
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();

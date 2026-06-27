@@ -212,8 +212,13 @@ impl HostAttachContract {
         })
     }
 
-    pub(crate) fn supports_resume(&self) -> bool {
+    pub(crate) fn supports_public_attach_continuity(&self) -> bool {
         self.capabilities.session_resume
+            && matches!(
+                self.attach_launch_knobs.attach_mode_preference,
+                HostAttachModePreference::ContinuityRequired
+                    | HostAttachModePreference::ContinuityPreferred
+            )
     }
 
     pub(crate) fn supports_fork(&self) -> bool {
@@ -224,16 +229,10 @@ impl HostAttachContract {
         self.capabilities.session_stop
     }
 
-    pub(crate) fn supports_continuity_attach(&self) -> bool {
-        matches!(
-            self.attach_launch_knobs.attach_mode_preference,
-            HostAttachModePreference::ContinuityRequired
-                | HostAttachModePreference::ContinuityPreferred
-        )
-    }
-
-    pub(crate) fn has_continuity_selector(&self) -> bool {
-        self.continuity_uaa_session_id.is_some()
+    pub(crate) fn public_attach_continuity_session_id(&self) -> Option<&str> {
+        self.continuity_uaa_session_id
+            .as_deref()
+            .filter(|session_id| !session_id.trim().is_empty())
     }
 }
 

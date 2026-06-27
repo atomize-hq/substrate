@@ -1899,6 +1899,8 @@ struct RemoteRetainedRunControl {
     observe_task: Option<tokio::task::JoinHandle<()>>,
 }
 
+struct SyntheticRetainedRunControl;
+
 #[derive(Debug)]
 struct InternalToolboxDispatchRequest {
     request: InternalToolboxDispatchRequestKind,
@@ -1971,6 +1973,7 @@ fn internal_toolbox_frame_is_terminal(payload: &serde_json::Value) -> bool {
 
 enum RetainedRunControl {
     Local(LocalRetainedRunControl),
+    Synthetic(SyntheticRetainedRunControl),
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     Remote(RemoteRetainedRunControl),
 }
@@ -2044,6 +2047,14 @@ fn runtime_task_start_message(role: &str) -> &'static str {
         "starting long-lived world-scoped member control turn"
     } else {
         "starting long-lived shell-owned orchestrator control turn"
+    }
+}
+
+fn runtime_attach_restore_message(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "restoring world-scoped member ownership from persisted runtime state"
+    } else {
+        "restoring shell-owned orchestrator ownership from persisted runtime state"
     }
 }
 
@@ -2596,15 +2607,7 @@ fn owner_helper_startup_extensions(
 ) -> std::result::Result<BTreeMap<String, serde_json::Value>, RuntimeBootstrapFailure> {
     match plan.mode {
         OwnerHelperMode::Start => Ok(BTreeMap::new()),
-        OwnerHelperMode::Attach => {
-            let Some(session_id) = plan.participant.internal_uaa_session_id.as_deref() else {
-                return Ok(BTreeMap::new());
-            };
-            Ok(BTreeMap::from([(
-                AGENT_API_SESSION_RESUME_V1.to_string(),
-                build_session_resume_extension(session_id),
-            )]))
-        }
+        OwnerHelperMode::Attach => Ok(BTreeMap::new()),
         OwnerHelperMode::ResumeOneTurn => {
             let session_id = plan
                 .participant
@@ -2672,6 +2675,11 @@ fn owner_helper_manifest(
 
     let mut manifest = manifest;
     manifest.internal.latest_run_id = Some(plan.participant.run_id.clone());
+    if matches!(plan.mode, OwnerHelperMode::Attach) {
+        if let Some(session_id) = plan.participant.internal_uaa_session_id.as_deref() {
+            manifest.set_uaa_session_id(session_id.to_string());
+        }
+    }
     Ok(manifest)
 }
 
@@ -2849,6 +2857,30 @@ async fn wait_for_hidden_owner_helper_completion(
                 }
             }
         }
+        RetainedRunControl::Synthetic(retained_control) => {
+            wait_for_hidden_owner_helper_synthetic_runtime(
+                HiddenOwnerHelperSyntheticRuntimeContext {
+                    store: &store,
+                    orchestration_session: &orchestration_session,
+                    manifest: &manifest,
+                    host_toolbox_surface_authoritative: &host_toolbox_surface_authoritative,
+                    private_stop_rx: &mut private_stop_rx,
+                    startup_context,
+                    toolbox_request_rx: &mut toolbox_request_rx,
+                    member_runtimes: &mut member_runtimes,
+                    stop_transport: &mut stop_transport,
+                    prompt_transport: &mut prompt_transport,
+                    prompt_owner_task: &mut prompt_owner_task,
+                    toolbox_transport: &mut toolbox_transport,
+                    heartbeat_stop_tx: &mut heartbeat_stop_tx,
+                    heartbeat_task: &mut heartbeat_task,
+                },
+                retained_control,
+                agent_printer,
+                telemetry,
+            )
+            .await;
+        }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         RetainedRunControl::Remote(retained_control) => {
             if let Some(mut auto_park_requests) = auto_park_rx.take() {
@@ -2978,6 +3010,23 @@ struct HiddenOwnerHelperLocalRuntimeContext<'a> {
     cancel_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
     stop_transport: &'a mut Option<PrivateStopTransport>,
     stop_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
+    prompt_transport: &'a mut Option<PrivatePromptTransport>,
+    prompt_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
+    toolbox_transport: &'a mut Option<InternalToolboxTransport>,
+    heartbeat_stop_tx: &'a mut Option<tokio::sync::oneshot::Sender<()>>,
+    heartbeat_task: &'a mut Option<tokio::task::JoinHandle<()>>,
+}
+
+struct HiddenOwnerHelperSyntheticRuntimeContext<'a> {
+    store: &'a AgentRuntimeStateStore,
+    orchestration_session: &'a Arc<Mutex<OrchestrationSessionRecord>>,
+    manifest: &'a Arc<Mutex<AgentRuntimeSessionManifest>>,
+    host_toolbox_surface_authoritative: &'a Arc<AtomicBool>,
+    private_stop_rx: &'a mut Option<PrivateStopRequestReceiver>,
+    startup_context: Option<&'a RuntimeOrchestrationContext>,
+    toolbox_request_rx: &'a mut Option<InternalToolboxDispatchRequestReceiver>,
+    member_runtimes: &'a mut RetainedMemberRuntimeMap,
+    stop_transport: &'a mut Option<PrivateStopTransport>,
     prompt_transport: &'a mut Option<PrivatePromptTransport>,
     prompt_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
     toolbox_transport: &'a mut Option<InternalToolboxTransport>,
@@ -3239,6 +3288,131 @@ async fn wait_for_hidden_owner_helper_local_runtime(
     outcome
 }
 
+async fn wait_for_hidden_owner_helper_synthetic_runtime(
+    context: HiddenOwnerHelperSyntheticRuntimeContext<'_>,
+    _retained_control: &mut SyntheticRetainedRunControl,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) {
+    let HiddenOwnerHelperSyntheticRuntimeContext {
+        store,
+        orchestration_session,
+        manifest,
+        host_toolbox_surface_authoritative,
+        private_stop_rx,
+        startup_context,
+        toolbox_request_rx,
+        member_runtimes,
+        stop_transport,
+        prompt_transport,
+        prompt_owner_task,
+        toolbox_transport,
+        heartbeat_stop_tx,
+        heartbeat_task,
+    } = context;
+
+    loop {
+        tokio::select! {
+            maybe_request = async {
+                match private_stop_rx.as_mut() {
+                    Some(stop_rx) => stop_rx.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                let request = match maybe_request {
+                    Some(request) => request,
+                    None => break,
+                };
+
+                if runtime_is_terminal(manifest) {
+                    let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
+                    break;
+                }
+
+                if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
+                    persist_hidden_owner_helper_stop_failure(
+                        store,
+                        orchestration_session,
+                        manifest,
+                        format!("failed to persist stop request before shutdown: {err:#}"),
+                    );
+                    let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                    break;
+                }
+
+                let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+                if let Some(mut owned_stop_transport) = stop_transport.take() {
+                    owned_stop_transport.close().await;
+                }
+                if let Some(mut owned_prompt_transport) = prompt_transport.take() {
+                    owned_prompt_transport.close().await;
+                }
+                if let Some(mut owned_toolbox_transport) = toolbox_transport.take() {
+                    host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                    owned_toolbox_transport.close().await;
+                }
+                if let Some(task) = prompt_owner_task.take() {
+                    let _ = task.await;
+                }
+                if let Some(stop_tx) = heartbeat_stop_tx.take() {
+                    let _ = stop_tx.send(());
+                }
+                if let Some(task) = heartbeat_task.take() {
+                    let _ = task.await;
+                }
+
+                let (orchestration_snapshot, manifest_snapshot) = {
+                    let mut orchestration_guard = orchestration_session
+                        .lock()
+                        .expect("orchestration session mutex poisoned");
+                    let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+                    apply_runtime_stop_closeout(&mut orchestration_guard, &mut manifest_guard);
+                    (orchestration_guard.clone(), manifest_guard.clone())
+                };
+                let _ = persist_runtime_snapshots(store, &orchestration_snapshot, &manifest_snapshot);
+                emit_runtime_event(
+                    build_runtime_message_event(
+                        &manifest_snapshot,
+                        &orchestration_snapshot,
+                        manifest_snapshot
+                            .internal
+                            .latest_run_id
+                            .clone()
+                            .unwrap_or_else(|| Uuid::now_v7().to_string()),
+                        MessageEventKind::Status,
+                        runtime_stopped_message(&manifest_snapshot.handle.role),
+                    ),
+                    telemetry,
+                    agent_printer,
+                );
+                break;
+            }
+            maybe_toolbox_request = async {
+                match toolbox_request_rx.as_mut() {
+                    Some(toolbox_rx) => toolbox_rx.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                match maybe_toolbox_request {
+                    Some(request) => {
+                        handle_internal_toolbox_dispatch_request(
+                            request,
+                            startup_context,
+                            member_runtimes,
+                            agent_printer,
+                            telemetry,
+                        )
+                        .await;
+                    }
+                    None => {
+                        *toolbox_request_rx = None;
+                    }
+                }
+            }
+        }
+    }
+}
+
 async fn completed_hidden_owner_helper_should_auto_park(
     auto_park_rx: &mut Option<UnboundedReceiver<()>>,
 ) -> bool {
@@ -3440,12 +3614,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         run_id,
         startup_extensions,
     } = prepared;
-    let Some(prompt_fulfillment) = prompt_fulfillment else {
-        return Err(RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: "missing host prompt-fulfillment bridge for retained startup".to_string(),
-        });
-    };
     let runtime_role = {
         manifest
             .lock()
@@ -3521,11 +3689,31 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             &orchestration_snapshot,
             run_id.clone(),
             MessageEventKind::TaskStart,
-            runtime_task_start_message(&runtime_role),
+            if control_only_attach {
+                runtime_attach_restore_message(&runtime_role)
+            } else {
+                runtime_task_start_message(&runtime_role)
+            },
         ),
         telemetry,
         agent_printer,
     );
+
+    if control_only_attach {
+        return start_control_only_attach_runtime(
+            descriptor,
+            startup_context,
+            manifest,
+            run_id,
+            runtime_role,
+            host_toolbox_surface_requested,
+            host_toolbox_surface_authoritative,
+            startup_toolbox_request_tx,
+            agent_printer,
+            telemetry,
+        )
+        .await;
+    }
 
     let startup_backchannel = match initial_prompt.as_ref() {
         Some(InitialExecPromptPlan::StartupPrompt { stream_path, .. }) => {
@@ -3563,52 +3751,13 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         });
     }
     let mut startup_toolbox_transport: Option<InternalToolboxTransport> = None;
-    let control = match if control_only_attach {
-        let Some(continuity_session_id) = startup_extensions
-            .get(AGENT_API_SESSION_RESUME_V1)
-            .and_then(|value| value.as_object())
-            .filter(|value| value.get("selector").and_then(serde_json::Value::as_str) == Some("id"))
-            .and_then(|value| value.get("id"))
-            .and_then(serde_json::Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .map(ToOwned::to_owned)
-        else {
-            let failure = RuntimeBootstrapFailure {
-                exit_code: 1,
-                message: "unsupported_attach_mode: fresh control-only attach is not sanctioned in this slice".to_string(),
-            };
-            if let Some(backchannel) = startup_backchannel.as_ref() {
-                let (orchestration_snapshot, manifest_snapshot) = {
-                    let mut orchestration_guard = startup_context
-                        .orchestration_session
-                        .lock()
-                        .expect("orchestration session mutex poisoned");
-                    let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
-                    orchestration_guard.mark_startup_prompt_failed(
-                        manifest_guard.handle.participant_id.as_str(),
-                        failure.message.clone(),
-                    );
-                    (orchestration_guard.clone(), manifest_guard.clone())
-                };
-                let _ = persist_runtime_snapshots(
-                    &startup_context.store,
-                    &orchestration_snapshot,
-                    &manifest_snapshot,
-                );
-                backchannel.send(startup_prompt_failed_envelope(failure.message.clone()));
-            }
-            mark_runtime_startup_failed(
-                &startup_context.store,
-                &startup_context.orchestration_session,
-                &manifest,
-                &failure.message,
-            );
-            return Err(failure);
-        };
-        prompt_fulfillment
-            .run_attach_control(&continuity_session_id)
-            .await
-    } else {
+    let Some(prompt_fulfillment) = prompt_fulfillment else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "missing host prompt-fulfillment bridge for retained startup".to_string(),
+        });
+    };
+    let control = match {
         let (orchestration_session_id, caller_participant_id) = {
             let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
             (
@@ -4657,6 +4806,244 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn start_control_only_attach_runtime(
+    descriptor: RuntimeSelectionDescriptor,
+    startup_context: RuntimeOrchestrationContext,
+    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    run_id: String,
+    runtime_role: String,
+    host_toolbox_surface_requested: bool,
+    host_toolbox_surface_authoritative: Arc<AtomicBool>,
+    startup_toolbox_request_tx: Option<&InternalToolboxDispatchRequestSender>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    let controls_parent_session = runtime_controls_parent_session(&runtime_role);
+    let Some(uaa_session_handle_id) = manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .internal
+        .uaa_session_id
+        .clone()
+        .filter(|session_id| !session_id.trim().is_empty())
+    else {
+        let failure = RuntimeBootstrapFailure {
+            exit_code: 1,
+            message:
+                "unsupported_attach_mode: fresh control-only attach is not sanctioned in this slice"
+                    .to_string(),
+        };
+        mark_runtime_startup_failed(
+            &startup_context.store,
+            &startup_context.orchestration_session,
+            &manifest,
+            &failure.message,
+        );
+        return Err(failure);
+    };
+
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    let cancel_requested = Arc::new(AtomicBool::new(false));
+    let mut startup_toolbox_transport: Option<InternalToolboxTransport> = None;
+    let (orchestration_session_id, participant_id) = {
+        let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        (
+            manifest_guard.handle.orchestration_session_id.clone(),
+            manifest_guard.handle.participant_id.clone(),
+        )
+    };
+    if host_toolbox_surface_requested {
+        if let Some(request_tx) = startup_toolbox_request_tx {
+            let transport = register_internal_toolbox_transport_for_session(
+                &orchestration_session_id,
+                &participant_id,
+                request_tx.clone(),
+            )
+            .await
+            .map_err(|err| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!("failed to register startup internal toolbox transport: {err:#}"),
+            })?;
+            host_toolbox_surface_authoritative.store(true, Ordering::SeqCst);
+            startup_toolbox_transport = Some(transport);
+        }
+    }
+
+    let (stop_tx, stop_rx) = private_stop_request_channel();
+    let stop_transport = match register_private_stop_transport(
+        &startup_context.store,
+        &orchestration_session_id,
+        &participant_id,
+        stop_tx,
+    )
+    .await
+    {
+        Ok(stop_transport) => stop_transport,
+        Err(err) => {
+            if let Some(mut transport) = startup_toolbox_transport.take() {
+                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                transport.close().await;
+            }
+            let message = format!("failed to register private stop transport: {err:#}");
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message,
+            });
+        }
+    };
+
+    let (prompt_tx, prompt_rx) = private_prompt_request_channel();
+    let prompt_transport = match register_private_prompt_transport(
+        &startup_context.store,
+        &orchestration_session_id,
+        &participant_id,
+        prompt_tx,
+    )
+    .await
+    {
+        Ok(prompt_transport) => prompt_transport,
+        Err(err) => {
+            if let Some(mut transport) = startup_toolbox_transport.take() {
+                host_toolbox_surface_authoritative.store(false, Ordering::SeqCst);
+                transport.close().await;
+            }
+            let mut stop_transport = stop_transport;
+            stop_transport.close().await;
+            let message = format!("failed to register private prompt transport: {err:#}");
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message,
+            });
+        }
+    };
+
+    let prompt_owner_task = spawn_local_private_prompt_owner(
+        prompt_runtime_from_parts(
+            descriptor.clone(),
+            Arc::clone(&startup_context.orchestration_session),
+            Arc::clone(&manifest),
+            startup_context.store.clone(),
+            uaa_session_handle_id.clone(),
+            None,
+            Arc::clone(&host_toolbox_surface_authoritative),
+        ),
+        prompt_rx,
+    );
+
+    let (orchestration_snapshot, manifest_snapshot) = {
+        let mut orchestration_guard = startup_context
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        manifest_guard.mark_runtime_ownership_retained();
+        manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+        manifest_guard.touch_heartbeat();
+        if controls_parent_session {
+            orchestration_guard
+                .bind_active_session_handle(manifest_guard.handle.participant_id.clone());
+            orchestration_guard.transition_state(OrchestrationSessionState::Active);
+        } else {
+            orchestration_guard.touch_active();
+        }
+        orchestration_guard.sync_host_attach_contract(&manifest_guard);
+        (orchestration_guard.clone(), manifest_guard.clone())
+    };
+    persist_runtime_snapshots(
+        &startup_context.store,
+        &orchestration_snapshot,
+        &manifest_snapshot,
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("failed to persist restored attached runtime ownership: {err:#}"),
+    })?;
+    emit_runtime_event(
+        build_runtime_message_event(
+            &manifest_snapshot,
+            &orchestration_snapshot,
+            run_id,
+            MessageEventKind::Status,
+            runtime_ready_message(&runtime_role),
+        ),
+        telemetry,
+        agent_printer,
+    );
+
+    let (heartbeat_stop_tx, mut heartbeat_stop_rx) = tokio::sync::oneshot::channel();
+    let heartbeat_store = startup_context.store.clone();
+    let heartbeat_orchestration_session = Arc::clone(&startup_context.orchestration_session);
+    let heartbeat_manifest = Arc::clone(&manifest);
+    let heartbeat_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    let next = {
+                        let mut orchestration_guard = heartbeat_orchestration_session
+                            .lock()
+                            .expect("orchestration session mutex poisoned");
+                        let mut manifest_guard = heartbeat_manifest
+                            .lock()
+                            .expect("runtime manifest mutex poisoned");
+                        if !manifest_guard.is_authoritative_live() {
+                            None
+                        } else {
+                            manifest_guard.touch_heartbeat();
+                            if orchestration_guard.state == OrchestrationSessionState::Active {
+                                orchestration_guard.touch_active();
+                            }
+                            Some((orchestration_guard.clone(), manifest_guard.clone()))
+                        }
+                    };
+                    let Some(next) = next else {
+                        break;
+                    };
+                    let _ = persist_runtime_snapshots(&heartbeat_store, &next.0, &next.1);
+                }
+                _ = &mut heartbeat_stop_rx => break,
+            }
+        }
+    });
+
+    Ok(Some(AsyncReplAgentRuntime {
+        descriptor,
+        orchestration_session: startup_context.orchestration_session,
+        manifest,
+        store: startup_context.store,
+        uaa_session_handle_id,
+        host_toolbox_surface_authoritative,
+        retained_control: RetainedRunControl::Synthetic(SyntheticRetainedRunControl),
+        shutdown_requested,
+        cancel_requested,
+        auto_park_rx: None,
+        private_stop_rx: Some(stop_rx),
+        cancel_transport: None,
+        cancel_owner_task: None,
+        stop_transport: Some(stop_transport),
+        stop_owner_task: None,
+        prompt_transport: Some(prompt_transport),
+        prompt_owner_task: Some(prompt_owner_task),
+        toolbox_transport: startup_toolbox_transport,
+        heartbeat_stop_tx: Some(heartbeat_stop_tx),
+        heartbeat_task: Some(heartbeat_task),
+    }))
+}
+
 fn runtime_manifest_snapshot(runtime: &AsyncReplAgentRuntime) -> AgentRuntimeParticipantRecord {
     runtime
         .manifest
@@ -5220,7 +5607,7 @@ fn runtime_launch_span_id(runtime: &AsyncReplAgentRuntime) -> Option<String> {
         // Local retained runtimes do not originate from a streamed /v1/execute span.
         // Their persisted run_id is the authoritative bootstrap receipt available to
         // the current runtime rules, so use that instead of inventing a new identifier.
-        RetainedRunControl::Local(_) => runtime
+        RetainedRunControl::Local(_) | RetainedRunControl::Synthetic(_) => runtime
             .manifest
             .lock()
             .expect("runtime manifest mutex poisoned")
@@ -5550,6 +5937,16 @@ async fn handle_internal_toolbox_dispatch_request(
                 ));
                 return;
             };
+            #[cfg(target_os = "linux")]
+            let session_snapshot = match synchronize_internal_toolbox_world_binding(startup_context)
+            {
+                Ok(snapshot) => snapshot,
+                Err(err) => {
+                    let _ = response_tx.send(internal_toolbox_error_result_frame(err.to_string()));
+                    return;
+                }
+            };
+            #[cfg(not(target_os = "linux"))]
             let session_snapshot = startup_context.snapshot();
             let world_binding = match authoritative_world_binding_for_session_v1(&session_snapshot)
             {
@@ -5667,6 +6064,43 @@ async fn handle_internal_toolbox_dispatch_request(
             let _ = response_tx.send(payload);
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn synchronize_internal_toolbox_world_binding(
+    startup_context: &RuntimeOrchestrationContext,
+) -> Result<OrchestrationSessionRecord> {
+    let session_snapshot = startup_context.snapshot();
+    let Some(current_binding) = session_snapshot.authoritative_world_binding() else {
+        return Ok(session_snapshot);
+    };
+    let Some(authoritative_binding) = startup_context
+        .store
+        .recover_active_shared_world_binding_from_local_metadata(
+            &session_snapshot.orchestration_session_id,
+        )?
+    else {
+        return Ok(session_snapshot);
+    };
+    if authoritative_binding == current_binding {
+        return Ok(session_snapshot);
+    }
+
+    let refreshed_binding = PersistedWorldBinding {
+        world_id: authoritative_binding.world_id,
+        world_generation: authoritative_binding.world_generation,
+    };
+    let persisted_snapshot = persist_world_binding_authority(
+        &startup_context.store,
+        &startup_context.orchestration_session,
+        Some(&refreshed_binding),
+    )?;
+    invalidate_stale_world_members_after_binding(
+        &startup_context.store,
+        &persisted_snapshot.orchestration_session_id,
+        refreshed_binding.world_generation,
+    )?;
+    Ok(persisted_snapshot)
 }
 
 fn decode_internal_toolbox_dispatch_request(
@@ -7665,6 +8099,22 @@ async fn shutdown_host_orchestrator_runtime_with_mode(
                 let _ = tokio::time::timeout(Duration::from_secs(5), task).await;
             }
         }
+        RetainedRunControl::Synthetic(_) => {
+            let (orchestration_session, manifest) = {
+                let mut orchestration_guard = runtime
+                    .orchestration_session
+                    .lock()
+                    .expect("orchestration session mutex poisoned");
+                let mut manifest_guard = runtime
+                    .manifest
+                    .lock()
+                    .expect("runtime manifest mutex poisoned");
+                apply_runtime_stop_closeout(&mut orchestration_guard, &mut manifest_guard);
+                (orchestration_guard.clone(), manifest_guard.clone())
+            };
+            let _ = persist_runtime_snapshots(&runtime.store, &orchestration_session, &manifest);
+            completion_observed = true;
+        }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         RetainedRunControl::Remote(retained_control) => {
             if retained_control
@@ -7821,6 +8271,7 @@ async fn park_host_orchestrator_runtime(
                 let _ = task.await;
             }
         }
+        RetainedRunControl::Synthetic(_) => {}
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         RetainedRunControl::Remote(retained_control) => {
             if let Some(task) = retained_control.observe_task.take() {
@@ -11122,6 +11573,11 @@ mod tests {
                     retained_control.completion_task =
                         Some(tokio::spawn(std::future::pending::<()>()));
                 }
+                RetainedRunControl::Synthetic(_) => {
+                    panic!(
+                        "host helper start runtime should stay on the local retained-control path"
+                    )
+                }
                 #[cfg(any(target_os = "linux", target_os = "macos"))]
                 RetainedRunControl::Remote(_) => {
                     panic!("host helper runtime should stay on the local retained-control path")
@@ -11282,6 +11738,13 @@ mod tests {
                 .classify_hidden_owner_helper_launch_readiness("orch-attach", "ash-attach", true)
                 .expect("readiness classification");
             assert_eq!(readiness, HiddenOwnerHelperLaunchReadiness::ReadyAttached);
+            assert!(
+                matches!(
+                    runtime.retained_control,
+                    RetainedRunControl::Synthetic(SyntheticRetainedRunControl)
+                ),
+                "attach restore should stay on the synthetic retained-control path"
+            );
 
             let session = runtime
                 .store
@@ -11294,18 +11757,27 @@ mod tests {
                 .find(|participant| participant.participant_id() == "ash-attach")
                 .expect("attached participant");
             assert_eq!(session.session.active_participant_id(), Some("ash-attach"));
-            assert_eq!(participant.internal_uaa_session_id(), Some("thread-test"));
+            assert_eq!(
+                participant.internal_uaa_session_id(),
+                Some("uaa-attach-source")
+            );
             assert_eq!(
                 session
                     .session
                     .host_attach_contract()
                     .and_then(|contract| contract.continuity_uaa_session_id.as_deref()),
-                Some("thread-test")
+                Some("uaa-attach-source")
             );
             assert_eq!(
-                fs::read_to_string(&stdin_capture_path).expect("read attach stdin capture"),
-                "",
-                "control-only attach must close stdin without sending a bootstrap prompt"
+                owner_helper_startup_extensions(&plan)
+                    .expect("attach startup extensions should resolve")
+                    .len(),
+                0,
+                "control-only attach should not stage a UAA resume selector at startup"
+            );
+            assert!(
+                !stdin_capture_path.exists(),
+                "control-only attach restore must not launch the backend at all"
             );
 
             let mut shutdown_telemetry = ReplSessionTelemetry::new(config, "async-test-stop");
@@ -11517,11 +11989,11 @@ mod tests {
             .await;
 
             let target = store
-                .resolve_public_control_target(
+                .resolve_public_attach_target(
                     &session_id,
-                    crate::execution::agent_runtime::PublicControlAction::Resume,
+                    crate::execution::agent_runtime::PublicAttachAction::Reattach,
                 )
-                .expect("parked session should stay resume-eligible");
+                .expect("parked session should stay attach-eligible");
             assert_eq!(target.session.state, OrchestrationSessionState::Active);
             assert_eq!(
                 target.session.posture,
@@ -11633,9 +12105,9 @@ mod tests {
             assert!(session.closed_at.is_some());
             assert!(
                 store
-                    .resolve_public_control_target(
+                    .resolve_public_attach_target(
                         &session_id,
-                        crate::execution::agent_runtime::PublicControlAction::Resume,
+                        crate::execution::agent_runtime::PublicAttachAction::Reattach,
                     )
                     .is_err(),
                 "invalid detached continuity must fail closed instead of parking"

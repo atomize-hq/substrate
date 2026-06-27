@@ -269,11 +269,13 @@ impl MemberRuntimeManager {
                     manager.remember_uaa_session_id(&participant_id, session_id);
                 }
             }
-            let preserve_retained_member = completion
-                .as_ref()
-                .ok()
-                .is_some_and(|completion| exit_code_from_status(&completion.status) == 0)
-                && active.uaa_session_id().is_some();
+            let preserve_retained_member = completion.as_ref().ok().is_some_and(|completion| {
+                should_preserve_retained_member_after_clean_bootstrap(
+                    &dispatch.participant_id,
+                    &completion.status,
+                    active.uaa_session_id().is_some(),
+                )
+            });
             for frame in frames_from_completion(
                 &context,
                 &binding,
@@ -1471,6 +1473,19 @@ fn missing_retained_slot_error(
     ))
 }
 
+fn should_preserve_retained_member_after_clean_bootstrap(
+    participant_id: &str,
+    completion_status: &std::process::ExitStatus,
+    has_uaa_session_id: bool,
+) -> bool {
+    // Only retained worker bootstraps (`ash_*`) may occupy the retained slot after
+    // a clean bootstrap exit. Ephemeral `run_world_task` bootstraps (`awm_*`) can
+    // surface resumable session identity, but they must still clean up immediately.
+    participant_id.starts_with("ash_")
+        && has_uaa_session_id
+        && exit_code_from_status(completion_status) == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1502,6 +1517,7 @@ mod tests {
 
     fn sample_active_member_runtime(
         temp_dir: &tempfile::TempDir,
+        participant_id: &str,
         bootstrap_span_id: &str,
     ) -> Arc<ActiveMemberRuntime> {
         let workspace_dir = temp_dir.path().join("workspace");
@@ -1517,7 +1533,7 @@ mod tests {
 
         Arc::new(ActiveMemberRuntime {
             agent_id: "codex_world".to_string(),
-            participant_id: "ash_member".to_string(),
+            participant_id: participant_id.to_string(),
             orchestration_session_id: "orch_123".to_string(),
             orchestrator_participant_id: "ash_orchestrator".to_string(),
             parent_participant_id: None,
@@ -2445,7 +2461,7 @@ base_url = "https://gateway.example.invalid/v1"
     #[test]
     fn finish_bootstrap_preserves_retained_slot_when_session_handle_exists() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
-        let active = sample_active_member_runtime(&temp_dir, "spn_bootstrap");
+        let active = sample_active_member_runtime(&temp_dir, "ash_member", "spn_bootstrap");
         active.remember_uaa_session_id("uaa_session".to_string());
         let manager = MemberRuntimeManager::new();
         manager
@@ -2487,7 +2503,7 @@ base_url = "https://gateway.example.invalid/v1"
     #[test]
     fn finish_bootstrap_unregisters_member_without_resumable_identity() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
-        let active = sample_active_member_runtime(&temp_dir, "spn_bootstrap");
+        let active = sample_active_member_runtime(&temp_dir, "ash_member", "spn_bootstrap");
         let manager = MemberRuntimeManager::new();
         manager
             .register_member(active.clone())
@@ -2517,6 +2533,48 @@ base_url = "https://gateway.example.invalid/v1"
         assert!(
             !temp_dir.path().join("launcher").exists(),
             "terminal bootstrap cleanup should still remove launcher artifacts"
+        );
+    }
+
+    #[test]
+    fn finish_bootstrap_unregisters_ephemeral_member_even_with_resumable_identity() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let active = sample_active_member_runtime(&temp_dir, "awm_task", "spn_bootstrap");
+        active.remember_uaa_session_id("uaa_session".to_string());
+        let manager = MemberRuntimeManager::new();
+        manager
+            .register_member(active.clone())
+            .expect("register ephemeral member");
+
+        manager.finish_bootstrap(
+            &active.participant_id,
+            should_preserve_retained_member_after_clean_bootstrap(
+                &active.participant_id,
+                &std::process::ExitStatus::from_raw(0),
+                active.uaa_session_id().is_some(),
+            ),
+        );
+
+        let guard = manager
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        assert!(
+            !guard.by_participant_id.contains_key(&active.participant_id),
+            "ephemeral run_world_task members must not remain retained after bootstrap exit"
+        );
+        assert!(
+            !guard
+                .by_retained_key
+                .contains_key(&RetainedMemberKey::from_active(active.as_ref())),
+            "ephemeral run_world_task members must not occupy retained slot identity"
+        );
+        drop(guard);
+        assert!(
+            !temp_dir.path().join("launcher").exists(),
+            "ephemeral bootstrap cleanup should still remove launcher artifacts"
         );
     }
 }

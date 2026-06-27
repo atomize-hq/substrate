@@ -573,6 +573,13 @@ impl AgentRuntimeParticipantRecord {
         self.internal.uaa_session_id.as_deref()
     }
 
+    pub(crate) fn is_public_attach_continuity_source(&self) -> bool {
+        self.is_host_orchestrator()
+            && self.handle.state.is_live()
+            && self.internal.terminal_observed_at.is_none()
+            && self.internal.resume_eligible
+    }
+
     pub(crate) fn is_host_orchestrator(&self) -> bool {
         self.handle.role == ORCHESTRATOR_ROLE
             && self.handle.execution.scope == AgentExecutionScope::Host
