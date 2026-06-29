@@ -3717,6 +3717,29 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Option<super::AgentRuntimeParticipantWorldBinding>> {
+        self.recover_active_shared_world_binding_from_local_metadata_with_unreadable_fallback(
+            orchestration_session_id,
+            true,
+        )
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn recover_active_shared_world_binding_from_local_metadata_only(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<super::AgentRuntimeParticipantWorldBinding>> {
+        self.recover_active_shared_world_binding_from_local_metadata_with_unreadable_fallback(
+            orchestration_session_id,
+            false,
+        )
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn recover_active_shared_world_binding_from_local_metadata_with_unreadable_fallback(
+        &self,
+        orchestration_session_id: &str,
+        allow_unreadable_live_fallback: bool,
+    ) -> Result<Option<super::AgentRuntimeParticipantWorldBinding>> {
         fn is_permission_denied(err: &anyhow::Error) -> bool {
             err.chain().any(|cause| {
                 cause
@@ -3734,13 +3757,16 @@ impl AgentRuntimeStateStore {
             orchestration_session_id: &str,
             blocked_path: &Path,
             err: anyhow::Error,
+            allow_unreadable_live_fallback: bool,
         ) -> Result<Option<super::AgentRuntimeParticipantWorldBinding>> {
-            if let Some(binding) = store
-                .recover_active_shared_world_binding_from_authoritative_live_participants(
-                    orchestration_session_id,
-                )?
-            {
-                return Ok(Some(binding));
+            if allow_unreadable_live_fallback {
+                if let Some(binding) = store
+                    .recover_active_shared_world_binding_from_authoritative_live_participants(
+                        orchestration_session_id,
+                    )?
+                {
+                    return Ok(Some(binding));
+                }
             }
 
             Err(err).with_context(|| {
@@ -3756,7 +3782,13 @@ impl AgentRuntimeStateStore {
         let Some(entries) = (match safe_read_dir(&root) {
             Ok(entries) => entries,
             Err(err) if is_permission_denied(&err) => {
-                return fallback_or_fail_closed(self, orchestration_session_id, &root, err);
+                return fallback_or_fail_closed(
+                    self,
+                    orchestration_session_id,
+                    &root,
+                    err,
+                    allow_unreadable_live_fallback,
+                );
             }
             Err(err) => return Err(err),
         }) else {
@@ -3773,6 +3805,7 @@ impl AgentRuntimeStateStore {
                         orchestration_session_id,
                         &root,
                         err.into(),
+                        allow_unreadable_live_fallback,
                     );
                 }
                 Err(err) => {
@@ -3793,6 +3826,7 @@ impl AgentRuntimeStateStore {
                             orchestration_session_id,
                             &metadata_path,
                             err,
+                            allow_unreadable_live_fallback,
                         );
                     }
                     Err(_) => continue,

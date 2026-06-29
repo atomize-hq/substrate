@@ -73,6 +73,14 @@ pub enum MemberDispatchStreamScript {
     ErrorBeforeReady {
         message: String,
     },
+    FailExactWorldIdMismatch {
+        expected_world_id: String,
+    },
+    WriteFileAndFailExactWorldIdMismatch {
+        path: PathBuf,
+        contents: Vec<u8>,
+        expected_world_id: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -160,6 +168,13 @@ impl ReplWorldAgentStub {
         scripts: Vec<MemberDispatchStreamScript>,
     ) -> Self {
         Self::start_with_overrides(path, behavior, None, None, scripts)
+    }
+
+    pub fn push_member_dispatch_script(&self, script: MemberDispatchStreamScript) {
+        self.member_dispatch_scripts
+            .lock()
+            .expect("member dispatch script queue")
+            .push_back(script);
     }
 
     fn start_with_overrides(
@@ -440,6 +455,39 @@ impl ReplWorldAgentStub {
                             let active_member_dispatch_cancels =
                                 active_member_dispatch_cancels.clone();
                             tokio::spawn(async move {
+                                let script = match script {
+                                    MemberDispatchStreamScript::FailExactWorldIdMismatch {
+                                        expected_world_id,
+                                    } => {
+                                        let body = format!(
+                                            r#"{{"error":"member_dispatch.world_id mismatch (expected {expected}, got {got})"}}"#,
+                                            expected = expected_world_id,
+                                            got = dispatch.world_id,
+                                        );
+                                        write_http_json(&mut stream, "400 Bad Request", &body).await;
+                                        return;
+                                    }
+                                    MemberDispatchStreamScript::WriteFileAndFailExactWorldIdMismatch {
+                                        path,
+                                        contents,
+                                        expected_world_id,
+                                    } => {
+                                        if let Some(parent) = path.parent() {
+                                            std::fs::create_dir_all(parent)
+                                                .expect("member dispatch mismatch parent dir");
+                                        }
+                                        std::fs::write(&path, contents)
+                                            .expect("member dispatch mismatch side effect");
+                                        let body = format!(
+                                            r#"{{"error":"member_dispatch.world_id mismatch (expected {expected}, got {got})"}}"#,
+                                            expected = expected_world_id,
+                                            got = dispatch.world_id,
+                                        );
+                                        write_http_json(&mut stream, "400 Bad Request", &body).await;
+                                        return;
+                                    }
+                                    script => script,
+                                };
                                 write_http_stream_start(&mut stream).await;
                                 write_chunked_frame(
                                     &mut stream,
@@ -550,6 +598,12 @@ impl ReplWorldAgentStub {
                                         )
                                         .await;
                                         finish_chunked_stream(&mut stream).await;
+                                    }
+                                    MemberDispatchStreamScript::WriteFileAndFailExactWorldIdMismatch { .. } => {
+                                        unreachable!("mismatch scripts return before stream start");
+                                    }
+                                    MemberDispatchStreamScript::FailExactWorldIdMismatch { .. } => {
+                                        unreachable!("mismatch scripts return before stream start");
                                     }
                                 }
                             });

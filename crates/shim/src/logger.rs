@@ -117,10 +117,11 @@ pub fn write_log_entry(_log_path: &Path, entry: &Value) -> Result<()> {
 pub fn redact_sensitive_argv(argv: &[std::ffi::OsString]) -> Vec<String> {
     let mut result = Vec::new();
     let mut i = 0;
+    let raw_logging = raw_logging_enabled();
 
     while i < argv.len() {
         let arg = argv[i].to_string_lossy();
-        let redacted_arg = redact_sensitive(&arg);
+        let redacted_arg = redact_sensitive_with_mode(&arg, raw_logging);
         result.push(redacted_arg.clone());
 
         // If this argument was a sensitive flag, redact the next argument too
@@ -129,7 +130,7 @@ pub fn redact_sensitive_argv(argv: &[std::ffi::OsString]) -> Vec<String> {
 
             // Special handling for header flags - apply header-specific redaction
             if arg.eq_ignore_ascii_case("-H") || arg.eq_ignore_ascii_case("--header") {
-                result.push(redact_header_value(&next_arg));
+                result.push(redact_header_value_with_mode(&next_arg, raw_logging));
             } else {
                 result.push("***".to_string());
             }
@@ -143,9 +144,14 @@ pub fn redact_sensitive_argv(argv: &[std::ffi::OsString]) -> Vec<String> {
 }
 
 /// Redact sensitive information from individual arguments
+#[cfg(test)]
 fn redact_sensitive(arg: &str) -> String {
+    redact_sensitive_with_mode(arg, raw_logging_enabled())
+}
+
+fn redact_sensitive_with_mode(arg: &str, raw_logging: bool) -> String {
     // Skip redaction if SHIM_LOG_OPTS=raw is set
-    if env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
+    if raw_logging {
         return arg.to_string();
     }
 
@@ -193,9 +199,14 @@ fn redact_sensitive(arg: &str) -> String {
 }
 
 /// Redact sensitive header values
+#[cfg(test)]
 fn redact_header_value(header_value: &str) -> String {
+    redact_header_value_with_mode(header_value, raw_logging_enabled())
+}
+
+fn redact_header_value_with_mode(header_value: &str, raw_logging: bool) -> String {
     // Skip redaction if SHIM_LOG_OPTS=raw is set
-    if env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw") {
+    if raw_logging {
         return header_value.to_string();
     }
 
@@ -239,6 +250,10 @@ fn redact_header_value(header_value: &str) -> String {
     }
 
     header_value.to_string()
+}
+
+fn raw_logging_enabled() -> bool {
+    env::var("SHIM_LOG_OPTS").as_deref() == Ok("raw")
 }
 
 /// Format timestamp as RFC3339 with milliseconds
@@ -296,7 +311,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_flag_value_redaction() {
+        env::remove_var("SHIM_LOG_OPTS");
+
         let args = vec![
             OsString::from("--token"),
             OsString::from("secret123"),
@@ -338,7 +356,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_header_flag_redaction() {
+        env::remove_var("SHIM_LOG_OPTS");
+
         let args = vec![
             OsString::from("-H"),
             OsString::from("Authorization: Bearer secret123"),

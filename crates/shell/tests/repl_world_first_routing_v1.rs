@@ -850,6 +850,27 @@ fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
     path
 }
 
+#[cfg(target_os = "linux")]
+fn write_fake_codex_script_with_prompt_memory_and_clean_park(temp: &Path) -> (PathBuf, PathBuf) {
+    let path = temp.join("fake-codex-prompt-memory.sh");
+    let state_path = temp.join("fake-codex-prompt-memory.count");
+    let prompt_path = temp.join("fake-codex-prompt-memory.last-prompt");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nPROMPT_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nARGS_PATH=\"$SCRIPT_DIR/fake-codex-memory-$count.args\"\nSTDIN_PATH=\"$SCRIPT_DIR/fake-codex-memory-$count.stdin\"\nprintf '%s\\n' \"$@\" > \"$ARGS_PATH\"\ncat > \"$STDIN_PATH\"\ncurrent_prompt=$(tr '\\r\\n' '  ' < \"$STDIN_PATH\")\nif [ -z \"$current_prompt\" ]; then\n  current_prompt=$(tail -n 1 \"$ARGS_PATH\" 2>/dev/null || true)\nfi\nif [ \"$count\" -eq 1 ]; then\n  printf '%s' \"$current_prompt\" > \"$PROMPT_FILE\"\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\",\"item_id\":\"msg-1\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"OK!\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  sleep 1\n  exit 0\nfi\nprevious_prompt=\nif [ -f \"$PROMPT_FILE\" ]; then\n  previous_prompt=$(cat \"$PROMPT_FILE\")\nfi\nprintf '%s' \"$current_prompt\" > \"$PROMPT_FILE\"\nescaped_previous_prompt=$(printf '%s' \"$previous_prompt\" | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g')\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"%s\"}}}}\\r\\n' \"$count\" \"$count\" \"$escaped_previous_prompt\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nsleep 1\nexit 0\n",
+        state_path.display(),
+        prompt_path.display(),
+        temp.display(),
+    );
+    fs::write(&path, body).expect("write fake codex prompt memory script");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex prompt memory metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex prompt memory permissions");
+    (path, state_path)
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_invocation_count(path: &Path) -> usize {
     fs::read_to_string(path)
@@ -1691,6 +1712,35 @@ fn read_orchestration_session(session_path: &Path) -> Value {
         .expect("parse orchestration session")
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn wait_for_orchestration_session_posture(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    expected_posture: &str,
+    timeout: Duration,
+) -> Value {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let session = read_orchestration_session(&orchestration_session_path(
+            substrate_home,
+            orchestration_session_id,
+        ));
+        if session.get("posture").and_then(Value::as_str) == Some(expected_posture) {
+            return session;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    panic!(
+        "timed out waiting for orchestration session {} posture {}; last session snapshot: {:?}",
+        orchestration_session_id,
+        expected_posture,
+        read_orchestration_session(&orchestration_session_path(
+            substrate_home,
+            orchestration_session_id,
+        ))
+    );
+}
+
 #[cfg(target_os = "linux")]
 fn assert_session_world_binding(
     session: &Value,
@@ -2528,6 +2578,74 @@ fn launch_host_runtime_via_targeted_turn(repl: &mut PtyRepl, backend_id: &str) {
         .expect("prompt after targeted host launch");
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn launch_world_member_via_targeted_turn(
+    repl: &mut PtyRepl,
+    records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
+    backend_id: &str,
+    prompt: &str,
+) {
+    let expected_dispatches = records
+        .lock()
+        .expect("lock records")
+        .member_dispatch_requests
+        .len()
+        + 1;
+    repl.send_line(&format!("::{backend_id} {prompt}"));
+    wait_for_min_member_dispatch_requests(records, expected_dispatches, Duration::from_secs(3));
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after targeted world launch");
+}
+
+#[cfg(target_os = "linux")]
+fn write_codex_host_and_world_member_runtime_world_config(
+    home_substrate: &Path,
+    fake_host: &Path,
+    fake_member: &Path,
+    on_drift: &str,
+) {
+    fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    install_test_world_scoped_codex_runtime(home_substrate, fake_member);
+    let config = format!(
+        r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ''
+  caged: false
+  net:
+    filter: false
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: codex-host
+    world_restart:
+      on_drift: {on_drift}
+"#
+    );
+    fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
+    fs::write(
+        home_substrate.join("policy.yaml"),
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"run_world_task\"\n      - \"spawn_world_worker\"\n      - \"continue_world_worker\"\n    allowed_modes:\n      - \"ephemeral\"\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+    )
+    .expect("write policy.yaml");
+    fs::write(
+        home_substrate.join("agents/codex.yaml"),
+        format!(
+            "version: 2\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  placements:\n    host:\n      enabled: true\n      cli:\n        runtime_family: codex\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n    world:\n      enabled: true\n      cli:\n        runtime_family: codex\n        binary: {}\n        mode: persistent\n      capabilities:\n        session_start: true\n        session_resume: true\n        session_fork: true\n        session_stop: true\n        status_snapshot: true\n        event_stream: true\n        llm: true\n        mcp_client: false\n",
+            fake_host.display(),
+            TEST_CODEX_WORLD_GUEST_ENTRYPOINT,
+        ),
+    )
+    .expect("write codex dual-placement agent file");
+}
+
 #[test]
 #[serial]
 fn c3_host_directive_is_gated_disabled_by_default() {
@@ -2897,6 +3015,58 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_world_mode_host_orchestrator_remains_dormant_until_first_targeted_turn() {
+    let temp = temp_dir("substrate-c3-world-host-dormant-target-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let (fake_codex, invocation_count_path, _captured_args_dir, _captured_stdin_dir) =
+        write_fake_codex_script_with_invocation_log_and_stdio_capture(temp.path());
+    write_host_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-world-host-dormant-target-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    std::thread::sleep(Duration::from_millis(150));
+
+    let out_before_target = repl.output_string();
+    assert_eq!(
+        read_invocation_count(&invocation_count_path),
+        0,
+        "world-mode REPL must not invoke the host orchestrator before the first explicit targeted turn; output:\n{out_before_target}"
+    );
+    assert_no_persisted_host_orchestrator_state_for_interval(
+        &substrate_home,
+        Duration::from_millis(150),
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.persistent_start_sessions.len(),
+        1,
+        "world-mode startup should only create the REPL-owned world session before any targeted host turn: {guard:#?}"
+    );
+    assert_start_sessions_have_no_shared_world_context(&guard, "world-mode dormant startup");
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
@@ -2988,8 +3158,8 @@ fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
-fn c3_first_world_backed_command_lazily_launches_member_runtime() {
-    let temp = temp_dir("substrate-c3-first-world-command-lazy-member-");
+fn c3_first_world_backed_command_does_not_cold_launch_member_runtime() {
+    let temp = temp_dir("substrate-c3-first-world-command-no-member-bootstrap-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     let substrate_home = home.join(".substrate");
@@ -3041,48 +3211,36 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
     wait_for_min_records(&records, 0, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
-
-    let live_members = wait_for_live_world_member_count(
+    assert_world_member_absent_for_interval(
         &substrate_home,
         &orchestration_session_id,
-        1,
-        Duration::from_secs(5),
+        Duration::from_millis(250),
     );
-    let member = &live_members[0];
-    assert_eq!(
-        member.get("agent_id").and_then(Value::as_str),
-        Some("codex-world")
-    );
+    let guard = records.lock().expect("lock records");
     assert!(
-        matches!(
-            member.get("state").and_then(Value::as_str),
-            Some("ready" | "running")
-        ),
-        "lazy member launch must become authoritative-live: {member:?}"
+        guard.member_dispatch_requests.is_empty(),
+        "first ordinary world-backed command must not promptlessly cold-launch a member runtime: {guard:#?}"
     );
+    drop(guard);
+    let session_after_command = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
     assert_eq!(
-        member.get("world_generation").and_then(Value::as_u64),
-        Some(0)
-    );
-    assert_eq!(
-        member.get("world_id").and_then(Value::as_str),
+        session_after_command
+            .get("world_id")
+            .and_then(Value::as_str),
         initial_session.get("world_id").and_then(Value::as_str),
-        "lazy member launch must bind to the current authoritative world"
+        "ordinary world-backed commands must keep the authoritative world binding unchanged"
     );
     assert_eq!(
-        member
-            .get("orchestrator_participant_id")
+        session_after_command
+            .get("active_session_handle_id")
             .and_then(Value::as_str),
         initial_session
             .get("active_session_handle_id")
             .and_then(Value::as_str),
-        "lazy member launch must retain the live orchestrator seam"
-    );
-    assert!(
-        member
-            .get("resumed_from_participant_id")
-            .is_none_or(Value::is_null),
-        "first member launch must not claim replacement lineage: {member:?}"
+        "ordinary world-backed commands must preserve the host orchestrator seam"
     );
 
     repl.send_line("exit");
@@ -3208,12 +3366,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let orchestration_session = read_orchestration_session(&orchestration_session_path(
         &substrate_home,
@@ -3226,7 +3379,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     assert_eq!(
         live_participants.len(),
         2,
-        "first world-backed command must leave both the host orchestrator and world member authoritative-live: {live_participants:?}"
+        "initial targeted world launch must leave both the host orchestrator and world member authoritative-live: {live_participants:?}"
     );
     assert_eq!(
         live_participants
@@ -3234,7 +3387,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
             .collect::<Vec<_>>(),
         vec![Some("cli:claude_code-host"), Some("cli:codex-world")],
-        "first world-backed command must establish authoritative-live coexistence for exactly cli:claude_code-host and cli:codex-world"
+        "initial targeted world launch must establish authoritative-live coexistence for exactly cli:claude_code-host and cli:codex-world"
     );
     let orchestrator = authoritative_live_participant_manifest_for_backend(
         &live_participants,
@@ -5791,11 +5944,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
-
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
     let first_live_members = wait_for_live_world_member_count(
         &substrate_home,
         &orchestration_session_id,
@@ -5873,8 +6022,8 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     let guard = records.lock().expect("lock records");
     assert_eq!(
         guard.persistent_execs.len(),
-        1,
-        "targeted world follow-up must not fall back to a second shell/persistent exec after restart: {guard:#?}"
+        0,
+        "targeted world follow-up must not fall back to shell/persistent exec after restart: {guard:#?}"
     );
     assert_eq!(
         guard.member_dispatch_requests.len(),
@@ -5960,12 +6109,7 @@ fn c3_targeted_world_turn_preserves_aliased_exact_backend_identity() {
     launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(6));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -6247,10 +6391,7 @@ fn c3_same_generation_world_command_reuses_live_member_runtime() {
         .expect("initial prompt");
     launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
     let first_live_members = wait_for_live_world_member_count(
         &substrate_home,
         &orchestration_session_id,
@@ -6264,7 +6405,7 @@ fn c3_same_generation_world_command_reuses_live_member_runtime() {
         .to_string();
 
     repl.send_line("echo second");
-    wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("second", Duration::from_secs(3))
         .expect("second command output");
     std::thread::sleep(Duration::from_millis(100));
@@ -6290,6 +6431,393 @@ fn c3_same_generation_world_command_reuses_live_member_runtime() {
     assert_eq!(
         member.get("world_generation").and_then(Value::as_u64),
         Some(0)
+    );
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "same-generation ordinary world commands must preserve the existing member instead of promptlessly relaunching it: {guard:#?}"
+    );
+    drop(guard);
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_codex_world_turn_after_parked_host_mismatch_remains_fail_closed() {
+    let temp = temp_dir("substrate-c3-parked-host-targeted-world-mismatch-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    fs::write(project.join("alpha.txt"), "alpha\n").expect("seed project file");
+    write_profile(&project);
+    let (fake_host, host_invocation_count_path) =
+        write_fake_codex_script_with_prompt_memory_and_clean_park(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_codex_host_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_host,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-parked-host-targeted-world-mismatch-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let parked_session = wait_for_orchestration_session_posture(
+        &substrate_home,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    let initial_world_id = parked_session
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("parked session world_id")
+        .to_string();
+    let initial_world_generation = parked_session
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("parked session world_generation");
+    let recovered_world_id = format!("wld_targeted_fail_closed_{orchestration_session_id}");
+    server.push_member_dispatch_script(MemberDispatchStreamScript::FailExactWorldIdMismatch {
+        expected_world_id: recovered_world_id.clone(),
+    });
+    server.push_member_dispatch_script(MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+        session_handle_id: "session-targeted-world-should-not-retry".to_string(),
+        exit_code_on_cancel: 130,
+    });
+
+    repl.send_line("::cli:codex-world stay fail closed");
+    repl.wait_for_output("member_dispatch.world_id mismatch", Duration::from_secs(3))
+        .expect("targeted world turn mismatch output");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after targeted world mismatch");
+    std::thread::sleep(Duration::from_millis(150));
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "targeted ::cli:codex-world mismatch must fail closed without a retry attempt: {guard:#?}"
+    );
+    assert_eq!(
+        guard.member_turn_submit_requests.len(),
+        0,
+        "targeted ::cli:codex-world mismatch must fail before submit-turn routing: {guard:#?}"
+    );
+    drop(guard);
+
+    let persisted_session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    assert_session_world_binding(
+        &persisted_session,
+        Some(initial_world_id.as_str()),
+        Some(initial_world_generation),
+    );
+    assert!(
+        authoritative_live_world_member_manifests_for_session(
+            &substrate_home,
+            &orchestration_session_id,
+        )
+        .is_empty(),
+        "targeted ::cli:codex-world mismatch must not leave an authoritative live member"
+    );
+    assert_eq!(
+        read_invocation_count(&host_invocation_count_path),
+        1,
+        "targeted world mismatch must not relaunch the parked host backend"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_pty_world_command_after_parked_host_mismatch_remains_fail_closed() {
+    let temp = temp_dir("substrate-c3-parked-host-pty-mismatch-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    fs::write(project.join("alpha.txt"), "alpha\n").expect("seed project file");
+    write_profile(&project);
+    let (fake_host, host_invocation_count_path) =
+        write_fake_codex_script_with_prompt_memory_and_clean_park(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_codex_host_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_host,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-parked-host-pty-mismatch-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let parked_session = wait_for_orchestration_session_posture(
+        &substrate_home,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    let initial_world_id = parked_session
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("parked session world_id")
+        .to_string();
+    let initial_world_generation = parked_session
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("parked session world_generation");
+    let recovered_world_id = format!("wld_pty_fail_closed_{orchestration_session_id}");
+    server.push_member_dispatch_script(MemberDispatchStreamScript::FailExactWorldIdMismatch {
+        expected_world_id: recovered_world_id,
+    });
+    server.push_member_dispatch_script(MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+        session_handle_id: "session-pty-should-not-retry".to_string(),
+        exit_code_on_cancel: 130,
+    });
+
+    repl.send_line(":pty echo hello");
+    repl.wait_for_output("member_dispatch.world_id mismatch", Duration::from_secs(3))
+        .expect("pty world mismatch output");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after pty mismatch");
+    std::thread::sleep(Duration::from_millis(150));
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        ":pty mismatch must fail closed without a retry attempt: {guard:#?}"
+    );
+    drop(guard);
+
+    let persisted_session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    assert_session_world_binding(
+        &persisted_session,
+        Some(initial_world_id.as_str()),
+        Some(initial_world_generation),
+    );
+    assert!(
+        authoritative_live_world_member_manifests_for_session(
+            &substrate_home,
+            &orchestration_session_id,
+        )
+        .is_empty(),
+        ":pty mismatch must not leave an authoritative live member"
+    );
+    assert_eq!(
+        read_invocation_count(&host_invocation_count_path),
+        1,
+        ":pty mismatch must not relaunch the parked host backend"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_codex_host_turn_resumes_same_session_after_ls_on_parked_authority() {
+    let temp = temp_dir("substrate-c3-parked-host-resume-after-ls-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    fs::write(project.join("alpha.txt"), "alpha\n").expect("seed project file");
+    write_profile(&project);
+    let (fake_host, host_invocation_count_path) =
+        write_fake_codex_script_with_prompt_memory_and_clean_park(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_codex_host_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_host,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-parked-host-resume-after-ls-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-parked-host-resume-member".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+
+    repl.send_line("::cli:codex-host just reply OK!");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(15),
+    )
+    .expect("host runtime ready");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after first targeted host turn");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let parked_session = wait_for_orchestration_session_posture(
+        &substrate_home,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    let first_participant_id = parked_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("first parked active_session_handle_id")
+        .to_string();
+    let continuity_uaa_session_id = parked_session
+        .pointer("/host_attach_contract/continuity_uaa_session_id")
+        .and_then(Value::as_str)
+        .expect("parked continuity_uaa_session_id")
+        .to_string();
+    let first_args = fs::read_to_string(temp.path().join("fake-codex-memory-1.args"))
+        .expect("read first fake codex args");
+    assert!(
+        !first_args.lines().any(|line| line == "resume"),
+        "first targeted host turn must not look like a continuity resume: {first_args:?}"
+    );
+    assert!(
+        !first_args
+            .lines()
+            .any(|line| line == continuity_uaa_session_id),
+        "first targeted host turn must not carry a parked-session continuity selector: {first_args:?}"
+    );
+
+    repl.send_line("ls");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("__PERSISTENT_EXEC_STUB__ eof ls", Duration::from_secs(3))
+        .expect("ordinary world command output after parked host session");
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard.member_dispatch_requests.is_empty(),
+        "ordinary world command after parked host authority must not attempt promptless member_dispatch bootstrap: {guard:#?}"
+    );
+    drop(guard);
+    assert_eq!(
+        read_invocation_count(&host_invocation_count_path),
+        1,
+        "ordinary world work between parked host turns must not relaunch the host backend"
+    );
+
+    repl.send_line("::cli:codex-host tell me what my last message said");
+    repl.wait_for_output("just reply OK!", Duration::from_secs(5))
+        .expect("resumed host reply should carry forward the prior prompt");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after resumed targeted host turn");
+
+    let second_args = fs::read_to_string(temp.path().join("fake-codex-memory-2.args"))
+        .expect("read second fake codex args");
+    assert!(
+        second_args.lines().any(|line| line == "resume"),
+        "later targeted host turn must resume durable continuity instead of starting a fresh runtime: {second_args:?}"
+    );
+    assert!(
+        second_args
+            .lines()
+            .any(|line| line == continuity_uaa_session_id),
+        "later targeted host turn must carry the persisted durable continuity selector: {second_args:?}"
+    );
+
+    let reparked_session = wait_for_orchestration_session_posture(
+        &substrate_home,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    let resumed_participant_id = reparked_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("reparked active_session_handle_id")
+        .to_string();
+    let resumed_participant = read_participant_manifest(&substrate_home, &resumed_participant_id);
+    assert_eq!(
+        reparked_session
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str()),
+        "resumed targeted host turn must stay on the same durable orchestration session lineage"
+    );
+    if resumed_participant_id == first_participant_id {
+        assert!(
+            resumed_participant
+                .get("resumed_from_participant_id")
+                .is_none_or(Value::is_null),
+            "same-handle parked resume must not invent replacement lineage: {resumed_participant:?}"
+        );
+    } else {
+        assert_eq!(
+            resumed_participant
+                .get("resumed_from_participant_id")
+                .and_then(Value::as_str),
+            Some(first_participant_id.as_str()),
+            "later targeted host turn must persist successor lineage to the parked authoritative participant"
+        );
+    }
+    assert_eq!(
+        read_invocation_count(&host_invocation_count_path),
+        2,
+        "the same parked durable session should resume through a second targeted host invocation"
     );
 
     repl.send_line("exit");

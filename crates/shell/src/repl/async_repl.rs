@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs;
+use std::future::Future;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -540,10 +541,16 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 return Ok(failure.exit_code);
             }
         };
-        let (prepared_runtime, mut dormant_host_bootstrap) = match resolved_host_bootstrap {
-            Some(resolved) => (None, Some(resolved)),
-            None => (None, None),
-        };
+        let mut dormant_host_launch_plan =
+            match prepare_repl_dormant_host_launch_plan(resolved_host_bootstrap) {
+                Ok(result) => result,
+                Err(failure) => {
+                    agent_printer.print(failure.message.clone());
+                    write_best_effort_stderr_line(&failure.message);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    return Ok(failure.exit_code);
+                }
+            };
         let mut startup_context = None;
 
         let mut world_session = if !shared_config.no_world {
@@ -590,35 +597,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         } else {
             None
         };
-        let initial_world_binding = world_session.as_ref().map(|session| PersistedWorldBinding {
-            world_id: session.world_id.clone(),
-            world_generation: session.world_generation,
-        });
         let (toolbox_request_tx, mut toolbox_request_rx) =
             internal_toolbox_dispatch_request_channel();
-        let mut agent_runtime = match start_host_orchestrator_runtime_with_prepared_with_toolbox_request_tx(
-            prepared_runtime,
-            initial_world_binding.as_ref(),
-            Some(&toolbox_request_tx),
-            &agent_printer,
-            &mut telemetry,
-        )
-        .await
-        {
-            Ok(runtime) => runtime,
-            Err(failure) => {
-                finalize_runtime_startup_failure(
-                    startup_context.as_ref(),
-                    &mut world_session,
-                    &failure.message,
-                )
-                .await;
-                agent_printer.print(failure.message.clone());
-                write_best_effort_stderr_line(&failure.message);
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                return Ok(failure.exit_code);
-            }
-        };
+        let mut agent_runtime = None;
         let mut member_runtimes = RetainedMemberRuntimeMap::new();
         let mut pending_member_replacements = PendingMemberReplacementMap::new();
         ensure_internal_toolbox_transport_registered(
@@ -777,7 +758,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             targeted_turn,
                             TargetedTurnDispatchContext {
                                 startup_context: &mut startup_context,
-                                dormant_host_bootstrap: &mut dormant_host_bootstrap,
+                                dormant_host_launch_plan: &mut dormant_host_launch_plan,
                                 agent_runtime: &mut agent_runtime,
                                 world_session: &mut world_session,
                                 toolbox_request_tx: &toolbox_request_tx,
@@ -916,7 +897,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 }
                                 if let Err(err) = ensure_member_runtime_ready(
                                     startup_context.as_ref(),
-                                    world_session.as_ref(),
+                                    world_session.as_mut(),
+                                    MemberRuntimeFirstDispatchRepairPolicy::Disabled,
                                     &mut member_runtimes,
                                     &mut pending_member_replacements,
                                     &agent_printer,
@@ -1010,20 +992,6 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             continue 'repl_loop;
                         }
                         if let Err(err) = reconcile_member_runtime_generation(
-                            world_session.as_ref(),
-                            &mut member_runtimes,
-                            &mut pending_member_replacements,
-                            &agent_printer,
-                            &mut telemetry,
-                        )
-                        .await
-                        {
-                            fatal_runtime_error = Some(err);
-                            should_exit = true;
-                            continue 'repl_loop;
-                        }
-                        if let Err(err) = ensure_member_runtime_ready(
-                            startup_context.as_ref(),
                             world_session.as_ref(),
                             &mut member_runtimes,
                             &mut pending_member_replacements,
@@ -1697,6 +1665,34 @@ struct RuntimeBootstrapFailure {
     message: String,
 }
 
+enum DormantHostOrchestratorLaunchPlan {
+    Resolved(ResolvedHostOrchestratorBootstrap),
+}
+
+impl DormantHostOrchestratorLaunchPlan {
+    fn backend_id(&self) -> &str {
+        match self {
+            Self::Resolved(resolved) => resolved.descriptor.backend_id.as_str(),
+        }
+    }
+
+    fn into_prepared(self) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
+        match self {
+            Self::Resolved(resolved) => prepare_host_orchestrator_runtime_from_resolved(resolved),
+        }
+    }
+}
+
+fn prepare_repl_dormant_host_launch_plan(
+    resolved_host_bootstrap: Option<ResolvedHostOrchestratorBootstrap>,
+) -> std::result::Result<Option<DormantHostOrchestratorLaunchPlan>, RuntimeBootstrapFailure> {
+    let Some(resolved) = resolved_host_bootstrap else {
+        return Ok(None);
+    };
+
+    Ok(Some(DormantHostOrchestratorLaunchPlan::Resolved(resolved)))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct TargetedTurn<'a> {
     backend_id: &'a str,
@@ -1716,7 +1712,7 @@ enum TargetedTurnDispatchStatus {
 
 struct TargetedTurnDispatchContext<'a> {
     startup_context: &'a mut Option<RuntimeOrchestrationContext>,
-    dormant_host_bootstrap: &'a mut Option<ResolvedHostOrchestratorBootstrap>,
+    dormant_host_launch_plan: &'a mut Option<DormantHostOrchestratorLaunchPlan>,
     agent_runtime: &'a mut Option<AsyncReplAgentRuntime>,
     world_session: &'a mut Option<WorldSession>,
     toolbox_request_tx: &'a InternalToolboxDispatchRequestSender,
@@ -3757,7 +3753,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             message: "missing host prompt-fulfillment bridge for retained startup".to_string(),
         });
     };
-    let control = match {
+    let control_result = {
         let (orchestration_session_id, caller_participant_id) = {
             let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
             (
@@ -3810,7 +3806,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             extensions: startup_extensions,
         };
         prompt_fulfillment.run_control(request).await
-    } {
+    };
+    let control = match control_result {
         Ok(control) => control,
         Err(err) => {
             if let Some(mut transport) = startup_toolbox_transport.take() {
@@ -5177,7 +5174,7 @@ fn active_orchestrator_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
 
 fn resolve_targeted_turn_route(
     startup_context: Option<&RuntimeOrchestrationContext>,
-    dormant_host_bootstrap: Option<&ResolvedHostOrchestratorBootstrap>,
+    dormant_host_launch_plan: Option<&DormantHostOrchestratorLaunchPlan>,
     agent_runtime: Option<&AsyncReplAgentRuntime>,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     member_runtimes: &RetainedMemberRuntimeMap,
@@ -5192,8 +5189,8 @@ fn resolve_targeted_turn_route(
         }
     }
 
-    if let Some(dormant_host_bootstrap) = dormant_host_bootstrap {
-        if dormant_host_bootstrap.descriptor.backend_id == backend_id {
+    if let Some(dormant_host_launch_plan) = dormant_host_launch_plan {
+        if dormant_host_launch_plan.backend_id() == backend_id {
             return Ok(TargetedTurnRoute::Host);
         }
     }
@@ -5203,7 +5200,7 @@ fn resolve_targeted_turn_route(
             let expected = agent_runtime
                 .map(active_orchestrator_backend_id)
                 .or_else(|| {
-                    dormant_host_bootstrap.map(|bootstrap| bootstrap.descriptor.backend_id.clone())
+                    dormant_host_launch_plan.map(|launch_plan| launch_plan.backend_id().to_string())
                 })
                 .unwrap_or_else(|| "<none>".to_string());
             return Err(RuntimeBootstrapFailure {
@@ -5238,7 +5235,7 @@ async fn dispatch_targeted_follow_up_turn(
 ) -> std::result::Result<TargetedTurnDispatchStatus, anyhow::Error> {
     let TargetedTurnDispatchContext {
         startup_context,
-        dormant_host_bootstrap,
+        dormant_host_launch_plan,
         agent_runtime,
         world_session,
         toolbox_request_tx,
@@ -5252,7 +5249,7 @@ async fn dispatch_targeted_follow_up_turn(
 
     let route = match resolve_targeted_turn_route(
         startup_context.as_ref(),
-        dormant_host_bootstrap.as_ref(),
+        dormant_host_launch_plan.as_ref(),
         agent_runtime.as_ref(),
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         member_runtimes,
@@ -5267,13 +5264,13 @@ async fn dispatch_targeted_follow_up_turn(
     match route {
         TargetedTurnRoute::Host => {
             if agent_runtime.is_none() {
-                let resolved = dormant_host_bootstrap.take().ok_or_else(|| {
+                let prepared = dormant_host_launch_plan.take().ok_or_else(|| {
                     anyhow!(
                         "substrate: error: no active or dormant orchestrator runtime is available for targeted follow-up turns"
                     )
-                })?;
-                let prepared = prepare_host_orchestrator_runtime_from_resolved(resolved)
-                    .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+                })?
+                .into_prepared()
+                .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
                 let prepared_startup_context = prepared.startup_context.clone();
                 let initial_world_binding =
                     world_session.as_ref().map(|session| PersistedWorldBinding {
@@ -5343,11 +5340,12 @@ async fn dispatch_targeted_follow_up_turn(
             let launched_from_targeted_prompt = ensure_member_runtime_ready_for_descriptor(
                 EnsureMemberRuntimeReadyContext {
                     startup_context: startup_context.as_ref(),
-                    world_session: world_session.as_ref(),
+                    world_session: world_session.as_mut(),
                     agent_printer,
                     telemetry,
                 },
                 &parity,
+                MemberRuntimeFirstDispatchRepairPolicy::Disabled,
                 Some(targeted_turn.prompt),
                 member_runtimes,
                 pending_member_replacements,
@@ -5984,12 +5982,12 @@ async fn handle_internal_toolbox_dispatch_request(
             #[cfg(target_os = "linux")]
             if translated.tool_name == HostToolNameV1::RunWorldTask {
                 let response_tx = response_tx.clone();
-                let store = startup_context.store.clone();
+                let startup_context = startup_context.clone();
                 tokio::spawn(async move {
                     let (started_task_run_id_tx, mut started_task_run_id_rx) =
                         mpsc::unbounded_channel();
-                    let dispatch = dispatch_run_world_task_request_with_started_task_run_id_tx(
-                        &store,
+                    let dispatch = dispatch_run_world_task_request_with_binding_retry(
+                        startup_context,
                         translated.dispatch_request,
                         started_task_run_id_tx,
                     );
@@ -6070,26 +6068,86 @@ async fn handle_internal_toolbox_dispatch_request(
 fn synchronize_internal_toolbox_world_binding(
     startup_context: &RuntimeOrchestrationContext,
 ) -> Result<OrchestrationSessionRecord> {
+    synchronize_repl_authoritative_world_binding(startup_context, None)
+}
+
+#[cfg(target_os = "linux")]
+fn synchronize_repl_authoritative_world_binding(
+    startup_context: &RuntimeOrchestrationContext,
+    world_session: Option<&mut WorldSession>,
+) -> Result<OrchestrationSessionRecord> {
     let session_snapshot = startup_context.snapshot();
-    let Some(current_binding) = session_snapshot.authoritative_world_binding() else {
-        return Ok(session_snapshot);
-    };
-    let Some(authoritative_binding) = startup_context
+    let snapshot_binding = session_snapshot.authoritative_world_binding();
+    let snapshot_binding = snapshot_binding
+        .as_ref()
+        .map(|binding| PersistedWorldBinding {
+            world_id: binding.world_id.clone(),
+            world_generation: binding.world_generation,
+        });
+    let persisted_session_binding = startup_context
         .store
-        .recover_active_shared_world_binding_from_local_metadata(
+        .load_session(&session_snapshot.orchestration_session_id)?
+        .and_then(|record| {
+            record
+                .session
+                .authoritative_world_binding()
+                .map(|binding| PersistedWorldBinding {
+                    world_id: binding.world_id,
+                    world_generation: binding.world_generation,
+                })
+        });
+    let authoritative_shared_world_binding = startup_context
+        .store
+        .recover_active_shared_world_binding_from_local_metadata_only(
             &session_snapshot.orchestration_session_id,
         )?
-    else {
+        .map(|binding| PersistedWorldBinding {
+            world_id: binding.world_id,
+            world_generation: binding.world_generation,
+        });
+
+    if let Some(refreshed_binding) = authoritative_shared_world_binding {
+        let snapshot_matches = snapshot_binding.as_ref().is_some_and(|binding| {
+            binding.world_id == refreshed_binding.world_id
+                && binding.world_generation == refreshed_binding.world_generation
+        });
+        let persisted_matches = persisted_session_binding.as_ref().is_some_and(|binding| {
+            binding.world_id == refreshed_binding.world_id
+                && binding.world_generation == refreshed_binding.world_generation
+        });
+        if snapshot_matches && persisted_matches {
+            apply_authoritative_world_binding_to_world_session(world_session, &session_snapshot);
+            return Ok(session_snapshot);
+        }
+
+        return persist_repl_authoritative_world_binding(
+            startup_context,
+            world_session,
+            refreshed_binding,
+        );
+    }
+
+    let Some(persisted_binding) = persisted_session_binding else {
+        apply_authoritative_world_binding_to_world_session(world_session, &session_snapshot);
         return Ok(session_snapshot);
     };
-    if authoritative_binding == current_binding {
+    if snapshot_binding.as_ref().is_some_and(|binding| {
+        binding.world_id == persisted_binding.world_id
+            && binding.world_generation == persisted_binding.world_generation
+    }) {
+        apply_authoritative_world_binding_to_world_session(world_session, &session_snapshot);
         return Ok(session_snapshot);
     }
 
-    let refreshed_binding = PersistedWorldBinding {
-        world_id: authoritative_binding.world_id,
-        world_generation: authoritative_binding.world_generation,
-    };
+    persist_repl_authoritative_world_binding(startup_context, world_session, persisted_binding)
+}
+
+#[cfg(target_os = "linux")]
+fn persist_repl_authoritative_world_binding(
+    startup_context: &RuntimeOrchestrationContext,
+    world_session: Option<&mut WorldSession>,
+    refreshed_binding: PersistedWorldBinding,
+) -> Result<OrchestrationSessionRecord> {
     let persisted_snapshot = persist_world_binding_authority(
         &startup_context.store,
         &startup_context.orchestration_session,
@@ -6100,7 +6158,138 @@ fn synchronize_internal_toolbox_world_binding(
         &persisted_snapshot.orchestration_session_id,
         refreshed_binding.world_generation,
     )?;
+    apply_authoritative_world_binding_to_world_session(world_session, &persisted_snapshot);
     Ok(persisted_snapshot)
+}
+
+#[cfg(target_os = "linux")]
+fn apply_authoritative_world_binding_to_world_session(
+    world_session: Option<&mut WorldSession>,
+    session_snapshot: &OrchestrationSessionRecord,
+) {
+    let Some(world_session) = world_session else {
+        return;
+    };
+    let Some(binding) = session_snapshot.authoritative_world_binding() else {
+        return;
+    };
+    world_session.world_id = binding.world_id;
+    world_session.world_generation = binding.world_generation;
+}
+
+#[cfg(target_os = "linux")]
+async fn dispatch_run_world_task_request_with_binding_retry(
+    startup_context: RuntimeOrchestrationContext,
+    request: WorldDispatchRequestV1,
+    started_task_run_id_tx: UnboundedSender<String>,
+) -> Result<WorldDispatchOutcomeV1> {
+    dispatch_run_world_task_request_with_binding_retry_using(
+        startup_context,
+        request,
+        started_task_run_id_tx,
+        |store, request, started_task_run_id_tx| async move {
+            dispatch_run_world_task_request_with_started_task_run_id_tx(
+                &store,
+                request,
+                started_task_run_id_tx,
+            )
+            .await
+        },
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+async fn dispatch_run_world_task_request_with_binding_retry_using<F, Fut>(
+    startup_context: RuntimeOrchestrationContext,
+    request: WorldDispatchRequestV1,
+    started_task_run_id_tx: UnboundedSender<String>,
+    mut dispatch_request: F,
+) -> Result<WorldDispatchOutcomeV1>
+where
+    F: FnMut(AgentRuntimeStateStore, WorldDispatchRequestV1, UnboundedSender<String>) -> Fut,
+    Fut: Future<Output = Result<WorldDispatchOutcomeV1>>,
+{
+    let store = startup_context.store.clone();
+    match dispatch_request(
+        store.clone(),
+        request.clone(),
+        started_task_run_id_tx.clone(),
+    )
+    .await
+    {
+        Ok(outcome) => Ok(outcome),
+        Err(err) if is_run_world_task_first_dispatch_binding_mismatch(&err) => {
+            let Some(retried_request) =
+                refresh_run_world_task_request_binding_after_mismatch(&startup_context, &request)?
+            else {
+                return Err(err);
+            };
+            dispatch_request(store, retried_request, started_task_run_id_tx).await
+        }
+        Err(err) => Err(err),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn refresh_run_world_task_request_binding_after_mismatch(
+    startup_context: &RuntimeOrchestrationContext,
+    request: &WorldDispatchRequestV1,
+) -> Result<Option<WorldDispatchRequestV1>> {
+    let session_snapshot = synchronize_internal_toolbox_world_binding(startup_context)?;
+    let refreshed_binding = authoritative_world_binding_for_session_v1(&session_snapshot)?;
+    let current_world_id = request.world_id.as_deref().unwrap_or_default();
+    let current_world_generation = request.world_generation.unwrap_or_default();
+    if refreshed_binding.world_id == current_world_id
+        && refreshed_binding.world_generation == current_world_generation
+    {
+        return Ok(None);
+    }
+
+    let mut retried_request = request.clone();
+    retried_request.world_id = Some(refreshed_binding.world_id);
+    retried_request.world_generation = Some(refreshed_binding.world_generation);
+    Ok(Some(retried_request))
+}
+
+#[cfg(target_os = "linux")]
+fn is_run_world_task_first_dispatch_binding_mismatch(err: &anyhow::Error) -> bool {
+    err.chain()
+        .any(|cause| is_exact_member_dispatch_world_id_mismatch_message(&cause.to_string()))
+}
+
+#[cfg(target_os = "linux")]
+fn is_exact_member_dispatch_world_id_mismatch_message(message: &str) -> bool {
+    #[derive(Deserialize)]
+    struct WorldDispatchHttpError {
+        error: String,
+    }
+
+    const PREFIX: &str = "HTTP 400 Bad Request error: ";
+
+    let Some(prefix_index) = message.find(PREFIX) else {
+        return false;
+    };
+    let mut body = message[prefix_index + PREFIX.len()..].trim();
+    let Some(body_end) = body.rfind('}') else {
+        return false;
+    };
+    body = &body[..=body_end];
+    let Ok(WorldDispatchHttpError { error }) = serde_json::from_str::<WorldDispatchHttpError>(body)
+    else {
+        return false;
+    };
+    let Some(remainder) = error.strip_prefix("member_dispatch.world_id mismatch (expected ") else {
+        return false;
+    };
+    let Some((expected, got)) = remainder.split_once(", got ") else {
+        return false;
+    };
+    let Some(got) = got.strip_suffix(')') else {
+        return false;
+    };
+
+    !expected.is_empty() && !got.is_empty()
 }
 
 fn decode_internal_toolbox_dispatch_request(
@@ -6385,32 +6574,80 @@ fn resolve_live_member_parent(
     startup_context: &RuntimeOrchestrationContext,
 ) -> std::result::Result<AgentRuntimeParticipantRecord, RuntimeBootstrapFailure> {
     let orchestration_snapshot = startup_context.snapshot();
-    let (parent_session, parent_participant) = startup_context
+    let live_parent = startup_context
         .store
-        .resolve_live_orchestrator_participant(&orchestration_snapshot.orchestrator_agent_id)
+        .resolve_live_orchestrator_participant(&orchestration_snapshot.orchestrator_agent_id);
+    match live_parent {
+        Ok(Some((parent_session, parent_participant))) => {
+            if parent_session.orchestration_session_id
+                != orchestration_snapshot.orchestration_session_id
+            {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "member launch resolved a live orchestrator parent from a different orchestration session (expected {}, got {})",
+                        orchestration_snapshot.orchestration_session_id,
+                        parent_session.orchestration_session_id
+                    ),
+                });
+            }
+            Ok(parent_participant)
+        }
+        live_parent => {
+            resolve_detached_member_parent(startup_context, &orchestration_snapshot)?.ok_or_else(
+                || {
+                    let message = match live_parent {
+                        Err(err) => format!(
+                            "failed to resolve the live orchestrator parent required for member launch: {err:#}"
+                        ),
+                        Ok(None) => "member launch requires exactly one live orchestrator parent, but none is active".to_string(),
+                        Ok(Some(_)) => unreachable!("live parent handled above"),
+                    };
+                    RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message,
+                    }
+                },
+            )
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn resolve_detached_member_parent(
+    startup_context: &RuntimeOrchestrationContext,
+    orchestration_snapshot: &OrchestrationSessionRecord,
+) -> std::result::Result<Option<AgentRuntimeParticipantRecord>, RuntimeBootstrapFailure> {
+    let Some(record) = startup_context
+        .store
+        .load_session(&orchestration_snapshot.orchestration_session_id)
         .map_err(|err| RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!(
-                "failed to resolve the live orchestrator parent required for member launch: {err:#}"
+                "failed to inspect detached orchestrator parent truth required for member launch: {err:#}"
             ),
         })?
-        .ok_or_else(|| RuntimeBootstrapFailure {
-            exit_code: 1,
-            message:
-                "member launch requires exactly one live orchestrator parent, but none is active"
-                    .to_string(),
-        })?;
-    if parent_session.orchestration_session_id != orchestration_snapshot.orchestration_session_id {
-        return Err(RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: format!(
-                "member launch resolved a live orchestrator parent from a different orchestration session (expected {}, got {})",
-                orchestration_snapshot.orchestration_session_id,
-                parent_session.orchestration_session_id
-            ),
-        });
+    else {
+        return Ok(None);
+    };
+    let Some(active_participant_id) = orchestration_snapshot.active_participant_id() else {
+        return Ok(None);
+    };
+    let Some(parent_participant) = record
+        .participants
+        .into_iter()
+        .find(|participant| participant.handle.participant_id == active_participant_id)
+    else {
+        return Ok(None);
+    };
+    if parent_participant.handle.agent_id != orchestration_snapshot.orchestrator_agent_id {
+        return Ok(None);
     }
-    Ok(parent_participant)
+    if valid_detached_host_continuity_posture(&record.session, &parent_participant, true).is_none()
+    {
+        return Ok(None);
+    }
+    Ok(Some(parent_participant))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -7559,15 +7796,22 @@ async fn reconcile_member_runtime_generation(
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 struct EnsureMemberRuntimeReadyContext<'a> {
     startup_context: Option<&'a RuntimeOrchestrationContext>,
-    world_session: Option<&'a WorldSession>,
+    world_session: Option<&'a mut WorldSession>,
     agent_printer: &'a ReplPrinter,
     telemetry: &'a mut ReplSessionTelemetry,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MemberRuntimeFirstDispatchRepairPolicy {
+    Disabled,
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn ensure_member_runtime_ready_for_descriptor(
     context: EnsureMemberRuntimeReadyContext<'_>,
     parity: &MemberDispatchParitySubset,
+    repair_policy: MemberRuntimeFirstDispatchRepairPolicy,
     initial_prompt: Option<&str>,
     member_runtimes: &mut RetainedMemberRuntimeMap,
     pending_member_replacements: &mut PendingMemberReplacementMap,
@@ -7584,6 +7828,8 @@ async fn ensure_member_runtime_ready_for_descriptor(
     let Some(world_session) = world_session else {
         return Ok(false);
     };
+    #[cfg(target_os = "linux")]
+    synchronize_repl_authoritative_world_binding(startup_context, Some(world_session))?;
     let descriptor = parity.to_runtime_selection_descriptor();
     ensure_member_backend_allowed(startup_context, &descriptor)
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
@@ -7615,6 +7861,10 @@ async fn ensure_member_runtime_ready_for_descriptor(
         }
     }
 
+    if initial_prompt.is_none() {
+        return Ok(false);
+    }
+
     if let Some(runtime) = member_runtimes.remove(&descriptor.backend_id) {
         shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
@@ -7627,25 +7877,25 @@ async fn ensure_member_runtime_ready_for_descriptor(
                 == startup_context.orchestration_session_id()
                 && participant.handle.backend_id == backend_id
         });
-    let prepared = prepare_member_runtime_startup_for_descriptor(
-        startup_context,
-        descriptor,
-        &PersistedWorldBinding {
-            world_id: world_session.world_id.clone(),
-            world_generation: world_session.world_generation,
-        },
-        resumed_from,
-    )
-    .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
-
-    let runtime = match start_remote_member_runtime_with_prepared(
-        Some(prepared),
-        initial_prompt.map(str::to_string),
-        agent_printer,
-        telemetry,
-    )
-    .await
-    {
+    let world_binding = PersistedWorldBinding {
+        world_id: world_session.world_id.clone(),
+        world_generation: world_session.world_generation,
+    };
+    let startup = match repair_policy {
+        MemberRuntimeFirstDispatchRepairPolicy::Disabled => {
+            start_remote_member_runtime(
+                startup_context,
+                world_binding,
+                descriptor,
+                resumed_from,
+                initial_prompt.map(str::to_string),
+                agent_printer,
+                telemetry,
+            )
+            .await
+        }
+    };
+    let runtime = match startup {
         Ok(runtime) => runtime,
         Err(failure) => return Err(anyhow!("substrate: error: {}", failure.message)),
     };
@@ -7657,10 +7907,235 @@ async fn ensure_member_runtime_ready_for_descriptor(
     Ok(false)
 }
 
+#[cfg(all(test, target_os = "linux"))]
+fn is_member_dispatch_first_bootstrap_binding_mismatch(failure: &RuntimeBootstrapFailure) -> bool {
+    is_exact_member_dispatch_world_id_mismatch_message(&failure.message)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+fn persist_failed_member_bootstrap_attempt(
+    store: &AgentRuntimeStateStore,
+    manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
+    message: &str,
+) {
+    let manifest_snapshot = {
+        let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        if manifest_guard.handle.state.is_live() {
+            manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
+        }
+        if !manifest_guard.has_valid_ownership() {
+            manifest_guard.mark_terminal_state(message.to_string());
+        }
+        manifest_guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
+        manifest_guard.internal.last_error_message = Some(message.to_string());
+        manifest_guard.clone()
+    };
+    let _ = store.persist_participant(&manifest_snapshot);
+}
+
+#[cfg(all(test, target_os = "linux"))]
+fn refresh_member_runtime_startup_after_binding_mismatch(
+    startup_context: &RuntimeOrchestrationContext,
+    descriptor: &RuntimeSelectionDescriptor,
+    current_binding: &PersistedWorldBinding,
+    resumed_from: Option<&AgentRuntimeParticipantRecord>,
+    world_session: Option<&mut WorldSession>,
+) -> std::result::Result<Option<PreparedAgentRuntime>, RuntimeBootstrapFailure> {
+    let Some(refreshed_binding) =
+        refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch(
+            startup_context,
+            current_binding,
+            world_session,
+        )
+        .map_err(runtime_bootstrap_failure_from_anyhow)?
+    else {
+        return Ok(None);
+    };
+
+    prepare_member_runtime_startup_for_descriptor(
+        startup_context,
+        descriptor.clone(),
+        &refreshed_binding,
+        resumed_from,
+    )
+    .map(Some)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+fn refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch(
+    startup_context: &RuntimeOrchestrationContext,
+    current_binding: &PersistedWorldBinding,
+    world_session: Option<&mut WorldSession>,
+) -> Result<Option<PersistedWorldBinding>> {
+    let Some(refreshed_binding) = startup_context
+        .store
+        .recover_active_shared_world_binding_from_local_metadata_only(
+            &startup_context.orchestration_session_id(),
+        )?
+        .map(|binding| PersistedWorldBinding {
+            world_id: binding.world_id,
+            world_generation: binding.world_generation,
+        })
+    else {
+        return Ok(None);
+    };
+
+    if refreshed_binding.world_id == current_binding.world_id
+        && refreshed_binding.world_generation == current_binding.world_generation
+    {
+        return Ok(None);
+    }
+
+    persist_repl_authoritative_world_binding(
+        startup_context,
+        world_session,
+        refreshed_binding.clone(),
+    )?;
+    Ok(Some(refreshed_binding))
+}
+
+#[cfg(all(test, target_os = "linux"))]
+struct RemoteMemberRuntimeRetryStartContext<'a> {
+    descriptor: RuntimeSelectionDescriptor,
+    resumed_from: Option<&'a AgentRuntimeParticipantRecord>,
+    initial_prompt: Option<String>,
+    agent_printer: &'a ReplPrinter,
+    telemetry: &'a mut ReplSessionTelemetry,
+}
+
+#[cfg(all(test, target_os = "linux"))]
+async fn start_remote_member_runtime_with_binding_retry(
+    startup_context: &RuntimeOrchestrationContext,
+    initial_binding: PersistedWorldBinding,
+    world_session: Option<&mut WorldSession>,
+    context: RemoteMemberRuntimeRetryStartContext<'_>,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    let RemoteMemberRuntimeRetryStartContext {
+        descriptor,
+        resumed_from,
+        initial_prompt,
+        agent_printer,
+        telemetry,
+    } = context;
+    let prepared = prepare_member_runtime_startup_for_descriptor(
+        startup_context,
+        descriptor.clone(),
+        &initial_binding,
+        resumed_from,
+    )?;
+    let failed_manifest = prepared.manifest.clone();
+    match start_remote_member_runtime_with_prepared(
+        Some(prepared),
+        initial_prompt.clone(),
+        agent_printer,
+        telemetry,
+    )
+    .await
+    {
+        Ok(runtime) => Ok(runtime),
+        Err(failure) if is_member_dispatch_first_bootstrap_binding_mismatch(&failure) => {
+            persist_failed_member_bootstrap_attempt(
+                &startup_context.store,
+                &failed_manifest,
+                &failure.message,
+            );
+            let Some(retried_prepared) = refresh_member_runtime_startup_after_binding_mismatch(
+                startup_context,
+                &descriptor,
+                &initial_binding,
+                resumed_from,
+                world_session,
+            )?
+            else {
+                return Err(failure);
+            };
+            start_remote_member_runtime_with_prepared(
+                Some(retried_prepared),
+                initial_prompt,
+                agent_printer,
+                telemetry,
+            )
+            .await
+        }
+        Err(failure) => Err(failure),
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn start_remote_member_runtime(
+    startup_context: &RuntimeOrchestrationContext,
+    initial_binding: PersistedWorldBinding,
+    descriptor: RuntimeSelectionDescriptor,
+    resumed_from: Option<&AgentRuntimeParticipantRecord>,
+    initial_prompt: Option<String>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    let prepared = prepare_member_runtime_startup_for_descriptor(
+        startup_context,
+        descriptor,
+        &initial_binding,
+        resumed_from,
+    )?;
+    start_remote_member_runtime_with_prepared(
+        Some(prepared),
+        initial_prompt,
+        agent_printer,
+        telemetry,
+    )
+    .await
+}
+
+#[cfg(all(test, target_os = "linux"))]
+async fn start_remote_member_runtime_with_binding_retry_using<F, Fut, T>(
+    startup_context: &RuntimeOrchestrationContext,
+    initial_binding: PersistedWorldBinding,
+    world_session: Option<&mut WorldSession>,
+    descriptor: RuntimeSelectionDescriptor,
+    resumed_from: Option<&AgentRuntimeParticipantRecord>,
+    initial_prompt: Option<String>,
+    mut start_runtime: F,
+) -> std::result::Result<T, RuntimeBootstrapFailure>
+where
+    F: FnMut(PreparedAgentRuntime, Option<String>) -> Fut,
+    Fut: Future<Output = std::result::Result<T, RuntimeBootstrapFailure>>,
+{
+    let prepared = prepare_member_runtime_startup_for_descriptor(
+        startup_context,
+        descriptor.clone(),
+        &initial_binding,
+        resumed_from,
+    )?;
+    let failed_manifest = prepared.manifest.clone();
+    match start_runtime(prepared, initial_prompt.clone()).await {
+        Ok(runtime) => Ok(runtime),
+        Err(failure) if is_member_dispatch_first_bootstrap_binding_mismatch(&failure) => {
+            persist_failed_member_bootstrap_attempt(
+                &startup_context.store,
+                &failed_manifest,
+                &failure.message,
+            );
+            let Some(retried_prepared) = refresh_member_runtime_startup_after_binding_mismatch(
+                startup_context,
+                &descriptor,
+                &initial_binding,
+                resumed_from,
+                world_session,
+            )?
+            else {
+                return Err(failure);
+            };
+            start_runtime(retried_prepared, initial_prompt).await
+        }
+        Err(failure) => Err(failure),
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
-    world_session: Option<&WorldSession>,
+    world_session: Option<&mut WorldSession>,
+    repair_policy: MemberRuntimeFirstDispatchRepairPolicy,
     member_runtimes: &mut RetainedMemberRuntimeMap,
     pending_member_replacements: &mut PendingMemberReplacementMap,
     agent_printer: &ReplPrinter,
@@ -7684,6 +8159,7 @@ async fn ensure_member_runtime_ready(
             telemetry,
         },
         &parity,
+        repair_policy,
         None,
         member_runtimes,
         pending_member_replacements,
@@ -7695,7 +8171,8 @@ async fn ensure_member_runtime_ready(
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
-    world_session: Option<&WorldSession>,
+    world_session: Option<&mut WorldSession>,
+    _repair_policy: MemberRuntimeFirstDispatchRepairPolicy,
     _member_runtimes: &mut RetainedMemberRuntimeMap,
     _pending_member_replacements: &mut PendingMemberReplacementMap,
     _agent_printer: &ReplPrinter,
@@ -10241,7 +10718,7 @@ mod tests {
     };
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::dispatch_contract::{
-        CancelWorldWorkTerminalStateV1, WorkerCancelPayloadV1, WorkerForkPayloadV1,
+        CancelWorldWorkTerminalStateV1, TaskPayloadV1, WorkerCancelPayloadV1, WorkerForkPayloadV1,
         WorkerInspectPayloadV1, WorkerStopPayloadV1,
     };
     #[cfg(unix)]
@@ -11651,6 +12128,1194 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
+    fn prepare_repl_dormant_host_launch_plan_keeps_world_mode_lazy_until_first_targeted_turn() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let resolved = resolve_host_orchestrator_bootstrap(&config)
+            .expect("resolve host bootstrap should succeed")
+            .expect("host runtime should be configured");
+        let plan = prepare_repl_dormant_host_launch_plan(Some(resolved))
+            .expect("world-enabled repl should keep host startup dormant");
+        let Some(DormantHostOrchestratorLaunchPlan::Resolved(resolved)) = plan else {
+            panic!("expected a resolved dormant host launch plan");
+        };
+        assert_eq!(resolved.descriptor.backend_id, "cli:claude_code-host");
+        let sessions_dir = substrate_home.join("run/agent-hub/sessions");
+        assert_eq!(
+            fs::read_dir(&sessions_dir)
+                .ok()
+                .into_iter()
+                .flat_map(|entries| entries.filter_map(Result::ok))
+                .count(),
+            0,
+            "world-enabled repl must not persist any orchestration session before the first targeted host turn"
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn prepare_repl_dormant_host_launch_plan_keeps_no_world_mode_lazy() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let resolved = resolve_host_orchestrator_bootstrap(&config)
+            .expect("resolve host bootstrap should succeed")
+            .expect("host runtime should be configured");
+        let plan = prepare_repl_dormant_host_launch_plan(Some(resolved))
+            .expect("no-world repl should keep runtime startup lazy");
+        assert!(
+            matches!(plan, Some(DormantHostOrchestratorLaunchPlan::Resolved(_))),
+            "no-world startup should defer runtime preparation until first host launch"
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch_declines_without_metadata_even_when_persisted_session_truth_differs(
+    ) {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let shared_world_metadata_root = temp.path().join("shared-world-metadata");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        fs::create_dir_all(&shared_world_metadata_root).expect("shared world metadata root");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        std::env::set_var(
+            "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
+            &shared_world_metadata_root,
+        );
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_retry_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let persisted_only_binding = PersistedWorldBinding {
+            world_id: "wld_retry_persisted_only".to_string(),
+            world_generation: 3,
+        };
+        let mut persisted_session = startup_context.snapshot();
+        startup_context
+            .store
+            .set_orchestration_session_world_binding(
+                &mut persisted_session,
+                persisted_only_binding.world_id.clone(),
+                persisted_only_binding.world_generation,
+            )
+            .expect("persist replacement session binding");
+
+        let refreshed = refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch(
+            &startup_context,
+            &initial_world_binding,
+            None,
+        )
+        .expect("refresh helper should succeed");
+        assert!(
+            refreshed.is_none(),
+            "mismatch refresh must decline without authoritative shared-world metadata"
+        );
+
+        let session_snapshot = startup_context.snapshot();
+        assert_eq!(
+            session_snapshot.world_id.as_deref(),
+            Some(initial_world_binding.world_id.as_str())
+        );
+        assert_eq!(
+            session_snapshot.world_generation,
+            Some(initial_world_binding.world_generation)
+        );
+
+        std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch_fails_closed_when_metadata_is_unreadable_even_if_live_member_truth_exists(
+    ) {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let shared_world_metadata_root = temp.path().join("shared-world-metadata");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        fs::create_dir_all(&shared_world_metadata_root).expect("shared world metadata root");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        std::env::set_var(
+            "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
+            &shared_world_metadata_root,
+        );
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_retry_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let recovered_world_binding = PersistedWorldBinding {
+            world_id: "wld_retry_live_only".to_string(),
+            world_generation: 3,
+        };
+        persist_world_binding_authority(
+            &startup_context.store,
+            &startup_context.orchestration_session,
+            Some(&recovered_world_binding),
+        )
+        .expect("persist recovered binding for live member seeding");
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("member runtime should be selected");
+        let prepared_member = prepare_member_runtime_startup_for_descriptor(
+            &startup_context,
+            selected_descriptor,
+            &recovered_world_binding,
+            None,
+        )
+        .expect("prepare member runtime");
+        let member_snapshot = {
+            let mut manifest_guard = prepared_member
+                .manifest
+                .lock()
+                .expect("prepared member manifest mutex poisoned");
+            manifest_guard.set_uaa_session_id("thread-member".to_string());
+            manifest_guard.mark_runtime_ownership_retained();
+            manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+            manifest_guard.touch_heartbeat();
+            manifest_guard.clone()
+        };
+        let orchestration_snapshot = startup_context
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
+            .clone();
+        persist_runtime_snapshots(
+            &startup_context.store,
+            &orchestration_snapshot,
+            &member_snapshot,
+        )
+        .expect("persist live member snapshot");
+        persist_world_binding_authority(
+            &startup_context.store,
+            &startup_context.orchestration_session,
+            Some(&initial_world_binding),
+        )
+        .expect("restore initial binding after live member seeding");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            fs::set_permissions(
+                &shared_world_metadata_root,
+                fs::Permissions::from_mode(0o000),
+            )
+            .expect("block metadata root");
+        }
+        let refresh = refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch(
+            &startup_context,
+            &initial_world_binding,
+            None,
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            fs::set_permissions(
+                &shared_world_metadata_root,
+                fs::Permissions::from_mode(0o700),
+            )
+            .expect("restore metadata root");
+        }
+
+        let err = refresh.expect_err("unreadable metadata must fail closed");
+        assert!(
+            err.to_string()
+                .contains("shared_world_binding_repair_metadata_unreadable"),
+            "unexpected strict metadata error: {err:#}"
+        );
+
+        let session_snapshot = startup_context.snapshot();
+        assert_eq!(
+            session_snapshot.world_id.as_deref(),
+            Some(initial_world_binding.world_id.as_str())
+        );
+        assert_eq!(
+            session_snapshot.world_generation,
+            Some(initial_world_binding.world_generation)
+        );
+
+        std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn synchronize_repl_authoritative_world_binding_repairs_from_persisted_session_truth() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_repl_session_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let replacement_binding = PersistedWorldBinding {
+            world_id: "wld_repl_session_new".to_string(),
+            world_generation: 3,
+        };
+        let mut persisted_session = startup_context.snapshot();
+        startup_context
+            .store
+            .set_orchestration_session_world_binding(
+                &mut persisted_session,
+                replacement_binding.world_id.clone(),
+                replacement_binding.world_generation,
+            )
+            .expect("persist replacement session binding");
+
+        let repaired_snapshot =
+            synchronize_repl_authoritative_world_binding(&startup_context, None)
+                .expect("repl world binding synchronization should succeed");
+        assert_eq!(
+            repaired_snapshot.world_id.as_deref(),
+            Some(replacement_binding.world_id.as_str())
+        );
+        assert_eq!(
+            repaired_snapshot.world_generation,
+            Some(replacement_binding.world_generation)
+        );
+
+        let current_snapshot = startup_context.snapshot();
+        assert_eq!(
+            current_snapshot.world_id.as_deref(),
+            Some(replacement_binding.world_id.as_str())
+        );
+        assert_eq!(
+            current_snapshot.world_generation,
+            Some(replacement_binding.world_generation)
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn synchronize_repl_authoritative_world_binding_prefers_shared_world_metadata_over_stale_session_truth(
+    ) {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let shared_world_metadata_root = temp.path().join("shared-world-metadata");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        fs::create_dir_all(&shared_world_metadata_root).expect("shared world metadata root");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        std::env::set_var(
+            "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
+            &shared_world_metadata_root,
+        );
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let stale_binding = PersistedWorldBinding {
+            world_id: "wld_repl_session_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &stale_binding);
+
+        let authoritative_binding = PersistedWorldBinding {
+            world_id: "wld_repl_session_new".to_string(),
+            world_generation: 3,
+        };
+        let metadata_dir = shared_world_metadata_root.join(&authoritative_binding.world_id);
+        fs::create_dir_all(&metadata_dir).expect("shared metadata dir");
+        fs::write(
+            metadata_dir.join("session.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "world_id": authoritative_binding.world_id,
+                "project_dir": workspace_root,
+                "isolate_network": false,
+                "always_isolate": false,
+                "allowed_domains": [],
+                "cgroup_path": "/tmp",
+                "started_at_unix_millis": 0,
+                "owner_mode": "shared_orchestration",
+                "orchestration_session_id": startup_context.orchestration_session_id(),
+                "world_generation": authoritative_binding.world_generation,
+                "binding_state": "active",
+            }))
+            .expect("serialize shared world metadata"),
+        )
+        .expect("write shared world metadata");
+
+        let repaired_snapshot =
+            synchronize_repl_authoritative_world_binding(&startup_context, None)
+                .expect("repl world binding synchronization should succeed");
+        assert_eq!(
+            repaired_snapshot.world_id.as_deref(),
+            Some(authoritative_binding.world_id.as_str())
+        );
+        assert_eq!(
+            repaired_snapshot.world_generation,
+            Some(authoritative_binding.world_generation)
+        );
+
+        let current_snapshot = startup_context.snapshot();
+        assert_eq!(
+            current_snapshot.world_id.as_deref(),
+            Some(authoritative_binding.world_id.as_str())
+        );
+        assert_eq!(
+            current_snapshot.world_generation,
+            Some(authoritative_binding.world_generation)
+        );
+
+        std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn synchronize_repl_authoritative_world_binding_fails_closed_when_metadata_is_unreadable_even_if_live_member_truth_exists(
+    ) {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let shared_world_metadata_root = temp.path().join("shared-world-metadata");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        fs::create_dir_all(&shared_world_metadata_root).expect("shared world metadata root");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        std::env::set_var(
+            "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
+            &shared_world_metadata_root,
+        );
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_repl_sync_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let recovered_world_binding = PersistedWorldBinding {
+            world_id: "wld_repl_sync_live_only".to_string(),
+            world_generation: 3,
+        };
+        persist_world_binding_authority(
+            &startup_context.store,
+            &startup_context.orchestration_session,
+            Some(&recovered_world_binding),
+        )
+        .expect("persist recovered binding for live member seeding");
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("member runtime should be selected");
+        let prepared_member = prepare_member_runtime_startup_for_descriptor(
+            &startup_context,
+            selected_descriptor,
+            &recovered_world_binding,
+            None,
+        )
+        .expect("prepare member runtime");
+        let member_snapshot = {
+            let mut manifest_guard = prepared_member
+                .manifest
+                .lock()
+                .expect("prepared member manifest mutex poisoned");
+            manifest_guard.set_uaa_session_id("thread-member".to_string());
+            manifest_guard.mark_runtime_ownership_retained();
+            manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+            manifest_guard.touch_heartbeat();
+            manifest_guard.clone()
+        };
+        let orchestration_snapshot = startup_context
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
+            .clone();
+        persist_runtime_snapshots(
+            &startup_context.store,
+            &orchestration_snapshot,
+            &member_snapshot,
+        )
+        .expect("persist live member snapshot");
+        persist_world_binding_authority(
+            &startup_context.store,
+            &startup_context.orchestration_session,
+            Some(&initial_world_binding),
+        )
+        .expect("restore initial binding after live member seeding");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            fs::set_permissions(
+                &shared_world_metadata_root,
+                fs::Permissions::from_mode(0o000),
+            )
+            .expect("block metadata root");
+        }
+        let refresh = synchronize_repl_authoritative_world_binding(&startup_context, None);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            fs::set_permissions(
+                &shared_world_metadata_root,
+                fs::Permissions::from_mode(0o700),
+            )
+            .expect("restore metadata root");
+        }
+
+        let err = refresh.expect_err("unreadable metadata must fail closed");
+        assert!(
+            err.to_string()
+                .contains("shared_world_binding_repair_metadata_unreadable"),
+            "unexpected strict metadata error: {err:#}"
+        );
+
+        let session_snapshot = startup_context.snapshot();
+        assert_eq!(
+            session_snapshot.world_id.as_deref(),
+            Some(initial_world_binding.world_id.as_str())
+        );
+        assert_eq!(
+            session_snapshot.world_generation,
+            Some(initial_world_binding.world_generation)
+        );
+
+        std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn refresh_run_world_task_request_binding_after_mismatch_repairs_retry_request() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let shared_world_metadata_root = temp.path().join("shared-world-metadata");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        fs::create_dir_all(&shared_world_metadata_root).expect("shared world metadata root");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        std::env::set_var(
+            "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
+            &shared_world_metadata_root,
+        );
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_retry_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let recovered_world_id = "wld_retry_new";
+        let recovered_world_generation = 3;
+        let metadata_dir = shared_world_metadata_root.join(recovered_world_id);
+        fs::create_dir_all(&metadata_dir).expect("shared metadata dir");
+        fs::write(
+            metadata_dir.join("session.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "world_id": recovered_world_id,
+                "project_dir": workspace_root,
+                "isolate_network": false,
+                "always_isolate": false,
+                "allowed_domains": [],
+                "cgroup_path": "/tmp",
+                "started_at_unix_millis": 0,
+                "owner_mode": "shared_orchestration",
+                "orchestration_session_id": startup_context.orchestration_session_id(),
+                "world_generation": recovered_world_generation,
+                "binding_state": "active",
+            }))
+            .expect("serialize shared world metadata"),
+        )
+        .expect("write shared world metadata");
+
+        let caller_participant_id = host_manifest
+            .lock()
+            .expect("host manifest")
+            .handle
+            .participant_id
+            .clone();
+        let request = WorldDispatchRequestV1 {
+            request_id: Some("req_retry_world_binding".to_string()),
+            idempotency_key: Some("idem_retry_world_binding".to_string()),
+            orchestration_session_id: Some(startup_context.orchestration_session_id()),
+            caller_participant_id: Some(caller_participant_id),
+            action: WorldDispatchActionV1::RunWorldTask,
+            mode: crate::execution::agent_runtime::WorldDispatchModeV1::Ephemeral,
+            target_backend_id: Some("cli:codex-world".to_string()),
+            task_run_id: None,
+            target_participant_id: None,
+            world_id: Some(initial_world_binding.world_id.clone()),
+            world_generation: Some(initial_world_binding.world_generation),
+            payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "retry world binding".to_string(),
+            }),
+        };
+
+        let refreshed =
+            refresh_run_world_task_request_binding_after_mismatch(&startup_context, &request)
+                .expect("world binding refresh should succeed")
+                .expect("retry request should be repaired");
+        assert_eq!(refreshed.world_id.as_deref(), Some(recovered_world_id));
+        assert_eq!(refreshed.world_generation, Some(recovered_world_generation));
+
+        let session_snapshot = startup_context.snapshot();
+        assert_eq!(
+            session_snapshot.world_id.as_deref(),
+            Some(recovered_world_id)
+        );
+        assert_eq!(
+            session_snapshot.world_generation,
+            Some(recovered_world_generation)
+        );
+
+        std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_run_world_task_request_with_binding_retry_retries_once_after_exact_binding_mismatch(
+    ) {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let shared_world_metadata_root = temp.path().join("shared-world-metadata");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        fs::create_dir_all(&shared_world_metadata_root).expect("shared world metadata root");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        std::env::set_var(
+            "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
+            &shared_world_metadata_root,
+        );
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_retry_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let recovered_world_id = "wld_retry_new";
+        let recovered_world_generation = 3;
+        let metadata_dir = shared_world_metadata_root.join(recovered_world_id);
+        fs::create_dir_all(&metadata_dir).expect("shared metadata dir");
+        fs::write(
+            metadata_dir.join("session.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "world_id": recovered_world_id,
+                "project_dir": workspace_root,
+                "isolate_network": false,
+                "always_isolate": false,
+                "allowed_domains": [],
+                "cgroup_path": "/tmp",
+                "started_at_unix_millis": 0,
+                "owner_mode": "shared_orchestration",
+                "orchestration_session_id": startup_context.orchestration_session_id(),
+                "world_generation": recovered_world_generation,
+                "binding_state": "active",
+            }))
+            .expect("serialize shared world metadata"),
+        )
+        .expect("write shared world metadata");
+
+        let caller_participant_id = host_manifest
+            .lock()
+            .expect("host manifest")
+            .handle
+            .participant_id
+            .clone();
+        let request = WorldDispatchRequestV1 {
+            request_id: Some("req_retry_world_binding".to_string()),
+            idempotency_key: Some("idem_retry_world_binding".to_string()),
+            orchestration_session_id: Some(startup_context.orchestration_session_id()),
+            caller_participant_id: Some(caller_participant_id),
+            action: WorldDispatchActionV1::RunWorldTask,
+            mode: crate::execution::agent_runtime::WorldDispatchModeV1::Ephemeral,
+            target_backend_id: Some("cli:codex-world".to_string()),
+            task_run_id: None,
+            target_participant_id: None,
+            world_id: Some(initial_world_binding.world_id.clone()),
+            world_generation: Some(initial_world_binding.world_generation),
+            payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "retry world binding".to_string(),
+            }),
+        };
+
+        let requests = Arc::new(Mutex::new(Vec::<WorldDispatchRequestV1>::new()));
+        let requests_for_dispatch = Arc::clone(&requests);
+        let attempt = Arc::new(AtomicI32::new(0));
+        let attempt_for_dispatch = Arc::clone(&attempt);
+        let (started_task_run_id_tx, mut started_task_run_id_rx) = mpsc::unbounded_channel();
+
+        let outcome = TokioRuntimeBuilder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime")
+            .block_on(async move {
+                dispatch_run_world_task_request_with_binding_retry_using(
+                    startup_context,
+                    request,
+                    started_task_run_id_tx,
+                    move |_store, request, started_task_run_id_tx| {
+                        let requests = Arc::clone(&requests_for_dispatch);
+                        let attempt = Arc::clone(&attempt_for_dispatch);
+                        async move {
+                            requests.lock().expect("requests").push(request.clone());
+                            if attempt.fetch_add(1, Ordering::SeqCst) == 0 {
+                                anyhow::bail!(
+                                    "HTTP 400 Bad Request error: {{\"error\":\"member_dispatch.world_id mismatch (expected {expected}, got {got})\"}}",
+                                    expected = recovered_world_id,
+                                    got = request.world_id.as_deref().unwrap_or("<missing>"),
+                                );
+                            }
+                            let _ = started_task_run_id_tx.send("member-span-retried".to_string());
+                            Ok(WorldDispatchOutcomeV1::RunWorldTask(RunWorldTaskOutcomeV1 {
+                                request_id: request
+                                    .request_id
+                                    .clone()
+                                    .expect("request_id should be present"),
+                                orchestration_session_id: request
+                                    .orchestration_session_id
+                                    .clone()
+                                    .expect("orchestration_session_id should be present"),
+                                action: WorldDispatchActionV1::RunWorldTask,
+                                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Ephemeral,
+                                task_run_id: Some("member-span-retried".to_string()),
+                                state: crate::execution::agent_runtime::WorldTaskTerminalStateV1::Completed,
+                                summary: "retry succeeded".to_string(),
+                            }))
+                        }
+                    },
+                )
+                .await
+            })
+            .expect("retry dispatch should succeed");
+
+        let requests = requests.lock().expect("requests");
+        assert_eq!(
+            requests.len(),
+            2,
+            "retry wrapper must dispatch exactly twice"
+        );
+        assert_eq!(
+            requests[0].world_id.as_deref(),
+            Some(initial_world_binding.world_id.as_str())
+        );
+        assert_eq!(
+            requests[0].world_generation,
+            Some(initial_world_binding.world_generation)
+        );
+        assert_eq!(requests[1].world_id.as_deref(), Some(recovered_world_id));
+        assert_eq!(
+            requests[1].world_generation,
+            Some(recovered_world_generation)
+        );
+        assert_eq!(
+            started_task_run_id_rx
+                .try_recv()
+                .expect("retried dispatch should surface the started task run id"),
+            "member-span-retried"
+        );
+        assert_eq!(
+            outcome,
+            WorldDispatchOutcomeV1::RunWorldTask(RunWorldTaskOutcomeV1 {
+                request_id: "req_retry_world_binding".to_string(),
+                orchestration_session_id: requests[1]
+                    .orchestration_session_id
+                    .clone()
+                    .expect("retry request orchestration session id"),
+                action: WorldDispatchActionV1::RunWorldTask,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Ephemeral,
+                task_run_id: Some("member-span-retried".to_string()),
+                state: crate::execution::agent_runtime::WorldTaskTerminalStateV1::Completed,
+                summary: "retry succeeded".to_string(),
+            })
+        );
+
+        std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn start_remote_member_runtime_with_binding_retry_retries_once_after_exact_binding_mismatch() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let shared_world_metadata_root = temp.path().join("shared-world-metadata");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        fs::create_dir_all(&shared_world_metadata_root).expect("shared world metadata root");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        std::env::set_var(
+            "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
+            &shared_world_metadata_root,
+        );
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_retry_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let recovered_world_id = "wld_retry_new";
+        let recovered_world_generation = 3;
+        let metadata_dir = shared_world_metadata_root.join(recovered_world_id);
+        fs::create_dir_all(&metadata_dir).expect("shared metadata dir");
+        fs::write(
+            metadata_dir.join("session.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "world_id": recovered_world_id,
+                "project_dir": workspace_root,
+                "isolate_network": false,
+                "always_isolate": false,
+                "allowed_domains": [],
+                "cgroup_path": "/tmp",
+                "started_at_unix_millis": 0,
+                "owner_mode": "shared_orchestration",
+                "orchestration_session_id": startup_context.orchestration_session_id(),
+                "world_generation": recovered_world_generation,
+                "binding_state": "active",
+            }))
+            .expect("serialize shared world metadata"),
+        )
+        .expect("write shared world metadata");
+
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("member runtime should be selected");
+        let attempted_bindings = Arc::new(Mutex::new(Vec::<PersistedWorldBinding>::new()));
+        let attempted_bindings_for_start = Arc::clone(&attempted_bindings);
+        let attempt = Arc::new(AtomicI32::new(0));
+        let attempt_for_start = Arc::clone(&attempt);
+        let startup_context_for_retry = startup_context.clone();
+        let initial_world_binding_for_retry = initial_world_binding.clone();
+
+        let outcome = TokioRuntimeBuilder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime")
+            .block_on(async move {
+                start_remote_member_runtime_with_binding_retry_using(
+                    &startup_context_for_retry,
+                    initial_world_binding_for_retry,
+                    None,
+                    selected_descriptor,
+                    None,
+                    Some("retry world binding".to_string()),
+                    move |prepared, initial_prompt| {
+                        let attempted_bindings = Arc::clone(&attempted_bindings_for_start);
+                        let attempt = Arc::clone(&attempt_for_start);
+                        async move {
+                            let manifest = prepared
+                                .manifest
+                                .lock()
+                                .expect("prepared manifest mutex poisoned")
+                                .clone();
+                            attempted_bindings
+                                .lock()
+                                .expect("attempted bindings")
+                                .push(PersistedWorldBinding {
+                                    world_id: manifest
+                                        .handle
+                                        .world_id
+                                        .clone()
+                                        .expect("prepared member world_id"),
+                                    world_generation: manifest
+                                        .handle
+                                        .world_generation
+                                        .expect("prepared member world_generation"),
+                                });
+                            if attempt.fetch_add(1, Ordering::SeqCst) == 0 {
+                                return Err(RuntimeBootstrapFailure {
+                                    exit_code: 1,
+                                    message: format!(
+                                        "HTTP 400 Bad Request error: {{\"error\":\"member_dispatch.world_id mismatch (expected {expected}, got {got})\"}}",
+                                        expected = recovered_world_id,
+                                        got = manifest
+                                            .handle
+                                            .world_id
+                                            .as_deref()
+                                            .unwrap_or("<missing>"),
+                                    ),
+                                });
+                            }
+                            Ok(initial_prompt.expect("initial prompt should be forwarded"))
+                        }
+                    },
+                )
+                .await
+            })
+            .expect("retry launch should succeed");
+
+        let attempted_bindings = attempted_bindings.lock().expect("attempted bindings");
+        assert_eq!(
+            attempted_bindings.len(),
+            2,
+            "retry wrapper must launch exactly twice"
+        );
+        assert_eq!(attempted_bindings[0], initial_world_binding);
+        assert_eq!(
+            attempted_bindings[1],
+            PersistedWorldBinding {
+                world_id: recovered_world_id.to_string(),
+                world_generation: recovered_world_generation,
+            }
+        );
+        assert_eq!(outcome, "retry world binding".to_string());
+
+        let session_snapshot = startup_context.snapshot();
+        assert_eq!(
+            session_snapshot.world_id.as_deref(),
+            Some(recovered_world_id)
+        );
+        assert_eq!(
+            session_snapshot.world_generation,
+            Some(recovered_world_generation)
+        );
+
+        std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn is_exact_member_dispatch_world_id_mismatch_message_matches_only_canonical_http_400_shape() {
+        assert!(is_exact_member_dispatch_world_id_mismatch_message(
+            r#"HTTP 400 Bad Request error: {"error":"member_dispatch.world_id mismatch (expected wld_expected, got wld_got)"}"#
+        ));
+        assert!(is_exact_member_dispatch_world_id_mismatch_message(
+            r#"failed to bootstrap shell-owned member runtime: HTTP 400 Bad Request error: {"error":"member_dispatch.world_id mismatch (expected wld_expected, got wld_got)"}"#
+        ));
+        assert!(!is_exact_member_dispatch_world_id_mismatch_message(
+            r#"HTTP 400 Bad Request error: {"error":"member_dispatch.world_id mismatch"}"#
+        ));
+        assert!(!is_exact_member_dispatch_world_id_mismatch_message(
+            r#"HTTP 400 Bad Request error: {"error":"member_turn_submit.world_id mismatch (expected wld_expected, got wld_got)"}"#
+        ));
+        assert!(!is_exact_member_dispatch_world_id_mismatch_message(
+            "context: member_dispatch.world_id mismatch (expected wld_expected, got wld_got)"
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn start_remote_member_runtime_with_binding_retry_does_not_retry_non_exact_mismatch_error() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_retry_old".to_string(),
+            world_generation: 2,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("member runtime should be selected");
+        let attempted_bindings = Arc::new(Mutex::new(Vec::<PersistedWorldBinding>::new()));
+        let attempted_bindings_for_start = Arc::clone(&attempted_bindings);
+        let startup_context_for_retry = startup_context.clone();
+        let initial_world_binding_for_retry = initial_world_binding.clone();
+
+        let failure = TokioRuntimeBuilder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime")
+            .block_on(async move {
+                start_remote_member_runtime_with_binding_retry_using(
+                    &startup_context_for_retry,
+                    initial_world_binding_for_retry,
+                    None,
+                    selected_descriptor,
+                    None,
+                    Some("no retry".to_string()),
+                    move |prepared, _initial_prompt| {
+                        let attempted_bindings = Arc::clone(&attempted_bindings_for_start);
+                        async move {
+                            let manifest = prepared
+                                .manifest
+                                .lock()
+                                .expect("prepared manifest mutex poisoned")
+                                .clone();
+                            attempted_bindings
+                                .lock()
+                                .expect("attempted bindings")
+                                .push(PersistedWorldBinding {
+                                    world_id: manifest
+                                        .handle
+                                        .world_id
+                                        .clone()
+                                        .expect("prepared member world_id"),
+                                    world_generation: manifest
+                                        .handle
+                                        .world_generation
+                                        .expect("prepared member world_generation"),
+                                });
+                            Err::<String, RuntimeBootstrapFailure>(RuntimeBootstrapFailure {
+                                exit_code: 1,
+                                message: r#"HTTP 400 Bad Request error: {"error":"member_dispatch.world_id mismatch"}"#.to_string(),
+                            })
+                        }
+                    },
+                )
+                .await
+                .expect_err("non-exact mismatch must not be retried")
+            });
+
+        let attempted_bindings = attempted_bindings.lock().expect("attempted bindings");
+        assert_eq!(
+            attempted_bindings.len(),
+            1,
+            "non-exact mismatch errors must fail without a retry attempt"
+        );
+        assert_eq!(attempted_bindings[0], initial_world_binding);
+        assert_eq!(
+            failure.message,
+            r#"HTTP 400 Bad Request error: {"error":"member_dispatch.world_id mismatch"}"#
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
     fn hidden_owner_helper_attach_startup_reaches_ready_attached() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
@@ -12191,6 +13856,89 @@ mod tests {
                 true,
             ),
             "completed resume-one-turn handoff should park even if the persisted session row still lags behind the attached snapshot"
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn prepare_member_runtime_startup_for_descriptor_accepts_parked_detached_orchestrator_parent() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let world_binding = PersistedWorldBinding {
+            world_id: "wld_member_parked_parent".to_string(),
+            world_generation: 11,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &world_binding);
+
+        let parked_participant_id = {
+            let mut orchestration_guard = startup_context
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            let mut manifest_guard = host_manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            let (parked_session, parked_manifest) = apply_parked_host_runtime_snapshots(
+                &mut orchestration_guard,
+                &mut manifest_guard,
+                "owner detached cleanly",
+            )
+            .expect("parked detached snapshots");
+            let participant_id = parked_manifest.handle.participant_id.clone();
+            persist_runtime_snapshots(&startup_context.store, &parked_session, &parked_manifest)
+                .expect("persist parked detached parent");
+            participant_id
+        };
+
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("one world-scoped member should be selected");
+        let member_prepared = prepare_member_runtime_startup_for_descriptor(
+            &startup_context,
+            selected_descriptor,
+            &world_binding,
+            None,
+        )
+        .expect("parked detached parent should remain valid for member startup");
+
+        let prepared_manifest = member_prepared
+            .manifest
+            .lock()
+            .expect("prepared manifest mutex poisoned")
+            .clone();
+        assert_eq!(
+            prepared_manifest
+                .handle
+                .orchestrator_participant_id
+                .as_deref(),
+            Some(parked_participant_id.as_str())
         );
 
         std::env::remove_var("SUBSTRATE_HOME");
