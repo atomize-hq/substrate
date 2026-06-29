@@ -2593,6 +2593,11 @@ fn launch_world_member_via_targeted_turn(
         + 1;
     repl.send_line(&format!("::{backend_id} {prompt}"));
     wait_for_min_member_dispatch_requests(records, expected_dispatches, Duration::from_secs(3));
+    repl.wait_for_output(
+        "world-scoped member session is ready via retained attached control ownership",
+        Duration::from_secs(15),
+    )
+    .expect("targeted world runtime ready event");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("prompt after targeted world launch");
 }
@@ -4360,11 +4365,7 @@ fn c3_internal_toolbox_control_directive_routes_rendered_prompt_to_exact_retaine
         toolbox_path.display()
     );
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(5));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(5))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -4565,11 +4566,7 @@ fn c3_internal_toolbox_progress_ack_routes_seen_progress_without_durable_side_ef
         toolbox_path.display()
     );
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(6));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -4775,11 +4772,7 @@ fn c3_internal_toolbox_progress_ack_fail_closed_for_control_and_fork_worker_even
         toolbox_path.display()
     );
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -5049,11 +5042,7 @@ fn c3_internal_toolbox_control_ack_fail_closed_for_invalid_contexts_and_out_of_s
         toolbox_path.display()
     );
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -5334,11 +5323,7 @@ fn c3_internal_toolbox_fork_command_reuses_retained_fork_bootstrap_with_explicit
         toolbox_path.display()
     );
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -5534,11 +5519,7 @@ fn c3_internal_toolbox_fork_command_rejects_live_retained_worker_cap_before_deli
         toolbox_path.display()
     );
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -5759,11 +5740,7 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
         toolbox_path.display()
     );
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
 
     let live_participants = authoritative_live_participant_manifests_for_session(
         &substrate_home,
@@ -6559,8 +6536,8 @@ fn c3_targeted_codex_world_turn_after_parked_host_mismatch_remains_fail_closed()
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
-fn c3_pty_world_command_after_parked_host_mismatch_remains_fail_closed() {
-    let temp = temp_dir("substrate-c3-parked-host-pty-mismatch-");
+fn c3_targeted_codex_host_turn_resumes_same_session_after_implicit_pty_on_parked_authority() {
+    let temp = temp_dir("substrate-c3-parked-host-resume-after-implicit-pty-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     let substrate_home = home.join(".substrate");
@@ -6580,114 +6557,7 @@ fn c3_pty_world_command_after_parked_host_mismatch_remains_fail_closed() {
         "auto_restart",
     );
 
-    let sock_temp = short_socket_dir("sub-c3ws-parked-host-pty-mismatch-");
-    let sock = sock_temp.path().join("world.sock");
-    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
-        &sock,
-        StreamBehavior::Normal,
-        vec![],
-    );
-    let records = server.records();
-
-    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(6))
-        .expect("banner");
-    repl.wait_for_prompt(Duration::from_secs(2))
-        .expect("initial prompt");
-
-    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex-host");
-    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-    let parked_session = wait_for_orchestration_session_posture(
-        &substrate_home,
-        &orchestration_session_id,
-        "parked_resumable",
-        Duration::from_secs(5),
-    );
-    let initial_world_id = parked_session
-        .get("world_id")
-        .and_then(Value::as_str)
-        .expect("parked session world_id")
-        .to_string();
-    let initial_world_generation = parked_session
-        .get("world_generation")
-        .and_then(Value::as_u64)
-        .expect("parked session world_generation");
-    let recovered_world_id = format!("wld_pty_fail_closed_{orchestration_session_id}");
-    server.push_member_dispatch_script(MemberDispatchStreamScript::FailExactWorldIdMismatch {
-        expected_world_id: recovered_world_id,
-    });
-    server.push_member_dispatch_script(MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
-        session_handle_id: "session-pty-should-not-retry".to_string(),
-        exit_code_on_cancel: 130,
-    });
-
-    repl.send_line(":pty echo hello");
-    repl.wait_for_output("member_dispatch.world_id mismatch", Duration::from_secs(3))
-        .expect("pty world mismatch output");
-    repl.wait_for_prompt(Duration::from_secs(2))
-        .expect("prompt after pty mismatch");
-    std::thread::sleep(Duration::from_millis(150));
-
-    let guard = records.lock().expect("lock records");
-    assert_eq!(
-        guard.member_dispatch_requests.len(),
-        1,
-        ":pty mismatch must fail closed without a retry attempt: {guard:#?}"
-    );
-    drop(guard);
-
-    let persisted_session = read_orchestration_session(&orchestration_session_path(
-        &substrate_home,
-        &orchestration_session_id,
-    ));
-    assert_session_world_binding(
-        &persisted_session,
-        Some(initial_world_id.as_str()),
-        Some(initial_world_generation),
-    );
-    assert!(
-        authoritative_live_world_member_manifests_for_session(
-            &substrate_home,
-            &orchestration_session_id,
-        )
-        .is_empty(),
-        ":pty mismatch must not leave an authoritative live member"
-    );
-    assert_eq!(
-        read_invocation_count(&host_invocation_count_path),
-        1,
-        ":pty mismatch must not relaunch the parked host backend"
-    );
-
-    repl.send_line("exit");
-    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-#[serial]
-fn c3_targeted_codex_host_turn_resumes_same_session_after_ls_on_parked_authority() {
-    let temp = temp_dir("substrate-c3-parked-host-resume-after-ls-");
-    let home = temp.path().join("home");
-    let project = temp.path().join("project");
-    let substrate_home = home.join(".substrate");
-    fs::create_dir_all(&home).expect("create home");
-    fs::create_dir_all(&project).expect("create project");
-    fs::create_dir_all(&substrate_home).expect("create substrate home");
-    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
-    fs::write(project.join("alpha.txt"), "alpha\n").expect("seed project file");
-    write_profile(&project);
-    let (fake_host, host_invocation_count_path) =
-        write_fake_codex_script_with_prompt_memory_and_clean_park(temp.path());
-    let fake_member = write_fake_codex_script(temp.path());
-    write_codex_host_and_world_member_runtime_world_config(
-        &substrate_home,
-        &fake_host,
-        &fake_member,
-        "auto_restart",
-    );
-
-    let sock_temp = short_socket_dir("sub-c3ws-parked-host-resume-after-ls-");
+    let sock_temp = short_socket_dir("sub-c3ws-parked-host-resume-after-implicit-pty-");
     let sock = sock_temp.path().join("world.sock");
     let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
         &sock,
@@ -6744,20 +6614,35 @@ fn c3_targeted_codex_host_turn_resumes_same_session_after_ls_on_parked_authority
         "first targeted host turn must not carry a parked-session continuity selector: {first_args:?}"
     );
 
-    repl.send_line("ls");
+    repl.send_line("bash");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    repl.wait_for_output("__PERSISTENT_EXEC_STUB__ eof ls", Duration::from_secs(3))
-        .expect("ordinary world command output after parked host session");
+    repl.wait_for_output(
+        "__PERSISTENT_EXEC_STUB__ passthrough bash",
+        Duration::from_secs(3),
+    )
+    .expect("implicit PTY ordinary world command output after parked host session");
+    std::thread::sleep(Duration::from_millis(150));
     let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.persistent_execs.len(),
+        1,
+        "implicit PTY ordinary world command must stay on the persistent exec lane: {guard:#?}"
+    );
+    assert!(
+        guard.persistent_execs.iter().any(
+            |rec| rec.stdin_mode == "passthrough" && rec.program_utf8.trim() == "bash"
+        ),
+        "implicit PTY ordinary world command must use passthrough exec without changing caller lanes: {guard:#?}"
+    );
     assert!(
         guard.member_dispatch_requests.is_empty(),
-        "ordinary world command after parked host authority must not attempt promptless member_dispatch bootstrap: {guard:#?}"
+        "implicit PTY ordinary world command after parked host authority must not attempt promptless member_dispatch bootstrap: {guard:#?}"
     );
     drop(guard);
     assert_eq!(
         read_invocation_count(&host_invocation_count_path),
         1,
-        "ordinary world work between parked host turns must not relaunch the host backend"
+        "implicit PTY ordinary world work between parked host turns must not relaunch the host backend"
     );
 
     repl.send_line("::cli:codex-host tell me what my last message said");
@@ -7207,10 +7092,7 @@ fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
     let first_live_members = wait_for_live_world_member_count(
         &substrate_home,
         &orchestration_session_id,
@@ -7240,55 +7122,56 @@ fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
         0,
         Duration::from_secs(30),
     );
-    wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 2, Duration::from_secs(3));
     repl.wait_for_output("second", Duration::from_secs(3))
         .expect("second command output");
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "ordinary restart must not cold-launch a replacement member runtime on the ordinary command lane: {guard:#?}"
+    );
+    assert_eq!(
+        guard.persistent_execs.len(),
+        1,
+        "ordinary restart should only execute the follow-up world command after the replacement world starts: {guard:#?}"
+    );
+    drop(guard);
 
     let replacement_live_members = wait_for_live_world_member_count(
         &substrate_home,
         &orchestration_session_id,
-        1,
+        0,
         Duration::from_secs(5),
     );
-    let replacement = &replacement_live_members[0];
-    let replacement_id = replacement
-        .get("participant_id")
-        .and_then(Value::as_str)
-        .expect("replacement participant_id");
-    assert_ne!(
-        replacement_id, first_member_id,
-        "restart must create a distinct replacement member runtime"
-    );
-    assert_eq!(
-        replacement.get("world_generation").and_then(Value::as_u64),
-        Some(1),
-        "replacement member must bind to the new world generation"
-    );
-    assert_eq!(
-        replacement.get("world_id").and_then(Value::as_str),
-        alert.get("world_id").and_then(Value::as_str),
-        "replacement member must bind to the replacement world id"
-    );
-    assert_eq!(
-        replacement
-            .get("orchestrator_participant_id")
-            .and_then(Value::as_str),
-        Some(orchestrator_participant_id.as_str()),
-        "replacement member must preserve the retained-control seam"
-    );
-    assert_eq!(
-        replacement
-            .get("resumed_from_participant_id")
-            .and_then(Value::as_str),
-        Some(first_member_id.as_str()),
-        "replacement member must retain explicit lineage to the previous generation"
+    assert!(
+        replacement_live_members.is_empty(),
+        "ordinary restart must leave honest absence until a later targeted world turn resumes member continuity"
     );
 
     let stale = read_participant_manifest(&substrate_home, &first_member_id);
     assert_eq!(
         stale.get("state").and_then(Value::as_str),
         Some("invalidated"),
-        "previous generation member must be invalidated after replacement launch: {stale:?}"
+        "previous generation member must be invalidated after restart even when no replacement member is auto-launched: {stale:?}"
+    );
+    assert_eq!(
+        stale
+            .get("orchestrator_participant_id")
+            .and_then(Value::as_str),
+        Some(orchestrator_participant_id.as_str()),
+        "stale member invalidation must preserve the retained-control seam identity: {stale:?}"
+    );
+    assert_eq!(
+        alert.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0002"),
+        "restart alert must still publish the replacement world binding: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "restart alert must still publish the replacement world generation: {alert:?}"
     );
 
     let persisted = read_orchestration_session(&session_path);
@@ -7346,10 +7229,7 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
-    repl.send_line("echo first");
-    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
-    repl.wait_for_output("first", Duration::from_secs(3))
-        .expect("first command output");
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
     let first_live_members = wait_for_live_world_member_count(
         &substrate_home,
         &orchestration_session_id,
@@ -7373,37 +7253,25 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
         0,
         Duration::from_secs(15),
     );
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(3) {
-        if repl.try_wait().expect("try_wait") {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-
-    let (code, out) = repl.shutdown();
-    assert_eq!(
-        code, 1,
-        "replacement startup failure must fail closed instead of continuing; output:\n{out}"
-    );
-    assert!(
-        out.contains("world-scoped member runtime exited with status 1 before ownership could be established"),
-        "replacement startup failure must surface the member bootstrap error; output:\n{out}"
-    );
-    assert!(
-        !out.contains("__PERSISTENT_EXEC_STUB__ eof echo second"),
-        "replacement startup failure must block the second command from executing; output:\n{out}"
-    );
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 
     let guard = records.lock().expect("lock records");
     assert_eq!(
         guard.persistent_execs.len(),
         1,
-        "fail-closed member startup must not fall through to a host-local or restarted-world second exec; records: {guard:#?}"
+        "ordinary restart must still execute the second world command without attempting a replacement member bootstrap: {guard:#?}"
     );
     assert!(
         guard.persistent_start_sessions.len() >= 2,
-        "world restart should still allocate the replacement world before the member bootstrap failure; records: {guard:#?}"
+        "world restart should still allocate the replacement world before continuing ordinary world execution: {guard:#?}"
+    );
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "ordinary restart must not attempt a second member_dispatch even when the next member bootstrap would fail: {guard:#?}"
     );
     drop(guard);
 
@@ -7421,13 +7289,13 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
     assert_eq!(
         stale.get("state").and_then(Value::as_str),
         Some("invalidated"),
-        "replacement failure must not resurrect the stale member: {stale:?}"
+        "ordinary restart must not resurrect the stale member: {stale:?}"
     );
     assert!(
         world_member_manifests_for_session(&substrate_home, &orchestration_session_id)
             .into_iter()
             .all(|manifest| !participant_is_authoritative_live(&manifest)),
-        "replacement failure must leave honest absence rather than any authoritative-live member"
+        "ordinary restart must leave honest absence rather than any authoritative-live member"
     );
     let persisted = read_orchestration_session(&session_path);
     assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));

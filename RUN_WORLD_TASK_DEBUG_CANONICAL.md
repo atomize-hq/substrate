@@ -1,11 +1,11 @@
 # `run_world_task` / retained-world-member debug synthesis
 
-Last updated: 2026-06-28  
+Last updated: 2026-06-29  
 Status: working canonical memo for this issue family; live code/tests/docs remain final authority.
 
 ## Purpose
 
-This file merges the 2026-06-25 debug packets plus the later 2026-06-27 and 2026-06-28 manual smokes / transcript clarifications into one bounded source-of-truth memo we can reuse during troubleshooting without rereading every handoff.
+This file merges the 2026-06-25 debug packets plus the later 2026-06-27 through 2026-06-29 manual smokes / transcript clarifications into one bounded source-of-truth memo we can reuse during troubleshooting without rereading every handoff.
 
 It is intentionally:
 - detailed enough to preserve the current diagnosis,
@@ -60,19 +60,25 @@ What is now **confirmed fixed** by fresh manual smoke:
    - immediate `exit`
    - `~/.substrate/run/agent-hub/sessions` diff before/after was empty,
    - so no bogus persisted session dir was created on startup alone.
+4. ordinary-command survivability after parked targeted host turn:
+   - in a fresh REPL:
+     - `::cli:codex-host just reply OK!`
+     - then ordinary `ls` succeeds
+     - then ordinary `pwd` succeeds
+     - `cd ../` is blocked by the caged-root guard as expected
 
 The still-live issues being debugged are now the combination of:
 
 1. retained world-worker launch/follow-up paths still diverging from the repaired one-shot `run_world_task` path,
 2. retained-worker follow-up/control operations failing across successor host participants with `stale_linkage`,
-3. ordinary REPL world-backed commands failing after a cleanly parked `::cli:codex-host` turn because the REPL loses the live orchestrator parent,
+3. resumed targeted host turns still sourcing the wrong conversation/context on both REPL and public `agent start|turn` even when transport/session reuse appears correct,
 4. worker turn execution failure (`codex exited non-zero`) remaining unresolved and distinct from the control-plane/linkage failures,
 5. and the older host-visible-file question still remaining secondary to those routing/control-plane issues.
 
 The current repo still exposes multiple relevant seams, but they no longer all sit at the same priority:
 
 - the host-visible file/write question remains open and likely still points at overlay/sync behavior,
-- while the active blockers have shifted to retained-worker control-plane/linkage behavior and REPL/CLI parity after parked host turns.
+- while the top active blocker has shifted to resumed targeted host-turn continuity/context scoping, with retained-worker control-plane/linkage issues still immediately behind it.
 
 Live code alone does **not** settle the host-visible write question, and the latest manual smoke only proves that certain routing/control surfaces now succeed. It does **not** yet prove the full end-to-end host-visible side-effect contract is settled.
 
@@ -277,13 +283,19 @@ Net effect:
 
 > a session can look healthy, parked, and resumable at the shell/control-plane surface while deeper world dispatch is already stale, non-routable, or launch-blocked.
 
-The 2026-06-28 transcript also sharpened the intended product contract:
+The 2026-06-28 and 2026-06-29 transcripts also sharpened the intended product contract:
 
 - REPL and CLI are UX wrappers over the same underlying lifecycle mechanisms; they should not diverge semantically.
 - Inside REPL, ordinary commands like `ls` / `pwd` / `cd` should behave like `substrate -c ...`.
 - Inside REPL, `::cli:codex-* prompt` should behave like `substrate agent start|turn`, with the REPL mainly handling session tracking and related niceties.
+- The REPL therefore has three distinct input classes:
+  - targeted, prompt-bearing `::cli:<backend> ...`
+  - ordinary unprefixed shell/world commands like `ls`, `pwd`, `cd`
+  - explicit `:pty ...` commands
+- Those classes must stay distinct.
+- UAA/Codex does not support promptless starts or turns by product decision, so ordinary commands cannot be modeled as promptless targeted launches.
 
-That exposed a distinct REPL bug class:
+Older smokes exposed a distinct REPL bug class:
 
 - fresh REPL
 - `::cli:codex-host just reply OK!`
@@ -300,15 +312,19 @@ The older 2026-06-26 repro sharpens this further:
 - one session failed honestly as **host-only / missing authoritative world binding**,
 - a later session failed in the more important way: it appeared world-bound from one runtime surface, but `world-service` rejected dispatch on **exact `world_id` mismatch**, and the retained participant left behind by that attempt was immediately **not authoritative-live** for follow-up.
 
-So the broader issue is not just one bug; it is also a **cross-layer contract mismatch** about what “routable after park/detach/bootstrap exit” actually means.
+That older failure mattered because it exposed a broader **cross-layer contract mismatch** about what “routable after park/detach/bootstrap exit” actually means.
 
 The newer smokes add one more refinement:
 
 - the public `start -> reattach -> stop` lifecycle can now behave correctly,
 - the one-shot REPL `run_world_task` first-dispatch path can now also behave correctly,
-- while the retained-worker path and REPL ordinary-command survivability are still broken.
+- ordinary unprefixed REPL commands after a parked targeted host turn now materially improve in live smoke:
+  - `ls` succeeds
+  - `pwd` succeeds
+  - `cd ../` is blocked by the caged-root guard as expected
+- while the retained-worker path and resumed targeted host-turn semantic continuity are still wrong.
 
-So the current live mismatch is narrower than “reattach is broken” or “all world dispatch is broken,” but broader than one retained-worker bug alone because REPL ordinary-command survivability is also violating the intended parity contract.
+So the current live mismatch is narrower than “reattach is broken” or “all world dispatch is broken.” The main remaining parity failure is now resumed targeted host-turn continuity/context sourcing, not ordinary-command survivability after park.
 
 ## What the cited runtime/docs actually establish
 
@@ -361,23 +377,33 @@ These are now part of the intended contract, not just optional nice-to-have test
 1. **REPL parity regression**
    - fresh REPL
    - `::cli:codex-host just reply OK!`
-   - clean park
-   - `ls`
-   - `::cli:codex-host tell me what my last message said`
-   - same parked durable session is reused
-   - answer is effectively `just reply OK`
+   - ordinary unprefixed `ls`
+   - ordinary unprefixed `pwd`
+   - ordinary unprefixed `cd ../`
+   - `::cli:codex-host what was the exact, full message I sent as the first user message in this session?`
+   - the same parked durable orchestration session is reused
+   - `resumed_from_participant_id` is present on the resumed targeted host turn
+   - the same UAA session id appears to persist
+   - ordinary commands still work or fail for the right reason:
+     - `ls` succeeds
+     - `pwd` succeeds
+     - `cd ../` is blocked by the caged-root guard
+   - but the resumed targeted host answer should come from the Substrate session-local `just reply OK!`, not from broader outer thread / `AGENTS.md` context
 
 2. **CLI-equivalent parity regression**
-   - `substrate agent start ... "just reply OK!"`
+   - `substrate agent start --backend cli:codex-host --prompt "just reply OK!"`
    - normal shell command in between, e.g. `substrate -c "ls"` or `pwd`
    - `substrate agent turn --session <same_session> --backend cli:codex-host --prompt "tell me what my last message said"`
-   - same durable session is reused
-   - answer is effectively `just reply OK`
+   - the same durable orchestration session is reused
+   - `resumed_from_participant_id` is present
+   - the same UAA session id appears to persist
+   - but the answer should still be effectively `just reply OK!`, not broader outer conversation context
 
 Both should also validate:
 
 - exact `orchestration_session_id` continuity,
 - expected participant successor behavior,
+- persisted UAA/Codex continuity markers when present,
 - shell execution in between does not invalidate the durable session,
 - and later follow-up does not silently create a new unrelated session.
 
@@ -385,26 +411,33 @@ Both should also validate:
 
 These are the best next debugging checks to separate confirmed truth from still-likely theory:
 
-1. **Trace `spawn_world_worker` first-dispatch world-binding handoff**
+1. **Trace resumed targeted host-turn continuity / context hydration**
+   - Goal: explain why REPL and public `agent start|turn` reuse the same orchestration session and resumed-participant lineage, but still answer from broader outer conversation context instead of the session-local prompt history.
+   - Most likely seams:
+     - host-turn resume/context assembly near the REPL targeted-turn path
+     - public `agent start|turn` continuity handoff
+     - pre-UAA conversation payload sourcing on resumed targeted turns
+
+2. **Trace `spawn_world_worker` first-dispatch world-binding handoff**
    - Goal: identify where the retained-worker launch path still disagrees on `world_id` / `world_generation` while one-shot `run_world_task` no longer does.
    - Most likely seams:
      - `crates/shell/src/repl/async_repl.rs`
      - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
      - `crates/shell/src/execution/repl_persistent_session.rs`
 
-2. **Trace retained-worker authority/linkage across successor host participants**
+3. **Trace retained-worker authority/linkage across successor host participants**
    - Goal: explain why `inspect_world_worker` / `stop_world_worker` fail with `stale_linkage` after a later public host participant becomes authoritative.
 
-3. **Separate worker execution failure from control-plane failure**
+4. **Separate worker execution failure from control-plane failure**
    - Goal: keep `continue_world_worker` worker-turn `codex exited non-zero` analysis separate from binding/linkage bugs so they do not get conflated.
 
-4. **Fix REPL ordinary-command survivability after parked host turns**
-   - Goal: preserve ordinary `ls` / `pwd` / `cd` behavior after park **without** severing the parked durable host session later reused by `::cli:codex-host`.
+5. **Keep ordinary-command survivability as a regression baseline**
+   - Goal: preserve live `ls` / `pwd` success and expected caged-root `cd ../` denial after park while fixing resumed targeted host-turn continuity.
 
-5. **Prove the REPL and CLI parity regressions together**
-   - Goal: confirm both wrappers preserve the same durable session truth and later same-session follow-up continuity.
+6. **Prove the REPL and CLI parity regressions together**
+   - Goal: confirm both wrappers preserve the same durable session truth, the same resumed continuity markers, and the correct session-local conversation continuity.
 
-6. **Keep the file-visibility question secondary**
+7. **Keep the file-visibility question secondary**
    - Goal: only revisit host-visible side-effect sync once the retained-worker and REPL parity/control-plane bugs are cleanly separated.
 
 ## 2026-06-29 patch sequence and current truth
@@ -449,7 +482,7 @@ Both were **partially right but incomplete / incorrect**:
 
 ### What the latest live runtime smoke established
 
-The most important recent live smoke is now:
+This older live smoke was the most important discriminator at that stage, but it is no longer current top-line truth after the later 2026-06-29 fixes and newest smoke:
 
 1. fresh REPL
 2. `::cli:codex-host just reply OK!`
@@ -458,14 +491,20 @@ The most important recent live smoke is now:
 5. failure:
    > `HTTP 400 Bad Request error: {"error":"member_dispatch.world_id mismatch (expected wld_..., got wld_019f08e8-dce6-74b0-9dc0-743ad2d297d8)"}`
 
-That smoke matters because it proves:
+At that point, the smoke mattered because it proved:
 
-- the old live-parent gate is no longer the active blocker on this path;
-- later targeted host follow-up continuity can work;
-- but ordinary REPL world-command/member bootstrap still sends a stale `world_id`;
-- and the stale `world_id` is stable across attempts, which strongly suggests a stale REPL/session-side binding source rather than random launch drift.
+- the old live-parent gate was no longer the active blocker on this path;
+- ordinary REPL world-command/member bootstrap was still sending a stale `world_id`;
+- and the stale `world_id` was stable across attempts, which strongly suggested a stale REPL/session-side binding source rather than random launch drift.
 
-Another important discriminator from the same smoke set:
+That older smoke should now be read as historical seam chronology only. Newer 2026-06-29 live smoke advanced this further:
+
+- after `::cli:codex-host just reply OK!`, ordinary unprefixed `ls` succeeds,
+- ordinary unprefixed `pwd` succeeds,
+- `cd ../` is blocked by the caged-root guard as expected,
+- and the remaining user-visible bug is no longer ordinary-command `world_id mismatch`, but resumed targeted host-turn continuity/context sourcing.
+
+Another important discriminator from that same older smoke set:
 
 - a **fresh REPL with no prior host turn** can still run `ls` successfully;
 - the failure is specifically introduced **after** the host orchestrator parks and later ordinary commands try to relaunch/bootstrap a world member.
@@ -506,7 +545,7 @@ The memo above is no longer current enough on the patch/review loop.
 
 The stale-binding issue did not stop at “ordinary REPL command needs retry/repair.” The later patch sequence established a more precise shape:
 
-> ordinary **unprefixed** REPL world commands may repair after an exact first `member_dispatch.world_id mismatch`, but detached targeted `::cli:codex-world ...` follow-up and `:pty` should remain fail-closed, and Linux authority must come from shared-world metadata rather than shell session truth.
+> ordinary **unprefixed** REPL world commands got the narrow repair seam, detached targeted `::cli:codex-world ...` follow-up still remains fail-closed, and Linux authority must come from shared-world metadata rather than shell session truth. Explicit `:pty` no longer belongs in that fail-closed bucket.
 
 That led to several thin patches and reviews.
 
@@ -531,9 +570,13 @@ That led to several thin patches and reviews.
 - A subsequent patch sequence did land the important design split:
   - ordinary **unprefixed** REPL world commands use the repair seam,
   - targeted `::cli:codex-world ...` remains fail-closed,
-  - `:pty` remains fail-closed,
+  - explicit `:pty` continues to route through persistent-session PTY execution rather than the removed fail-closed expectation,
   - and ordinary mismatch repair no longer uses shell session truth when shared-world metadata is absent.
 - Review still found one remaining authority broadening in the wider REPL sync path, which was then tightened so the REPL sync helper also stopped consuming unreadable-metadata live-participant fallback on this surface.
+- Current status:
+  - this narrowing is what got the ordinary-command path past the older parked-session survivability failure and then past the old first `world_id mismatch` failure,
+  - and later live smoke shows ordinary-command survivability has now materially improved,
+  - while the remaining live user-visible bug has moved to resumed targeted host-turn continuity/context sourcing across REPL and public `agent start|turn`.
 
 ### 4. Positive success regression was dead code, then fixed
 
@@ -544,6 +587,7 @@ That led to several thin patches and reviews.
   was present but not actually registered as a test.
 - A tiny follow-up patch added the missing test attributes.
 - Review validated that final test-enablement patch.
+- So the positive regression is now actually executing; that was enablement, not a behavior fix by itself.
 
 ### 5. Clippy-only patch was separate and healthy
 
@@ -554,47 +598,81 @@ That led to several thin patches and reviews.
 
 The latest real CLI/REPL smoke is now more important than the earlier `world_id mismatch` smoke.
 
-### REPL ordinary unprefixed command after parked host
+### REPL ordinary unprefixed commands after parked targeted host turn
 
-Observed:
+Observed in the newest live smoke:
 
 1. fresh REPL
 2. `::cli:codex-host just reply OK!`
 3. host parks cleanly
 4. ordinary unprefixed `ls`
-5. failure:
-   > `HTTP 400 Bad Request error: {"error":"member_dispatch.initial_prompt is required for launch-time first turn"}`
+5. ordinary unprefixed `pwd`
+6. ordinary unprefixed `cd ../`
+7. later targeted host follow-up asking:
+   - `what was the exact, full message I sent as the first user message in this session?`
+
+Results:
+
+- `ls` succeeds,
+- `pwd` succeeds,
+- `cd ../` is blocked by the caged-root guard as expected,
+- the later targeted host turn resumes over the same durable orchestration-session continuity,
+- but the semantic answer is wrong: it comes from broader outer conversation / `AGENTS.md` context rather than the Substrate session-local `just reply OK!`.
 
 Interpretation:
 
-- the stale `world_id mismatch` blocker is no longer the first failure on this path;
-- the binding-repair work appears to have progressed enough that the runtime now reaches the next gate;
-- the next active blocker is that the ordinary unprefixed REPL command launch path is still using a member-launch shape that expects a launch-time `initial_prompt`;
-- but plain shell commands like `ls` / `pwd` do not have an LLM prompt, so this is the wrong contract for that surface.
+- ordinary unprefixed-command survivability after parked host has materially improved in live smoke and should no longer be described as the main live bug,
+- transport/session reuse is not the primary failure on this seam anymore,
+- the remaining user-visible bug is resumed targeted host-turn context sourcing.
 
-### Fresh ordinary command without prior host turn still works
+### Explicit `:pty` directive truth
 
-Observed:
+Observed in adjacent regression coverage:
 
-- a fresh REPL with no prior parked host turn can still run plain `ls` successfully.
+- `:pty echo hello` routes to persistent-session exec passthrough with the stripped command payload.
 
 Interpretation:
 
-- the remaining failure is specifically tied to the post-parked-host ordinary-command relaunch/bootstrap path, not to ordinary world-backed command execution in general.
+- explicit `:pty` is not currently a fail-closed targeted-world seam;
+- stale memo language claiming explicit `:pty` fail-closed coverage existed should now be read as superseded history, not current truth.
 
-### Public `agent start` / `agent turn` continuity is still suspicious
+### Latest seam read from the two most recent probe passes
+
+Best current seam split:
+
+1. **Seam A: ordinary unprefixed commands**
+   - live smoke now shows parked host -> ordinary unprefixed `ls` / `pwd` success and expected caged-root `cd ../` denial,
+   - adjacent regression coverage also covers the implicit-PTY ordinary-command lane,
+   - so this seam has advanced past the earlier first-failure descriptions,
+   - but that should not be over-read as closure for every caller boundary.
+
+2. **Seam B: implicit PTY ordinary commands**
+   - adjacent coverage now shows a positive parked-host implicit-PTY ordinary-command resume path,
+   - so this seam is narrower than before,
+   - but it is no longer the top live blocker.
+
+3. **Seam C: resumed targeted host-turn semantic continuity**
+   - REPL and public CLI both now show reuse of transport/session identity,
+   - but both can still source the wrong conversation history on the resumed targeted host turn,
+   - so this is the top active live seam.
+
+### Public `agent start` / `agent turn` continuity is still semantically wrong
 
 Observed:
 
-1. `substrate agent start --backend cli:codex-world --scope world --prompt 'just reply OK!'`
+1. `substrate agent start --backend cli:codex-host --prompt 'just reply OK!'`
 2. ordinary shell command outside the agent surface succeeds
 3. `substrate agent turn --session <same> --backend cli:codex-host --prompt 'tell me what my last message said'`
-4. the reply came from broader conversation context, not effectively `just reply OK!`
+4. the same orchestration session is reused
+5. `resumed_from_participant_id` is present
+6. the same UAA session id appears to persist
+7. but the reply still comes from broader conversation context, not effectively `just reply OK!`
 
 Interpretation:
 
-- the public durable-session continuity surface is still not trustworthy enough to call “done”;
-- this is a different seam from the current ordinary unprefixed REPL `initial_prompt` blocker, but it remains open.
+- the public durable-session continuity surface now looks transport-correct but semantically wrong;
+- the remaining problem is not “new session accidentally created” but “wrong context hydrated onto the resumed targeted turn”;
+- this seam matches the REPL failure closely enough that they should now be treated as one top-priority continuity/context-sourcing bug family.
 
 ## What is now actually landed and trusted
 
@@ -603,78 +681,67 @@ At this point the following narrow claims appear trustworthy:
 1. **One-shot `run_world_task` stale-binding mismatch is no longer the primary live blocker**
    - that earlier seam appears repaired enough that later runtime smoke moved on to different failures.
 
-2. **Targeted host follow-up continuity inside the REPL is materially improved**
-   - parked `::cli:codex-host ...` can later accept another targeted host turn without immediately failing on the old live-parent gate.
+2. **Ordinary-command survivability after parked targeted host turn is materially improved in live smoke**
+   - after `::cli:codex-host just reply OK!`, ordinary unprefixed `ls` and `pwd` succeed and `cd ../` is denied by the caged-root guard as expected.
 
-3. **The design split between ordinary unprefixed commands and fail-closed targeted-world/`:pty` paths is now reflected in tests**
+3. **Resumed targeted host turns now appear to reuse transport/session identity correctly**
+   - same `orchestration_session_id` is reused,
+   - `resumed_from_participant_id` is present,
+   - the same UAA session id appears to persist,
+   - but semantic conversation continuity is still wrong.
+
+4. **The parked-session survivability slice that removed the old `no live orchestrator parent` first failure is landed**
+   - that older failure is no longer the first blocker on the ordinary unprefixed path.
+
+5. **The current test split is now reflected in adjacent coverage**
    - targeted `::cli:codex-world ...` fail-closed coverage exists
-   - `:pty` fail-closed coverage exists
-   - the positive parked-host -> ordinary command -> targeted host resume regression now actually executes
+   - explicit `:pty` positive persistent-session routing coverage exists
+   - the positive parked-host -> ordinary unprefixed implicit-PTY command -> targeted host resume regression now actually executes
 
-4. **But the positive regression is still not equivalent to the live runtime failure we are now seeing**
-   - tests currently validate the mismatch-repair seam;
-   - live runtime is now failing later on launch-time `initial_prompt` requirements;
-   - so the harness is still not modeling the full real launch contract closely enough.
+6. **But the live failure has moved above the current regression focus**
+   - tests currently validate important routing boundaries,
+   - while the newest live bug is resumed targeted host-turn semantic continuity/context sourcing across both REPL and public CLI.
+
+7. **Invalidated vs retained patch slices are now clearer**
+   - invalidated:
+     - the generic member-bootstrap retry patch
+     - the later narrower retry patch that still widened the seam incorrectly
+   - retained:
+     - parked-session survivability work that got past the old live-parent failure
+     - the shared-metadata-only narrowing for ordinary unprefixed binding repair
+     - the positive regression enablement patch that made the intended success test actually run
 
 ## Updated active blockers
 
 The open bug buckets should now be read in this order:
 
-1. **ordinary unprefixed REPL world-command launch contract still wrongly requires `member_dispatch.initial_prompt` after parked host turns**
-2. **public `agent start` / `agent turn` durable-session continuity still appears semantically wrong in live smoke**
-3. **retained-worker bootstrap parity (`spawn_world_worker`) is still open**
-4. **retained-worker authority/linkage across successor host participants (`stale_linkage`) remains open**
-5. **worker turn execution failure (`codex exited non-zero`) remains a separate issue**
-6. **test harness still does not fully model the real launch-time first-turn contract for ordinary unprefixed REPL commands**
+1. **Resumed targeted host-turn continuity/context scoping is still wrong across both REPL and public `agent start|turn`**
+2. **retained-worker bootstrap parity (`spawn_world_worker`) is still open**
+3. **retained-worker authority/linkage across successor host participants (`stale_linkage`) remains open**
+4. **worker turn execution failure (`codex exited non-zero`) remains a separate issue**
+5. **implicit-PTY ordinary-command caller-boundary clarification/coverage is still useful, but it is no longer the top live blocker**
+6. **test harness still does not fully model every live caller boundary or resumed-context seam**
 7. **host-visible file/write semantics remain open but are not first in priority**
 
-## Updated next thin patches
+Do not describe ordinary-command survivability after parked host as the primary open bug in this memo anymore:
 
-### Patch 1: ordinary unprefixed REPL command first-turn contract
+- the newest live smoke shows meaningful success on `ls` / `pwd` and the expected caged-root denial on `cd ../`,
+- so the main remaining failure is semantic continuity on resumed targeted host turns.
 
-Goal:
+## Next planned landing order
 
-- fix the post-parked-host ordinary unprefixed REPL command path so `ls`, `pwd`, `cd`, etc. do not route through a member-launch shape that requires `initial_prompt`.
+1. **Fix resumed targeted host-turn continuity/context sourcing first**
+   - target the wrong prompt/history hydration on resumed targeted host turns in both REPL and public `agent start|turn`.
 
-Likely seam:
+2. **Keep ordinary-command survivability as the live regression baseline**
+   - do not regress parked-host -> ordinary unprefixed `ls` / `pwd` success, expected caged-root `cd ../` denial, or the adjacent implicit-PTY regression while fixing continuity.
 
-- the ordinary unprefixed REPL command member/runtime launch path in `crates/shell/src/repl/async_repl.rs`
-- specifically the launch-time first-turn contract used after parked host state when a world-backed command needs a member runtime
+3. **Then return to retained-worker bootstrap/linkage seams**
+   - resume `spawn_world_worker` first-dispatch parity and successor-linkage work once the top continuity/context bug is cleanly separated.
 
-Success condition:
-
-- real manual smoke:
-  - fresh REPL
-  - `::cli:codex-host just reply OK!`
-  - clean park
-  - `ls`
-  - no `member_dispatch.initial_prompt is required for launch-time first turn`
-
-### Patch 2: public `agent start` / `agent turn` continuity correction
-
-Goal:
-
-- ensure public durable session follow-up semantics behave like the intended session-local memory contract rather than answering from broader thread context.
-
-Success condition:
-
-- real manual smoke:
-  - `agent start ... 'just reply OK!'`
-  - ordinary shell command
-  - `agent turn --session ... 'tell me what my last message said'`
-  - answer effectively `just reply OK!`
-
-### Patch 3: retained-worker bootstrap parity
-
-Goal:
-
-- apply the same final contract-correct repair/launch semantics to `spawn_world_worker` bootstrap.
-
-### Patch 4: harness realism for ordinary unprefixed launch-time first turn
-
-Goal:
-
-- make integration coverage reproduce the real `initial_prompt` launch failure/success boundary so tests stop going green ahead of live runtime.
+4. **Only after the live continuity bug is fixed, do the structural enum/type cleanup before the UAA boundary**
+   - replace ambiguous `Option<prompt>` / launch-policy semantics with an explicit pre-UAA representation so ordinary commands and prompt-bearing turns cannot be conflated accidentally.
+   - this is still wanted, but it should be treated as hardening/refactor work after the live continuity bug is closed, not as the next patch.
 
 ## Short operational summary
 
@@ -683,11 +750,15 @@ If we need the shortest honest current diagnosis:
 - the missing host file is still most likely a **workspace sync / host visibility** issue, not proof of non-execution;
 - the host-visible side-effect contract is still **open**;
 - the earlier one-shot REPL first-dispatch `run_world_task` stale-binding mismatch is no longer the first live blocker;
-- the current first live blocker on ordinary unprefixed REPL commands after parked host turns is:
-  - `member_dispatch.initial_prompt is required for launch-time first turn`
-- targeted host follow-up continuity is better than it was, but public `agent start` / `agent turn` continuity still looks semantically wrong in live smoke;
+- ordinary-command survivability after parked targeted host turn is materially better in live smoke:
+  - `ls` succeeds
+  - `pwd` succeeds
+  - `cd ../` is denied by the caged-root guard as expected
+- explicit `:pty` should not be described as fail-closed on this memo's current truth;
+- REPL and public CLI both now appear to reuse the same transport/session continuity markers on resumed targeted host turns;
+- but the top active bug is still resumed targeted host-turn context sourcing, because the answer is coming from broader outer conversation context instead of the session-local `just reply OK!`;
 - still-open likely bug buckets are:
-  - ordinary unprefixed REPL command launch-time first-turn contract,
+  - resumed targeted host-turn continuity/context scoping,
   - public durable-session continuity semantics,
   - retained-worker bootstrap parity,
   - retained-worker successor-linkage / `stale_linkage`,
@@ -705,11 +776,12 @@ When using this file during debugging, keep these constraints explicit:
 - do not use shell session JSON as co-authoritative Linux world-binding proof for the ordinary unprefixed REPL command repair seam;
 - do not assume shared-world metadata absence/unreadability is repairable on this REPL surface unless the design/docs explicitly say so;
 - do not describe `active_attached` or auto-attach in process-liveness terms; the transcript clarified that all durable truth is Substrate-owned and backend execution is headless/ephemeral;
+- do not say explicit `:pty` fail-closed coverage exists; current adjacent truth is positive persistent-session `:pty` routing coverage;
 - do not treat REPL as a semantically distinct lifecycle surface from CLI; parity is part of the product contract;
 - distinguish:
   - ordinary unprefixed REPL commands,
   - `:pty` commands,
-  - targeted `::cli:codex-world ...` turns,
+  - targeted `::cli:...` prompt-bearing turns,
   because the intended repair/fail-closed behavior differs across those surfaces;
 - do not widen this memo into a generic retained-worker architecture doc;
 - if later repros keep showing “first `spawn_world_worker` dispatch mismatches, later launch or public follow-up succeeds,” prioritize retained-worker first-dispatch world-binding and successor-linkage seams over the already-repaired one-shot `run_world_task` path.
