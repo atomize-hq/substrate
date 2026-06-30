@@ -2066,6 +2066,7 @@ where
         prompt,
         host_toolbox_surface_authoritative,
     );
+    let continuity_session_id = prompt_submit_continuity_session_id(runtime);
 
     let request = agent_api::AgentWrapperRunRequest {
         prompt: request_prompt,
@@ -2077,7 +2078,7 @@ where
         )?,
         extensions: std::collections::BTreeMap::from([(
             AGENT_API_SESSION_RESUME_V1.to_string(),
-            build_session_resume_extension(&runtime.uaa_session_handle_id),
+            build_session_resume_extension(&continuity_session_id),
         )]),
     };
     let control = prompt_fulfillment
@@ -2134,6 +2135,31 @@ where
         exit_code: completion.status.code().unwrap_or(-1),
         warning: warning_for_exit_status(&completion.status),
     })
+}
+
+fn prompt_submit_continuity_session_id(runtime: &PromptSubmitRuntime) -> String {
+    if let Some(session_id) = runtime
+        .orchestration_session
+        .lock()
+        .expect("orchestration session mutex poisoned")
+        .host_attach_contract()
+        .and_then(HostAttachContract::public_attach_continuity_session_id)
+        .map(str::to_owned)
+    {
+        return session_id;
+    }
+
+    if let Some(session_id) = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .internal_uaa_session_id()
+        .map(str::to_owned)
+    {
+        return session_id;
+    }
+
+    runtime.uaa_session_handle_id.clone()
 }
 
 #[cfg(target_os = "linux")]
@@ -3771,6 +3797,88 @@ mod tests {
             park_after_turn_tx: None,
             host_toolbox_surface_authoritative: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    #[test]
+    fn prompt_submit_continuity_prefers_persisted_session_contract() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut manifest = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_prompt_continuity_contract".to_string(),
+                "ash_prompt_continuity_contract".to_string(),
+                "lease_prompt_continuity_contract".to_string(),
+            )
+            .expect("orchestrator participant");
+            manifest.transition_state(AgentRuntimeSessionState::Ready);
+            manifest.set_uaa_session_id("uaa_manifest_fresh".to_string());
+
+            let mut host_attach_contract =
+                HostAttachContract::from_manifest_for_test(&manifest).expect("attach contract");
+            host_attach_contract.continuity_uaa_session_id = Some("uaa_contract_fresh".to_string());
+
+            let orchestration_session = OrchestrationSessionRecord::new(
+                "sess_prompt_continuity_contract".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &manifest,
+                Some(host_attach_contract),
+            );
+            let mut runtime =
+                prompt_submit_runtime_for_test(store, orchestration_session, manifest);
+            runtime.uaa_session_handle_id = "uaa_runtime_stale".to_string();
+
+            assert_eq!(
+                super::prompt_submit_continuity_session_id(&runtime),
+                "uaa_contract_fresh"
+            );
+        });
+    }
+
+    #[test]
+    fn prompt_submit_continuity_falls_back_to_manifest_when_session_contract_missing() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut manifest = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_prompt_continuity_manifest".to_string(),
+                "ash_prompt_continuity_manifest".to_string(),
+                "lease_prompt_continuity_manifest".to_string(),
+            )
+            .expect("orchestrator participant");
+            manifest.transition_state(AgentRuntimeSessionState::Ready);
+            manifest.set_uaa_session_id("uaa_manifest_fresh".to_string());
+
+            let orchestration_session = OrchestrationSessionRecord::new(
+                "sess_prompt_continuity_manifest".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &manifest,
+                None,
+            );
+            let mut runtime =
+                prompt_submit_runtime_for_test(store, orchestration_session, manifest);
+            runtime.uaa_session_handle_id = "uaa_runtime_stale".to_string();
+
+            assert_eq!(
+                super::prompt_submit_continuity_session_id(&runtime),
+                "uaa_manifest_fresh"
+            );
+        });
     }
 
     #[test]

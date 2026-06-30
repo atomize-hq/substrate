@@ -81,6 +81,12 @@ When explicit shared-owner reuse is active, the authoritative proof surface is `
 - `world_generation`
 - `binding_state`
 
+Identifier placement note:
+- This document owns the meaning of shared-world proof fields (`world_id`, `world_generation`,
+  `binding_state`) only.
+- The broader session/participant/trace continuity map lives in
+  `docs/internals/agent_runtime/session_identity_and_continuity.md`.
+
 Current enforcement boundary:
 
 - Linux remains the source-of-truth implementation for owner-bound shared-world reuse semantics, and those semantics live in `crates/world`.

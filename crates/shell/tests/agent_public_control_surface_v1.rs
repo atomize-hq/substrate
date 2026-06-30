@@ -639,6 +639,23 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
     path
 }
 
+fn write_fake_codex_script_resume_requires_expected_handle(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-resume-requires-expected-handle.sh");
+    let count_path = dir.join("fake-codex-resume-requires-expected-handle.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nresume_handle=\nexpect_resume_handle=0\nfor arg in \"$@\"; do\n  if [ \"$expect_resume_handle\" -eq 1 ]; then\n    resume_handle=\"$arg\"\n    break\n  fi\n  if [ \"$arg\" = \"resume\" ]; then\n    expect_resume_handle=1\n  fi\ndone\nreply=NO_RESUME\nif [ \"$resume_handle\" = \"uaa-sess_turn_contract_semantic\" ]; then\n  reply='just reply OK!'\nelif [ -n \"$resume_handle\" ]; then\n  reply=OUTER_CONTEXT\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"%s\"}}\\r\\n' \"${{resume_handle:-thread-missing}}\"\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"%s\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"${{resume_handle:-thread-missing}}\" \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"%s\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"%s\"}}}}\\r\\n' \"${{resume_handle:-thread-missing}}\" \"$count\" \"$count\" \"$reply\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"%s\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"${{resume_handle:-thread-missing}}\" \"$count\"\nexit 0\n",
+        count_path.display(),
+        dir.display(),
+    );
+    fs::write(&path, body).expect("write expected-handle fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("expected-handle fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set expected-handle fake codex permissions");
+    path
+}
+
 fn write_fake_claude_script(dir: &Path) -> PathBuf {
     let path = dir.join("fake-claude.sh");
     let count_path = dir.join("fake-claude.count");
@@ -4242,6 +4259,62 @@ fn public_turn_uses_persisted_attach_continuity_selector_when_recovering_detache
     assert!(
         !args.iter().any(|arg| arg == "uaa-ambient-turn"),
         "detached host turn recovery must not derive continuity from the detached participant snapshot: {args:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_turn_semantically_uses_persisted_attach_continuity_when_recovering_detached_host_turns() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_resume_requires_expected_handle,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_turn_contract_semantic",
+        "ash_turn_contract_semantic",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_contract_semantic",
+        "codex",
+        "sess_turn_contract_semantic",
+        "running",
+        false,
+        Some("uaa-ambient-turn"),
+        None,
+        ts,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_turn_contract_semantic",
+        "--backend",
+        "cli:codex-host",
+        "--prompt",
+        "tell me what my last message said",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "detached host turn should recover through the persisted continuity handle: {output:?}"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("just reply OK!"),
+        "detached host turn must answer from the persisted session-local continuity, not broader context: {stdout}"
+    );
+    assert!(
+        !stdout.contains("OUTER_CONTEXT"),
+        "detached host turn must not answer from broader ambient context: {stdout}"
     );
 }
 

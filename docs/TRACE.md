@@ -65,6 +65,8 @@ Operator note (non-negotiable):
 - Invalidated participant tombstones in canonical or flat compatibility participant records beat stale trace fallback rows for live-state selection. If no replacement participant has been persisted yet for the same `(orchestration_session_id, agent_id, execution.scope)` tuple, the selected live surface omits that tuple instead of resurfacing stale liveness from trace.
 - Runtime participant lineage persists under `resumed_from_participant_id`; any `resumed_from_session_handle_id` input is compatibility-only aliasing on read.
 - Trace remains the canonical historical event log and historical fallback for `substrate agent status` gaps only. Trace never authorizes current-session toolbox state or `substrate agent toolbox env`.
+- This document owns emitted trace/event correlation fields. The broader runtime identity taxonomy
+  and continuity map lives in `docs/internals/agent_runtime/session_identity_and_continuity.md`.
 
 ### Command Span Schema (`command_start` / `command_complete`)
 
@@ -154,6 +156,11 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `agent_id`: actor/principal identifier (`human` for direct operator actions; agent inventory id for agent-driven records).
 - `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex-host`, `api:openai`) when a specific backend is involved.
 - `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
+
+Internal ownership note:
+- `session_id` here means the shell trace session id, not `orchestration_session_id`.
+- `run_id`/`latest_run_id` remain correlation aids, not durable ownership selectors.
+- `participant_id`/`resumed_from_participant_id` remain runtime lineage fields, not public control selectors.
 
 Emission rule:
 - `AgentEvent` keeps backward-compatible additive lineage fields: `participant_id`, `parent_participant_id`, and `resumed_from_participant_id`.

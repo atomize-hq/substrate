@@ -14,6 +14,7 @@ What does not belong here:
 
 ## Sections
 
+- `docs/internals/agent_runtime/`
 - `docs/internals/broker/`
 - `docs/internals/config/`
 - `docs/internals/env/`

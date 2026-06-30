@@ -37,6 +37,10 @@ This ADR owns the durable host-orchestration posture surfaced through:
 - `substrate agent reattach`
 - `substrate agent stop`
 
+Field-level identifier placement and continuity semantics now live in
+`docs/internals/agent_runtime/session_identity_and_continuity.md`. This ADR remains the decision
+owner for durable-session posture, not the exhaustive field glossary.
+
 ## Current Implementation Anchors
 
 The decision is materially implemented and verified through:

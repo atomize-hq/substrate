@@ -37,12 +37,18 @@ The stable placement posture is:
 This keeps operator, status, and trace semantics aligned with the actual runtime split between
 Substrate and `substrate-gateway`.
 
+`backend_id` remains intentionally separate from this tuple. It is the exact backend/adaptor
+selector, not semantic identity; for the runtime taxonomy, selector boundary, and where
+`backend_id` is stored/emitted, see
+`docs/internals/agent_runtime/session_identity_and_continuity.md`.
+
 ## Stable Owned Surface
 
 This ADR remains the semantic owner for:
 
 - `identity_tuple`
 - `placement_posture`
+- the boundary that keeps `backend_id` separate from semantic tuple meaning
 
 Current stable contract references that depend on this ownership include:
 

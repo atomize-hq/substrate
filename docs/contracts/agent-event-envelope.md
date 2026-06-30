@@ -7,6 +7,7 @@ Related references:
 - `docs/TRACE.md`
 - `docs/adr/implemented/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
 - `docs/adr/implemented/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+- `docs/internals/agent_runtime/session_identity_and_continuity.md`
 
 ## Scope
 
@@ -56,16 +57,34 @@ Required attribution and correlation fields:
 
 Optional correlation fields:
 
+- `parent_run_id`
 - `backend_id`
 - `thread_id`
 - `role`
+- `participant_id`
+- `parent_participant_id`
+- `resumed_from_participant_id`
 - `world_id`
+- `world_generation`
 - `cmd_id`
 - `span_id`
 
+Lineage and runtime-identity note:
+
+- `participant_id`, `parent_participant_id`, `resumed_from_participant_id`, `world_id`, and
+  `world_generation` are emitted here only as additive lineage/correlation fields.
+- The canonical meaning and ownership boundaries for those ids live in
+  `docs/internals/agent_runtime/session_identity_and_continuity.md`.
+
 ## Identity-Tuple-Compatible Metadata
 
-These fields are optional and additive:
+Canonical envelope objects are optional and additive:
+
+- `identity_tuple`
+- `placement_posture`
+
+When `identity_tuple` is present, canonical trace publication also projects these additive flat
+fields for join/search convenience:
 
 - `client`
 - `router`
@@ -78,6 +97,8 @@ Boundary rules:
 - pure agent/toolbox records may omit `provider` and `auth_authority`
 - nested gateway-backed records may include `provider` and `auth_authority`
 - `backend_id` remains adapter-only and must not be treated as semantic identity
+- `placement_posture` remains the canonical execution-placement object; flat tuple fields do not
+  replace it
 - interpretation of these tuple fields remains owned by the identity ADR chain, not by this schema
 
 ## Routing Hint
@@ -137,6 +158,6 @@ Additional alert fields:
 
 - pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` and
   `auth_authority`
-- host-scoped pure-agent records omit `world_id`
+- host-scoped pure-agent records omit `world_id` and `world_generation`
 - nested gateway-backed records may add `provider` and `auth_authority`, but omit `world_id`
   and `world_generation`

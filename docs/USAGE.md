@@ -106,6 +106,11 @@ When the async REPL owns a shell-scoped orchestrator session, live session disco
 
 Trace is historical fallback only for `substrate agent status` gaps after live-state filtering. It can still contribute `source_kind=trace_fallback` pure-agent rows and trace-correlated `nested_llm_records`, but it never authorizes live posture truth for the three durable-session fields and never authorizes current-session toolbox state or `substrate agent toolbox env`.
 
+Identifier ownership for durable sessions, participant lineage, shared-world binding, backend-native
+continuity, and trace correlation lives in
+`docs/internals/agent_runtime/session_identity_and_continuity.md`. This usage guide owns only the
+public selector contract.
+
 ### Public Session Control
 
 The public prompt-taking and control surface is intentionally narrow:
@@ -130,6 +135,8 @@ substrate agent stop --session <orchestration_session_id> --json
 - `substrate agent stop` is the canonical closeout path for attached and parked durable host sessions.
 - `substrate agent status --json` is the authoritative live-runtime read surface for `posture`, `attached_participant_id`, and `pending_inbox_count`; `born_unattached` remains specialized/legacy posture truth rather than the default public world-backed start posture.
 - Public follow-up never falls back to `participant_id`, legacy `session_handle_id`, `active_session_handle_id`, or `internal.uaa_session_id`; those selector shapes fail closed.
+- Public selector rule: only `orchestration_session_id` and exact `backend_id` are supported public
+  control inputs on this surface.
 - There is still no default-agent routing and there is still no standalone member-root public world-root start/continuity model.
 - Prompt-bearing host execution and Linux world-member execution now fulfill through the gateway-mediated adapter seam while preserving the same visible `start` / `turn` / `reattach` / `stop` lifecycle contract.
 - On Linux, exact world-member follow-up reuses the retained member slot and submits through the typed `/v1/member_turn/stream` path.
