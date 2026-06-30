@@ -145,11 +145,15 @@ objective-coupled `R6` code lands.
 
 ## Task Order
 
-Tasks 1-3 are **complete** as of 2026-06-27 — the consumer/failure-mode investigation and the
+Tasks 1-4 are **complete** as of 2026-06-30 — the consumer/failure-mode investigation and the
 `Decision Gate 0` resolution landed in
 `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md` (which also fixes the packet
-decomposition: `R6-1`, `R6-2`, conditional `R6-3`), and the `R6-1` and `R6-2` SPEC/PLAN/TASKS sets are
-written (see Packet Documents below). Tasks 4-5 are the remaining execution sequence.
+decomposition: `R6-1`, `R6-2`, conditional `R6-3`), the `R6-1` and `R6-2` SPEC/PLAN/TASKS sets are
+written (see Packet Documents below), and `R6-1` closed review-clean with the full analyzer wall plus
+touched sentinel spot-checks green (`cargo test -p agent-drift-analyzer -- --nocapture`,
+`cargo test -p agent-drift-sentinel warning_policy -- --nocapture`,
+`cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`). Task 5 is now the active next
+execution sequence.
 
 ### Packet Documents
 
@@ -165,9 +169,12 @@ written (see Packet Documents below). Tasks 4-5 are the remaining execution sequ
    the `R6` DESIGN doc.
 3. **[done] Lock `R6` scope + acceptance wall.** The `R6-1` and `R6-2` SPEC/PLAN/TASKS sets are written
    under `docs/specs/r6/R6-1/` and `docs/specs/r6/R6-2/` (Packet Documents above).
-4. **`dead_end_thrash` cutover (`R6-1`, gate-independent).** Implement per the `R6-1` SPEC/PLAN/TASKS:
-   frontier-aware decisive-step scoring + the two objective-independent process dimensions, rule-based.
-5. **Objective-coupled work (`R6-2`, then conditional `R6-3`).** Implement the
+4. **[done] `dead_end_thrash` cutover (`R6-1`, gate-independent).** Landed per the `R6-1`
+   SPEC/PLAN/TASKS: frontier-aware decisive-step scoring + the two objective-independent process
+   dimensions, rule-based, with closeout confirmed by the green analyzer wall and touched sentinel
+   spot-checks on 2026-06-30. `R6-1` is promoted history.
+5. **Objective-coupled work (`R6-2`, then conditional `R6-3`).** `R6-2` is the next active seam.
+   Implement the
    `semantic drift from kickoff/plan/docs` dimension as a new structured-sidecar consumer per `R6-2`; open
    the conditional `R6-3` reset migration only if `R6-1`/`R6-2` evidence warrants. Guardrails enforced in
    tests throughout.
