@@ -79,7 +79,7 @@ The still-live issues being debugged are now the combination of:
 2. adjacent retained-mode `cancel_world_work` still failing live with the same `authoritative-live` stale-linkage class and likely an additional cancel-eligibility seam behind it,
 3. retained-worker follow-up/control operations remaining intentionally split by seam boundary:
    - retained `fork_world_worker` and retained-mode `cancel_world_work` are supposed to keep successor-lineage authority,
-   - retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority by design,
+   - retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority in the presently landed implementation boundary,
 4. worker turn execution failure (`codex exited non-zero`) remaining unresolved and distinct from the retained follow-up/control-plane failures,
 5. and the older host-visible-file question still remaining secondary to those routing/control-plane issues.
 
@@ -329,7 +329,8 @@ The older retained-worker probes sharpened that interpretation further:
 
 - retained-worker authority is session-rooted under `orchestration_session_id`, not pinned to one attached host participant;
 - `spawn_world_worker` is supposed to use the authoritative session `world_id` / `world_generation` from the bound session, not caller-remembered values;
-- retained-worker follow-up/control operations (`continue_world_worker`, `inspect_world_worker`, `stop_world_worker`) are supposed to survive host detach/reattach and successor host participants;
+- retained successor `fork_world_worker` and retained-mode `cancel_world_work` are the follow-up/control operations expected to remain successor-authorized;
+- retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority in the presently landed implementation boundary;
 - `participant_id` is the authoritative retained-worker control handle;
 - `resumed_from_participant_id` is lineage/audit metadata, not the control selector;
 - so absent a genuine world replacement / generation rollover, `stale_linkage` currently reads as design-wrong rather than expected contract enforcement.
@@ -400,7 +401,7 @@ The newer smokes add one more refinement:
   - `cd ../` is blocked by the caged-root guard as expected
 - and the later continuity-selector precedence fix closed the resumed targeted host-turn semantic continuity bug on both REPL and public CLI.
 
-So the current live mismatch is narrower than “reattach is broken” or “all world dispatch is broken.” The main remaining runtime failures are now retained-worker bootstrap/linkage/execution seams, not ordinary-command survivability or resumed targeted host-turn continuity.
+So the current live mismatch is narrower than “reattach is broken” or “all world dispatch is broken.” The main remaining runtime failures are now the retained parked/resumable `authoritative-live` seam for successor `fork_world_worker`, then adjacent retained `cancel_world_work`, and only later worker execution, not ordinary-command survivability or resumed targeted host-turn continuity.
 
 ## What the cited runtime/docs actually establish
 
@@ -487,18 +488,18 @@ Both should also validate:
 
 These are the best next debugging checks to separate confirmed truth from still-likely theory:
 
-1. **Trace `spawn_world_worker` first-dispatch world-binding handoff**
-   - Goal: identify where the retained-worker launch path still disagrees on `world_id` / `world_generation` while one-shot `run_world_task` no longer does.
+1. **Trace retained successor `fork_world_worker` through the parked/resumable `authoritative-live` gate**
+   - Goal: identify where a cleanly parked/resumable retained worker stops qualifying as `authoritative-live` for successor-authorized retained fork follow-up.
    - Most likely seams:
-     - `crates/shell/src/repl/async_repl.rs`
+     - `crates/world-service/src/member_runtime.rs`
      - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
-     - `crates/shell/src/execution/repl_persistent_session.rs`
+     - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
 
-2. **Trace retained-worker authority/linkage across successor host participants**
-   - Goal: explain why `inspect_world_worker` / `stop_world_worker` fail with `stale_linkage` after a later public host participant becomes authoritative.
+2. **Then trace retained-mode `cancel_world_work` on the same retained worker**
+   - Goal: confirm whether `cancel_world_work` is blocked by the same wrong `authoritative-live` gate alone or whether a narrower retained cancel-eligibility seam appears immediately after it.
 
 3. **Separate worker execution failure from control-plane failure**
-   - Goal: keep `continue_world_worker` worker-turn `codex exited non-zero` analysis separate from binding/linkage bugs so they do not get conflated.
+   - Goal: keep `continue_world_worker` worker-turn `codex exited non-zero` analysis separate from the retained fork/cancel liveness-predicate bug so they do not get conflated.
 
 4. **Keep ordinary-command survivability as a regression baseline**
    - Goal: preserve live `ls` / `pwd` success and expected caged-root `cd ../` denial after park while working retained-worker seams.
@@ -806,7 +807,7 @@ At this point the following narrow claims appear trustworthy:
 
 6. **But the live failure has moved above the current regression focus**
    - tests currently validate important routing boundaries,
-   - while the newest live bugs are now retained-worker bootstrap/linkage/execution seams rather than resumed targeted host-turn continuity.
+   - while the newest live bugs are now retained successor `fork_world_worker` `authoritative-live` gating, adjacent retained `cancel_world_work`, and only then worker execution rather than resumed targeted host-turn continuity.
 
 7. **ID taxonomy / continuity documentation is landed enough for this seam**
    - the canonical internal doc exists:
