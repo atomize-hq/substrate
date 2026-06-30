@@ -1,7 +1,9 @@
 # Tasks: Agent Drift Analyzer Dead-End-Thrash Cutover And Frontier-Aware Process Dimensions (R6-1)
 
-Status: task ledger created on 2026-06-27 from the `R6-1` SPEC/PLAN in this directory. Packet not yet
-started; all tasks open. This ledger is the closeout record as tasks land.
+Status: task ledger created on 2026-06-27 from the `R6-1` SPEC/PLAN in this directory. The docs lock is
+already committed at HEAD (`eb7225b85`), and Task `R6-1.1.1` was completed on 2026-06-30 via a read-only
+frontier-predicate/access-path investigation. Later implementation tasks remain open. This ledger is the
+closeout record as tasks land.
 
 Packet prerequisite rule: this packet names `R5.75` as landed. Verify it in live code/tests before
 editing (it is, at HEAD — the analyzer wall and sentinel spot-checks are green). If a named prerequisite
@@ -9,7 +11,7 @@ were missing, stop and report it instead of compensating inside this packet.
 
 ## R6-1.0: Docs Lock
 
-- [ ] Task R6-1.0.1: Commit the SPEC/PLAN/TASKS family.
+- [x] Task R6-1.0.1: Commit the SPEC/PLAN/TASKS family.
   - Acceptance: `docs/specs/r6/R6-1/` contains the spec, plan, and this tasks ledger, and they record the
     objective-independence boundary, the within-`DeadEndThrash` modeling of the two process dimensions,
     the frozen-corpus regression floor, and the no-`DriftClass`-variant / no-schema-bump boundary.
@@ -18,10 +20,13 @@ were missing, stop and report it instead of compensating inside this packet.
     - `docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-spec.md`
     - `docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-plan.md`
     - `docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-tasks.md`
+  - Closeout note (2026-06-30): the prerequisite re-check for `R6-1.1` confirmed the docs-lock family is
+    already committed at HEAD in `eb7225b85` (`docs(r6): land R6 scorer-cutover spec family with review fixes`),
+    so `R6-1.0` is treated as landed history rather than work to repeat in this packet.
 
 ## R6-1.1: Choose The Frontier-Access Path And Predicate (Investigation, No Committed Code)
 
-- [ ] Task R6-1.1.1: Decide how the scorer reaches the frontier judgment, and which predicate to use.
+- [x] Task R6-1.1.1: Decide how the scorer reaches the frontier judgment, and which predicate to use.
   - Acceptance: a recorded finding (in this ledger) that (a) names the chosen **access path** — default
     recommendation: compute `build_session_progress`/`build_session_archetype` before `score_session` and
     pass the frontier signal (or `SessionProgress`) into `score_dead_end_thrash` (additive input change +
@@ -37,7 +42,49 @@ were missing, stop and report it instead of compensating inside this packet.
     - (read-only) `crates/agent-drift-analyzer/src/checkpoint/progress.rs`,
       `crates/agent-drift-analyzer/src/checkpoint/mod.rs` (pipeline order / reorder target),
       `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`
-  - Finding: _(record here when complete — access path + predicate)_
+  - Finding (2026-06-30): read-only investigation resolved SPEC Open Question 1 as follows:
+    - chosen access path for `R6-1.2`: compute `build_session_archetype` and `build_session_progress`
+      before `score_session`, then pass the resulting `SessionProgress` (or an additive bool derived from
+      it) into `score_dead_end_thrash`. At HEAD, `build_session_checkpoint_from_analysis_with_ordinal`
+      still computes `drift_scores` before `build_session_archetype` / `build_session_progress`, and
+      `session_progress` exists only on the exported `Checkpoint`, not on `CheckpointAnalysis`, so the
+      scorer cannot read the frontier judgment at scoring time without this bounded reorder/input change.
+      Recomputing the predicate inside `dead_end_thrash.rs` was rejected because it would fork the
+      `progress.rs` source of truth and bypass the existing zero-verifier fallback / delegation-cap logic.
+    - chosen frontier predicate: treat the frontier as advanced only when
+      `session_progress.dimension == troubleshooting_frontier` and `session_progress.signals` contains one
+      of the existing direct troubleshooting-advancement codes already used by `progress.rs` to return
+      `ProgressStatus::Advancing`: `failure_frontier_advanced`, `failure_count_reduced`, or
+      `verification_clean`. For `dead_end_thrash`, repeated activity with no such signal counts as
+      **no frontier movement**.
+    - exact signals read by that predicate:
+      - `failure_frontier_advanced`: blocked-before-target -> target-exercised or later failure-class
+        movement within the troubleshooting pipeline.
+      - `failure_count_reduced`: the comparable failing count drops on the same troubleshooting scope.
+      - `verification_clean`: a previously failing focused verification target reaches a clean result.
+    - signals explicitly **not** treated as frontier movement: `failing_scope_edited` alone, planning
+      signals such as `candidate_set_*` / `working_set_*`, and `delegation_visibility_limited`. Those can
+      produce `mixed`, `stalled`, or non-troubleshooting lanes without a genuine troubleshooting-frontier
+      advance, which is exactly the false-positive path this packet must avoid.
+    - why this predicate is the live authority boundary: `progress.rs` already encodes the same split via
+      `has_direct_troubleshooting_advancement_signal(...)` -> `ProgressStatus::Advancing`; positive-but-not-direct
+      signals remain `mixed`, and negative-only signals become `stalled` / `regressing`. Reusing that
+      boundary lets `R6-1.2` consume the existing frontier judgment rather than inventing a second model.
+    - corpus / witness confirmation (read-only evidence only; no production changes):
+      - frozen `dead_end_thrash` corpus: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_ -- --nocapture`
+        passed, preserving `019e93fa-60d4-73d1-9092-014130b60e14`,
+        `019e940c-a91b-7fe0-a967-b0bdd595b581`, and `019e943c-668e-7a03-992b-6a98cf3055da` at
+        `cleared / flagged=false / raw_score=0`, and preserving
+        `019e894a-86c9-71e3-b57b-e3d3285f0988` at `recovered / flagged=false / raw_score=20`.
+      - `R5.75-3` / `R5.75-4` witnesses: `cargo test -p agent-drift-analyzer --test progress_acceptance progress_acceptance_cases_match_expected_progress_contract -- --nocapture`
+        passed. The packet-owned zero-verifier witness `adapted-zero-verifier-097d97e914ca220f` remains
+        `planning_convergence / stalled` with `failure_frontier_advanced` and `verification_clean`
+        forbidden; the mixed delegated witness `adapted-parent-visible-da59436e63915185` remains
+        `parent_visible_orchestration / stalled` with `failure_frontier_advanced` and
+        `verification_clean` forbidden; and the native delegated proof
+        `019eb970-3543-7ab1-a5d6-2a62c00c7185` remains `parent_visible_orchestration / mixed`. Because the
+        chosen predicate is gated to troubleshooting-dimension direct-advance signals only, those
+        witnesses stay outside the churn-suppression lane and remain unaffected.
 
 ## R6-1.2: Dead-End-Thrash Cutover
 
