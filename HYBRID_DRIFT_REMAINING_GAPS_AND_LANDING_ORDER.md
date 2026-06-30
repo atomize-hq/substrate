@@ -11,8 +11,11 @@ records:
 - which gap is actually blocking honest analyzer and sentinel behavior now
 - the order the remaining work should land in
 
-This file is intended to be the repo-root authority for the current follow-on sequence after the
-landed `R5` packet family.
+This file is the repo-root landing-order narrative for the hybrid-drift stack. It is current through the
+landed `R5.75` family. Authority for the active `R6` seam now lives under `docs/specs/r6/` (`MAP.md` +
+`DESIGN-r6-scorer-cutover-and-objective-consumption.md` + the per-packet sets); this file defers to those
+for `R6` scope and decisions. The Ground Truth Sources list below is historical context, not an
+exhaustive index of current authority.
 
 ## Ground Truth Sources
 
@@ -24,6 +27,10 @@ landed `R5` packet family.
 - `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-spec.md`
 - `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-plan.md`
 - `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md`
+- `docs/specs/r5/R5_75/` (the landed `R5.75` pre-`R6` hardening family, incl. `phase-1/SO/`)
+- `docs/specs/r6/MAP.md`
+- `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md`
+- `docs/specs/r6/R6-1/` and `docs/specs/r6/R6-2/` (the committed `R6` packet sets)
 - `.codex/handoffs/2026-06-04-180058-drift-sentinel-rollout-review.md`
 - `target/hybrid-drift-evals/*/analyzer/summary.md`
 - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
@@ -681,6 +688,13 @@ it still needed a smaller sequence of fixes before scorer cutover could be calle
 
 ## Packet R6: Drift Scorer Cutover To Context-Aware Semantics
 
+> **Rescoped (2026-06-27):** `R5.75` is complete, so `R6` is now the active seam and has been
+> rescoped against the structured-objective work that landed inside `R5.75`. The authoritative `R6`
+> map, the resolved `Decision Gate 0` (objective-consumption boundary), and the packet decomposition
+> now live in `docs/specs/r6/MAP.md` and
+> `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md`. The original intent below is
+> preserved and carried forward by that rescope.
+
 ### Objective
 
 Re-score `dead_end_thrash` and related drift classes using typed outcome evidence, turn context,
@@ -774,8 +788,10 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5`, `R3.75`, `R4`, `R5`, and `R5.5` are now landed on this worktree, so the active pre-`R6`
-packet family is `R5.75`.
+`R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, and `R5.75` are now landed on this worktree, so `R6` is the
+active seam. `R6` has been rescoped against the structured-objective work that landed inside
+`R5.75`; its map, the resolved `Decision Gate 0`, and the packet decomposition live under
+`docs/specs/r6/`.
 
 The next honest implementation target is:
 
@@ -785,8 +801,9 @@ The next honest implementation target is:
 - keep `R4` closed as the completed session-archetype packet family
 - keep `R5` closed as the landed archetype-aware progress packet family
 - keep `R5.5` closed as the landed first hardening pass
-- complete `R5.75` before opening `R6`
-- keep `R6` scorer cutover queued behind `R5.75`
+- keep `R5.75` closed as the landed pre-`R6` hardening/validation family
+- open `R6` per the rescope under `docs/specs/r6/` (`MAP.md` +
+  `DESIGN-r6-scorer-cutover-and-objective-consumption.md`)
 - keep full delegated-session support as `R7` behind `R6`
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
