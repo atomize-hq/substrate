@@ -104,10 +104,12 @@ impl HostToolNameV1 {
 
     fn retained_follow_up_target_requirement(self) -> RetainedFollowUpTargetRequirementV1 {
         match self {
-            Self::ForkWorldWorker | Self::ContinueWorldWorker | Self::CancelWorldWork => {
+            Self::ContinueWorldWorker | Self::CancelWorldWork => {
                 RetainedFollowUpTargetRequirementV1::AuthoritativeLive
             }
-            Self::StopWorldWorker => RetainedFollowUpTargetRequirementV1::NonTerminal,
+            Self::ForkWorldWorker | Self::StopWorldWorker => {
+                RetainedFollowUpTargetRequirementV1::NonTerminal
+            }
             Self::InspectWorldWorker | Self::RunWorldTask | Self::SpawnWorldWorker => {
                 RetainedFollowUpTargetRequirementV1::LinkedOnly
             }
@@ -972,6 +974,18 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
                             metadata.orchestration_session_id,
                             retained_worker.participant_id,
                             target_participant.reviewable_terminal_state_label()
+                        );
+                    }
+                    if matches!(tool_name, HostToolNameV1::ForkWorldWorker)
+                        && target_participant.is_authoritative_live()
+                        && record.live_participants().into_iter().all(|participant| {
+                            participant.participant_id() != target_participant.participant_id()
+                        })
+                    {
+                        bail!(
+                            "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
+                            metadata.orchestration_session_id,
+                            retained_worker.participant_id
                         );
                     }
                 }
@@ -2502,6 +2516,89 @@ mod tests {
             assert_eq!(
                 validated.target_participant_id.as_deref(),
                 Some("worker_packet2_detached")
+            );
+            assert_eq!(validated.target_backend_id, "cli:codex_world");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_allows_successor_fork_for_non_authoritative_live_worker(
+    ) {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex", "sess_packet2", "orch_packet2_launch");
+            let mut successor =
+                live_orchestrator("codex", "sess_packet2", "orch_packet2_successor");
+            successor.handle.resumed_from_participant_id = Some("orch_packet2_launch".to_string());
+            successor.handle.resumed_from_session_handle_id =
+                Some("orch_packet2_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+
+            let mut member = live_member(
+                "codex_world",
+                "sess_packet2",
+                "worker_packet2_retained",
+                "orch_packet2_launch",
+            );
+            member.release_runtime_ownership();
+
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.bind_active_session_handle("orch_packet2_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let metadata = HostToolRuntimeDispatchMetadataV1 {
+                caller_participant_id: "orch_packet2_successor".to_string(),
+                ..sample_runtime_metadata()
+            };
+
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::ForkWorldWorker,
+                &HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_retained".to_string(),
+                }),
+            )
+            .expect("resolve successor-authorized fork authority for parked retained worker");
+
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(
+                resolved.target_participant_id.as_deref(),
+                Some("worker_packet2_retained")
+            );
+
+            let request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+                store,
+                &metadata,
+                HostToolNameV1::ForkWorldWorker,
+                HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_retained".to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+                    prompt: "Fork from the parked retained worker.".to_string(),
+                    fork_reason: None,
+                    fork_strategy: None,
+                }),
+            )
+            .expect("translate successor-authorized fork request for parked retained worker");
+
+            let validated = request.validate().expect("validate retained fork request");
+            assert_eq!(validated.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(
+                validated.target_participant_id.as_deref(),
+                Some("worker_packet2_retained")
             );
             assert_eq!(validated.target_backend_id, "cli:codex_world");
         });

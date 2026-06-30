@@ -1966,8 +1966,12 @@ impl AgentRuntimeStateStore {
                 source_participant.reviewable_terminal_state_label()
             );
         }
-        if !source_participant.is_authoritative_live()
-            || !owner_process_is_alive(&source_participant)
+        // A retained worker that cleanly exited bootstrap is expected to remain a valid
+        // parked/resumable fork source even after it relinquishes authoritative-live runtime
+        // ownership. Rows that still claim authoritative-live must still prove their owner pid is
+        // reachable so stale owner-live snapshots continue to fail closed.
+        if source_participant.is_authoritative_live()
+            && !owner_process_is_alive(&source_participant)
         {
             anyhow::bail!(
                 "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
@@ -10614,7 +10618,9 @@ mod tests {
             successor.handle.resumed_from_session_handle_id = Some("orch_fork_launch".to_string());
             launch_orchestrator.mark_client_detached("successor attached");
 
-            let member = live_member("codex_world", "sess_fork", "ash_source", "orch_fork_launch");
+            let mut member =
+                live_member("codex_world", "sess_fork", "ash_source", "orch_fork_launch");
+            member.release_runtime_ownership();
 
             let mut parent = active_parent(&launch_orchestrator);
             parent.set_world_binding("world-17", 2);
