@@ -10,9 +10,10 @@ use agent_drift_analyzer::{
     ProgressSignalCode, ProgressStatus, SessionArchetypeLabel,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::Value;
 use support::{analyze_sample_bundle, load_sample_bundle, BundleFixture};
+use tempfile::TempDir;
 use time::macros::datetime;
 
 #[test]
@@ -7248,6 +7249,101 @@ fn analyze_custom_rows(rows: Vec<CompactionRow>) -> AnalyzeResult {
         output_dir: fixture.output_dir.clone(),
     })
     .expect("analyze custom rows")
+}
+
+fn analyze_progress_acceptance_case(case_id: &str) -> AnalyzeResult {
+    let input_dir = Utf8PathBuf::from(format!(
+        "{}/{}",
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/progress_acceptance"
+        ),
+        case_id
+    ));
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let output_dir = root.join("output");
+    fs::create_dir_all(&output_dir).expect("create output dir");
+
+    agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir,
+        output_dir,
+    })
+    .expect("analyze progress acceptance case")
+}
+
+#[test]
+fn checkpoints_r5_75_witnesses_stay_outside_frontier_advancement_after_r6_1_2() {
+    let zero_verifier_result =
+        analyze_progress_acceptance_case("adapted-zero-verifier-097d97e914ca220f");
+    let zero_verifier_progress = zero_verifier_result.sessions[0]
+        .checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.ordinal == 6)
+        .expect("adapted zero-verifier checkpoint")
+        .session_progress
+        .as_ref()
+        .expect("adapted zero-verifier progress");
+    assert_eq!(
+        zero_verifier_progress.dimension,
+        ProgressDimension::PlanningConvergence
+    );
+    assert_eq!(zero_verifier_progress.status, ProgressStatus::Stalled);
+    assert!(!zero_verifier_progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::FailureFrontierAdvanced));
+    assert!(!zero_verifier_progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::VerificationClean));
+
+    let adapted_parent_visible_result =
+        analyze_progress_acceptance_case("adapted-parent-visible-da59436e63915185");
+    let adapted_parent_visible_progress = adapted_parent_visible_result.sessions[0]
+        .checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.ordinal == 28)
+        .expect("adapted parent-visible checkpoint")
+        .session_progress
+        .as_ref()
+        .expect("adapted parent-visible progress");
+    assert_eq!(
+        adapted_parent_visible_progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(
+        adapted_parent_visible_progress.status,
+        ProgressStatus::Stalled
+    );
+    assert!(!adapted_parent_visible_progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::FailureFrontierAdvanced));
+    assert!(!adapted_parent_visible_progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::VerificationClean));
+
+    let native_parent_visible_result =
+        analyze_progress_acceptance_case("019eb970-3543-7ab1-a5d6-2a62c00c7185");
+    let native_parent_visible_progress = native_parent_visible_result.sessions[0]
+        .checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.ordinal == 4)
+        .expect("native parent-visible checkpoint")
+        .session_progress
+        .as_ref()
+        .expect("native parent-visible progress");
+    assert_eq!(
+        native_parent_visible_progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(native_parent_visible_progress.status, ProgressStatus::Mixed);
+    assert!(!native_parent_visible_progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::VerificationClean));
 }
 
 fn prompt_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {

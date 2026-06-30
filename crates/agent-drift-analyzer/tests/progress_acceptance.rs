@@ -293,6 +293,131 @@ fn progress_acceptance_cases_match_expected_progress_contract() {
     }
 }
 
+#[test]
+fn progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary() {
+    let zero_verifier_case =
+        ProgressAcceptanceFixture::load("adapted-zero-verifier-097d97e914ca220f");
+    let zero_verifier_result = zero_verifier_case.analyze();
+    let zero_verifier_session = zero_verifier_result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "097d97e914ca220f")
+        .expect("expected adapted zero-verifier witness session");
+    let zero_verifier_checkpoint = zero_verifier_session
+        .checkpoints
+        .iter()
+        .find(|checkpoint| {
+            checkpoint.ordinal == zero_verifier_case.expected.selected_checkpoint.ordinal
+        })
+        .expect("expected adapted zero-verifier witness checkpoint");
+    let zero_verifier_archetype = zero_verifier_checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("zero-verifier witness archetype");
+    let zero_verifier_progress = zero_verifier_checkpoint
+        .session_progress
+        .as_ref()
+        .expect("zero-verifier witness progress");
+    assert_eq!(
+        zero_verifier_archetype.label,
+        SessionArchetypeLabel::Planning
+    );
+    assert_eq!(
+        zero_verifier_progress.dimension,
+        ProgressDimension::PlanningConvergence
+    );
+    assert_eq!(zero_verifier_progress.status, ProgressStatus::Stalled);
+    assert!(
+        !zero_verifier_progress
+            .signals
+            .iter()
+            .any(|signal| signal.code == ProgressSignalCode::FailureFrontierAdvanced),
+        "R5.75-4 zero-verifier witness must stay outside troubleshooting-frontier advancement"
+    );
+    assert!(
+        !zero_verifier_progress
+            .signals
+            .iter()
+            .any(|signal| signal.code == ProgressSignalCode::VerificationClean),
+        "R5.75-4 zero-verifier witness must not regain verification_clean"
+    );
+
+    let adapted_parent_visible_case =
+        ProgressAcceptanceFixture::load("adapted-parent-visible-da59436e63915185");
+    let adapted_parent_visible_result = adapted_parent_visible_case.analyze();
+    let adapted_parent_visible_session = adapted_parent_visible_result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "da59436e63915185")
+        .expect("expected adapted parent-visible witness session");
+    let adapted_parent_visible_checkpoint = adapted_parent_visible_session
+        .checkpoints
+        .iter()
+        .find(|checkpoint| {
+            checkpoint.ordinal
+                == adapted_parent_visible_case
+                    .expected
+                    .selected_checkpoint
+                    .ordinal
+        })
+        .expect("expected adapted parent-visible witness checkpoint");
+    let adapted_parent_visible_progress = adapted_parent_visible_checkpoint
+        .session_progress
+        .as_ref()
+        .expect("adapted parent-visible witness progress");
+    assert_eq!(
+        adapted_parent_visible_progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(
+        adapted_parent_visible_progress.status,
+        ProgressStatus::Stalled
+    );
+    assert!(
+        !adapted_parent_visible_progress
+            .signals
+            .iter()
+            .any(|signal| signal.code == ProgressSignalCode::FailureFrontierAdvanced),
+        "adapted delegated guardrail witness must stay outside troubleshooting-frontier advancement"
+    );
+    assert!(
+        !adapted_parent_visible_progress
+            .signals
+            .iter()
+            .any(|signal| signal.code == ProgressSignalCode::VerificationClean),
+        "adapted delegated guardrail witness must not regain verification_clean"
+    );
+
+    let native_parent_visible_case =
+        ProgressAcceptanceFixture::load("019eb970-3543-7ab1-a5d6-2a62c00c7185");
+    let native_parent_visible_result = native_parent_visible_case.analyze();
+    let native_parent_visible_session = native_parent_visible_result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "019eb970-3543-7ab1-a5d6-2a62c00c7185")
+        .expect("expected native parent-visible witness session");
+    let native_parent_visible_checkpoint = native_parent_visible_session
+        .checkpoints
+        .iter()
+        .find(|checkpoint| {
+            checkpoint.ordinal
+                == native_parent_visible_case
+                    .expected
+                    .selected_checkpoint
+                    .ordinal
+        })
+        .expect("expected native parent-visible witness checkpoint");
+    let native_parent_visible_progress = native_parent_visible_checkpoint
+        .session_progress
+        .as_ref()
+        .expect("native parent-visible witness progress");
+    assert_eq!(
+        native_parent_visible_progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(native_parent_visible_progress.status, ProgressStatus::Mixed);
+}
+
 fn assert_progress_case(case_id: &str) {
     let case = ProgressAcceptanceFixture::load(case_id);
     let expected_session_id = case
