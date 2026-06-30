@@ -385,6 +385,11 @@ pub(crate) fn build_session_checkpoint_from_analysis(
     )
 }
 
+pub(crate) fn build_scoring_session_progress(analysis: &CheckpointAnalysis) -> SessionProgress {
+    let session_archetype = build_session_archetype(analysis);
+    build_session_progress(analysis, &session_archetype)
+}
+
 pub(crate) fn assign_drift_states(
     drift_scores: Vec<ScoredDrift>,
     previous_drift_scores: Option<&[DriftScore]>,

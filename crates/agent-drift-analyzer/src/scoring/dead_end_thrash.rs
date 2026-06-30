@@ -2,20 +2,63 @@ use std::collections::BTreeSet;
 
 use crate::checkpoint::{
     CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
-    RepeatedCommandLoop, RepeatedFailureLoop,
+    ProgressDimension, ProgressSignal, ProgressSignalCode, RepeatedCommandLoop,
+    RepeatedFailureLoop, SessionProgress,
 };
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
+const CHURN_WITH_PROGRESS_REASON_PREFIX: &str = "churn with progress evidence:";
 const HISTORICAL_REPEATED_VERIFICATION_REASON_PREFIX: &str =
     "historical repeated verification evidence:";
 const HISTORICAL_REPEATED_FAILURE_REASON_PREFIX: &str = "historical repeated failure evidence:";
+const STALL_WITHOUT_FRONTIER_MOVEMENT_REASON_PREFIX: &str =
+    "stall without frontier movement evidence:";
 
-pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> ScoredDrift {
+pub(crate) fn score_dead_end_thrash(
+    analysis: &CheckpointAnalysis,
+    session_progress: &SessionProgress,
+) -> ScoredDrift {
     let has_history = !analysis.repetition.repeated_verification_loops.is_empty()
         || !analysis.repetition.repeated_failure_loops.is_empty();
-    let flagged = has_history
+    let would_flag_active = has_history
         && (analysis.recovery.active_repeated_failure
             || analysis.recovery.active_repeated_verification);
+
+    if would_flag_active && frontier_advanced_in_interval(session_progress) {
+        let mut evidence = churn_with_progress_evidence(analysis, session_progress);
+        dedupe_evidence(&mut evidence);
+
+        return ScoredDrift::new(
+            DriftScore {
+                class: DriftClass::DeadEndThrash,
+                state: DriftState::Cleared,
+                raw_score: 20,
+                confidence: score_confidence(analysis),
+                flagged: false,
+                evidence,
+            },
+            DriftStateHint::HistoricalContext,
+        );
+    }
+
+    if would_flag_active {
+        let mut evidence = stall_without_frontier_movement_evidence(analysis, session_progress);
+        dedupe_evidence(&mut evidence);
+
+        return ScoredDrift::new(
+            DriftScore {
+                class: DriftClass::DeadEndThrash,
+                state: DriftState::Cleared,
+                raw_score: decisive_stall_raw_score(analysis),
+                confidence: score_confidence(analysis),
+                flagged: true,
+                evidence,
+            },
+            DriftStateHint::HistoricalContext,
+        );
+    }
+
+    let flagged = would_flag_active;
     let raw_score = if flagged {
         active_raw_score(analysis)
     } else if has_history {
@@ -35,15 +78,7 @@ pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> ScoredDrif
             class: DriftClass::DeadEndThrash,
             state: DriftState::Cleared,
             raw_score,
-            confidence: if !analysis.repetition.repeated_verification_loops.is_empty() {
-                Confidence::High
-            } else if !analysis.repetition.repeated_failure_loops.is_empty()
-                || !analysis.current.context.command_observations.is_empty()
-            {
-                Confidence::Medium
-            } else {
-                Confidence::Low
-            },
+            confidence: score_confidence(analysis),
             flagged,
             evidence,
         },
@@ -53,6 +88,18 @@ pub(crate) fn score_dead_end_thrash(analysis: &CheckpointAnalysis) -> ScoredDrif
             DriftStateHint::None
         },
     )
+}
+
+fn score_confidence(analysis: &CheckpointAnalysis) -> Confidence {
+    if !analysis.repetition.repeated_verification_loops.is_empty() {
+        Confidence::High
+    } else if !analysis.repetition.repeated_failure_loops.is_empty()
+        || !analysis.current.context.command_observations.is_empty()
+    {
+        Confidence::Medium
+    } else {
+        Confidence::Low
+    }
 }
 
 fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {
@@ -66,6 +113,22 @@ fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {
         as u8
 }
 
+fn decisive_stall_raw_score(analysis: &CheckpointAnalysis) -> u8 {
+    let has_failure_history = !analysis.repetition.repeated_failure_loops.is_empty();
+
+    match (
+        analysis.recovery.active_repeated_verification,
+        analysis.recovery.active_repeated_failure,
+        has_failure_history,
+    ) {
+        (true, true, _) => 70,
+        (true, false, true) => 60,
+        (true, false, false) => 40,
+        (false, true, _) => 30,
+        (false, false, _) => 0,
+    }
+}
+
 fn current_thrashing_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> {
     let mut evidence = repeated_verification_evidence(
         &analysis.repetition.repeated_verification_loops,
@@ -75,6 +138,41 @@ fn current_thrashing_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef>
         &analysis.repetition.repeated_failure_loops,
         false,
     ));
+    evidence
+}
+
+fn churn_with_progress_evidence(
+    analysis: &CheckpointAnalysis,
+    session_progress: &SessionProgress,
+) -> Vec<EvidenceRef> {
+    let mut evidence = direct_frontier_signal_evidence(
+        session_progress,
+        CHURN_WITH_PROGRESS_REASON_PREFIX,
+    );
+    evidence.extend(historical_thrash_evidence(analysis));
+    if evidence.is_empty() {
+        evidence.extend(named_fallback_evidence(
+            historical_thrash_evidence(analysis).first(),
+            CHURN_WITH_PROGRESS_REASON_PREFIX,
+        ));
+    }
+    evidence
+}
+
+fn stall_without_frontier_movement_evidence(
+    analysis: &CheckpointAnalysis,
+    session_progress: &SessionProgress,
+) -> Vec<EvidenceRef> {
+    let current_thrashing = current_thrashing_evidence(analysis);
+    let mut evidence = non_advancing_frontier_signal_evidence(
+        session_progress,
+        STALL_WITHOUT_FRONTIER_MOVEMENT_REASON_PREFIX,
+    );
+    evidence.extend(named_fallback_evidence(
+        current_thrashing.first(),
+        STALL_WITHOUT_FRONTIER_MOVEMENT_REASON_PREFIX,
+    ));
+    evidence.extend(current_thrashing);
     evidence
 }
 
@@ -129,6 +227,80 @@ fn repeated_failure_evidence(loops: &[RepeatedFailureLoop], historical: bool) ->
                 })
         })
         .collect()
+}
+
+fn frontier_advanced_in_interval(session_progress: &SessionProgress) -> bool {
+    session_progress.dimension == ProgressDimension::TroubleshootingFrontier
+        && session_progress
+            .signals
+            .iter()
+            .any(|signal| is_direct_troubleshooting_advancement_signal(signal))
+}
+
+fn is_direct_troubleshooting_advancement_signal(signal: &ProgressSignal) -> bool {
+    matches!(
+        signal.code,
+        ProgressSignalCode::FailureFrontierAdvanced
+            | ProgressSignalCode::FailureCountReduced
+            | ProgressSignalCode::VerificationClean
+    )
+}
+
+fn direct_frontier_signal_evidence(
+    session_progress: &SessionProgress,
+    reason_prefix: &str,
+) -> Vec<EvidenceRef> {
+    if session_progress.dimension != ProgressDimension::TroubleshootingFrontier {
+        return Vec::new();
+    }
+
+    session_progress
+        .signals
+        .iter()
+        .filter(|signal| is_direct_troubleshooting_advancement_signal(signal))
+        .flat_map(|signal| named_signal_evidence(signal, reason_prefix))
+        .collect()
+}
+
+fn non_advancing_frontier_signal_evidence(
+    session_progress: &SessionProgress,
+    reason_prefix: &str,
+) -> Vec<EvidenceRef> {
+    if session_progress.dimension != ProgressDimension::TroubleshootingFrontier {
+        return Vec::new();
+    }
+
+    session_progress
+        .signals
+        .iter()
+        .filter(|signal| !is_direct_troubleshooting_advancement_signal(signal))
+        .flat_map(|signal| named_signal_evidence(signal, reason_prefix))
+        .collect()
+}
+
+fn named_signal_evidence(signal: &ProgressSignal, reason_prefix: &str) -> Vec<EvidenceRef> {
+    signal
+        .evidence
+        .iter()
+        .map(|evidence| EvidenceRef {
+            row: evidence.row.clone(),
+            reason: format!("{reason_prefix} {}", signal.summary),
+        })
+        .collect()
+}
+
+fn named_fallback_evidence(
+    evidence: Option<&EvidenceRef>,
+    reason_prefix: &str,
+) -> Vec<EvidenceRef> {
+    evidence
+        .map(|evidence| {
+            vec![EvidenceRef {
+                row: evidence.row.clone(),
+                reason: format!("{reason_prefix} {}", evidence.reason),
+            }]
+        })
+        .unwrap_or_default()
 }
 
 fn dedupe_evidence(evidence: &mut Vec<EvidenceRef>) {

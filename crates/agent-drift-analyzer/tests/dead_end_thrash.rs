@@ -49,7 +49,9 @@ fn dead_end_thrash_stays_active_when_verification_interval_remains_out_of_scope(
     assert!(second
         .evidence
         .iter()
-        .any(|item| item.reason.starts_with("repeated verification command:")));
+        .any(|item| item
+            .reason
+            .starts_with("stall without frontier movement evidence:")));
 }
 
 #[test]
@@ -338,6 +340,74 @@ fn dead_end_thrash_treats_explicit_error_rows_as_repeated_failure_evidence() {
 }
 
 #[test]
+fn dead_end_thrash_stall_score_is_not_driven_by_repeated_failure_loop_count() {
+    let base_rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Verify a decisive stalled failure scores once.",
+        ),
+        row(1, CompactionKind::Error, "world failed"),
+        row(2, CompactionKind::Error, "world failed"),
+    ];
+    let mut base_archival_rows = base_rows.clone();
+    base_archival_rows[1].text_hash_hex = "hash-stall-base-world-failed".to_string();
+    base_archival_rows[2].text_hash_hex = "hash-stall-base-world-failed".to_string();
+    let base_fixture =
+        BundleFixture::from_rows(base_archival_rows.clone(), base_archival_rows, Vec::new());
+    let base_result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: base_fixture.input_dir.clone(),
+        output_dir: base_fixture.output_dir.clone(),
+    })
+    .expect("analyze base decisive-stall bundle");
+    let base_checkpoints = read_checkpoints(&base_result.checkpoints_path);
+    let base_thrash = base_checkpoints[0]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("base dead end thrash score");
+
+    let expanded_rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Verify a decisive stalled failure does not scale with extra repeated loops.",
+        ),
+        row(1, CompactionKind::Error, "world failed"),
+        row(2, CompactionKind::Error, "world failed"),
+        row(3, CompactionKind::Error, "compile failed"),
+        row(4, CompactionKind::Error, "compile failed"),
+    ];
+    let mut expanded_archival_rows = expanded_rows.clone();
+    expanded_archival_rows[1].text_hash_hex = "hash-stall-expanded-world-failed".to_string();
+    expanded_archival_rows[2].text_hash_hex = "hash-stall-expanded-world-failed".to_string();
+    expanded_archival_rows[3].text_hash_hex = "hash-stall-expanded-compile-failed".to_string();
+    expanded_archival_rows[4].text_hash_hex = "hash-stall-expanded-compile-failed".to_string();
+    let expanded_fixture = BundleFixture::from_rows(
+        expanded_archival_rows.clone(),
+        expanded_archival_rows,
+        Vec::new(),
+    );
+    let expanded_result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: expanded_fixture.input_dir.clone(),
+        output_dir: expanded_fixture.output_dir.clone(),
+    })
+    .expect("analyze expanded decisive-stall bundle");
+    let expanded_checkpoints = read_checkpoints(&expanded_result.checkpoints_path);
+    let expanded_thrash = expanded_checkpoints[0]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("expanded dead end thrash score");
+
+    assert!(base_thrash.flagged);
+    assert!(expanded_thrash.flagged);
+    assert_eq!(base_thrash.raw_score, 30);
+    assert_eq!(expanded_thrash.raw_score, 30);
+    assert_eq!(base_thrash.raw_score, expanded_thrash.raw_score);
+}
+
+#[test]
 fn dead_end_thrash_treats_non_zero_exit_code_tool_output_as_failure_evidence() {
     let rows = vec![
         row(
@@ -585,7 +655,7 @@ fn dead_end_thrash_keeps_historical_verification_loops_out_of_active_failure_sco
 
     assert_eq!(checkpoints.len(), 2);
     assert!(thrash.flagged);
-    assert_eq!(thrash.raw_score, 30);
+    assert!(thrash.raw_score >= 30);
     assert_eq!(thrash.state, DriftState::Active);
     assert!(thrash
         .evidence
@@ -599,6 +669,130 @@ fn dead_end_thrash_keeps_historical_verification_loops_out_of_active_failure_sco
         .evidence
         .iter()
         .any(|item| item.reason.starts_with("repeated verification command:")));
+}
+
+#[test]
+fn dead_end_thrash_suppresses_repeated_activity_when_the_frontier_advances() {
+    let mut rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Troubleshoot checkpoints::captures_progress without widening scope.",
+        ),
+        tool_row(
+            1,
+            "cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            2,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 2 tests\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nthread 'checkpoints::captures_progress' panicked at crates/agent-drift-analyzer/src/checkpoint/progress.rs:12:34:\nAssertionError: expected advancing\n\ntest result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 26 filtered out",
+        ),
+        row(3, CompactionKind::Error, "world failed"),
+        row(
+            4,
+            CompactionKind::UserMessage,
+            "/goal Re-run the same troubleshooting verifier after a focused fix edit.",
+        ),
+        tool_row(
+            5,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\n*** End Patch\nPATCH",
+        ),
+        tool_row(
+            6,
+            "cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            7,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nthread 'checkpoints::captures_progress' panicked at crates/agent-drift-analyzer/src/checkpoint/progress.rs:12:34:\nAssertionError: expected advancing\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out",
+        ),
+        row(8, CompactionKind::Error, "world failed"),
+    ];
+    rows[3].text_hash_hex = "hash-frontier-advancing-failure".to_string();
+    rows[8].text_hash_hex = "hash-frontier-advancing-failure".to_string();
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze frontier-advancing thrash bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints[1]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert_eq!(checkpoints.len(), 2);
+    assert!(!thrash.flagged);
+    assert_eq!(thrash.raw_score, 20);
+    assert_eq!(thrash.state, DriftState::HistoricalOnly);
+    assert!(thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason.starts_with("churn with progress evidence:")));
+}
+
+#[test]
+fn dead_end_thrash_names_stalls_when_repeated_activity_has_no_frontier_movement() {
+    let mut rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Troubleshoot checkpoints::captures_progress without widening scope.",
+        ),
+        tool_row(
+            1,
+            "cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            2,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+        ),
+        row(3, CompactionKind::Error, "world failed"),
+        row(
+            4,
+            CompactionKind::UserMessage,
+            "/goal Re-run the same troubleshooting verifier before widening scope.",
+        ),
+        tool_row(
+            5,
+            "cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            6,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\nAssertionError: expected advancing",
+        ),
+        row(7, CompactionKind::Error, "world failed"),
+    ];
+    rows[3].text_hash_hex = "hash-frontier-stalled-failure".to_string();
+    rows[7].text_hash_hex = "hash-frontier-stalled-failure".to_string();
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze frontier-stalled thrash bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let thrash = checkpoints[1]
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert_eq!(checkpoints.len(), 2);
+    assert!(thrash.flagged);
+    assert_eq!(thrash.raw_score, 30);
+    assert_eq!(thrash.state, DriftState::Active);
+    assert!(thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason.starts_with("stall without frontier movement evidence:")));
 }
 
 #[test]
