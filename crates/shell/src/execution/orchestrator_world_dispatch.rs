@@ -537,15 +537,13 @@ async fn fork_world_worker(
         })?;
         let _concurrency_guard =
             acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
-        let dispatch_workspace_root = std::env::current_dir()
-            .context("failed to resolve cwd for fork_world_worker bootstrap")?;
         let transport_request = build_fork_world_worker_transport_request(
             &prepared.request,
             &resolved.source_participant,
             &descriptor,
         )?;
         let receipt = execute_spawn_world_worker_stream(
-            &dispatch_workspace_root,
+            &workspace_root,
             &transport_request,
             &prepared.request,
         )
@@ -1045,6 +1043,7 @@ struct SpawnWorldWorkerReceipt {
 pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
     pub request: ValidatedWorldDispatchRequestV1,
     pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    pub workspace_root: PathBuf,
     _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
 }
 
@@ -1148,6 +1147,7 @@ pub(crate) fn prepare_spawn_world_worker_bootstrap(
     Ok(PreparedSpawnWorldWorkerBootstrap {
         request: prepared.request,
         descriptor,
+        workspace_root,
         _concurrency_guard: concurrency_guard,
     })
 }
@@ -1157,13 +1157,14 @@ async fn spawn_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
     let prepared = prepare_spawn_world_worker_bootstrap(prepared)?;
-    let workspace_root = std::env::current_dir()
-        .context("failed to resolve cwd for direct spawn_world_worker bootstrap")?;
     let transport_request =
         build_spawn_world_worker_transport_request(&prepared.request, &prepared.descriptor)?;
-    let receipt =
-        execute_spawn_world_worker_stream(&workspace_root, &transport_request, &prepared.request)
-            .await?;
+    let receipt = execute_spawn_world_worker_stream(
+        &prepared.workspace_root,
+        &transport_request,
+        &prepared.request,
+    )
+    .await?;
     let summary = summarize_spawn_world_worker_result(&receipt);
 
     Ok(WorldDispatchOutcomeV1::SpawnWorldWorker(
@@ -1305,30 +1306,25 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
             err.reason
         )
     })?;
-    let dispatch_workspace_root = std::env::current_dir()
-        .context("failed to resolve cwd for continue_world_worker fork_command bootstrap")?;
     let transport_request = build_continue_world_worker_fork_command_transport_request(
         &prepared.request,
         &resolved.source_participant,
         &descriptor,
     )?;
-    let receipt = execute_spawn_world_worker_stream(
-        &dispatch_workspace_root,
-        &transport_request,
-        &prepared.request,
-    )
-    .await
-    .map_err(|err| {
-        anyhow::anyhow!(
-            "{}",
-            format_continue_world_worker_fork_command_bootstrap_failure(
-                resolved.source_participant.participant_id(),
-                format!(
+    let receipt =
+        execute_spawn_world_worker_stream(&workspace_root, &transport_request, &prepared.request)
+            .await
+            .map_err(|err| {
+                anyhow::anyhow!(
+                    "{}",
+                    format_continue_world_worker_fork_command_bootstrap_failure(
+                        resolved.source_participant.participant_id(),
+                        format!(
                     "retained child bootstrap failed before authoritative registration ({err:#})"
                 ),
-            )
-        )
-    })?;
+                    )
+                )
+            })?;
     let lineage =
         match persist_fork_child_lineage(&prepared.store, &resolved, &receipt.participant_id) {
             Ok(lineage) => lineage,
@@ -4366,6 +4362,27 @@ mod tests {
             } else {
                 std::env::remove_var(self.key);
             }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl CurrentDirGuard {
+        fn change_to(path: &Path) -> Self {
+            let original = std::env::current_dir().expect("capture current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
         }
     }
 
@@ -9661,9 +9678,13 @@ agents:
             AgentExecutionScope::World,
         );
 
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let expected_execute_cwd = workspace_root.path().display().to_string();
+        let expected_execute_cwd_for_server = expected_execute_cwd.clone();
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("fork-command-success.sock");
         let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
         let store_for_server = store.clone();
         let recorded_requests = Arc::new(Mutex::new(Vec::<
             transport_api_types::MemberTurnSubmitRequestV1,
@@ -9741,6 +9762,11 @@ agents:
                 if first_line.starts_with("POST /v1/execute/stream ") {
                     let execute_request: ExecuteRequest =
                         serde_json::from_slice(&body).expect("member dispatch execute request");
+                    assert_eq!(
+                        execute_request.cwd.as_deref(),
+                        Some(expected_execute_cwd_for_server.as_str()),
+                        "continue fork bootstrap must dispatch against the authoritative session workspace root",
+                    );
                     let member_dispatch = execute_request
                         .member_dispatch
                         .expect("member dispatch request");
@@ -9831,9 +9857,8 @@ agents:
             }
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let ambient_cwd = tempdir().expect("ambient cwd tempdir");
+        let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
         let request = sample_continue_fork_command_world_dispatch_request();
         let expected_prompt = render_continue_world_worker_transport_prompt(
             &request
@@ -13626,6 +13651,149 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
+    async fn dispatch_contract_spawn_world_worker_uses_authoritative_workspace_root_for_bootstrap()
+    {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let expected_execute_cwd = workspace_root.path().display().to_string();
+        let expected_execute_cwd_for_server = expected_execute_cwd.clone();
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("spawn-world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("member dispatch execute request");
+                    assert_eq!(
+                        execute_request.cwd.as_deref(),
+                        Some(expected_execute_cwd_for_server.as_str()),
+                        "spawn bootstrap must dispatch against the authoritative session workspace root",
+                    );
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("member dispatch request");
+
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "spn_spawn".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: substrate_common::agent_events::AgentEvent {
+                                ts: chrono::Utc::now(),
+                                kind: AgentEventKind::Registered,
+                                data: json!({}),
+                                agent_id: execute_request.agent_id,
+                                orchestration_session_id: member_dispatch
+                                    .orchestration_session_id
+                                    .clone(),
+                                run_id: member_dispatch.run_id.clone(),
+                                parent_run_id: None,
+                                participant_id: Some(member_dispatch.participant_id.clone()),
+                                parent_participant_id: None,
+                                resumed_from_participant_id: None,
+                                backend_id: Some(member_dispatch.backend_id.clone()),
+                                thread_id: None,
+                                role: Some("member".to_string()),
+                                world_id: Some(member_dispatch.world_id.clone()),
+                                world_generation: Some(member_dispatch.world_generation),
+                                cmd_id: None,
+                                span_id: Some("spn_spawn".to_string()),
+                                channel: None,
+                                identity_tuple: None,
+                                placement_posture: None,
+                                project: None,
+                            },
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let ambient_cwd = tempdir().expect("ambient cwd tempdir");
+        let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
+
+        let outcome = dispatch_orchestrator_world_request(
+            &store,
+            WorldDispatchRequestV1 {
+                request_id: Some("req_spawn".to_string()),
+                idempotency_key: Some("idem_spawn".to_string()),
+                orchestration_session_id: Some("sess_dispatch".to_string()),
+                caller_participant_id: Some("orch_dispatch".to_string()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some("world-17".to_string()),
+                world_generation: Some(2),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "open a retained worker".to_string(),
+                }),
+            },
+        )
+        .await
+        .expect("spawn dispatch should succeed");
+        let WorldDispatchOutcomeV1::SpawnWorldWorker(outcome) = outcome else {
+            panic!("expected spawn_world_worker outcome");
+        };
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
     async fn dispatch_contract_fork_world_worker_returns_typed_lineage_after_authoritative_bootstrap(
     ) {
         let _env_guard = world_env_guard();
@@ -13648,6 +13816,8 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        let expected_execute_cwd = workspace_root.path().display().to_string();
+        let expected_execute_cwd_for_server = expected_execute_cwd.clone();
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
 
@@ -13675,6 +13845,11 @@ agents:
                 if first_line.starts_with("POST /v1/execute/stream ") {
                     let execute_request: ExecuteRequest =
                         serde_json::from_slice(&body).expect("member dispatch execute request");
+                    assert_eq!(
+                        execute_request.cwd.as_deref(),
+                        Some(expected_execute_cwd_for_server.as_str()),
+                        "fork bootstrap must dispatch against the authoritative session workspace root",
+                    );
                     let member_dispatch = execute_request
                         .member_dispatch
                         .expect("member dispatch request");
@@ -13763,6 +13938,8 @@ agents:
         });
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let ambient_cwd = tempdir().expect("ambient cwd tempdir");
+        let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
 
         let outcome = dispatch_real_fork_world_worker_request(
             &store,
