@@ -6181,6 +6181,106 @@ Packet 3.6 is implementation-complete and review-clean.
 }
 
 #[test]
+fn checkpoints_bridge_prefers_grounded_goal_anchor_for_needled_validate_and_subordinate_phrases() {
+    let grounded_goal = "Determine whether Packet R6-1.4 landed correctly and completely.";
+    let subordinate_closeout =
+        "Return with changed files, residual risks, and a recommended commit message.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", grounded_goal),
+        prompt_row(1, "turn-001", subordinate_closeout),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-tasks.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_eq!(
+        checkpoint.task_frame.objective, grounded_goal,
+        "known bridge needles must lift the grounded goal above subordinate closeout wording"
+    );
+    assert!(
+        !checkpoint
+            .task_frame
+            .objective
+            .contains(subordinate_closeout),
+        "subordinate closeout wording must stay off the effective objective"
+    );
+
+    let structured = checkpoint
+        .structured_objective
+        .as_ref()
+        .expect("structured objective");
+    let goal_excerpts = structured
+        .evidence_spans
+        .iter()
+        .filter(|span| span.role == ObjectiveRole::Goal)
+        .map(|span| span.excerpt.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        goal_excerpts
+            .iter()
+            .any(|excerpt| excerpt.contains(grounded_goal)),
+        "expected grounded goal in evidence spans, got {:?}",
+        goal_excerpts
+    );
+}
+
+#[test]
+fn checkpoints_surface_bridge_gap_when_grounded_goal_phrase_falls_outside_needles() {
+    // Guardrail-5 debt is explicit here: the structured goal is grounded, but the compatibility-text
+    // bridge still depends on needle lists. A semantically equivalent unlisted ask must fail this wall
+    // as a bridge gap rather than silently looking like settled target-state behavior.
+    let novel_goal = "Pressure-test whether Packet R6-1.4 landed correctly and completely.";
+    let subordinate_closeout =
+        "Return with changed files, residual risks, and a recommended commit message.";
+    let result = analyze_custom_rows(vec![
+        prompt_row(0, "turn-001", novel_goal),
+        prompt_row(1, "turn-001", subordinate_closeout),
+        tool_call_row(
+            2,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-tasks.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(3, "turn-001", "Exit code: 0"),
+    ]);
+
+    let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+    assert_ne!(
+        checkpoint.task_frame.objective, novel_goal,
+        "an unlisted grounded-goal phrasing should remain visible as bridge debt on the legacy surface"
+    );
+    assert!(
+        checkpoint.task_frame.objective.contains(subordinate_closeout),
+        "legacy objective text should expose the bridge miss by falling back to the subordinate closeout wording"
+    );
+
+    let structured = checkpoint
+        .structured_objective
+        .as_ref()
+        .expect("structured objective");
+    assert!(
+        structured
+            .evidence_spans
+            .iter()
+            .all(|span| span.role != ObjectiveRole::Goal),
+        "unlisted bridge-gap phrasing should leave the real ask ungrounded instead of silently looking supported: {:?}",
+        structured.evidence_spans
+    );
+    assert!(
+        structured
+            .unknowns
+            .iter()
+            .any(|unknown| unknown.field_name == "primary_goal"),
+        "the miss must stay visible as a bridge gap via an unknown primary goal"
+    );
+}
+
+#[test]
 fn checkpoints_context_objective_preserves_explicit_file_target_without_copying_whole_goal() {
     let prompt = "/goal Review crates/agent-drift-analyzer/src/context/objective.rs only for Packet B2.1 target honesty and return concrete findings.";
     let result = analyze_custom_rows(vec![

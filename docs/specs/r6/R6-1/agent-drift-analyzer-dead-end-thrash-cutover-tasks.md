@@ -126,7 +126,7 @@ were missing, stop and report it instead of compensating inside this packet.
 
 ## R6-1.4: Guardrail-5 Bridge Coverage
 
-- [ ] Task R6-1.4.1: Cover the `R5.75-6` bridge needle lists.
+- [x] Task R6-1.4.1: Cover the `R5.75-6` bridge needle lists.
   - Acceptance: `tests/checkpoints.rs` adds regressions that exercise `anchor_text_looks_grounded_goal` /
     `narrowed_objective_looks_subordinate` so a phrasing the bridge misses fails the wall (a novel-phrasing
     miss is caught as a bridge gap, not silently mis-scored). The closeout note records legacy-surface
@@ -134,6 +134,11 @@ were missing, stop and report it instead of compensating inside this packet.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Closeout note (2026-06-30): added focused checkpoint regressions that (a) prove known
+    `anchor_text_looks_grounded_goal` / `narrowed_objective_looks_subordinate` needles lift the grounded
+    goal over subordinate closeout text and (b) lock a semantically equivalent unlisted phrasing as an
+    explicit bridge gap on the legacy surface. That miss is intentional packet-local debt reporting:
+    legacy-surface string-truth remains migration debt, not target state.
 
 ## R6-1.5: Smoke And Closeout
 
