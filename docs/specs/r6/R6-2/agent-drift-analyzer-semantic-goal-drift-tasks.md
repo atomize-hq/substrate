@@ -71,7 +71,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.2: Confirm The Variant Blast Radius And Schema Decision (Impact-Gated, No Scorer Code)
 
-- [ ] Task R6-2.2.1: Confirm the `SemanticGoalDrift` variant blast radius and the `schema_version` decision.
+- [x] Task R6-2.2.1: Confirm the `SemanticGoalDrift` variant blast radius and the `schema_version` decision.
   - Acceptance: the variant is the decided shape (SPEC Resolved Decision 6). Run `gitnexus_impact` on
     `score_session` and the `SemanticGoalDrift` variant; record the full blast radius (schema `DriftClass`,
     analyzer `export.rs` class lists/labels, analyzer sort order, sentinel `operator_surface.rs` mappings —
@@ -83,7 +83,37 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     - (read-only) `crates/agent-drift-analyzer/src/checkpoint/schema.rs`,
       `crates/agent-drift-analyzer/src/checkpoint/export.rs`,
       `crates/agent-drift-sentinel/src/operator_surface.rs`
-  - Finding: _(record the blast radius + schema_version decision here when complete)_
+  - Finding: Live prerequisite check passed before this ledger update: `R6-2.0` is landed in repo truth
+    via the docs-lock commit (`085b5193c`) plus the present spec/plan/tasks/prompt artifact set under
+    `docs/specs/r6/R6-2/`, and `R6-2.1.1` is landed in both this ledger and live code
+    (`c53ba7a44`, `1c2e1da8a`; `score_session` now accepts `kickoff_anchor: Option<&StructuredObjective>`).
+    GitNexus impact on `score_session` (`npx gitnexus impact score_session --repo 97a0-substrate --direction upstream --depth 4`)
+    came back **LOW** risk with one direct caller (`analyze_loaded_bundle`), one affected process
+    (`analyze_loaded_bundle`, 9 hits / earliest broken step 1), two affected modules (`Checkpoint`
+    direct, `Tests` indirect), and the upstream chain `analyze_loaded_bundle` -> `analyze_bundle` ->
+    CLI `run`. GitNexus could not resolve `SemanticGoalDrift` yet because the variant does **not** exist
+    at HEAD, so the honest proxy was the live `DriftClass` surface plus direct code reads: adding the
+    variant will require lockstep edits in `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
+    (the `DriftClass` enum itself), `crates/agent-drift-analyzer/src/scoring/mod.rs`
+    (`score_session` exhaustive sort order), `crates/agent-drift-analyzer/src/checkpoint/export.rs`
+    (`drift_classes()` inventory and `drift_class_label()`), and
+    `crates/agent-drift-sentinel/src/operator_surface.rs`
+    (`drift_class_name`, `historical_reason_prefixes`, and the posture path that depends on
+    `checkpoint_had_active_class`; the helper body is generic, but the new variant only becomes
+    sentinel-visible once the explicit name/prefix surfaces are taught about it). Schema blast radius is
+    likewise broader than the enum line itself: analyzer checkpoints are still emitted as
+    `schema_version: "v0.6"` in `checkpoint/mod.rs`, analyzer validation currently treats
+    `session_archetype` as required only for `v0.5 | v0.6` and `session_progress` as required only for
+    `v0.6` in `checkpoint/schema.rs`, and sentinel explicit-state gating currently admits only
+    `v0.3 | v0.4 | v0.5 | v0.6` in `operator_surface.rs`. Decision: **bump checkpoint `schema_version`
+    to `v0.7` when `SemanticGoalDrift` lands.** This is an honest-labeling + sentinel-gate decision, not
+    a compatibility shield: old readers still fail at enum deserialization before any version gate if the
+    new variant appears. The bump is still warranted because the active drift-class surface, analyzer
+    export labels/lists, and sentinel explicit-state allowlist all change together, so shipping the
+    variant under `v0.6` would mislabel a materially different checkpoint contract. Operationally this
+    remains a **lockstep deploy**: land the variant with the analyzer `export.rs` updates, the sentinel
+    `operator_surface.rs` updates, the `v0.7` writer/gate changes, and the full analyzer + sentinel walls
+    in the same packet; do not rely on versioning to protect mixed old/new binaries.
 
 ## R6-2.3: Semantic-Goal-Drift Scorer + Presence Guard
 
