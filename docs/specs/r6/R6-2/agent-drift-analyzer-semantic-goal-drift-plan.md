@@ -24,6 +24,11 @@ objective sidecar (`comparison_key` + typed goal anchor) with a mandatory sideca
    class is resolved with `gitnexus_impact` before landing, defaulting toward the additive variant.
 6. The scorer stays rule-based and interpretable; learned monitors deferred.
 7. Packet-prompt rule: verify `R5.75-1` and `R6-1` are landed before editing.
+8. The kickoff anchor is *session-level* and not on `CheckpointAnalysis`, so it is threaded into
+   `score_session` as additive session-running input (mirroring `previous_truth_grounding_gap` in
+   `lib.rs`), never read via `session_kickoff_anchor(analysis)`. The current goal is read from
+   `analysis.current`. The anchor *source* (first confident `TaskStatement` vs session-level signal) is
+   resolved in `R6-2.1`; capture-onto-`CheckpointAnalysis` is the fallback access path.
 
 ## Why This Packet Exists
 
@@ -38,7 +43,9 @@ without migrating the high-risk reset surface.
 
 ```text
 docs lock (this SPEC/PLAN/TASKS)
-  -> kickoff-anchor capture probe (first confident TaskStatement vs session kickoff signal)
+  -> kickoff-anchor capture + access-path decision
+     (source: first confident TaskStatement vs session kickoff signal;
+      access: thread into score_session like previous_truth_grounding_gap, not read off analysis)
   -> DriftClass-vs-evidence impact decision (gitnexus_impact)
   -> semantic_goal_drift scorer + sidecar-presence guard (structured-state read)
   -> drift-vs-replan + structured-source regressions + acceptance fixture
@@ -69,26 +76,38 @@ shape) must be explicit before editing.
 
 Manual review against `docs/specs/r6/MAP.md`, the DESIGN doc, and live `context/objective.rs`.
 
-## R6-2.1: Capture The Kickoff Anchor
+## R6-2.1: Capture And Thread The Kickoff Anchor
 
 ### Scope
 
-- determine, from the per-checkpoint `structured_objective`, how to capture the session's kickoff anchor:
-  the first confident `TaskStatement` checkpoint goal vs a session-level kickoff signal — investigation
-  plus a minimal, committed anchor-capture helper
-- the anchor is read once and reused; it does not recompute objective extraction
+- **Anchor source.** Determine, from the per-checkpoint `structured_objective`, how to capture the
+  session's kickoff anchor: the first confident `TaskStatement` checkpoint goal — the only concrete source,
+  since the `R4` session-level kickoff-signal hook is disabled (`checkpoint/mod.rs`), so it is not a live
+  alternative (Open Question 1a) — investigation plus a minimal, committed anchor-capture helper. The
+  anchor is read once and reused; it does not recompute objective extraction.
+- **Access path (how the scorer reaches it).** The anchor is session-level and is **not** on
+  `CheckpointAnalysis`, so decide how it reaches `score_session` (Open Question 1b). Recommended: thread a
+  running anchor through the per-session analyze loop and pass it into the scorer, exactly as
+  `previous_truth_grounding_gap` is threaded today (`lib.rs`); the fallback is capturing it onto
+  `CheckpointAnalysis`. Reject `session_kickoff_anchor(analysis)` — the anchor is not derivable from a
+  single `CheckpointAnalysis`. (Contrast `R6-1`: its frontier signal is checkpoint-local, so
+  `build_scoring_session_progress` could derive it inside `score_session`; the anchor is session-level, so
+  that pattern does not extend.) Record both the source and the access path in the TASKS ledger.
 
 ### Primary Files
 
 ```text
-crates/agent-drift-analyzer/src/checkpoint/mod.rs   (anchor capture from existing structured_objective)
+crates/agent-drift-analyzer/src/checkpoint/mod.rs    (anchor capture from existing structured_objective)
+crates/agent-drift-analyzer/src/lib.rs               (thread the running anchor into score_session, like previous_truth_grounding_gap)
+crates/agent-drift-analyzer/src/scoring/mod.rs       (score_session additive anchor input)
 crates/agent-drift-analyzer/src/context/objective.rs (read-only)
 ```
 
 ### Why Before The Scorer
 
-The scorer's correctness depends on a stable, confident anchor; resolve the anchor source before writing
-the distance logic.
+The scorer's correctness depends on a stable, confident anchor *and* a real path for that anchor to reach
+scoring. Resolving the source without the access path is what left the first draft asserting a
+non-existent `session_kickoff_anchor(analysis)`; settle both before writing the distance logic.
 
 ### Verification
 

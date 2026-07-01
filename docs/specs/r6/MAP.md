@@ -179,8 +179,9 @@ execution sequence.
    consumer per `R6-2`, scoped to the **kickoff-anchored first cut** (drift of the current checkpoint's
    structured goal from the session's kickoff/anchor goal). Then land `R6-3`, the committed follow-up that
    adds **rolling / previous-checkpoint** semantic drift (current checkpoint's structured goal vs the
-   immediately-previous checkpoint's, reachable via `analysis.previous` with no new plumbing) to catch the
-   gradual, step-over-step drift the origin comparison can miss. Open the conditional `R6-4` reset
+   immediately-previous checkpoint's, reachable via `analysis.previous` with no new plumbing) to catch
+   **abrupt single-checkpoint goal pivots** cheaply — the complement to the kickoff-anchored signal, which
+   is the cumulative measure that catches gradual drift from the original ask. Open the conditional `R6-4` reset
    migration only if `R6-1`/`R6-2` evidence warrants. Guardrails enforced in tests throughout.
 
 ## Non-Goals For This Rescope

@@ -105,8 +105,10 @@ new dimension — which we satisfy as a fresh direct consumer, not a migration.
 The `semantic drift from kickoff/plan/docs` dimension is the structured-objective integration point. Its
 contract:
 
-- read `analysis.current.task_frame` for the structured objective sidecar (goal anchor `comparison_key`
-  and typed target/evidence), plus the kickoff/anchor objective for the session;
+- read the structured objective sidecar from `analysis.current.context.objective` (its
+  `structured: Option<StructuredObjective>` goal anchor and the already-computed `comparison_key`; exported
+  per-checkpoint as `structured_objective`) — **not** `task_frame`, which has no structured field — plus
+  the kickoff/anchor objective for the session;
 - compute drift as semantic distance between the current effective goal and the anchored kickoff goal,
   using `comparison_key` / structured terms rather than raw display-string token overlap;
 - **sidecar-presence guard (mandatory):** define behavior for all three states the migration doc
@@ -139,8 +141,9 @@ advances; the known `dead_end_thrash` replay artifacts (e.g. the cleared control
 **`R6-2` — `semantic drift from kickoff/plan/docs` as a new structured-objective consumer.** Build the
 dimension per the architecture above; gives `comparison_key` its first live consumer with a sidecar-
 presence guard. Depends on `R6-1` only for shared scorer scaffolding, not semantically. Primary files:
-a new `src/scoring/semantic_drift.rs` (or equivalent) + `scoring/mod.rs`, `src/checkpoint/schema.rs`
-(only if a new `DriftClass` variant is needed — additive), tests + acceptance fixtures. Acceptance: a
+a new `src/scoring/semantic_goal_drift.rs` + `scoring/mod.rs`, `src/checkpoint/schema.rs`
+(only if a new `DriftClass` variant is needed — additive at the enum, but see the serde-compat note in the
+`R6-2` spec), tests + acceptance fixtures. Acceptance: a
 session that pivots away from its kickoff goal scores drift only when the sidecar is present and
 confident; absent/unknown sidecar stays conservative; `R5.75` witnesses do not regress.
 
@@ -148,15 +151,20 @@ confident; absent/unknown sidecar stays conservative; `R5.75` witnesses do not r
 2026-06-30).** `R6-2` ships the **kickoff-anchored** first cut (drift of the current structured goal from
 the session's kickoff/anchor goal — the "still on the original ask?" question). `R6-3` adds the
 complementary **rolling** signal: drift of the current checkpoint's structured goal from the
-*immediately-previous* checkpoint's structured goal — the "did we drift step-over-step?" question.
-Rationale: the origin comparison can miss slow, cumulative drift that never trips a single-step threshold,
-and the previous-checkpoint goal is already reachable via
-`analysis.previous.context.objective.structured` with **no new plumbing** (the kickoff anchor, by
-contrast, is session-level and must be threaded — see `R6-2`). Whether it lands as a second `DriftClass`
-variant or as additional evidence on the `R6-2` class is an impact-gated decision deferred to the `R6-3`
-spec. Primary files (when written): `src/scoring/` (extends the `R6-2` semantic-drift module), tests +
-acceptance fixtures. Acceptance: a session that drifts gradually across checkpoints without a sanctioned
-replan scores rolling drift; `R5.75`/`R6-1`/`R6-2` witnesses do not regress.
+*immediately-previous* checkpoint's structured goal — the "did we lurch this checkpoint?" question.
+Rationale (the two comparisons catch different failure shapes — do not conflate them): kickoff-vs-current
+is the *cumulative* measure — a slow drift accumulates distance from the origin and eventually flags — so
+it is the one that catches gradual drift from the original ask. Previous-vs-current is a *step-size*
+measure: it flags an abrupt single-checkpoint pivot immediately, and does not false-positive on slow
+legitimate evolution — but on its own it *misses* slow cumulative drift when each step stays under
+threshold. `R6-3`'s distinctive value is therefore catching abrupt pivots cheaply: the previous-checkpoint
+goal is already reachable via `analysis.previous.context.objective.structured` with **no new plumbing**
+(the kickoff anchor, by contrast, is session-level and must be threaded — see `R6-2`). Whether it lands as
+a second `DriftClass` variant or as additional evidence on the `R6-2` class is an impact-gated decision
+deferred to the `R6-3` spec. Primary files (when written): `src/scoring/` (extends the `R6-2`
+`semantic_goal_drift` module), tests + acceptance fixtures. Acceptance: a session with an abrupt
+single-checkpoint goal pivot (without a sanctioned replan) scores rolling drift; a slow legitimate
+evolution does not; `R5.75`/`R6-1`/`R6-2` witnesses do not regress.
 
 **`R6-4` (conditional) — Seam 5 reset/comparability onto `comparison_key`.** Only opened if `R6-1`/`R6-2`
 replay evidence shows reset/continuity errors caused by objective-string quality (e.g. a bridge miss

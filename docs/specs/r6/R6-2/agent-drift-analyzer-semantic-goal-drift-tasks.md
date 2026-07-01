@@ -19,17 +19,26 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     - `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-plan.md`
     - `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-tasks.md`
 
-## R6-2.1: Capture The Kickoff Anchor
+## R6-2.1: Capture And Thread The Kickoff Anchor
 
-- [ ] Task R6-2.1.1: Fix and capture the session kickoff structured-goal anchor.
-  - Acceptance: a minimal, committed helper captures the kickoff anchor from the existing per-checkpoint
-    `structured_objective` (the first confident `TaskStatement` goal, or a session-level kickoff signal —
-    resolve SPEC Open Question 1), read once and reused; it does not recompute objective extraction.
+- [ ] Task R6-2.1.1: Capture the session kickoff structured-goal anchor and decide its scorer access path.
+  - Acceptance: (a) a minimal, committed helper captures the kickoff anchor from the existing per-checkpoint
+    `structured_objective` (the first confident `TaskStatement` goal — the only concrete source; the
+    session-level kickoff-signal hook is disabled — Open Question 1a), read once and reused, not
+    recomputing objective extraction; and (b) the ledger
+    records the chosen **access path** by which the scorer receives the session-level anchor (Open Question
+    1b) — recommended: thread a running anchor through the per-session analyze loop into `score_session`
+    (additive input, mirroring `previous_truth_grounding_gap` at `lib.rs`); fallback: capture onto
+    `CheckpointAnalysis`. Reject `session_kickoff_anchor(analysis)` — the anchor is not on
+    `CheckpointAnalysis`. The current goal stays read from `analysis.current`. Resolves SPEC Open Question 1
+    (both sub-questions) and sizes R6-2.3.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
-    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
+    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs` (anchor capture)
+    - `crates/agent-drift-analyzer/src/lib.rs` (thread the anchor into `score_session`)
+    - `crates/agent-drift-analyzer/src/scoring/mod.rs` (`score_session` additive anchor input)
     - (read-only) `crates/agent-drift-analyzer/src/context/objective.rs`
-  - Finding: _(record the anchor-source decision here when complete)_
+  - Finding: _(record the anchor source + access path here when complete)_
 
 ## R6-2.2: Decide The Surfacing Shape (Impact-Gated, No Scorer Code)
 
@@ -49,11 +58,14 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 - [ ] Task R6-2.3.1: Implement the rule-based scorer with the three-state sidecar-presence guard.
   - Acceptance: a new `scoring/semantic_goal_drift.rs` first applies the presence guard (present+confident
-    → score; absent → no claim; present-but-unknown → no claim), then compares the current goal to the
-    kickoff anchor over `comparison_key`/structured terms, excluding sanctioned explicit replans, and
-    attaches named evidence (anchor + drifted goal). It is wired into `score_session` per the R6-2.2
-    decision. The drift signal reads structured state only — never `task_frame.objective`. Add the minimal
-    presence-guard + drift-vs-replan proof here (TDD); the full matrix is R6-2.4.
+    → score; absent → no claim; present-but-unknown → no claim), then compares the current goal (from
+    `analysis.current`) to the kickoff anchor (from the R6-2.1 threaded `score_session` input, not from
+    `analysis`) over `comparison_key`/structured terms, excluding sanctioned explicit replans **via the
+    replan signal exposed to the scorer per SPEC Open Question 4** (the private `progress.rs` detectors are
+    not reachable from `score_session`), and attaches named evidence (anchor + drifted goal). It is wired
+    into `score_session` per the R6-2.1 access path and the R6-2.2 surfacing decision. The drift signal
+    reads structured state only — never `task_frame.objective`. Add the minimal presence-guard +
+    drift-vs-replan proof here (TDD); the full matrix is R6-2.4.
   - Verify:
     - `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
@@ -71,7 +83,9 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     an unauthorized pivot → flagged with anchor-naming evidence; a sanctioned explicit replan → not
     flagged; and a structured-source proof where the bridge-patched display string and the structured goal
     disagree scores off the structured goal.
-  - Verify: `cargo test -p agent-drift-analyzer semantic_goal_drift checkpoints -- --nocapture`
+  - Verify:
+    - `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture`
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/...`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
@@ -95,7 +109,8 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     updated with status, routing, and the `R6-4` decision.
   - Verify:
     - `cargo test -p agent-drift-analyzer -- --nocapture`
-    - `cargo test -p agent-drift-sentinel -- --nocapture`
+    - `cargo test -p agent-drift-sentinel -- --nocapture` (only if a `DriftClass` variant landed; otherwise
+      the sentinel surface is untouched and this wall is not required)
   - Files:
     - `docs/specs/r6/MAP.md`
 
