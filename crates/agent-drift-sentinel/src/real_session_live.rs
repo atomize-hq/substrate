@@ -324,6 +324,18 @@ impl LiveSessionCoordinator {
             }
             Err(error) => return Err(error),
         };
+        if sparse_startup_checkpoint_emission_deferred(&self.progress, &self.rollout_path) {
+            self.progress.complete_poll(observed_size_bytes);
+            self.persist_state()?;
+            return Ok(LiveSessionPollResult {
+                rollout_path: self.rollout_path.clone(),
+                observed_size_bytes,
+                reran_pipeline: true,
+                emitted_checkpoints: 0,
+                latest_cursor: self.progress.last_delivered_cursor.clone(),
+                observations: Vec::new(),
+            });
+        }
         self.progress.begin_poll(observed_size_bytes);
         let fresh_checkpoints = checkpoints
             .into_iter()
@@ -608,6 +620,19 @@ fn sparse_startup_retry_allowed(rollout_path: &Utf8Path, error: &LiveSessionErro
         )) => sparse_startup_contract_gap(&readiness, reason),
         _ => false,
     }
+}
+
+fn sparse_startup_checkpoint_emission_deferred(
+    progress: &LiveSessionProgress,
+    rollout_path: &Utf8Path,
+) -> bool {
+    if progress.last_delivered_cursor.is_some() {
+        return false;
+    }
+
+    inspect_rollout_startup_readiness(rollout_path)
+        .map(|readiness| !readiness.has_session_activity)
+        .unwrap_or(false)
 }
 
 fn sparse_startup_contract_gap(readiness: &RolloutStartupReadiness, reason: &str) -> bool {
