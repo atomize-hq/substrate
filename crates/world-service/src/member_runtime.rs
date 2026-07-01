@@ -12,7 +12,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::Infallible,
     fs,
     path::Path,
@@ -45,7 +45,7 @@ pub(crate) struct MemberRuntimeManager {
 #[derive(Default)]
 struct ActiveMemberRegistry {
     by_participant_id: HashMap<String, Arc<ActiveMemberRuntime>>,
-    by_retained_key: HashMap<RetainedMemberKey, String>,
+    by_retained_key: HashMap<RetainedMemberKey, RetainedMemberSlot>,
 }
 
 struct ActiveMemberRuntime {
@@ -103,6 +103,12 @@ struct RetainedMemberKey {
     orchestration_session_id: String,
     world_generation: u64,
     backend_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RetainedMemberSlot {
+    primary_participant_id: String,
+    fork_child_participant_id: Option<String>,
 }
 
 impl MemberRuntimeManager {
@@ -441,15 +447,24 @@ impl MemberRuntimeManager {
             ))
             .into());
         }
-        if let Some(existing_participant_id) = guard.by_retained_key.get(&retained_key) {
-            return Err(
-                duplicate_retained_member_error(&retained_key, existing_participant_id).into(),
-            );
+        match guard.by_retained_key.get(&retained_key).cloned() {
+            Some(slot) => {
+                let updated_slot = slot.with_registered_fork_child(
+                    &retained_key,
+                    &guard.by_participant_id,
+                    active.as_ref(),
+                )?;
+                guard
+                    .by_retained_key
+                    .insert(retained_key.clone(), updated_slot);
+            }
+            None => {
+                guard.by_retained_key.insert(
+                    retained_key.clone(),
+                    RetainedMemberSlot::new(active.participant_id.clone()),
+                );
+            }
         }
-
-        guard
-            .by_retained_key
-            .insert(retained_key, active.participant_id.clone());
         guard
             .by_participant_id
             .insert(active.participant_id.clone(), active);
@@ -460,7 +475,16 @@ impl MemberRuntimeManager {
         if let Ok(mut guard) = self.active_members.write() {
             if let Some(active) = guard.by_participant_id.remove(participant_id) {
                 let retained_key = RetainedMemberKey::from_active(active.as_ref());
-                guard.by_retained_key.remove(&retained_key);
+                if let Some(slot) = guard.by_retained_key.get(&retained_key).cloned() {
+                    match slot.without_participant(participant_id) {
+                        Some(updated_slot) => {
+                            guard.by_retained_key.insert(retained_key, updated_slot);
+                        }
+                        None => {
+                            guard.by_retained_key.remove(&retained_key);
+                        }
+                    }
+                }
                 active.close_bootstrap();
                 active.cleanup_launcher_dir();
             }
@@ -553,10 +577,11 @@ impl MemberRuntimeManager {
             return Ok(active);
         }
 
-        if let Some(existing_participant_id) = guard.by_retained_key.get(&retained_key) {
+        if let Some(existing_slot) = guard.by_retained_key.get(&retained_key) {
+            let existing_participant_ids = existing_slot.participant_ids();
             return Err(retained_slot_owner_mismatch_error(
                 &retained_key,
-                existing_participant_id,
+                &existing_participant_ids,
                 &req.participant_id,
             )
             .into());
@@ -576,13 +601,16 @@ impl MemberRuntimeManager {
             .read()
             .expect("member runtime registry lock poisoned");
         match guard.by_retained_key.get(&retained_key) {
-            Some(participant_id) if participant_id == &req.participant_id => Ok(()),
-            Some(participant_id) => Err(retained_slot_owner_mismatch_error(
-                &retained_key,
-                participant_id,
-                &req.participant_id,
-            )
-            .into()),
+            Some(slot) if slot.contains(&req.participant_id) => Ok(()),
+            Some(slot) => {
+                let participant_ids = slot.participant_ids();
+                Err(retained_slot_owner_mismatch_error(
+                    &retained_key,
+                    &participant_ids,
+                    &req.participant_id,
+                )
+                .into())
+            }
             None => Err(missing_retained_slot_error(&retained_key).into()),
         }
     }
@@ -1434,31 +1462,121 @@ impl RetainedMemberKey {
     }
 }
 
-fn duplicate_retained_member_error(
-    retained_key: &RetainedMemberKey,
-    existing_participant_id: &str,
-) -> crate::service::BadRequestError {
-    crate::service::BadRequestError::new(format!(
-        "a retained world member is already active for orchestration_session_id {} world_generation {} backend_id {} (participant_id {})",
-        retained_key.orchestration_session_id,
-        retained_key.world_generation,
-        retained_key.backend_id,
-        existing_participant_id,
-    ))
+impl RetainedMemberSlot {
+    fn new(primary_participant_id: String) -> Self {
+        Self {
+            primary_participant_id,
+            fork_child_participant_id: None,
+        }
+    }
+
+    fn contains(&self, participant_id: &str) -> bool {
+        self.primary_participant_id == participant_id
+            || self.fork_child_participant_id.as_deref() == Some(participant_id)
+    }
+
+    fn participant_ids(&self) -> BTreeSet<String> {
+        let mut participant_ids = BTreeSet::from([self.primary_participant_id.clone()]);
+        if let Some(fork_child_participant_id) = self.fork_child_participant_id.as_ref() {
+            participant_ids.insert(fork_child_participant_id.clone());
+        }
+        participant_ids
+    }
+
+    fn with_registered_fork_child(
+        self,
+        retained_key: &RetainedMemberKey,
+        active_members: &HashMap<String, Arc<ActiveMemberRuntime>>,
+        candidate: &ActiveMemberRuntime,
+    ) -> Result<Self> {
+        if self.fork_child_participant_id.is_some() {
+            return Err(
+                retained_slot_registration_conflict_error(retained_key, &self, candidate).into(),
+            );
+        }
+
+        let Some(parent_participant_id) = candidate.parent_participant_id.as_deref() else {
+            return Err(
+                retained_slot_registration_conflict_error(retained_key, &self, candidate).into(),
+            );
+        };
+        if parent_participant_id != self.primary_participant_id {
+            return Err(
+                retained_slot_registration_conflict_error(retained_key, &self, candidate).into(),
+            );
+        }
+        if candidate.resumed_from_participant_id.is_some() {
+            return Err(
+                retained_slot_registration_conflict_error(retained_key, &self, candidate).into(),
+            );
+        }
+
+        let Some(parent) = active_members.get(parent_participant_id) else {
+            return Err(
+                retained_slot_registration_conflict_error(retained_key, &self, candidate).into(),
+            );
+        };
+        if parent.orchestration_session_id != candidate.orchestration_session_id
+            || parent.orchestrator_participant_id != candidate.orchestrator_participant_id
+            || parent.backend_id != candidate.backend_id
+            || parent.binding.world_id != candidate.binding.world_id
+            || parent.binding.world_generation != candidate.binding.world_generation
+        {
+            return Err(
+                retained_slot_registration_conflict_error(retained_key, &self, candidate).into(),
+            );
+        }
+
+        Ok(Self {
+            primary_participant_id: self.primary_participant_id,
+            fork_child_participant_id: Some(candidate.participant_id.clone()),
+        })
+    }
+
+    fn without_participant(self, participant_id: &str) -> Option<Self> {
+        if self.fork_child_participant_id.as_deref() == Some(participant_id) {
+            return Some(Self {
+                primary_participant_id: self.primary_participant_id,
+                fork_child_participant_id: None,
+            });
+        }
+        if self.primary_participant_id == participant_id {
+            return self.fork_child_participant_id.map(RetainedMemberSlot::new);
+        }
+        Some(self)
+    }
 }
 
 fn retained_slot_owner_mismatch_error(
     retained_key: &RetainedMemberKey,
-    expected_participant_id: &str,
+    expected_participant_ids: &BTreeSet<String>,
     actual_participant_id: &str,
 ) -> crate::service::BadRequestError {
+    let expected = if expected_participant_ids.len() == 1 {
+        format!(
+            "expected {}, got {}",
+            expected_participant_ids
+                .iter()
+                .next()
+                .expect("non-empty participant set"),
+            actual_participant_id
+        )
+    } else {
+        format!(
+            "active participant_ids [{}], got {}",
+            expected_participant_ids
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", "),
+            actual_participant_id
+        )
+    };
     crate::service::BadRequestError::new(format!(
-        "member_turn_submit.participant_id mismatch for retained member orchestration_session_id {} world_generation {} backend_id {} (expected {}, got {})",
+        "member_turn_submit.participant_id mismatch for retained member orchestration_session_id {} world_generation {} backend_id {} ({expected})",
         retained_key.orchestration_session_id,
         retained_key.world_generation,
         retained_key.backend_id,
-        expected_participant_id,
-        actual_participant_id,
     ))
 }
 
@@ -1470,6 +1588,28 @@ fn missing_retained_slot_error(
         retained_key.orchestration_session_id,
         retained_key.world_generation,
         retained_key.backend_id,
+    ))
+}
+
+fn retained_slot_registration_conflict_error(
+    retained_key: &RetainedMemberKey,
+    slot: &RetainedMemberSlot,
+    candidate: &ActiveMemberRuntime,
+) -> crate::service::BadRequestError {
+    let active_participant_ids = slot
+        .participant_ids()
+        .into_iter()
+        .collect::<Vec<_>>()
+        .join(", ");
+    crate::service::BadRequestError::new(format!(
+        "member_dispatch retained member slot conflict for orchestration_session_id {} world_generation {} backend_id {} (active participant_ids [{}], requested participant_id {}, parent_participant_id {:?}, resumed_from_participant_id {:?}); only a direct fork child of the current retained participant may co-register",
+        retained_key.orchestration_session_id,
+        retained_key.world_generation,
+        retained_key.backend_id,
+        active_participant_ids,
+        candidate.participant_id,
+        candidate.parent_participant_id,
+        candidate.resumed_from_participant_id,
     ))
 }
 
@@ -1520,6 +1660,22 @@ mod tests {
         participant_id: &str,
         bootstrap_span_id: &str,
     ) -> Arc<ActiveMemberRuntime> {
+        sample_active_member_runtime_with_lineage(
+            temp_dir,
+            participant_id,
+            bootstrap_span_id,
+            None,
+            None,
+        )
+    }
+
+    fn sample_active_member_runtime_with_lineage(
+        temp_dir: &tempfile::TempDir,
+        participant_id: &str,
+        bootstrap_span_id: &str,
+        parent_participant_id: Option<&str>,
+        resumed_from_participant_id: Option<&str>,
+    ) -> Arc<ActiveMemberRuntime> {
         let workspace_dir = temp_dir.path().join("workspace");
         let process_working_dir = temp_dir.path().join("process");
         let binary_path = temp_dir.path().join("member-runtime");
@@ -1536,8 +1692,8 @@ mod tests {
             participant_id: participant_id.to_string(),
             orchestration_session_id: "orch_123".to_string(),
             orchestrator_participant_id: "ash_orchestrator".to_string(),
-            parent_participant_id: None,
-            resumed_from_participant_id: None,
+            parent_participant_id: parent_participant_id.map(str::to_string),
+            resumed_from_participant_id: resumed_from_participant_id.map(str::to_string),
             backend_id: "cli:codex".to_string(),
             backend_kind: MemberRuntimeBackendKindV1::Codex,
             binary_path,
@@ -2379,28 +2535,6 @@ base_url = "https://gateway.example.invalid/v1"
     }
 
     #[test]
-    fn duplicate_retained_member_error_mentions_backend_slot_identity() {
-        let err = duplicate_retained_member_error(
-            &RetainedMemberKey {
-                orchestration_session_id: "orch_123".to_string(),
-                world_generation: 7,
-                backend_id: "cli:codex".to_string(),
-            },
-            "ash_member_existing",
-        );
-
-        assert!(
-            err.to_string().contains("backend_id cli:codex"),
-            "unexpected error: {err}"
-        );
-        assert!(
-            err.to_string()
-                .contains("participant_id ash_member_existing"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
     fn retained_slot_owner_mismatch_error_mentions_expected_participant() {
         let err = retained_slot_owner_mismatch_error(
             &RetainedMemberKey {
@@ -2408,7 +2542,7 @@ base_url = "https://gateway.example.invalid/v1"
                 world_generation: 7,
                 backend_id: "cli:codex".to_string(),
             },
-            "ash_member_existing",
+            &BTreeSet::from(["ash_member_existing".to_string()]),
             "ash_member_other",
         );
 
@@ -2437,7 +2571,10 @@ base_url = "https://gateway.example.invalid/v1"
             .write()
             .expect("member runtime registry lock poisoned")
             .by_retained_key
-            .insert(retained_key, "ash_member_existing".to_string());
+            .insert(
+                retained_key,
+                RetainedMemberSlot::new("ash_member_existing".to_string()),
+            );
 
         let mut req = sample_submit_turn_request();
         req.participant_id = "ash_member_other".to_string();
@@ -2456,6 +2593,34 @@ base_url = "https://gateway.example.invalid/v1"
                 .contains("expected ash_member_existing, got ash_member_other"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn validate_submit_target_slot_accepts_retained_fork_child_in_shared_slot() {
+        let manager = MemberRuntimeManager::new();
+        manager
+            .active_members
+            .write()
+            .expect("member runtime registry lock poisoned")
+            .by_retained_key
+            .insert(
+                RetainedMemberKey {
+                    orchestration_session_id: "orch_123".to_string(),
+                    world_generation: 7,
+                    backend_id: "cli:codex".to_string(),
+                },
+                RetainedMemberSlot {
+                    primary_participant_id: "ash_member_source".to_string(),
+                    fork_child_participant_id: Some("ash_member_child".to_string()),
+                },
+            );
+
+        let mut req = sample_submit_turn_request();
+        req.participant_id = "ash_member_child".to_string();
+
+        manager
+            .validate_submit_target_slot(&req)
+            .expect("source plus direct fork child should accept the exact participant");
     }
 
     #[test]
@@ -2482,7 +2647,7 @@ base_url = "https://gateway.example.invalid/v1"
             guard
                 .by_retained_key
                 .get(&RetainedMemberKey::from_active(active.as_ref())),
-            Some(&active.participant_id),
+            Some(&RetainedMemberSlot::new(active.participant_id.clone())),
             "retained slot ownership should stay exact after bootstrap cleanup"
         );
         drop(guard);
@@ -2575,6 +2740,137 @@ base_url = "https://gateway.example.invalid/v1"
         assert!(
             !temp_dir.path().join("launcher").exists(),
             "ephemeral bootstrap cleanup should still remove launcher artifacts"
+        );
+    }
+
+    #[test]
+    fn register_member_allows_direct_fork_child_in_same_slot() {
+        let source_dir = tempfile::tempdir().expect("source temp dir");
+        let child_dir = tempfile::tempdir().expect("child temp dir");
+        let source = sample_active_member_runtime(&source_dir, "ash_member_source", "spn_source");
+        let child = sample_active_member_runtime_with_lineage(
+            &child_dir,
+            "ash_member_child",
+            "spn_child",
+            Some("ash_member_source"),
+            None,
+        );
+        let manager = MemberRuntimeManager::new();
+
+        manager
+            .register_member(source.clone())
+            .expect("register source retained member");
+        manager
+            .register_member(child.clone())
+            .expect("register child retained member in shared slot");
+
+        let guard = manager
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        assert!(
+            guard.by_participant_id.contains_key(&source.participant_id),
+            "source retained member should stay registered"
+        );
+        assert!(
+            guard.by_participant_id.contains_key(&child.participant_id),
+            "child retained member should stay registered"
+        );
+        assert_eq!(
+            guard
+                .by_retained_key
+                .get(&RetainedMemberKey::from_active(source.as_ref())),
+            Some(&RetainedMemberSlot {
+                primary_participant_id: source.participant_id.clone(),
+                fork_child_participant_id: Some(child.participant_id.clone()),
+            }),
+            "shared retained slot should only track the source plus its direct fork child"
+        );
+    }
+
+    #[test]
+    fn register_member_rejects_unrelated_duplicate_in_same_slot() {
+        let source_dir = tempfile::tempdir().expect("source temp dir");
+        let duplicate_dir = tempfile::tempdir().expect("duplicate temp dir");
+        let source = sample_active_member_runtime(&source_dir, "ash_member_source", "spn_source");
+        let duplicate =
+            sample_active_member_runtime(&duplicate_dir, "ash_member_duplicate", "spn_duplicate");
+        let manager = MemberRuntimeManager::new();
+
+        manager
+            .register_member(source)
+            .expect("register source retained member");
+        let err = match manager.register_member(duplicate) {
+            Ok(_) => panic!("unrelated same-slot retained registration should fail closed"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.to_string()
+                .contains("member_dispatch retained member slot conflict"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.to_string().contains(
+                "only a direct fork child of the current retained participant may co-register"
+            ),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn unregister_member_preserves_direct_fork_child_slot_until_last_participant_leaves() {
+        let source_dir = tempfile::tempdir().expect("source temp dir");
+        let child_dir = tempfile::tempdir().expect("child temp dir");
+        let source = sample_active_member_runtime(&source_dir, "ash_member_source", "spn_source");
+        let child = sample_active_member_runtime_with_lineage(
+            &child_dir,
+            "ash_member_child",
+            "spn_child",
+            Some("ash_member_source"),
+            None,
+        );
+        let manager = MemberRuntimeManager::new();
+
+        manager
+            .register_member(source.clone())
+            .expect("register source retained member");
+        manager
+            .register_member(child.clone())
+            .expect("register child retained member");
+
+        manager.unregister_member(&source.participant_id);
+
+        let retained_key = RetainedMemberKey::from_active(child.as_ref());
+        {
+            let guard = manager
+                .active_members
+                .read()
+                .expect("member runtime registry lock poisoned");
+            assert!(
+                !guard.by_participant_id.contains_key(&source.participant_id),
+                "source retained member should be removed"
+            );
+            assert!(
+                guard.by_participant_id.contains_key(&child.participant_id),
+                "child retained member should remain registered"
+            );
+            assert_eq!(
+                guard.by_retained_key.get(&retained_key),
+                Some(&RetainedMemberSlot::new(child.participant_id.clone())),
+                "shared retained slot should promote the direct fork child once the source leaves"
+            );
+        }
+
+        manager.unregister_member(&child.participant_id);
+
+        let guard = manager
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        assert!(
+            !guard.by_retained_key.contains_key(&retained_key),
+            "shared retained slot should clear once the last participant leaves"
         );
     }
 }

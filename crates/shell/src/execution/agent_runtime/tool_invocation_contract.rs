@@ -976,18 +976,6 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
                             target_participant.reviewable_terminal_state_label()
                         );
                     }
-                    if matches!(tool_name, HostToolNameV1::ForkWorldWorker)
-                        && target_participant.is_authoritative_live()
-                        && record.live_participants().into_iter().all(|participant| {
-                            participant.participant_id() != target_participant.participant_id()
-                        })
-                    {
-                        bail!(
-                            "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
-                            metadata.orchestration_session_id,
-                            retained_worker.participant_id
-                        );
-                    }
                 }
                 RetainedFollowUpTargetRequirementV1::AuthoritativeLive => {
                     if record.live_participants().into_iter().all(|participant| {
@@ -2523,7 +2511,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn dispatch_contract_adapter_follow_up_resolution_allows_successor_fork_for_non_authoritative_live_worker(
+    fn dispatch_contract_adapter_follow_up_resolution_allows_successor_fork_after_retained_owner_exits(
     ) {
         with_store(|store| {
             let mut launch_orchestrator =
@@ -2541,7 +2529,7 @@ mod tests {
                 "worker_packet2_retained",
                 "orch_packet2_launch",
             );
-            member.release_runtime_ownership();
+            member.internal.shell_owner_pid = 999_999_999;
 
             let mut parent = active_parent(&launch_orchestrator);
             parent.bind_active_session_handle("orch_packet2_successor".to_string());
@@ -2570,7 +2558,7 @@ mod tests {
                     participant_id: "worker_packet2_retained".to_string(),
                 }),
             )
-            .expect("resolve successor-authorized fork authority for parked retained worker");
+            .expect("resolve successor-authorized fork authority after retained owner exits");
 
             assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
             assert_eq!(resolved.target_backend_id, "cli:codex_world");
@@ -2592,7 +2580,7 @@ mod tests {
                     fork_strategy: None,
                 }),
             )
-            .expect("translate successor-authorized fork request for parked retained worker");
+            .expect("translate successor-authorized fork request after retained owner exits");
 
             let validated = request.validate().expect("validate retained fork request");
             assert_eq!(validated.mode, WorldDispatchModeV1::Retained);

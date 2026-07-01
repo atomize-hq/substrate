@@ -1,6 +1,6 @@
 # `run_world_task` / retained-world-member debug synthesis
 
-Last updated: 2026-06-30  
+Last updated: 2026-07-01  
 Status: working canonical memo for this issue family; live code/tests/docs remain final authority.
 
 ## Purpose
@@ -42,7 +42,7 @@ Primary repo-truth surfaces repeatedly cited by those logs:
 
 ## Active symptom family
 
-The live issue family has narrowed. Some earlier blockers are now closed by real manual smoke; the active work is now centered on retained-worker successor follow-up liveness/eligibility and then worker-execution seams, with host-visible file semantics still secondary.
+The live issue family has narrowed, but it has also moved through several distinct retained-fork stages. Some earlier blockers are now closed by real manual smoke; the active work is no longer the original bootstrap mismatch, nor the first exposed `authoritative-live` seam, but a newer retained-fork bootstrap/stream-launch failure, with host-visible file semantics still secondary.
 
 What is now **confirmed fixed** by fresh manual smoke:
 
@@ -75,18 +75,20 @@ What is now **confirmed fixed** by fresh manual smoke:
 
 The still-live issues being debugged are now the combination of:
 
-1. retained successor `fork_world_worker` still failing live with `stale_linkage ... is no longer authoritative-live`,
-2. adjacent retained-mode `cancel_world_work` still failing live with the same `authoritative-live` stale-linkage class and likely an additional cancel-eligibility seam behind it,
-3. retained-worker follow-up/control operations remaining intentionally split by seam boundary:
+1. current valid world-bound `agent start` plus retained `spawn_world_worker` still pass, but the latest valid retained `fork_world_worker` smoke on 2026-07-01 fails earlier again with:
+   - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+2. the older retained successor `authoritative-live` seam and the later `fork_lineage_persist_failed ... missing_fork_child_registration ...` seam both advanced the code and exposed real bugs, but neither should be described as the **current** top live blocker anymore;
+3. retained-worker follow-up/control operations still remain intentionally split by seam boundary:
    - retained `fork_world_worker` and retained-mode `cancel_world_work` are supposed to keep successor-lineage authority,
-   - retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority in the presently landed implementation boundary,
-4. worker turn execution failure (`codex exited non-zero`) remaining unresolved and distinct from the retained follow-up/control-plane failures,
-5. and the older host-visible-file question still remaining secondary to those routing/control-plane issues.
+   - retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority in the current codebase/test boundary,
+4. adjacent retained-mode `cancel_world_work` has not yet been fully re-smoked through the newer retained-fork patch chain and may still expose either the older `authoritative-live` seam or a newer downstream eligibility seam,
+5. worker turn execution failure (`codex exited non-zero`) remains unresolved and distinct from the retained follow-up/control-plane failures,
+6. and the older host-visible-file question still remains secondary to those routing/control-plane issues.
 
 The current repo still exposes multiple relevant seams, but they no longer all sit at the same priority:
 
 - the host-visible file/write question remains open and likely still points at overlay/sync behavior,
-- while the top active blockers have shifted away from the old retained-worker bootstrap mismatch and toward retained successor `authoritative-live` / eligibility seams, then worker execution.
+- while the top active blockers have shifted away from the old retained-worker bootstrap mismatch, then through retained successor `authoritative-live` / post-registration seams, and now back to an earlier retained fork stream-launch/bootstrap wrapper failure on the newest valid smoke.
 
 Live code alone does **not** settle the host-visible write question, and the latest manual smoke only proves that certain routing/control surfaces now succeed. It does **not** yet prove the full end-to-end host-visible side-effect contract is settled.
 
@@ -244,6 +246,49 @@ Why this matters:
   are still rejected because parked/resumable retained workers are being downgraded too far after clean bootstrap exit;
 - this is therefore best read as a **wrong liveness predicate / authoritative-live gate** bug rather than the older world-binding bootstrap bug.
 
+### Repro F (2026-07-01): the retained-fork bug moved forward twice, then the latest valid smoke re-exposed an earlier stream-launch wrapper
+
+Later 2026-07-01 smokes and patch/review cycles moved the retained `fork_world_worker` failure through multiple real stages.
+
+Important status clarification:
+
+- unless a specific commit id is cited inline, the stage shifts below should be read as **later local patch-chain observations in a dirty worktree**, not as committed `HEAD` truth.
+
+Those local 2026-07-01 observations moved through these stages:
+
+1. after the earlier shell-side stale-owner / successor-authority work was advanced in committed history and then continued through later local iterations, the old:
+
+> `stale_linkage: orchestration session ... retained worker ... is no longer authoritative-live`
+
+was no longer the first retained-fork blocker;
+
+2. the next valid fork smoke then failed during child bootstrap with:
+
+> `failed to launch spawn_world_worker over world member dispatch`
+
+which led to the retained-slot / fork-child registration / orchestrator-id patch sequence;
+
+3. after later local patch-chain iterations on slot narrowing / orchestrator-id preservation / error-chain work, a subsequent valid fork smoke got farther and failed with:
+
+> `fork_lineage_persist_failed: failed to persist explicit fork lineage for child ... after authoritative registration, and automatic stop rollback did not reach durable closeout (missing_fork_child_registration: ... owner_unreachable: ...)`
+
+which exposed the shell-side durability/publication seam after the first `Registered` event;
+
+4. after later local patch-chain iterations adding a bounded durability gate for post-registration child visibility plus stop transport publication, the newest valid fork smoke on 2026-07-01 shifted again and now fails earlier with:
+
+> `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+
+What this means:
+
+- the old retained `authoritative-live` fork seam was real and has committed code history behind it, but it is no longer the top live blocker;
+- the later `fork_lineage_persist_failed ... missing_fork_child_registration ...` seam was also real in local 2026-07-01 smokes, but it should be read as a local patch-chain stage rather than assumed committed-`HEAD` truth;
+- the current top live blocker has moved back earlier in retained fork bootstrap, before the post-registration durability gate can even run;
+- so the memo must distinguish:
+  - **addressed in landed code**
+  - **once exposed in live smoke**
+  - **current top live blocker**
+  rather than treating every previously exposed retained-fork seam as still top-of-queue simultaneously.
+
 ## Synthesized working model
 
 ### 1) Missing host-visible file is probably **not** the primary runtime failure, but it remains explicitly open
@@ -315,7 +360,7 @@ But the later 2026-06-28 REPL smoke narrows the current priority:
 
 > if both first and second sequential `run_world_task` launches now succeed in the same fresh REPL session, then first-dispatch one-shot `run_world_task` binding mismatch is no longer the strongest active blocker.
 
-For the still-broken retained-worker path, the better leading hypotheses are now:
+For the still-broken retained-worker path, the better leading hypotheses at that 2026-06-30 stage were:
 
 - retained-worker parked/resumable state is being validated too strictly by an `authoritative-live` predicate on successor follow-up,
 - retained `fork_world_worker` and retained-mode `cancel_world_work` still hit that liveness gate even after bootstrap/world binding succeeds,
@@ -330,19 +375,21 @@ The older retained-worker probes sharpened that interpretation further:
 - retained-worker authority is session-rooted under `orchestration_session_id`, not pinned to one attached host participant;
 - `spawn_world_worker` is supposed to use the authoritative session `world_id` / `world_generation` from the bound session, not caller-remembered values;
 - retained successor `fork_world_worker` and retained-mode `cancel_world_work` are the follow-up/control operations expected to remain successor-authorized;
-- retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority in the presently landed implementation boundary;
+- retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority in the current codebase/test boundary;
 - `participant_id` is the authoritative retained-worker control handle;
 - `resumed_from_participant_id` is lineage/audit metadata, not the control selector;
 - so absent a genuine world replacement / generation rollover, `stale_linkage` currently reads as design-wrong rather than expected contract enforcement.
 
-The newest 2026-06-30 probes add one more refinement:
+The newest 2026-06-30 probes added one more refinement for that stage:
 
 - retained-worker bootstrap parity can now succeed in live smoke;
 - the real remaining fork/cancel failure is the `authoritative-live` requirement firing too early on parked/resumable retained workers;
-- so the top live bug has moved again:
+- so at that stage the top live bug had moved again:
   - from retained-worker bootstrap parity
   - to retained-worker successor-authorized **authoritative-live** gating for parked/resumable retained workers;
 - worker execution failure should still stay behind that fix.
+
+That 2026-06-30 read is now historical only. Later 2026-07-01 local patch-chain smokes moved the retained fork seam further forward and then re-exposed an earlier stream-launch/bootstrap wrapper as the current top blocker.
 
 ### 4) There is also a broader shell/runtime contract mismatch and a REPL/CLI parity requirement
 
@@ -401,7 +448,7 @@ The newer smokes add one more refinement:
   - `cd ../` is blocked by the caged-root guard as expected
 - and the later continuity-selector precedence fix closed the resumed targeted host-turn semantic continuity bug on both REPL and public CLI.
 
-So the current live mismatch is narrower than “reattach is broken” or “all world dispatch is broken.” The main remaining runtime failures are now the retained parked/resumable `authoritative-live` seam for successor `fork_world_worker`, then adjacent retained `cancel_world_work`, and only later worker execution, not ordinary-command survivability or resumed targeted host-turn continuity.
+So by the end of the 2026-06-30 stage, the live mismatch was narrower than “reattach is broken” or “all world dispatch is broken.” At that point the main remaining runtime failures were the retained parked/resumable `authoritative-live` seam for successor `fork_world_worker`, then adjacent retained `cancel_world_work`, and only later worker execution. That ordering is now superseded by the later 2026-07-01 local patch-chain smokes, which currently put the retained fork stream-launch/bootstrap wrapper first.
 
 ## What the cited runtime/docs actually establish
 
@@ -488,26 +535,32 @@ Both should also validate:
 
 These are the best next debugging checks to separate confirmed truth from still-likely theory:
 
-1. **Trace retained successor `fork_world_worker` through the parked/resumable `authoritative-live` gate**
-   - Goal: identify where a cleanly parked/resumable retained worker stops qualifying as `authoritative-live` for successor-authorized retained fork follow-up.
+1. **Recover the inner cause under the current retained fork stream-launch/bootstrap wrapper**
+   - Goal: explain or expose the exact inner failure under:
+     - `failed to launch world member dispatch stream for retained worker bootstrap ...`
    - Most likely seams:
-     - `crates/world-service/src/member_runtime.rs`
      - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
      - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+     - `crates/world-service/src/service.rs`
 
-2. **Then trace retained-mode `cancel_world_work` on the same retained worker**
-   - Goal: confirm whether `cancel_world_work` is blocked by the same wrong `authoritative-live` gate alone or whether a narrower retained cancel-eligibility seam appears immediately after it.
+2. **Then re-check whether the older post-registration durability seam still reproduces**
+   - Goal: determine whether:
+     - `fork_lineage_persist_failed ... missing_fork_child_registration ...`
+     reappears once the earlier stream-launch/bootstrap wrapper is repaired, or whether it was fully local to the later dirty-worktree patch chain.
 
-3. **Separate worker execution failure from control-plane failure**
-   - Goal: keep `continue_world_worker` worker-turn `codex exited non-zero` analysis separate from the retained fork/cancel liveness-predicate bug so they do not get conflated.
+3. **Then re-check retained-mode `cancel_world_work`**
+   - Goal: establish whether `cancel_world_work` is still blocked by the older `authoritative-live` class on current code, or whether later retained-fork changes have shifted that seam too.
 
-4. **Keep ordinary-command survivability as a regression baseline**
+4. **Separate worker execution failure from control-plane failure**
+   - Goal: keep `continue_world_worker` worker-turn `codex exited non-zero` analysis separate from retained fork/cancel launch and control-plane failures.
+
+5. **Keep ordinary-command survivability as a regression baseline**
    - Goal: preserve live `ls` / `pwd` success and expected caged-root `cd ../` denial after park while working retained-worker seams.
 
-5. **Keep the REPL and CLI parity regressions green**
+6. **Keep the REPL and CLI parity regressions green**
    - Goal: confirm both wrappers continue to preserve the same durable session truth, the same resumed continuity markers, and the correct session-local conversation continuity.
 
-6. **Keep the file-visibility question secondary**
+7. **Keep the file-visibility question secondary**
    - Goal: only revisit host-visible side-effect sync once the retained-worker and REPL parity/control-plane bugs are cleanly separated.
 
 ## 2026-06-29 patch sequence and current truth
@@ -630,7 +683,7 @@ The stale-binding issue did not stop at “ordinary REPL command needs retry/rep
 
 That led to several thin patches and reviews.
 
-## Later landed patches and review outcomes
+## Later committed branch history and local patch-chain observations
 
 ### 1. Generic member-bootstrap retry patch was invalidated
 
@@ -659,7 +712,25 @@ That led to several thin patches and reviews.
   - and later live smoke shows ordinary-command survivability has now materially improved,
   - while the next active runtime focus has moved on to retained-worker seams rather than resumed targeted host-turn continuity.
 
-### 4. Positive success regression was dead code, then fixed
+### 4. Earlier committed retained-fork authority / linkage history
+
+- The earlier committed branch history for the old retained-fork authority stage includes:
+  - `382a63a8` — `Refactor retained worker authority checks and enhance follow-up resolution for non-authoritative live workers`
+  - `02940fb6` — `Refactor retained worker linkage validation and bootstrap context`
+- Those commits are the supportable committed history for the earlier retained-fork `authoritative-live` / linkage stage.
+- They should not be conflated with the later 2026-07-01 local patch chain around slot registration, orchestrator-id preservation, post-registration durability gating, or the latest stream-launch wrapper.
+
+### 5. Later local retained-fork patch-chain observations (dirty worktree, not committed `HEAD` unless separately cited)
+
+- Later 2026-07-01 retained-fork work in the dirty worktree moved through several narrower seams:
+  - retained slot / direct fork-child registration narrowing,
+  - shell-side retained source orchestrator identity preservation for fork child bootstrap,
+  - shell-side error-chain preservation cleanup for fork bootstrap errors,
+  - shell-side bounded wait for child durability visibility / stop transport before treating the child receipt as usable.
+- Those observations are useful debug chronology.
+- But absent specific commit refs, they should be read as **local patch/review/smoke iterations**, not as committed branch history.
+
+### 6. Positive success regression was dead code, then fixed
 
 - Review later discovered the intended positive regression for:
   - parked host
@@ -670,7 +741,7 @@ That led to several thin patches and reviews.
 - Review validated that final test-enablement patch.
 - So the positive regression is now actually executing; that was enablement, not a behavior fix by itself.
 
-### 5. Clippy-only patch was separate and healthy
+### 7. Clippy-only patch was separate and healthy
 
 - A separate thin patch bundled arguments for `start_remote_member_runtime_with_binding_retry` to fix `clippy::too_many_arguments`.
 - That patch was a pure signature/parameter-struct cleanup and should not be conflated with runtime behavior changes.
@@ -749,7 +820,8 @@ Best current seam split:
    - successor-authorized retained `fork_world_worker` and retained-mode `cancel_world_work` still fail live with:
      - `stale_linkage ... retained worker ... is no longer authoritative-live`
    - design intent says a retained worker that exits clean bootstrap should become parked/resumable, not become an invalid control target,
-   - so the next active bug is now the authoritative-live gate on later retained follow-ups, not the earlier bootstrap mismatch.
+   - this seam was the next active bug after bootstrap parity improved,
+   - but it should now be read as a previously exposed / committed-history retained-fork stage rather than the current top live blocker, because the newest valid smoke has moved back earlier to the retained fork stream-launch wrapper.
 
 6. **Seam F: worker execution after continue**
    - `continue_world_worker` reaching the retained worker and then failing with `codex exited non-zero` remains real,
@@ -781,7 +853,9 @@ Interpretation:
   - then frozen runtime continuity last;
 - this seam should now be read as validated current truth, not an active live repro.
 
-## What is now actually landed and trusted
+## What is now actually committed / historically trustworthy vs what is only local patch-chain truth
+
+Committed / landed means committed on this branch. Later 2026-07-01 retained-fork stage changes without commit ids should be read as dirty-worktree patch-chain observations only.
 
 At this point the following narrow claims appear trustworthy:
 
@@ -807,7 +881,11 @@ At this point the following narrow claims appear trustworthy:
 
 6. **But the live failure has moved above the current regression focus**
    - tests currently validate important routing boundaries,
-   - while the newest live bugs are now retained successor `fork_world_worker` `authoritative-live` gating, adjacent retained `cancel_world_work`, and only then worker execution rather than resumed targeted host-turn continuity.
+   - while the retained-worker queue has since moved through local 2026-07-01 patch-chain stages:
+     - retained successor `authoritative-live` gating,
+     - then retained slot / fork-child registration / orchestrator-id and error-chain cleanup,
+     - then post-registration child durability publication,
+     - and the newest valid live fork smoke now failing earlier again on the retained world-member dispatch stream launch wrapper.
 
 7. **ID taxonomy / continuity documentation is landed enough for this seam**
    - the canonical internal doc exists:
@@ -832,33 +910,51 @@ At this point the following narrow claims appear trustworthy:
    - targeted adapter follow-up tests now pass on that exact split,
    - and the recent lineage boundary / adapter-store scope cleanup should now be read as materially validated rather than the current blocker.
 
+10. **The old retained `authoritative-live` fork seam has supportable committed history**
+   - the supportable committed branch history here is:
+     - `382a63a8` — `Refactor retained worker authority checks and enhance follow-up resolution for non-authoritative live workers`
+     - `02940fb6` — `Refactor retained worker linkage validation and bootstrap context`
+   - those are the safe inline commit refs for the earlier retained-fork authority / linkage stage.
+
+11. **The later retained slot / fork-child registration / orchestrator-id / durability chain should currently be read as local patch-chain truth**
+   - those later 2026-07-01 stages materially changed the observed live failure point,
+   - but absent explicit commit refs they should not be described here as committed `HEAD` history.
+
+12. **The current top blocker under the newest valid smoke is the retained fork stream-launch/bootstrap wrapper**
+   - latest valid 2026-07-01 smoke currently fails with:
+     - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+   - so the current top blocker is now the retained fork stream-launch/bootstrap seam, not the older `authoritative-live` or later `fork_lineage_persist_failed` stages.
+
 ## Updated active blockers
 
 The open bug buckets should now be read in this order:
 
-1. **retained successor `fork_world_worker` still fails live on the parked/resumable `authoritative-live` seam**
-   - latest live smoke shows:
+1. **latest valid retained `fork_world_worker` smoke now fails earlier again at retained world-member dispatch stream launch**
+   - current valid smoke still shows:
      - world-bound `agent start`: pass
      - retained `spawn_world_worker`: pass
-     - successor retained `fork_world_worker`: fail with `stale_linkage ... is no longer authoritative-live`
-   - next patch target:
-     - narrow the retained follow-up liveness predicate so a cleanly parked/resumable retained worker remains a valid successor-authorized fork target.
-2. **adjacent retained-mode `cancel_world_work` still fails on the same `authoritative-live` class and may still have a deeper cancel-eligibility seam**
-   - latest live smoke shows retained `cancel_world_work` failing with the same `stale_linkage ... is no longer authoritative-live` error,
-   - so this is no longer primarily the old bootstrap mismatch seam and no longer primarily a lineage-matching seam,
-   - but once the wrong liveness gate is removed it may expose the more specific retained cancel eligibility logic behind it.
-3. **worker turn execution failure (`codex exited non-zero`) remains a separate follow-up issue**
-   - keep this deferred until the retained successor fork/cancel seams are fixed, so execution failure analysis starts from a correct control-plane posture.
-4. **retained-worker lineage boundary / adapter-store scope cleanup is materially improved, but it is no longer the primary blocker**
-   - the lineage/selector cleanup work is now substantially better aligned:
-     - retained `fork_world_worker` and retained-mode `cancel_world_work` keep successor-lineage authority,
-     - retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are back on strict direct-link authority,
-     - and adapter tests now match that intended seam boundary.
-5. **implicit-PTY ordinary-command caller-boundary clarification/coverage is still useful, but it is no longer the top live blocker**
-6. **test harness still does not fully model every live caller boundary**
-7. **host-visible file/write semantics remain open but are not first in priority**
-8. **low-severity unrelated `docs/TRACE.md` stale absolute-link cleanup remains**
-9. **enum/type cleanup remains post-stabilization hardening, not the next live blocker**
+   - but the newest valid fork smoke now fails with:
+     - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+   - this is now the top live blocker and should be treated as earlier than the later lineage-persist/durability gate.
+2. **the older retained `authoritative-live` seam should now be read as code-addressed / historically important, not the current top blocker**
+   - it was a real live seam,
+   - it drove multiple shell-side stale-owner / authority / continue-fork-command narrowing patches,
+   - but the latest valid fork smoke has moved past that stage.
+3. **the later `fork_lineage_persist_failed ... missing_fork_child_registration ...` seam should also now be read as intermediate, not current top-of-queue**
+   - it exposed a real post-registration durability/publication race,
+   - and in the later 2026-07-01 local patch chain it drove bounded child-visibility / stop-transport gate work,
+   - but the newest valid smoke currently fails earlier again before that gate becomes the first blocker.
+4. **adjacent retained-mode `cancel_world_work` still needs renewed live validation after the later retained-fork patch chain**
+   - older live smoke showed the same `authoritative-live` class,
+   - but cancel has not yet been re-established as the top current blocker after the newer fork-launch failures moved earlier.
+5. **worker turn execution failure (`codex exited non-zero`) remains a separate follow-up issue**
+   - keep this deferred until retained fork/cancel control-plane posture is stable again.
+6. **retained-worker lineage boundary / adapter-store scope cleanup is materially improved, but it is no longer the primary blocker**
+7. **implicit-PTY ordinary-command caller-boundary clarification/coverage is still useful, but it is no longer the top live blocker**
+8. **test harness still does not fully model every live caller boundary**
+9. **host-visible file/write semantics remain open but are not first in priority**
+10. **low-severity unrelated `docs/TRACE.md` stale absolute-link cleanup remains**
+11. **enum/type cleanup remains post-stabilization hardening, not the next live blocker**
    - keep the pre-UAA enum/type cleanup as structural hardening after the retained-worker queue above is stabilized.
 
 Do not describe ordinary-command survivability after parked host as the primary open bug in this memo anymore:
@@ -868,26 +964,31 @@ Do not describe ordinary-command survivability after parked host as the primary 
 
 ## Next planned landing order
 
-1. **Patch retained `fork_world_worker` authoritative-live gating first**
-   - next live target is no longer bootstrap parity and no longer lineage matching by itself;
-   - the freshest live smoke says retained worker creation succeeds, but later successor `fork_world_worker` still fails because the worker is treated as no longer `authoritative-live`;
-   - inspect the retained follow-up path around the `AuthoritativeLive` predicate and the parked/resumable worker state transition after clean bootstrap exit.
+1. **Patch / explain the retained fork stream-launch wrapper next**
+   - next live target is now the earlier:
+     - `failed to launch world member dispatch stream for retained worker bootstrap ...`
+   - recover or expose the inner cause under that wrapper and repair that seam before treating later durability/rollback surfaces as primary again.
 
-2. **Then re-check retained-mode `cancel_world_work`**
-   - this likely shares some of the same gate,
-   - but once the wrong authoritative-live gate is removed it may expose a more specific “active cancelable work” eligibility seam.
+2. **Then re-check whether the post-registration durability gate seam still reproduces**
+   - if the stream-launch wrapper is repaired, verify whether the older:
+     - `fork_lineage_persist_failed ... missing_fork_child_registration ...`
+     seam is now gone or reappears as the next blocker.
 
-3. **Only then separate worker execution failure**
-   - revisit `continue_world_worker` `codex exited non-zero` only after the retained successor fork/cancel seams are fixed, so worker execution is analyzed from a correct control-plane baseline.
+3. **Then re-check retained-mode `cancel_world_work`**
+   - older live smoke tied it to the same retained successor queue,
+   - but it now needs fresh validation after the later fork patch chain.
 
-4. **Keep ordinary-command survivability as the live regression baseline**
+4. **Only then separate worker execution failure**
+   - revisit `continue_world_worker` `codex exited non-zero` only after retained fork/cancel control-plane seams are stable again, so worker execution is analyzed from a correct baseline.
+
+5. **Keep ordinary-command survivability as the live regression baseline**
    - do not regress parked-host -> ordinary unprefixed `ls` / `pwd` success, expected caged-root `cd ../` denial, or the adjacent implicit-PTY regression while fixing retained-worker/runtime seams.
 
-5. **Keep the docs/contract work stable, with only bounded cleanup left**
+6. **Keep the docs/contract work stable, with only bounded cleanup left**
    - avoid reopening the landed ID taxonomy / continuity docs unless retained-worker work proves a real contract gap;
    - the remaining `docs/TRACE.md` stale absolute-link cleanup is low severity and unrelated to the active runtime bugs.
 
-6. **Do the structural enum/type cleanup before the UAA boundary as post-stabilization hardening**
+7. **Do the structural enum/type cleanup before the UAA boundary as post-stabilization hardening**
    - replace ambiguous `Option<prompt>` / launch-policy semantics with an explicit pre-UAA representation so ordinary commands and prompt-bearing turns cannot be conflated accidentally.
    - this is still worthwhile for readability and safety, but it is not the next live patch target.
 
@@ -910,12 +1011,15 @@ If we need the shortest honest current diagnosis:
 - explicit `:pty` should not be described as fail-closed on this memo's current truth;
 - REPL and public CLI both now appear to reuse the same transport/session continuity markers on resumed targeted host turns;
 - the resumed targeted host-turn continuity seam is now validated enough on both surfaces, including the strict public `start` -> `turn` smoke returning `Just reply OK`;
-- recent patches cleaned up the retained-worker lineage boundary and adapter/store scope enough that those are no longer the primary diagnosis;
-- still-open likely bug buckets are:
-  - retained successor `fork_world_worker` failing on the parked/resumable `authoritative-live` seam,
-  - adjacent retained `cancel_world_work` failing on the same seam, with possible deeper cancel eligibility still hidden behind it,
-  - worker non-zero execution failures after those,
-  - remaining caller-boundary / harness realism gaps,
+- earlier committed patches plus later 2026-07-01 local patch-chain iterations cleaned up the retained-worker lineage boundary and moved the observed fork failure point through slot registration, orchestrator-id, error-chain, and post-registration durability stages, so those earlier seams are no longer the top-line diagnosis;
+- the newest valid retained fork smoke now fails earlier again with:
+  - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+- still-open likely bug buckets are therefore now:
+  - the retained fork stream-launch/bootstrap wrapper and its hidden inner cause,
+  - then any re-exposed post-registration durability seam if it still survives after that,
+  - then renewed retained `cancel_world_work` validation,
+  - then worker non-zero execution failures,
+  - then remaining caller-boundary / harness realism gaps,
   - and host-visible file/write semantics;
 - the enum/type cleanup remains useful post-stabilization hardening, but it should stay behind the retained-worker queue rather than acting as the next live patch target.
 

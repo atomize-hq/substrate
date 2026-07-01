@@ -14999,7 +14999,7 @@ mod tests {
 
             assert!(
                 err.to_string().contains(
-                    "failed to launch spawn_world_worker over world member dispatch"
+                    "failed to launch world member dispatch stream for retained worker bootstrap"
                 ),
                 "allowed fork should now fail only at retained bootstrap launch in this harness: {err}"
             );

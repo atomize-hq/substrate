@@ -1661,6 +1661,15 @@ impl AgentRuntimeStateStore {
             target_participant_id,
             target_backend_id,
         )?;
+        if !resolved.source_participant.is_authoritative_live()
+            || !owner_process_is_alive(&resolved.source_participant)
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
+                orchestration_session_id,
+                target_participant_id
+            );
+        }
 
         Ok(ResolvedInternalContinueWorldDispatchTarget {
             session: resolved.session,
@@ -1964,19 +1973,6 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id,
                 target_participant_id,
                 source_participant.reviewable_terminal_state_label()
-            );
-        }
-        // A retained worker that cleanly exited bootstrap is expected to remain a valid
-        // parked/resumable fork source even after it relinquishes authoritative-live runtime
-        // ownership. Rows that still claim authoritative-live must still prove their owner pid is
-        // reachable so stale owner-live snapshots continue to fail closed.
-        if source_participant.is_authoritative_live()
-            && !owner_process_is_alive(&source_participant)
-        {
-            anyhow::bail!(
-                "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
-                orchestration_session_id,
-                target_participant_id
             );
         }
 
@@ -10608,7 +10604,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_internal_fork_world_dispatch_target_accepts_successor_authoritative_caller_for_retained_source(
+    fn resolve_internal_fork_world_dispatch_target_accepts_successor_authoritative_caller_after_retained_owner_exits(
     ) {
         with_store(|store| {
             let mut launch_orchestrator =
@@ -10620,7 +10616,7 @@ mod tests {
 
             let mut member =
                 live_member("codex_world", "sess_fork", "ash_source", "orch_fork_launch");
-            member.release_runtime_ownership();
+            member.internal.shell_owner_pid = 999_999_999;
 
             let mut parent = active_parent(&launch_orchestrator);
             parent.set_world_binding("world-17", 2);
@@ -10644,7 +10640,7 @@ mod tests {
                     "ash_source",
                     "cli:codex_world",
                 )
-                .expect("resolve retained fork source through authoritative successor");
+                .expect("resolve retained fork source after retained owner exits");
 
             assert_eq!(
                 resolved.caller_participant.participant_id(),
@@ -10911,7 +10907,8 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_internal_fork_world_dispatch_target_rejects_stale_retained_source() {
+    fn resolve_internal_fork_world_dispatch_target_allows_non_terminal_retained_source_after_owner_exit(
+    ) {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_fork", "orch_fork");
             let mut parent = active_parent(&orchestrator);
@@ -10928,19 +10925,17 @@ mod tests {
                 .expect("persist orchestrator");
             store.persist_participant(&member).expect("persist member");
 
-            let err = store
+            let resolved = store
                 .resolve_internal_fork_world_dispatch_target(
                     "sess_fork",
                     "orch_fork",
                     "ash_source",
                     "cli:codex_world",
                 )
-                .expect_err("stale source must fail closed");
+                .expect("non-terminal retained source should remain forkable after owner exit");
 
-            assert_eq!(
-                err.to_string(),
-                "stale_linkage: orchestration session sess_fork retained worker ash_source is no longer authoritative-live"
-            );
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_fork");
+            assert_eq!(resolved.source_participant.participant_id(), "ash_source");
         });
     }
 
@@ -11012,6 +11007,41 @@ mod tests {
             assert_eq!(
                 err.to_string(),
                 "target_already_terminal: orchestration session sess_fork retained worker ash_source is already terminal (invalidated)"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_continue_fork_command_dispatch_target_rejects_stale_retained_source() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_fork", "orch_fork");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member("codex_world", "sess_fork", "ash_source", "orch_fork");
+            member.internal.shell_owner_pid = 999_999_999;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_continue_fork_command_dispatch_target(
+                    "sess_fork",
+                    "orch_fork",
+                    "ash_source",
+                    "cli:codex_world",
+                )
+                .expect_err("stale source must fail closed for continue fork command");
+
+            assert_eq!(
+                err.to_string(),
+                "stale_linkage: orchestration session sess_fork retained worker ash_source is no longer authoritative-live"
             );
         });
     }
