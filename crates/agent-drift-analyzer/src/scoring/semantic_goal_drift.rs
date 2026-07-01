@@ -285,7 +285,10 @@ fn no_claim(confidence: Confidence) -> ScoredDrift {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use camino::Utf8PathBuf;
+    use serde::Deserialize;
 
     use super::{
         score_semantic_goal_drift, CURRENT_GOAL_REASON_PREFIX, KICKOFF_ANCHOR_REASON_PREFIX,
@@ -303,6 +306,39 @@ mod tests {
     };
     use crate::inference::DelegationContext;
     use crate::input::BundleSession;
+
+    const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/semantic_goal_drift_acceptance"
+    );
+
+    const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 1] =
+        ["synthetic-kickoff-anchor-unauthorized-pivot"];
+
+    #[derive(Debug, Deserialize)]
+    struct AcceptanceFixtureRaw {
+        case_id: String,
+        source_artifact: String,
+        notes: String,
+        bridge_display_text: String,
+        comparison_key: String,
+        anchor_target_display: String,
+        current_target_display: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct AcceptanceExpectedScore {
+        state: crate::checkpoint::DriftState,
+        flagged: bool,
+        raw_score: u8,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct AcceptanceFixtureExpected {
+        case_id: String,
+        final_semantic_goal_drift: AcceptanceExpectedScore,
+        required_reason_prefixes: Vec<String>,
+    }
 
     #[test]
     fn semantic_goal_drift_flags_unauthorized_pivot_with_named_anchor_and_current_evidence() {
@@ -335,6 +371,76 @@ mod tests {
             .evidence
             .iter()
             .any(|item| item.reason.starts_with(KICKOFF_ANCHOR_REASON_PREFIX)));
+    }
+
+    #[test]
+    fn semantic_goal_drift_acceptance_fixture_root_stays_bounded_and_scores_committed_case() {
+        let fixture_root = std::path::Path::new(SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT);
+        let mut expected_root_entries = SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS
+            .iter()
+            .map(|case_id| (*case_id).to_owned())
+            .collect::<Vec<_>>();
+        expected_root_entries.push("README.md".to_owned());
+        expected_root_entries.sort();
+        assert_eq!(sorted_entry_names(fixture_root), expected_root_entries);
+
+        for case_id in SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS {
+            let case_dir = fixture_root.join(case_id);
+            assert_eq!(
+                sorted_entry_names(&case_dir),
+                vec!["expected.json".to_owned(), "raw.json".to_owned()],
+                "semantic-goal-drift acceptance case {case_id} must keep the committed raw/expected contract only"
+            );
+
+            let raw: AcceptanceFixtureRaw = read_json(&case_dir.join("raw.json"));
+            let expected: AcceptanceFixtureExpected = read_json(&case_dir.join("expected.json"));
+            assert_eq!(raw.case_id, case_id);
+            assert_eq!(expected.case_id, case_id);
+            assert!(
+                !raw.source_artifact.trim().is_empty(),
+                "acceptance case {case_id} must document its source artifact"
+            );
+            assert!(
+                !raw.notes.trim().is_empty(),
+                "acceptance case {case_id} must document its packet-local notes"
+            );
+
+            let anchor = structured_goal(&raw.anchor_target_display, Confidence::High, Vec::new());
+            let current = structured_goal(&raw.current_target_display, Confidence::High, Vec::new());
+            let analysis = analysis_with_summary(
+                objective_summary(
+                    &raw.comparison_key,
+                    Some(current),
+                    &raw.bridge_display_text,
+                ),
+                false,
+            );
+
+            let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+            assert_eq!(
+                scored.score.state,
+                expected.final_semantic_goal_drift.state
+            );
+            assert_eq!(
+                scored.score.flagged,
+                expected.final_semantic_goal_drift.flagged
+            );
+            assert_eq!(
+                scored.score.raw_score,
+                expected.final_semantic_goal_drift.raw_score
+            );
+            for prefix in expected.required_reason_prefixes {
+                assert!(
+                    scored
+                        .score
+                        .evidence
+                        .iter()
+                        .any(|item| item.reason.starts_with(&prefix)),
+                    "acceptance case {case_id} must preserve evidence prefix `{prefix}`"
+                );
+            }
+        }
     }
 
     #[test]
@@ -429,6 +535,41 @@ mod tests {
 
         assert!(!scored.score.flagged);
         assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_prefers_structured_goal_over_legacy_bridge_display_string() {
+        let anchor = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "structured comparison_key drift should win even when the legacy bridge display string still matches the kickoff anchor"
+        );
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(CURRENT_GOAL_REASON_PREFIX)));
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(KICKOFF_ANCHOR_REASON_PREFIX)));
     }
 
     fn analysis_with_summary(
@@ -582,5 +723,25 @@ mod tests {
             event_index,
             row_ordinal: 0,
         }
+    }
+
+    fn read_json<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> T {
+        serde_json::from_str(&fs::read_to_string(path).expect("read json fixture"))
+            .expect("parse json fixture")
+    }
+
+    fn sorted_entry_names(path: &std::path::Path) -> Vec<String> {
+        let mut entries = fs::read_dir(path)
+            .unwrap_or_else(|err| panic!("read_dir {}: {err}", path.display()))
+            .map(|entry| {
+                entry
+                    .unwrap_or_else(|err| panic!("dir entry under {}: {err}", path.display()))
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        entries.sort();
+        entries
     }
 }

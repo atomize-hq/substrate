@@ -1,0 +1,12 @@
+{
+  "case_id": "synthetic-kickoff-anchor-unauthorized-pivot",
+  "final_semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": true,
+    "raw_score": 80
+  },
+  "required_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:"
+  ]
+}
