@@ -145,22 +145,25 @@ objective-coupled `R6` code lands.
 
 ## Task Order
 
-Tasks 1-4 are **complete** as of 2026-06-30 — the consumer/failure-mode investigation and the
+Tasks 1-5 are **complete** as of 2026-07-01 — the consumer/failure-mode investigation and the
 `Decision Gate 0` resolution landed in
 `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md` (which also fixes the packet
 decomposition: `R6-1`, `R6-2`, `R6-3`, conditional `R6-4`), the `R6-1` and `R6-2` SPEC/PLAN/TASKS sets are
 written (see Packet Documents below), and `R6-1` closed review-clean with the full analyzer wall plus
 touched sentinel spot-checks green (`cargo test -p agent-drift-analyzer -- --nocapture`,
 `cargo test -p agent-drift-sentinel warning_policy -- --nocapture`,
-`cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`). Task 5 is now the active next
-execution sequence.
+`cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`). `R6-2` then closed with the full
+analyzer wall plus the full sentinel wall green on 2026-07-01 (`cargo test -p agent-drift-analyzer -- --nocapture`,
+`cargo test -p agent-drift-sentinel -- --nocapture`), and no `R6-1`/`R6-2` replay evidence showed
+`progress.rs` reset errors caused by objective-string quality, so `R6-4` remains deferred to the later
+full-migration phase. The next active execution sequence is `R6-3`.
 
 ### Packet Documents
 
 - `R6-1` (objective-independent scorer cutover): `docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-{spec,plan,tasks}.md`
 - `R6-2` (structured-objective consumer, kickoff-anchored first cut): `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-{spec,plan,tasks}.md`
 - `R6-3` (rolling / previous-checkpoint semantic drift): committed follow-up to `R6-2` — spec/plan/tasks to be written when `R6-2` lands (added 2026-06-30; see DESIGN "Packet Decomposition").
-- `R6-4` (conditional reset migration): not written — evidence-gated per the DESIGN doc and `R6-2.5`.
+- `R6-4` (conditional reset migration): not written — deferred after `R6-2.5` closeout because no `R6-1`/`R6-2` replay evidence showed `progress.rs` reset errors caused by objective-string quality; remains evidence-gated per the DESIGN doc.
 
 1. **[done] Complete the consumer/failure-mode investigation.** Finish the scorer-input audit (turn context,
    archetype inputs, interval/reset history carry, how `truth_artifacts` are sourced), and enumerate
@@ -174,15 +177,19 @@ execution sequence.
    SPEC/PLAN/TASKS: frontier-aware decisive-step scoring + the two objective-independent process
    dimensions, rule-based, with closeout confirmed by the green analyzer wall and touched sentinel
    spot-checks on 2026-06-30. `R6-1` is promoted history.
-5. **Objective-coupled work (`R6-2`, then `R6-3`, then conditional `R6-4`).** `R6-2` is the next active
-   seam. Implement the `semantic drift from kickoff/plan/docs` dimension as a new structured-sidecar
-   consumer per `R6-2`, scoped to the **kickoff-anchored first cut** (drift of the current checkpoint's
-   structured goal from the session's kickoff/anchor goal). Then land `R6-3`, the committed follow-up that
-   adds **rolling / previous-checkpoint** semantic drift (current checkpoint's structured goal vs the
-   immediately-previous checkpoint's, reachable via `analysis.previous` with no new plumbing) to catch
-   **abrupt single-checkpoint goal pivots** cheaply — the complement to the kickoff-anchored signal, which
-   is the cumulative measure that catches gradual drift from the original ask. Open the conditional `R6-4` reset
-   migration only if `R6-1`/`R6-2` evidence warrants. Guardrails enforced in tests throughout.
+5. **[done] Objective-coupled first cut (`R6-2`) + closeout routing.** Landed per the `R6-2`
+   SPEC/PLAN/TASKS as the kickoff-anchored `semantic drift from kickoff/plan/docs` dimension, wired as a
+   structured-sidecar consumer. Closeout is confirmed by the green full analyzer wall plus the green full
+   sentinel wall on 2026-07-01 (`cargo test -p agent-drift-analyzer -- --nocapture`,
+   `cargo test -p agent-drift-sentinel -- --nocapture`). `R6-4` stays **deferred** because no `R6-1`/`R6-2`
+   replay evidence showed `progress.rs` reset errors caused by objective-string quality.
+6. **Next active seam: `R6-3` (rolling / previous-checkpoint semantic drift), with `R6-4` still conditional.**
+   Land the committed follow-up that adds **rolling / previous-checkpoint** semantic drift (current
+   checkpoint's structured goal vs the immediately-previous checkpoint's, reachable via `analysis.previous`
+   with no new plumbing) to catch **abrupt single-checkpoint goal pivots** cheaply — the complement to the
+   kickoff-anchored signal, which is the cumulative measure that catches gradual drift from the original ask.
+   Open the conditional `R6-4` reset migration only if later evidence warrants. Guardrails enforced in tests
+   throughout.
 
 ## Non-Goals For This Rescope
 
