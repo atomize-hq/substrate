@@ -1,8 +1,9 @@
 # Tasks: Agent Drift Analyzer Semantic Goal Drift From Kickoff/Plan/Docs (R6-2)
 
-Status: task ledger created on 2026-06-27 from the `R6-2` SPEC/PLAN in this directory. `R6-2.1.1`
-landed on 2026-07-01; remaining tasks stay open. Sequenced after `R6-1`. This ledger is the closeout
-record as tasks land.
+Status: task ledger created on 2026-06-27 from the `R6-2` SPEC/PLAN in this directory. `R6-2.0` through
+`R6-2.5` are now landed in repo truth as of 2026-07-01 (`085b5193c`, `c53ba7a44`, `1c2e1da8a`,
+`513adcdce`, `b2a0f19be`, `5649e83de`, `fa4d0ee9a`, `7ea6df74c`, `4aa6c549f`, `065a4d9af`,
+`5d57abd45`). Sequenced after `R6-1`. This ledger is the closeout record as tasks land.
 
 Packet prerequisite rule: this packet names `R5.75-1` (structured sidecar + `comparison_key_from_structured`)
 and `R6-1` (dead_end_thrash cutover) as landed. Verify both in live code/tests before editing. If a named
@@ -10,7 +11,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.0: Docs Lock
 
-- [ ] Task R6-2.0.1: Lock the SPEC/PLAN/TASKS family and packet-prompts artifact.
+- [x] Task R6-2.0.1: Lock the SPEC/PLAN/TASKS family and packet-prompts artifact.
   - Acceptance: `docs/specs/r6/R6-2/` contains the spec, plan, this tasks ledger, and the packet-prompts
     artifact, and they record the structured-state-only drift-read contract, the current-goal three-state
     sidecar-presence guard plus the separate anchor-presence guard, the sanctioned-replan exclusion via
@@ -126,7 +127,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.3: Semantic-Goal-Drift Scorer + Presence Guard
 
-- [ ] Task R6-2.3.1: Implement the rule-based scorer with the two presence guards.
+- [x] Task R6-2.3.1: Implement the rule-based scorer with the two presence guards.
   - Acceptance: a new `scoring/semantic_goal_drift.rs` first applies the current-goal three-state guard
     (present+confident → score; absent → no claim; present-but-unknown → no claim) and the separate anchor
     guard, at the resolved confidence bar (anchor `High` + current `Medium+`, both `TaskStatement`, empty
@@ -168,7 +169,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.4: Regressions And Acceptance Fixture
 
-- [ ] Task R6-2.4.1: Complete the presence-guard + drift matrix (do not re-add R6-2.3's minimal proof).
+- [x] Task R6-2.4.1: Complete the presence-guard + drift matrix (do not re-add R6-2.3's minimal proof).
   - Acceptance: tests assert all three presence-guard states (score / absent-no-claim / unknown-no-claim);
     an unauthorized pivot → flagged with anchor-naming evidence; a sanctioned explicit replan → not
     flagged; and a structured-source proof where the bridge-patched display string and the structured goal
@@ -180,7 +181,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     - `crates/agent-drift-analyzer/tests/...`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
 
-- [ ] Task R6-2.4.2: Commit a kickoff-anchored drift acceptance fixture + assert non-regression.
+- [x] Task R6-2.4.2: Commit a kickoff-anchored drift acceptance fixture + assert non-regression.
   - Acceptance: a committed acceptance fixture (locked like `objective_acceptance`) proves the
     kickoff-anchored drift case end to end; `R5.75-3`/`R5.75-4` witnesses and the `R6-1` `dead_end_thrash`
     posture are asserted unchanged.
@@ -191,7 +192,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.5: Smoke And Closeout
 
-- [ ] Task R6-2.5.1: Full (+ sentinel) walls, the `R6-4` open/defer decision, and MAP status update.
+- [x] Task R6-2.5.1: Full (+ sentinel) walls, the `R6-4` open/defer decision, and MAP status update.
   - Acceptance: the full analyzer wall and the full sentinel walls (the `SemanticGoalDrift` variant touches
     the sentinel surface) are green; the closeout records whether any `R6-1`/`R6-2` replay evidence showed a `progress.rs` reset
     error caused by objective-string quality — if yes, route to the conditional `R6-4`; if no, close `R6`
@@ -203,6 +204,14 @@ prerequisite is missing, stop and report it instead of compensating inside this 
       `operator_surface.rs`, so this wall is required)
   - Files:
     - `docs/specs/r6/MAP.md`
+  - Finding: Closeout finished on 2026-07-01 after a packet-scoped sentinel fallout fix
+    (`065a4d9af`) restored the sparse-startup contract in
+    `crates/agent-drift-sentinel/src/real_session_live.rs`. The required walls are now green:
+    `cargo test -p agent-drift-analyzer -- --nocapture` and
+    `cargo test -p agent-drift-sentinel -- --nocapture`. No `R6-1`/`R6-2` replay evidence showed a
+    `progress.rs` reset error caused by objective-string quality, so `R6-4` stays deferred to the later
+    full-migration phase; `docs/specs/r6/MAP.md` records the `R6-2` closeout state, the route to `R6-3`,
+    and the defer decision.
 
 ## Deferred / Ask-First
 
