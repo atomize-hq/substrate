@@ -87,7 +87,7 @@ This packet succeeds when:
   - `crates/agent-drift-analyzer/src/scoring/` (a new `semantic_goal_drift.rs` module + `scoring/mod.rs`)
   - `crates/agent-drift-sentinel/src/operator_surface.rs` (the `DriftClass` mapping, if a variant is added)
   - `crates/agent-drift-analyzer/tests/` (a new acceptance + scorer regression surface)
-- This packet does **not** touch `progress.rs` comparability/reset (that is the conditional `R6-3`).
+- This packet does **not** touch `progress.rs` comparability/reset (that is the conditional `R6-4`).
 
 ## Commands
 
@@ -187,7 +187,7 @@ Conventions for this packet:
   - whether the kickoff anchor is the first confident checkpoint or a session-level kickoff signal.
 - **Never:**
   - read `task_frame.objective` (the bridge-patched display string) for the drift signal;
-  - migrate `progress.rs` comparability/reset here (that is the conditional `R6-3`);
+  - migrate `progress.rs` comparability/reset here (that is the conditional `R6-4`);
   - flag a sanctioned explicit replan as drift;
   - score drift when the sidecar is absent or its goal fields are unknown;
   - add a learned/hybrid scorer or bump the schema beyond the additive variant.
@@ -209,8 +209,16 @@ Conventions for this packet:
    string.** This is the reason Option C exists — the new dimension cannot be honest on the heuristic
    `task_frame.objective`. `comparison_key`/structured goal anchors are the authority.
 2. **Resolved (2026-06-27): `progress.rs` comparability/reset is not migrated in this packet.** Any
-   structured-state migration of the reset surface is the conditional `R6-3`, evidence-gated, to honor
+   structured-state migration of the reset surface is the conditional `R6-4`, evidence-gated, to honor
    Guardrail 4 (do not move progress reasoning first).
+3. **Resolved (2026-06-30): `R6-2` ships the kickoff-anchored first cut only.** Drift is measured between
+   the current checkpoint's structured goal and the session's kickoff/anchor goal (the "still on the
+   original ask?" question). Rolling / previous-checkpoint drift — the current checkpoint's structured
+   goal vs the *immediately-previous* checkpoint's (the "did we drift step-over-step?" question) — is the
+   committed follow-up packet `R6-3` (MAP "Packet Documents"; DESIGN "Packet Decomposition"), **not** this
+   packet. Note the plumbing asymmetry that motivates the split: the previous-checkpoint goal is reachable
+   via `analysis.previous.context.objective.structured` with no new plumbing, whereas this packet's kickoff
+   anchor is session-level and must be threaded into scoring (see Open Question 1 / `R6-2.1`).
 
 ## Open Questions
 

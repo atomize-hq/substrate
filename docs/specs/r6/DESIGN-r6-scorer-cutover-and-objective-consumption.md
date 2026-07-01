@@ -91,7 +91,7 @@ new dimension — which we satisfy as a fresh direct consumer, not a migration.
 
 - **Guardrail 4 (do not move progress reasoning first):** honored. The high-risk `progress.rs` reset
   surface is not migrated; the structured objective enters via a new, additive scorer dimension, not
-  by re-keying comparability. The optional Seam 5 migration (`R6-3`) stays gated behind evidence.
+  by re-keying comparability. The optional Seam 5 migration (`R6-4`) stays gated behind evidence.
 - **Guardrail 5 (no compatibility-string-as-permanent-authority):** honored. The new semantic-drift
   dimension reads typed structured state directly, never the patched string. For the legacy-surface
   scorers (`R6-1`), the `R5.75-6` bridge needle lists (`anchor_text_looks_grounded_goal`,
@@ -120,10 +120,11 @@ This is intentionally a *read* of the sidecar, not a re-plumb of `TaskFrame`. If
 
 ## Packet Decomposition
 
-This resolves the MAP's "how many spec/plan/tasks sets" question. `R6` is **two committed packets plus
-one conditional packet**. The two committed packets (`R6-1`, `R6-2`) each have their own spec/plan/tasks
-set, written now. The conditional `R6-3` set is **not** written unless replay evidence opens it (see
-below); until then it has no spec/plan/tasks.
+This resolves the MAP's "how many spec/plan/tasks sets" question. `R6` is **three committed packets plus
+one conditional packet**. Two of the committed packets (`R6-1`, `R6-2`) have their spec/plan/tasks sets
+written now; the third committed packet (`R6-3`, rolling drift — added 2026-06-30 after the decision to
+ship `R6-2` kickoff-anchored first) is written when `R6-2` lands. The conditional `R6-4` set is **not**
+written unless replay evidence opens it (see below); until then it has no spec/plan/tasks.
 
 **`R6-1` — `dead_end_thrash` cutover + objective-independent process dimensions.** Redesign
 `dead_end_thrash` toward decisive-bad-step semantics (AgentRx "critical failure step" framing) and add
@@ -143,16 +144,31 @@ a new `src/scoring/semantic_drift.rs` (or equivalent) + `scoring/mod.rs`, `src/c
 session that pivots away from its kickoff goal scores drift only when the sidecar is present and
 confident; absent/unknown sidecar stays conservative; `R5.75` witnesses do not regress.
 
-**`R6-3` (conditional) — Seam 5 reset/comparability onto `comparison_key`.** Only opened if `R6-1`/`R6-2`
+**`R6-3` — rolling / previous-checkpoint semantic drift (committed follow-up to `R6-2`, added
+2026-06-30).** `R6-2` ships the **kickoff-anchored** first cut (drift of the current structured goal from
+the session's kickoff/anchor goal — the "still on the original ask?" question). `R6-3` adds the
+complementary **rolling** signal: drift of the current checkpoint's structured goal from the
+*immediately-previous* checkpoint's structured goal — the "did we drift step-over-step?" question.
+Rationale: the origin comparison can miss slow, cumulative drift that never trips a single-step threshold,
+and the previous-checkpoint goal is already reachable via
+`analysis.previous.context.objective.structured` with **no new plumbing** (the kickoff anchor, by
+contrast, is session-level and must be threaded — see `R6-2`). Whether it lands as a second `DriftClass`
+variant or as additional evidence on the `R6-2` class is an impact-gated decision deferred to the `R6-3`
+spec. Primary files (when written): `src/scoring/` (extends the `R6-2` semantic-drift module), tests +
+acceptance fixtures. Acceptance: a session that drifts gradually across checkpoints without a sanctioned
+replan scores rolling drift; `R5.75`/`R6-1`/`R6-2` witnesses do not regress.
+
+**`R6-4` (conditional) — Seam 5 reset/comparability onto `comparison_key`.** Only opened if `R6-1`/`R6-2`
 replay evidence shows reset/continuity errors caused by objective-string quality (e.g. a bridge miss
 that wrongly resets or fails to reset a window). If opened, migrate `explicit_replan_boundary` /
 `material_objective_delta` to consume `comparison_key` with a sidecar-presence guard, preserving
-`R5.75-3`/`R5.75-4` behavior. If the evidence does not appear, `R6-3` is **not** written here; it folds
+`R5.75-3`/`R5.75-4` behavior. If the evidence does not appear, `R6-4` is **not** written here; it folds
 into the later full structured-native migration phase. Primary files (if opened):
 `src/checkpoint/progress.rs`, `tests/checkpoints.rs`, `tests/progress_acceptance.rs`.
 
 Sequencing: `R6-1` first (objective-independent, fastest, unblocks the chartered cutover), `R6-2` next
-(the structured integration), `R6-3` only on evidence. Each lands test-green and replay-honest before
+(the structured integration, kickoff-anchored first cut), `R6-3` after `R6-2` (the rolling /
+previous-checkpoint follow-up), `R6-4` only on evidence. Each lands test-green and replay-honest before
 the next, mirroring the `R5.75` one-packet-at-a-time discipline.
 
 ## Answered Open Questions (From The MAP)
@@ -168,7 +184,7 @@ the next, mirroring the `R5.75` one-packet-at-a-time discipline.
   migration, because reading the sidecar does not require migrating it.
 - *Can Seam 5 reset consume `comparison_key` without `TaskFrame` Phase 2, given a sidecar-presence guard?*
   Yes in principle (the sidecar is already on `task_frame`/context), but it is deferred to the
-  conditional `R6-3` and only if evidence warrants — Guardrail 4 keeps it from being a first move.
+  conditional `R6-4` and only if evidence warrants — Guardrail 4 keeps it from being a first move.
 - *Minimum acceptance coverage for Option A to be honest under Guardrail 5?* `R6-1` adds regression
   coverage that exercises the `R5.75-6` bridge needle lists directly, so a phrasing the bridge misses is
   caught at the analyzer acceptance wall rather than silently mis-scoring downstream.
@@ -177,6 +193,6 @@ the next, mirroring the `R5.75` one-packet-at-a-time discipline.
 
 Left to the per-packet spec/plan/tasks (not pre-empted here): exact `DriftClass`/schema field names and
 whether a new variant is needed; the precise semantic-distance function for `R6-2`; specific fixture
-session ids and threshold numbers; and whether `R6-3` opens at all (evidence-gated). The full
+session ids and threshold numbers; and whether `R6-4` opens at all (evidence-gated). The full
 structured-native `TaskFrame`/working-set/progress migration (design Phases 2-3 beyond the conditional
-`R6-3` slice) remains a later phase, not part of `R6`.
+`R6-4` slice) remains a later phase, not part of `R6`.

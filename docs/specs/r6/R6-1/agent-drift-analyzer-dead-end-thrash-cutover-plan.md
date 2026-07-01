@@ -232,7 +232,7 @@ Mitigation: `raw_score` band changes are Ask-First (SPEC Boundaries); the sentin
 
 Mitigation: Boundaries forbid all three, and each has a distinct home so they are not conflated.
 Structured-objective *reads* are `R6-2`. The `progress.rs` reset/comparability migration onto
-`comparison_key` is the conditional `R6-3` (DESIGN "Packet Decomposition"), not this packet. The
+`comparison_key` is the conditional `R6-4` (DESIGN "Packet Decomposition"), not this packet. The
 `progress.rs` frontier *computation* stays read-only here — `R6-1` may expose/plumb the already-computed
 signal per `R6-1.1`, but editing the frontier model itself is Ask-First.
 
@@ -248,7 +248,7 @@ signal per `R6-1.1`, but editing the frontier model itself is Ask-First.
 ## Out Of Scope
 
 - any structured-objective read (that is `R6-2`) or the reset/comparability migration onto
-  `comparison_key` (the conditional `R6-3`)
+  `comparison_key` (the conditional `R6-4`)
 - a new `DriftClass` variant (ask-first)
 - changes to `progress.rs` frontier computation (read-only consumer here)
 - `wrong_plan_branch` / `truth_grounding_gap` rescoring (only if obvious, and not in this packet)

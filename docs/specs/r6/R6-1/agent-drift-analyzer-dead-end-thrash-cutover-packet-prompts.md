@@ -48,7 +48,7 @@ Global rules for every packet prompt below:
    report any HIGH or CRITICAL blast radius before proceeding. Run `gitnexus_detect_changes()` before
    every real commit.
 10. `R6-1` is objective-independent: no subagent may read the structured objective (that is `R6-2`),
-    migrate the reset/comparability surface onto `comparison_key` (that is the conditional `R6-3`), edit
+    migrate the reset/comparability surface onto `comparison_key` (that is the conditional `R6-4`), edit
     the `progress.rs` frontier *computation* (read-only here; exposing/plumbing the already-computed
     signal per `R6-1.1` is allowed, editing the model is ask-first), add a `DriftClass` variant, or bump
     the schema.

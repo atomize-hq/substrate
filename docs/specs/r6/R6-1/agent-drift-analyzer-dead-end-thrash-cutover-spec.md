@@ -20,7 +20,7 @@ ground truth for current behavior.
    `analysis.recovery.active_repeated_*`, `command_observations`) — no objective text, no truth
    artifacts. This packet therefore does **not** read or migrate the structured objective: structured
    reads are `R6-2`, and the `progress.rs` reset/comparability migration onto `comparison_key` is the
-   conditional `R6-3`.
+   conditional `R6-4`.
 2. **The frontier judgment already exists in `progress.rs` and is reused, not reinvented — but it is not
    reachable by the scorer today.** `progress.rs` already computes troubleshooting-frontier movement
    (`frontier_advanced`, the private `frontier_rank`, the frontier fallback reasons), but only as a
@@ -238,7 +238,7 @@ Conventions for this packet:
   - changing the numeric `raw_score` bands the sentinel/operator surface keys off.
 - **Never:**
   - read or migrate the structured objective here (structured reads are `R6-2`; the reset/comparability
-    migration onto `comparison_key` is the conditional `R6-3`);
+    migration onto `comparison_key` is the conditional `R6-4`);
   - regress `R5.75-3`/`R5.75-4` behavior;
   - add a schema version bump or a learned scoring path;
   - flag thrash on a session whose frontier is advancing.

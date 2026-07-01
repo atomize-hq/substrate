@@ -87,12 +87,12 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.5: Smoke And Closeout
 
-- [ ] Task R6-2.5.1: Full (+ sentinel) walls, the `R6-3` open/defer decision, and MAP status update.
+- [ ] Task R6-2.5.1: Full (+ sentinel) walls, the `R6-4` open/defer decision, and MAP status update.
   - Acceptance: the full analyzer wall and (if a `DriftClass` variant landed) the full sentinel walls are
     green; the closeout records whether any `R6-1`/`R6-2` replay evidence showed a `progress.rs` reset
-    error caused by objective-string quality — if yes, route to the conditional `R6-3`; if no, close `R6`
-    with `R6-3` deferred to the later full-migration phase. The `R6-2` entry in `docs/specs/r6/MAP.md` is
-    updated with status, routing, and the `R6-3` decision.
+    error caused by objective-string quality — if yes, route to the conditional `R6-4`; if no, close `R6`
+    with `R6-4` deferred to the later full-migration phase. The `R6-2` entry in `docs/specs/r6/MAP.md` is
+    updated with status, routing, and the `R6-4` decision.
   - Verify:
     - `cargo test -p agent-drift-analyzer -- --nocapture`
     - `cargo test -p agent-drift-sentinel -- --nocapture`
@@ -101,7 +101,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## Deferred / Ask-First
 
-- [ ] Task R6-2.X.1: Open the conditional `R6-3` (progress.rs reset onto `comparison_key`).
+- [ ] Task R6-2.X.1: Open the conditional `R6-4` (progress.rs reset onto `comparison_key`).
   - Acceptance: only if R6-1/R6-2 replay evidence shows reset/continuity errors caused by objective-string
     quality; migrate `explicit_replan_boundary` / `material_objective_delta` onto `comparison_key` with a
     sidecar-presence guard, preserving `R5.75-3`/`R5.75-4`. Otherwise this folds into the later

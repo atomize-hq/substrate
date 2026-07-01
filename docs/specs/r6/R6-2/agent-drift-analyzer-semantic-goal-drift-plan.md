@@ -19,7 +19,7 @@ objective sidecar (`comparison_key` + typed goal anchor) with a mandatory sideca
    present-but-unknown → no claim.
 3. A sanctioned explicit replan is excluded from drift via existing replan signals.
 4. `progress.rs` comparability/reset is **not** migrated here (SPEC Resolved Decision 2); that is the
-   conditional `R6-3`, honoring Guardrail 4.
+   conditional `R6-4`, honoring Guardrail 4.
 5. Whether semantic goal drift surfaces as a new `DriftClass` variant or as evidence within an existing
    class is resolved with `gitnexus_impact` before landing, defaulting toward the additive variant.
 6. The scorer stays rule-based and interpretable; learned monitors deferred.
@@ -45,7 +45,7 @@ docs lock (this SPEC/PLAN/TASKS)
   -> R5.75-3/R5.75-4 + R6-1 non-regression + full (+ sentinel) walls
 
 explicitly deferred / out of scope:
-  -> progress.rs comparability/reset migration (conditional R6-3)
+  -> progress.rs comparability/reset migration (conditional R6-4)
   -> TaskFrame Phase-2 migration (later phase)
   -> learned/hybrid scoring
 ```
@@ -175,15 +175,15 @@ cargo test -p agent-drift-analyzer -- --nocapture
 ### Scope
 
 - full analyzer wall + (if a variant landed) full sentinel walls
-- record whether `R6-3` opens: did any `R6-1`/`R6-2` replay evidence show a `progress.rs` reset error
-  caused by objective-string quality? If yes, route to `R6-3`; if no, close `R6` with `R6-3` deferred to
+- record whether `R6-4` opens: did any `R6-1`/`R6-2` replay evidence show a `progress.rs` reset error
+  caused by objective-string quality? If yes, route to `R6-4`; if no, close `R6` with `R6-4` deferred to
   the later full-migration phase
-- update the MAP `R6-2` status and the `R6-3` decision
+- update the MAP `R6-2` status and the `R6-4` decision
 
 ### Primary Files
 
 ```text
-docs/specs/r6/MAP.md   (status/routing + R6-3 open/defer decision)
+docs/specs/r6/MAP.md   (status/routing + R6-4 open/defer decision)
 ```
 
 ### Verification
@@ -214,7 +214,7 @@ evidence-within-existing-class.
 ### Risk: scope creep into the progress.rs reset migration
 
 Mitigation: Boundaries forbid `progress.rs` comparability/reset changes here; that is the conditional
-`R6-3`, evidence-gated, honoring Guardrail 4.
+`R6-4`, evidence-gated, honoring Guardrail 4.
 
 ## Verification Checkpoints
 
@@ -223,11 +223,11 @@ Mitigation: Boundaries forbid `progress.rs` comparability/reset changes here; th
 3. **After R6-2.3** — the presence guard + minimal drift-vs-replan proof pass; structured-state read only.
 4. **After R6-2.4** — full presence-guard matrix, structured-source proof, acceptance fixture, and
    `R5.75`/`R6-1` non-regression green.
-5. **Packet closeout** — full analyzer (+ sentinel) walls green; the `R6-3` open/defer decision recorded.
+5. **Packet closeout** — full analyzer (+ sentinel) walls green; the `R6-4` open/defer decision recorded.
 
 ## Out Of Scope
 
-- `progress.rs` comparability/reset migration onto `comparison_key` (conditional `R6-3`)
+- `progress.rs` comparability/reset migration onto `comparison_key` (conditional `R6-4`)
 - `TaskFrame` Phase-2 coexistence migration (later phase)
 - `dead_end_thrash` / `wrong_plan_branch` / `truth_grounding_gap` rescoring (R6-1 / not this packet)
 - learned/hybrid scoring monitors

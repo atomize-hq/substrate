@@ -148,7 +148,7 @@ objective-coupled `R6` code lands.
 Tasks 1-4 are **complete** as of 2026-06-30 — the consumer/failure-mode investigation and the
 `Decision Gate 0` resolution landed in
 `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md` (which also fixes the packet
-decomposition: `R6-1`, `R6-2`, conditional `R6-3`), the `R6-1` and `R6-2` SPEC/PLAN/TASKS sets are
+decomposition: `R6-1`, `R6-2`, `R6-3`, conditional `R6-4`), the `R6-1` and `R6-2` SPEC/PLAN/TASKS sets are
 written (see Packet Documents below), and `R6-1` closed review-clean with the full analyzer wall plus
 touched sentinel spot-checks green (`cargo test -p agent-drift-analyzer -- --nocapture`,
 `cargo test -p agent-drift-sentinel warning_policy -- --nocapture`,
@@ -158,8 +158,9 @@ execution sequence.
 ### Packet Documents
 
 - `R6-1` (objective-independent scorer cutover): `docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-{spec,plan,tasks}.md`
-- `R6-2` (structured-objective consumer): `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-{spec,plan,tasks}.md`
-- `R6-3` (conditional reset migration): not written — evidence-gated per the DESIGN doc and `R6-2.5`.
+- `R6-2` (structured-objective consumer, kickoff-anchored first cut): `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-{spec,plan,tasks}.md`
+- `R6-3` (rolling / previous-checkpoint semantic drift): committed follow-up to `R6-2` — spec/plan/tasks to be written when `R6-2` lands (added 2026-06-30; see DESIGN "Packet Decomposition").
+- `R6-4` (conditional reset migration): not written — evidence-gated per the DESIGN doc and `R6-2.5`.
 
 1. **[done] Complete the consumer/failure-mode investigation.** Finish the scorer-input audit (turn context,
    archetype inputs, interval/reset history carry, how `truth_artifacts` are sourced), and enumerate
@@ -173,11 +174,14 @@ execution sequence.
    SPEC/PLAN/TASKS: frontier-aware decisive-step scoring + the two objective-independent process
    dimensions, rule-based, with closeout confirmed by the green analyzer wall and touched sentinel
    spot-checks on 2026-06-30. `R6-1` is promoted history.
-5. **Objective-coupled work (`R6-2`, then conditional `R6-3`).** `R6-2` is the next active seam.
-   Implement the
-   `semantic drift from kickoff/plan/docs` dimension as a new structured-sidecar consumer per `R6-2`; open
-   the conditional `R6-3` reset migration only if `R6-1`/`R6-2` evidence warrants. Guardrails enforced in
-   tests throughout.
+5. **Objective-coupled work (`R6-2`, then `R6-3`, then conditional `R6-4`).** `R6-2` is the next active
+   seam. Implement the `semantic drift from kickoff/plan/docs` dimension as a new structured-sidecar
+   consumer per `R6-2`, scoped to the **kickoff-anchored first cut** (drift of the current checkpoint's
+   structured goal from the session's kickoff/anchor goal). Then land `R6-3`, the committed follow-up that
+   adds **rolling / previous-checkpoint** semantic drift (current checkpoint's structured goal vs the
+   immediately-previous checkpoint's, reachable via `analysis.previous` with no new plumbing) to catch the
+   gradual, step-over-step drift the origin comparison can miss. Open the conditional `R6-4` reset
+   migration only if `R6-1`/`R6-2` evidence warrants. Guardrails enforced in tests throughout.
 
 ## Non-Goals For This Rescope
 
@@ -201,6 +205,6 @@ retained here for provenance, not as open work:
 - Does `semantic drift from kickoff/plan/docs` ship in the first `R6` cut, or wait behind the objective
   migration? → ships in `R6-2` as a direct sidecar consumer; does not wait behind a `TaskFrame` migration.
 - For the resolution, can Seam 5 reset/comparability consume `comparison_key` without `TaskFrame` Phase 2,
-  given a sidecar-presence guard? → yes in principle, but deferred to the conditional `R6-3`, evidence-gated.
+  given a sidecar-presence guard? → yes in principle, but deferred to the conditional `R6-4`, evidence-gated.
 - Minimum acceptance coverage to keep the legacy surface honest under Guardrail 5? → `R6-1` exercises the
   `R5.75-6` bridge needle lists directly so a missed phrasing fails at the analyzer wall.
