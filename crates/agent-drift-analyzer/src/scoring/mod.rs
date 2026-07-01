@@ -2,7 +2,9 @@ mod dead_end_thrash;
 mod truth_grounding_gap;
 mod wrong_plan_branch;
 
-use crate::checkpoint::{build_scoring_session_progress, CheckpointAnalysis, DriftClass, DriftScore};
+use crate::checkpoint::{
+    build_scoring_session_progress, CheckpointAnalysis, DriftClass, DriftScore, StructuredObjective,
+};
 
 pub(crate) use truth_grounding_gap::score_truth_grounding_gap;
 pub(crate) use wrong_plan_branch::score_wrong_plan_branch;
@@ -28,7 +30,9 @@ impl ScoredDrift {
 pub(crate) fn score_session(
     analysis: &CheckpointAnalysis,
     previous_truth_grounding_gap: Option<&DriftScore>,
+    kickoff_anchor: Option<&StructuredObjective>,
 ) -> Vec<ScoredDrift> {
+    let _ = kickoff_anchor;
     let session_progress = build_scoring_session_progress(analysis);
     let mut scores = vec![
         score_wrong_plan_branch(analysis),

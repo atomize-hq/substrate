@@ -1,7 +1,8 @@
 # Tasks: Agent Drift Analyzer Semantic Goal Drift From Kickoff/Plan/Docs (R6-2)
 
-Status: task ledger created on 2026-06-27 from the `R6-2` SPEC/PLAN in this directory. Packet not yet
-started; all tasks open. Sequenced after `R6-1`. This ledger is the closeout record as tasks land.
+Status: task ledger created on 2026-06-27 from the `R6-2` SPEC/PLAN in this directory. `R6-2.1.1`
+landed on 2026-07-01; remaining tasks stay open. Sequenced after `R6-1`. This ledger is the closeout
+record as tasks land.
 
 Packet prerequisite rule: this packet names `R5.75-1` (structured sidecar + `comparison_key_from_structured`)
 and `R6-1` (dead_end_thrash cutover) as landed. Verify both in live code/tests before editing. If a named
@@ -25,7 +26,7 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.1: Capture And Thread The Kickoff Anchor
 
-- [ ] Task R6-2.1.1: Capture the session kickoff structured-goal anchor (access path settled — threaded).
+- [x] Task R6-2.1.1: Capture the session kickoff structured-goal anchor (access path settled — threaded).
   - Acceptance: (a) a minimal, committed helper captures the kickoff anchor from the existing per-checkpoint
     `structured_objective` (the first confident `TaskStatement` goal — the only concrete source; the
     session-level kickoff-signal hook is disabled; the Open Question 1 corpus check confirms it holds), read once and reused, not
@@ -45,7 +46,28 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     - `crates/agent-drift-analyzer/src/lib.rs` (thread the anchor into `score_session`)
     - `crates/agent-drift-analyzer/src/scoring/mod.rs` (`score_session` additive anchor input)
     - (read-only) `crates/agent-drift-analyzer/src/context/objective.rs`
-  - Finding: _(record anchor source + access path + confidence-bar check + `sanctioned_replan` derivation)_
+  - Finding: Verified live prerequisites before editing: `R5.75-1` is promoted/closed in
+    `docs/specs/r5/R5_75/MAP.md` and live code still exports the structured sidecar /
+    `comparison_key_from_structured`; `R6-1` is promoted history in `docs/specs/r6/MAP.md` and the
+    `R6-1` tasks ledger. Anchor source/access path: the only live kickoff source remains the per-checkpoint
+    `structured_objective` sidecar (`ENABLE_KICKOFF_PRIORS` is still disabled), so
+    `session_kickoff_structured_goal_anchor(&analyses)` now captures the **first**
+    `current.context.objective.structured` that is `TaskStatement` + empty `unknowns` + `Confidence::High`,
+    clones it once, and `analyze_loaded_bundle` threads `Option<&StructuredObjective>` into `score_session`
+    alongside `previous_truth_grounding_gap`; no `session_kickoff_anchor(analysis)` helper was introduced
+    and nothing was stamped onto every `CheckpointAnalysis`. Confidence-bar corpus check (committed bundle
+    fixtures under `tests/fixtures/acceptance/` and `tests/fixtures/progress_acceptance/`): 18 fixture
+    directories produced 120 checkpoints; 9 sessions exposed a qualifying kickoff anchor, all `High`
+    confidence (8 first appeared at ordinal 1, 1 at ordinal 3). The current-goal side of the bar was also
+    non-dormant: 32 checkpoints had `TaskStatement` + empty `unknowns`, and all 32 were `High` (0
+    `Medium`). The resolved bar therefore stays anchor `High` + current `Medium+`; no relaxation to
+    `Medium+` anchor was needed. `sanctioned_replan` derivation: `CheckpointAnalysis.sanctioned_replan` is
+    now checkpoint-local assembly metadata, set by scanning the current checkpoint window for
+    `UserMessageRole::Steer` rows whose normalized text matches the existing explicit-pivot phrase set
+    (`replan`, `pivot`, `instead of`, `instead`, `new objective`, `change objective`, `change the
+    objective`, `change scope`, `change the scope`, `different objective`). That keeps the signal sourced
+    from steer-row evidence, not the private `progress.rs` string heuristic, and makes it available for the
+    later semantic-drift scorer without threading another session-running bool.
 
 ## R6-2.2: Confirm The Variant Blast Radius And Schema Decision (Impact-Gated, No Scorer Code)
 

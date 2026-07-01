@@ -45,6 +45,7 @@ pub(crate) struct CheckpointAnalysis {
     pub ordinal: usize,
     pub current: CheckpointSlice,
     pub previous: Option<CheckpointSlice>,
+    pub sanctioned_replan: bool,
     pub delegation: DelegationContext,
     pub interval: IntervalSlice,
     pub turn_context: TurnContext,
@@ -274,6 +275,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             prompts_observed_in_session,
             &mut checkpoints_in_turn,
         );
+        let sanctioned_replan = checkpoint_has_sanctioned_replan(&current.window.compact_rows);
         let repetition = repetition_slice(&current);
         let task_frame_delta = task_frame_delta(previous.as_ref(), &current);
         let recovery = recovery_state(&current, &interval, &repetition);
@@ -283,6 +285,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             ordinal: index + 1,
             current: current.clone(),
             previous: previous.clone(),
+            sanctioned_replan,
             delegation,
             interval,
             turn_context,
@@ -297,6 +300,16 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     analyses
 }
 
+pub(crate) fn session_kickoff_structured_goal_anchor(
+    analyses: &[CheckpointAnalysis],
+) -> Option<StructuredObjective> {
+    analyses
+        .iter()
+        .filter_map(|analysis| analysis.current.context.objective.structured.as_ref())
+        .find(|structured| structured_matches_kickoff_anchor_bar(structured))
+        .cloned()
+}
+
 fn classify_checkpoint_delegation(mut delegation: DelegationContext) -> DelegationContext {
     let topology = derive_delegation_topology(&delegation);
     let child_work_visibility = derive_child_work_visibility(&delegation, topology);
@@ -306,6 +319,24 @@ fn classify_checkpoint_delegation(mut delegation: DelegationContext) -> Delegati
     delegation.child_work_visibility = Some(child_work_visibility);
     delegation.confidence = Some(confidence);
     delegation
+}
+
+fn checkpoint_has_sanctioned_replan(rows: &[CompactionRow]) -> bool {
+    rows.iter()
+        .any(objective_candidate_is_explicit_replan_pivot)
+}
+
+fn structured_matches_kickoff_anchor_bar(structured: &StructuredObjective) -> bool {
+    structured_matches_confident_task_statement(structured, Confidence::High)
+}
+
+fn structured_matches_confident_task_statement(
+    structured: &StructuredObjective,
+    minimum_confidence: Confidence,
+) -> bool {
+    structured.objective_class == ObjectiveClass::TaskStatement
+        && structured.confidence >= minimum_confidence
+        && structured.unknowns.is_empty()
 }
 
 fn derive_delegation_topology(delegation: &DelegationContext) -> DelegationTopology {
@@ -3219,14 +3250,14 @@ fn is_failure_row(row: &CompactionRow) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::context::CommandObservation;
-    use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind};
+    use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
     use camino::Utf8PathBuf;
 
     use crate::input::BundleSession;
 
     use super::{
-        checkpoint_analyses, classify_command_role, tool_output_is_unambiguous_failure,
-        CommandRole, EvidenceRef,
+        checkpoint_analyses, classify_command_role, session_kickoff_structured_goal_anchor,
+        tool_output_is_unambiguous_failure, CommandRole, Confidence, EvidenceRef,
     };
 
     #[test]
@@ -3475,6 +3506,59 @@ mod tests {
                 && span.section_index.is_some()
                 && span.clause_index.is_some()
         }));
+    }
+
+    #[test]
+    fn checkpoints_capture_kickoff_anchor_once_and_mark_sanctioned_replans_from_steer_rows() {
+        let kickoff = "## Scope\nValidate the kickoff anchor helper in crates/agent-drift-analyzer/src/checkpoint/mod.rs only.\n\n## Deliverables\n- Return findings.\n\n## Verification\n- cargo test -p agent-drift-analyzer checkpoints -- --nocapture";
+        let replan = "Replan instead: review crates/agent-drift-analyzer/src/checkpoint/export.rs only and return findings.";
+        let mut replan_row = row(2, CompactionKind::UserMessage, replan);
+        replan_row.user_message_role = Some(UserMessageRole::Steer);
+
+        let session = BundleSession {
+            session_id: "session-alpha".to_string(),
+            archival_rows: vec![
+                row(0, CompactionKind::UserMessage, kickoff),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    "{\"command\":\"echo kickoff-anchor\",\"workdir\":\"/repo\"}",
+                ),
+                replan_row.clone(),
+                tool_call(
+                    3,
+                    "functions.shell_command",
+                    "{\"command\":\"echo sanctioned-replan\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+            compact_rows: vec![
+                row(0, CompactionKind::UserMessage, kickoff),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    "{\"command\":\"echo kickoff-anchor\",\"workdir\":\"/repo\"}",
+                ),
+                replan_row,
+                tool_call(
+                    3,
+                    "functions.shell_command",
+                    "{\"command\":\"echo sanctioned-replan\",\"workdir\":\"/repo\"}",
+                ),
+            ],
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 2);
+        assert!(!analyses[0].sanctioned_replan);
+        assert!(analyses[1].sanctioned_replan);
+
+        let anchor =
+            session_kickoff_structured_goal_anchor(&analyses).expect("kickoff structured anchor");
+        assert_eq!(anchor.confidence, Confidence::High);
+        assert!(anchor
+            .evidence_spans
+            .iter()
+            .any(|span| span.excerpt.contains("Validate the kickoff anchor helper")));
     }
 
     #[test]

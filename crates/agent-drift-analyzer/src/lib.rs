@@ -80,8 +80,15 @@ pub fn analyze_loaded_bundle(
         let mut checkpoints = Vec::new();
         let mut previous_truth_grounding_gap = None;
         let mut previous_checkpoint_scores: Option<Vec<DriftScore>> = None;
-        for analysis in checkpoint::checkpoint_analyses(session) {
-            let raw_scores = score_session(&analysis, previous_truth_grounding_gap.as_ref());
+        let analyses_for_session = checkpoint::checkpoint_analyses(session);
+        let kickoff_anchor =
+            checkpoint::session_kickoff_structured_goal_anchor(&analyses_for_session);
+        for analysis in &analyses_for_session {
+            let raw_scores = score_session(
+                analysis,
+                previous_truth_grounding_gap.as_ref(),
+                kickoff_anchor.as_ref(),
+            );
             let scores =
                 checkpoint::assign_drift_states(raw_scores, previous_checkpoint_scores.as_deref());
             previous_truth_grounding_gap = scores
@@ -91,7 +98,7 @@ pub fn analyze_loaded_bundle(
                 .cloned();
             previous_checkpoint_scores = Some(scores.clone());
             checkpoints.push(checkpoint::build_session_checkpoint_from_analysis(
-                &analysis,
+                analysis,
                 &analysis.current.task_frame,
                 scores,
             ));
