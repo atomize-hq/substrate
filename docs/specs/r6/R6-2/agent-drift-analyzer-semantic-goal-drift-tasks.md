@@ -9,15 +9,19 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.0: Docs Lock
 
-- [ ] Task R6-2.0.1: Commit the SPEC/PLAN/TASKS family.
-  - Acceptance: `docs/specs/r6/R6-2/` contains the spec, plan, and this tasks ledger, and they record the
-    structured-state-only read contract, the three-state sidecar-presence guard, the sanctioned-replan
-    exclusion, and the no-`progress.rs`-migration boundary.
+- [ ] Task R6-2.0.1: Lock the SPEC/PLAN/TASKS family and packet-prompts artifact.
+  - Acceptance: `docs/specs/r6/R6-2/` contains the spec, plan, this tasks ledger, and the packet-prompts
+    artifact, and they record the structured-state-only drift-read contract, the current-goal three-state
+    sidecar-presence guard plus the separate anchor-presence guard, the sanctioned-replan exclusion via
+    `analysis.sanctioned_replan`, and the no-`progress.rs`-migration boundary. The packet-prompts artifact
+    uses the live packet numbering (`R6-2.0` through `R6-2.5`) and matches those source-of-truth
+    constraints.
   - Verify: manual review against the `R6` MAP, the DESIGN doc, and live `context/objective.rs`.
   - Files:
     - `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-spec.md`
     - `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-plan.md`
     - `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-tasks.md`
+    - `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-packet-prompts.md`
 
 ## R6-2.1: Capture And Thread The Kickoff Anchor
 

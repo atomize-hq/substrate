@@ -67,22 +67,27 @@ explicitly deferred / out of scope:
 
 ## Recommended Landing Sequence
 
-## R6-2.0: Docs Lock (This SPEC / PLAN / TASKS)
+## R6-2.0: Docs Lock (This SPEC / PLAN / TASKS + Packet Prompts)
 
 ### Scope
 
-- commit the bounded SPEC/PLAN/TASKS family under `docs/specs/r6/R6-2/`
-- record the structured-state-only contract, the three-state presence guard, and the no-`progress.rs`
-  boundary
+- commit the bounded SPEC/PLAN/TASKS family plus the packet-prompts artifact under
+  `docs/specs/r6/R6-2/`
+- record the structured-state-only drift-read contract, the current-goal three-state guard **plus** the
+  separate anchor-presence guard, the sanctioned-replan exclusion via `analysis.sanctioned_replan`, and
+  the no-`progress.rs` boundary
+- make the packet-prompts artifact match the live packet numbering (`R6-2.0` through `R6-2.5`) and these
+  source-of-truth constraints before any implementation packet starts
 
 ### Why First
 
-The DESIGN fixes the architecture; the per-packet contract (anchor source, presence guard, surfacing
-shape) must be explicit before editing.
+The DESIGN fixes the architecture; the per-packet contract (anchor source, guard shape, sanctioned-replan
+exclusion surface, packet numbering, surfacing shape) must be explicit before editing.
 
 ### Verification
 
-Manual review against `docs/specs/r6/MAP.md`, the DESIGN doc, and live `context/objective.rs`.
+Manual review against `docs/specs/r6/MAP.md`, the DESIGN doc, and live `context/objective.rs`, including
+the packet-prompts numbering/constraint alignment.
 
 ## R6-2.1: Capture And Thread The Kickoff Anchor
 
