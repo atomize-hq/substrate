@@ -17,6 +17,7 @@ pub enum DriftClass {
     #[serde(alias = "ignoring_repo_truth")]
     TruthGroundingGap,
     DeadEndThrash,
+    SemanticGoalDrift,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -484,9 +485,9 @@ impl<'de> Deserialize<'de> for Checkpoint {
 }
 
 fn schema_requires_session_archetype(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.5" | "v0.6")
+    matches!(schema_version, "v0.5" | "v0.6" | "v0.7")
 }
 
 fn schema_requires_session_progress(schema_version: &str) -> bool {
-    schema_version == "v0.6"
+    matches!(schema_version, "v0.6" | "v0.7")
 }

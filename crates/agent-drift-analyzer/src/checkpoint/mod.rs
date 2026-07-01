@@ -446,7 +446,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let session_archetype = build_session_archetype(analysis);
     let session_progress = build_session_progress(analysis, &session_archetype);
     Checkpoint {
-        schema_version: "v0.6".to_string(),
+        schema_version: "v0.7".to_string(),
         session_id: analysis.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
         ordinal,

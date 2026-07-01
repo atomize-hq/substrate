@@ -434,10 +434,10 @@ fn live_end_to_end_replay_and_live_surfaces_share_archetype_rendering_for_v0_5_c
 }
 
 #[test]
-fn live_end_to_end_replay_and_live_surfaces_share_progress_rendering_for_v0_6_checkpoints() {
+fn live_end_to_end_replay_and_live_surfaces_share_progress_rendering_for_v0_7_checkpoints() {
     let mut checkpoints = support::sample_checkpoints();
     for (index, checkpoint) in checkpoints.iter_mut().take(2).enumerate() {
-        checkpoint.schema_version = "v0.6".to_string();
+        checkpoint.schema_version = "v0.7".to_string();
         checkpoint.turn_context = Some(sample_turn_context(index + 1));
         checkpoint.session_archetype = Some(sample_session_archetype(
             checkpoint,

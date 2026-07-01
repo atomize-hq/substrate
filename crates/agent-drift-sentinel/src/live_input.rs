@@ -10,8 +10,10 @@ use crate::input::CheckpointCursor;
 use crate::operator_surface::warning_fingerprint;
 use crate::scheduler::TriggerClass;
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] = &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str = "v0.2, v0.3, v0.4, v0.5, or v0.6";
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] =
+    &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7"];
+const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str =
+    "v0.2, v0.3, v0.4, v0.5, v0.6, or v0.7";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCheckpointEvent {
@@ -527,6 +529,36 @@ fn validate_live_fixture_contract(
             )?;
             validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.6")
         }
+        Some("v0.7") => {
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.7",
+                "checkpoint.turn_context",
+                "turn_context",
+                "v0.7 checkpoints must serialize explicit turn context",
+            )?;
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.7",
+                "checkpoint.session_archetype",
+                "session_archetype",
+                "v0.7 checkpoints must serialize explicit session archetype",
+            )?;
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.7",
+                "checkpoint.session_progress",
+                "session_progress",
+                "v0.7 checkpoints must serialize explicit session progress",
+            )?;
+            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.7")
+        }
         _ => Ok(()),
     }
 }
@@ -556,15 +588,15 @@ fn require_non_null_fixture_field(
 }
 
 fn schema_requires_turn_context(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.4" | "v0.5" | "v0.6")
+    matches!(schema_version, "v0.4" | "v0.5" | "v0.6" | "v0.7")
 }
 
 fn schema_requires_session_archetype(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.5" | "v0.6")
+    matches!(schema_version, "v0.5" | "v0.6" | "v0.7")
 }
 
 fn schema_requires_session_progress(schema_version: &str) -> bool {
-    schema_version == "v0.6"
+    matches!(schema_version, "v0.6" | "v0.7")
 }
 
 fn validate_fixture_drift_score_state_contract(

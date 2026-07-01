@@ -584,7 +584,7 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(checkpoints.len(), 2);
     assert!(checkpoints
         .iter()
-        .all(|checkpoint| checkpoint.schema_version == "v0.6"));
+        .all(|checkpoint| checkpoint.schema_version == "v0.7"));
     assert!(checkpoints
         .iter()
         .all(|checkpoint| checkpoint.session_progress.is_some()));
@@ -610,7 +610,10 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert!(second
         .drift_scores
         .iter()
-        .all(|score| matches!(score.state, DriftState::Active | DriftState::Recovered)));
+        .all(|score| matches!(
+            score.state,
+            DriftState::Active | DriftState::Recovered | DriftState::Cleared
+        )));
 }
 
 #[test]
@@ -764,6 +767,7 @@ fn export_bundle_summarizes_checkpoint_local_diagnostics() {
         DriftClass::WrongPlanBranch,
         DriftClass::TruthGroundingGap,
         DriftClass::DeadEndThrash,
+        DriftClass::SemanticGoalDrift,
     ] {
         let expected = checkpoints
             .iter()
@@ -1301,6 +1305,7 @@ fn format_drift_class_frequencies(
         DriftClass::WrongPlanBranch,
         DriftClass::TruthGroundingGap,
         DriftClass::DeadEndThrash,
+        DriftClass::SemanticGoalDrift,
     ]
     .into_iter()
     .map(|class| {
@@ -1308,6 +1313,7 @@ fn format_drift_class_frequencies(
             DriftClass::WrongPlanBranch => "wrong_plan_branch",
             DriftClass::TruthGroundingGap => "truth_grounding_gap",
             DriftClass::DeadEndThrash => "dead_end_thrash",
+            DriftClass::SemanticGoalDrift => "semantic_goal_drift",
         };
         format!(
             "{label}={}",

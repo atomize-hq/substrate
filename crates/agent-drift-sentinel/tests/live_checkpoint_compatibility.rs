@@ -233,9 +233,9 @@ fn live_checkpoint_compatibility_accepts_v0_5_checkpoint() {
 }
 
 #[test]
-fn live_checkpoint_compatibility_accepts_v0_6_checkpoint() {
+fn live_checkpoint_compatibility_accepts_v0_7_checkpoint() {
     let mut checkpoint = schema_checkpoint(
-        "v0.6",
+        "v0.7",
         "session-alpha",
         1,
         88,
@@ -598,13 +598,13 @@ fn live_checkpoint_compatibility_rejects_v0_5_fixture_missing_session_archetype(
 }
 
 #[test]
-fn live_checkpoint_compatibility_rejects_v0_6_fixture_missing_session_progress() {
+fn live_checkpoint_compatibility_rejects_v0_7_fixture_missing_session_progress() {
     let temp_dir = TempDir::new().expect("temp dir");
     let fixture_path = Utf8Path::from_path(temp_dir.path())
         .expect("utf8 temp dir")
         .join("live-checkpoints.jsonl");
     let mut checkpoint = schema_checkpoint(
-        "v0.6",
+        "v0.7",
         "session-alpha",
         1,
         88,
@@ -632,7 +632,7 @@ fn live_checkpoint_compatibility_rejects_v0_6_fixture_missing_session_progress()
     .expect("write live fixture");
 
     let error = load_live_fixture(&fixture_path)
-        .expect_err("v0.6 fixtures missing session progress must fail");
+        .expect_err("v0.7 fixtures missing session progress must fail");
 
     assert!(matches!(
         error,
@@ -640,7 +640,7 @@ fn live_checkpoint_compatibility_rejects_v0_6_fixture_missing_session_progress()
             ref schema_version,
             ref field,
             ..
-        } if schema_version == "v0.6" && field == "checkpoint.session_progress"
+        } if schema_version == "v0.7" && field == "checkpoint.session_progress"
     ));
     assert!(error
         .to_string()

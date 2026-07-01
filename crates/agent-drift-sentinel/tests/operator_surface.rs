@@ -216,9 +216,9 @@ fn operator_surface_renders_compact_archetype_inspection_for_v0_5_checkpoints() 
 }
 
 #[test]
-fn operator_surface_renders_compact_progress_inspection_for_v0_6_checkpoints() {
+fn operator_surface_renders_compact_progress_inspection_for_v0_7_checkpoints() {
     let mut visible = checkpoint_with_schema_state(
-        "v0.6",
+        "v0.7",
         "session-progress",
         1,
         DriftClass::TruthGroundingGap,
@@ -240,7 +240,7 @@ fn operator_surface_renders_compact_progress_inspection_for_v0_6_checkpoints() {
     ));
 
     let mut silent = checkpoint_with_schema_state(
-        "v0.6",
+        "v0.7",
         "session-progress",
         2,
         DriftClass::TruthGroundingGap,

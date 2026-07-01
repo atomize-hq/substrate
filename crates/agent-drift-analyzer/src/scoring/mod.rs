@@ -1,4 +1,5 @@
 mod dead_end_thrash;
+mod semantic_goal_drift;
 mod truth_grounding_gap;
 mod wrong_plan_branch;
 
@@ -38,11 +39,13 @@ pub(crate) fn score_session(
         score_wrong_plan_branch(analysis),
         score_truth_grounding_gap(analysis, previous_truth_grounding_gap),
         dead_end_thrash::score_dead_end_thrash(analysis, &session_progress),
+        semantic_goal_drift::score_semantic_goal_drift(analysis, kickoff_anchor),
     ];
     scores.sort_by_key(|score| match score.score.class {
         DriftClass::WrongPlanBranch => 0,
         DriftClass::TruthGroundingGap => 1,
         DriftClass::DeadEndThrash => 2,
+        DriftClass::SemanticGoalDrift => 3,
     });
     scores
 }

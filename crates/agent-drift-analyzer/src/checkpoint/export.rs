@@ -1395,11 +1395,12 @@ fn progress_dimension_counts() -> BTreeMap<ProgressDimension, usize> {
         .collect()
 }
 
-fn drift_classes() -> [DriftClass; 3] {
+fn drift_classes() -> [DriftClass; 4] {
     [
         DriftClass::WrongPlanBranch,
         DriftClass::TruthGroundingGap,
         DriftClass::DeadEndThrash,
+        DriftClass::SemanticGoalDrift,
     ]
 }
 
@@ -1428,6 +1429,7 @@ fn drift_class_label(class: DriftClass) -> &'static str {
         DriftClass::WrongPlanBranch => "wrong_plan_branch",
         DriftClass::TruthGroundingGap => "truth_grounding_gap",
         DriftClass::DeadEndThrash => "dead_end_thrash",
+        DriftClass::SemanticGoalDrift => "semantic_goal_drift",
     }
 }
 

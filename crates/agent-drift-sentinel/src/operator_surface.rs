@@ -543,7 +543,7 @@ fn classify_checkpoint_posture(
 fn uses_explicit_analyzer_state(checkpoint: &Checkpoint) -> bool {
     matches!(
         checkpoint.schema_version.as_str(),
-        "v0.3" | "v0.4" | "v0.5" | "v0.6"
+        "v0.3" | "v0.4" | "v0.5" | "v0.6" | "v0.7"
     )
 }
 
@@ -631,6 +631,7 @@ fn historical_reason_prefixes(class: DriftClass) -> &'static [&'static str] {
             "historical repeated verification evidence:",
         ],
         DriftClass::WrongPlanBranch => &[],
+        DriftClass::SemanticGoalDrift => &[],
     }
 }
 
@@ -793,6 +794,7 @@ fn drift_class_name(class: DriftClass) -> &'static str {
         DriftClass::WrongPlanBranch => "wrong_plan_branch",
         DriftClass::TruthGroundingGap => "truth_grounding_gap",
         DriftClass::DeadEndThrash => "dead_end_thrash",
+        DriftClass::SemanticGoalDrift => "semantic_goal_drift",
     }
 }
 

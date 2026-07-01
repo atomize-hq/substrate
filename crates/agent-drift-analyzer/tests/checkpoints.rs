@@ -34,7 +34,7 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
     assert_eq!(checkpoints[0].session_id, "session-alpha");
-    assert_eq!(checkpoints[0].schema_version, "v0.6");
+    assert_eq!(checkpoints[0].schema_version, "v0.7");
     assert!(checkpoints[0].session_archetype.is_some());
     assert!(checkpoints[0].session_progress.is_some());
     assert_eq!(checkpoints[0].ordinal, 1);
@@ -49,7 +49,7 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     assert_eq!(first_turn.checkpoints_in_turn, 1);
     assert_eq!(first_turn.prompts_observed_in_session, 1);
     assert_eq!(checkpoints[1].ordinal, 2);
-    assert_eq!(checkpoints[1].schema_version, "v0.6");
+    assert_eq!(checkpoints[1].schema_version, "v0.7");
     assert!(checkpoints[1].session_archetype.is_some());
     assert!(checkpoints[1].session_progress.is_some());
     let second_turn = checkpoints[1]
@@ -68,7 +68,7 @@ fn checkpoints_are_deterministic_and_session_scoped() {
 }
 
 #[test]
-fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_6() {
+fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_7() {
     let checkpoint = analyze_sample_bundle().sessions[0].checkpoints[0].clone();
 
     for schema_version in ["v0.2", "v0.3", "v0.4"] {
@@ -104,33 +104,33 @@ fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_6() {
     assert!(parsed_v0_5.session_archetype.is_some());
     assert!(parsed_v0_5.session_progress.is_none());
 
-    let mut missing_v0_6_progress =
+    let mut missing_v0_7_progress =
         serde_json::to_value(&checkpoint).expect("serialize checkpoint");
-    missing_v0_6_progress
+    missing_v0_7_progress
         .as_object_mut()
         .expect("checkpoint object")
         .remove("session_progress");
-    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_6_progress)
-        .expect_err("v0.6 checkpoint without session_progress must fail");
+    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_7_progress)
+        .expect_err("v0.7 checkpoint without session_progress must fail");
     let message = err.to_string();
-    assert!(message.contains("v0.6"));
+    assert!(message.contains("v0.7"));
     assert!(message.contains("session_progress"));
 
-    let mut missing_v0_6_archetype =
+    let mut missing_v0_7_archetype =
         serde_json::to_value(&checkpoint).expect("serialize checkpoint");
-    missing_v0_6_archetype
+    missing_v0_7_archetype
         .as_object_mut()
         .expect("checkpoint object")
         .remove("session_archetype");
-    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_6_archetype)
-        .expect_err("v0.6 checkpoint without session_archetype must fail");
+    let err = serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing_v0_7_archetype)
+        .expect_err("v0.7 checkpoint without session_archetype must fail");
     let message = err.to_string();
-    assert!(message.contains("v0.6"));
+    assert!(message.contains("v0.7"));
     assert!(message.contains("session_archetype"));
 
     let round_tripped: agent_drift_analyzer::Checkpoint =
         serde_json::from_value(serde_json::to_value(&checkpoint).expect("serialize checkpoint"))
-            .expect("v0.6 checkpoint with progress should round-trip");
+            .expect("v0.7 checkpoint with progress should round-trip");
     assert_eq!(round_tripped, checkpoint);
 }
 
