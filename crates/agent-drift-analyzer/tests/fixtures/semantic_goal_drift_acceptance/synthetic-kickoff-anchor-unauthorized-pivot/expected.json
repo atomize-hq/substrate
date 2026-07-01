@@ -1,7 +1,10 @@
 {
   "case_id": "synthetic-kickoff-anchor-unauthorized-pivot",
+  "session_id": "semantic-goal-drift-r6-2-4",
+  "kickoff_target_display": "crates/agent-drift-analyzer/tests/checkpoints.rs",
+  "final_target_display": "docs/specs/r6/MAP.md",
   "final_semantic_goal_drift": {
-    "state": "cleared",
+    "state": "active",
     "flagged": true,
     "raw_score": 80
   },

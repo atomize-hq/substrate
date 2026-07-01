@@ -1,9 +1,40 @@
 {
   "case_id": "synthetic-kickoff-anchor-unauthorized-pivot",
-  "source_artifact": "Synthetic kickoff-anchored semantic-goal-drift acceptance case for Packet R6-2.4.",
-  "notes": "The kickoff anchor remains crates/agent-drift-analyzer/tests/checkpoints.rs, while the current structured goal pivots to docs/specs/r6/MAP.md and the legacy bridge display string still names the kickoff anchor. This proves the scorer reads structured state rather than the bridge-patched display string.",
-  "bridge_display_text": "crates/agent-drift-analyzer/tests/checkpoints.rs",
-  "comparison_key": "docs|spec_or_design_doc|docs_specs_r6_map_md",
-  "anchor_target_display": "crates/agent-drift-analyzer/tests/checkpoints.rs",
-  "current_target_display": "docs/specs/r6/MAP.md"
+  "session_id": "semantic-goal-drift-r6-2-4",
+  "source_artifact": "Synthetic compact-row acceptance fixture for Packet R6-2.4 semantic goal drift coverage.",
+  "notes": "Turn 1 anchors the session on crates/agent-drift-analyzer/tests/checkpoints.rs. Turn 2 pivots to docs/specs/r6/MAP.md without a sanctioned replan marker, so the live analyzer/checkpoint/objective path must preserve the kickoff anchor and flag the later objective drift end to end.",
+  "rows": [
+    {
+      "turn_id": "turn-001",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Review crates/agent-drift-analyzer/tests/checkpoints.rs only."
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '6180,6275p' crates/agent-drift-analyzer/tests/checkpoints.rs\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed checkpoints witness excerpts"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update docs/specs/r6/MAP.md only.\n\n## Verification\n- cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,200p' docs/specs/r6/MAP.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed MAP witness excerpts"
+    }
+  ]
 }

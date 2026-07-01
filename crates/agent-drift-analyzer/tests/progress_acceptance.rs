@@ -3,7 +3,7 @@
 use std::fs;
 
 use agent_drift_analyzer::{
-    analyze_bundle, AnalyzeRequest, Confidence, ProgressDimension, ProgressSignalCode,
+    analyze_bundle, AnalyzeRequest, Confidence, DriftClass, ProgressDimension, ProgressSignalCode,
     ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress,
 };
 use camino::{Utf8Path, Utf8PathBuf};
@@ -341,6 +341,13 @@ fn progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary() {
             .any(|signal| signal.code == ProgressSignalCode::VerificationClean),
         "R5.75-4 zero-verifier witness must not regain verification_clean"
     );
+    assert!(
+        !zero_verifier_checkpoint
+            .drift_scores
+            .iter()
+            .any(|score| score.class == DriftClass::SemanticGoalDrift && score.flagged),
+        "R5.75-4 zero-verifier witness must not pick up semantic_goal_drift while its planning boundary stays intact"
+    );
 
     let adapted_parent_visible_case =
         ProgressAcceptanceFixture::load("adapted-parent-visible-da59436e63915185");
@@ -387,6 +394,13 @@ fn progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary() {
             .any(|signal| signal.code == ProgressSignalCode::VerificationClean),
         "adapted delegated guardrail witness must not regain verification_clean"
     );
+    assert!(
+        !adapted_parent_visible_checkpoint
+            .drift_scores
+            .iter()
+            .any(|score| score.class == DriftClass::SemanticGoalDrift && score.flagged),
+        "combined R5.75-3/R5.75-4 delegated witness must not pick up semantic_goal_drift"
+    );
 
     let native_parent_visible_case =
         ProgressAcceptanceFixture::load("019eb970-3543-7ab1-a5d6-2a62c00c7185");
@@ -416,6 +430,13 @@ fn progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary() {
         ProgressDimension::ParentVisibleOrchestration
     );
     assert_eq!(native_parent_visible_progress.status, ProgressStatus::Mixed);
+    assert!(
+        !native_parent_visible_checkpoint
+            .drift_scores
+            .iter()
+            .any(|score| score.class == DriftClass::SemanticGoalDrift && score.flagged),
+        "native delegated parent-visible witness must not pick up semantic_goal_drift"
+    );
 }
 
 fn assert_progress_case(case_id: &str) {
