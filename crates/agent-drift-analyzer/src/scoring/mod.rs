@@ -33,7 +33,6 @@ pub(crate) fn score_session(
     previous_truth_grounding_gap: Option<&DriftScore>,
     kickoff_anchor: Option<&StructuredObjective>,
 ) -> Vec<ScoredDrift> {
-    let _ = kickoff_anchor;
     let session_progress = build_scoring_session_progress(analysis);
     let mut scores = vec![
         score_wrong_plan_branch(analysis),

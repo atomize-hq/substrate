@@ -166,6 +166,20 @@ prerequisite is missing, stop and report it instead of compensating inside this 
       `crates/agent-drift-sentinel/tests/live_end_to_end.rs`, and
       `crates/agent-drift-sentinel/tests/operator_surface.rs` (schema-version / operator-surface fallout)
     - `crates/agent-drift-analyzer/tests/...` (minimal proof only)
+  - Finding (backfilled 2026-07-01 during MAP.md validation review): the scorer applies the current-goal
+    three-state guard (`eligible_current_goal`) and the separate anchor guard (`eligible_anchor_goal`)
+    before any comparison, at the resolved bar (anchor `High`, current `Medium+`, both `TaskStatement` with
+    empty `unknowns`). The semantic-distance function (SPEC Open Question 2) is resolved as disjoint-set
+    overlap over normalized structured-goal terms (`comparison_key` segments + target
+    display/paths/symbols/named-artifacts/workspace-refs + `PlatformBoundary`/`ScopeBoundary` constraint
+    displays, minus a generic-term stoplist) — see SPEC Resolved Decision 7 for the full rationale and its
+    tradeoff (conservative binary check, not a graduated threshold). `DriftClass::SemanticGoalDrift` landed
+    with lockstep updates across `scoring/mod.rs` sort order, `checkpoint/mod.rs` (`v0.7` writer bump),
+    `checkpoint/schema.rs`, `checkpoint/export.rs`, and the sentinel `input.rs`/`live_input.rs`/
+    `operator_surface.rs` allowlists/mappings, all committed together in `fa4d0ee9a`. One dead-code leftover
+    from `R6-2.1` plumbing (a no-op `let _ = kickoff_anchor;` in `scoring/mod.rs`, needed only until this
+    packet gave the parameter a real consumer) was identified during the MAP.md validation review and
+    removed in the follow-up cleanup commit.
 
 ## R6-2.4: Regressions And Acceptance Fixture
 
@@ -180,6 +194,16 @@ prerequisite is missing, stop and report it instead of compensating inside this 
   - Files:
     - `crates/agent-drift-analyzer/tests/...`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Finding (backfilled 2026-07-01 during MAP.md validation review): the matrix in
+    `scoring/semantic_goal_drift.rs`'s test module asserts all three presence-guard states
+    (`semantic_goal_drift_flags_unauthorized_pivot_with_named_anchor_and_current_evidence`,
+    `semantic_goal_drift_skips_when_current_sidecar_is_absent`,
+    `semantic_goal_drift_skips_when_current_sidecar_is_present_but_unknown`,
+    `semantic_goal_drift_skips_without_confident_anchor`), the sanctioned-replan exclusion
+    (`semantic_goal_drift_skips_sanctioned_replan_pivots`), and the structured-source proof
+    (`semantic_goal_drift_prefers_structured_goal_over_legacy_bridge_display_string`, where the legacy
+    bridge display string still matches the anchor but the structured `comparison_key` has diverged).
+    `cargo test -p agent-drift-analyzer checkpoints -- --nocapture` is green (130 tests).
 
 - [x] Task R6-2.4.2: Commit a kickoff-anchored drift acceptance fixture + assert non-regression.
   - Acceptance: a committed acceptance fixture (locked like `objective_acceptance`) proves the
@@ -189,6 +213,15 @@ prerequisite is missing, stop and report it instead of compensating inside this 
   - Files:
     - `crates/agent-drift-analyzer/tests/` (new acceptance fixture + harness wiring)
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+  - Finding (backfilled 2026-07-01 during MAP.md validation review): the committed
+    `tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-anchor-unauthorized-pivot` fixture
+    (raw + expected JSON, locked like `objective_acceptance`) runs end to end through
+    `analyze_bundle`/`checkpoint::checkpoint_analyses`, asserting the kickoff checkpoint does not flag and
+    the final pivoted checkpoint flags with named anchor + current-goal evidence prefixes
+    (`tests/semantic_goal_drift_acceptance.rs`). `tests/progress_acceptance.rs` adds explicit assertions
+    that the `adapted-zero-verifier` (`R5.75-4`) and combined delegated (`R5.75-3`/`R5.75-4`) witnesses do
+    not pick up `semantic_goal_drift`. Full analyzer wall green (`cargo test -p agent-drift-analyzer --
+    --nocapture`).
 
 ## R6-2.5: Smoke And Closeout
 

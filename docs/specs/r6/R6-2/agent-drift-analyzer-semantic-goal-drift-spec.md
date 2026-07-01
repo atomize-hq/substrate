@@ -302,15 +302,29 @@ Conventions for this packet:
    `schema_version` gate), so a version bump does not protect them — lockstep deploy does. The
    `schema_version` `v0.7` decision and the exact blast radius are confirmed in `R6-2.2` via
    `gitnexus_impact`. Whether `R6-3` reuses this variant is deferred to the `R6-3` spec.
+7. **Resolved (2026-07-01, post-closeout doc cleanup): the semantic-distance function is disjoint-set
+   overlap over normalized structured-goal terms, not a graduated threshold.** `semantic_goal_diverged`
+   (`scoring/semantic_goal_drift.rs`) collects a term set per goal from `comparison_key` segments, the
+   structured `target` (display, paths, symbols, named artifacts, workspace refs), and
+   `PlatformBoundary`/`ScopeBoundary` constraint displays, normalizes each to snake_case, and drops a fixed
+   stoplist of generic words (`implement`, `docs`, `plan`, the `ObjectiveTargetKind`/`ObjectiveIntent`
+   labels, etc.). Drift fires only when the current-goal term set and the anchor term set are fully
+   disjoint; any shared specific term suppresses the claim. This is a binary (not graduated) distance
+   choice: it is deliberately conservative — the common case in the committed corpus reduces to "did the
+   normalized target path/artifact change" — which keeps false positives low for a rule-based first cut at
+   the cost of missing partial-overlap drift (e.g. a goal that keeps one shared term but meaningfully
+   changes everything else). Revisiting this as a graduated/weighted distance is left to a later `R6`
+   iteration if acceptance evidence shows the binary rule under- or over-fires.
 
 ## Open Questions
 
-1. **Empirical anchor + confidence validation (resolve in `R6-2.1`).** Confirm across the fixture corpus
-   that (a) the first-confident-`TaskStatement` anchor source holds (the `R4` session-level kickoff-signal
-   hook is disabled, so it is the only concrete source), and (b) `High`-confidence anchors occur often
-   enough for the anchor-`High` bar (Resolved Decision 5) not to leave the signal dormant — if `High`
-   anchors are scarce, relax the anchor bar to `Medium+`. The access path is settled: thread the anchor
-   into `score_session` (Resolved Decisions / Assumption 2); `session_kickoff_anchor(analysis)` is not
-   viable.
-2. What `comparison_key`/structured-term distance threshold cleanly separates drift from normal goal
-   refinement without flagging sanctioned replans? (Resolve in `R6-2.3` against the acceptance fixtures.)
+Both open questions from the original draft are resolved; kept here for provenance.
+
+1. **Resolved in `R6-2.1`.** Confirmed across the fixture corpus that (a) the first-confident-
+   `TaskStatement` anchor source holds (the `R4` session-level kickoff-signal hook is disabled, so it is
+   the only concrete source), and (b) `High`-confidence anchors occur often enough (9/9 qualifying sessions
+   were `High`) that the anchor-`High` bar (Resolved Decision 5) is not dormant; no relaxation to `Medium+`
+   was needed. See the `R6-2.1.1` Finding in the TASKS ledger for the full corpus numbers.
+2. **Resolved in `R6-2.3`, see Resolved Decision 7.** The `comparison_key`/structured-term distance is
+   disjoint-set overlap, not a numeric threshold — no partial-overlap grading was introduced for this first
+   cut.
