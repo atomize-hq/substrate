@@ -1,9 +1,10 @@
 # Tasks: Agent Drift Analyzer Dead-End-Thrash Cutover And Frontier-Aware Process Dimensions (R6-1)
 
 Status: task ledger created on 2026-06-27 from the `R6-1` SPEC/PLAN in this directory. The docs lock is
-already committed at HEAD (`eb7225b85`), and Task `R6-1.1.1` was completed on 2026-06-30 via a read-only
-frontier-predicate/access-path investigation. Later implementation tasks remain open. This ledger is the
-closeout record as tasks land.
+already committed at HEAD (`eb7225b85`), Task `R6-1.1.1` was completed on 2026-06-30 via a read-only
+frontier-predicate/access-path investigation, and Tasks `R6-1.2.1`, `R6-1.3.1`, `R6-1.3.2`, `R6-1.4.1`,
+and `R6-1.5.1` are now landed at HEAD via `45d48bdda`, `97f32420c`, `ce99803f4`, and `99aa1ed46`.
+`R6-1` is promoted history per `docs/specs/r6/MAP.md`. This ledger is the closeout record.
 
 Packet prerequisite rule: this packet names `R5.75` as landed. Verify it in live code/tests before
 editing (it is, at HEAD — the analyzer wall and sentinel spot-checks are green). If a named prerequisite
@@ -88,7 +89,7 @@ were missing, stop and report it instead of compensating inside this packet.
 
 ## R6-1.2: Dead-End-Thrash Cutover
 
-- [ ] Task R6-1.2.1: Re-score `dead_end_thrash` to be frontier-aware (decisive-step, not streak-length).
+- [x] Task R6-1.2.1: Re-score `dead_end_thrash` to be frontier-aware (decisive-step, not streak-length).
   - Acceptance: run `gitnexus_impact` on `score_dead_end_thrash` and report the blast radius first. Then:
     repeated activity with an advancing frontier yields `flagged=false` (historical context) with
     churn-with-progress evidence; repeated activity with no frontier movement flags with stall-named
@@ -103,18 +104,35 @@ were missing, stop and report it instead of compensating inside this packet.
   - Files:
     - `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`
     - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs` (minimal proof only)
+  - Closeout note (2026-06-30): landed in `45d48bdda`
+    (`feat(agent-drift-analyzer): make dead_end_thrash frontier-aware`). The scorer now takes
+    `SessionProgress` as additive input via the pre-score reorder in `checkpoint/mod.rs` +
+    `scoring/mod.rs`, suppresses repeated activity with frontier advancement to historical
+    `20 / flagged=false` with churn-with-progress evidence, and flags repeated activity without
+    frontier movement using stall-named evidence with decisive-step scoring. Reconciliation reruns at
+    HEAD confirmed the acceptance wall remains green: `npx gitnexus impact score_dead_end_thrash -r
+    97a0-substrate --direction upstream --depth 3` reported LOW risk with 0 upstream dependents / 0
+    affected processes after a fresh index refresh, `cargo test -p agent-drift-analyzer dead_end_thrash
+    -- --nocapture` passed, and `cargo test -p agent-drift-analyzer --test acceptance_fixtures --
+    --nocapture` passed.
 
 ## R6-1.3: Regressions And Corpus Invariance
 
-- [ ] Task R6-1.3.1: Complete the churn-vs-stall matrix (do not re-add R6-1.2's minimal proof).
+- [x] Task R6-1.3.1: Complete the churn-vs-stall matrix (do not re-add R6-1.2's minimal proof).
   - Acceptance: `tests/dead_end_thrash.rs` adds: advancing-frontier-with-repeated-failures →
     `flagged=false`; repeated-activity-no-movement → flagged with stall evidence; a single decisive stuck
     step scored as decisive (not diluted by streak length).
   - Verify: `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/tests/dead_end_thrash.rs`
+  - Closeout note (2026-06-30): landed in `45d48bdda`. `tests/dead_end_thrash.rs` now carries the
+    churn-vs-stall matrix this packet called for: advancing-frontier repeated failures stay
+    `flagged=false`, repeated activity without frontier movement stays flagged with stall evidence, and
+    decisive stuck steps use decisive scores instead of the retired streak-length bands. `cargo test -p
+    agent-drift-analyzer dead_end_thrash -- --nocapture` reran green at HEAD during ledger
+    reconciliation.
 
-- [ ] Task R6-1.3.2: Assert frozen-corpus and `R5.75` invariance.
+- [x] Task R6-1.3.2: Assert frozen-corpus and `R5.75` invariance.
   - Acceptance: `tests/acceptance_fixtures.rs` proves the frozen `dead_end_thrash` corpus keeps posture
     (controls cleared/0; sticky recovered/20/unflagged); `tests/checkpoints.rs` /
     `tests/progress_acceptance.rs` prove `R5.75-3`/`R5.75-4` witnesses unchanged.
@@ -123,6 +141,13 @@ were missing, stop and report it instead of compensating inside this packet.
     - `crates/agent-drift-analyzer/tests/acceptance_fixtures.rs`
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
+  - Closeout note (2026-06-30): landed in `97f32420c`
+    (`test: lock R6-1.3 corpus and R5.75 witness invariance`). `tests/acceptance_fixtures.rs`,
+    `tests/checkpoints.rs`, and `tests/progress_acceptance.rs` now lock the frozen
+    `dead_end_thrash` corpus plus the `R5.75-3` / `R5.75-4` witness boundaries explicitly.
+    Reconciliation reruns at HEAD confirmed the posture stayed honest: `cargo test -p
+    agent-drift-analyzer --test acceptance_fixtures -- --nocapture` passed and the full analyzer wall
+    `cargo test -p agent-drift-analyzer -- --nocapture` passed.
 
 ## R6-1.4: Guardrail-5 Bridge Coverage
 
@@ -142,7 +167,7 @@ were missing, stop and report it instead of compensating inside this packet.
 
 ## R6-1.5: Smoke And Closeout
 
-- [ ] Task R6-1.5.1: Full + touched sentinel walls, then MAP status update.
+- [x] Task R6-1.5.1: Full + touched sentinel walls, then MAP status update.
   - Acceptance: the full analyzer wall and the touched sentinel spot-checks are green; the `R6-1` entry in
     `docs/specs/r6/MAP.md` is updated (status + routing note pointing to `R6-2` as the next active seam).
   - Verify:
@@ -151,6 +176,12 @@ were missing, stop and report it instead of compensating inside this packet.
     - `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture`
   - Files:
     - `docs/specs/r6/MAP.md`
+  - Closeout note (2026-06-30): the closeout landed in `99aa1ed46`
+    (`docs(r6): promote R6-1 and route to R6-2`) after `ce99803f4` completed the `R5.75-6` bridge
+    coverage. `docs/specs/r6/MAP.md` now records `R6-1` as promoted history and routes to `R6-2` as
+    the next active seam. Reconciliation reruns at HEAD kept the closeout proof green: `cargo test -p
+    agent-drift-analyzer -- --nocapture`, `cargo test -p agent-drift-sentinel warning_policy --
+    --nocapture`, and `cargo test -p agent-drift-sentinel live_end_to_end -- --nocapture` all passed.
 
 ## Deferred / Ask-First
 

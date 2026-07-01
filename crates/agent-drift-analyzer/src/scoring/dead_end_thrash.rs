@@ -58,19 +58,9 @@ pub(crate) fn score_dead_end_thrash(
         );
     }
 
-    let flagged = would_flag_active;
-    let raw_score = if flagged {
-        active_raw_score(analysis)
-    } else if has_history {
-        20
-    } else {
-        0
-    };
-    let mut evidence = if flagged {
-        current_thrashing_evidence(analysis)
-    } else {
-        historical_thrash_evidence(analysis)
-    };
+    let raw_score = if has_history { 20 } else { 0 };
+    let flagged = false;
+    let mut evidence = historical_thrash_evidence(analysis);
     dedupe_evidence(&mut evidence);
 
     ScoredDrift::new(
@@ -100,17 +90,6 @@ fn score_confidence(analysis: &CheckpointAnalysis) -> Confidence {
     } else {
         Confidence::Low
     }
-}
-
-fn active_raw_score(analysis: &CheckpointAnalysis) -> u8 {
-    let repeated_verification_score = if analysis.recovery.active_repeated_verification {
-        analysis.repetition.repeated_verification_loops.len() * 40
-    } else {
-        0
-    };
-
-    (repeated_verification_score + (analysis.repetition.repeated_failure_loops.len() * 30)).min(100)
-        as u8
 }
 
 fn decisive_stall_raw_score(analysis: &CheckpointAnalysis) -> u8 {
@@ -145,10 +124,8 @@ fn churn_with_progress_evidence(
     analysis: &CheckpointAnalysis,
     session_progress: &SessionProgress,
 ) -> Vec<EvidenceRef> {
-    let mut evidence = direct_frontier_signal_evidence(
-        session_progress,
-        CHURN_WITH_PROGRESS_REASON_PREFIX,
-    );
+    let mut evidence =
+        direct_frontier_signal_evidence(session_progress, CHURN_WITH_PROGRESS_REASON_PREFIX);
     evidence.extend(historical_thrash_evidence(analysis));
     if evidence.is_empty() {
         evidence.extend(named_fallback_evidence(
