@@ -30,50 +30,60 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     1b) — recommended: thread a running anchor through the per-session analyze loop into `score_session`
     (additive input, mirroring `previous_truth_grounding_gap` at `lib.rs`); fallback: capture onto
     `CheckpointAnalysis`. Reject `session_kickoff_anchor(analysis)` — the anchor is not on
-    `CheckpointAnalysis`. The current goal stays read from `analysis.current`. Resolves SPEC Open Question 1
-    (both sub-questions) and sizes R6-2.3.
+    `CheckpointAnalysis`. The current goal stays read from `analysis.current`. Also: (c) record the
+    confidence-bar corpus check (`High`-anchor frequency; current `Medium`-vs-`High`), confirming the
+    resolved bar (anchor `High` + current `Medium+`) is not dormant — or relaxing the anchor bar to
+    `Medium+` if `High` anchors are scarce (SPEC Resolved Decision 5); and (d) add a
+    `CheckpointAnalysis.sanctioned_replan` field computed at analysis-assembly time from steer-row evidence
+    (SPEC Resolved Decision 4), with every construction site (incl. test fixtures) setting it. Resolves SPEC
+    Open Question 1 and sizes R6-2.3.
   - Verify: `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Files:
-    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs` (anchor capture)
+    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs` (anchor capture + `sanctioned_replan` field)
     - `crates/agent-drift-analyzer/src/lib.rs` (thread the anchor into `score_session`)
     - `crates/agent-drift-analyzer/src/scoring/mod.rs` (`score_session` additive anchor input)
     - (read-only) `crates/agent-drift-analyzer/src/context/objective.rs`
-  - Finding: _(record the anchor source + access path here when complete)_
+  - Finding: _(record anchor source + access path + confidence-bar check + `sanctioned_replan` derivation)_
 
-## R6-2.2: Decide The Surfacing Shape (Impact-Gated, No Scorer Code)
+## R6-2.2: Confirm The Variant Blast Radius And Schema Decision (Impact-Gated, No Scorer Code)
 
-- [ ] Task R6-2.2.1: Resolve new `DriftClass` variant vs. evidence-within-existing-class.
-  - Acceptance: run `gitnexus_impact` on `score_session` and a candidate `SemanticGoalDrift` variant;
-    record the blast radius (schema `DriftClass`, sentinel `operator_surface.rs` mapping —
-    `drift_class_name` / `historical_reason_prefixes` / `checkpoint_had_active_class` — and `score_session`
-    ordering). Decide the surfacing shape from that report and record it (default toward the additive
-    variant per SPEC Assumption 4). Resolves SPEC Open Question 2.
+- [ ] Task R6-2.2.1: Confirm the `SemanticGoalDrift` variant blast radius and the `schema_version` decision.
+  - Acceptance: the variant is the decided shape (SPEC Resolved Decision 6). Run `gitnexus_impact` on
+    `score_session` and the `SemanticGoalDrift` variant; record the full blast radius (schema `DriftClass`,
+    analyzer `export.rs` class lists/labels, analyzer sort order, sentinel `operator_surface.rs` mappings —
+    `drift_class_name` / `historical_reason_prefixes` / `checkpoint_had_active_class`). From that report,
+    decide the `schema_version` `v0.7` bump (honest labeling + sentinel allowlist/gate updates, not
+    compat protection — old readers break at deserialization regardless). Record the decision.
   - Verify: impact report recorded in this ledger; no scorer code committed from this task.
   - Files:
     - (read-only) `crates/agent-drift-analyzer/src/checkpoint/schema.rs`,
+      `crates/agent-drift-analyzer/src/checkpoint/export.rs`,
       `crates/agent-drift-sentinel/src/operator_surface.rs`
-  - Finding: _(record the surfacing decision + impact summary here when complete)_
+  - Finding: _(record the blast radius + schema_version decision here when complete)_
 
 ## R6-2.3: Semantic-Goal-Drift Scorer + Presence Guard
 
-- [ ] Task R6-2.3.1: Implement the rule-based scorer with the three-state sidecar-presence guard.
-  - Acceptance: a new `scoring/semantic_goal_drift.rs` first applies the presence guard (present+confident
-    → score; absent → no claim; present-but-unknown → no claim), then compares the current goal (from
-    `analysis.current`) to the kickoff anchor (from the R6-2.1 threaded `score_session` input, not from
-    `analysis`) over `comparison_key`/structured terms, excluding sanctioned explicit replans **via the
-    replan signal exposed to the scorer per SPEC Open Question 4** (the private `progress.rs` detectors are
-    not reachable from `score_session`), and attaches named evidence (anchor + drifted goal). It is wired
-    into `score_session` per the R6-2.1 access path and the R6-2.2 surfacing decision. The drift signal
-    reads structured state only — never `task_frame.objective`. Add the minimal presence-guard +
-    drift-vs-replan proof here (TDD); the full matrix is R6-2.4.
+- [ ] Task R6-2.3.1: Implement the rule-based scorer with the two presence guards.
+  - Acceptance: a new `scoring/semantic_goal_drift.rs` first applies the current-goal three-state guard
+    (present+confident → score; absent → no claim; present-but-unknown → no claim) and the separate anchor
+    guard, at the resolved confidence bar (anchor `High` + current `Medium+`, both `TaskStatement`, empty
+    `unknowns` — SPEC Resolved Decision 5), then compares the current goal (from `analysis.current`) to the
+    kickoff anchor (from the R6-2.1 threaded `score_session` input, not from `analysis`) over
+    `comparison_key`/structured terms, excluding sanctioned explicit replans **via `analysis.sanctioned_replan`**
+    (SPEC Resolved Decision 4; the field added in R6-2.1 — the private `progress.rs` detectors are not
+    reachable from `score_session`), and attaches named evidence (anchor + drifted goal). It emits the new
+    `DriftClass::SemanticGoalDrift` (SPEC Resolved Decision 6), wired into `score_session` per the R6-2.1
+    access path. The drift signal reads structured state only — never `task_frame.objective`. Add the
+    minimal presence-guard + drift-vs-replan proof here (TDD); the full matrix is R6-2.4.
   - Verify:
     - `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
   - Files:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs` (new)
     - `crates/agent-drift-analyzer/src/scoring/mod.rs`
-    - `crates/agent-drift-analyzer/src/checkpoint/schema.rs` (only if a variant lands)
-    - `crates/agent-drift-sentinel/src/operator_surface.rs` (only if a variant lands, lockstep)
+    - `crates/agent-drift-analyzer/src/checkpoint/schema.rs` (`SemanticGoalDrift` variant)
+    - `crates/agent-drift-analyzer/src/checkpoint/export.rs` (class lists/labels, lockstep)
+    - `crates/agent-drift-sentinel/src/operator_surface.rs` (mappings, lockstep)
     - `crates/agent-drift-analyzer/tests/...` (minimal proof only)
 
 ## R6-2.4: Regressions And Acceptance Fixture
@@ -102,15 +112,15 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 ## R6-2.5: Smoke And Closeout
 
 - [ ] Task R6-2.5.1: Full (+ sentinel) walls, the `R6-4` open/defer decision, and MAP status update.
-  - Acceptance: the full analyzer wall and (if a `DriftClass` variant landed) the full sentinel walls are
-    green; the closeout records whether any `R6-1`/`R6-2` replay evidence showed a `progress.rs` reset
+  - Acceptance: the full analyzer wall and the full sentinel walls (the `SemanticGoalDrift` variant touches
+    the sentinel surface) are green; the closeout records whether any `R6-1`/`R6-2` replay evidence showed a `progress.rs` reset
     error caused by objective-string quality — if yes, route to the conditional `R6-4`; if no, close `R6`
     with `R6-4` deferred to the later full-migration phase. The `R6-2` entry in `docs/specs/r6/MAP.md` is
     updated with status, routing, and the `R6-4` decision.
   - Verify:
     - `cargo test -p agent-drift-analyzer -- --nocapture`
-    - `cargo test -p agent-drift-sentinel -- --nocapture` (only if a `DriftClass` variant landed; otherwise
-      the sentinel surface is untouched and this wall is not required)
+    - `cargo test -p agent-drift-sentinel -- --nocapture` (the `SemanticGoalDrift` variant touches
+      `operator_surface.rs`, so this wall is required)
   - Files:
     - `docs/specs/r6/MAP.md`
 

@@ -111,10 +111,11 @@ contract:
   the kickoff/anchor objective for the session;
 - compute drift as semantic distance between the current effective goal and the anchored kickoff goal,
   using `comparison_key` / structured terms rather than raw display-string token overlap;
-- **sidecar-presence guard (mandatory):** define behavior for all three states the migration doc
-  requires — sidecar present and high-confidence (score drift), sidecar absent (no drift claim; stay
-  conservative), sidecar present but key fields unknown (no drift claim). Silent fallback to brittle
-  string assumptions must be visible in tests;
+- **presence guards (mandatory):** a three-state guard on the current goal (present+confident → eligible;
+  absent → no claim; present-but-key-fields-unknown → no claim) plus a separate anchor-presence guard. The
+  resolved confidence bar is anchor `High` + current `Medium`-or-`High` (both `TaskStatement`, empty
+  `unknowns`) — `High`-only-both-sides would be dormant given the `Medium`-heavy extractor (see the `R6-2`
+  spec Resolved Decision 5). Silent fallback to brittle string assumptions must be visible in tests;
 - keep it rule-based and interpretable in the first cut; learned monitors stay deferred.
 
 This is intentionally a *read* of the sidecar, not a re-plumb of `TaskFrame`. If a later phase migrates

@@ -37,37 +37,45 @@ this SPEC/PLAN/TASKS family owns the implementation contract; the live crate
    `CheckpointAnalysis`. It **cannot** be read via `session_kickoff_anchor(analysis)`. The *current* goal,
    by contrast, is checkpoint-local and is reachable directly at `analysis.current.context.objective.structured`.
    The access path is resolved in `R6-2.1` (Open Question 1b).
-3. **Drift is scored only when the sidecar is present and confident (mandatory presence guard).** This is
-   the three-state guard on the **current** goal's sidecar: present and confident → eligible to score;
-   sidecar absent → no drift claim (conservative); sidecar present but key fields unknown
-   (`ObjectiveUnknown` / `objective_class != TaskStatement`) → no drift claim. There is a **separate**
-   anchor-presence guard (anchor captured yet, or not → no claim); the two guards are distinct, not a
-   single four-state guard. What counts as "confident" is not yet pinned: live extraction yields
-   `Low`/`Medium`/`High` (`context/objective.rs`), and whether `TaskStatement + Medium` scores or is
-   suppressed to `High`-only is an **open design decision** (see Open Questions). Silent fallback to
-   brittle string assumptions must be visible in tests.
-4. **A new `DriftClass` variant is the likely shape, and it has cross-crate blast radius plus a serde
-   cost.** Surfacing semantic goal drift as a first-class drift signal needs a new `DriftClass` variant
-   (e.g. `SemanticGoalDrift`), which requires updating the sentinel `operator_surface.rs` mapping
-   (`drift_class_name`, `historical_reason_prefixes`, `checkpoint_had_active_class`) and `score_session`'s
-   sort order. It is additive at the enum, but `DriftClass` is a **closed serde enum**, so adding a variant
-   is a forward-compat break for any older reader deserializing checkpoints — acceptable only under in-repo
-   lockstep, **not** a cost-free additive change. Whether to pay that (a real variant) or surface drift as
-   evidence within an existing class is an open design decision (see Open Questions). This cross-crate
-   coordination is called out as Ask-First (Boundaries) and gated on `gitnexus_impact`.
+3. **Drift is scored only when the sidecar is present and confident (mandatory presence guards).** Two
+   distinct guards, not one four-state guard: (i) the three-state guard on the **current** goal's sidecar —
+   present and confident → eligible to score; sidecar absent → no drift claim (conservative); sidecar
+   present but key fields unknown (`ObjectiveUnknown` / `objective_class != TaskStatement`) → no drift
+   claim; and (ii) a **separate** anchor-presence guard (no confident anchor captured yet → no claim).
+   **Confidence bar (resolved — see Resolved Decision 5):** the anchor must be `High`, the current goal
+   `Medium`-or-`High`, both `TaskStatement` with empty `unknowns`. `High`-only-both-sides would be dormant
+   because the extractor is structurally `Medium`-heavy (any goal clause resolves to `Medium` unless it is
+   on `Scope`/`Mission` with goal evidence — `context/objective.rs`); the `High` anchor + `Medium+` current
+   bar keeps the origin confident while still firing on the common case. Silent fallback to brittle string
+   assumptions must be visible in tests.
+4. **Semantic goal drift is surfaced as a new `DriftClass::SemanticGoalDrift` variant (resolved — see
+   Resolved Decision 6).** Burying it as evidence under an existing class conflates failure modes and pays
+   the variant cost later anyway plus a migration. The variant needs lockstep exhaustive-match updates in:
+   analyzer `score_session` sort order (`scoring/mod.rs`), analyzer export class lists/labels
+   (`checkpoint/export.rs`), and the sentinel `operator_surface.rs` mappings (`drift_class_name`, the
+   historical-fallback / `historical_reason_prefixes`, `checkpoint_had_active_class`). `DriftClass` is a
+   **closed serde enum**, so adding a variant is a hard forward-compat break for any older reader — it fails
+   at checkpoint deserialization *before* any `schema_version` gate, so a version bump does **not** protect
+   old binaries; lockstep deploy is the only mitigation. Whether to bump `schema_version` to `v0.7` (honest
+   labeling + sentinel allowlist/gate updates, not compat protection) is decided in `R6-2.2` with
+   `gitnexus_impact`. Whether `R6-3` rolling drift reuses this variant or gets its own is **not** pre-decided
+   here — deferred to the `R6-3` spec (one merged operator family vs two independently surfaced signals is a
+   real tradeoff given the per-class fingerprint/threshold surfaces).
 5. **Rule-based, interpretable first cut.** Semantic distance is a deterministic comparison of structured
    goal anchors (`comparison_key` / structured terms), not a learned monitor. Learned/hybrid scoring stays
    deferred.
 6. **`R5.75` behavior is preserved.** This packet is additive; it must not change the progress lanes or
    regress delegated-stability (`R5.75-3`) or zero-verifier anti-flap (`R5.75-4`).
-7. **Drift ≠ legitimate replan.** A goal change that is an explicit, user-authorized replan/pivot is not
-   semantic drift; the scorer must not flag a sanctioned objective change. **But the existing replan
-   detectors are not reachable from the scorer as written:** `explicit_replan_boundary` (`progress.rs`) and
-   `objective_candidate_is_explicit_replan_pivot` (`checkpoint/mod.rs`) are private, and `CheckpointAnalysis`
-   carries no sanctioned-replan bit — `score_session` gets only `CheckpointAnalysis` +
-   `previous_truth_grounding_gap`. So "just cross-check the existing signals" is not implementable today;
-   how to expose a sanctioned-replan signal to the scorer is an **open design decision** (see Open
-   Questions).
+7. **Drift ≠ legitimate replan; the sanctioned-replan signal is a new `CheckpointAnalysis` field (resolved
+   — see Resolved Decision 4).** A sanctioned/authorized pivot must not be flagged. The existing replan
+   detectors are private and not reachable from `score_session`, and they are *weak heuristics*
+   (`explicit_replan_boundary` is objective-string delta + a keyword, `progress.rs`;
+   `objective_candidate_is_explicit_replan_pivot` keys off a `UserMessageRole::Steer` row + a phrase list,
+   `checkpoint/mod.rs`). Because "was this checkpoint an authorized replan?" is *checkpoint-local derived
+   metadata* (like `turn_context` / `recovery` / `delegation`), it is added as a field on
+   `CheckpointAnalysis` computed at analysis-assembly time, sourced primarily from **steer-row evidence**,
+   not the `progress.rs` string heuristic. The scorer reads `analysis.sanctioned_replan`; nothing is
+   threaded for replan (only the session-level anchor is threaded).
 
 If any of these assumptions drift, update this spec before implementation.
 
@@ -123,7 +131,7 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 cargo test -p agent-drift-analyzer --test objective_acceptance -- --nocapture
 ```
 
-Full analyzer wall + (if a `DriftClass` variant lands) sentinel walls for closeout:
+Full analyzer wall + sentinel walls for closeout (the `SemanticGoalDrift` variant touches the sentinel surface):
 
 ```bash
 cargo test -p agent-drift-analyzer -- --nocapture
@@ -143,40 +151,42 @@ docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-{spec,plan,tasks}.md
 crates/agent-drift-analyzer/src/context/objective.rs
   StructuredObjective + comparison_key_from_structured: the typed state R6-2 consumes (read-only here).
 crates/agent-drift-analyzer/src/checkpoint/{schema.rs,mod.rs}
-  Per-checkpoint structured_objective (from R5.75-1); kickoff-anchor capture; the new DriftClass variant if added.
+  Per-checkpoint structured_objective (from R5.75-1); kickoff-anchor capture; the sanctioned_replan field; the new SemanticGoalDrift DriftClass variant.
 crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs (new)
-  The new rule-based scorer with the sidecar-presence guard.
+  The new rule-based scorer with the two presence guards.
+crates/agent-drift-analyzer/src/checkpoint/export.rs
+  DriftClass class lists/labels for the new variant (lockstep).
 crates/agent-drift-sentinel/src/operator_surface.rs
-  DriftClass mapping update, only if a variant lands (lockstep, additive).
+  DriftClass mapping update for the new variant (lockstep).
 ```
 
 ## Code Style
 
 Make the presence guards the first thing the scorer does, and keep the states explicit and test-visible.
 Note the live types: the goal is a `StructuredObjective` (`schema.rs`), reached via
-`analysis.current.context.objective` (which is an `ObjectiveSummary` carrying `structured` +
-`comparison_key`). `confident_structured_goal` below is a **helper to define** in this packet from
-`objective_class == TaskStatement`, `confidence`, and empty `unknowns` — the exact `confidence` bar is an
-open design decision. `sanctioned_replan` is **not** derivable from `analysis` today (see Assumption 7 /
-Open Questions); it is shown as a threaded/CheckpointAnalysis input, pending that decision.
+`analysis.current.context.objective` (an `ObjectiveSummary` carrying `structured` + `comparison_key`).
+`confident_structured_goal` below is a **helper to define** from `objective_class == TaskStatement`, empty
+`unknowns`, and the resolved confidence bar (anchor `High`, current `Medium`-or-`High` — Resolved
+Decision 5). `sanctioned_replan` is a new `CheckpointAnalysis` field (Resolved Decision 4), read as
+`analysis.sanctioned_replan`. Only the session-level `anchor` is threaded.
 
 ```rust
 // `anchor: Option<&StructuredObjective>` is threaded into score_session from the per-session analyze loop
-// (like previous_truth_grounding_gap) — None until the first confident anchor is captured. NOT on `analysis`.
-// `sanctioned_replan: bool` is likewise supplied to the scorer (threaded or as a CheckpointAnalysis field);
-// it is NOT read from a private progress.rs helper — those are unreachable from score_session.
+// (like previous_truth_grounding_gap) — None until the first High-confidence anchor is captured. NOT on `analysis`.
+// `analysis.sanctioned_replan` is a CheckpointAnalysis field (Resolved Decision 4), derived at
+// analysis-assembly time from steer-row evidence — NOT read from a private progress.rs helper.
 
-// Sidecar-presence guard on the CURRENT goal (three states): absent OR unknown → no drift claim.
+// Current-goal guard (three states) at the resolved bar (Medium-or-High): absent OR unknown → no drift claim.
 let Some(current_goal) = confident_structured_goal(&analysis.current) else {
     return no_drift_claim(SidecarState::AbsentOrUnknown); // conservative, test-visible
 };
-// Separate anchor-presence guard: no confident kickoff anchor captured yet → no drift claim.
+// Separate anchor-presence guard: no confident (High) kickoff anchor captured yet → no drift claim.
 let Some(anchor_goal) = anchor else {
     return no_drift_claim(SidecarState::NoAnchor);
 };
 
 // Compare structured goal anchors (comparison_key / structured terms), never the bridge-patched display string.
-if comparison_key_diverged(current_goal, anchor_goal) && !sanctioned_replan {
+if comparison_key_diverged(current_goal, anchor_goal) && !analysis.sanctioned_replan {
     // flagged semantic goal drift, evidence names the anchor + the drifted goal
 }
 ```
@@ -187,8 +197,10 @@ Conventions for this packet:
 - Thread the kickoff anchor into `score_session` as session-running input (mirroring
   `previous_truth_grounding_gap`); read the current goal from `analysis.current`. Never assume the anchor
   is on a single `CheckpointAnalysis`.
-- The presence guard's three outcomes (score / absent / unknown) are each asserted in tests.
-- Exclude sanctioned explicit replans from drift via the existing replan signals.
+- The current-goal guard's three outcomes (score / absent / unknown) and the separate anchor guard are
+  each asserted in tests.
+- Exclude sanctioned explicit replans from drift via the `analysis.sanctioned_replan` field (Resolved
+  Decision 4), not private `progress.rs` helpers.
 - Keep the scorer rule-based and evidence-first; no learned monitor.
 
 ## Testing Strategy
@@ -203,7 +215,8 @@ Conventions for this packet:
 4. **Acceptance fixture(s)**: a committed kickoff-anchored session that drifts, locked like the
    `objective_acceptance` corpus.
 5. **Non-regression**: `R5.75-3`/`R5.75-4` witnesses and the `R6-1` `dead_end_thrash` posture unchanged;
-   if a `DriftClass` variant lands, the sentinel walls stay green.
+   the sentinel walls stay green after the `SemanticGoalDrift` variant + `operator_surface.rs`/`export.rs`
+   updates.
 
 ## Boundaries
 
@@ -215,21 +228,22 @@ Conventions for this packet:
     (mirroring `previous_truth_grounding_gap`), not by reading it off a single `CheckpointAnalysis`; read
     the current goal from `analysis.current`;
   - implement the three-state sidecar-presence guard and assert each state;
-  - run `gitnexus_impact` on `score_session` and (if added) the new `DriftClass` variant before editing,
-    and report the blast radius — especially the sentinel `operator_surface.rs` coupling;
-  - keep the change additive and preserve `R5.75`/`R6-1` behavior.
+  - run `gitnexus_impact` on `score_session` and the new `SemanticGoalDrift` `DriftClass` variant before
+    editing, and report the blast radius — especially the sentinel `operator_surface.rs` coupling and the
+    analyzer `export.rs` class lists;
+  - keep `DriftScore`'s output shape additive and preserve `R5.75`/`R6-1` behavior; the `DriftClass`
+    variant lands only with its lockstep sentinel + `export.rs` updates.
 - **Ask first:**
-  - adding the `SemanticGoalDrift` `DriftClass` variant (cross-crate: schema + sentinel mapping +
-    `score_session` ordering) — confirm the variant vs. surfacing drift as evidence within an existing
-    class before landing;
-  - the exact semantic-distance threshold over `comparison_key`/structured terms;
-  - whether the kickoff anchor is the first confident checkpoint or a session-level kickoff signal.
+  - the `schema_version` `v0.7` bump decision (honest labeling + sentinel allowlist/gate updates, not
+    compat protection) — resolve in `R6-2.2` from the `gitnexus_impact` blast-radius report;
+  - the exact semantic-distance threshold over `comparison_key`/structured terms (Open Question 2).
 - **Never:**
   - read `task_frame.objective` (the bridge-patched display string) for the drift signal;
   - migrate `progress.rs` comparability/reset here (that is the conditional `R6-4`);
   - flag a sanctioned explicit replan as drift;
   - score drift when the sidecar is absent or its goal fields are unknown;
-  - add a learned/hybrid scorer or bump the schema beyond the additive variant.
+  - add a learned/hybrid scorer, or ship the `DriftClass` variant without its lockstep sentinel /
+    `export.rs` updates.
 
 ## Success Criteria
 
@@ -238,9 +252,10 @@ Conventions for this packet:
 2. The three sidecar-presence states are each asserted: score / absent-no-claim / unknown-no-claim.
 3. The signal is provably derived from `comparison_key`/structured state, not the patched display string.
 4. A sanctioned explicit replan is not flagged.
-5. `R5.75-3`/`R5.75-4` and `R6-1` postures do not regress; any `DriftClass` variant is additive with the
-   sentinel mapping updated in lockstep; `cargo test -p agent-drift-analyzer -- --nocapture` (and the
-   sentinel walls if touched) are green.
+5. `R5.75-3`/`R5.75-4` and `R6-1` postures do not regress; the `SemanticGoalDrift` `DriftClass` variant
+   lands with its lockstep sentinel (`operator_surface.rs`) and analyzer (`export.rs`) updates — a
+   forward-compat break for old readers, mitigated only by lockstep deploy; `cargo test -p
+   agent-drift-analyzer -- --nocapture` and the sentinel walls are green.
 
 ## Resolved Decisions
 
@@ -261,31 +276,36 @@ Conventions for this packet:
    also motivates the split: the previous-checkpoint goal is reachable via
    `analysis.previous.context.objective.structured` with no new plumbing, whereas this packet's kickoff
    anchor is session-level and must be threaded into scoring (see Open Question 1 / `R6-2.1`).
+4. **Resolved (2026-06-30, codex-adjusted): the sanctioned-replan signal is a new `CheckpointAnalysis`
+   field.** "Was this checkpoint an authorized replan?" is checkpoint-local derived metadata (like
+   `turn_context` / `recovery` / `delegation`), so it is a `CheckpointAnalysis` field computed at
+   analysis-assembly time from **steer-row evidence** — **not** a bool threaded into `score_session` (that
+   pattern is for session-running state like the anchor), and **not** the weak private `progress.rs`
+   string heuristic. The scorer reads `analysis.sanctioned_replan`. Dropping the exclusion was rejected
+   (it ships a known false positive, violating Success Criterion 4).
+5. **Resolved (2026-06-30, codex-adjusted): the confidence bar is anchor `High` + current `Medium`-or-`High`.**
+   Both must be `TaskStatement` with empty `unknowns`. `High`-only-both-sides was rejected as dormant: the
+   extractor is structurally `Medium`-heavy (`context/objective.rs`), so `High/High` would rarely fire. The
+   `High` anchor keeps the origin confident; `Medium+` current fires on the common case. The empirical
+   corpus check in `R6-2.1` (Open Question 1) must confirm `High` anchors actually occur often enough; if
+   they are scarce, relax the anchor bar to `Medium+` and lean harder on the distance threshold.
+6. **Resolved (2026-06-30, codex-adjusted): surface drift as a new `DriftClass::SemanticGoalDrift` variant.**
+   Evidence-within-an-existing-class was rejected (conflates failure modes; pays the variant cost later
+   plus a migration). The variant lands with lockstep exhaustive-match updates in analyzer sort order
+   (`scoring/mod.rs`), analyzer `export.rs` class lists/labels, and sentinel `operator_surface.rs`
+   mappings. Adding it is a hard forward-compat break (old readers fail at deserialization before any
+   `schema_version` gate), so a version bump does not protect them — lockstep deploy does. The
+   `schema_version` `v0.7` decision and the exact blast radius are confirmed in `R6-2.2` via
+   `gitnexus_impact`. Whether `R6-3` reuses this variant is deferred to the `R6-3` spec.
 
 ## Open Questions
 
-1. **Kickoff anchor — two coupled sub-questions, both resolved in PLAN step `R6-2.1`.** (a) *Source:* the
-   anchor is the first confident `TaskStatement` checkpoint goal — the only concrete source today, since
-   the `R4` session-level kickoff-signal hook is disabled (`checkpoint/mod.rs`), so it is not a live peer
-   alternative; confirm this holds across the fixture corpus. (b) *Access path:* how does the session-level anchor
-   reach the scorer, given `score_session` gets only `CheckpointAnalysis` + `previous_truth_grounding_gap`?
-   Recommended: thread a running anchor through the per-session analyze loop into `score_session` (additive
-   input, mirrors `previous_truth_grounding_gap` at `lib.rs`); the alternative is capturing it onto
-   `CheckpointAnalysis`. `session_kickoff_anchor(analysis)` is **not** viable — the anchor is not on
-   `analysis`. (Contrast `R6-1`: its frontier signal is checkpoint-local, so it could be derived inside
-   `score_session` via `build_scoring_session_progress`; the anchor is session-level, so that pattern does
-   not extend.)
-2. Should semantic goal drift be a new `DriftClass` variant (cleaner operator semantics, cross-crate
-   change) or evidence within an existing class (smaller blast radius, weaker surfacing)? (Resolve in
-   `R6-2.2` with `gitnexus_impact`, default per Assumption 4 toward the additive variant pending the
-   impact report.)
-3. What `comparison_key`/structured-term distance threshold cleanly separates drift from normal goal
+1. **Empirical anchor + confidence validation (resolve in `R6-2.1`).** Confirm across the fixture corpus
+   that (a) the first-confident-`TaskStatement` anchor source holds (the `R4` session-level kickoff-signal
+   hook is disabled, so it is the only concrete source), and (b) `High`-confidence anchors occur often
+   enough for the anchor-`High` bar (Resolved Decision 5) not to leave the signal dormant — if `High`
+   anchors are scarce, relax the anchor bar to `Medium+`. The access path is settled: thread the anchor
+   into `score_session` (Resolved Decisions / Assumption 2); `session_kickoff_anchor(analysis)` is not
+   viable.
+2. What `comparison_key`/structured-term distance threshold cleanly separates drift from normal goal
    refinement without flagging sanctioned replans? (Resolve in `R6-2.3` against the acceptance fixtures.)
-4. **Sanctioned-replan reachability (blocking design decision).** The existing replan detectors are private
-   and not reachable from the scorer. How is a sanctioned-replan signal exposed to `score_session` — thread
-   a bool through the analyze loop (like the anchor / `previous_truth_grounding_gap`), add a field to
-   `CheckpointAnalysis`, or drop replan-exclusion from the first cut and accept sanctioned pivots scoring as
-   drift until a follow-up? (Resolve before `R6-2.3`.)
-5. **Confidence bar for "confident" (blocking design decision).** Live extraction yields `Low`/`Medium`/`High`.
-   Does `TaskStatement + Medium` (with no `unknowns`) score, or is scoring suppressed to `High`-only for the
-   first cut? This sets how often the guard fires vs stays conservative. (Resolve in `R6-2.1`/`R6-2.3`.)

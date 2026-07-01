@@ -15,13 +15,20 @@ objective sidecar (`comparison_key` + typed goal anchor) with a mandatory sideca
 
 1. The drift signal reads structured state (`StructuredObjective` / `comparison_key_from_structured`)
    only — never the `R5.75-6` bridge-patched `task_frame.objective` (SPEC Resolved Decision 1).
-2. The sidecar-presence guard has three test-visible states: present+confident → score; absent → no claim;
-   present-but-unknown → no claim.
-3. A sanctioned explicit replan is excluded from drift via existing replan signals.
+2. Two presence guards (SPEC Resolved Decision 5): a three-state current-goal guard (present+confident →
+   score; absent → no claim; present-but-unknown → no claim) plus a separate anchor-presence guard. The
+   confidence bar is anchor `High` + current `Medium`-or-`High` (both `TaskStatement`, empty `unknowns`);
+   `High`-only-both-sides is dormant given the `Medium`-heavy extractor.
+3. A sanctioned explicit replan is excluded via a new `CheckpointAnalysis.sanctioned_replan` field (SPEC
+   Resolved Decision 4), computed from steer-row evidence at analysis-assembly time — not a threaded bool
+   and not the private `progress.rs` string heuristic.
 4. `progress.rs` comparability/reset is **not** migrated here (SPEC Resolved Decision 2); that is the
    conditional `R6-4`, honoring Guardrail 4.
-5. Whether semantic goal drift surfaces as a new `DriftClass` variant or as evidence within an existing
-   class is resolved with `gitnexus_impact` before landing, defaulting toward the additive variant.
+5. Semantic goal drift surfaces as a new `DriftClass::SemanticGoalDrift` variant (SPEC Resolved
+   Decision 6), landing with lockstep updates in analyzer sort order, `export.rs` class lists, and sentinel
+   `operator_surface.rs`. Adding it is a hard forward-compat break (old readers fail before any
+   `schema_version` gate); `R6-2.2` confirms the blast radius and the `v0.7` bump decision via
+   `gitnexus_impact`. `R6-3` variant reuse is deferred to the `R6-3` spec.
 6. The scorer stays rule-based and interpretable; learned monitors deferred.
 7. Packet-prompt rule: verify `R5.75-1` and `R6-1` are landed before editing.
 8. The kickoff anchor is *session-level* and not on `CheckpointAnalysis`, so it is threaded into
@@ -93,6 +100,15 @@ Manual review against `docs/specs/r6/MAP.md`, the DESIGN doc, and live `context/
   single `CheckpointAnalysis`. (Contrast `R6-1`: its frontier signal is checkpoint-local, so
   `build_scoring_session_progress` could derive it inside `score_session`; the anchor is session-level, so
   that pattern does not extend.) Record both the source and the access path in the TASKS ledger.
+- **Confidence-bar corpus check (Open Question 1 / SPEC Resolved Decision 5).** Measure across the fixture
+  corpus how often `High`-confidence `TaskStatement` anchors occur and how often current goals are `Medium`
+  vs `High`. Confirm the resolved bar (anchor `High` + current `Medium+`) is not dormant; if `High` anchors
+  are scarce, relax the anchor bar to `Medium+` and note the tradeoff (the distance threshold then does
+  more work). Record the finding.
+- **`sanctioned_replan` field (SPEC Resolved Decision 4).** Add the `CheckpointAnalysis.sanctioned_replan`
+  field, computed at analysis-assembly time primarily from steer-row evidence (not the private
+  `progress.rs` string heuristic). This is analysis-time infra the scorer reads in `R6-2.3`; every
+  `CheckpointAnalysis` construction site (incl. test fixtures) must set it.
 
 ### Primary Files
 
@@ -115,19 +131,23 @@ non-existent `session_kickoff_anchor(analysis)`; settle both before writing the 
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 ```
 
-## R6-2.2: Decide The Surfacing Shape (Impact-Gated)
+## R6-2.2: Confirm The Variant Blast Radius And Schema Decision (Impact-Gated)
 
 ### Scope
 
-- run `gitnexus_impact` on `score_session` and a candidate `SemanticGoalDrift` `DriftClass` variant;
-  report the blast radius (schema, sentinel `operator_surface.rs` mapping, `score_session` ordering)
-- decide variant vs. evidence-within-existing-class from that report; record the decision
+- run `gitnexus_impact` on `score_session` and the `SemanticGoalDrift` `DriftClass` variant; report the
+  full blast radius (analyzer sort order, `export.rs` class lists/labels, sentinel `operator_surface.rs`
+  mappings, and any `schema_version` gate)
+- the variant is already the decided shape (SPEC Resolved Decision 6); this step **confirms** the blast
+  radius and decides the `schema_version` `v0.7` bump (honest labeling + sentinel allowlist, not compat
+  protection) from that report; record the decision
 
 ### Primary Files
 
 ```text
-crates/agent-drift-analyzer/src/checkpoint/schema.rs   (DriftClass, if a variant lands)
-crates/agent-drift-sentinel/src/operator_surface.rs    (mapping, lockstep, if a variant lands)
+crates/agent-drift-analyzer/src/checkpoint/schema.rs   (DriftClass variant + any schema_version gate)
+crates/agent-drift-analyzer/src/checkpoint/export.rs   (class lists/labels, lockstep)
+crates/agent-drift-sentinel/src/operator_surface.rs    (mappings, lockstep)
 ```
 
 ### Why Here
@@ -154,8 +174,9 @@ Impact report recorded in the TASKS ledger; no scorer code from this step.
 ```text
 crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs (new)
 crates/agent-drift-analyzer/src/scoring/mod.rs
-crates/agent-drift-analyzer/src/checkpoint/schema.rs           (only if a variant lands)
-crates/agent-drift-sentinel/src/operator_surface.rs            (only if a variant lands)
+crates/agent-drift-analyzer/src/checkpoint/schema.rs           (SemanticGoalDrift variant)
+crates/agent-drift-analyzer/src/checkpoint/export.rs           (class lists/labels, lockstep)
+crates/agent-drift-sentinel/src/operator_surface.rs            (mappings, lockstep)
 crates/agent-drift-analyzer/tests/...                          (minimal proof only)
 ```
 
