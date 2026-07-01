@@ -21,10 +21,10 @@ prerequisite is missing, stop and report it instead of compensating inside this 
 
 ## R6-2.1: Capture And Thread The Kickoff Anchor
 
-- [ ] Task R6-2.1.1: Capture the session kickoff structured-goal anchor and decide its scorer access path.
+- [ ] Task R6-2.1.1: Capture the session kickoff structured-goal anchor (access path settled — threaded).
   - Acceptance: (a) a minimal, committed helper captures the kickoff anchor from the existing per-checkpoint
     `structured_objective` (the first confident `TaskStatement` goal — the only concrete source; the
-    session-level kickoff-signal hook is disabled — Open Question 1a), read once and reused, not
+    session-level kickoff-signal hook is disabled; the Open Question 1 corpus check confirms it holds), read once and reused, not
     recomputing objective extraction; and (b) the anchor is threaded into `score_session` via the
     per-session analyze loop (settled — mirroring `previous_truth_grounding_gap` at `lib.rs`);
     `session_kickoff_anchor(analysis)` is not viable and the current goal stays read from `analysis.current`.

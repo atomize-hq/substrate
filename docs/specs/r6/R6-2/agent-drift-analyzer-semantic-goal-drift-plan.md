@@ -34,8 +34,9 @@ objective sidecar (`comparison_key` + typed goal anchor) with a mandatory sideca
 8. The kickoff anchor is *session-level* and not on `CheckpointAnalysis`, so it is threaded into
    `score_session` as additive session-running input (mirroring `previous_truth_grounding_gap` in
    `lib.rs`), never read via `session_kickoff_anchor(analysis)`. The current goal is read from
-   `analysis.current`. The anchor *source* (first confident `TaskStatement` vs session-level signal) is
-   resolved in `R6-2.1`; capture-onto-`CheckpointAnalysis` is the fallback access path.
+   `analysis.current`. The anchor *source* is the first confident `TaskStatement` checkpoint (the
+   session-level kickoff-signal hook is disabled); `R6-2.1` confirms this empirically — it is not an
+   access-path or source decision.
 
 ## Why This Packet Exists
 
@@ -50,10 +51,10 @@ without migrating the high-risk reset surface.
 
 ```text
 docs lock (this SPEC/PLAN/TASKS)
-  -> kickoff-anchor capture + access-path decision
-     (source: first confident TaskStatement vs session kickoff signal;
-      access: thread into score_session like previous_truth_grounding_gap, not read off analysis)
-  -> DriftClass-vs-evidence impact decision (gitnexus_impact)
+  -> kickoff-anchor capture + empirical corpus check
+     (source settled: first confident TaskStatement, kickoff-signal hook disabled;
+      access settled: threaded into score_session like previous_truth_grounding_gap, not read off analysis)
+  -> SemanticGoalDrift variant blast-radius + schema_version confirmation (gitnexus_impact)
   -> semantic_goal_drift scorer + sidecar-presence guard (structured-state read)
   -> drift-vs-replan + structured-source regressions + acceptance fixture
   -> R5.75-3/R5.75-4 + R6-1 non-regression + full (+ sentinel) walls
@@ -90,8 +91,8 @@ Manual review against `docs/specs/r6/MAP.md`, the DESIGN doc, and live `context/
 - **Anchor source.** Determine, from the per-checkpoint `structured_objective`, how to capture the
   session's kickoff anchor: the first confident `TaskStatement` checkpoint goal — the only concrete source,
   since the `R4` session-level kickoff-signal hook is disabled (`checkpoint/mod.rs`), so it is not a live
-  alternative (Open Question 1a) — investigation plus a minimal, committed anchor-capture helper. The
-  anchor is read once and reused; it does not recompute objective extraction.
+  alternative (the Open Question 1 corpus check confirms it holds) — investigation plus a minimal, committed
+  anchor-capture helper. The anchor is read once and reused; it does not recompute objective extraction.
 - **Access path (settled — thread the anchor).** The anchor is session-level and is **not** on
   `CheckpointAnalysis`, so it **is threaded** through the per-session analyze loop and passed into the
   scorer, exactly as `previous_truth_grounding_gap` is threaded today (`lib.rs`). `session_kickoff_anchor(analysis)`
