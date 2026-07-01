@@ -10,7 +10,7 @@ These prompts map:
 - Packet `R6-2.0` -> Task `R6-2.0.1` (docs lock)
 - Packet `R6-2.1` -> Task `R6-2.1.1` (capture + thread the kickoff anchor; add `sanctioned_replan`)
 - Packet `R6-2.2` -> Task `R6-2.2.1` (impact-gated variant blast radius + `schema_version` decision; no scorer code)
-- Packet `R6-2.3` -> Task `R6-2.3.1` (semantic-goal-drift scorer + presence guards + minimal proof)
+- Packet `R6-2.3` -> Task `R6-2.3.1` (semantic-goal-drift scorer + presence guards + `v0.7` writer/gate fallout + minimal proof)
 - Packet `R6-2.4` -> Tasks `R6-2.4.1` and `R6-2.4.2` (regression matrix + acceptance fixture)
 - Packet `R6-2.5` -> Task `R6-2.5.1` (full analyzer + sentinel walls, `R6-4` open/defer decision, MAP update)
 
@@ -430,15 +430,24 @@ Packet `R6-2.3` scope only:
 - add `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs` with the two presence guards first: current-goal three-state guard and separate anchor-presence guard
 - compare the current goal from `analysis.current` to the threaded kickoff anchor using `comparison_key` / structured terms only, excluding sanctioned explicit replans via `analysis.sanctioned_replan`
 - emit the new `DriftClass::SemanticGoalDrift`, with named evidence for the anchor and drifted goal, and wire it into `score_session`
-- land the lockstep analyzer/sentinel surfacing updates required by the Packet `R6-2.2` blast-radius decision
+- land the lockstep analyzer/sentinel surfacing updates required by the Packet `R6-2.2` blast-radius decision, including the `crates/agent-drift-analyzer/src/checkpoint/mod.rs` `v0.7` writer bump and the analyzer/sentinel schema gates that must move with it
 - add only the minimal presence-guard + drift-vs-replan proof here; the full regression matrix belongs to Packet `R6-2.4`
 
 Primary files:
 - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
 - `crates/agent-drift-analyzer/src/scoring/mod.rs`
+- `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
 - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
 - `crates/agent-drift-analyzer/src/checkpoint/export.rs`
+- `crates/agent-drift-sentinel/src/input.rs`
+- `crates/agent-drift-sentinel/src/live_input.rs`
 - `crates/agent-drift-sentinel/src/operator_surface.rs`
+- `crates/agent-drift-analyzer/tests/end_to_end.rs`
+- `crates/agent-drift-analyzer/tests/export_bundle.rs`
+- `crates/agent-drift-sentinel/tests/replay_input.rs`
+- `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
+- `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
+- `crates/agent-drift-sentinel/tests/operator_surface.rs`
 - `crates/agent-drift-analyzer/tests/...` (minimal proof only)
 
 Out of scope:
@@ -487,7 +496,8 @@ Do this:
 - add `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs` so the first thing it does is the current-goal three-state guard (present+confident -> score path eligible; absent -> no claim; present-but-unknown -> no claim) and the separate anchor guard (no confident anchor -> no claim)
 - compare the current goal from `analysis.current` to the threaded kickoff anchor using `comparison_key` / structured terms only; never read `task_frame.objective`
 - exclude sanctioned explicit replans via `analysis.sanctioned_replan`
-- emit `DriftClass::SemanticGoalDrift`, attach named evidence for the anchor and drifted goal, and update `scoring/mod.rs`, `checkpoint/schema.rs`, `checkpoint/export.rs`, and `agent-drift-sentinel/src/operator_surface.rs` in lockstep per the Packet `R6-2.2` blast-radius decision
+- emit `DriftClass::SemanticGoalDrift`, attach named evidence for the anchor and drifted goal, and update `scoring/mod.rs`, `checkpoint/mod.rs`, `checkpoint/schema.rs`, `checkpoint/export.rs`, `agent-drift-sentinel/src/input.rs`, `agent-drift-sentinel/src/live_input.rs`, and `agent-drift-sentinel/src/operator_surface.rs` in lockstep per the Packet `R6-2.2` blast-radius decision
+- bump the checkpoint writer to `schema_version: "v0.7"` and move the class-list / schema-version fallout surfaces with it: analyzer `tests/end_to_end.rs` + `tests/export_bundle.rs`, plus sentinel `tests/replay_input.rs`, `tests/live_checkpoint_compatibility.rs`, `tests/live_end_to_end.rs`, and `tests/operator_surface.rs`
 - add only the minimal presence-guard + drift-vs-replan proof needed for this packet; leave the full matrix and acceptance fixture for Packet `R6-2.4`
 
 Run:
@@ -508,7 +518,8 @@ Use the `$code-review-and-quality` skill.
 Focus:
 - whether the scorer applies the current-goal three-state guard and separate anchor guard first, with no silent fallback to `task_frame.objective`
 - whether the current goal comes from `analysis.current`, the anchor comes from the threaded session-level input, and sanctioned replans are excluded via `analysis.sanctioned_replan`
-- whether the `SemanticGoalDrift` variant, `checkpoint/export.rs`, and sentinel `operator_surface.rs` updates are lockstep and consistent with Packet `R6-2.2`
+- whether the `SemanticGoalDrift` variant, `checkpoint/mod.rs` writer bump, `checkpoint/export.rs`, and sentinel schema/operator-surface updates are lockstep and consistent with Packet `R6-2.2`
+- whether the class-list / schema-version fallout surfaces (`tests/end_to_end.rs`, `tests/export_bundle.rs`, `tests/replay_input.rs`, `tests/live_checkpoint_compatibility.rs`, `tests/live_end_to_end.rs`, `tests/operator_surface.rs`) moved with the variant
 - whether the evidence naming is clear and the minimal proof is sufficient for this packet
 - whether the work stayed packet-scoped and did not pull forward Packet `R6-2.4` / `R6-4`
 
@@ -527,6 +538,7 @@ Review findings to fix:
 
 Rules:
 - fix only Packet `R6-2.3` issues; keep the full regression matrix and acceptance fixture out of scope
+- if the finding touches the Packet `R6-2.2` blast-radius fallout, keep the `checkpoint/mod.rs` `v0.7` writer bump, analyzer/sentinel schema gates, and the named class-list / schema-version test surfaces in sync
 - run GitNexus impact analysis before editing any affected indexed symbol
 - rerun `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture`
 - rerun `cargo test -p agent-drift-analyzer -- --nocapture`

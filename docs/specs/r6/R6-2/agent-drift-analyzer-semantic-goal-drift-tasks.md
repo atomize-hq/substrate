@@ -127,17 +127,34 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     (SPEC Resolved Decision 4; the field added in R6-2.1 — the private `progress.rs` detectors are not
     reachable from `score_session`), and attaches named evidence (anchor + drifted goal). It emits the new
     `DriftClass::SemanticGoalDrift` (SPEC Resolved Decision 6), wired into `score_session` per the R6-2.1
-    access path. The drift signal reads structured state only — never `task_frame.objective`. Add the
-    minimal presence-guard + drift-vs-replan proof here (TDD); the full matrix is R6-2.4.
+    access path. Per the Packet `R6-2.2` blast-radius decision, this same packet also owns the lockstep
+    `v0.7` fallout: bump the checkpoint writer in `crates/agent-drift-analyzer/src/checkpoint/mod.rs`,
+    extend the analyzer/sentinel schema gates in `crates/agent-drift-analyzer/src/checkpoint/schema.rs`,
+    `crates/agent-drift-sentinel/src/input.rs`, `crates/agent-drift-sentinel/src/live_input.rs`, and
+    `crates/agent-drift-sentinel/src/operator_surface.rs`, and move the class-list / schema-version test
+    surfaces with the variant in the same commit. The drift signal reads structured state only — never
+    `task_frame.objective`. Add the minimal presence-guard + drift-vs-replan proof here (TDD); the full
+    matrix is R6-2.4.
   - Verify:
     - `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture`
     - `cargo test -p agent-drift-analyzer -- --nocapture`
+    - targeted fallout review/update for the class-list / schema-version surfaces named below so `v0.7`
+      writer + gate changes do not strand stale coverage
   - Files:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs` (new)
     - `crates/agent-drift-analyzer/src/scoring/mod.rs`
-    - `crates/agent-drift-analyzer/src/checkpoint/schema.rs` (`SemanticGoalDrift` variant)
+    - `crates/agent-drift-analyzer/src/checkpoint/mod.rs` (`schema_version` writer bump to `v0.7`)
+    - `crates/agent-drift-analyzer/src/checkpoint/schema.rs` (`SemanticGoalDrift` variant + analyzer gate)
     - `crates/agent-drift-analyzer/src/checkpoint/export.rs` (class lists/labels, lockstep)
-    - `crates/agent-drift-sentinel/src/operator_surface.rs` (mappings, lockstep)
+    - `crates/agent-drift-sentinel/src/input.rs` (replay schema allowlist/gate, lockstep)
+    - `crates/agent-drift-sentinel/src/live_input.rs` (live schema allowlist/gate, lockstep)
+    - `crates/agent-drift-sentinel/src/operator_surface.rs` (mappings + explicit-state gate, lockstep)
+    - `crates/agent-drift-analyzer/tests/end_to_end.rs` and
+      `crates/agent-drift-analyzer/tests/export_bundle.rs` (class-list / schema-version fallout)
+    - `crates/agent-drift-sentinel/tests/replay_input.rs`,
+      `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`,
+      `crates/agent-drift-sentinel/tests/live_end_to_end.rs`, and
+      `crates/agent-drift-sentinel/tests/operator_surface.rs` (schema-version / operator-surface fallout)
     - `crates/agent-drift-analyzer/tests/...` (minimal proof only)
 
 ## R6-2.4: Regressions And Acceptance Fixture
