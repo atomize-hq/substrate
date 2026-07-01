@@ -302,12 +302,21 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
 
 pub(crate) fn session_kickoff_structured_goal_anchor(
     analyses: &[CheckpointAnalysis],
-) -> Option<StructuredObjective> {
-    analyses
-        .iter()
-        .filter_map(|analysis| analysis.current.context.objective.structured.as_ref())
-        .find(|structured| structured_matches_kickoff_anchor_bar(structured))
-        .cloned()
+) -> Option<(usize, StructuredObjective)> {
+    analyses.iter().find_map(|analysis| {
+        let structured = analysis.current.context.objective.structured.as_ref()?;
+        structured_matches_kickoff_anchor_bar(structured).then(|| (analysis.ordinal, structured.clone()))
+    })
+}
+
+/// The anchor is captured from whichever checkpoint first establishes it, so checkpoints
+/// ordinally before that point must not be scored against a goal the analyzer had not yet
+/// recognized — otherwise a still-undiscovered anchor gets applied retroactively.
+pub(crate) fn kickoff_anchor_for_ordinal(
+    anchor: Option<&(usize, StructuredObjective)>,
+    ordinal: usize,
+) -> Option<&StructuredObjective> {
+    anchor.and_then(|(anchor_ordinal, structured)| (ordinal >= *anchor_ordinal).then_some(structured))
 }
 
 fn classify_checkpoint_delegation(mut delegation: DelegationContext) -> DelegationContext {
@@ -2887,12 +2896,14 @@ fn objective_candidate_is_explicit_replan_pivot(row: &CompactionRow) -> bool {
         return false;
     }
 
+    // "instead"/"instead of" were dropped from this needle list: they fire on routine tool/approach
+    // substitutions ("use rg instead of grep") with no objective-level pivot, which would wrongly
+    // suppress a real semantic_goal_drift claim. The remaining phrases are unambiguously about the
+    // objective/scope itself.
     let normalized = normalize_objective_candidate_text(&row.text);
     [
         "replan",
         "pivot",
-        "instead of",
-        "instead",
         "new objective",
         "change objective",
         "change the objective",
@@ -3256,8 +3267,9 @@ mod tests {
     use crate::input::BundleSession;
 
     use super::{
-        checkpoint_analyses, classify_command_role, session_kickoff_structured_goal_anchor,
-        tool_output_is_unambiguous_failure, CommandRole, Confidence, EvidenceRef,
+        checkpoint_analyses, classify_command_role, kickoff_anchor_for_ordinal,
+        session_kickoff_structured_goal_anchor, tool_output_is_unambiguous_failure, CommandRole,
+        Confidence, EvidenceRef, ObjectiveClass, ObjectiveIntent, StructuredObjective,
     };
 
     #[test]
@@ -3571,13 +3583,49 @@ mod tests {
             "later non-replan checkpoints must not inherit the prior sanctioned replan"
         );
 
-        let anchor =
+        let (anchor_ordinal, anchor) =
             session_kickoff_structured_goal_anchor(&analyses).expect("kickoff structured anchor");
+        assert_eq!(anchor_ordinal, 1);
         assert_eq!(anchor.confidence, Confidence::High);
         assert!(anchor
             .evidence_spans
             .iter()
             .any(|span| span.excerpt.contains("Validate the kickoff anchor helper")));
+    }
+
+    #[test]
+    fn kickoff_anchor_for_ordinal_withholds_a_not_yet_established_anchor() {
+        let anchor_structured = StructuredObjective {
+            objective_class: ObjectiveClass::TaskStatement,
+            primary_intent: ObjectiveIntent::Implement,
+            target: None,
+            constraints: Vec::new(),
+            success_conditions: Vec::new(),
+            deliverables: Vec::new(),
+            verification_commands: Vec::new(),
+            evidence_spans: Vec::new(),
+            confidence: Confidence::High,
+            unknowns: Vec::new(),
+        };
+        let anchor = Some((3usize, anchor_structured));
+
+        assert!(
+            kickoff_anchor_for_ordinal(anchor.as_ref(), 1).is_none(),
+            "a checkpoint ordinally before the anchor's own checkpoint must not be scored against it"
+        );
+        assert!(
+            kickoff_anchor_for_ordinal(anchor.as_ref(), 2).is_none(),
+            "still before the anchor's ordinal"
+        );
+        assert!(
+            kickoff_anchor_for_ordinal(anchor.as_ref(), 3).is_some(),
+            "the anchor's own establishing checkpoint must see it"
+        );
+        assert!(
+            kickoff_anchor_for_ordinal(anchor.as_ref(), 4).is_some(),
+            "later checkpoints must see the established anchor"
+        );
+        assert!(kickoff_anchor_for_ordinal(None, 1).is_none());
     }
 
     #[test]

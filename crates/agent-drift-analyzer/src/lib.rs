@@ -87,7 +87,7 @@ pub fn analyze_loaded_bundle(
             let raw_scores = score_session(
                 analysis,
                 previous_truth_grounding_gap.as_ref(),
-                kickoff_anchor.as_ref(),
+                checkpoint::kickoff_anchor_for_ordinal(kickoff_anchor.as_ref(), analysis.ordinal),
             );
             let scores =
                 checkpoint::assign_drift_states(raw_scores, previous_checkpoint_scores.as_deref());

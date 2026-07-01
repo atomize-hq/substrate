@@ -246,6 +246,47 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     full-migration phase; `docs/specs/r6/MAP.md` records the `R6-2` closeout state, the route to `R6-3`,
     and the defer decision.
 
+## Post-Closeout Codex Review Fixes (2026-07-01)
+
+A second-opinion `codex exec` review of the landed `R6-2` commit range (`c53ba7a44^..c593729af`),
+dispatched after the MAP.md validation pass and its cleanup commit, found one real correctness bug and
+one coverage hole beyond what that validation pass had caught, plus confirmed two heuristic-quality risks.
+Fixed here, all under the full green analyzer + sentinel walls:
+
+- **Anchor-ordinal bug (fixed).** `session_kickoff_structured_goal_anchor` scans the whole session and
+  returns a single anchor value that `lib.rs` previously passed unconditionally to **every** checkpoint's
+  `score_session` call — including checkpoints ordinally *before* the one that established the anchor. The
+  `R6-2.1.1` corpus check itself recorded a session where the anchor first appeared at ordinal 3, so
+  checkpoints 1-2 in that exact fixture were scored against a goal the analyzer had not yet recognized.
+  Fixed by changing `session_kickoff_structured_goal_anchor` to return `(ordinal, StructuredObjective)` and
+  adding `checkpoint::kickoff_anchor_for_ordinal(anchor, ordinal)`, which withholds the anchor for any
+  checkpoint ordinally before it. `lib.rs` now calls this per checkpoint instead of passing the same
+  `Option<&StructuredObjective>` to all of them. New test:
+  `kickoff_anchor_for_ordinal_withholds_a_not_yet_established_anchor` in `checkpoint/mod.rs`.
+- **Sentinel `SemanticGoalDrift` coverage hole (fixed).** No sentinel test constructed a checkpoint with a
+  flagged `SemanticGoalDrift` score; the touched sentinel fixtures only exercised the schema/allowlist
+  plumbing. Added `operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end` (full replay
+  path, asserts `Active` posture and both evidence lines render) and
+  `operator_surface_semantic_goal_drift_has_no_historical_echo_once_cleared` (locks in that this class,
+  which never emits `DriftStateHint::HistoricalContext`, correctly never presents as `Recovered`/
+  `HistoricalOnly` the way `truth_grounding_gap`/`dead_end_thrash` do) in
+  `crates/agent-drift-sentinel/tests/operator_surface.rs`.
+- **`sanctioned_replan` phrase-list tightening (fixed).** `objective_candidate_is_explicit_replan_pivot`
+  matched bare `"instead"`/`"instead of"` in any steer row, so a routine tool/approach substitution like
+  "use rg instead of grep" would suppress a real drift claim in that checkpoint. Dropped both needles from
+  `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, keeping the unambiguous objective/scope-referencing
+  phrases (`replan`, `pivot`, `new objective`, `change objective`, `change the objective`, `change scope`,
+  `change the scope`, `different objective`). `gitnexus_impact` on this function (shared with
+  `objective_candidate_pivot_priority` in the `progress.rs` `R5.75` surface) reported LOW risk; the full
+  `R5.75-3`/`R5.75-4` `progress_acceptance` assertions and the full analyzer/sentinel walls stayed green
+  after the change, so this did not touch the guardrailed `R5.75` posture.
+- **Left as documented debt (not changed).** The disjoint-set semantic-distance check (SPEC Resolved
+  Decision 7) can still miss legitimate narrowing (e.g. `crates/agent-drift-analyzer` →
+  `crates/agent-drift-analyzer/src/checkpoint/mod.rs` reads as fully disjoint) and can be masked by any
+  single shared `PlatformBoundary`/`ScopeBoundary` constraint term. Confirmed by this review as the same
+  accepted v1 tradeoff already recorded; revisiting it as a graduated/weighted distance is deferred to a
+  later `R6` iteration, not addressed here.
+
 ## Deferred / Ask-First
 
 - [ ] Task R6-2.X.1: Open the conditional `R6-4` (progress.rs reset onto `comparison_key`).

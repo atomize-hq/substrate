@@ -599,6 +599,95 @@ fn operator_surface_public_previous_aware_presenter_can_render_recovered_posture
 }
 
 #[test]
+fn operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end() {
+    let fixture = support::ReplayFixture::from_checkpoints(
+        vec![checkpoint_with_drift(
+            "session-semantic-goal-drift",
+            1,
+            DriftClass::SemanticGoalDrift,
+            80,
+            true,
+            "confirm the pivot is intentional or return to the anchored goal",
+            &[
+                "semantic goal drift kickoff anchor: crates_agent_drift_analyzer_src_scoring_mod_rs",
+                "semantic goal drift current goal: docs_specs_r6_map_md",
+            ],
+        )],
+        support::sample_summary(),
+    );
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    assert_eq!(result.report.visible_warnings.len(), 1);
+    let visible = &result.report.visible_warnings[0];
+    assert_eq!(visible.posture, Some(CheckpointPosture::Active));
+    assert!(visible
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("semantic goal drift kickoff anchor:")));
+    assert!(visible
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("semantic goal drift current goal:")));
+}
+
+#[test]
+fn operator_surface_semantic_goal_drift_has_no_historical_echo_once_cleared() {
+    // Unlike truth_grounding_gap/dead_end_thrash, semantic_goal_drift never emits
+    // DriftStateHint::HistoricalContext, so a cleared checkpoint must never present as
+    // Recovered/HistoricalOnly on this class alone, even right after a flagged one.
+    let previous = checkpoint_with_schema_state(
+        "v0.7",
+        "session-semantic-goal-drift-echo",
+        1,
+        DriftClass::SemanticGoalDrift,
+        DriftState::Active,
+        80,
+        true,
+        "confirm the pivot is intentional or return to the anchored goal",
+        &["semantic goal drift kickoff anchor: crates_agent_drift_analyzer_src_scoring_mod_rs"],
+    );
+    let current = checkpoint_with_schema_state(
+        "v0.7",
+        "session-semantic-goal-drift-echo",
+        2,
+        DriftClass::SemanticGoalDrift,
+        DriftState::Cleared,
+        0,
+        false,
+        "continue on the current task frame",
+        &[],
+    );
+
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        agent_drift_sentinel::CheckpointCursor::from(&current),
+        TriggerClass::CheckpointReady,
+        current.flagged,
+        Some(&warning_fingerprint(&current)),
+    );
+    let presentation = present_checkpoint_with_previous(
+        &current,
+        Some(&previous),
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+
+    assert_eq!(
+        presentation.posture, None,
+        "a cleared semantic_goal_drift score must not echo as Recovered/HistoricalOnly"
+    );
+}
+
+#[test]
 fn operator_surface_labels_scheduler_trigger_separately_from_analyzer_posture() {
     let recovered = checkpoint_with_state(
         "session-trigger-label",
