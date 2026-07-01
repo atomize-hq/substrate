@@ -275,7 +275,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             prompts_observed_in_session,
             &mut checkpoints_in_turn,
         );
-        let sanctioned_replan = checkpoint_has_sanctioned_replan(&current.window.compact_rows);
+        let sanctioned_replan = checkpoint_has_sanctioned_replan(&interval.compact_rows);
         let repetition = repetition_slice(&current);
         let task_frame_delta = task_frame_delta(previous.as_ref(), &current);
         let recovery = recovery_state(&current, &interval, &repetition);
@@ -3512,8 +3512,11 @@ mod tests {
     fn checkpoints_capture_kickoff_anchor_once_and_mark_sanctioned_replans_from_steer_rows() {
         let kickoff = "## Scope\nValidate the kickoff anchor helper in crates/agent-drift-analyzer/src/checkpoint/mod.rs only.\n\n## Deliverables\n- Return findings.\n\n## Verification\n- cargo test -p agent-drift-analyzer checkpoints -- --nocapture";
         let replan = "Replan instead: review crates/agent-drift-analyzer/src/checkpoint/export.rs only and return findings.";
+        let followup = "Continue by validating the checkpoint exporter findings and return the result.";
         let mut replan_row = row(2, CompactionKind::UserMessage, replan);
         replan_row.user_message_role = Some(UserMessageRole::Steer);
+        let mut followup_row = row(4, CompactionKind::UserMessage, followup);
+        followup_row.user_message_role = Some(UserMessageRole::Steer);
 
         let session = BundleSession {
             session_id: "session-alpha".to_string(),
@@ -3530,6 +3533,12 @@ mod tests {
                     "functions.shell_command",
                     "{\"command\":\"echo sanctioned-replan\",\"workdir\":\"/repo\"}",
                 ),
+                followup_row.clone(),
+                tool_call(
+                    5,
+                    "functions.shell_command",
+                    "{\"command\":\"echo later-followup\",\"workdir\":\"/repo\"}",
+                ),
             ],
             compact_rows: vec![
                 row(0, CompactionKind::UserMessage, kickoff),
@@ -3544,13 +3553,23 @@ mod tests {
                     "functions.shell_command",
                     "{\"command\":\"echo sanctioned-replan\",\"workdir\":\"/repo\"}",
                 ),
+                followup_row,
+                tool_call(
+                    5,
+                    "functions.shell_command",
+                    "{\"command\":\"echo later-followup\",\"workdir\":\"/repo\"}",
+                ),
             ],
         };
 
         let analyses = checkpoint_analyses(&session);
-        assert_eq!(analyses.len(), 2);
+        assert_eq!(analyses.len(), 3);
         assert!(!analyses[0].sanctioned_replan);
         assert!(analyses[1].sanctioned_replan);
+        assert!(
+            !analyses[2].sanctioned_replan,
+            "later non-replan checkpoints must not inherit the prior sanctioned replan"
+        );
 
         let anchor =
             session_kickoff_structured_goal_anchor(&analyses).expect("kickoff structured anchor");
