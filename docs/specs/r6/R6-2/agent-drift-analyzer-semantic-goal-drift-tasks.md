@@ -102,18 +102,27 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     `checkpoint_had_active_class`; the helper body is generic, but the new variant only becomes
     sentinel-visible once the explicit name/prefix surfaces are taught about it). Schema blast radius is
     likewise broader than the enum line itself: analyzer checkpoints are still emitted as
-    `schema_version: "v0.6"` in `checkpoint/mod.rs`, analyzer validation currently treats
+    `schema_version: "v0.6"` in `checkpoint/mod.rs`; analyzer validation currently treats
     `session_archetype` as required only for `v0.5 | v0.6` and `session_progress` as required only for
-    `v0.6` in `checkpoint/schema.rs`, and sentinel explicit-state gating currently admits only
-    `v0.3 | v0.4 | v0.5 | v0.6` in `operator_surface.rs`. Decision: **bump checkpoint `schema_version`
-    to `v0.7` when `SemanticGoalDrift` lands.** This is an honest-labeling + sentinel-gate decision, not
-    a compatibility shield: old readers still fail at enum deserialization before any version gate if the
-    new variant appears. The bump is still warranted because the active drift-class surface, analyzer
-    export labels/lists, and sentinel explicit-state allowlist all change together, so shipping the
-    variant under `v0.6` would mislabel a materially different checkpoint contract. Operationally this
-    remains a **lockstep deploy**: land the variant with the analyzer `export.rs` updates, the sentinel
-    `operator_surface.rs` updates, the `v0.7` writer/gate changes, and the full analyzer + sentinel walls
-    in the same packet; do not rely on versioning to protect mixed old/new binaries.
+    `v0.6` in `checkpoint/schema.rs`; sentinel replay input hard-codes support only through `v0.6` in
+    `crates/agent-drift-sentinel/src/input.rs`
+    (`SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS` / `SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION`, plus the
+    `validate_checkpoint_contract` branches that enforce the `v0.6` contract fields); sentinel live input
+    does the same in `crates/agent-drift-sentinel/src/live_input.rs`
+    (`SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS` / `SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION`, plus the
+    live-fixture compatibility checks against the `v0.6` analyzer contract); and sentinel explicit-state
+    gating currently admits only `v0.3 | v0.4 | v0.5 | v0.6` in `operator_surface.rs`. Those
+    `input.rs` / `live_input.rs` gates are therefore part of the real `v0.7` fallout now, not merely a
+    later `R6-2.3` handoff concern. Decision: **bump checkpoint `schema_version` to `v0.7` when
+    `SemanticGoalDrift` lands.** This is an honest-labeling + sentinel-gate decision, not a compatibility
+    shield: old readers still fail at enum deserialization before any version gate if the new variant
+    appears. The bump is still warranted because the active drift-class surface, analyzer export
+    labels/lists, sentinel replay/live schema allowlists and contract gates, and sentinel explicit-state
+    allowlist all change together, so shipping the variant under `v0.6` would mislabel a materially
+    different checkpoint contract. Operationally this remains a **lockstep deploy**: land the variant with
+    the analyzer `export.rs` updates, the sentinel `input.rs` / `live_input.rs` / `operator_surface.rs`
+    updates, the `v0.7` writer/gate changes, and the full analyzer + sentinel walls in the same packet;
+    do not rely on versioning to protect mixed old/new binaries.
 
 ## R6-2.3: Semantic-Goal-Drift Scorer + Presence Guard
 
