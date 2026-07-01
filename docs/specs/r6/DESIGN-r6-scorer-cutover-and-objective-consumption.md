@@ -142,9 +142,10 @@ advances; the known `dead_end_thrash` replay artifacts (e.g. the cleared control
 **`R6-2` — `semantic drift from kickoff/plan/docs` as a new structured-objective consumer.** Build the
 dimension per the architecture above; gives `comparison_key` its first live consumer with a sidecar-
 presence guard. Depends on `R6-1` only for shared scorer scaffolding, not semantically. Primary files:
-a new `src/scoring/semantic_goal_drift.rs` + `scoring/mod.rs`, `src/checkpoint/schema.rs`
-(only if a new `DriftClass` variant is needed — additive at the enum, but see the serde-compat note in the
-`R6-2` spec), tests + acceptance fixtures. Acceptance: a
+a new `src/scoring/semantic_goal_drift.rs` + `scoring/mod.rs`, the new `SemanticGoalDrift` `DriftClass`
+variant in `src/checkpoint/schema.rs` (a forward-compat break — see the serde-compat note in the `R6-2`
+spec) with lockstep `checkpoint/export.rs` + sentinel `operator_surface.rs` updates, tests + acceptance
+fixtures. Acceptance: a
 session that pivots away from its kickoff goal scores drift only when the sidecar is present and
 confident; absent/unknown sidecar stays conservative; `R5.75` witnesses do not regress.
 
@@ -200,8 +201,9 @@ the next, mirroring the `R5.75` one-packet-at-a-time discipline.
 
 ## What This Design Does Not Decide
 
-Left to the per-packet spec/plan/tasks (not pre-empted here): exact `DriftClass`/schema field names and
-whether a new variant is needed; the precise semantic-distance function for `R6-2`; specific fixture
+Left to the per-packet spec/plan/tasks (not pre-empted here): exact `DriftClass`/schema field names (the
+`SemanticGoalDrift` variant itself is decided — `R6-2` spec Resolved Decision 6); the precise
+semantic-distance function for `R6-2`; specific fixture
 session ids and threshold numbers; and whether `R6-4` opens at all (evidence-gated). The full
 structured-native `TaskFrame`/working-set/progress migration (design Phases 2-3 beyond the conditional
 `R6-4` slice) remains a later phase, not part of `R6`.

@@ -32,11 +32,12 @@ this SPEC/PLAN/TASKS family owns the implementation contract; the live crate
    future work, not a live peer option. **Reachability (do not
    repeat the `R6-1` mistake):** the scorer receives only `CheckpointAnalysis` (current + one `previous`)
    plus `previous_truth_grounding_gap`; the kickoff anchor is *session-level* and is **not** a field on
-   `CheckpointAnalysis`. So the anchor must be threaded into `score_session` through the per-session analyze
-   loop — mirroring how `previous_truth_grounding_gap` is already threaded (`lib.rs`) — or captured onto
-   `CheckpointAnalysis`. It **cannot** be read via `session_kickoff_anchor(analysis)`. The *current* goal,
-   by contrast, is checkpoint-local and is reachable directly at `analysis.current.context.objective.structured`.
-   The access path is resolved in `R6-2.1` (Open Question 1b).
+   `CheckpointAnalysis`. So the anchor **is threaded** into `score_session` through the per-session analyze
+   loop — mirroring how `previous_truth_grounding_gap` is already threaded (`lib.rs`) — and **not** read via
+   `session_kickoff_anchor(analysis)` (access path settled; stamping a session-level value onto every
+   `CheckpointAnalysis` was rejected as redundant). The *current* goal, by contrast, is checkpoint-local and
+   is reachable directly at `analysis.current.context.objective.structured`. `R6-2.1` does the anchor
+   capture and the empirical corpus check, not an access-path choice.
 3. **Drift is scored only when the sidecar is present and confident (mandatory presence guards).** Two
    distinct guards, not one four-state guard: (i) the three-state guard on the **current** goal's sidecar —
    present and confident → eligible to score; sidecar absent → no drift claim (conservative); sidecar
@@ -103,21 +104,25 @@ This packet succeeds when:
 3. a sanctioned explicit replan/pivot is **not** flagged as drift;
 4. the signal is derived from `comparison_key` / structured terms, not `task_frame.objective`;
 5. `R5.75-3`/`R5.75-4` outcomes and the `R6-1` `dead_end_thrash` posture do not regress;
-6. any new `DriftClass` variant is additive and the sentinel mapping is updated in lockstep, with no
-   schema version bump beyond the additive variant.
+6. the `SemanticGoalDrift` `DriftClass` variant lands with lockstep sentinel (`operator_surface.rs`) +
+   analyzer (`export.rs`) updates; adding it is a forward-compat break for old readers (mitigated only by
+   lockstep deploy), and the `schema_version` `v0.7` bump is a labeling decision confirmed in `R6-2.2`, not
+   pre-rejected.
 
 ## Tech Stack
 
 - Language: Rust 2021
-- Primary crate: `agent-drift-analyzer` (+ coordinated additive change in `agent-drift-sentinel` if a new
-  `DriftClass` variant lands)
+- Primary crate: `agent-drift-analyzer` (+ coordinated lockstep change in `agent-drift-sentinel` for the
+  new `SemanticGoalDrift` `DriftClass` variant)
 - Live code seams for this packet:
   - `crates/agent-drift-analyzer/src/context/objective.rs` (read: `StructuredObjective`,
     `comparison_key_from_structured`, the grounded goal anchor authority)
   - `crates/agent-drift-analyzer/src/checkpoint/{schema.rs,mod.rs}` (the per-checkpoint
     `structured_objective` already exported by `R5.75-1`; the kickoff anchor capture)
   - `crates/agent-drift-analyzer/src/scoring/` (a new `semantic_goal_drift.rs` module + `scoring/mod.rs`)
-  - `crates/agent-drift-sentinel/src/operator_surface.rs` (the `DriftClass` mapping, if a variant is added)
+  - `crates/agent-drift-analyzer/src/checkpoint/export.rs` (`DriftClass` class lists/labels for the new
+    variant, lockstep)
+  - `crates/agent-drift-sentinel/src/operator_surface.rs` (the `DriftClass` mapping for the new variant, lockstep)
   - `crates/agent-drift-analyzer/tests/` (a new acceptance + scorer regression surface)
 - This packet does **not** touch `progress.rs` comparability/reset (that is the conditional `R6-4`).
 

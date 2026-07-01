@@ -92,14 +92,13 @@ Manual review against `docs/specs/r6/MAP.md`, the DESIGN doc, and live `context/
   since the `R4` session-level kickoff-signal hook is disabled (`checkpoint/mod.rs`), so it is not a live
   alternative (Open Question 1a) — investigation plus a minimal, committed anchor-capture helper. The
   anchor is read once and reused; it does not recompute objective extraction.
-- **Access path (how the scorer reaches it).** The anchor is session-level and is **not** on
-  `CheckpointAnalysis`, so decide how it reaches `score_session` (Open Question 1b). Recommended: thread a
-  running anchor through the per-session analyze loop and pass it into the scorer, exactly as
-  `previous_truth_grounding_gap` is threaded today (`lib.rs`); the fallback is capturing it onto
-  `CheckpointAnalysis`. Reject `session_kickoff_anchor(analysis)` — the anchor is not derivable from a
-  single `CheckpointAnalysis`. (Contrast `R6-1`: its frontier signal is checkpoint-local, so
-  `build_scoring_session_progress` could derive it inside `score_session`; the anchor is session-level, so
-  that pattern does not extend.) Record both the source and the access path in the TASKS ledger.
+- **Access path (settled — thread the anchor).** The anchor is session-level and is **not** on
+  `CheckpointAnalysis`, so it **is threaded** through the per-session analyze loop and passed into the
+  scorer, exactly as `previous_truth_grounding_gap` is threaded today (`lib.rs`). `session_kickoff_anchor(analysis)`
+  is not viable, and stamping a session-level value onto every `CheckpointAnalysis` was rejected as
+  redundant. (Contrast `R6-1`: its frontier signal is checkpoint-local, so `build_scoring_session_progress`
+  could derive it inside `score_session`; the anchor is session-level, so that pattern does not extend.)
+  Record the source and the corpus-check finding in the TASKS ledger.
 - **Confidence-bar corpus check (Open Question 1 / SPEC Resolved Decision 5).** Measure across the fixture
   corpus how often `High`-confidence `TaskStatement` anchors occur and how often current goals are `Medium`
   vs `High`. Confirm the resolved bar (anchor `High` + current `Medium+`) is not dormant; if `High` anchors
@@ -214,7 +213,7 @@ cargo test -p agent-drift-analyzer -- --nocapture
 
 ### Scope
 
-- full analyzer wall + (if a variant landed) full sentinel walls
+- full analyzer wall + full sentinel walls (the `SemanticGoalDrift` variant touches the sentinel surface)
 - record whether `R6-4` opens: did any `R6-1`/`R6-2` replay evidence show a `progress.rs` reset error
   caused by objective-string quality? If yes, route to `R6-4`; if no, close `R6` with `R6-4` deferred to
   the later full-migration phase
@@ -237,19 +236,20 @@ cargo test -p agent-drift-sentinel -- --nocapture
 
 ### Risk: the scorer silently falls back to the patched string when the sidecar is weak
 
-Mitigation: the three-state presence guard is the scorer's first step and each state is asserted; an
+Mitigation: the two presence guards are the scorer's first step and each state is asserted; an
 absent/unknown sidecar yields an explicit no-claim, not a string fallback.
 
 ### Risk: a sanctioned replan is flagged as drift
 
-Mitigation: sanctioned explicit replans are excluded via existing replan signals; a drift-vs-replan
-regression locks it.
+Mitigation: sanctioned explicit replans are excluded via the `analysis.sanctioned_replan` field (SPEC
+Resolved Decision 4), computed from steer-row evidence; a drift-vs-replan regression locks it.
 
 ### Risk: a new DriftClass variant breaks the sentinel surface
 
-Mitigation: the variant is impact-gated (`R6-2.2`), additive, and updated in lockstep with
-`operator_surface.rs`; the sentinel walls gate closeout. If the impact is judged too broad, fall back to
-evidence-within-existing-class.
+Mitigation: the variant is impact-gated (`R6-2.2`) and updated in lockstep with `operator_surface.rs` and
+`export.rs`; the sentinel walls gate closeout. Adding it is a forward-compat break (old readers fail at
+deserialization before any `schema_version` gate), mitigated only by lockstep deploy — not by a version
+bump. Falling back to evidence-within-an-existing-class is **not** an option (SPEC Resolved Decision 6).
 
 ### Risk: scope creep into the progress.rs reset migration
 

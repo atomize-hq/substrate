@@ -25,12 +25,10 @@ prerequisite is missing, stop and report it instead of compensating inside this 
   - Acceptance: (a) a minimal, committed helper captures the kickoff anchor from the existing per-checkpoint
     `structured_objective` (the first confident `TaskStatement` goal — the only concrete source; the
     session-level kickoff-signal hook is disabled — Open Question 1a), read once and reused, not
-    recomputing objective extraction; and (b) the ledger
-    records the chosen **access path** by which the scorer receives the session-level anchor (Open Question
-    1b) — recommended: thread a running anchor through the per-session analyze loop into `score_session`
-    (additive input, mirroring `previous_truth_grounding_gap` at `lib.rs`); fallback: capture onto
-    `CheckpointAnalysis`. Reject `session_kickoff_anchor(analysis)` — the anchor is not on
-    `CheckpointAnalysis`. The current goal stays read from `analysis.current`. Also: (c) record the
+    recomputing objective extraction; and (b) the anchor is threaded into `score_session` via the
+    per-session analyze loop (settled — mirroring `previous_truth_grounding_gap` at `lib.rs`);
+    `session_kickoff_anchor(analysis)` is not viable and the current goal stays read from `analysis.current`.
+    Also: (c) record the
     confidence-bar corpus check (`High`-anchor frequency; current `Medium`-vs-`High`), confirming the
     resolved bar (anchor `High` + current `Medium+`) is not dormant — or relaxing the anchor bar to
     `Medium+` if `High` anchors are scarce (SPEC Resolved Decision 5); and (d) add a
