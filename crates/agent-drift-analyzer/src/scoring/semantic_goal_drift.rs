@@ -106,8 +106,13 @@ fn structured_matches_confident_task_statement(
 // docs/specs/r6/MAP.md item 5): this is a binary disjoint-set check, not a graduated distance.
 // A legitimate narrowing (e.g. a target path narrowing from a crate root to one file inside it)
 // reads as fully disjoint and gets flagged; any single shared constraint term (PlatformBoundary/
-// ScopeBoundary) masks real drift. Revisiting this as a weighted/graduated distance is deferred
-// to a later R6 iteration — do not assume this already grades partial overlap.
+// ScopeBoundary) masks real drift. The check is also asymmetric: the anchor's term set is built
+// without its comparison_key (it is a bare StructuredObjective with no ObjectiveSummary), so a
+// High-confidence anchor with no concrete target and no boundary constraint collapses to an empty
+// set and produces no claim at all (a conservative miss, never a false positive). Revisiting this
+// as a weighted/graduated distance, or threading the anchor's own comparison_key so both sides
+// extract symmetrically, is deferred to a later R6 iteration; do not assume this already grades
+// partial overlap or extracts the anchor's comparison_key.
 fn semantic_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     anchor_goal: &StructuredObjective,

@@ -331,6 +331,42 @@ first round's fixes above) found gaps in the *fixes*, not new gaps in the origin
   needle list as current; annotated in place rather than rewritten, to keep the historical record honest
   about what was true when that finding was written).
 
+### Third Round (2026-07-02): Final Sign-Off Review
+
+A third, independent `codex exec` review of the full landed `R6-2` range (`f313cde7d..HEAD`, i.e. every
+commit after the `R6-1` closeout) was dispatched as the closeout sign-off. It raised three findings; all
+three were verified against live code and git history before acting. Codex's raw gate was FAIL on two
+`[P1]`s, but verification downgraded both, and neither blocks closeout:
+
+- **Anchor term set omits `comparison_key` (verified real, doc-only fix).** `semantic_goal_diverged` builds
+  the current-goal term set with `goal_specific_terms(structured, Some(summary))` (includes `comparison_key`
+  segments) but the anchor with `goal_specific_terms(anchor, None)` (structured `target` + boundary
+  constraints only). The consequence is a conservative false *negative*: an anchor with no concrete target
+  and no boundary constraint yields an empty term set, and `semantic_goal_diverged` returns `false` on an
+  empty set, so no claim is emitted (never a false positive). Unreached in the committed corpus, where every
+  qualifying `High` anchor carries a concrete target. Codex's cross-reference that SPEC Resolved Decision 7
+  claimed symmetric `comparison_key` extraction was correct: that wording was an overclaim. Fixed by
+  correcting Decision 7 to describe the asymmetric extraction and its empty-anchor consequence, and by
+  extending the `semantic_goal_diverged` inline comment to match. Symmetric extraction (threading the
+  anchor's own `comparison_key`) is folded into the deferred graduated-distance item. No scorer logic changed.
+- **Core `Checkpoint` type fail-opens on missing `drift_scores[*].state` (verified real, pre-existing,
+  mitigated: backlog).** `DriftScore.state` is `#[serde(default)]` and defaults to `Cleared`, and
+  `RawCheckpoint::into_checkpoint` version-gates only `session_archetype`/`session_progress`, so a malformed
+  post-`v0.2` checkpoint missing an explicit state parses through `agent_drift_analyzer::Checkpoint` as
+  `Cleared` instead of being rejected. This is **not** an `R6-2` regression: the field and its
+  `#[serde(default)]` came from `b035d73f2` (`v0.6a`), and `R6-2`'s entire `schema.rs` diff is adding
+  `SemanticGoalDrift` to the enum plus `"v0.7"` to two version-gate arms. The real trust boundary already
+  fails closed: sentinel `validate_checkpoint_contract` calls `validate_drift_score_state_contract` for every
+  schema `v0.3`-`v0.7` (`crates/agent-drift-sentinel/src/input.rs`). Filed as backlog Task R6-2.X.2 (harden
+  the library type), not addressed at closeout.
+- **Retained sentinel `v0.6` path is unproven by the narrowed schema tests (verified real, low-risk:
+  backlog).** `v0.6` is still a live supported schema in `validate_checkpoint_contract`, but the
+  positive/negative schema tests were narrowed to `v0.7` in `tests/replay_input.rs` and
+  `tests/live_checkpoint_compatibility.rs`. The `v0.6` and `v0.7` arms run the same shared helpers
+  (`require_non_null_field`, `validate_drift_score_state_contract`) with the same three required fields, so
+  residual risk is low. Filed as backlog Task R6-2.X.3 (re-add a `v0.6` contract regression), not addressed
+  at closeout.
+
 ## Deferred / Ask-First
 
 - [ ] Task R6-2.X.1: Open the conditional `R6-4` (progress.rs reset onto `comparison_key`).
@@ -341,3 +377,26 @@ first round's fixes above) found gaps in the *fixes*, not new gaps in the origin
   - Verify: to be defined when (and if) opened, with its own SPEC/PLAN/TASKS.
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
+
+- [ ] Task R6-2.X.2: Fail closed on missing `drift_scores[*].state` in the core `Checkpoint` type.
+  - Acceptance: `RawCheckpoint::into_checkpoint` (or an equivalent gate) rejects a post-`v0.2` checkpoint
+    whose `drift_scores` omit an explicit `state`, matching the sentinel's `validate_drift_score_state_contract`
+    rather than relying on `#[serde(default)]` collapsing missing state to `Cleared`. Pre-existing since
+    `b035d73f2` (`v0.6a`), surfaced by the `R6-2` final sign-off review (Third Round above). Non-blocking
+    because the sentinel trust boundary already fails closed; this hardens the library type for any consumer
+    that deserializes untrusted checkpoints directly through `agent_drift_analyzer::Checkpoint`.
+  - Verify: a new `schema.rs` unit test asserting a `v0.7` checkpoint with a stateless drift score fails to
+    deserialize through `agent_drift_analyzer::Checkpoint`.
+  - Files:
+    - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
+
+- [ ] Task R6-2.X.3: Re-add a `v0.6` contract regression to the sentinel schema tests.
+  - Acceptance: the positive/negative schema tests in `tests/replay_input.rs` and
+    `tests/live_checkpoint_compatibility.rs` exercise the retained `v0.6` arm (not only `v0.7`), or `v0.6`
+    support is intentionally retired if replay evidence no longer needs it. Surfaced by the `R6-2` final
+    sign-off review (Third Round above); low-risk because the `v0.6`/`v0.7` arms share the same
+    required-field helpers.
+  - Verify: `cargo test -p agent-drift-sentinel` with the re-added `v0.6` cases green.
+  - Files:
+    - `crates/agent-drift-sentinel/tests/replay_input.rs`
+    - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`

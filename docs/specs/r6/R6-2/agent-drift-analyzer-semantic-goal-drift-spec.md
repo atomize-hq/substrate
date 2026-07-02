@@ -302,19 +302,29 @@ Conventions for this packet:
    `schema_version` gate), so a version bump does not protect them — lockstep deploy does. The
    `schema_version` `v0.7` decision and the exact blast radius are confirmed in `R6-2.2` via
    `gitnexus_impact`. Whether `R6-3` reuses this variant is deferred to the `R6-3` spec.
-7. **Resolved (2026-07-01, post-closeout doc cleanup): the semantic-distance function is disjoint-set
-   overlap over normalized structured-goal terms, not a graduated threshold.** `semantic_goal_diverged`
-   (`scoring/semantic_goal_drift.rs`) collects a term set per goal from `comparison_key` segments, the
-   structured `target` (display, paths, symbols, named artifacts, workspace refs), and
-   `PlatformBoundary`/`ScopeBoundary` constraint displays, normalizes each to snake_case, and drops a fixed
-   stoplist of generic words (`implement`, `docs`, `plan`, the `ObjectiveTargetKind`/`ObjectiveIntent`
-   labels, etc.). Drift fires only when the current-goal term set and the anchor term set are fully
-   disjoint; any shared specific term suppresses the claim. This is a binary (not graduated) distance
-   choice: it is deliberately conservative — the common case in the committed corpus reduces to "did the
-   normalized target path/artifact change" — which keeps false positives low for a rule-based first cut at
-   the cost of missing partial-overlap drift (e.g. a goal that keeps one shared term but meaningfully
-   changes everything else). Revisiting this as a graduated/weighted distance is left to a later `R6`
-   iteration if acceptance evidence shows the binary rule under- or over-fires.
+7. **Resolved (2026-07-01, post-closeout doc cleanup; anchor-term wording corrected 2026-07-02 after the
+   final sign-off review): the semantic-distance function is disjoint-set overlap over normalized
+   structured-goal terms, not a graduated threshold.** `semantic_goal_diverged`
+   (`scoring/semantic_goal_drift.rs`) builds one term set per goal and flags drift only when the two sets are
+   fully disjoint; any shared specific term suppresses the claim. The two sets are **not** built
+   symmetrically. The current goal is gated on a non-empty `comparison_key`, so its term set is
+   `goal_specific_terms(structured, Some(summary))`: the `comparison_key` segments plus the structured
+   `target` (display, paths, symbols, named artifacts, workspace refs) and `PlatformBoundary`/`ScopeBoundary`
+   constraint displays. The kickoff anchor is a bare `StructuredObjective` with no threaded `ObjectiveSummary`,
+   so its term set is `goal_specific_terms(anchor, None)`: the structured `target` and boundary-constraint
+   displays only, with no `comparison_key` segments. Both sets are normalized to snake_case with a fixed
+   stoplist of generic words (`implement`, `docs`, `plan`, the `ObjectiveTargetKind`/`ObjectiveIntent` labels,
+   etc.) dropped. Two consequences follow, both accepted for v1. First, an anchor with no concrete `target`
+   and no boundary constraint yields an empty term set, and `semantic_goal_diverged` returns `false` on an
+   empty set, so such an anchor emits no drift claim at all (a conservative miss, never a false positive);
+   this is unreached in the committed corpus, where every qualifying `High`-confidence anchor carries a
+   concrete target. Second, the binary (not graduated) distance choice is deliberately conservative: the
+   common case in the committed corpus reduces to "did the normalized target path/artifact change", which
+   keeps false positives low for a rule-based first cut at the cost of missing partial-overlap drift (e.g. a
+   goal that keeps one shared term but meaningfully changes everything else). Revisiting this as a
+   graduated/weighted distance, and if needed threading the anchor's own `comparison_key` so both sides
+   extract symmetrically, is left to a later `R6` iteration if acceptance evidence shows the binary rule
+   under- or over-fires.
 
 ## Open Questions
 
