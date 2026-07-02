@@ -64,6 +64,8 @@ use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
 };
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::session::AgentRuntimeForkParticipantInit;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
 #[cfg(target_os = "linux")]
@@ -106,6 +108,8 @@ use crate::execution::config_model::AgentExecutionScope;
 use crate::execution::get_terminal_size;
 #[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::dispatch_run_world_task_request_with_started_task_run_id_tx;
+#[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::prepare_fork_world_worker_bootstrap;
 use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
     prepare_spawn_world_worker_bootstrap,
@@ -2002,6 +2006,33 @@ struct AsyncReplAgentRuntime {
 
 type RetainedMemberRuntimeMap = BTreeMap<String, AsyncReplAgentRuntime>;
 type PendingMemberReplacementMap = BTreeMap<String, AgentRuntimeParticipantRecord>;
+
+fn retained_member_runtime_storage_key(runtime: &AsyncReplAgentRuntime) -> String {
+    let manifest = runtime_manifest_snapshot(runtime);
+    if manifest.handle.fork_source_participant_id.is_some() {
+        format!(
+            "{}#{}",
+            manifest.handle.backend_id, manifest.handle.participant_id
+        )
+    } else {
+        manifest.handle.backend_id
+    }
+}
+
+fn remove_retained_member_runtime_by_participant(
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Option<AsyncReplAgentRuntime> {
+    let key = member_runtimes.iter().find_map(|(key, runtime)| {
+        let manifest = runtime_manifest_snapshot(runtime);
+        (manifest.handle.role == MEMBER_ROLE
+            && manifest.handle.orchestration_session_id == orchestration_session_id
+            && manifest.handle.participant_id == participant_id)
+            .then_some(key.clone())
+    })?;
+    member_runtimes.remove(&key)
+}
 
 impl InternalToolboxTransport {
     async fn close(&mut self) {
@@ -6343,7 +6374,6 @@ async fn handle_internal_toolbox_world_dispatch_request(
 
     match request.action {
         WorldDispatchActionV1::RunWorldTask
-        | WorldDispatchActionV1::ForkWorldWorker
         | WorldDispatchActionV1::ContinueWorldWorker
         | WorldDispatchActionV1::InspectWorldWorker
         | WorldDispatchActionV1::CancelWorldWork
@@ -6371,6 +6401,89 @@ async fn handle_internal_toolbox_world_dispatch_request(
                 }
                 _ => {}
             }
+            Ok(outcome)
+        }
+        #[cfg(target_os = "linux")]
+        WorldDispatchActionV1::ForkWorldWorker => {
+            let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;
+            let fork = prepare_fork_world_worker_bootstrap(prepared)?;
+            let prompt = match &fork.request.payload {
+                WorldDispatchPayloadV1::WorkerFork(payload) => payload.prompt.clone(),
+                _ => anyhow::bail!(
+                    "invalid_dispatch_payload: action fork_world_worker requires matching typed payload"
+                ),
+            };
+            let source_participant_id = fork.resolved.source_participant.participant_id().to_string();
+            let world_binding = PersistedWorldBinding {
+                world_id: fork.request.world_id.clone(),
+                world_generation: fork.request.world_generation,
+            };
+            let prepared_runtime = prepare_fork_child_runtime_startup_for_descriptor(
+                startup_context,
+                fork.descriptor,
+                &world_binding,
+                &fork.resolved.source_participant,
+            )
+            .map_err(|failure| anyhow::anyhow!(failure.message))?;
+            let runtime = start_internal_dispatch_member_runtime(
+                prepared_runtime,
+                prompt,
+                agent_printer,
+                telemetry,
+            )
+            .await
+            .map_err(|failure| anyhow::anyhow!(failure.message))?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: fork_world_worker did not return a retained runtime"
+                )
+            })?;
+            let manifest = runtime_manifest_snapshot(&runtime);
+            let target_backend_id = runtime_backend_id(&runtime);
+            let child_participant_id = manifest.handle.participant_id.clone();
+            let world_id = manifest.handle.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!("retained_bootstrap_failed: retained fork child omitted world_id")
+            })?;
+            let world_generation = manifest.handle.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: retained fork child omitted world_generation"
+                )
+            })?;
+            let orchestrator_participant_id = manifest
+                .handle
+                .orchestrator_participant_id
+                .clone()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "retained_bootstrap_failed: retained fork child omitted orchestrator_participant_id"
+                    )
+                })?;
+            let summary = format!(
+                "fork_world_worker launched retained child {} from source {} on backend {}; launch receipt is authoritative and explicit source-to-child lineage is preserved",
+                child_participant_id, source_participant_id, target_backend_id
+            );
+            let outcome = WorldDispatchOutcomeV1::ForkWorldWorker(
+                crate::execution::agent_runtime::dispatch_contract::ForkWorldWorkerOutcomeV1 {
+                    request_id: fork.request.request_id,
+                    orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+                    action: WorldDispatchActionV1::ForkWorldWorker,
+                    mode: fork.request.mode,
+                    orchestrator_participant_id,
+                    source_participant_id,
+                    child_participant_id,
+                    target_backend_id,
+                    world_id,
+                    world_generation,
+                    summary,
+                },
+            );
+            member_runtimes.insert(retained_member_runtime_storage_key(&runtime), runtime);
+            Ok(outcome)
+        }
+        #[cfg(not(target_os = "linux"))]
+        WorldDispatchActionV1::ForkWorldWorker => {
+            let outcome =
+                dispatch_orchestrator_world_request(&startup_context.store, request).await?;
             Ok(outcome)
         }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -6453,7 +6566,7 @@ async fn handle_internal_toolbox_world_dispatch_request(
                 launch_span_id,
                 summary,
             });
-            member_runtimes.insert(runtime_backend_id(&runtime), runtime);
+            member_runtimes.insert(retained_member_runtime_storage_key(&runtime), runtime);
             Ok(outcome)
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -6469,19 +6582,11 @@ async fn reap_stopped_internal_dispatch_member_runtime(
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) {
-    let should_remove = member_runtimes
-        .get(outcome.target_backend_id.as_str())
-        .is_some_and(|runtime| {
-            let manifest = runtime_manifest_snapshot(runtime);
-            manifest.handle.role == MEMBER_ROLE
-                && manifest.handle.orchestration_session_id == outcome.orchestration_session_id
-                && manifest.handle.participant_id == outcome.target_participant_id
-        });
-    if !should_remove {
-        return;
-    }
-
-    if let Some(runtime) = member_runtimes.remove(outcome.target_backend_id.as_str()) {
+    if let Some(runtime) = remove_retained_member_runtime_by_participant(
+        member_runtimes,
+        &outcome.orchestration_session_id,
+        &outcome.target_participant_id,
+    ) {
         shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
 }
@@ -6492,19 +6597,11 @@ async fn reap_cancelled_internal_dispatch_member_runtime(
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) {
-    let should_remove = member_runtimes
-        .get(outcome.target_backend_id.as_str())
-        .is_some_and(|runtime| {
-            let manifest = runtime_manifest_snapshot(runtime);
-            manifest.handle.role == MEMBER_ROLE
-                && manifest.handle.orchestration_session_id == outcome.orchestration_session_id
-                && manifest.handle.participant_id == outcome.target_participant_id
-        });
-    if !should_remove {
-        return;
-    }
-
-    if let Some(runtime) = member_runtimes.remove(outcome.target_backend_id.as_str()) {
+    if let Some(runtime) = remove_retained_member_runtime_by_participant(
+        member_runtimes,
+        &outcome.orchestration_session_id,
+        &outcome.target_participant_id,
+    ) {
         shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
 }
@@ -6775,6 +6872,59 @@ fn parked_member_runtime_matches_generation(
                 && !persisted.is_authoritative_live()
                 && persisted.matches_authoritative_parent_world_binding(&orchestration_snapshot)
         })
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_fork_child_runtime_startup_for_descriptor(
+    startup_context: &RuntimeOrchestrationContext,
+    descriptor: RuntimeSelectionDescriptor,
+    world_binding: &PersistedWorldBinding,
+    source_participant: &AgentRuntimeParticipantRecord,
+) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
+    ensure_member_backend_allowed(startup_context, &descriptor)?;
+    let authoritative_world = authoritative_member_world_binding(startup_context, world_binding)?;
+    let orchestrator_participant_id = source_participant
+        .handle
+        .orchestrator_participant_id
+        .clone()
+        .ok_or_else(|| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "fork child launch requires source participant {} to retain orchestrator_participant_id",
+                source_participant.handle.participant_id
+            ),
+        })?;
+    let participant_id = format!("ash_{}", Uuid::now_v7());
+    let lease_token = Uuid::now_v7().to_string();
+    let run_id = Uuid::now_v7().to_string();
+    let manifest = AgentRuntimeSessionManifest::new_fork_child_participant(
+        &descriptor,
+        AgentRuntimeForkParticipantInit {
+            orchestration_session_id: startup_context.orchestration_session_id(),
+            participant_id,
+            orchestrator_participant_id,
+            source_participant_id: source_participant.handle.participant_id.clone(),
+            world: authoritative_world,
+            lease_token,
+        },
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("failed to construct retained fork child participant state: {err:#}"),
+    })?;
+    let mut manifest = manifest;
+    manifest.internal.latest_run_id = Some(run_id.clone());
+    let member_dispatch_parity = MemberDispatchParitySubset::from_descriptor(&descriptor);
+
+    Ok(PreparedAgentRuntime {
+        descriptor,
+        member_dispatch_parity: Some(member_dispatch_parity),
+        prompt_fulfillment: None,
+        startup_context: startup_context.clone(),
+        manifest: Arc::new(Mutex::new(manifest)),
+        run_id,
+        startup_extensions: BTreeMap::new(),
+    })
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -14991,33 +15141,302 @@ mod tests {
                 &mut telemetry,
             )
             .await;
-            let err = tokio::time::timeout(Duration::from_secs(15), request_task)
+            let outcome = tokio::time::timeout(Duration::from_secs(15), request_task)
                 .await
                 .expect("timed out waiting for internal toolbox response")
                 .expect("internal toolbox task should join")
-                .expect_err("fork should route into retained bootstrap once Packet 3 dispatch wiring is live");
+                .expect("fork should bootstrap a retained child runtime");
 
+            let fork = match outcome {
+                WorldDispatchOutcomeV1::ForkWorldWorker(outcome) => outcome,
+                other => panic!("expected fork_world_worker outcome, got {other:?}"),
+            };
+            assert_eq!(fork.target_backend_id, "cli:codex-world");
+            assert_eq!(fork.world_id, world_binding.world_id);
+            assert_eq!(fork.world_generation, world_binding.world_generation);
+            assert_eq!(fork.source_participant_id, member_manifest.handle.participant_id);
+            let host_participant_id = runtime_manifest_snapshot(&host_runtime).handle.participant_id;
+            let persisted_child = startup_context
+                .store
+                .load_participant(&fork.child_participant_id)
+                .expect("load fork child participant")
+                .expect("fork child participant must persist");
             assert!(
-                err.to_string().contains(
-                    "failed to launch world member dispatch stream for retained worker bootstrap"
+                persisted_child.is_authoritative_live(),
+                "fork child participant must persist authoritative retained runtime ownership"
+            );
+            assert_eq!(
+                persisted_child
+                    .handle
+                    .orchestrator_participant_id
+                    .as_deref(),
+                Some(host_participant_id.as_str()),
+                "fork child must retain exact host orchestrator linkage"
+            );
+            assert_eq!(
+                persisted_child.handle.parent_participant_id.as_deref(),
+                Some(fork.source_participant_id.as_str()),
+                "fork child must preserve exact source lineage as parent_participant_id"
+            );
+            assert_eq!(
+                persisted_child.fork_source_participant_id(),
+                Some(fork.source_participant_id.as_str()),
+                "fork child must persist explicit fork_source_participant_id lineage"
+            );
+            let prompt_path = private_prompt_transport_path(
+                &startup_context.store,
+                &startup_context.orchestration_session_id(),
+                &fork.child_participant_id,
+            );
+            assert!(
+                prompt_path.exists(),
+                "fork child must publish its prompt transport so follow-up steering can target it"
+            );
+            let stop_path = crate::execution::agent_runtime::control::private_stop_transport_path(
+                &startup_context.store,
+                &startup_context.orchestration_session_id(),
+                &fork.child_participant_id,
+            );
+            assert!(
+                stop_path.exists(),
+                "fork child must publish its stop transport so durable closeout can reach it"
+            );
+            assert_eq!(
+                member_runtimes.len(),
+                2,
+                "fork bootstrap must retain both the source runtime and the new child runtime"
+            );
+
+            shutdown_host_orchestrator_runtime(
+                host_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            shutdown_all_member_runtimes(
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn orchestrator_world_dispatch_surface_stops_fork_child_without_eviction_of_source_runtime() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator = write_fake_codex_script(&temp, true);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let _world_codex_runtime_guard =
+            install_test_world_scoped_codex_runtime(&temp, &fake_member);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex-host\n    - cli:codex-world\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"fork_world_worker\"\n      - \"stop_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 8\n    max_concurrent_ephemeral: 8\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex-host.yaml"),
+            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
+        )
+        .expect("write codex agent file");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            runtime_agent_file_host_and_world("codex", "codex", &fake_orchestrator, &fake_member),
+        )
+        .expect("write placement-aware codex agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let world_binding = PersistedWorldBinding {
+                world_id: "wld_toolbox_dispatch".to_string(),
+                world_generation: 9,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let mut host_runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+                Some(prepared),
+                Some(&world_binding),
+                Some(InitialExecPromptPlan::Replace(
+                    "internal toolbox bootstrap".to_string(),
+                )),
+                false,
+                false,
+                false,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("host runtime start should succeed")
+            .expect("host runtime");
+
+            let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
+            ensure_internal_toolbox_transport_registered(
+                Some(&mut host_runtime),
+                Some(&startup_context),
+                &toolbox_tx,
+            )
+            .await
+            .expect("register toolbox transport");
+            let selected_descriptor =
+                select_member_runtime_descriptor_for_backend(&startup_context, "cli:codex-world")
+                    .expect("member selection should succeed")
+                    .expect("member runtime should be selected");
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor,
+                &world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_internal_dispatch_member_runtime(
+                member_prepared,
+                "internal fork source bootstrap".to_string(),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+            let member_manifest = runtime_manifest_snapshot(&member_runtime);
+            let member_backend_id = runtime_backend_id(&member_runtime);
+            wait_for_persisted_participant_snapshot(
+                &startup_context.store,
+                &member_manifest.handle.participant_id,
+                AgentRuntimeSessionState::Running,
+            )
+            .await;
+
+            let mut member_runtimes = RetainedMemberRuntimeMap::new();
+            member_runtimes.insert(member_backend_id.clone(), member_runtime);
+            let transport_path =
+                internal_toolbox_transport_path(&startup_context.orchestration_session_id());
+
+            let fork_request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_fork_then_stop".to_string()),
+                idempotency_key: Some("idem_toolbox_fork_then_stop".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(
+                    runtime_manifest_snapshot(&host_runtime).handle.participant_id,
                 ),
-                "allowed fork should now fail only at retained bootstrap launch in this harness: {err}"
+                action: WorldDispatchActionV1::ForkWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: Some(member_manifest.handle.participant_id.clone()),
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerFork(WorkerForkPayloadV1 {
+                    prompt: "split off a child for cleanup verification".to_string(),
+                    fork_reason: Some("verify retained fork stop cleanup".to_string()),
+                    fork_strategy: Some("exact_source_retained".to_string()),
+                }),
+            };
+            let fork_request_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                let request = fork_request.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(&transport_path, &request).await
+                }
+            });
+            let request = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for internal toolbox fork request")
+                .expect("toolbox fork request");
+            handle_internal_toolbox_dispatch_request(
+                request,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let fork = tokio::time::timeout(Duration::from_secs(15), fork_request_task)
+                .await
+                .expect("timed out waiting for internal toolbox fork response")
+                .expect("internal toolbox fork task should join")
+                .expect("fork should succeed");
+            let WorldDispatchOutcomeV1::ForkWorldWorker(fork) = fork else {
+                panic!("expected fork_world_worker outcome envelope");
+            };
+            assert_eq!(member_runtimes.len(), 2, "fork should retain source and child handles");
+
+            let stop_request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_stop_fork_child".to_string()),
+                idempotency_key: Some("idem_toolbox_stop_fork_child".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(
+                    runtime_manifest_snapshot(&host_runtime).handle.participant_id,
+                ),
+                action: WorldDispatchActionV1::StopWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: Some(fork.child_participant_id.clone()),
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerStop(WorkerStopPayloadV1::default()),
+            };
+            let stop_request_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                let request = stop_request.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(&transport_path, &request).await
+                }
+            });
+            let request = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for internal toolbox stop request")
+                .expect("toolbox stop request");
+            handle_internal_toolbox_dispatch_request(
+                request,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let stop = tokio::time::timeout(Duration::from_secs(15), stop_request_task)
+                .await
+                .expect("timed out waiting for internal toolbox stop response")
+                .expect("internal toolbox stop task should join")
+                .expect("fork child stop should succeed");
+            let WorldDispatchOutcomeV1::StopWorldWorker(stop) = stop else {
+                panic!("expected stop_world_worker outcome envelope");
+            };
+            assert_eq!(stop.target_participant_id, fork.child_participant_id);
+            assert_eq!(
+                member_runtimes.len(),
+                1,
+                "stopping the fork child should reap only that child runtime handle"
             );
             assert!(
-                !err.to_string().contains("unsupported_dispatch_action"),
-                "allowed fork must no longer fall into the legacy unsupported dispatch stub: {err}"
-            );
-            assert!(
-                !err.to_string().contains("action_not_allowed:"),
-                "allowed fork should not fail at steering policy: {err}"
-            );
-            assert!(
-                !err.to_string().contains("missing_dispatch_field:"),
-                "well-formed fork should not fail contract validation: {err}"
-            );
-            assert!(
-                !err.to_string().contains("target_not_in_session:"),
-                "allowed fork with a live retained source should not fail exact-source resolution: {err}"
+                member_runtimes
+                    .values()
+                    .any(|runtime| runtime_manifest_snapshot(runtime).handle.participant_id
+                        == member_manifest.handle.participant_id),
+                "stopping the fork child must keep the original source runtime retained"
             );
 
             shutdown_host_orchestrator_runtime(

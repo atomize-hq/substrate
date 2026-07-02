@@ -1071,7 +1071,13 @@ const STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT: Duration = Duration::from_secs(5)
 #[cfg(target_os = "linux")]
 const STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 #[cfg(target_os = "linux")]
-const FORK_CHILD_REGISTRATION_VISIBILITY_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+// Authoritative registration can precede durable child snapshot publication by the retained
+// runtime startup path, so fork must allow a longer child-visibility window than the private
+// stop-transport publication window.
+const FORK_CHILD_REGISTRATION_VISIBILITY_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(target_os = "linux")]
+const FORK_CHILD_STOP_TRANSPORT_VISIBILITY_WAIT_TIMEOUT: Duration =
+    STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT;
 #[cfg(target_os = "linux")]
 const FORK_CHILD_REGISTRATION_VISIBILITY_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
@@ -1093,6 +1099,15 @@ pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
     pub request: ValidatedWorldDispatchRequestV1,
     pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
     pub workspace_root: PathBuf,
+    _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct PreparedForkWorldWorkerBootstrap {
+    pub request: ValidatedWorldDispatchRequestV1,
+    pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    pub resolved:
+        crate::execution::agent_runtime::state_store::ResolvedInternalForkWorldDispatchTarget,
     _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
 }
 
@@ -1197,6 +1212,50 @@ pub(crate) fn prepare_spawn_world_worker_bootstrap(
         request: prepared.request,
         descriptor,
         workspace_root,
+        _concurrency_guard: concurrency_guard,
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn prepare_fork_world_worker_bootstrap(
+    prepared: PreparedOrchestratorWorldDispatch,
+) -> Result<PreparedForkWorldWorkerBootstrap> {
+    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let context = resolve_internal_dispatch_context(&workspace_root)?;
+    enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
+    let resolved = prepared
+        .store
+        .resolve_internal_fork_world_dispatch_target(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            prepared
+                .request
+                .target_participant_id
+                .as_deref()
+                .expect("validated fork request must include target_participant_id"),
+            &prepared.request.target_backend_id,
+        )
+        .map_err(map_fork_world_dispatch_resolution_error)?;
+    let contract = resolve_world_dispatch_contract(
+        &workspace_root,
+        &context,
+        &prepared.request,
+        "fork_world_worker",
+    )?;
+    let descriptor = materialize_runtime_descriptor(&contract).map_err(|err| {
+        anyhow::anyhow!(
+            "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+            contract.agent_id,
+            err.reason
+        )
+    })?;
+    let concurrency_guard =
+        acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
+
+    Ok(PreparedForkWorldWorkerBootstrap {
+        request: prepared.request,
+        descriptor,
+        resolved,
         _concurrency_guard: concurrency_guard,
     })
 }
@@ -3095,6 +3154,15 @@ async fn execute_spawn_world_worker_stream(
     let response = client
         .execute_stream(execute_request)
         .await
+        .inspect_err(|err| {
+            warn!(
+                participant_id = %request.participant_id,
+                orchestration_session_id = %request.orchestration_session_id,
+                inner_error = %err,
+                inner_error_debug = ?err,
+                "retained worker bootstrap stream launch failed before wrapper context"
+            );
+        })
         .with_context(|| {
             format!(
                 "failed to launch world member dispatch stream for retained worker bootstrap {} in orchestration session {}",
@@ -4057,18 +4125,48 @@ async fn wait_for_fork_child_durable_publication(
     orchestration_session_id: &str,
     child_participant_id: &str,
 ) -> Result<()> {
+    wait_for_fork_child_durable_publication_with_timeouts(
+        store,
+        orchestration_session_id,
+        child_participant_id,
+        FORK_CHILD_REGISTRATION_VISIBILITY_WAIT_TIMEOUT,
+        FORK_CHILD_STOP_TRANSPORT_VISIBILITY_WAIT_TIMEOUT,
+        FORK_CHILD_REGISTRATION_VISIBILITY_POLL_INTERVAL,
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+async fn wait_for_fork_child_durable_publication_with_timeouts(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    child_participant_id: &str,
+    child_visibility_wait_timeout: Duration,
+    stop_transport_visibility_wait_timeout: Duration,
+    poll_interval: Duration,
+) -> Result<()> {
     let stop_transport_path =
         private_stop_transport_path(store, orchestration_session_id, child_participant_id);
-    let started_at = Instant::now();
+    let started_at = tokio::time::Instant::now();
+    let mut child_visible_at = None;
 
     loop {
         let child_visible = store.load_participant(child_participant_id)?.is_some();
+        if child_visible && child_visible_at.is_none() {
+            child_visible_at = Some(tokio::time::Instant::now());
+        }
         let stop_transport_published = stop_transport_path.exists();
         if child_visible && stop_transport_published {
             return Ok(());
         }
 
-        if started_at.elapsed() >= FORK_CHILD_REGISTRATION_VISIBILITY_WAIT_TIMEOUT {
+        let child_visibility_timed_out = started_at.elapsed() >= child_visibility_wait_timeout;
+        let stop_transport_timed_out = child_visible_at
+            .map(|observed_at| observed_at.elapsed() >= stop_transport_visibility_wait_timeout)
+            .unwrap_or(false);
+        if (!child_visible && child_visibility_timed_out)
+            || (child_visible && !stop_transport_published && stop_transport_timed_out)
+        {
             let mut missing = Vec::new();
             if !child_visible {
                 missing.push("missing_target_participant");
@@ -4083,7 +4181,7 @@ async fn wait_for_fork_child_durable_publication(
             );
         }
 
-        tokio::time::sleep(FORK_CHILD_REGISTRATION_VISIBILITY_POLL_INTERVAL).await;
+        tokio::time::sleep(poll_interval).await;
     }
 }
 
@@ -10162,6 +10260,239 @@ agents:
     }
 
     #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn dispatch_contract_continue_world_worker_fork_command_tolerates_late_child_durable_publication_after_authoritative_registration(
+    ) {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_world_dispatch_policy_with_fork_commands(
+            substrate_home.path(),
+            true,
+            &["cli:codex-world"],
+            &["continue_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home
+            .path()
+            .join("fork-command-late-child-publication.sock");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let store_for_server = store.clone();
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: sample_continue_stream_uaa_event_for_run(
+                                &parsed.run_id,
+                                json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-delivered-fork-command",
+                                    "turn_id": "turn-fork-command",
+                                    "item_id": "msg-fork-command",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "fork command delivered before delayed child publication"
+                                    }
+                                }),
+                            ),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("member dispatch execute request");
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("member dispatch request");
+                    let child = authoritative_registered_fork_child(
+                        &store_for_server,
+                        &execute_request.agent_id,
+                        &member_dispatch,
+                    );
+                    let store_for_publication = store_for_server.clone();
+                    let child_id = member_dispatch.participant_id.clone();
+                    let session_id = member_dispatch.orchestration_session_id.clone();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(6)).await;
+                        store_for_publication.persist_participant(&child).expect(
+                            "persist authoritative child participant after delayed publication",
+                        );
+                        let (stop_tx, _stop_rx) =
+                            crate::execution::agent_runtime::control::private_stop_request_channel(
+                            );
+                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            register_private_stop_transport(
+                                &store_for_publication,
+                                &session_id,
+                                &child_id,
+                                stop_tx,
+                            )
+                            .await
+                            .expect("register private stop transport after delayed publication");
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        stop_transport.close().await;
+                    });
+
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "fork-bootstrap-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            event: substrate_common::agent_events::AgentEvent {
+                                ts: chrono::Utc::now(),
+                                kind: AgentEventKind::Registered,
+                                data: json!({}),
+                                agent_id: execute_request.agent_id,
+                                orchestration_session_id: member_dispatch
+                                    .orchestration_session_id
+                                    .clone(),
+                                run_id: member_dispatch.run_id.clone(),
+                                parent_run_id: None,
+                                participant_id: Some(member_dispatch.participant_id.clone()),
+                                parent_participant_id: member_dispatch
+                                    .parent_participant_id
+                                    .clone(),
+                                resumed_from_participant_id: member_dispatch
+                                    .resumed_from_participant_id
+                                    .clone(),
+                                backend_id: Some(member_dispatch.backend_id.clone()),
+                                thread_id: None,
+                                role: Some("member".to_string()),
+                                world_id: Some(member_dispatch.world_id.clone()),
+                                world_generation: Some(member_dispatch.world_generation),
+                                cmd_id: None,
+                                span_id: Some("fork-bootstrap-span".to_string()),
+                                channel: None,
+                                identity_tuple: None,
+                                placement_posture: None,
+                                project: None,
+                            },
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let ambient_cwd = tempdir().expect("ambient cwd tempdir");
+        let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
+
+        let mut request = sample_continue_fork_command_world_dispatch_request();
+        request.request_id = Some("req_continue_fork_command_late_child_publication".to_string());
+        request.idempotency_key =
+            Some("idem_continue_fork_command_late_child_publication".to_string());
+
+        let outcome = dispatch_orchestrator_world_request(&store, request)
+            .await
+            .expect("late child publication within the retained readiness window must succeed");
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+            panic!("expected continue_world_worker outcome");
+        };
+
+        assert_eq!(outcome.source_participant_id.as_deref(), Some("ash_member"));
+        let child_participant_id = outcome
+            .child_participant_id
+            .as_deref()
+            .expect("continue fork-command outcome child_participant_id");
+        assert!(
+            outcome.summary.contains(child_participant_id),
+            "Packet 3 summary must surface explicit child allocation truth: {}",
+            outcome.summary
+        );
+        assert!(
+            outcome
+                .summary
+                .contains("explicit source-to-child lineage is preserved"),
+            "Packet 3 summary must keep explicit lineage in scope: {}",
+            outcome.summary
+        );
+
+        let child = store
+            .load_participant(child_participant_id)
+            .expect("load persisted fork child")
+            .expect("persisted fork child");
+        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+        assert_eq!(
+            child.handle.parent_participant_id.as_deref(),
+            Some("ash_member")
+        );
+        assert_eq!(
+            child.handle.orchestrator_participant_id.as_deref(),
+            Some("orch_dispatch")
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_continue_world_worker_fork_command_rejects_terminal_exact_source_before_delivery(
@@ -14619,6 +14950,181 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
+    async fn dispatch_contract_fork_world_worker_tolerates_late_child_durable_publication_after_authoritative_registration(
+    ) {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["fork_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_successor_authoritative_fork_dispatch_state(
+            &store,
+            workspace_root.path(),
+            "world-17",
+            2,
+        );
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world-late-child-publication.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let store_for_server = store.clone();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("member dispatch execute request");
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("member dispatch request");
+                    let child = authoritative_registered_fork_child(
+                        &store_for_server,
+                        &execute_request.agent_id,
+                        &member_dispatch,
+                    );
+
+                    let start =
+                        serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            span_id: "spn_fork".to_string(),
+                        })
+                        .expect("serialize start frame");
+                    let event = substrate_common::agent_events::AgentEvent {
+                        ts: chrono::Utc::now(),
+                        kind: AgentEventKind::Registered,
+                        data: json!({}),
+                        agent_id: execute_request.agent_id,
+                        orchestration_session_id: member_dispatch.orchestration_session_id.clone(),
+                        run_id: member_dispatch.run_id.clone(),
+                        parent_run_id: None,
+                        participant_id: Some(member_dispatch.participant_id.clone()),
+                        parent_participant_id: member_dispatch.parent_participant_id.clone(),
+                        resumed_from_participant_id: member_dispatch
+                            .resumed_from_participant_id
+                            .clone(),
+                        backend_id: Some(member_dispatch.backend_id.clone()),
+                        thread_id: None,
+                        role: Some("member".to_string()),
+                        world_id: Some(member_dispatch.world_id.clone()),
+                        world_generation: Some(member_dispatch.world_generation),
+                        cmd_id: None,
+                        span_id: Some("spn_fork".to_string()),
+                        channel: None,
+                        identity_tuple: None,
+                        placement_posture: None,
+                        project: None,
+                    };
+                    let registered =
+                        serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            event,
+                        })
+                        .expect("serialize registered frame");
+                    let mut body = Vec::new();
+                    body.extend_from_slice(&start);
+                    body.push(b'\n');
+                    body.extend_from_slice(&registered);
+                    body.push(b'\n');
+                    write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
+
+                    let store_for_publication = store_for_server.clone();
+                    let child_id = member_dispatch.participant_id.clone();
+                    let session_id = member_dispatch.orchestration_session_id.clone();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(6)).await;
+                        store_for_publication.persist_participant(&child).expect(
+                            "persist authoritative child participant after delayed publication",
+                        );
+                        let (stop_tx, _stop_rx) =
+                            crate::execution::agent_runtime::control::private_stop_request_channel(
+                            );
+                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            register_private_stop_transport(
+                                &store_for_publication,
+                                &session_id,
+                                &child_id,
+                                stop_tx,
+                            )
+                            .await
+                            .expect("register private stop transport after delayed publication");
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        stop_transport.close().await;
+                    });
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let ambient_cwd = tempdir().expect("ambient cwd tempdir");
+        let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
+
+        let mut request = sample_fork_world_dispatch_request();
+        request.request_id = Some("req_fork_late_child_publication".to_string());
+        request.idempotency_key = Some("idem_fork_late_child_publication".to_string());
+        request.caller_participant_id = Some("orch_successor".to_string());
+        request.world_id = Some("world-17".to_string());
+        request.world_generation = Some(2);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, request).expect("prepare fork dispatch");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("late child publication within the retained readiness window must succeed");
+        let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
+            panic!("expected fork_world_worker outcome envelope");
+        };
+
+        let child = store
+            .load_participant(&outcome.child_participant_id)
+            .expect("load persisted fork child")
+            .expect("persisted fork child");
+        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+        assert_eq!(
+            child.handle.parent_participant_id.as_deref(),
+            Some("ash_member")
+        );
+        assert_eq!(
+            child.handle.orchestrator_participant_id.as_deref(),
+            Some("orch_successor")
+        );
+
+        server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
     async fn dispatch_contract_fork_world_worker_rolls_back_child_when_lineage_persist_fails() {
         let _env_guard = world_env_guard();
         let _world_codex_guard = EnvVarGuard::set_path(
@@ -14927,10 +15433,14 @@ agents:
                             )
                             .await
                             .expect("register private stop transport for missing-child rollback");
-                        let request = tokio::time::timeout(Duration::from_secs(10), stop_rx.recv())
-                            .await
-                            .expect("timed out waiting for missing-child rollback stop request")
-                            .expect("missing-child rollback stop request");
+                        let request = tokio::time::timeout(
+                            FORK_CHILD_REGISTRATION_VISIBILITY_WAIT_TIMEOUT
+                                + Duration::from_secs(5),
+                            stop_rx.recv(),
+                        )
+                        .await
+                        .expect("timed out waiting for missing-child rollback stop request")
+                        .expect("missing-child rollback stop request");
                         let mut session = store_for_stop
                             .load_orchestration_session(&session_id)
                             .expect("load orchestration session for missing-child rollback closeout")
@@ -15227,6 +15737,96 @@ agents:
         assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
 
         server.await.expect("stub world server task");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn wait_for_fork_child_durable_publication_allows_late_child_visibility_without_extending_stop_transport_budget(
+    ) {
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let child_id = "ash_delayed_child";
+        let store_for_publication = store.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            let mut child = sample_member_participant();
+            child.handle.participant_id = child_id.to_string();
+            store_for_publication
+                .persist_participant(&child)
+                .expect("persist delayed child participant");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            let (stop_tx, _stop_rx) =
+                crate::execution::agent_runtime::control::private_stop_request_channel();
+            let mut stop_transport =
+                crate::execution::agent_runtime::control::register_private_stop_transport(
+                    &store_for_publication,
+                    "sess_dispatch",
+                    child_id,
+                    stop_tx,
+                )
+                .await
+                .expect("register delayed stop transport");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            stop_transport.close().await;
+        });
+
+        wait_for_fork_child_durable_publication_with_timeouts(
+            &store,
+            "sess_dispatch",
+            child_id,
+            Duration::from_millis(250),
+            Duration::from_millis(40),
+            Duration::from_millis(5),
+        )
+        .await
+        .expect("late child visibility within the longer child budget must succeed");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn wait_for_fork_child_durable_publication_keeps_stop_transport_timeout_short_once_child_is_visible(
+    ) {
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let child_id = "ash_visible_child";
+        let mut child = sample_member_participant();
+        child.handle.participant_id = child_id.to_string();
+        store
+            .persist_participant(&child)
+            .expect("persist visible child participant");
+
+        let store_for_publication = store.clone();
+        let late_transport = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let (stop_tx, _stop_rx) =
+                crate::execution::agent_runtime::control::private_stop_request_channel();
+            let mut stop_transport =
+                crate::execution::agent_runtime::control::register_private_stop_transport(
+                    &store_for_publication,
+                    "sess_dispatch",
+                    child_id,
+                    stop_tx,
+                )
+                .await
+                .expect("register late stop transport");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            stop_transport.close().await;
+        });
+
+        let err = wait_for_fork_child_durable_publication_with_timeouts(
+            &store,
+            "sess_dispatch",
+            child_id,
+            Duration::from_secs(1),
+            Duration::from_millis(50),
+            Duration::from_millis(5),
+        )
+        .await
+        .expect_err("missing stop transport must still fail on the short stop-publication budget");
+
+        late_transport.abort();
+        assert!(
+            err.to_string().contains("missing_stop_transport"),
+            "expected missing stop transport detail in error: {err}"
+        );
     }
 
     #[cfg(target_os = "linux")]

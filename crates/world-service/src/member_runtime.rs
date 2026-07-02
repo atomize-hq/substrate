@@ -449,6 +449,7 @@ impl MemberRuntimeManager {
         }
         match guard.by_retained_key.get(&retained_key).cloned() {
             Some(slot) => {
+                let slot = prune_stale_fork_child_slot(&mut guard, &retained_key, slot);
                 let updated_slot = slot.with_registered_fork_child(
                     &retained_key,
                     &guard.by_participant_id,
@@ -1387,6 +1388,18 @@ impl ActiveMemberRuntime {
         })
     }
 
+    fn has_active_bootstrap(&self) -> bool {
+        self.bootstrap
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|_| ()))
+            .is_some()
+    }
+
+    fn is_bootstrapping_or_resumable(&self) -> bool {
+        self.has_active_bootstrap() || self.uaa_session_id().is_some()
+    }
+
     fn cancel_bootstrap(&self) {
         if let Ok(guard) = self.bootstrap.lock() {
             if let Some(bootstrap) = guard.as_ref() {
@@ -1483,6 +1496,17 @@ impl RetainedMemberSlot {
         participant_ids
     }
 
+    fn stale_fork_child_participant_id(
+        &self,
+        active_members: &HashMap<String, Arc<ActiveMemberRuntime>>,
+    ) -> Option<String> {
+        let fork_child_participant_id = self.fork_child_participant_id.as_ref()?;
+        match active_members.get(fork_child_participant_id) {
+            Some(active) if active.is_bootstrapping_or_resumable() => None,
+            Some(_) | None => Some(fork_child_participant_id.clone()),
+        }
+    }
+
     fn with_registered_fork_child(
         self,
         retained_key: &RetainedMemberKey,
@@ -1545,6 +1569,36 @@ impl RetainedMemberSlot {
         }
         Some(self)
     }
+}
+
+fn prune_stale_fork_child_slot(
+    registry: &mut ActiveMemberRegistry,
+    retained_key: &RetainedMemberKey,
+    slot: RetainedMemberSlot,
+) -> RetainedMemberSlot {
+    let Some(stale_child_participant_id) =
+        slot.stale_fork_child_participant_id(&registry.by_participant_id)
+    else {
+        return slot;
+    };
+
+    if let Some(stale_child) = registry
+        .by_participant_id
+        .remove(&stale_child_participant_id)
+    {
+        stale_child.cancel_bootstrap();
+        stale_child.close_bootstrap();
+        stale_child.cleanup_launcher_dir();
+    }
+
+    let pruned_slot = RetainedMemberSlot {
+        primary_participant_id: slot.primary_participant_id,
+        fork_child_participant_id: None,
+    };
+    registry
+        .by_retained_key
+        .insert(retained_key.clone(), pruned_slot.clone());
+    pruned_slot
 }
 
 fn retained_slot_owner_mismatch_error(
@@ -2814,6 +2868,192 @@ base_url = "https://gateway.example.invalid/v1"
             err.to_string().contains(
                 "only a direct fork child of the current retained participant may co-register"
             ),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn register_member_replaces_stale_fork_child_in_same_slot() {
+        let source_dir = tempfile::tempdir().expect("source temp dir");
+        let stale_child_dir = tempfile::tempdir().expect("stale child temp dir");
+        let replacement_child_dir = tempfile::tempdir().expect("replacement child temp dir");
+        let source = sample_active_member_runtime(&source_dir, "ash_member_source", "spn_source");
+        let stale_child = sample_active_member_runtime_with_lineage(
+            &stale_child_dir,
+            "ash_member_child_stale",
+            "spn_child_stale",
+            Some("ash_member_source"),
+            None,
+        );
+        let replacement_child = sample_active_member_runtime_with_lineage(
+            &replacement_child_dir,
+            "ash_member_child_replacement",
+            "spn_child_replacement",
+            Some("ash_member_source"),
+            None,
+        );
+        let manager = MemberRuntimeManager::new();
+
+        manager
+            .register_member(source.clone())
+            .expect("register source retained member");
+        manager
+            .register_member(stale_child.clone())
+            .expect("register stale child retained member");
+
+        stale_child.close_bootstrap();
+
+        manager
+            .register_member(replacement_child.clone())
+            .expect("stale child should not block replacement registration");
+
+        let guard = manager
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        assert!(
+            !guard
+                .by_participant_id
+                .contains_key(&stale_child.participant_id),
+            "stale child should be evicted from active members"
+        );
+        assert!(
+            guard
+                .by_participant_id
+                .contains_key(&replacement_child.participant_id),
+            "replacement child should become the retained fork child"
+        );
+        assert_eq!(
+            guard
+                .by_retained_key
+                .get(&RetainedMemberKey::from_active(source.as_ref())),
+            Some(&RetainedMemberSlot {
+                primary_participant_id: source.participant_id.clone(),
+                fork_child_participant_id: Some(replacement_child.participant_id.clone()),
+            }),
+            "shared retained slot should track the replacement child after stale eviction"
+        );
+        assert!(
+            !stale_child.launcher_dir.exists(),
+            "stale child eviction should clean launcher artifacts"
+        );
+    }
+
+    #[test]
+    fn register_member_replaces_missing_stale_fork_child_in_same_slot() {
+        let source_dir = tempfile::tempdir().expect("source temp dir");
+        let missing_child_dir = tempfile::tempdir().expect("missing child temp dir");
+        let replacement_child_dir = tempfile::tempdir().expect("replacement child temp dir");
+        let source = sample_active_member_runtime(&source_dir, "ash_member_source", "spn_source");
+        let missing_child = sample_active_member_runtime_with_lineage(
+            &missing_child_dir,
+            "ash_member_child_missing",
+            "spn_child_missing",
+            Some("ash_member_source"),
+            None,
+        );
+        let replacement_child = sample_active_member_runtime_with_lineage(
+            &replacement_child_dir,
+            "ash_member_child_replacement",
+            "spn_child_replacement",
+            Some("ash_member_source"),
+            None,
+        );
+        let manager = MemberRuntimeManager::new();
+        let retained_key = RetainedMemberKey::from_active(source.as_ref());
+
+        manager
+            .register_member(source.clone())
+            .expect("register source retained member");
+        manager
+            .register_member(missing_child.clone())
+            .expect("register missing child retained member");
+
+        {
+            let mut guard = manager
+                .active_members
+                .write()
+                .expect("member runtime registry lock poisoned");
+            guard
+                .by_participant_id
+                .remove(&missing_child.participant_id)
+                .expect("missing child should start in active members");
+            assert_eq!(
+                guard.by_retained_key.get(&retained_key),
+                Some(&RetainedMemberSlot {
+                    primary_participant_id: source.participant_id.clone(),
+                    fork_child_participant_id: Some(missing_child.participant_id.clone()),
+                }),
+                "test setup should leave a stale fork-child slot behind"
+            );
+        }
+
+        manager
+            .register_member(replacement_child.clone())
+            .expect("missing stale child should not block replacement registration");
+
+        let guard = manager
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        assert!(
+            !guard
+                .by_participant_id
+                .contains_key(&missing_child.participant_id),
+            "missing child should stay absent from active members"
+        );
+        assert!(
+            guard
+                .by_participant_id
+                .contains_key(&replacement_child.participant_id),
+            "replacement child should become the retained fork child"
+        );
+        assert_eq!(
+            guard.by_retained_key.get(&retained_key),
+            Some(&RetainedMemberSlot {
+                primary_participant_id: source.participant_id.clone(),
+                fork_child_participant_id: Some(replacement_child.participant_id.clone()),
+            }),
+            "shared retained slot should repair itself when the stale child entry is missing"
+        );
+    }
+
+    #[test]
+    fn register_member_rejects_second_live_fork_child_in_same_slot() {
+        let source_dir = tempfile::tempdir().expect("source temp dir");
+        let first_child_dir = tempfile::tempdir().expect("first child temp dir");
+        let second_child_dir = tempfile::tempdir().expect("second child temp dir");
+        let source = sample_active_member_runtime(&source_dir, "ash_member_source", "spn_source");
+        let first_child = sample_active_member_runtime_with_lineage(
+            &first_child_dir,
+            "ash_member_child_first",
+            "spn_child_first",
+            Some("ash_member_source"),
+            None,
+        );
+        let second_child = sample_active_member_runtime_with_lineage(
+            &second_child_dir,
+            "ash_member_child_second",
+            "spn_child_second",
+            Some("ash_member_source"),
+            None,
+        );
+        let manager = MemberRuntimeManager::new();
+
+        manager
+            .register_member(source)
+            .expect("register source retained member");
+        manager
+            .register_member(first_child)
+            .expect("register first child retained member");
+        let err = match manager.register_member(second_child) {
+            Ok(_) => panic!("a live fork child should still block a second child"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.to_string()
+                .contains("member_dispatch retained member slot conflict"),
             "unexpected error: {err}"
         );
     }

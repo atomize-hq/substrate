@@ -1,6 +1,6 @@
 # `run_world_task` / retained-world-member debug synthesis
 
-Last updated: 2026-07-01  
+Last updated: 2026-07-01 (late)  
 Status: working canonical memo for this issue family; live code/tests/docs remain final authority.
 
 ## Purpose
@@ -27,6 +27,7 @@ Primary repo-truth surfaces repeatedly cited by those logs:
 - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
 - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
 - `crates/shell/src/repl/async_repl.rs`
+- `crates/shell/src/execution/agent_runtime/control.rs`
 - `crates/shell/src/execution/agent_runtime/state_store.rs`
 - `crates/world-service/src/service.rs`
 - `crates/world-service/src/member_runtime.rs`
@@ -42,7 +43,7 @@ Primary repo-truth surfaces repeatedly cited by those logs:
 
 ## Active symptom family
 
-The live issue family has narrowed, but it has also moved through several distinct retained-fork stages. Some earlier blockers are now closed by real manual smoke; the active work is no longer the original bootstrap mismatch, nor the first exposed `authoritative-live` seam, but a newer retained-fork bootstrap/stream-launch failure, with host-visible file semantics still secondary.
+The live issue family has narrowed, but it has also moved through several distinct retained-fork stages. Some earlier blockers are now closed by real manual smoke; the active work is no longer the original bootstrap mismatch, nor the first exposed `authoritative-live` seam, and it is no longer best summarized as only the stream-launch/bootstrap wrapper either. The latest clean rerun got that earlier wrapper blocker out of the way and re-exposed the post-registration retained-fork durability/publication seam, with host-visible file semantics still secondary.
 
 What is now **confirmed fixed** by fresh manual smoke:
 
@@ -75,20 +76,24 @@ What is now **confirmed fixed** by fresh manual smoke:
 
 The still-live issues being debugged are now the combination of:
 
-1. current valid world-bound `agent start` plus retained `spawn_world_worker` still pass, but the latest valid retained `fork_world_worker` smoke on 2026-07-01 fails earlier again with:
-   - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
-2. the older retained successor `authoritative-live` seam and the later `fork_lineage_persist_failed ... missing_fork_child_registration ...` seam both advanced the code and exposed real bugs, but neither should be described as the **current** top live blocker anymore;
-3. retained-worker follow-up/control operations still remain intentionally split by seam boundary:
+1. current valid world-bound `agent start` plus retained `spawn_world_worker` still pass, and the earlier retained fork stream-launch/bootstrap blocker can now move out of the way on a clean rerun, but the latest clean retained `fork_world_worker` seam on 2026-07-01 is again:
+   - `fork_lineage_persist_failed ... missing_fork_child_registration ... missing_target_participant, missing_stop_transport ...`
+2. the older retained successor `authoritative-live` seam, the intermediate stream-launch/bootstrap wrapper seam, and the re-exposed post-registration durability/publication seam all exposed real bugs, but only the last of those is the **current** top live blocker;
+3. the newest probe finding now points at a likely structural shell gap:
+   - direct `fork_world_worker` dispatch does **not** appear to start the shell-owned retained child runtime/controller/publication path that REPL `spawn_world_worker` uses,
+   - so the missing child participant snapshot and missing private stop transport now look more like absent shell publication than like a pure timeout tuning failure;
+4. retained-worker follow-up/control operations still remain intentionally split by seam boundary:
    - retained `fork_world_worker` and retained-mode `cancel_world_work` are supposed to keep successor-lineage authority,
    - retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` are currently back on strict direct-link authority in the current codebase/test boundary,
-4. adjacent retained-mode `cancel_world_work` has not yet been fully re-smoked through the newer retained-fork patch chain and may still expose either the older `authoritative-live` seam or a newer downstream eligibility seam,
-5. worker turn execution failure (`codex exited non-zero`) remains unresolved and distinct from the retained follow-up/control-plane failures,
-6. and the older host-visible-file question still remains secondary to those routing/control-plane issues.
+5. the recent local shell timeout-split patch was reviewed clean and added targeted coverage, but it was **not** sufficient to clear the live retained fork seam;
+6. adjacent retained-mode `cancel_world_work` has not yet been fully re-smoked through the newer retained-fork patch chain and may still expose either the older `authoritative-live` seam or a newer downstream eligibility seam,
+7. worker turn execution failure (`codex exited non-zero`) remains unresolved and distinct from the retained follow-up/control-plane failures,
+8. and the older host-visible-file question still remains secondary to those routing/control-plane issues.
 
 The current repo still exposes multiple relevant seams, but they no longer all sit at the same priority:
 
 - the host-visible file/write question remains open and likely still points at overlay/sync behavior,
-- while the top active blockers have shifted away from the old retained-worker bootstrap mismatch, then through retained successor `authoritative-live` / post-registration seams, and now back to an earlier retained fork stream-launch/bootstrap wrapper failure on the newest valid smoke.
+- while the top active blockers have shifted away from the old retained-worker bootstrap mismatch, then through retained successor `authoritative-live`, then through the temporary stream-launch/bootstrap wrapper seam, and now back to the post-registration durability/publication seam with a stronger shell-side structural diagnosis.
 
 Live code alone does **not** settle the host-visible write question, and the latest manual smoke only proves that certain routing/control surfaces now succeed. It does **not** yet prove the full end-to-end host-visible side-effect contract is settled.
 
@@ -246,15 +251,37 @@ Why this matters:
   are still rejected because parked/resumable retained workers are being downgraded too far after clean bootstrap exit;
 - this is therefore best read as a **wrong liveness predicate / authoritative-live gate** bug rather than the older world-binding bootstrap bug.
 
-### Repro F (2026-07-01): the retained-fork bug moved forward twice, then the latest valid smoke re-exposed an earlier stream-launch wrapper
+### Repro F (2026-07-01 late): retained fork moved through wrapper recovery, then re-exposed the shell-side durability/publication seam
 
-Later 2026-07-01 smokes and patch/review cycles moved the retained `fork_world_worker` failure through multiple real stages.
+Later 2026-07-01 smokes and patch/review cycles moved the retained `fork_world_worker` failure through multiple real stages, and the newest probe changed which stage should now be treated as current.
 
 Important status clarification:
 
 - unless a specific commit id is cited inline, the stage shifts below should be read as **later local patch-chain observations in a dirty worktree**, not as committed `HEAD` truth.
 
-Those local 2026-07-01 observations moved through these stages:
+Those 2026-07-01 observations now sort into three different truth buckets:
+
+1. **landed / committed `HEAD` truth**
+   - `7732d839` (`Refactor retained member management in MemberRuntimeManager`) is the real landed packet for this stage, and it was not world-service-only;
+   - on the world-service side, it taught `MemberRuntimeManager` to prune stale retained fork-child slot entries before registering a replacement child;
+   - and it added branch coverage for:
+     - replacing a stale fork child that is still present but no longer bootstrapping/resumable,
+     - repairing a stale retained slot whose old child entry is already missing from `by_participant_id`,
+     - while still rejecting a genuinely second live fork child in the same slot.
+   - on the shell side, the same landed commit also included:
+     - the retained-bootstrap wrapper-era launch text:
+       - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+     - the first durable-publication `fork_lineage_persist_failed` / `missing_fork_child_registration` path in `crates/shell/src/execution/orchestrator_world_dispatch.rs`,
+     - including the more specific `missing_target_participant` / `missing_stop_transport` detail surfaced out of the shell-side durable-publication gate.
+
+2. **later local shell patch-chain observations (dirty worktree, not committed `HEAD` unless separately cited)**
+   - a later local shell observability patch added pre-wrapper logging in the retained stream-launch helper so the inner `ApiError` is preserved before the already-landed outer:
+     - `failed to launch world member dispatch stream for retained worker bootstrap ...`
+     wrapper context flattens it;
+   - a later local timeout-split patch widened child participant visibility budget while keeping private stop-transport publication on the original bounded budget, and added targeted regression coverage for that split;
+   - review on that timeout-split patch was clean, but the patch was **not** sufficient to clear the live retained fork seam.
+
+3. **latest live smoke chronology**
 
 1. after the earlier shell-side stale-owner / successor-authority work was advanced in committed history and then continued through later local iterations, the old:
 
@@ -262,32 +289,43 @@ Those local 2026-07-01 observations moved through these stages:
 
 was no longer the first retained-fork blocker;
 
-2. the next valid fork smoke then failed during child bootstrap with:
+2. the next valid fork smoke then failed during child bootstrap with the pre-wrapper form:
 
 > `failed to launch spawn_world_worker over world member dispatch`
 
-which led to the retained-slot / fork-child registration / orchestrator-id patch sequence;
-
-3. after later local patch-chain iterations on slot narrowing / orchestrator-id preservation / error-chain work, a subsequent valid fork smoke got farther and failed with:
-
-> `fork_lineage_persist_failed: failed to persist explicit fork lineage for child ... after authoritative registration, and automatic stop rollback did not reach durable closeout (missing_fork_child_registration: ... owner_unreachable: ...)`
-
-which exposed the shell-side durability/publication seam after the first `Registered` event;
-
-4. after later local patch-chain iterations adding a bounded durability gate for post-registration child visibility plus stop transport publication, the newest valid fork smoke on 2026-07-01 shifted again and now fails earlier with:
+which then became the landed retained-bootstrap wrapper form in `7732d839`:
 
 > `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+
+These two labels should be read as sequential forms of the same wrapper-era bootstrap stage, not as unrelated seams.
+
+That wrapper-era stage led to the landed retained-slot / shell wrapper / first durability-gate work in `7732d839`, and then to later local shell observability/orchestrator-id/error-chain patch iterations;
+
+3. after the earlier stream-launch/bootstrap blocker moved out of the way on a clean rerun, a subsequent valid fork smoke got farther and again failed with:
+
+> `fork_lineage_persist_failed: failed to persist explicit fork lineage for child ... after authoritative registration ... (missing_fork_child_registration: ... missing_target_participant, missing_stop_transport ...)`
+
+which re-exposed the shell-side durability/publication seam after the first `Registered` event;
+
+4. one malformed-tool-call pass that surfaced:
+
+> `invalid_tool_arguments`
+
+should be read as a contract/prompt issue on that probe input, **not** as a runtime regression in the retained fork path;
+
+5. after the local timeout-split patch was reviewed clean and the smoke was re-run without the malformed-tool-call mistake, the latest clean live seam remained:
+
+> `fork_lineage_persist_failed: failed to persist explicit fork lineage for child ... after authoritative registration ... (missing_fork_child_registration: ... missing_target_participant, missing_stop_transport ...)`
 
 What this means:
 
 - the old retained `authoritative-live` fork seam was real and has committed code history behind it, but it is no longer the top live blocker;
-- the later `fork_lineage_persist_failed ... missing_fork_child_registration ...` seam was also real in local 2026-07-01 smokes, but it should be read as a local patch-chain stage rather than assumed committed-`HEAD` truth;
-- the current top live blocker has moved back earlier in retained fork bootstrap, before the post-registration durability gate can even run;
-- so the memo must distinguish:
-  - **addressed in landed code**
-  - **once exposed in live smoke**
-  - **current top live blocker**
-  rather than treating every previously exposed retained-fork seam as still top-of-queue simultaneously.
+- the temporary stream-launch/bootstrap wrapper seam was also real, but the wrapper itself is already landed history in `7732d839`; the later local observability patch was useful because it preserved the inner `ApiError` instead of losing it behind that landed wrapper context;
+- the latest clean live seam is once again the post-registration durability/publication failure, not the malformed-tool-call pass and not the already-moved wrapper blocker;
+- the timeout-split patch improved the shell-side wait logic and its coverage, but because the latest clean smoke still misses both the child participant snapshot and the stop transport, simple wait-budget tuning is no longer the strongest explanation;
+- the strongest current probe read is structural:
+  - direct `fork_world_worker` does not appear to start the shell-owned retained child runtime/controller/publication path that REPL `spawn_world_worker` uses,
+  - so the child is authoritatively registered by `world-service`, but the shell never publishes the retained child snapshot or private stop transport needed for durable lineage persistence and rollback closeout.
 
 ## Synthesized working model
 
@@ -389,7 +427,7 @@ The newest 2026-06-30 probes added one more refinement for that stage:
   - to retained-worker successor-authorized **authoritative-live** gating for parked/resumable retained workers;
 - worker execution failure should still stay behind that fix.
 
-That 2026-06-30 read is now historical only. Later 2026-07-01 local patch-chain smokes moved the retained fork seam further forward and then re-exposed an earlier stream-launch/bootstrap wrapper as the current top blocker.
+That 2026-06-30 read is now historical only. Later 2026-07-01 local patch-chain smokes first moved the retained fork seam into an earlier stream-launch/bootstrap wrapper, then a later clean rerun moved past that wrapper and re-exposed the post-registration durability/publication seam with a stronger shell-side structural diagnosis.
 
 ### 4) There is also a broader shell/runtime contract mismatch and a REPL/CLI parity requirement
 
@@ -448,7 +486,7 @@ The newer smokes add one more refinement:
   - `cd ../` is blocked by the caged-root guard as expected
 - and the later continuity-selector precedence fix closed the resumed targeted host-turn semantic continuity bug on both REPL and public CLI.
 
-So by the end of the 2026-06-30 stage, the live mismatch was narrower than “reattach is broken” or “all world dispatch is broken.” At that point the main remaining runtime failures were the retained parked/resumable `authoritative-live` seam for successor `fork_world_worker`, then adjacent retained `cancel_world_work`, and only later worker execution. That ordering is now superseded by the later 2026-07-01 local patch-chain smokes, which currently put the retained fork stream-launch/bootstrap wrapper first.
+So by the end of the 2026-06-30 stage, the live mismatch was narrower than “reattach is broken” or “all world dispatch is broken.” At that point the main remaining runtime failures were the retained parked/resumable `authoritative-live` seam for successor `fork_world_worker`, then adjacent retained `cancel_world_work`, and only later worker execution. That ordering is now superseded by the later 2026-07-01 local patch-chain smokes, which now point first at the re-exposed post-registration durability/publication seam and the missing shell-owned retained-child publication path behind it.
 
 ## What the cited runtime/docs actually establish
 
@@ -535,18 +573,18 @@ Both should also validate:
 
 These are the best next debugging checks to separate confirmed truth from still-likely theory:
 
-1. **Recover the inner cause under the current retained fork stream-launch/bootstrap wrapper**
-   - Goal: explain or expose the exact inner failure under:
-     - `failed to launch world member dispatch stream for retained worker bootstrap ...`
+1. **Patch the shell-owned retained-child startup/publication gap next**
+   - Goal: make direct retained `fork_world_worker` start the same shell-owned retained child runtime/controller/publication path that REPL `spawn_world_worker` already uses.
    - Most likely seams:
+     - `crates/shell/src/repl/async_repl.rs`
      - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
-     - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-     - `crates/world-service/src/service.rs`
+     - shell retained-runtime control/persistence helpers used by `start_internal_dispatch_member_runtime(...)`
 
-2. **Then re-check whether the older post-registration durability seam still reproduces**
-   - Goal: determine whether:
-     - `fork_lineage_persist_failed ... missing_fork_child_registration ...`
-     reappears once the earlier stream-launch/bootstrap wrapper is repaired, or whether it was fully local to the later dirty-worktree patch chain.
+2. **Use the already-clean timeout-split patch only as supporting evidence**
+   - Goal: keep the local timeout-split work as proof that longer child visibility alone does not clear the seam.
+   - Current read:
+     - the latest clean smoke still misses both the child participant snapshot and the stop transport,
+     - so timing budget alone is unlikely to be the root cause.
 
 3. **Then re-check retained-mode `cancel_world_work`**
    - Goal: establish whether `cancel_world_work` is still blocked by the older `authoritative-live` class on current code, or whether later retained-fork changes have shifted that seam too.
@@ -718,19 +756,33 @@ That led to several thin patches and reviews.
   - `382a63a8` — `Refactor retained worker authority checks and enhance follow-up resolution for non-authoritative live workers`
   - `02940fb6` — `Refactor retained worker linkage validation and bootstrap context`
 - Those commits are the supportable committed history for the earlier retained-fork `authoritative-live` / linkage stage.
-- They should not be conflated with the later 2026-07-01 local patch chain around slot registration, orchestrator-id preservation, post-registration durability gating, or the latest stream-launch wrapper.
+- They should not be conflated with the later 2026-07-01 local patch chain around slot registration, orchestrator-id preservation, post-registration durability gating, or the later temporary stream-launch wrapper seam.
 
-### 5. Later local retained-fork patch-chain observations (dirty worktree, not committed `HEAD` unless separately cited)
+### 5. Landed retained-slot cleanup in current `HEAD`
+
+- `7732d839` — `Refactor retained member management in MemberRuntimeManager`
+- This landed packet includes both world-service and shell-side retained-fork work.
+- On the world-service side, it prunes a stale retained fork-child slot before registering a replacement child.
+- Added coverage now proves:
+  - a stale child still present in `by_participant_id` but no longer bootstrapping/resumable is evicted and replaced,
+  - a stale retained slot whose prior child entry is already missing from `by_participant_id` is repaired and replaced,
+  - a genuinely second live fork child in the same slot is still rejected.
+- On the shell side, the same landed commit already includes:
+  - the retained-bootstrap wrapper wording in `execute_spawn_world_worker_stream(...)`,
+  - the first shell durable-publication gate that can fail with `fork_lineage_persist_failed ... missing_fork_child_registration ...`,
+  - and the specific `missing_target_participant` / `missing_stop_transport` detail path in `orchestrator_world_dispatch.rs`.
+
+### 6. Later local retained-fork patch-chain observations (dirty worktree, not committed `HEAD` unless separately cited)
 
 - Later 2026-07-01 retained-fork work in the dirty worktree moved through several narrower seams:
-  - retained slot / direct fork-child registration narrowing,
+  - shell-side observability to preserve the inner stream-launch `ApiError` before the already-landed wrapper context,
   - shell-side retained source orchestrator identity preservation for fork child bootstrap,
   - shell-side error-chain preservation cleanup for fork bootstrap errors,
-  - shell-side bounded wait for child durability visibility / stop transport before treating the child receipt as usable.
+  - shell-side bounded wait split between child visibility and stop-transport publication before treating the child receipt as usable.
 - Those observations are useful debug chronology.
 - But absent specific commit refs, they should be read as **local patch/review/smoke iterations**, not as committed branch history.
 
-### 6. Positive success regression was dead code, then fixed
+### 7. Positive success regression was dead code, then fixed
 
 - Review later discovered the intended positive regression for:
   - parked host
@@ -741,7 +793,7 @@ That led to several thin patches and reviews.
 - Review validated that final test-enablement patch.
 - So the positive regression is now actually executing; that was enablement, not a behavior fix by itself.
 
-### 7. Clippy-only patch was separate and healthy
+### 8. Clippy-only patch was separate and healthy
 
 - A separate thin patch bundled arguments for `start_remote_member_runtime_with_binding_retry` to fix `clippy::too_many_arguments`.
 - That patch was a pure signature/parameter-struct cleanup and should not be conflated with runtime behavior changes.
@@ -821,11 +873,17 @@ Best current seam split:
      - `stale_linkage ... retained worker ... is no longer authoritative-live`
    - design intent says a retained worker that exits clean bootstrap should become parked/resumable, not become an invalid control target,
    - this seam was the next active bug after bootstrap parity improved,
-   - but it should now be read as a previously exposed / committed-history retained-fork stage rather than the current top live blocker, because the newest valid smoke has moved back earlier to the retained fork stream-launch wrapper.
+   - but it should now be read as a previously exposed / committed-history retained-fork stage rather than the current top live blocker, because later smokes moved through the wrapper seam and now back to the post-registration durability/publication seam.
 
 6. **Seam F: worker execution after continue**
    - `continue_world_worker` reaching the retained worker and then failing with `codex exited non-zero` remains real,
    - but this should stay behind bootstrap parity and successor-authority fixes in the live queue so execution failure is not conflated with launch/control-plane bugs.
+
+7. **Seam G: retained fork post-registration durability/publication**
+   - the latest clean live seam is again:
+     - `fork_lineage_persist_failed ... missing_fork_child_registration ... missing_target_participant, missing_stop_transport ...`
+   - the recent timeout-split patch improved the local wait logic and tested it, but did not clear this seam live,
+   - and the strongest current probe read is that direct `fork_world_worker` bypasses shell-owned retained child runtime/controller/publication startup, so the shell never publishes the child snapshot or stop transport that lineage persistence and rollback expect.
 
 ### Public `agent start` / `agent turn` continuity strict smoke now validates semantically
 
@@ -883,9 +941,10 @@ At this point the following narrow claims appear trustworthy:
    - tests currently validate important routing boundaries,
    - while the retained-worker queue has since moved through local 2026-07-01 patch-chain stages:
      - retained successor `authoritative-live` gating,
-     - then retained slot / fork-child registration / orchestrator-id and error-chain cleanup,
-     - then post-registration child durability publication,
-     - and the newest valid live fork smoke now failing earlier again on the retained world-member dispatch stream launch wrapper.
+     - then the landed world-service retained-slot cleanup,
+     - then temporary stream-launch/bootstrap wrapper recovery,
+     - then re-exposed post-registration child durability/publication failure,
+     - with the newest probe now pointing at missing shell-owned child publication rather than a pure world-service slot conflict.
 
 7. **ID taxonomy / continuity documentation is landed enough for this seam**
    - the canonical internal doc exists:
@@ -916,40 +975,45 @@ At this point the following narrow claims appear trustworthy:
      - `02940fb6` — `Refactor retained worker linkage validation and bootstrap context`
    - those are the safe inline commit refs for the earlier retained-fork authority / linkage stage.
 
-11. **The later retained slot / fork-child registration / orchestrator-id / durability chain should currently be read as local patch-chain truth**
+11. **The later shell observability / timeout-split / publication diagnosis chain should currently be read as local patch-chain truth**
    - those later 2026-07-01 stages materially changed the observed live failure point,
    - but absent explicit commit refs they should not be described here as committed `HEAD` history.
 
-12. **The current top blocker under the newest valid smoke is the retained fork stream-launch/bootstrap wrapper**
-   - latest valid 2026-07-01 smoke currently fails with:
-     - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
-   - so the current top blocker is now the retained fork stream-launch/bootstrap seam, not the older `authoritative-live` or later `fork_lineage_persist_failed` stages.
+12. **The current top blocker under the latest clean smoke is the retained fork post-registration durability/publication seam**
+   - latest clean 2026-07-01 smoke currently fails with:
+     - `fork_lineage_persist_failed ... missing_fork_child_registration ... missing_target_participant, missing_stop_transport ...`
+   - so the current top blocker is no longer the temporary stream-launch/bootstrap wrapper seam;
+   - the strongest current read is that direct retained `fork_world_worker` never starts the shell-owned retained child runtime/controller/publication path needed to make that child durably visible to shell-side lineage persistence and rollback;
+   - but the shell wiring direction for that gap should now be read as **current local patch-chain work under test / awaiting rerun evidence**, not as untouched future work.
 
 ## Updated active blockers
 
 The open bug buckets should now be read in this order:
 
-1. **latest valid retained `fork_world_worker` smoke now fails earlier again at retained world-member dispatch stream launch**
+1. **latest clean retained `fork_world_worker` smoke now fails at post-registration durability/publication**
    - current valid smoke still shows:
      - world-bound `agent start`: pass
      - retained `spawn_world_worker`: pass
-   - but the newest valid fork smoke now fails with:
-     - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
-   - this is now the top live blocker and should be treated as earlier than the later lineage-persist/durability gate.
+   - the earlier stream-launch/bootstrap wrapper blocker can move out of the way on a clean rerun,
+   - but the latest clean fork smoke now fails with:
+     - `fork_lineage_persist_failed ... missing_fork_child_registration ... missing_target_participant, missing_stop_transport ...`
+   - this is now the top live blocker.
 2. **the older retained `authoritative-live` seam should now be read as code-addressed / historically important, not the current top blocker**
    - it was a real live seam,
    - it drove multiple shell-side stale-owner / authority / continue-fork-command narrowing patches,
-   - but the latest valid fork smoke has moved past that stage.
-3. **the later `fork_lineage_persist_failed ... missing_fork_child_registration ...` seam should also now be read as intermediate, not current top-of-queue**
-   - it exposed a real post-registration durability/publication race,
-   - and in the later 2026-07-01 local patch chain it drove bounded child-visibility / stop-transport gate work,
-   - but the newest valid smoke currently fails earlier again before that gate becomes the first blocker.
+   - but the latest clean fork smoke has moved past that stage.
+3. **the temporary retained fork stream-launch/bootstrap wrapper seam should now be read as intermediate, not current top-of-queue**
+   - it was real and useful because it exposed a hidden inner `ApiError`,
+   - but the latest clean rerun moved past it.
 4. **adjacent retained-mode `cancel_world_work` still needs renewed live validation after the later retained-fork patch chain**
    - older live smoke showed the same `authoritative-live` class,
-   - but cancel has not yet been re-established as the top current blocker after the newer fork-launch failures moved earlier.
+   - but cancel has not yet been re-established as the top current blocker after the retained fork seam shifted again.
 5. **worker turn execution failure (`codex exited non-zero`) remains a separate follow-up issue**
    - keep this deferred until retained fork/cancel control-plane posture is stable again.
-6. **retained-worker lineage boundary / adapter-store scope cleanup is materially improved, but it is no longer the primary blocker**
+6. **the current strongest diagnosis is a structural shell publication gap, not pure timeout tuning**
+   - the local timeout-split patch was reviewed clean and added useful coverage,
+   - but the latest clean smoke still misses both child snapshot publication and private stop transport publication,
+   - so the active local patch-chain direction belongs in async REPL / shell retained-runtime startup and publication wiring, with rerun evidence still pending.
 7. **implicit-PTY ordinary-command caller-boundary clarification/coverage is still useful, but it is no longer the top live blocker**
 8. **test harness still does not fully model every live caller boundary**
 9. **host-visible file/write semantics remain open but are not first in priority**
@@ -964,15 +1028,15 @@ Do not describe ordinary-command survivability after parked host as the primary 
 
 ## Next planned landing order
 
-1. **Patch / explain the retained fork stream-launch wrapper next**
-   - next live target is now the earlier:
-     - `failed to launch world member dispatch stream for retained worker bootstrap ...`
-   - recover or expose the inner cause under that wrapper and repair that seam before treating later durability/rollback surfaces as primary again.
+1. **Keep the async-repl / shell retained-child startup and publication wiring as the active local patch-chain direction**
+   - next live target is no longer the wrapper itself.
+   - current local worktree direction is to route direct retained `fork_world_worker` through the same shell-owned retained child runtime/controller/publication path that REPL `spawn_world_worker` uses, so child snapshot persistence plus private stop transport publication both actually happen.
+   - frame this as local work under test / awaiting rerun evidence, not as an untouched future idea.
 
-2. **Then re-check whether the post-registration durability gate seam still reproduces**
-   - if the stream-launch wrapper is repaired, verify whether the older:
-     - `fork_lineage_persist_failed ... missing_fork_child_registration ...`
-     seam is now gone or reappears as the next blocker.
+2. **Then re-check whether the current durability/publication seam is cleared**
+   - after that shell wiring change, verify whether:
+     - `fork_lineage_persist_failed ... missing_fork_child_registration ... missing_target_participant, missing_stop_transport ...`
+     is gone or remains as a narrower residual issue.
 
 3. **Then re-check retained-mode `cancel_world_work`**
    - older live smoke tied it to the same retained successor queue,
@@ -1011,12 +1075,13 @@ If we need the shortest honest current diagnosis:
 - explicit `:pty` should not be described as fail-closed on this memo's current truth;
 - REPL and public CLI both now appear to reuse the same transport/session continuity markers on resumed targeted host turns;
 - the resumed targeted host-turn continuity seam is now validated enough on both surfaces, including the strict public `start` -> `turn` smoke returning `Just reply OK`;
-- earlier committed patches plus later 2026-07-01 local patch-chain iterations cleaned up the retained-worker lineage boundary and moved the observed fork failure point through slot registration, orchestrator-id, error-chain, and post-registration durability stages, so those earlier seams are no longer the top-line diagnosis;
-- the newest valid retained fork smoke now fails earlier again with:
-  - `failed to launch world member dispatch stream for retained worker bootstrap ... in orchestration session ...`
+- landed `7732d839` included both the world-service stale retained fork-child slot fix and the shell-side retained-bootstrap wrapper / first durable-publication failure path, and the later local shell observability patch then preserved the inner `ApiError` behind that already-landed wrapper;
+- one `invalid_tool_arguments` pass during the latest probes was a malformed tool-call / contract issue, not a retained-runtime regression;
+- the latest clean retained fork smoke is again:
+  - `fork_lineage_persist_failed ... missing_fork_child_registration ... missing_target_participant, missing_stop_transport ...`
 - still-open likely bug buckets are therefore now:
-  - the retained fork stream-launch/bootstrap wrapper and its hidden inner cause,
-  - then any re-exposed post-registration durability seam if it still survives after that,
+  - the shell-owned retained-child startup/publication gap on direct `fork_world_worker`,
+  - then any narrower residual durability/publication seam that survives after that wiring is repaired,
   - then renewed retained `cancel_world_work` validation,
   - then worker non-zero execution failures,
   - then remaining caller-boundary / harness realism gaps,
