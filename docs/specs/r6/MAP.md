@@ -162,7 +162,7 @@ full-migration phase. The next active execution sequence is `R6-3`.
 
 - `R6-1` (objective-independent scorer cutover): `docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-{spec,plan,tasks}.md`
 - `R6-2` (structured-objective consumer, kickoff-anchored first cut): `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-{spec,plan,tasks}.md`
-- `R6-3` (rolling / previous-checkpoint semantic drift): committed follow-up to `R6-2` — spec/plan/tasks to be written when `R6-2` lands (added 2026-06-30; see DESIGN "Packet Decomposition").
+- `R6-3` (rolling / previous-checkpoint semantic drift): `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-{spec,plan,tasks}.md` — committed follow-up to `R6-2`; SPEC/PLAN/TASKS written 2026-07-02, **not yet implemented**. Surfacing resolved (codex-consulted) to **tagged evidence on the existing `SemanticGoalDrift` class, not a new variant**, so no `schema_version` bump and no sentinel/`export.rs` lockstep; the flip-conditions that would promote it to its own variant are recorded in the `R6-3` SPEC Resolved Decision 1.
 - `R6-4` (conditional reset migration): not written — deferred after `R6-2.5` closeout because no `R6-1`/`R6-2` replay evidence showed `progress.rs` reset errors caused by objective-string quality; remains evidence-gated per the DESIGN doc.
 
 1. **[done] Complete the consumer/failure-mode investigation.** Finish the scorer-input audit (turn context,
