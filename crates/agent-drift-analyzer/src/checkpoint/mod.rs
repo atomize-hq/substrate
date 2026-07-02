@@ -3267,9 +3267,10 @@ mod tests {
     use crate::input::BundleSession;
 
     use super::{
-        checkpoint_analyses, classify_command_role, kickoff_anchor_for_ordinal,
+        assign_drift_states, checkpoint_analyses, classify_command_role, kickoff_anchor_for_ordinal,
         session_kickoff_structured_goal_anchor, tool_output_is_unambiguous_failure, CommandRole,
-        Confidence, EvidenceRef, ObjectiveClass, ObjectiveIntent, StructuredObjective,
+        Confidence, DriftClass, DriftScore, DriftState, DriftStateHint, EvidenceRef, ObjectiveClass,
+        ObjectiveIntent, ScoredDrift, StructuredObjective,
     };
 
     #[test]
@@ -3626,6 +3627,63 @@ mod tests {
             "later checkpoints must see the established anchor"
         );
         assert!(kickoff_anchor_for_ordinal(None, 1).is_none());
+    }
+
+    #[test]
+    fn sanctioned_replan_does_not_fire_on_routine_instead_of_tool_choice_steer_rows() {
+        let routine = "Use rg instead of grep for this search, it's faster.";
+        let mut routine_row = row(1, CompactionKind::UserMessage, routine);
+        routine_row.user_message_role = Some(UserMessageRole::Steer);
+
+        let session = BundleSession {
+            session_id: "session-routine-instead".to_string(),
+            archival_rows: vec![
+                row(0, CompactionKind::UserMessage, "/goal Implement the search helper."),
+                routine_row.clone(),
+            ],
+            compact_rows: vec![
+                row(0, CompactionKind::UserMessage, "/goal Implement the search helper."),
+                routine_row,
+            ],
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 1);
+        assert!(
+            !analyses[0].sanctioned_replan,
+            "a routine tool-choice steer ('instead of') must not be treated as an authorized replan"
+        );
+    }
+
+    #[test]
+    fn assign_drift_states_never_promotes_a_cleared_semantic_goal_drift_score_to_historical() {
+        // semantic_goal_drift never emits DriftStateHint::HistoricalContext (unlike
+        // truth_grounding_gap/dead_end_thrash), so a cleared score must come out Cleared even
+        // right after a previously Active one on the same class, not echo as HistoricalOnly.
+        let previous_active = DriftScore {
+            class: DriftClass::SemanticGoalDrift,
+            state: DriftState::Active,
+            raw_score: 80,
+            confidence: Confidence::High,
+            flagged: true,
+            evidence: Vec::new(),
+        };
+        let cleared = ScoredDrift::new(
+            DriftScore {
+                class: DriftClass::SemanticGoalDrift,
+                state: DriftState::Cleared,
+                raw_score: 0,
+                confidence: Confidence::Low,
+                flagged: false,
+                evidence: Vec::new(),
+            },
+            DriftStateHint::None,
+        );
+
+        let assigned = assign_drift_states(vec![cleared], Some(&[previous_active]));
+
+        assert_eq!(assigned.len(), 1);
+        assert_eq!(assigned[0].state, DriftState::Cleared);
     }
 
     #[test]

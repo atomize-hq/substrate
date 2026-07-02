@@ -600,21 +600,34 @@ fn operator_surface_public_previous_aware_presenter_can_render_recovered_posture
 
 #[test]
 fn operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end() {
-    let fixture = support::ReplayFixture::from_checkpoints(
-        vec![checkpoint_with_drift(
-            "session-semantic-goal-drift",
-            1,
-            DriftClass::SemanticGoalDrift,
-            80,
-            true,
-            "confirm the pivot is intentional or return to the anchored goal",
-            &[
-                "semantic goal drift kickoff anchor: crates_agent_drift_analyzer_src_scoring_mod_rs",
-                "semantic goal drift current goal: docs_specs_r6_map_md",
-            ],
-        )],
-        support::sample_summary(),
+    // schema_version must be v0.7 (what the analyzer actually writes for this variant) so this
+    // exercises the real explicit-state-backed rendering path, not the legacy v0.2 default.
+    let mut checkpoint = checkpoint_with_drift(
+        "session-semantic-goal-drift",
+        1,
+        DriftClass::SemanticGoalDrift,
+        80,
+        true,
+        "confirm the pivot is intentional or return to the anchored goal",
+        &[
+            "semantic goal drift kickoff anchor: crates_agent_drift_analyzer_src_scoring_mod_rs",
+            "semantic goal drift current goal: docs_specs_r6_map_md",
+        ],
     );
+    checkpoint.schema_version = "v0.7".to_string();
+    checkpoint.drift_scores[0].state = DriftState::Active;
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(
+        &checkpoint,
+        SessionArchetypeLabel::AutonomousImplementation,
+    ));
+    checkpoint.session_progress = Some(sample_session_progress(
+        &checkpoint,
+        ProgressStatus::Advancing,
+        ProgressDimension::ImplementationVerificationWall,
+    ));
+    let fixture =
+        support::ReplayFixture::from_checkpoints(vec![checkpoint], support::sample_summary());
     let result = execute(&SentinelRequest {
         checkpoint_dir: fixture.checkpoint_dir.clone(),
         mode: SentinelMode::Replay,
@@ -640,9 +653,12 @@ fn operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end() 
 
 #[test]
 fn operator_surface_semantic_goal_drift_has_no_historical_echo_once_cleared() {
-    // Unlike truth_grounding_gap/dead_end_thrash, semantic_goal_drift never emits
-    // DriftStateHint::HistoricalContext, so a cleared checkpoint must never present as
-    // Recovered/HistoricalOnly on this class alone, even right after a flagged one.
+    // This is the sentinel-side half of the contract: given an already-Cleared score (which is
+    // all this class's scorer ever produces when not flagged — the analyzer-side guarantee that
+    // it never emits DriftStateHint::HistoricalContext is proven separately by
+    // agent-drift-analyzer::checkpoint::tests::assign_drift_states_never_promotes_a_cleared_semantic_goal_drift_score_to_historical
+    // — this test only proves the sentinel does not add Recovered/HistoricalOnly framing on top
+    // of it, even right after a flagged one.
     let previous = checkpoint_with_schema_state(
         "v0.7",
         "session-semantic-goal-drift-echo",

@@ -64,11 +64,13 @@ prerequisite is missing, stop and report it instead of compensating inside this 
     `Medium`). The resolved bar therefore stays anchor `High` + current `Medium+`; no relaxation to
     `Medium+` anchor was needed. `sanctioned_replan` derivation: `CheckpointAnalysis.sanctioned_replan` is
     now checkpoint-local assembly metadata, set by scanning the current checkpoint window for
-    `UserMessageRole::Steer` rows whose normalized text matches the existing explicit-pivot phrase set
-    (`replan`, `pivot`, `instead of`, `instead`, `new objective`, `change objective`, `change the
-    objective`, `change scope`, `change the scope`, `different objective`). That keeps the signal sourced
-    from steer-row evidence, not the private `progress.rs` string heuristic, and makes it available for the
-    later semantic-drift scorer without threading another session-running bool.
+    `UserMessageRole::Steer` rows whose normalized text matches the explicit-pivot phrase set as it stood at
+    this point in the packet (`replan`, `pivot`, `instead of`, `instead`, `new objective`, `change
+    objective`, `change the objective`, `change scope`, `change the scope`, `different objective`) — **note:
+    `instead`/`instead of` were later dropped from this list; see "Post-Closeout Codex Review Fixes" below
+    for the corrected, currently-live phrase set.** That keeps the signal sourced from steer-row evidence,
+    not the private `progress.rs` string heuristic, and makes it available for the later semantic-drift
+    scorer without threading another session-running bool.
 
 ## R6-2.2: Confirm The Variant Blast Radius And Schema Decision (Impact-Gated, No Scorer Code)
 
@@ -285,7 +287,49 @@ Fixed here, all under the full green analyzer + sentinel walls:
   `crates/agent-drift-analyzer/src/checkpoint/mod.rs` reads as fully disjoint) and can be masked by any
   single shared `PlatformBoundary`/`ScopeBoundary` constraint term. Confirmed by this review as the same
   accepted v1 tradeoff already recorded; revisiting it as a graduated/weighted distance is deferred to a
-  later `R6` iteration, not addressed here.
+  later `R6` iteration, not addressed here. Made unmissable in `docs/specs/r6/MAP.md` item 5 and as an
+  inline comment on `semantic_goal_diverged` in `scoring/semantic_goal_drift.rs`.
+
+### Second Round (2026-07-01): Test-Quality Fixes On The First Round's Own Fixes
+
+A second, independent `codex exec` review of the full range (`c53ba7a44^..774586f12`, i.e. including the
+first round's fixes above) found gaps in the *fixes*, not new gaps in the original packet:
+
+- **`operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end` exercised the wrong schema
+  path (fixed).** It built its checkpoint via `checkpoint_with_drift`, whose underlying `support::checkpoint`
+  defaults `schema_version` to `"v0.2"` — the legacy evidence-reason-based posture path, not the `v0.7`
+  explicit-state path the analyzer actually writes. Fixed by setting `checkpoint.schema_version = "v0.7"`
+  (and the matching `DriftState::Active`) before running it through the fixture, so the test now exercises
+  the real production path.
+- **`operator_surface_semantic_goal_drift_has_no_historical_echo_once_cleared` over-claimed what it proved
+  (fixed, comment only).** The test hardcodes the score to `DriftState::Cleared` and only proves the
+  sentinel does not add extra framing on top of an already-cleared score — it says nothing about whether
+  the *analyzer* actually produces `Cleared` rather than `HistoricalOnly` for this class. That analyzer-side
+  guarantee is now proven directly by a new test,
+  `assign_drift_states_never_promotes_a_cleared_semantic_goal_drift_score_to_historical`, in
+  `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, which calls `assign_drift_states` with a
+  `DriftStateHint::None` score following a previously-`Active` one on the same class and asserts the result
+  is `Cleared`. The sentinel test's comment was corrected to describe only the narrower claim it actually
+  supports.
+- **No regression test locked the `sanctioned_replan` needle-list tightening itself (fixed).** The only
+  existing regression (`checkpoints_capture_kickoff_anchor_once_and_mark_sanctioned_replans_from_steer_rows`)
+  matches via the word `"replan"` and never exercised the removed `"instead"`/`"instead of"` needles at all.
+  Added `sanctioned_replan_does_not_fire_on_routine_instead_of_tool_choice_steer_rows` in
+  `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, proving a routine steer like "Use rg instead of grep"
+  does not set `sanctioned_replan`.
+- **Confirmed, not changed: the needle-list tightening trades recall for precision, and this is intentional,
+  not a bug.** The reviewer correctly noted that dropping `"instead"`/`"instead of"` also means a genuine
+  replan phrased that way (e.g. "instead of reviewing A, review B" with no other magic word) is no longer
+  recognized as sanctioned, and that the same predicate feeds `objective_candidate_pivot_priority` /
+  `narrowed_objective_summary`'s legacy candidate-selection tiebreak, not only the new `sanctioned_replan`
+  field. This is the same precision/recall tradeoff already chosen and documented above, now with a wider
+  confirmed blast radius (it can shift which row wins as the legacy narrowed-objective candidate, not just
+  the new field) — the full `R5.75-3`/`R5.75-4` acceptance assertions and full analyzer/sentinel walls stay
+  green, so no known regression exists in the committed corpus, but this is flagged here for future
+  awareness rather than re-litigated.
+- Fixed the stale phrase-list wording in the `R6-2.1.1` Finding above (it still described the pre-tightening
+  needle list as current; annotated in place rather than rewritten, to keep the historical record honest
+  about what was true when that finding was written).
 
 ## Deferred / Ask-First
 
