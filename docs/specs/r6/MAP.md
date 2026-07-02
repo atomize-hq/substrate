@@ -188,10 +188,12 @@ full-migration phase. The next active execution sequence is `R6-3`.
    TASKS ledger "Post-Closeout Codex Review Fixes" section.
    **Known limitation, carried as debt, not fixed in `R6-2`:** the semantic-distance check is disjoint-set
    overlap over normalized structured-goal terms, not a graduated distance (SPEC Resolved Decision 7). It
-   can miss legitimate narrowing (e.g. a target path narrowing from a crate root to one file inside it
-   reads as fully disjoint and gets flagged) and can be masked by any single shared
-   `PlatformBoundary`/`ScopeBoundary` constraint term. Anyone building `R6-3` or a future distance-metric
-   pass should read that Resolved Decision before assuming the current check is graduated.
+   can over-flag legitimate narrowing (e.g. a target path narrowing from a crate root to one file inside it
+   reads as fully disjoint and gets flagged as drift) and can miss real drift whenever the two goals still
+   share any single `PlatformBoundary`/`ScopeBoundary` constraint term (which masks it) or the anchor has no
+   concrete target and no boundary constraint (an empty anchor term set suppresses the claim). Anyone
+   building `R6-3` or a future distance-metric pass should read that Resolved Decision before assuming the
+   current check is graduated.
 6. **Next active seam: `R6-3` (rolling / previous-checkpoint semantic drift), with `R6-4` still conditional.**
    Land the committed follow-up that adds **rolling / previous-checkpoint** semantic drift (current
    checkpoint's structured goal vs the immediately-previous checkpoint's, reachable via `analysis.previous`

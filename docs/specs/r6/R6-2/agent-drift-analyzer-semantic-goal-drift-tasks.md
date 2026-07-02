@@ -367,6 +367,18 @@ three were verified against live code and git history before acting. Codex's raw
   residual risk is low. Filed as backlog Task R6-2.X.3 (re-add a `v0.6` contract regression), not addressed
   at closeout.
 
+After these three were addressed (SPEC/comment reconciliation committed, backlog tasks filed), a re-run of
+the same sign-off review over the updated range returned **GATE: PASS, zero `[P1]`** and confirmed all three
+resolutions. It surfaced two further non-blocking `[P2]`s, both handled here:
+
+- **`docs/specs/r6/MAP.md` item 5 miss-vs-over-fire wording (fixed).** MAP said the disjoint-set check "can
+  miss legitimate narrowing" while its own example (narrowing "gets flagged") is an over-*fire*, not a miss.
+  Corrected MAP item 5 to attribute narrowing to over-flagging and the shared-constraint / empty-anchor cases
+  to misses, matching SPEC Resolved Decision 7 and the `semantic_goal_diverged` comment.
+- **Core `Checkpoint` type also does not enforce `turn_context` for `v0.4`+ (folded into backlog).** Same
+  class as the `drift_scores[*].state` fail-open and mitigated the same way (sentinel `require_non_null_field`
+  fails closed). Folded into Task R6-2.X.2 rather than opening a near-identical task.
+
 ## Deferred / Ask-First
 
 - [ ] Task R6-2.X.1: Open the conditional `R6-4` (progress.rs reset onto `comparison_key`).
@@ -378,15 +390,18 @@ three were verified against live code and git history before acting. Codex's raw
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
 
-- [ ] Task R6-2.X.2: Fail closed on missing `drift_scores[*].state` in the core `Checkpoint` type.
+- [ ] Task R6-2.X.2: Fail closed on missing required fields (`drift_scores[*].state`, `turn_context`) in the
+  core `Checkpoint` type.
   - Acceptance: `RawCheckpoint::into_checkpoint` (or an equivalent gate) rejects a post-`v0.2` checkpoint
-    whose `drift_scores` omit an explicit `state`, matching the sentinel's `validate_drift_score_state_contract`
-    rather than relying on `#[serde(default)]` collapsing missing state to `Cleared`. Pre-existing since
-    `b035d73f2` (`v0.6a`), surfaced by the `R6-2` final sign-off review (Third Round above). Non-blocking
-    because the sentinel trust boundary already fails closed; this hardens the library type for any consumer
-    that deserializes untrusted checkpoints directly through `agent_drift_analyzer::Checkpoint`.
-  - Verify: a new `schema.rs` unit test asserting a `v0.7` checkpoint with a stateless drift score fails to
-    deserialize through `agent_drift_analyzer::Checkpoint`.
+    whose `drift_scores` omit an explicit `state`, and rejects a `v0.4`+ checkpoint whose `turn_context` is
+    absent, matching the sentinel's `validate_drift_score_state_contract` / `require_non_null_field`
+    contracts rather than relying on `#[serde(default)]` collapsing missing `state` to `Cleared` (and
+    leaving `turn_context` unenforced). Both are pre-existing (`state` since `b035d73f2` / `v0.6a`), surfaced
+    by the `R6-2` final sign-off review (Third Round above). Non-blocking because the sentinel trust boundary
+    already fails closed for both; this hardens the library type for any consumer that deserializes untrusted
+    checkpoints directly through `agent_drift_analyzer::Checkpoint`.
+  - Verify: new `schema.rs` unit tests asserting a `v0.7` checkpoint with a stateless drift score, and one
+    with a missing `turn_context`, each fail to deserialize through `agent_drift_analyzer::Checkpoint`.
   - Files:
     - `crates/agent-drift-analyzer/src/checkpoint/schema.rs`
 
