@@ -17,7 +17,10 @@ use super::{
         WorldDispatchRequestV1, WorldTaskTerminalStateV1,
     },
     mapping::MEMBER_ROLE,
-    state_store::{validate_retained_worker_authoritative_lineage, AgentRuntimeStateStore},
+    state_store::{
+        exact_continue_retained_worker_is_routable, validate_retained_worker_authoritative_lineage,
+        AgentRuntimeStateStore,
+    },
 };
 
 /// Frozen adapter-visible contract for host-owned tool invocation above the
@@ -104,9 +107,8 @@ impl HostToolNameV1 {
 
     fn retained_follow_up_target_requirement(self) -> RetainedFollowUpTargetRequirementV1 {
         match self {
-            Self::ContinueWorldWorker | Self::CancelWorldWork => {
-                RetainedFollowUpTargetRequirementV1::AuthoritativeLive
-            }
+            Self::ContinueWorldWorker => RetainedFollowUpTargetRequirementV1::ContinueRoutable,
+            Self::CancelWorldWork => RetainedFollowUpTargetRequirementV1::AuthoritativeLive,
             Self::ForkWorldWorker | Self::StopWorldWorker => {
                 RetainedFollowUpTargetRequirementV1::NonTerminal
             }
@@ -115,10 +117,6 @@ impl HostToolNameV1 {
             }
         }
     }
-
-    fn retains_successor_lineage_authority(self) -> bool {
-        matches!(self, Self::ForkWorldWorker | Self::CancelWorldWork)
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,6 +124,7 @@ enum RetainedFollowUpTargetRequirementV1 {
     LinkedOnly,
     NonTerminal,
     AuthoritativeLive,
+    ContinueRoutable,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -936,25 +935,11 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
                     retained_worker.participant_id
                 );
             }
-            if tool_name.retains_successor_lineage_authority() {
-                validate_retained_worker_authoritative_lineage(
-                    &record,
-                    &authority.caller_participant,
-                    &target_participant,
-                )?;
-            } else if target_participant
-                .handle
-                .orchestrator_participant_id
-                .as_deref()
-                != Some(authority.caller_participant.participant_id())
-            {
-                bail!(
-                    "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
-                    metadata.orchestration_session_id,
-                    retained_worker.participant_id,
-                    authority.caller_participant.participant_id()
-                );
-            }
+            validate_retained_worker_authoritative_lineage(
+                &record,
+                &authority.caller_participant,
+                &target_participant,
+            )?;
             if !target_participant.matches_authoritative_parent_world_binding(&authority.session) {
                 bail!(
                     "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
@@ -981,6 +966,19 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
                     if record.live_participants().into_iter().all(|participant| {
                         participant.participant_id() != target_participant.participant_id()
                     }) {
+                        bail!(
+                            "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
+                            metadata.orchestration_session_id,
+                            retained_worker.participant_id
+                        );
+                    }
+                }
+                RetainedFollowUpTargetRequirementV1::ContinueRoutable => {
+                    if !exact_continue_retained_worker_is_routable(
+                        &authority.session,
+                        &authority.caller_participant,
+                        &target_participant,
+                    ) {
                         bail!(
                             "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
                             metadata.orchestration_session_id,
@@ -2322,7 +2320,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn dispatch_contract_adapter_follow_up_resolution_rejects_successor_authority_for_out_of_scope_retained_follow_ups(
+    fn dispatch_contract_adapter_follow_up_resolution_accepts_successor_authority_for_retained_continue_inspect_and_stop(
     ) {
         with_store(|store| {
             let mut launch_orchestrator =
@@ -2365,7 +2363,7 @@ mod tests {
                 HostToolNameV1::InspectWorldWorker,
                 HostToolNameV1::StopWorldWorker,
             ] {
-                let err = resolve_follow_up_dispatch_authority_v1(
+                let resolved = resolve_follow_up_dispatch_authority_v1(
                     store,
                     &metadata,
                     tool_name,
@@ -2373,11 +2371,13 @@ mod tests {
                         participant_id: "worker_packet2_retained".to_string(),
                     }),
                 )
-                .expect_err("successor must not authorize out-of-scope retained follow-up");
+                .expect("successor lineage should authorize retained follow-up");
 
+                assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
+                assert_eq!(resolved.target_backend_id, "cli:codex_world");
                 assert_eq!(
-                    err.to_string(),
-                    "stale_linkage: orchestration session sess_packet2 retained worker worker_packet2_retained is not linked to authoritative orchestrator orch_packet2_successor"
+                    resolved.target_participant_id.as_deref(),
+                    Some("worker_packet2_retained")
                 );
             }
         });
@@ -2594,6 +2594,126 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_allows_continue_for_parked_resumable_retained_worker(
+    ) {
+        with_store(|store| {
+            let orchestrator =
+                detached_orchestrator("codex", "sess_packet2_parked", "orch_packet2_parked");
+            let parent = parked_parent(&orchestrator);
+            let mut member = live_member(
+                "codex_world",
+                "sess_packet2_parked",
+                "worker_packet2_parked",
+                "orch_packet2_parked",
+            );
+            member.release_runtime_ownership();
+            member.internal.shell_owner_pid = 999_999_999;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let metadata = HostToolRuntimeDispatchMetadataV1 {
+                orchestration_session_id: "sess_packet2_parked".to_string(),
+                caller_participant_id: "orch_packet2_parked".to_string(),
+                ..sample_runtime_metadata()
+            };
+
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::ContinueWorldWorker,
+                &HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_parked".to_string(),
+                }),
+            )
+            .expect("parked resumable retained worker should remain continue-routable");
+
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(
+                resolved.target_participant_id.as_deref(),
+                Some("worker_packet2_parked")
+            );
+
+            let request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+                store,
+                &metadata,
+                HostToolNameV1::ContinueWorldWorker,
+                HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_parked".to_string(),
+                }),
+                WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                    prompt: "Resume the parked retained worker.".to_string(),
+                    thread_id: Some("thread-packet2-parked".to_string()),
+                }),
+            )
+            .expect("translate parked retained continue request");
+
+            let validated = request
+                .validate()
+                .expect("validate retained continue request");
+            assert_eq!(validated.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(
+                validated.target_participant_id.as_deref(),
+                Some("worker_packet2_parked")
+            );
+            assert_eq!(validated.target_backend_id, "cli:codex_world");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_follow_up_resolution_allows_continue_for_exact_retained_worker_after_owner_exit(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
+            let mut member = live_member(
+                "codex_world",
+                "sess_packet2",
+                "worker_packet2_detached_continue",
+                "orch_packet2",
+            );
+            member.release_runtime_ownership();
+            member.internal.shell_owner_pid = 999_999_999;
+
+            let parent = active_parent(&orchestrator);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let metadata = sample_runtime_metadata();
+            let resolved = resolve_follow_up_dispatch_authority_v1(
+                store,
+                &metadata,
+                HostToolNameV1::ContinueWorldWorker,
+                &HostToolFollowUpHandleV1::RetainedWorker(super::RetainedWorkerHandleV1 {
+                    participant_id: "worker_packet2_detached_continue".to_string(),
+                }),
+            )
+            .expect(
+                "exact retained continue should not depend on owner PID liveness or live authority",
+            );
+
+            assert_eq!(resolved.mode, WorldDispatchModeV1::Retained);
+            assert_eq!(resolved.target_backend_id, "cli:codex_world");
+            assert_eq!(
+                resolved.target_participant_id.as_deref(),
+                Some("worker_packet2_detached_continue")
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn dispatch_contract_adapter_follow_up_resolution_rejects_active_handle_for_retained_only_tool()
     {
         with_store(|store| {
@@ -2721,6 +2841,14 @@ mod tests {
         parent.world_id = Some("world-17".to_string());
         parent.world_generation = Some(2);
         parent.bind_active_session_handle(participant.handle.participant_id.clone());
+        parent
+    }
+
+    fn parked_parent(
+        participant: &AgentRuntimeParticipantRecord,
+    ) -> crate::execution::agent_runtime::OrchestrationSessionRecord {
+        let mut parent = active_parent(participant);
+        parent.mark_parked_resumable("owner detached cleanly");
         parent
     }
 

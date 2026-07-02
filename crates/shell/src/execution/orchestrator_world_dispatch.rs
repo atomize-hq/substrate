@@ -9589,7 +9589,17 @@ agents:
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let mut member = store
+            .load_participant("ash_member")
+            .expect("load retained worker")
+            .expect("retained worker must exist");
+        member.mark_terminal_state("worker invalidated");
+        member.transition_state(AgentRuntimeSessionState::Invalidated);
+        store
+            .persist_participant(&member)
+            .expect("persist terminal retained worker");
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -9605,17 +9615,21 @@ agents:
         );
         assert!(
             message.contains("stale_linkage:"),
-            "progress_ack routing should now reach retained-worker lifecycle resolution: {message}"
+            "progress_ack routing should now reach retained-worker resolution before delivery: {message}"
         );
         assert!(
             !message.contains(
                 "world_binding_mismatch: orchestration session sess_dispatch retained worker"
             ),
-            "stale-linkage failure should stay specific without widening to topology drift messaging: {message}"
+            "resolution failure should stay specific without widening to topology drift messaging: {message}"
         );
         assert!(
             !message.contains("invalid_dispatch_payload:"),
             "policy-enabled progress_ack routing should not fail in submit-request rendering: {message}"
+        );
+        assert!(
+            !message.contains("failed to build member turn submit client for continue_world_worker"),
+            "progress_ack routing should fail in retained-target resolution before member-turn delivery: {message}"
         );
     }
 

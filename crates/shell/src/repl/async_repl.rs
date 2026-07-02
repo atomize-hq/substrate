@@ -121,8 +121,8 @@ use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::{
-    build_agent_client_and_member_dispatch_request, build_agent_client_and_pending_diff_request,
-    MemberDispatchTransportRequest,
+    build_agent_client_and_member_dispatch_request_for_cwd,
+    build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
 };
 use crate::execution::{
     canonicalize_or, enforce_caged_destination, execute_command, find_workspace_root,
@@ -2016,6 +2016,83 @@ fn retained_member_runtime_storage_key(runtime: &AsyncReplAgentRuntime) -> Strin
         )
     } else {
         manifest.handle.backend_id
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn retained_member_runtime_matches_backend_generation(
+    startup_context: &RuntimeOrchestrationContext,
+    backend_id: &str,
+    world_generation: u64,
+    manifest: &AgentRuntimeParticipantRecord,
+) -> bool {
+    manifest.handle.role == MEMBER_ROLE
+        && manifest.handle.execution.scope == AgentExecutionScope::World
+        && manifest.handle.orchestration_session_id == startup_context.orchestration_session_id()
+        && manifest.handle.backend_id == backend_id
+        && manifest.handle.world_generation == Some(world_generation)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn resolve_retained_member_runtime_key_for_backend_generation(
+    startup_context: &RuntimeOrchestrationContext,
+    member_runtimes: &RetainedMemberRuntimeMap,
+    backend_id: &str,
+    world_generation: u64,
+    preferred_participant_id: Option<&str>,
+) -> std::result::Result<Option<String>, RuntimeBootstrapFailure> {
+    if let Some(runtime) = member_runtimes.get(backend_id) {
+        let manifest = runtime_manifest_snapshot(runtime);
+        if retained_member_runtime_matches_backend_generation(
+            startup_context,
+            backend_id,
+            world_generation,
+            &manifest,
+        ) {
+            return Ok(Some(backend_id.to_string()));
+        }
+    }
+
+    let candidates = member_runtimes
+        .iter()
+        .filter_map(|(key, runtime)| {
+            let manifest = runtime_manifest_snapshot(runtime);
+            retained_member_runtime_matches_backend_generation(
+                startup_context,
+                backend_id,
+                world_generation,
+                &manifest,
+            )
+            .then_some((key.clone(), manifest.handle.participant_id))
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(preferred_participant_id) = preferred_participant_id {
+        if let Some((key, _participant_id)) = candidates
+            .iter()
+            .find(|(_key, participant_id)| participant_id.as_str() == preferred_participant_id)
+        {
+            return Ok(Some(key.clone()));
+        }
+    }
+
+    match candidates.as_slice() {
+        [] => Ok(None),
+        [(key, _participant_id)] => Ok(Some(key.clone())),
+        _ => {
+            let participant_ids = candidates
+                .iter()
+                .map(|(_key, participant_id)| participant_id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(RuntimeBootstrapFailure {
+                exit_code: 2,
+                message: format!(
+                    "generic world-targeted turns for backend '{}' in world generation {} are ambiguous because multiple retained runtimes remain after same-backend forking ({participant_ids})",
+                    backend_id, world_generation
+                ),
+            })
+        }
     }
 }
 
@@ -5385,8 +5462,31 @@ async fn dispatch_targeted_follow_up_turn(
             if launched_from_targeted_prompt {
                 return Ok(TargetedTurnDispatchStatus::Submitted);
             }
-            let runtime = member_runtimes
-                .get_mut(targeted_turn.backend_id)
+            let descriptor = parity.to_runtime_selection_descriptor();
+            let runtime_lookup_key = match (startup_context.as_ref(), world_session.as_ref()) {
+                (Some(startup_context), Some(world_session)) => {
+                    let exact_live_member = live_member_for_generation(
+                        startup_context,
+                        &descriptor,
+                        world_session.world_generation,
+                    )
+                    .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+                    resolve_retained_member_runtime_key_for_backend_generation(
+                        startup_context,
+                        member_runtimes,
+                        targeted_turn.backend_id,
+                        world_session.world_generation,
+                        exact_live_member
+                            .as_ref()
+                            .map(|participant| participant.handle.participant_id.as_str()),
+                    )
+                    .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?
+                }
+                _ => Some(targeted_turn.backend_id.to_string()),
+            };
+            let runtime = runtime_lookup_key
+                .as_deref()
+                .and_then(|key| member_runtimes.get_mut(key))
                 .ok_or_else(|| {
                     anyhow!(
                         "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns for backend '{}'",
@@ -7301,8 +7401,9 @@ async fn start_remote_member_runtime_with_prepared(
         agent_printer,
     );
 
+    let workspace_root = PathBuf::from(startup_context.snapshot().workspace_root.clone());
     let (client, request, _agent_id) =
-        build_agent_client_and_member_dispatch_request(&transport_request)
+        build_agent_client_and_member_dispatch_request_for_cwd(&transport_request, &workspace_root)
             .map_err(runtime_bootstrap_failure_from_anyhow)?;
     let response = client
         .execute_stream(request)
@@ -7987,8 +8088,21 @@ async fn ensure_member_runtime_ready_for_descriptor(
     let exact_live_member =
         live_member_for_generation(startup_context, &descriptor, world_session.world_generation)
             .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+    let retained_runtime_key = resolve_retained_member_runtime_key_for_backend_generation(
+        startup_context,
+        member_runtimes,
+        &descriptor.backend_id,
+        world_session.world_generation,
+        exact_live_member
+            .as_ref()
+            .map(|participant| participant.handle.participant_id.as_str()),
+    )
+    .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
-    if let Some(runtime) = member_runtimes.get(&descriptor.backend_id) {
+    if let Some(runtime_key) = retained_runtime_key.as_deref() {
+        let runtime = member_runtimes
+            .get(runtime_key)
+            .expect("resolved retained member runtime key must exist");
         let manifest_snapshot = runtime_manifest_snapshot(runtime);
         if manifest_snapshot.handle.role == MEMBER_ROLE
             && manifest_snapshot.handle.orchestration_session_id
@@ -8015,7 +8129,10 @@ async fn ensure_member_runtime_ready_for_descriptor(
         return Ok(false);
     }
 
-    if let Some(runtime) = member_runtimes.remove(&descriptor.backend_id) {
+    if let Some(runtime_key) = retained_runtime_key {
+        let runtime = member_runtimes
+            .remove(&runtime_key)
+            .expect("resolved retained member runtime key must remain removable");
         shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
 

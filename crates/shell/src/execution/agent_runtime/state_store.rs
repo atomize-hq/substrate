@@ -1610,19 +1610,11 @@ impl AgentRuntimeStateStore {
                 target_participant_id
             );
         }
-        if target_participant
-            .handle
-            .orchestrator_participant_id
-            .as_deref()
-            != Some(authoritative.participant.participant_id())
-        {
-            anyhow::bail!(
-                "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
-                orchestration_session_id,
-                target_participant_id,
-                authoritative.participant.participant_id()
-            );
-        }
+        validate_retained_worker_authoritative_lineage(
+            &record,
+            &authoritative.participant,
+            &target_participant,
+        )?;
         if !target_participant.matches_authoritative_parent_world_binding(&authoritative.session) {
             anyhow::bail!(
                 "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
@@ -1630,9 +1622,11 @@ impl AgentRuntimeStateStore {
                 target_participant_id
             );
         }
-        if !target_participant.is_authoritative_live()
-            || !owner_process_is_alive(&target_participant)
-        {
+        if !exact_continue_retained_worker_is_routable(
+            &authoritative.session,
+            &authoritative.participant,
+            &target_participant,
+        ) {
             anyhow::bail!(
                 "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
                 orchestration_session_id,
@@ -1661,9 +1655,11 @@ impl AgentRuntimeStateStore {
             target_participant_id,
             target_backend_id,
         )?;
-        if !resolved.source_participant.is_authoritative_live()
-            || !owner_process_is_alive(&resolved.source_participant)
-        {
+        if !exact_continue_retained_worker_is_routable(
+            &resolved.session,
+            &resolved.caller_participant,
+            &resolved.source_participant,
+        ) {
             anyhow::bail!(
                 "stale_linkage: orchestration session {} retained worker {} is no longer authoritative-live",
                 orchestration_session_id,
@@ -2053,19 +2049,11 @@ impl AgentRuntimeStateStore {
                 target_participant_id
             );
         }
-        if target_participant
-            .handle
-            .orchestrator_participant_id
-            .as_deref()
-            != Some(authoritative.participant.participant_id())
-        {
-            anyhow::bail!(
-                "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
-                orchestration_session_id,
-                target_participant_id,
-                authoritative.participant.participant_id()
-            );
-        }
+        validate_retained_worker_authoritative_lineage(
+            &record,
+            &authoritative.participant,
+            &target_participant,
+        )?;
         if !target_participant.matches_authoritative_parent_world_binding(&authoritative.session) {
             anyhow::bail!(
                 "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
@@ -2151,19 +2139,11 @@ impl AgentRuntimeStateStore {
                 target_participant_id
             );
         }
-        if target_participant
-            .handle
-            .orchestrator_participant_id
-            .as_deref()
-            != Some(authoritative.participant.participant_id())
-        {
-            anyhow::bail!(
-                "stale_linkage: orchestration session {} retained worker {} is not linked to authoritative orchestrator {}",
-                orchestration_session_id,
-                target_participant_id,
-                authoritative.participant.participant_id()
-            );
-        }
+        validate_retained_worker_authoritative_lineage(
+            &record,
+            &authoritative.participant,
+            &target_participant,
+        )?;
         if !target_participant.matches_authoritative_parent_world_binding(&authoritative.session) {
             anyhow::bail!(
                 "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
@@ -2418,7 +2398,8 @@ impl AgentRuntimeStateStore {
             resolve_authoritative_session_control(&record, orchestration_session_id)?;
 
         let slot_present = public_turn_session_mentions_backend(&record, backend_id);
-        let mut candidates = public_turn_authoritative_candidates(&record, backend_id);
+        let mut candidates =
+            public_turn_authoritative_candidates(&record, &authoritative.participant, backend_id);
         if candidates.is_empty() {
             if slot_present {
                 anyhow::bail!(
@@ -5034,26 +5015,17 @@ fn public_turn_session_mentions_backend(
 #[allow(dead_code)]
 fn public_turn_authoritative_candidates(
     record: &AgentRuntimeSessionRecord,
+    authoritative_participant: &AgentRuntimeParticipantRecord,
     backend_id: &str,
 ) -> Vec<PublicTurnTargetCandidate> {
     let mut candidates = Vec::new();
-    let active_participant_id = session_authoritative_participant_id(&record.session);
-
-    if let Some(active_participant_id) = active_participant_id {
-        if let Some(participant) = record
-            .participants
-            .iter()
-            .find(|participant| participant.participant_id() == active_participant_id)
-            .filter(|participant| {
-                participant.handle.backend_id == backend_id
-                    && participant.matches_public_parent_linkage(&record.session)
-            })
-        {
-            candidates.push(PublicTurnTargetCandidate {
-                participant: participant.clone(),
-                kind: PublicTurnTargetKind::Host,
-            });
-        }
+    if authoritative_participant.handle.backend_id == backend_id
+        && authoritative_participant.matches_public_parent_linkage(&record.session)
+    {
+        candidates.push(PublicTurnTargetCandidate {
+            participant: authoritative_participant.clone(),
+            kind: PublicTurnTargetKind::Host,
+        });
     }
 
     if record.session.world_id.is_none() || record.session.world_generation.is_none() {
@@ -5066,9 +5038,13 @@ fn public_turn_authoritative_candidates(
             .iter()
             .filter(|participant| {
                 participant.handle.backend_id == backend_id
-                    && participant.handle.orchestrator_participant_id.as_deref()
-                        == active_participant_id
                     && participant.matches_authoritative_parent_world_binding(&record.session)
+                    && validate_retained_worker_authoritative_lineage(
+                        record,
+                        authoritative_participant,
+                        participant,
+                    )
+                    .is_ok()
             })
             .cloned()
             .map(|participant| PublicTurnTargetCandidate {
@@ -5172,6 +5148,15 @@ pub(crate) fn validate_retained_worker_authoritative_lineage(
         target_participant.participant_id(),
         authoritative_participant_id
     );
+}
+
+pub(crate) fn exact_continue_retained_worker_is_routable(
+    _session: &OrchestrationSessionRecord,
+    _authoritative_participant: &AgentRuntimeParticipantRecord,
+    target_participant: &AgentRuntimeParticipantRecord,
+) -> bool {
+    target_participant.handle.state.is_live()
+        && target_participant.internal.terminal_observed_at.is_none()
 }
 
 fn resolve_authoritative_session_participant(
@@ -8684,6 +8669,105 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_public_turn_target_accepts_successor_lineage_world_member() {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex-host", "sess_world_turn_successor", "ash_launch");
+            let mut successor =
+                live_orchestrator("codex-host", "sess_world_turn_successor", "ash_successor");
+            successor.handle.resumed_from_participant_id = Some("ash_launch".to_string());
+            successor.handle.resumed_from_session_handle_id = Some("ash_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+
+            let member = live_member(
+                "codex-world",
+                "sess_world_turn_successor",
+                "ash_member",
+                "ash_launch",
+            );
+
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.bind_active_session_handle("ash_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let target = store
+                .resolve_public_turn_target("sess_world_turn_successor", "cli:codex-world")
+                .expect("successor lineage should resolve exact world-member target");
+
+            assert_eq!(target.participant.participant_id(), "ash_member");
+            assert_eq!(target.target_kind, PublicTurnTargetKind::World);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_reports_ambiguity_for_multiple_same_backend_successor_lineage_workers(
+    ) {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex-host", "sess_world_turn_ambiguous", "ash_launch");
+            let mut successor =
+                live_orchestrator("codex-host", "sess_world_turn_ambiguous", "ash_successor");
+            successor.handle.resumed_from_participant_id = Some("ash_launch".to_string());
+            successor.handle.resumed_from_session_handle_id = Some("ash_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+
+            let source = live_member(
+                "codex-world",
+                "sess_world_turn_ambiguous",
+                "ash_source",
+                "ash_launch",
+            );
+            let mut child = live_member(
+                "codex-world",
+                "sess_world_turn_ambiguous",
+                "ash_child",
+                "ash_launch",
+            );
+            child.handle.parent_participant_id = Some("ash_source".to_string());
+
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.bind_active_session_handle("ash_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store.persist_participant(&source).expect("persist source");
+            store.persist_participant(&child).expect("persist child");
+
+            let err = store
+                .resolve_public_turn_target("sess_world_turn_ambiguous", "cli:codex-world")
+                .expect_err("same-backend retained targets must fail closed as ambiguous");
+
+            let err = err.to_string();
+            assert!(err.contains("ambiguous_backend_slot"));
+            assert!(err.contains("sess_world_turn_ambiguous"));
+            assert!(err.contains("cli:codex-world"));
+            assert!(err.contains("ash_source"));
+            assert!(err.contains("ash_child"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_public_turn_target_rejects_retired_codex_exact_selector() {
         with_store(|store| {
             let participant = live_orchestrator("codex-host", "sess_public_turn", "ash_selected");
@@ -9541,6 +9625,67 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_internal_continue_world_dispatch_target_accepts_successor_authoritative_caller_for_retained_worker(
+    ) {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex", "sess_continue", "orch_continue_launch");
+            let mut successor =
+                live_orchestrator("codex", "sess_continue", "orch_continue_successor");
+            successor.handle.resumed_from_participant_id = Some("orch_continue_launch".to_string());
+            successor.handle.resumed_from_session_handle_id =
+                Some("orch_continue_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+
+            let member = live_member(
+                "codex_world",
+                "sess_continue",
+                "ash_continue",
+                "orch_continue_launch",
+            );
+
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.bind_active_session_handle("orch_continue_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue",
+                    "orch_continue_successor",
+                    "ash_continue",
+                    "cli:codex_world",
+                )
+                .expect("resolve retained continue target through authoritative successor");
+
+            assert_eq!(
+                resolved.caller_participant.participant_id(),
+                "orch_continue_successor"
+            );
+            assert_eq!(resolved.target_participant.participant_id(), "ash_continue");
+            assert_eq!(
+                resolved
+                    .target_participant
+                    .handle
+                    .orchestrator_participant_id
+                    .as_deref(),
+                Some("orch_continue_launch")
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_internal_continue_world_dispatch_target_rejects_backend_mismatch() {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_continue", "orch_continue");
@@ -9620,7 +9765,8 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_internal_continue_world_dispatch_target_rejects_stale_retained_worker() {
+    fn resolve_internal_continue_world_dispatch_target_accepts_retained_worker_after_owner_pid_exit(
+    ) {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_continue", "orch_continue");
             let mut parent = active_parent(&orchestrator);
@@ -9642,19 +9788,67 @@ mod tests {
                 .expect("persist orchestrator");
             store.persist_participant(&member).expect("persist member");
 
-            let err = store
+            let resolved = store
                 .resolve_internal_continue_world_dispatch_target(
                     "sess_continue",
                     "orch_continue",
                     "ash_continue",
                     "cli:codex_world",
                 )
-                .expect_err("stale retained worker must fail closed");
+                .expect("exact retained continue should not depend on owner PID liveness");
 
             assert_eq!(
-                err.to_string(),
-                "stale_linkage: orchestration session sess_continue retained worker ash_continue is no longer authoritative-live"
+                resolved.caller_participant.participant_id(),
+                "orch_continue"
             );
+            assert_eq!(resolved.target_participant.participant_id(), "ash_continue");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_continue_world_dispatch_target_accepts_parked_resumable_retained_worker() {
+        with_store(|store| {
+            let orchestrator =
+                detached_orchestrator("codex", "sess_continue_parked", "orch_continue_parked");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member = live_member(
+                "codex_world",
+                "sess_continue_parked",
+                "ash_continue_parked",
+                "orch_continue_parked",
+            );
+            member.release_runtime_ownership();
+            member.internal.shell_owner_pid = 999_999_999;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_continue_world_dispatch_target(
+                    "sess_continue_parked",
+                    "orch_continue_parked",
+                    "ash_continue_parked",
+                    "cli:codex_world",
+                )
+                .expect("parked resumable retained worker should remain continue-routable");
+
+            assert_eq!(
+                resolved.caller_participant.participant_id(),
+                "orch_continue_parked"
+            );
+            assert_eq!(
+                resolved.target_participant.participant_id(),
+                "ash_continue_parked"
+            );
+            assert!(!resolved.target_participant.is_authoritative_live());
         });
     }
 
@@ -11013,7 +11207,8 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_internal_continue_fork_command_dispatch_target_rejects_stale_retained_source() {
+    fn resolve_internal_continue_fork_command_dispatch_target_accepts_retained_source_after_owner_pid_exit(
+    ) {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_fork", "orch_fork");
             let mut parent = active_parent(&orchestrator);
@@ -11030,19 +11225,53 @@ mod tests {
                 .expect("persist orchestrator");
             store.persist_participant(&member).expect("persist member");
 
-            let err = store
+            let resolved = store
                 .resolve_internal_continue_fork_command_dispatch_target(
                     "sess_fork",
                     "orch_fork",
                     "ash_source",
                     "cli:codex_world",
                 )
-                .expect_err("stale source must fail closed for continue fork command");
+                .expect("continue-fork exact source should not depend on owner PID liveness");
 
-            assert_eq!(
-                err.to_string(),
-                "stale_linkage: orchestration session sess_fork retained worker ash_source is no longer authoritative-live"
-            );
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_fork");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_source");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_continue_fork_command_dispatch_target_accepts_parked_resumable_source() {
+        with_store(|store| {
+            let orchestrator = detached_orchestrator("codex", "sess_fork_parked", "orch_fork");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let mut member =
+                live_member("codex_world", "sess_fork_parked", "ash_source", "orch_fork");
+            member.release_runtime_ownership();
+            member.internal.shell_owner_pid = 999_999_999;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_continue_fork_command_dispatch_target(
+                    "sess_fork_parked",
+                    "orch_fork",
+                    "ash_source",
+                    "cli:codex_world",
+                )
+                .expect("parked resumable retained source should remain continue-routable");
+
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_fork");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_source");
+            assert!(!resolved.target_participant.is_authoritative_live());
         });
     }
 
@@ -11183,6 +11412,67 @@ mod tests {
 
             assert_eq!(resolved.caller_participant.participant_id(), "orch_inspect");
             assert_eq!(resolved.target_participant.participant_id(), "ash_inspect");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_inspect_world_dispatch_target_accepts_successor_authoritative_caller_for_retained_worker(
+    ) {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex", "sess_inspect", "orch_inspect_launch");
+            let mut successor =
+                live_orchestrator("codex", "sess_inspect", "orch_inspect_successor");
+            successor.handle.resumed_from_participant_id = Some("orch_inspect_launch".to_string());
+            successor.handle.resumed_from_session_handle_id =
+                Some("orch_inspect_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+
+            let member = live_member(
+                "codex_world",
+                "sess_inspect",
+                "ash_inspect",
+                "orch_inspect_launch",
+            );
+
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.bind_active_session_handle("orch_inspect_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_inspect_world_dispatch_target(
+                    "sess_inspect",
+                    "orch_inspect_successor",
+                    "ash_inspect",
+                    "cli:codex_world",
+                )
+                .expect("resolve retained inspect target through authoritative successor");
+
+            assert_eq!(
+                resolved.caller_participant.participant_id(),
+                "orch_inspect_successor"
+            );
+            assert_eq!(resolved.target_participant.participant_id(), "ash_inspect");
+            assert_eq!(
+                resolved
+                    .target_participant
+                    .handle
+                    .orchestrator_participant_id
+                    .as_deref(),
+                Some("orch_inspect_launch")
+            );
         });
     }
 
@@ -11569,6 +11859,60 @@ mod tests {
 
             assert_eq!(resolved.caller_participant.participant_id(), "orch_stop");
             assert_eq!(resolved.target_participant.participant_id(), "ash_stop");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_accepts_successor_authoritative_caller_for_retained_worker(
+    ) {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex", "sess_stop", "orch_stop_launch");
+            let mut successor = live_orchestrator("codex", "sess_stop", "orch_stop_successor");
+            successor.handle.resumed_from_participant_id = Some("orch_stop_launch".to_string());
+            successor.handle.resumed_from_session_handle_id = Some("orch_stop_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop_launch");
+
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.bind_active_session_handle("orch_stop_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop_successor",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect("resolve retained stop target through authoritative successor");
+
+            assert_eq!(
+                resolved.caller_participant.participant_id(),
+                "orch_stop_successor"
+            );
+            assert_eq!(resolved.target_participant.participant_id(), "ash_stop");
+            assert_eq!(
+                resolved
+                    .target_participant
+                    .handle
+                    .orchestrator_participant_id
+                    .as_deref(),
+                Some("orch_stop_launch")
+            );
         });
     }
 

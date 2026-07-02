@@ -3314,6 +3314,292 @@ fn c3_targeted_turn_requires_exact_double_colon_grammar_before_shell_fallback() 
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_world_turn_reuses_surviving_same_backend_fork_child_after_source_stop() {
+    let temp = temp_dir("substrate-c3-targeted-world-fork-child-submit-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex-world",
+            enabled: true,
+            allowed_backends: &["cli:codex-world"],
+            allowed_actions: &[
+                "spawn_world_worker",
+                "fork_world_worker",
+                "stop_world_worker",
+            ],
+            allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-world-fork-child-submit-");
+    let backend_sock = sock_temp.path().join("backend-world.sock");
+    let proxy_sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &backend_sock,
+        StreamBehavior::Normal,
+        vec![
+            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-targeted-world-source".to_string(),
+                exit_code_on_cancel: 130,
+            },
+            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-targeted-world-child".to_string(),
+                exit_code_on_cancel: 130,
+            },
+        ],
+    );
+    wait_for_socket_path(&backend_sock, Duration::from_secs(2));
+    let records = server.records();
+    let (member_turn_submits, proxy_shutdown, proxy_thread) =
+        start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
+            &proxy_sock,
+            &backend_sock,
+            vec![MemberTurnInterceptScript::GenericReply],
+            Some(ForkChildPersistenceConfig {
+                substrate_home: substrate_home.clone(),
+                child_session_handle_id: "session-targeted-world-child".to_string(),
+            }),
+        );
+
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &proxy_sock,
+        &[],
+        &["--world"],
+    );
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let source_member = &live_members[0];
+    let source_participant_id = source_member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("source participant_id")
+        .to_string();
+    let source_orchestrator_participant_id = source_member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("source orchestrator_participant_id")
+        .to_string();
+    let world_id = source_member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("source world_id")
+        .to_string();
+    let world_generation = source_member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("source world_generation");
+
+    let fork = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_targeted_world_follow_up_fork",
+            "idempotency_key": "idem_targeted_world_follow_up_fork",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "fork_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex-world",
+            "target_participant_id": source_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_fork",
+                "prompt": "bootstrap a retained child for the follow-up route",
+                "fork_reason": "cover same-backend follow-up reuse",
+                "fork_strategy": "exact_source_retained",
+            }
+        }),
+    );
+    assert_eq!(fork.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        fork.pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("fork_world_worker")
+    );
+    let child_participant_id = fork
+        .pointer("/outcome/child_participant_id")
+        .and_then(Value::as_str)
+        .expect("fork child participant id")
+        .to_string();
+    assert_ne!(child_participant_id, source_participant_id);
+
+    let fork_live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        2,
+        Duration::from_secs(5),
+    );
+    assert!(
+        fork_live_members.iter().any(|manifest| {
+            manifest.get("participant_id").and_then(Value::as_str)
+                == Some(child_participant_id.as_str())
+        }),
+        "fork must publish the authoritative live child before the source is stopped: {fork_live_members:?}"
+    );
+
+    let stop = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_targeted_world_follow_up_stop_source",
+            "idempotency_key": "idem_targeted_world_follow_up_stop_source",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "stop_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex-world",
+            "target_participant_id": source_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_stop"
+            }
+        }),
+    );
+    assert_eq!(stop.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        stop.pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("stop_world_worker")
+    );
+    assert_eq!(
+        stop.pointer("/outcome/target_participant_id")
+            .and_then(Value::as_str),
+        Some(source_participant_id.as_str())
+    );
+
+    let surviving_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        surviving_members[0]
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some(child_participant_id.as_str()),
+        "stopping the source must leave the retained fork child as the only live world member"
+    );
+
+    let member_dispatch_count_before_follow_up = {
+        let guard = records.lock().expect("lock records");
+        guard.member_dispatch_requests.len()
+    };
+
+    repl.send_line("::cli:codex-world second");
+    let submit_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < submit_deadline
+        && member_turn_submits
+            .lock()
+            .expect("lock intercepted member turn submits")
+            .is_empty()
+    {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    repl.wait_for_output(
+        "targeted follow-up turn completed for cli:codex-world",
+        Duration::from_secs(3),
+    )
+    .expect("typed submit route completion");
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        member_dispatch_count_before_follow_up,
+        "generic targeted follow-up must reuse the surviving retained child instead of relaunching the backend: {guard:#?}"
+    );
+    drop(guard);
+
+    let intercepted_turns = member_turn_submits
+        .lock()
+        .expect("lock intercepted member turn submits");
+    let submit = intercepted_turns
+        .last()
+        .expect("member turn submit request");
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, child_participant_id);
+    assert_eq!(
+        submit.orchestrator_participant_id,
+        source_orchestrator_participant_id
+    );
+    assert_eq!(submit.backend_id, "cli:codex-world");
+    assert_eq!(submit.world_id, world_id);
+    assert_eq!(submit.world_generation, world_generation);
+    assert_eq!(submit.prompt, "second");
+    drop(intercepted_turns);
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    proxy_shutdown.store(true, Ordering::SeqCst);
+    proxy_thread
+        .join()
+        .expect("join member turn intercept proxy");
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
@@ -8069,6 +8355,8 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
+    let child_str = child.to_string_lossy().into_owned();
+    let parent_cwd_str = temp.path().to_string_lossy().into_owned();
     let project_canon = project.canonicalize().unwrap_or(project.clone());
     let parent_canon = temp
         .path()
@@ -8111,9 +8399,22 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     let second = &guard.persistent_start_sessions[1];
 
     assert_eq!(
+        first.cwd, child_str,
+        "expected the initial persistent session to start from the child cwd"
+    );
+    assert_eq!(
         first.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
         Some(project_str.as_str()),
         "expected initial anchor path to be workspace root"
+    );
+    assert_ne!(
+        first.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
+        Some(first.cwd.as_str()),
+        "expected the initial anchor path to come from the workspace root, not the child cwd"
+    );
+    assert_eq!(
+        second.cwd, parent_cwd_str,
+        "expected the drift restart to request the new cwd outside the workspace"
     );
     assert_eq!(
         second.env.get("SUBSTRATE_ANCHOR_PATH").map(String::as_str),
