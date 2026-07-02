@@ -101,6 +101,13 @@ fn structured_matches_confident_task_statement(
         && structured.unknowns.is_empty()
 }
 
+// KNOWN LIMITATION (accepted v1 debt, not a bug to silently "fix" here — see
+// docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-spec.md Resolved Decision 7 and
+// docs/specs/r6/MAP.md item 5): this is a binary disjoint-set check, not a graduated distance.
+// A legitimate narrowing (e.g. a target path narrowing from a crate root to one file inside it)
+// reads as fully disjoint and gets flagged; any single shared constraint term (PlatformBoundary/
+// ScopeBoundary) masks real drift. Revisiting this as a weighted/graduated distance is deferred
+// to a later R6 iteration — do not assume this already grades partial overlap.
 fn semantic_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     anchor_goal: &StructuredObjective,

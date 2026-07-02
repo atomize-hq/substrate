@@ -182,14 +182,24 @@ full-migration phase. The next active execution sequence is `R6-3`.
    structured-sidecar consumer. Closeout is confirmed by the green full analyzer wall plus the green full
    sentinel wall on 2026-07-01 (`cargo test -p agent-drift-analyzer -- --nocapture`,
    `cargo test -p agent-drift-sentinel -- --nocapture`). `R6-4` stays **deferred** because no `R6-1`/`R6-2`
-   replay evidence showed `progress.rs` reset errors caused by objective-string quality.
+   replay evidence showed `progress.rs` reset errors caused by objective-string quality. A follow-up codex
+   second-opinion review (2026-07-01) found and fixed one real bug (the kickoff anchor was being applied to
+   checkpoints ordinally before the one that established it) and one sentinel coverage hole; see the `R6-2`
+   TASKS ledger "Post-Closeout Codex Review Fixes" section.
+   **Known limitation, carried as debt, not fixed in `R6-2`:** the semantic-distance check is disjoint-set
+   overlap over normalized structured-goal terms, not a graduated distance (SPEC Resolved Decision 7). It
+   can miss legitimate narrowing (e.g. a target path narrowing from a crate root to one file inside it
+   reads as fully disjoint and gets flagged) and can be masked by any single shared
+   `PlatformBoundary`/`ScopeBoundary` constraint term. Anyone building `R6-3` or a future distance-metric
+   pass should read that Resolved Decision before assuming the current check is graduated.
 6. **Next active seam: `R6-3` (rolling / previous-checkpoint semantic drift), with `R6-4` still conditional.**
    Land the committed follow-up that adds **rolling / previous-checkpoint** semantic drift (current
    checkpoint's structured goal vs the immediately-previous checkpoint's, reachable via `analysis.previous`
    with no new plumbing) to catch **abrupt single-checkpoint goal pivots** cheaply — the complement to the
    kickoff-anchored signal, which is the cumulative measure that catches gradual drift from the original ask.
    Open the conditional `R6-4` reset migration only if later evidence warrants. Guardrails enforced in tests
-   throughout.
+   throughout. `R6-3` reuses the same disjoint-set distance primitive unless it explicitly revisits it (see
+   item 5's known-limitation note) — decide deliberately, don't inherit it silently.
 
 ## Non-Goals For This Rescope
 
