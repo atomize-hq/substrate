@@ -10,6 +10,8 @@ use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const CURRENT_GOAL_REASON_PREFIX: &str = "semantic goal drift current goal:";
 const KICKOFF_ANCHOR_REASON_PREFIX: &str = "semantic goal drift kickoff anchor:";
+const ROLLING_CURRENT_REASON_PREFIX: &str = "rolling semantic goal drift current goal:";
+const ROLLING_PREVIOUS_REASON_PREFIX: &str = "rolling semantic goal drift previous goal:";
 const DRIFT_RAW_SCORE: u8 = 80;
 
 pub(crate) fn score_semantic_goal_drift(
@@ -19,24 +21,55 @@ pub(crate) fn score_semantic_goal_drift(
     let Some(current_goal) = eligible_current_goal(&analysis.current.context.objective) else {
         return no_claim(Confidence::Low);
     };
-    let Some(anchor_goal) = eligible_anchor_goal(kickoff_anchor) else {
-        return no_claim(Confidence::Low);
-    };
+    let anchor_goal = eligible_anchor_goal(kickoff_anchor);
+    let previous_goal = eligible_previous_goal(analysis);
+    let kickoff_drift = anchor_goal
+        .is_some_and(|anchor| semantic_goal_diverged(&current_goal, anchor));
+    let rolling_drift = previous_goal
+        .as_ref()
+        .is_some_and(|previous| rolling_goal_diverged(&current_goal, previous));
 
-    if analysis.sanctioned_replan || !semantic_goal_diverged(&current_goal, anchor_goal) {
+    if analysis.sanctioned_replan {
         return no_claim(current_goal.structured.confidence);
     }
+    if !(kickoff_drift || rolling_drift) {
+        let confidence = if anchor_goal.is_some() || previous_goal.is_some() {
+            current_goal.structured.confidence
+        } else {
+            Confidence::Low
+        };
+        return no_claim(confidence);
+    }
 
-    let mut evidence = goal_evidence(
-        current_goal.summary.evidence.first(),
-        current_goal.description(),
-        CURRENT_GOAL_REASON_PREFIX,
-    );
-    evidence.extend(structured_goal_evidence(
-        anchor_goal,
-        structured_goal_description(anchor_goal),
-        KICKOFF_ANCHOR_REASON_PREFIX,
-    ));
+    let mut evidence = Vec::new();
+    if kickoff_drift {
+        evidence.extend(goal_evidence(
+            current_goal.summary.evidence.first(),
+            current_goal.description(),
+            CURRENT_GOAL_REASON_PREFIX,
+        ));
+        if let Some(anchor_goal) = anchor_goal {
+            evidence.extend(structured_goal_evidence(
+                anchor_goal,
+                structured_goal_description(anchor_goal),
+                KICKOFF_ANCHOR_REASON_PREFIX,
+            ));
+        }
+    }
+    if rolling_drift {
+        evidence.extend(goal_evidence(
+            current_goal.summary.evidence.first(),
+            current_goal.description(),
+            ROLLING_CURRENT_REASON_PREFIX,
+        ));
+        if let Some(previous_goal) = previous_goal.as_ref() {
+            evidence.extend(goal_evidence(
+                previous_goal.summary.evidence.first(),
+                previous_goal.description(),
+                ROLLING_PREVIOUS_REASON_PREFIX,
+            ));
+        }
+    }
     dedupe_evidence(&mut evidence);
 
     ScoredDrift::new(
@@ -84,6 +117,10 @@ fn eligible_anchor_goal(anchor: Option<&StructuredObjective>) -> Option<&Structu
     anchor.filter(|structured| structured_matches_anchor_bar(structured))
 }
 
+fn eligible_previous_goal(analysis: &CheckpointAnalysis) -> Option<EligibleCurrentGoal<'_>> {
+    eligible_current_goal(&analysis.previous.as_ref()?.context.objective)
+}
+
 fn structured_matches_current_goal_bar(structured: &StructuredObjective) -> bool {
     structured_matches_confident_task_statement(structured, Confidence::Medium)
 }
@@ -123,6 +160,17 @@ fn semantic_goal_diverged(
     }
 
     current_goal.specific_terms.is_disjoint(&anchor_terms)
+}
+
+fn rolling_goal_diverged(
+    current_goal: &EligibleCurrentGoal<'_>,
+    previous_goal: &EligibleCurrentGoal<'_>,
+) -> bool {
+    if current_goal.specific_terms.is_empty() || previous_goal.specific_terms.is_empty() {
+        return false;
+    }
+
+    current_goal.specific_terms.is_disjoint(&previous_goal.specific_terms)
 }
 
 fn goal_specific_terms(
@@ -301,6 +349,7 @@ mod tests {
 
     use super::{
         score_semantic_goal_drift, CURRENT_GOAL_REASON_PREFIX, KICKOFF_ANCHOR_REASON_PREFIX,
+        ROLLING_CURRENT_REASON_PREFIX, ROLLING_PREVIOUS_REASON_PREFIX,
     };
     use crate::checkpoint::{
         CheckpointAnalysis, CheckpointSlice, Confidence, EvidenceRef, ObjectiveClass,
@@ -444,6 +493,195 @@ mod tests {
     }
 
     #[test]
+    fn semantic_goal_drift_flags_rolling_pivot_with_named_previous_and_current_evidence() {
+        let anchor = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let previous = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(scored.score.flagged);
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)));
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_PREVIOUS_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(CURRENT_GOAL_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(KICKOFF_ANCHOR_REASON_PREFIX)));
+    }
+
+    #[test]
+    fn semantic_goal_drift_rolling_still_flags_without_confident_anchor() {
+        let previous = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(scored.score.flagged);
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)));
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_PREVIOUS_REASON_PREFIX)));
+    }
+
+    #[test]
+    fn semantic_goal_drift_skips_rolling_when_previous_checkpoint_is_absent() {
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(!scored.score.flagged);
+        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_skips_rolling_pivots_when_sanctioned_replan_is_present() {
+        let previous = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs",
+                Some(previous),
+                "previous structured goal",
+            )),
+            true,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(!scored.score.flagged);
+        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_cofire_preserves_family_order_and_keeps_both_current_goal_lines() {
+        let anchor = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let previous = structured_goal(
+            "docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-spec.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "docs|spec_or_design_doc|docs_specs_r6_r6_2_agent_drift_analyzer_semantic_goal_drift_spec_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(scored.score.flagged);
+        let reasons = scored
+            .score
+            .evidence
+            .iter()
+            .map(|item| item.reason.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(reasons.len(), 4);
+        assert!(reasons[0].starts_with(CURRENT_GOAL_REASON_PREFIX));
+        assert!(reasons[1].starts_with(KICKOFF_ANCHOR_REASON_PREFIX));
+        assert!(reasons[2].starts_with(ROLLING_CURRENT_REASON_PREFIX));
+        assert!(reasons[3].starts_with(ROLLING_PREVIOUS_REASON_PREFIX));
+        assert_eq!(
+            reasons
+                .iter()
+                .filter(|reason| {
+                    reason.starts_with(CURRENT_GOAL_REASON_PREFIX)
+                        || reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)
+                })
+                .count(),
+            2,
+            "co-fire keeps one current-goal line per comparison family instead of cross-family de-duping"
+        );
+    }
+
+    #[test]
     fn semantic_goal_drift_prefers_structured_goal_over_legacy_bridge_display_string() {
         let anchor = structured_goal(
             "crates/agent-drift-analyzer/src/scoring/mod.rs",
@@ -482,6 +720,14 @@ mod tests {
         objective: ObjectiveSummary,
         sanctioned_replan: bool,
     ) -> CheckpointAnalysis {
+        analysis_with_current_and_previous_summaries(objective, None, sanctioned_replan)
+    }
+
+    fn analysis_with_current_and_previous_summaries(
+        objective: ObjectiveSummary,
+        previous_objective: Option<ObjectiveSummary>,
+        sanctioned_replan: bool,
+    ) -> CheckpointAnalysis {
         let task_frame = TaskFrame {
             objective: "legacy bridge objective".to_string(),
             confidence: Confidence::High,
@@ -517,7 +763,20 @@ mod tests {
                 context,
                 task_frame: task_frame.clone(),
             },
-            previous: None,
+            previous: previous_objective.map(|objective| CheckpointSlice {
+                window: window.clone(),
+                context: ContextPack {
+                    session_id: "session-alpha".to_string(),
+                    objective,
+                    truth_artifacts: Vec::<CandidateTruthArtifact>::new(),
+                    working_set_paths: Vec::<WorkingSetPath>::new(),
+                    tools: Vec::<ToolObservation>::new(),
+                    command_families: Vec::new(),
+                    command_observations: Vec::<CommandObservation>::new(),
+                    supporting_evidence: Vec::new(),
+                },
+                task_frame: task_frame.clone(),
+            }),
             sanctioned_replan,
             delegation: DelegationContext {
                 topology: None,
@@ -559,13 +818,22 @@ mod tests {
         structured: Option<StructuredObjective>,
         text: &str,
     ) -> ObjectiveSummary {
+        objective_summary_at(1, comparison_key, structured, text)
+    }
+
+    fn objective_summary_at(
+        event_index: usize,
+        comparison_key: &str,
+        structured: Option<StructuredObjective>,
+        text: &str,
+    ) -> ObjectiveSummary {
         ObjectiveSummary {
             text: text.to_string(),
             comparison_key: comparison_key.to_string(),
             structured,
             verification_commands: Vec::new(),
             evidence: vec![EvidenceRef {
-                row: row_ref(1),
+                row: row_ref(event_index),
                 reason: "current objective evidence".to_string(),
             }],
         }
