@@ -6675,3 +6675,94 @@ fn public_stop_reaches_repl_owned_sessions_through_the_same_private_owner_plane(
         String::from_utf8_lossy(&output)
     );
 }
+
+#[test]
+#[serial]
+fn public_stop_fails_closed_without_same_episode_terminal_proof_even_if_later_state_reads_stopped() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let orchestration_session_id = "sess_public_stop_missing_terminal_proof";
+    let participant_id = "ash_public_stop_missing_terminal_proof";
+    let ts = "2026-07-03T00:00:00Z";
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        Some(participant_id),
+        "active",
+        None,
+        None,
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        participant_id,
+        "codex",
+        orchestration_session_id,
+        "running",
+        true,
+        Some("uaa-public-stop-missing-terminal-proof"),
+        None,
+        ts,
+    );
+
+    let transport_path = stop_transport_path(&fixture, orchestration_session_id, participant_id);
+    let _ = fs::remove_file(&transport_path);
+    assert!(
+        !transport_path.exists(),
+        "missing-terminal-proof fixture must not expose a private stop transport"
+    );
+
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert_eq!(
+        stop_output.status.code(),
+        Some(2),
+        "public stop must fail closed when the same stop episode cannot return terminal proof: {stop_output:?}"
+    );
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        Some(participant_id),
+        "stopped",
+        None,
+        None,
+        "2026-07-03T00:01:00Z",
+    );
+    let status_output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        status_output.status.success(),
+        "later public status should remain readable after the failed stop episode: {status_output:?}"
+    );
+    let status_json = parse_json_output(&status_output);
+    let status_row = find_status_session_by_orchestration_session_id(
+        status_sessions(&status_json),
+        orchestration_session_id,
+    );
+    assert_eq!(
+        status_row.get("posture").and_then(Value::as_str),
+        Some("terminal"),
+        "later public status may surface a terminal view after the earlier failed stop episode"
+    );
+    assert!(
+        status_row
+            .get("attached_participant_id")
+            .is_some_and(Value::is_null),
+        "later public status should expose the detached terminal view through the real public read surface: {status_row}"
+    );
+    assert_eq!(
+        stop_output.status.code(),
+        Some(2),
+        "later public status must not retroactively convert the earlier public stop result into success"
+    );
+}

@@ -6649,6 +6649,227 @@ fn c3_internal_toolbox_stop_world_worker_treats_disappearing_private_stop_delive
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
+fn c3_internal_toolbox_stop_world_worker_keeps_caller_result_failed_when_later_state_reads_stopped(
+) {
+    let temp = temp_dir("substrate-c3-toolbox-stop-missing-terminal-proof-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex-world",
+            enabled: true,
+            allowed_backends: &["cli:codex-world"],
+            allowed_actions: &[
+                "spawn_world_worker",
+                "stop_world_worker",
+                "inspect_world_worker",
+            ],
+            allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-stop-missing-terminal-proof-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-stop-missing-terminal-proof".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+
+    let stop_transport_path = private_stop_transport_path_for_home(
+        &substrate_home,
+        &orchestration_session_id,
+        &member_participant_id,
+    );
+    wait_for_socket_path(&stop_transport_path, Duration::from_secs(3));
+    fs::remove_file(&stop_transport_path).unwrap_or_else(|_| {
+        panic!(
+            "remove missing-terminal-proof stop transport fixture {}",
+            stop_transport_path.display()
+        )
+    });
+    assert!(
+        !stop_transport_path.exists(),
+        "missing-terminal-proof fixture must remove the published stop socket path"
+    );
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_stop_missing_terminal_proof",
+            "idempotency_key": "idem_toolbox_stop_missing_terminal_proof",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "stop_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex-world",
+            "target_participant_id": member_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_stop"
+            }
+        }),
+    );
+
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    let error = response
+        .get("error")
+        .and_then(Value::as_str)
+        .expect("missing terminal proof must surface an error");
+    assert!(
+        error.contains("durable stop closeout was not observed"),
+        "missing terminal proof must fail closed instead of claiming durable stop success: {response:#?}"
+    );
+
+    let later_ts = "2026-07-03T00:00:00Z";
+    let participant_path = canonical_participant_path(
+        &substrate_home,
+        &orchestration_session_id,
+        &member_participant_id,
+    );
+    let mut later_member = read_participant_manifest(&substrate_home, &member_participant_id);
+    later_member["state"] = Value::String("stopped".to_string());
+    later_member["last_transition_at"] = Value::String(later_ts.to_string());
+    later_member["internal"]["terminal_observed_at"] = Value::String(later_ts.to_string());
+    later_member["internal"]["termination_reason"] =
+        Value::String("later_read_side_stop".to_string());
+    fs::write(
+        participant_path,
+        serde_json::to_vec_pretty(&later_member).expect("serialize later stopped participant"),
+    )
+    .expect("persist later stopped participant");
+
+    let later_inspect = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_inspect_after_failed_stop",
+            "idempotency_key": "idem_toolbox_inspect_after_failed_stop",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id,
+            "action": "inspect_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex-world",
+            "target_participant_id": member_participant_id.clone(),
+            "world_id": world_id,
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_inspect"
+            }
+        }),
+    );
+    assert_eq!(
+        later_inspect.get("ok").and_then(Value::as_bool),
+        Some(true),
+        "later inspect should surface the changed read-side worker state without reinterpreting the earlier failed stop episode: {later_inspect:#?}"
+    );
+    assert_eq!(
+        later_inspect
+            .pointer("/outcome/snapshot/participant_state")
+            .and_then(Value::as_str),
+        Some("stopped"),
+        "later inspect must be able to observe a stopped worker after the failed stop episode"
+    );
+    assert_eq!(
+        later_inspect
+            .pointer("/outcome/snapshot/authoritative_live")
+            .and_then(Value::as_bool),
+        Some(false),
+        "later inspect must report that the retained worker is no longer authoritative-live"
+    );
+    assert_eq!(
+        response.get("ok").and_then(Value::as_bool),
+        Some(false),
+        "later inspect-state observation must not retroactively convert the earlier caller-visible stop result into success"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
 fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     let temp = temp_dir("substrate-c3-targeted-world-relaunch-");
     let home = temp.path().join("home");

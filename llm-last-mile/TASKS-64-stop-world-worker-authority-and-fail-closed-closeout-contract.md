@@ -62,7 +62,7 @@ Session goal:
     - [`crates/shell/tests/repl_world_first_routing_v1.rs`](../crates/shell/tests/repl_world_first_routing_v1.rs)
     - [`crates/world-service/src/member_runtime.rs`](../crates/world-service/src/member_runtime.rs) only if an adjacent unit harness is the narrowest honest place to pin runtime-side non-success proof behavior
 
-- [ ] Task: Add focused regression coverage for missing-terminal-proof fail-closed caller behavior
+- [x] Task: Add focused regression coverage for missing-terminal-proof fail-closed caller behavior
   - Acceptance: automated coverage proves that when a stop episode cannot return terminal proof for that same episode, the caller-visible result fails closed even if later read-side state observation could differ.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
