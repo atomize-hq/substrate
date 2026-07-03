@@ -68,6 +68,11 @@ cargo run -q -p agent-drift-analyzer   -- --input-dir  $H/bundle     --output-di
 # and drift_scores[class==semantic_goal_drift].{flagged,evidence[].reason}
 ```
 
+These commands are now packaged as reusable, parameterized tooling at `scripts/dev/drift-batch-scan/`
+(`sample_sessions.py` → `run_batch.py` → `tabulate.py` / `inspect_targets.py` / `filter_junk.py`, with a
+`README.md`). The generated batch data and session manifest are intentionally not committed (regenerable;
+they embed private `~/.codex/sessions` paths).
+
 Sampling notes: rollout date is in the path (`sessions/YYYY/MM/DD/`); the repo/cwd is in line 1
 (`session_meta.payload.cwd`), normalized by collapsing `/worktrees/<hash>/` segments. Run each session in
 its own temp codex-home to avoid any cross-session exact-dedupe contamination in the compactor.
@@ -160,6 +165,48 @@ Two read-only Codex consults converged with the analysis.
    Its observed real-world precision is 0% on this sample; the operator surface should not present it as a
    trustworthy signal yet.
 
+## Gate Result (executed 2026-07-03): Analysis-Only Junk-Target Filter
+
+The charter's Step 2 "cheaper first cut" — an analysis-only junk-target filter over the existing
+batch data, before writing any extraction code — has now been run. The 110-session batch and its
+pipeline scripts were recovered intact and preserved as reusable tooling at
+`scripts/dev/drift-batch-scan/` (`filter_junk.py` is this gate; see that directory's `README.md`).
+Re-running the tabulator reproduced the F1–F4 baseline exactly (882 checkpoints, 156 current-bar
+eligible, 6 flagged, 348 target-resolved, 12 disjoint pairs, 43 repos).
+
+A term-level junk classifier matching the charter's named extraction defects — escaped-newline
+residue (a stray `n` token from literal `\n`), number/coordinate runs, bare model/version tokens
+(`GPT-5.4`), and prose-`etc` enumerations — was applied and survivors re-counted:
+
+- **Actual fires: `0 of 6` survive.** All six flagged checkpoints carry the same garbage target (a
+  GraphQL server-startup log — `0.0.0.0:4000`, `supergraph:`, `/graphql`, `5s` — parsed as "paths");
+  suppressing junk empties their term set, so none reaches a comparison. This includes the single
+  rolling fire (`README.md → log-garbage`). Extraction hardening alone removes 100% of the real-data
+  over-fire.
+- **Current-bar eligible resting on junk-only targets: `8 of 156` (5.1%)** had a target term set that
+  is entirely garbage.
+- **Target-resolved disjoint adjacent pairs: `12 → 9`** (3 killed outright: `isolated.\n- → \n-`,
+  `…SKILL.md → GPT-5.4`, `README.md → log-garbage`).
+
+Hand-verifying the 9 survivors — **none is an "abandoned goal A for unrelated goal B" pivot**:
+- `2` are residual extraction garbage the conservative gate missed (prose fragments
+  `closeout/review-ready` and `linux/mac/windows`); a slightly stronger prose/path guard rejects those
+  too, taking extraction to effectively ~`5 of 12` killed.
+- the remaining ~`7` are legitimate narrowing / progression / work-cycles: the canonical narrowing
+  `audit-trio.report.json → audit-trio.model-selection/cohesion-audit.report.json`; the
+  `PLAN-04.md → exec.rs → async_repl.rs → PLAN-04.md` plan→code→plan cycle (3 pairs);
+  `status/risks.md → sprint-planning.md` doc progression; and two more real doc/step changes still
+  carrying markdown-link / space-split-path mangling.
+
+**Gate verdict.** Extraction hardening (Step 1) is confirmed the dominant lever: it eliminates every
+real firing and the bulk of the disjoint firing surface, and the only residue is exactly the
+narrowing / progression that the graduated-distance metric (`R6-3.X.2`, Step 3) is designed to absorb.
+No genuine pivot surfaces, so the eligibility bar (`R6-3.X.3`, Step 4) stays deferred. This
+quantitatively confirms the locked ordering. The ground truth also hands Step 1 a witness-backed
+defect list: escaped-`\n` blobs ingested as paths (the dominant poison), unparsed `[text](path)`
+markdown links, space-split truncated paths, JSON agent-status blobs, prose enumerations, and bare
+model tokens.
+
 ## Next-Steps Charter (for a dedicated fresh session)
 
 ### Step 1 (primary) — Objective-extraction robustness in `context/objective.rs`
@@ -181,7 +228,9 @@ unchanged and measure, before vs after: eligible-checkpoint count, live flagged/
 of the 12 target-resolved disjoint adjacent pairs from F3. If most of the 12 disappear, extraction was the
 dominant fix. If many survive, they are the narrowing/progression cases that prove the graduated-distance
 work (`R6-3.X.2`) is the next blocker. A cheaper first cut can be done as an analysis-only junk-target filter
-over the existing batch data before writing extraction code.
+over the existing batch data before writing extraction code. **Done (2026-07-03): see the "Gate Result"
+section above — the cheap cut confirmed extraction is the dominant lever (0/6 fires survive, 12→9 pairs,
+no genuine pivot). A full shadow-eval with real extraction code applied is still the remaining Step 2 work.**
 
 ### Step 3 (conditional) — Graduated / weighted distance (`R6-3.X.2`)
 

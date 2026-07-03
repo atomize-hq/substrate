@@ -332,7 +332,8 @@ all fixed here.
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see
-  "Batch scan outcome" below. Still deferred / ask-first; a codex second-opinion on the batch is being sought.**
+  "Batch scan outcome" below. Still deferred / ask-first. Codex `019f2964` reviewed the batch and a
+  junk-filter gate re-count (2026-07-03) confirmed extraction-first; both are recorded below.**
   - Motivation: real-session probes on 2026-07-03 (`019e9864-…` exploratory, `019f2837-…` concrete-goal)
     run through the live `agent-session-compactor` -> `agent-drift-analyzer` pipeline both produced `0`
     eligible checkpoints and `0` rolling/kickoff drift, and a codex consult (`019f2927`) confirmed the cause:
@@ -371,7 +372,7 @@ all fixed here.
       legitimate narrowing / progression (`audit-trio.report.json`->`audit-trio.model-selection/…report.json`;
       `PLAN-04.md`->`exec.rs:1537`->findings->`PLAN-04.md`, a normal plan->code->plan cycle). **No clear
       "abandoned goal A for unrelated goal B" pivot appeared.**
-  - Revised verdict (2026-07-03, pending codex second-opinion): **do NOT loosen the eligibility bar in
+  - Revised verdict (2026-07-03, confirmed by codex `019f2964` and the junk-filter gate re-count): **do NOT loosen the eligibility bar in
     isolation.** The batch shows the problem is not only low coverage but that both the current firings and
     the firings loosening would add are dominated by two over-fire sources — garbage target extraction and
     the disjoint-set metric misreading narrowing/progression as drift. The strict `unknowns.is_empty()` bar
@@ -379,6 +380,17 @@ all fixed here.
     extraction robustness (suppress garbage/fragment targets in `context/objective.rs`) and (b) the
     graduated-distance metric (`R6-3.X.2`); loosening alone would multiply false positives (~1 -> ~12, nearly
     all spurious), not surface real drift.
+  - Junk-filter gate re-count (2026-07-03, done — cheapest cut of the FINDINGS Step 2, analysis-only, no
+    code changed; the batch + pipeline scripts were recovered and preserved as reusable tooling at
+    `scripts/dev/drift-batch-scan/`): a term-level junk-target filter (escaped-newline residue,
+    number/coordinate runs, model/version tokens, prose-`etc`) applied to the same 110-session batch shows
+    **0/6 fires survive** (every real firing, including the one rolling fire, is garbage extraction),
+    **8/156** current-bar-eligible checkpoints rested on junk-only targets, and the **12 disjoint pairs drop
+    to 9** — none of which is a real "abandoned goal A for unrelated goal B" pivot (2 are prose garbage a
+    stronger guard also kills, ~7 are legitimate narrowing / progression / plan->code->plan cycles). This
+    confirms the ordering quantitatively: extraction hardening in `context/objective.rs` is the dominant
+    lever, the graduated-distance metric (`R6-3.X.2`) owns the narrowing residue, and this bar stays
+    deferred. Full detail: `docs/specs/r6/FINDINGS-r6-3-real-world-drift-validation.md` → "Gate Result".
   - Verify: to be defined when (and if) opened, with its own SPEC/PLAN/TASKS delta and impact analysis on
     the shared `eligible_current_goal` helper.
   - Files:

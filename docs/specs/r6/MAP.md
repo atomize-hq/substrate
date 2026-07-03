@@ -241,8 +241,11 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    appeared. **Revised verdict:** do **not** loosen the bar in isolation; the strict `unknowns.is_empty()`
    gate currently suppresses over-fire, and loosening would multiply false positives from garbage extraction
    and the disjoint-set narrowing debt. Gate any loosening behind BOTH objective-extraction robustness
-   (`context/objective.rs`) and the graduated-distance metric (`R6-3.X.2`). Full data in the `R6-3` TASKS
-   ledger, `R6-3.X.3` "Batch scan outcome."
+   (`context/objective.rs`) and the graduated-distance metric (`R6-3.X.2`). **Junk-filter gate re-count
+   (2026-07-03):** an analysis-only junk-target filter over the same batch confirmed extraction is the
+   dominant lever — `0/6` fires survive and the `12` disjoint pairs drop to `9`, none a real pivot. The
+   batch + pipeline scripts are preserved at `scripts/dev/drift-batch-scan/`. Full data in the `R6-3` TASKS
+   ledger, `R6-3.X.3` "Batch scan outcome," and `FINDINGS-r6-3-real-world-drift-validation.md` "Gate Result."
 
 ## Non-Goals For This Rescope
 
