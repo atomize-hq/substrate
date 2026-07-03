@@ -1,9 +1,10 @@
 # Tasks: Agent Drift Analyzer Rolling / Previous-Checkpoint Semantic Goal Drift (R6-3)
 
-Status: task ledger created on 2026-07-02 from the `R6-3` SPEC/PLAN in this directory. `R6-3` is **not yet
-implemented**; all tasks below are open. Sequenced after `R6-2` (the kickoff-anchored `semantic_goal_drift`
-scorer + `SemanticGoalDrift` class), which closed on 2026-07-01 and passed a final sign-off review on
-2026-07-02. This ledger becomes the closeout record as tasks land.
+Status: task ledger created on 2026-07-02 from the `R6-3` SPEC/PLAN in this directory. `R6-3` is in
+progress; completed items are marked inline below, and the remaining tasks stay open. Sequenced after
+`R6-2` (the kickoff-anchored `semantic_goal_drift` scorer + `SemanticGoalDrift` class), which closed on
+2026-07-01 and passed a final sign-off review on 2026-07-02. This ledger becomes the closeout record as
+tasks land.
 
 Packet prerequisite rule: this packet names `R6-2` (the landed `score_semantic_goal_drift` scorer, the
 `DriftClass::SemanticGoalDrift` variant, the `CheckpointAnalysis.sanctioned_replan` field, and the
@@ -107,7 +108,7 @@ holds today. Do not reopen the variant question mid-implementation.
 
 ## R6-3.2: Rolling Scorer Extension + Evidence Tag
 
-- [ ] Task R6-3.2.1: Extend `score_semantic_goal_drift` with the rolling comparison and rolling-tagged
+- [x] Task R6-3.2.1: Extend `score_semantic_goal_drift` with the rolling comparison and rolling-tagged
   evidence.
   - Acceptance: `scoring/semantic_goal_drift.rs` reads the previous goal from `analysis.previous`, applies
     the landed `eligible_current_goal` bar to it (symmetric with the current goal), and computes a rolling
@@ -132,6 +133,32 @@ holds today. Do not reopen the variant question mid-implementation.
   - Files:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
     - `crates/agent-drift-analyzer/tests/...` (minimal proof only)
+  - Result (2026-07-02):
+    - Live scorer confirmation: `score_semantic_goal_drift` now reads the previous goal from
+      `analysis.previous` via `eligible_previous_goal(analysis)`, applies the same
+      `eligible_current_goal(..)` bar to that previous side, and computes rolling divergence with
+      `rolling_goal_diverged(&EligibleCurrentGoal, &EligibleCurrentGoal)`, preserving the previous side's
+      `comparison_key`/summary-backed extraction instead of falling back to an asymmetric bare
+      `StructuredObjective`.
+    - Independence + replan confirmation: kickoff-anchored and rolling comparisons are computed
+      independently before the no-claim path, so an absent/ineligible kickoff anchor no longer
+      short-circuits rolling, while `analysis.sanctioned_replan` still suppresses both paths.
+    - Evidence/boundary confirmation: rolling evidence lands with distinct
+      `ROLLING_CURRENT_REASON_PREFIX` / `ROLLING_PREVIOUS_REASON_PREFIX` tags, co-fire ordering is asserted
+      in `semantic_goal_drift_cofire_preserves_family_order_and_keeps_both_current_goal_lines`, and no new
+      `DriftClass`, no `schema_version` bump, and no `scoring/mod.rs` signature change landed — the
+      implementation commit `d47c5e751` touched only
+      `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`.
+    - Minimal proof confirmation: the scorer test module covers rolling flag, rolling-fires-when-kickoff-
+      anchor-absent, first-checkpoint-`None` no-claim, and rolling-vs-replan via
+      `semantic_goal_drift_flags_rolling_pivot_with_named_previous_and_current_evidence`,
+      `semantic_goal_drift_rolling_still_flags_without_confident_anchor`,
+      `semantic_goal_drift_skips_rolling_when_previous_checkpoint_is_absent`, and
+      `semantic_goal_drift_skips_rolling_pivots_when_sanctioned_replan_is_present`.
+    - Verifier status: `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture` and
+      `cargo test -p agent-drift-analyzer -- --nocapture` were rerun successfully in the parent thread,
+      and the live scorer file still matches implementation commit `d47c5e751`, so those verifier results
+      still apply to the current repo state.
 
 ## R6-3.3: Regressions And Acceptance Fixture
 
