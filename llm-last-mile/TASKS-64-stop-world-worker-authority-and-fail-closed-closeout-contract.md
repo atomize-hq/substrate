@@ -53,7 +53,7 @@ Session goal:
     - [`crates/shell/tests/repl_world_first_routing_v1.rs`](../crates/shell/tests/repl_world_first_routing_v1.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs) only if file-local tests are the narrowest honest place to pin owner-rejection behavior
 
-- [ ] Task: Add focused regression coverage proving dead or disappearing private stop delivery does not imply stop success
+- [x] Task: Add focused regression coverage proving dead or disappearing private stop delivery does not imply stop success
   - Acceptance: automated coverage proves that a dead, dropped, or disappearing private stop delivery path does not by itself count as durable stop success, and the worker is not treated as `stopped` merely because delivery failed mid-episode.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`

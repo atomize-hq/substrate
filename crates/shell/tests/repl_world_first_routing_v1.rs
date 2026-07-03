@@ -910,6 +910,49 @@ fn toolbox_transport_path_for_home(
 }
 
 #[cfg(target_os = "linux")]
+fn compact_private_stop_transport_fragment(id: &str) -> String {
+    let normalized = id
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>();
+    if normalized.len() <= 12 {
+        return normalized;
+    }
+
+    format!(
+        "{}{}",
+        &normalized[..6],
+        &normalized[normalized.len() - 6..]
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn private_stop_transport_path_for_home(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
+    let socket_name = format!(
+        "{}-{}.sock",
+        compact_private_stop_transport_fragment(orchestration_session_id),
+        compact_private_stop_transport_fragment(participant_id),
+    );
+    let preferred = substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("handles")
+        .join("stop")
+        .join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-hub-stop")
+            .join(socket_name);
+    }
+    preferred
+}
+
+#[cfg(target_os = "linux")]
 fn translate_internal_toolbox_legacy_dispatch_request_to_host_tool_envelope(
     request: &serde_json::Value,
 ) -> serde_json::Value {
@@ -6398,6 +6441,206 @@ fn c3_internal_toolbox_stop_world_worker_rejects_stale_attached_host_owner_befor
             .is_none_or(Value::is_null),
         "pre-delivery stale owner rejection must not persist stop closeout state: {member_after:?}"
     );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_internal_toolbox_stop_world_worker_treats_disappearing_private_stop_delivery_as_fail_closed(
+) {
+    let temp = temp_dir("substrate-c3-toolbox-stop-disappearing-private-delivery-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex-world",
+            enabled: true,
+            allowed_backends: &["cli:codex-world"],
+            allowed_actions: &["spawn_world_worker", "stop_world_worker"],
+            allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-stop-disappearing-private-delivery-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-stop-disappearing-private-delivery".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+
+    let stop_transport_path = private_stop_transport_path_for_home(
+        &substrate_home,
+        &orchestration_session_id,
+        &member_participant_id,
+    );
+    wait_for_socket_path(&stop_transport_path, Duration::from_secs(3));
+    fs::remove_file(&stop_transport_path).unwrap_or_else(|_| {
+        panic!(
+            "remove disappearing private stop transport fixture {}",
+            stop_transport_path.display()
+        )
+    });
+    assert!(
+        !stop_transport_path.exists(),
+        "disappearing private stop delivery fixture must remove the published socket path"
+    );
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_stop_disappearing_private_delivery",
+            "idempotency_key": "idem_toolbox_stop_disappearing_private_delivery",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": orchestrator_participant_id.clone(),
+            "action": "stop_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex-world",
+            "target_participant_id": member_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_stop"
+            }
+        }),
+    );
+
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    let error = response
+        .get("error")
+        .and_then(Value::as_str)
+        .expect("disappearing private stop delivery must surface an error");
+    assert!(
+        error.contains(
+            format!(
+                "owner_unreachable: failed to deliver stop_world_worker to retained worker {}",
+                member_participant_id
+            )
+            .as_str()
+        ),
+        "disappearing private stop delivery must stay fail-closed instead of claiming durable stop success: {response:#?}"
+    );
+    assert!(
+        error.contains("durable stop closeout was not observed"),
+        "disappearing private stop delivery must explain that durable stopped proof never arrived: {response:#?}"
+    );
+
+    let live_members_after = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(3),
+    );
+    assert_eq!(
+        live_members_after[0]
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some(member_participant_id.as_str()),
+        "failed private stop delivery must leave the exact retained worker authoritative-live"
+    );
+    let member_after = read_participant_manifest(&substrate_home, &member_participant_id);
+    assert_eq!(
+        member_after.get("state").and_then(Value::as_str),
+        Some("ready"),
+        "disappearing private stop delivery must not mark the retained worker stopped: {member_after:?}"
+    );
+    assert!(
+        member_after
+            .pointer("/internal/termination_reason")
+            .is_none_or(Value::is_null),
+        "failed private stop delivery must not persist durable stop closeout state: {member_after:?}"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.execute_cancel_requests.len(),
+        0,
+        "disappearing private stop delivery must not fabricate downstream cancel delivery as durable stop success: {guard:#?}"
+    );
+    drop(guard);
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
