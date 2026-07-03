@@ -607,13 +607,10 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(second.diagnostics.interval_command_count, 3);
     assert_eq!(second.diagnostics.interval_verification_command_count, 1);
     assert!(second.diagnostics.evidence_item_count > 0);
-    assert!(second
-        .drift_scores
-        .iter()
-        .all(|score| matches!(
-            score.state,
-            DriftState::Active | DriftState::Recovered | DriftState::Cleared
-        )));
+    assert!(second.drift_scores.iter().all(|score| matches!(
+        score.state,
+        DriftState::Active | DriftState::Recovered | DriftState::Cleared
+    )));
 }
 
 #[test]

@@ -305,7 +305,8 @@ pub(crate) fn session_kickoff_structured_goal_anchor(
 ) -> Option<(usize, StructuredObjective)> {
     analyses.iter().find_map(|analysis| {
         let structured = analysis.current.context.objective.structured.as_ref()?;
-        structured_matches_kickoff_anchor_bar(structured).then(|| (analysis.ordinal, structured.clone()))
+        structured_matches_kickoff_anchor_bar(structured)
+            .then(|| (analysis.ordinal, structured.clone()))
     })
 }
 
@@ -316,7 +317,8 @@ pub(crate) fn kickoff_anchor_for_ordinal(
     anchor: Option<&(usize, StructuredObjective)>,
     ordinal: usize,
 ) -> Option<&StructuredObjective> {
-    anchor.and_then(|(anchor_ordinal, structured)| (ordinal >= *anchor_ordinal).then_some(structured))
+    anchor
+        .and_then(|(anchor_ordinal, structured)| (ordinal >= *anchor_ordinal).then_some(structured))
 }
 
 fn classify_checkpoint_delegation(mut delegation: DelegationContext) -> DelegationContext {
@@ -3267,10 +3269,11 @@ mod tests {
     use crate::input::BundleSession;
 
     use super::{
-        assign_drift_states, checkpoint_analyses, classify_command_role, kickoff_anchor_for_ordinal,
-        session_kickoff_structured_goal_anchor, tool_output_is_unambiguous_failure, CommandRole,
-        Confidence, DriftClass, DriftScore, DriftState, DriftStateHint, EvidenceRef, ObjectiveClass,
-        ObjectiveIntent, ScoredDrift, StructuredObjective,
+        assign_drift_states, checkpoint_analyses, classify_command_role,
+        kickoff_anchor_for_ordinal, session_kickoff_structured_goal_anchor,
+        tool_output_is_unambiguous_failure, CommandRole, Confidence, DriftClass, DriftScore,
+        DriftState, DriftStateHint, EvidenceRef, ObjectiveClass, ObjectiveIntent, ScoredDrift,
+        StructuredObjective,
     };
 
     #[test]
@@ -3525,7 +3528,8 @@ mod tests {
     fn checkpoints_capture_kickoff_anchor_once_and_mark_sanctioned_replans_from_steer_rows() {
         let kickoff = "## Scope\nValidate the kickoff anchor helper in crates/agent-drift-analyzer/src/checkpoint/mod.rs only.\n\n## Deliverables\n- Return findings.\n\n## Verification\n- cargo test -p agent-drift-analyzer checkpoints -- --nocapture";
         let replan = "Replan instead: review crates/agent-drift-analyzer/src/checkpoint/export.rs only and return findings.";
-        let followup = "Continue by validating the checkpoint exporter findings and return the result.";
+        let followup =
+            "Continue by validating the checkpoint exporter findings and return the result.";
         let mut replan_row = row(2, CompactionKind::UserMessage, replan);
         replan_row.user_message_role = Some(UserMessageRole::Steer);
         let mut followup_row = row(4, CompactionKind::UserMessage, followup);
@@ -3638,11 +3642,19 @@ mod tests {
         let session = BundleSession {
             session_id: "session-routine-instead".to_string(),
             archival_rows: vec![
-                row(0, CompactionKind::UserMessage, "/goal Implement the search helper."),
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Implement the search helper.",
+                ),
                 routine_row.clone(),
             ],
             compact_rows: vec![
-                row(0, CompactionKind::UserMessage, "/goal Implement the search helper."),
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Implement the search helper.",
+                ),
                 routine_row,
             ],
         };

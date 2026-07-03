@@ -214,10 +214,16 @@ fn verifier_failure_evidence(analysis: &CheckpointAnalysis) -> Vec<EvidenceRef> 
 
 fn attempt_is_nondiagnostic_probe_failure(
     attempt: &CommandAttempt,
-    compact_rows_by_key: &BTreeMap<(camino::Utf8PathBuf, usize, usize), &agent_session_compactor::CompactionRow>,
+    compact_rows_by_key: &BTreeMap<
+        (camino::Utf8PathBuf, usize, usize),
+        &agent_session_compactor::CompactionRow,
+    >,
 ) -> bool {
     attempt_has_output_matching(attempt, compact_rows_by_key, |text| {
-        let body = text.split_once("Output:\n").map(|(_, body)| body).unwrap_or(text);
+        let body = text
+            .split_once("Output:\n")
+            .map(|(_, body)| body)
+            .unwrap_or(text);
         let body = body.trim();
         is_probe_discovery_attempt(attempt)
             || body.is_empty()
@@ -230,19 +236,19 @@ fn attempt_is_nondiagnostic_probe_failure(
 }
 
 fn is_probe_discovery_attempt(attempt: &CommandAttempt) -> bool {
-    matches!(attempt.role, CommandAttemptRole::Read | CommandAttemptRole::VcsInspection)
-        || matches!(
-            attempt.family.as_str(),
-            "rg"
-                | "grep"
-                | "Select-String"
-                | "where.exe"
-                | "Get-ChildItem"
-                | "Get-Command"
-                | "Test-Path"
-                | "Invoke-WebRequest"
-        )
-        || is_read_only_python_probe(attempt)
+    matches!(
+        attempt.role,
+        CommandAttemptRole::Read | CommandAttemptRole::VcsInspection
+    ) || matches!(
+        attempt.family.as_str(),
+        "rg" | "grep"
+            | "Select-String"
+            | "where.exe"
+            | "Get-ChildItem"
+            | "Get-Command"
+            | "Test-Path"
+            | "Invoke-WebRequest"
+    ) || is_read_only_python_probe(attempt)
         || (attempt.family == "git" && attempt.raw_command.contains(" status"))
 }
 
@@ -303,7 +309,10 @@ fn is_read_only_python_probe(attempt: &CommandAttempt) -> bool {
 
 fn attempt_has_output_matching(
     attempt: &CommandAttempt,
-    compact_rows_by_key: &BTreeMap<(camino::Utf8PathBuf, usize, usize), &agent_session_compactor::CompactionRow>,
+    compact_rows_by_key: &BTreeMap<
+        (camino::Utf8PathBuf, usize, usize),
+        &agent_session_compactor::CompactionRow,
+    >,
     predicate: impl Fn(&str) -> bool,
 ) -> bool {
     attempt.output_rows.iter().any(|row| {
@@ -490,7 +499,10 @@ fn parent_visible_conservative_stall_evidence(
     read_attempts
         .into_iter()
         .flat_map(|attempt| {
-            attempt_evidence(attempt, "repeated broad planning scan without convergence artifact")
+            attempt_evidence(
+                attempt,
+                "repeated broad planning scan without convergence artifact",
+            )
         })
         .collect()
 }
@@ -2152,14 +2164,10 @@ fn has_parent_visible_orchestration_evidence(
     let has_evidence = !analysis.interval.command_attempts.is_empty()
         && !orchestration_attempts.is_empty()
         && source_edits(analysis).is_empty()
-        && analysis
-            .interval
-            .command_attempts
-            .iter()
-            .all(|attempt| {
-                !is_parent_visible_disqualifying_attempt(attempt)
-                    || is_parent_visible_artifact_refinement(attempt)
-            })
+        && analysis.interval.command_attempts.iter().all(|attempt| {
+            !is_parent_visible_disqualifying_attempt(attempt)
+                || is_parent_visible_artifact_refinement(attempt)
+        })
         && match visibility {
             ChildWorkVisibility::Opaque => true,
             ChildWorkVisibility::Partial => true,
@@ -2275,9 +2283,9 @@ fn has_parent_visible_synthesis(
     matches!(visibility, ChildWorkVisibility::Partial)
         && visible_child_surface
         && (!synthesis_attempts.is_empty()
-            || orchestration_attempts
-                .iter()
-                .any(|attempt| matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1")))
+            || orchestration_attempts.iter().any(|attempt| {
+                matches!(attempt.tool_name.as_str(), "close_agent" | "multi_agent_v1")
+            }))
 }
 
 fn previous_checkpoint_was_comparable_parent_visible(analysis: &CheckpointAnalysis) -> bool {
@@ -3584,11 +3592,9 @@ AssertionError: expected advancing"#,
             ),
         ]);
 
-        let progress = parent_visible_orchestration_progress(
-            &analysis,
-            SessionArchetypeLabel::Planning,
-        )
-        .expect("parent-visible followup progress");
+        let progress =
+            parent_visible_orchestration_progress(&analysis, SessionArchetypeLabel::Planning)
+                .expect("parent-visible followup progress");
 
         assert_eq!(
             progress.dimension,
@@ -3658,11 +3664,9 @@ AssertionError: expected advancing"#,
             ChildWorkVisibility::Opaque
         );
 
-        let progress = parent_visible_orchestration_progress(
-            &analysis,
-            SessionArchetypeLabel::Planning,
-        )
-        .expect("parent-visible orchestration progress");
+        let progress =
+            parent_visible_orchestration_progress(&analysis, SessionArchetypeLabel::Planning)
+                .expect("parent-visible orchestration progress");
 
         assert_eq!(
             progress.dimension,
@@ -3672,14 +3676,11 @@ AssertionError: expected advancing"#,
         assert_eq!(progress.confidence, Confidence::Low);
         assert_has_signal(&progress, ProgressSignalCode::DelegationVisibilityLimited);
         assert!(
-            progress
-                .counter_evidence
-                .iter()
-                .any(|evidence| {
-                    evidence
-                        .reason
-                        .contains("repeated broad planning scan without convergence artifact")
-                }),
+            progress.counter_evidence.iter().any(|evidence| {
+                evidence
+                    .reason
+                    .contains("repeated broad planning scan without convergence artifact")
+            }),
             "expected broad-scan stall evidence in counter_evidence, got {:?}",
             progress
                 .counter_evidence

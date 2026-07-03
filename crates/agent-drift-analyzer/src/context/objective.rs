@@ -1395,7 +1395,12 @@ fn inject_structural_goal_if_absent(decomposition: &mut ObjectiveDecomposition) 
         return;
     };
     let role_candidates = &mut decomposition.clauses[position].role_candidates;
-    push_role_candidate(role_candidates, ObjectiveRole::Goal, Confidence::Medium, 650);
+    push_role_candidate(
+        role_candidates,
+        ObjectiveRole::Goal,
+        Confidence::Medium,
+        650,
+    );
     role_candidates.sort_by(|left, right| right.score.cmp(&left.score));
     role_candidates.dedup_by(|left, right| left.role == right.role);
 }
@@ -2272,7 +2277,14 @@ fn intent_from_action_words(tokens: &[String]) -> ObjectiveIntent {
     } else if has(&["debug", "fix", "troubleshoot"]) {
         ObjectiveIntent::Debug
     } else if has(&[
-        "review", "inspect", "determine", "compare", "analyze", "evaluate", "assess", "audit",
+        "review",
+        "inspect",
+        "determine",
+        "compare",
+        "analyze",
+        "evaluate",
+        "assess",
+        "audit",
     ]) {
         ObjectiveIntent::Review
     } else if has(&["research", "survey"]) {

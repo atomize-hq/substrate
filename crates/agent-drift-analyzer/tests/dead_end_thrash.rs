@@ -46,12 +46,9 @@ fn dead_end_thrash_stays_active_when_verification_interval_remains_out_of_scope(
         .evidence
         .iter()
         .any(|item| item.reason == "repeated failure evidence"));
-    assert!(second
-        .evidence
-        .iter()
-        .any(|item| item
-            .reason
-            .starts_with("stall without frontier movement evidence:")));
+    assert!(second.evidence.iter().any(|item| item
+        .reason
+        .starts_with("stall without frontier movement evidence:")));
 }
 
 #[test]
@@ -789,10 +786,9 @@ fn dead_end_thrash_names_stalls_when_repeated_activity_has_no_frontier_movement(
     assert!(thrash.flagged);
     assert_eq!(thrash.raw_score, 30);
     assert_eq!(thrash.state, DriftState::Active);
-    assert!(thrash
-        .evidence
-        .iter()
-        .any(|item| item.reason.starts_with("stall without frontier movement evidence:")));
+    assert!(thrash.evidence.iter().any(|item| item
+        .reason
+        .starts_with("stall without frontier movement evidence:")));
 }
 
 #[test]
