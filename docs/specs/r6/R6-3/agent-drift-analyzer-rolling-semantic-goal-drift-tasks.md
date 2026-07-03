@@ -243,8 +243,9 @@ holds today. Do not reopen the variant question mid-implementation.
     `cargo test -p agent-drift-analyzer -- --nocapture` and
     `cargo test -p agent-drift-sentinel -- --nocapture`.
   - Finding: No new variant/schema/sentinel-source fallout landed across `R6-3`. Using pre-`R6-3` base
-    commit `169dd2757` (`docs: reconcile R6-2 anchor-term wording and file sign-off backlog`),
-    `git diff 169dd2757..HEAD -- crates/agent-drift-analyzer/src/checkpoint/schema.rs crates/agent-drift-analyzer/src/checkpoint/export.rs crates/agent-drift-sentinel/src/operator_surface.rs`
+    commit `169dd2757` (`docs: reconcile R6-2 anchor-term wording and file sign-off backlog`) and the
+    fixed `R6-3` closeout upper bound `08bfaed64` (`docs: close R6-3 rolling semantic goal drift`),
+    `git diff 169dd2757..08bfaed64 -- crates/agent-drift-analyzer/src/checkpoint/schema.rs crates/agent-drift-analyzer/src/checkpoint/export.rs crates/agent-drift-sentinel/src/operator_surface.rs`
     is empty. Live grep confirms the only relevant analyzer/sentinel surfacing remains the existing
     `DriftClass::SemanticGoalDrift` entry in `checkpoint/schema.rs`, `checkpoint/export.rs`, and sentinel
     `operator_surface.rs`, with no `RollingSemanticGoalDrift` symbol and the schema gates still capped at
@@ -252,10 +253,10 @@ holds today. Do not reopen the variant question mid-implementation.
   - Finding: `R6-4` stays **deferred**. The existing MAP already recorded that no `R6-1`/`R6-2` replay
     evidence showed a `progress.rs` reset error caused by objective-string quality, and the committed
     `R6-3` range itself does not touch `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
-    (`git diff 169dd2757..HEAD -- crates/agent-drift-analyzer/src/checkpoint/progress.rs` is empty;
-    `git log 169dd2757..HEAD -- crates/agent-drift-analyzer/src/checkpoint/progress.rs` is empty). The
-    2026-07-03 analyzer wall still includes the progress and semantic-goal-drift acceptance corpora green,
-    so no new replay/reset evidence justifies opening conditional `R6-4`.
+    (`git diff 169dd2757..08bfaed64 -- crates/agent-drift-analyzer/src/checkpoint/progress.rs` is empty;
+    `git log 169dd2757..08bfaed64 -- crates/agent-drift-analyzer/src/checkpoint/progress.rs` is empty).
+    The 2026-07-03 analyzer wall still includes the progress and semantic-goal-drift acceptance corpora
+    green, so no new replay/reset evidence justifies opening conditional `R6-4`.
 
 ## Deferred / Ask-First
 
