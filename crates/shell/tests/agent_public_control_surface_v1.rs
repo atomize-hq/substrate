@@ -6678,7 +6678,8 @@ fn public_stop_reaches_repl_owned_sessions_through_the_same_private_owner_plane(
 
 #[test]
 #[serial]
-fn public_stop_fails_closed_without_same_episode_terminal_proof_even_if_later_state_reads_stopped() {
+fn public_stop_fails_closed_without_same_episode_terminal_proof_even_if_later_state_reads_stopped()
+{
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);

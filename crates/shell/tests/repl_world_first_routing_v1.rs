@@ -6317,10 +6317,8 @@ fn c3_internal_toolbox_stop_world_worker_rejects_stale_attached_host_owner_befor
 
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
     let mut persisted_session = read_orchestration_session(&session_path);
-    let mut stale_orchestrator = read_participant_manifest(
-        &substrate_home,
-        &stale_orchestrator_participant_id,
-    );
+    let mut stale_orchestrator =
+        read_participant_manifest(&substrate_home, &stale_orchestrator_participant_id);
     let successor_participant_id = format!("{stale_orchestrator_participant_id}_successor");
     let successor_uaa_session_id = "uaa_toolbox_stop_stale_owner_successor";
 
@@ -6335,10 +6333,8 @@ fn c3_internal_toolbox_stop_world_worker_rejects_stale_attached_host_owner_befor
     stale_orchestrator["internal"]["attached_client_present"] = Value::Bool(false);
     stale_orchestrator["internal"]["resume_eligible"] = Value::Bool(true);
 
-    persisted_session["active_session_handle_id"] =
-        Value::String(successor_participant_id.clone());
-    persisted_session["attached_participant_id"] =
-        Value::String(successor_participant_id.clone());
+    persisted_session["active_session_handle_id"] = Value::String(successor_participant_id.clone());
+    persisted_session["attached_participant_id"] = Value::String(successor_participant_id.clone());
     persisted_session["posture"] = Value::String("active_attached".to_string());
     if let Some(contract) = persisted_session
         .get_mut("host_attach_contract")
@@ -6352,7 +6348,8 @@ fn c3_internal_toolbox_stop_world_worker_rejects_stale_attached_host_owner_befor
 
     fs::write(
         &session_path,
-        serde_json::to_vec_pretty(&persisted_session).expect("serialize persisted successor session"),
+        serde_json::to_vec_pretty(&persisted_session)
+            .expect("serialize persisted successor session"),
     )
     .expect("persist successor session truth");
     fs::write(
@@ -6371,7 +6368,8 @@ fn c3_internal_toolbox_stop_world_worker_rejects_stale_attached_host_owner_befor
             &orchestration_session_id,
             &successor_participant_id,
         ),
-        serde_json::to_vec_pretty(&successor).expect("serialize successor orchestrator participant"),
+        serde_json::to_vec_pretty(&successor)
+            .expect("serialize successor orchestrator participant"),
     )
     .expect("persist successor orchestrator participant");
 
@@ -6449,8 +6447,8 @@ fn c3_internal_toolbox_stop_world_worker_rejects_stale_attached_host_owner_befor
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
-fn c3_internal_toolbox_stop_world_worker_treats_disappearing_private_stop_delivery_as_fail_closed(
-) {
+fn c3_internal_toolbox_stop_world_worker_treats_disappearing_private_stop_delivery_as_fail_closed()
+{
     let temp = temp_dir("substrate-c3-toolbox-stop-disappearing-private-delivery-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -6649,8 +6647,8 @@ fn c3_internal_toolbox_stop_world_worker_treats_disappearing_private_stop_delive
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
-fn c3_internal_toolbox_stop_world_worker_keeps_caller_result_failed_when_later_state_reads_stopped(
-) {
+fn c3_internal_toolbox_stop_world_worker_keeps_caller_result_failed_when_later_state_reads_stopped()
+{
     let temp = temp_dir("substrate-c3-toolbox-stop-missing-terminal-proof-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");

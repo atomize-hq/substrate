@@ -4719,6 +4719,8 @@ mod tests {
         OrchestrationSessionPosture, OrchestrationSessionState,
     };
     #[cfg(target_os = "linux")]
+    use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchContinuity;
+    #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::tool_invocation_contract::{
         normalize_cancel_world_work_outcome_v1, normalize_inspect_world_worker_outcome_v1,
         normalize_stop_world_worker_outcome_v1,
@@ -4762,6 +4764,7 @@ mod tests {
     use tempfile::{tempdir, TempDir};
     #[cfg(target_os = "linux")]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
     #[cfg(target_os = "linux")]
     use tokio::net::UnixListener;
     #[cfg(target_os = "linux")]
@@ -14001,6 +14004,167 @@ agents:
         assert_eq!(
             participant_after.internal.termination_reason.as_deref(),
             Some("stopped")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_spec64_recovery_harness_drives_the_real_refreshed_transport_failure_branch(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative stop target before refused transport");
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        assert!(
+            transport_path.starts_with(substrate_home.path()),
+            "SPEC-64 recovery harness must keep the private stop socket inside the isolated SUBSTRATE_HOME instead of a shared fallback namespace: {}",
+            transport_path.display()
+        );
+        assert!(
+            !transport_path.starts_with(Path::new("/tmp/substrate-agent-hub-stop")),
+            "SPEC-64 recovery harness must not silently fall back to the shared /tmp stop namespace: {}",
+            transport_path.display()
+        );
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        assert!(
+            transport_path.exists(),
+            "SPEC-64 recovery harness must enter the refused live-transport seam through a published but dead stop socket"
+        );
+
+        let transport_error = request_private_stop_after_transport_registration(&transport_path)
+            .await
+            .expect_err("dead private stop socket must refuse the transport request");
+        assert!(
+            detached_stop_transport_is_unusable(&transport_error),
+            "SPEC-64 recovery harness must drive the real refused private stop transport seam"
+        );
+        assert!(
+            !detached_stop_world_worker_closeout_available_after_transport_failure(
+                &store,
+                &resolved,
+                &transport_path,
+                &transport_error,
+            ),
+            "fresh-session recheck must stay fail-closed until authoritative detached truth is persisted"
+        );
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load authoritative orchestration session")
+            .expect("authoritative orchestration session");
+        session.mark_parked_resumable("owner detached after refused private stop");
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist parked-resumable orchestration session");
+        let mut orchestrator = store
+            .load_participant("orch_dispatch")
+            .expect("load authoritative orchestrator")
+            .expect("authoritative orchestrator");
+        orchestrator.mark_client_detached("owner detached after refused private stop");
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist detached orchestrator truth");
+
+        let continuity = store
+            .classify_hidden_owner_helper_launch_continuity("sess_dispatch", "orch_dispatch", true)
+            .expect("classify refreshed detached continuity");
+        assert_eq!(
+            continuity,
+            HiddenOwnerHelperLaunchContinuity::DetachedReconciled(
+                OrchestrationSessionPosture::ParkedResumable
+            ),
+            "the production recovery seam should narrow to detached continuity on the same authoritative session instead of widening attach scope"
+        );
+        assert!(
+            detached_stop_world_worker_closeout_available_after_transport_failure(
+                &store,
+                &resolved,
+                &transport_path,
+                &transport_error,
+            ),
+            "recoverable refused transport should unlock the real refreshed detached closeout seam once authoritative detached truth lands"
+        );
+        let refreshed_resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("re-resolve exact stop target after authoritative detached refresh");
+        assert_eq!(
+            refreshed_resolved.orchestration_session_id(),
+            resolved.orchestration_session_id()
+        );
+        assert_eq!(
+            refreshed_resolved.caller_participant.participant_id(),
+            resolved.caller_participant.participant_id()
+        );
+        assert_eq!(
+            refreshed_resolved.target_participant.participant_id(),
+            resolved.target_participant.participant_id()
+        );
+        assert_eq!(
+            refreshed_resolved.target_participant.handle.backend_id,
+            resolved.target_participant.handle.backend_id
+        );
+        assert_eq!(
+            refreshed_resolved.target_participant.handle.world_id,
+            resolved.target_participant.handle.world_id
+        );
+        assert_eq!(
+            refreshed_resolved
+                .target_participant
+                .handle
+                .world_generation,
+            resolved.target_participant.handle.world_generation
+        );
+        let closeout = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect("persist detached durable stop closeout after refreshed refused transport");
+        assert_eq!(
+            closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(closeout.session_state, OrchestrationSessionState::Active);
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after refreshed closeout")
+            .expect("retained participant after refreshed closeout");
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("stopped")
+        );
+        assert_eq!(
+            store
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session after refreshed closeout")
+                .expect("orchestration session after refreshed closeout")
+                .posture,
+            OrchestrationSessionPosture::ParkedResumable,
+            "the refreshed exact-target re-attempt must stay bound to the same session, worker, backend, and world binding without attach-scope widening"
         );
     }
 

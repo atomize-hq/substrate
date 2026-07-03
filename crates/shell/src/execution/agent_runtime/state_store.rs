@@ -11864,6 +11864,67 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_recovery_harness_preserves_exact_target_under_stale_attached_truth(
+    ) {
+        with_store(|store| {
+            let mut orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            orchestrator.internal.shell_owner_pid = 999_999_999;
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist stale attached orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let continuity = store
+                .classify_hidden_owner_helper_launch_continuity("sess_stop", "orch_stop", true)
+                .expect("classify stale attached continuity");
+            assert_eq!(
+                continuity,
+                HiddenOwnerHelperLaunchContinuity::StaleAttachedTruth,
+                "SPEC-64 recovery harness must pin recoverable stale attached truth independently from stop transport behavior"
+            );
+
+            let resolved = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect("resolve exact retained stop target under stale attached truth");
+
+            assert_eq!(resolved.orchestration_session_id(), "sess_stop");
+            assert_eq!(resolved.caller_participant.participant_id(), "orch_stop");
+            assert_eq!(resolved.target_participant.participant_id(), "ash_stop");
+            assert_eq!(
+                resolved.target_participant.handle.backend_id,
+                "cli:codex_world"
+            );
+            assert_eq!(
+                resolved.target_participant.handle.world_id.as_deref(),
+                Some("world-17")
+            );
+            assert_eq!(resolved.target_participant.handle.world_generation, Some(2));
+            assert_eq!(
+                resolved
+                    .target_participant
+                    .handle
+                    .orchestrator_participant_id
+                    .as_deref(),
+                Some("orch_stop")
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_internal_stop_world_dispatch_target_accepts_successor_authoritative_caller_for_retained_worker(
     ) {
         with_store(|store| {
