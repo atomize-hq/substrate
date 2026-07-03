@@ -656,7 +656,13 @@ fn operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end() 
 }
 
 #[test]
-fn operator_surface_renders_flagged_semantic_goal_drift_rolling_evidence_lines() {
+fn operator_surface_renders_cofire_rolling_previous_line_in_order_under_default_policy() {
+    // The analyzer de-dups the shared current-goal line on co-fire, so a co-firing
+    // SemanticGoalDrift checkpoint carries exactly three evidence lines in this order:
+    // kickoff current goal, kickoff anchor, rolling previous goal. This test uses the DEFAULT
+    // warning policy (max_evidence_lines = 3) — not a widened cap — to prove the informative
+    // "rolling ... previous goal:" line (what the goal lurched away from) survives truncation
+    // and renders in order, which the old 4-line ordering would have dropped.
     let mut checkpoint = checkpoint_with_drift(
         "session-semantic-goal-drift-rolling",
         3,
@@ -665,9 +671,8 @@ fn operator_surface_renders_flagged_semantic_goal_drift_rolling_evidence_lines()
         true,
         "confirm the pivot is intentional or return to the anchored goal",
         &[
-            "semantic goal drift kickoff anchor: crates_agent_drift_analyzer_tests_checkpoints_rs",
             "semantic goal drift current goal: docs_specs_r6_map_md",
-            "rolling semantic goal drift current goal: docs_specs_r6_map_md",
+            "semantic goal drift kickoff anchor: crates_agent_drift_analyzer_tests_checkpoints_rs",
             "rolling semantic goal drift previous goal: crates_agent_drift_analyzer_tests_checkpoints_rs",
         ],
     );
@@ -686,30 +691,38 @@ fn operator_surface_renders_flagged_semantic_goal_drift_rolling_evidence_lines()
 
     let fixture =
         support::ReplayFixture::from_checkpoints(vec![checkpoint], support::sample_summary());
-    let warning_policy = WarningPolicy {
-        max_evidence_lines: 4,
-        ..WarningPolicy::default()
-    };
     let result = execute(&SentinelRequest {
         checkpoint_dir: fixture.checkpoint_dir.clone(),
         mode: SentinelMode::Replay,
         cursor: None,
         scheduler_policy: SchedulerPolicy::default(),
-        warning_policy,
+        warning_policy: WarningPolicy::default(),
         adjudication: AdjudicationConfig::default(),
     })
     .expect("run replay");
 
     let visible = &result.report.visible_warnings[0];
     assert_eq!(visible.posture, Some(CheckpointPosture::Active));
-    assert!(visible
-        .evidence_lines
-        .iter()
-        .any(|line| line.contains("rolling semantic goal drift current goal:")));
-    assert!(visible
-        .evidence_lines
-        .iter()
-        .any(|line| line.contains("rolling semantic goal drift previous goal:")));
+    assert_eq!(
+        visible.evidence_lines.len(),
+        3,
+        "co-fire renders exactly three de-duped evidence lines under the default cap, got {:?}",
+        visible.evidence_lines
+    );
+    assert!(visible.evidence_lines[0].contains("semantic goal drift current goal:"));
+    assert!(visible.evidence_lines[1].contains("semantic goal drift kickoff anchor:"));
+    assert!(
+        visible.evidence_lines[2].contains("rolling semantic goal drift previous goal:"),
+        "the rolling previous-goal line must survive default-policy truncation and render last, got {:?}",
+        visible.evidence_lines
+    );
+    assert!(
+        visible
+            .evidence_lines
+            .iter()
+            .all(|line| !line.contains("rolling semantic goal drift current goal:")),
+        "the redundant rolling current-goal line is de-duped by the analyzer and must not appear"
+    );
 }
 
 #[test]

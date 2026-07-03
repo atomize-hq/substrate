@@ -57,11 +57,19 @@ pub(crate) fn score_semantic_goal_drift(
         }
     }
     if rolling_drift {
-        evidence.extend(goal_evidence(
-            current_goal.summary.evidence.first(),
-            current_goal.description(),
-            ROLLING_CURRENT_REASON_PREFIX,
-        ));
+        // De-dup the shared current-goal line across families. When kickoff drift already
+        // surfaced the current goal, a second `rolling ... current goal:` line names the same
+        // goal and adds nothing; worse, under the default `max_evidence_lines` cap (3) that
+        // redundant line pushes the informative `rolling ... previous goal:` line — the one
+        // naming what the goal lurched away from — out of the rendered evidence. Only surface
+        // the rolling current-goal line when kickoff did not already name the current goal.
+        if !kickoff_drift {
+            evidence.extend(goal_evidence(
+                current_goal.summary.evidence.first(),
+                current_goal.description(),
+                ROLLING_CURRENT_REASON_PREFIX,
+            ));
+        }
         if let Some(previous_goal) = previous_goal.as_ref() {
             evidence.extend(goal_evidence(
                 previous_goal.summary.evidence.first(),
@@ -649,6 +657,66 @@ mod tests {
     }
 
     #[test]
+    fn semantic_goal_drift_rolling_still_flags_with_below_high_anchor() {
+        // A present-but-ineligible kickoff anchor (below the High bar) is rejected by
+        // eligible_anchor_goal via its confidence filter — a different path than an absent
+        // (None) anchor. It must be a kickoff-side no-claim and must NOT short-circuit the
+        // rolling comparison, so rolling still fires with an ineligible anchor present.
+        let anchor = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::Medium,
+            Vec::new(),
+        );
+        let previous = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "an ineligible below-High anchor must not short-circuit the rolling comparison"
+        );
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)));
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_PREVIOUS_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(CURRENT_GOAL_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(KICKOFF_ANCHOR_REASON_PREFIX)));
+    }
+
+    #[test]
     fn semantic_goal_drift_skips_rolling_when_previous_checkpoint_is_absent() {
         let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
         let analysis = analysis_with_summary(
@@ -768,7 +836,7 @@ mod tests {
     }
 
     #[test]
-    fn semantic_goal_drift_cofire_preserves_family_order_and_keeps_both_current_goal_lines() {
+    fn semantic_goal_drift_cofire_dedupes_current_goal_and_surfaces_rolling_previous() {
         let anchor = structured_goal(
             "crates/agent-drift-analyzer/src/scoring/mod.rs",
             Confidence::High,
@@ -804,21 +872,27 @@ mod tests {
             .iter()
             .map(|item| item.reason.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(reasons.len(), 4);
+        // On co-fire the shared current-goal line is de-duped: the redundant rolling current-goal
+        // line is dropped so the informative rolling previous-goal line survives the default
+        // max_evidence_lines cap (3). Order stays kickoff-family (current, anchor), then the
+        // rolling previous-goal line.
+        assert_eq!(reasons.len(), 3);
         assert!(reasons[0].starts_with(CURRENT_GOAL_REASON_PREFIX));
         assert!(reasons[1].starts_with(KICKOFF_ANCHOR_REASON_PREFIX));
-        assert!(reasons[2].starts_with(ROLLING_CURRENT_REASON_PREFIX));
-        assert!(reasons[3].starts_with(ROLLING_PREVIOUS_REASON_PREFIX));
+        assert!(reasons[2].starts_with(ROLLING_PREVIOUS_REASON_PREFIX));
+        assert!(
+            !reasons
+                .iter()
+                .any(|reason| reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)),
+            "co-fire must drop the redundant rolling current-goal line so the previous-goal line is not truncated under the default evidence cap"
+        );
         assert_eq!(
             reasons
                 .iter()
-                .filter(|reason| {
-                    reason.starts_with(CURRENT_GOAL_REASON_PREFIX)
-                        || reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)
-                })
+                .filter(|reason| reason.starts_with(CURRENT_GOAL_REASON_PREFIX))
                 .count(),
-            2,
-            "co-fire keeps one current-goal line per comparison family instead of cross-family de-duping"
+            1,
+            "co-fire surfaces exactly one current-goal line"
         );
     }
 
