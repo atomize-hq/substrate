@@ -29,8 +29,8 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
-    private_cancel_transport_path, private_stop_transport_path, request_private_cancel,
-    request_private_stop, PrivateCancelOutcome, PrivateStopOutcome,
+    persist_runtime_stop_closeout, private_cancel_transport_path, private_stop_transport_path,
+    request_private_cancel, request_private_stop, PrivateCancelOutcome, PrivateStopOutcome,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
@@ -2350,45 +2350,94 @@ async fn stop_world_worker(
         &resolved.session.orchestration_session_id,
         resolved.target_participant.participant_id(),
     );
-    let transport_result = request_private_stop(&transport_path).await;
-    let closeout = wait_for_stop_world_worker_closeout(
+    let mut used_private_stop_surface = true;
+    let closeout = if detached_stop_world_worker_closeout_available(
         &prepared.store,
-        &resolved.session.orchestration_session_id,
-        resolved.target_participant.participant_id(),
-    )
-    .await;
-    let closeout = match (transport_result, closeout) {
-        (Ok(PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal), Ok(closeout)) => {
-            closeout
-        }
-        (Ok(PrivateStopOutcome::OwnerUnreachable), Ok(closeout))
-        | (Ok(PrivateStopOutcome::ProtocolError), Ok(closeout))
-        | (Err(_), Ok(closeout)) => closeout,
-        (Ok(PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal), Err(err)) => {
-            return Err(err);
-        }
-        (Ok(PrivateStopOutcome::OwnerUnreachable), Err(err)) => {
-            return Err(anyhow::anyhow!(
-                "owner_unreachable: private stop transport for retained worker {} did not stay reachable until durable stop closeout completed: {err}",
-                resolved.target_participant.participant_id()
-            ));
-        }
-        (Ok(PrivateStopOutcome::ProtocolError), Err(err)) => {
-            return Err(anyhow::anyhow!(
-                "owner_unreachable: private stop transport for retained worker {} returned a protocol error before durable stop closeout completed: {err}",
-                resolved.target_participant.participant_id()
-            ));
-        }
-        (Err(connect_err), Err(closeout_err)) => {
-            return Err(anyhow::anyhow!(
-                "owner_unreachable: failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({connect_err:#}; {closeout_err})",
-                resolved.target_participant.participant_id()
-            ));
+        &resolved,
+        &transport_path,
+        None,
+    ) {
+        used_private_stop_surface = false;
+        persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
+    } else {
+        let transport_result =
+            request_private_stop_after_transport_registration(&transport_path).await;
+        if let Err(transport_err) = &transport_result {
+            if detached_stop_world_worker_closeout_available(
+                &prepared.store,
+                &resolved,
+                &transport_path,
+                Some(transport_err),
+            ) || detached_stop_world_worker_closeout_available_after_transport_failure(
+                &prepared.store,
+                &resolved,
+                &transport_path,
+                transport_err,
+            ) {
+                used_private_stop_surface = false;
+                persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
+            } else {
+                let closeout = wait_for_stop_world_worker_closeout(
+                    &prepared.store,
+                    &resolved.session.orchestration_session_id,
+                    resolved.target_participant.participant_id(),
+                )
+                .await;
+                match (transport_result, closeout) {
+                    (Err(_), Ok(closeout)) => closeout,
+                    (Err(connect_err), Err(closeout_err)) => {
+                        return Err(anyhow::anyhow!(
+                            "owner_unreachable: failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({connect_err:#}; {closeout_err})",
+                            resolved.target_participant.participant_id()
+                        ));
+                    }
+                    _ => {
+                        unreachable!("Err transport_result branch must carry only transport errors")
+                    }
+                }
+            }
+        } else {
+            let transport_outcome = match transport_result {
+                Ok(outcome) => outcome,
+                Err(_) => {
+                    unreachable!("Ok transport_result branch must carry only private stop outcomes")
+                }
+            };
+            let closeout = wait_for_stop_world_worker_closeout(
+                &prepared.store,
+                &resolved.session.orchestration_session_id,
+                resolved.target_participant.participant_id(),
+            )
+            .await;
+            match (transport_outcome, closeout) {
+                (
+                    PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal,
+                    Ok(closeout),
+                ) => closeout,
+                (PrivateStopOutcome::OwnerUnreachable, Ok(closeout))
+                | (PrivateStopOutcome::ProtocolError, Ok(closeout)) => closeout,
+                (PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal, Err(err)) => {
+                    return Err(err);
+                }
+                (PrivateStopOutcome::OwnerUnreachable, Err(err)) => {
+                    return Err(anyhow::anyhow!(
+                        "owner_unreachable: private stop transport for retained worker {} did not stay reachable until durable stop closeout completed: {err}",
+                        resolved.target_participant.participant_id()
+                    ));
+                }
+                (PrivateStopOutcome::ProtocolError, Err(err)) => {
+                    return Err(anyhow::anyhow!(
+                        "owner_unreachable: private stop transport for retained worker {} returned a protocol error before durable stop closeout completed: {err}",
+                        resolved.target_participant.participant_id()
+                    ));
+                }
+            }
         }
     };
     let summary = summarize_stop_world_worker_result(
         resolved.target_participant.participant_id(),
         &resolved.target_participant.handle.backend_id,
+        used_private_stop_surface,
     );
 
     Ok(WorldDispatchOutcomeV1::StopWorldWorker(
@@ -4433,9 +4482,172 @@ async fn wait_for_cancel_world_work_closeout(
 }
 
 #[cfg(target_os = "linux")]
-fn summarize_stop_world_worker_result(participant_id: &str, backend_id: &str) -> String {
+fn detached_stop_world_worker_closeout_available(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+    transport_path: &Path,
+    transport_error: Option<&anyhow::Error>,
+) -> bool {
+    let owner_continuity = store
+        .classify_hidden_owner_helper_launch_continuity(
+            &resolved.session.orchestration_session_id,
+            resolved.caller_participant.participant_id(),
+            true,
+        )
+        .ok();
+    let detached_owner_unreachable = matches!(
+        owner_continuity,
+        Some(
+            crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchContinuity::DetachedReconciled(
+                _
+            ) | crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchContinuity::StaleAttachedTruth
+        )
+    );
+    if let Some(err) = transport_error {
+        let refused_live_transport =
+            transport_path.exists() && detached_stop_transport_is_unusable(err);
+        if refused_live_transport && parked_retained_target_stop_transport_contradiction(resolved) {
+            return true;
+        }
+        if !detached_owner_unreachable {
+            return false;
+        }
+        return !transport_path.exists() || detached_stop_transport_is_unusable(err);
+    }
+
+    if !detached_owner_unreachable {
+        return false;
+    }
+
+    !transport_path.exists()
+}
+
+#[cfg(target_os = "linux")]
+fn detached_stop_transport_is_unusable(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::ConnectionRefused)
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn detached_stop_world_worker_closeout_available_after_transport_failure(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+    transport_path: &Path,
+    transport_error: &anyhow::Error,
+) -> bool {
+    // The refreshed re-resolution path is only intended for the stale live-socket seam:
+    // we saw a stop socket, attempted delivery, and got ECONNREFUSED while session truth
+    // may have flipped to parked resumable during that wait window.
+    if !transport_path.exists() || !detached_stop_transport_is_unusable(transport_error) {
+        return false;
+    }
+
+    let session = match store.load_orchestration_session(&resolved.session.orchestration_session_id)
+    {
+        Ok(Some(session)) => session,
+        Ok(None) | Err(_) => return false,
+    };
+    let Some(authoritative_caller_participant_id) = session.active_participant_id() else {
+        return false;
+    };
+    let refreshed_resolved = match store.resolve_internal_stop_world_dispatch_target(
+        &resolved.session.orchestration_session_id,
+        authoritative_caller_participant_id,
+        resolved.target_participant.participant_id(),
+        &resolved.target_participant.handle.backend_id,
+    ) {
+        Ok(refreshed_resolved) => refreshed_resolved,
+        Err(_) => return false,
+    };
+
+    detached_stop_world_worker_closeout_available(
+        store,
+        &refreshed_resolved,
+        transport_path,
+        Some(transport_error),
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn parked_retained_target_stop_transport_contradiction(
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+) -> bool {
+    resolved.session.state == crate::execution::agent_runtime::orchestration_session::OrchestrationSessionState::Active
+        && resolved.session.posture
+            == crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::ParkedResumable
+        && resolved.target_participant.handle.execution.scope == AgentExecutionScope::World
+        && resolved.target_participant.handle.state.is_live()
+        && resolved.target_participant.internal.terminal_observed_at.is_none()
+        && !resolved.target_participant.is_resume_eligible()
+        && resolved.target_participant.internal.control_owner_retained
+        && resolved.target_participant.internal.event_stream_active
+        && resolved
+            .target_participant
+            .internal
+            .completion_observer_retained
+        && resolved.target_participant.internal.ownership_valid
+        && matches!(
+            resolved.target_participant.internal.ownership_mode,
+            Some(
+                crate::execution::agent_runtime::session::AgentRuntimeOwnershipMode::MemberRuntime
+            )
+        )
+}
+
+#[cfg(target_os = "linux")]
+fn persist_detached_stop_world_worker_closeout(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+) -> Result<RetainedWorkerStopCloseoutV1> {
+    let session = store
+        .load_orchestration_session(&resolved.session.orchestration_session_id)?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing_orchestration_session: orchestration session {} disappeared before detached durable stop closeout could be persisted",
+                resolved.session.orchestration_session_id
+            )
+        })?;
+    let authoritative_caller_participant_id = session.active_participant_id().ok_or_else(|| {
+        anyhow::anyhow!(
+            "stale_linkage: orchestration session {} lost its authoritative orchestrator before detached durable stop closeout could be persisted",
+            resolved.session.orchestration_session_id
+        )
+    })?;
+    let resolved = store.resolve_internal_stop_world_dispatch_target(
+        &resolved.session.orchestration_session_id,
+        authoritative_caller_participant_id,
+        resolved.target_participant.participant_id(),
+        &resolved.target_participant.handle.backend_id,
+    )?;
+    let mut session = resolved.session;
+    let mut participant = resolved.target_participant;
+
+    persist_runtime_stop_closeout(store, &mut session, &mut participant)
+        .context("failed to persist detached durable stop closeout for retained worker")?;
+
+    Ok(RetainedWorkerStopCloseoutV1 {
+        participant_state: participant.handle.state,
+        session_state: session.state,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn summarize_stop_world_worker_result(
+    participant_id: &str,
+    backend_id: &str,
+    used_private_stop_surface: bool,
+) -> String {
+    if used_private_stop_surface {
+        return format!(
+            "stop_world_worker drove durable stopped closeout for retained worker {participant_id} on backend {backend_id} via the existing private owner stop surface"
+        );
+    }
+
     format!(
-        "stop_world_worker drove durable stopped closeout for retained worker {participant_id} on backend {backend_id} via the existing private owner stop surface"
+        "stop_world_worker drove durable stopped closeout for retained worker {participant_id} on backend {backend_id} via detached durable closeout because the retained runtime owner was no longer reachable"
     )
 }
 
@@ -5768,6 +5980,30 @@ mod tests {
         store
             .persist_participant(&member)
             .expect("persist retained worker");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn persist_stale_attached_continue_dispatch_state(
+        store: &AgentRuntimeStateStore,
+        workspace_root: &Path,
+        world_id: &str,
+        world_generation: u64,
+    ) {
+        persist_authoritative_continue_dispatch_state(
+            store,
+            workspace_root,
+            world_id,
+            world_generation,
+        );
+
+        let mut orchestrator = store
+            .load_participant("orch_dispatch")
+            .expect("load authoritative orchestrator")
+            .expect("authoritative orchestrator");
+        orchestrator.internal.shell_owner_pid = 999_999_999;
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist stale attached orchestrator");
     }
 
     #[cfg(target_os = "linux")]
@@ -13267,6 +13503,902 @@ agents:
 
         stop_owner.await.expect("stop owner task should join");
         stop_transport.close().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_waits_for_late_private_stop_transport_publication()
+    {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let store_for_task = store.clone();
+        let stop_owner = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            let (stop_tx, mut stop_rx) =
+                crate::execution::agent_runtime::control::private_stop_request_channel();
+            let mut stop_transport =
+                crate::execution::agent_runtime::control::register_private_stop_transport(
+                    &store_for_task,
+                    "sess_dispatch",
+                    "ash_member",
+                    stop_tx,
+                )
+                .await
+                .expect("register late private stop transport");
+            let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
+                .await
+                .expect("timed out waiting for late private stop request")
+                .expect("late private stop request");
+            let mut session = store_for_task
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for late stop closeout")
+                .expect("authoritative orchestration session for late stop closeout");
+            let mut participant = store_for_task
+                .load_participant("ash_member")
+                .expect("load retained participant for late stop closeout")
+                .expect("authoritative retained participant for late stop closeout");
+            participant.transition_state(AgentRuntimeSessionState::Stopped);
+            participant.mark_terminal_state("worker stopped after late transport publication");
+            participant.touch_heartbeat();
+            session.touch_active();
+            crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                &store_for_task,
+                &session,
+                &participant,
+            )
+            .expect("persist retained late stop closeout");
+            let _ = request
+                .response_tx
+                .send(crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted);
+            stop_transport.close().await;
+        });
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch prepared stop request should wait for late transport");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(
+            outcome.closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+
+        stop_owner.await.expect("late stop owner task should join");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_persists_parked_resumable_closeout_without_private_transport(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        assert!(
+            !transport_path.exists(),
+            "parked resumable retained workers should not depend on a private stop transport"
+        );
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch parked resumable stop request");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(
+            outcome.closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            outcome.closeout.session_state,
+            OrchestrationSessionState::Active
+        );
+        assert!(
+            outcome.summary.contains("detached durable closeout"),
+            "summary should disclose the no-live-owner retained stop path: {}",
+            outcome.summary
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after parked stop")
+            .expect("retained participant after parked stop");
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("stopped")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_persists_parked_resumable_closeout_when_private_stop_socket_is_stale(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        assert!(
+            transport_path.exists(),
+            "stale private stop socket path should remain present without a listener"
+        );
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch parked resumable stop request with stale private socket");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(
+            outcome.closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert!(
+            outcome.summary.contains("detached durable closeout"),
+            "stale private stop socket should route through detached durable closeout: {}",
+            outcome.summary
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after stale-socket stop")
+            .expect("retained participant after stale-socket stop");
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("stopped")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_rejects_live_active_attached_refused_transport(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        assert!(
+            transport_path.exists(),
+            "stale private stop socket path should remain present without a listener"
+        );
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let connection_refused =
+            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+
+        assert!(
+            !detached_stop_world_worker_closeout_available(
+                &store,
+                &resolved,
+                &transport_path,
+                Some(&connection_refused),
+            ),
+            "live active_attached sessions must stay fail-closed on ECONNREFUSED instead of taking detached stop fallback"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_accepts_parked_refused_transport_when_target_runtime_truth_is_stale(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let mut orchestrator = store
+            .load_participant("orch_dispatch")
+            .expect("load parked orchestrator")
+            .expect("parked orchestrator");
+        orchestrator.internal.uaa_session_id = None;
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist parked orchestrator without internal session id");
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve parked stop target with stale target ownership truth");
+        let continuity = store
+            .classify_hidden_owner_helper_launch_continuity("sess_dispatch", "orch_dispatch", true)
+            .expect("classify parked owner continuity");
+        assert!(
+            matches!(
+                continuity,
+                crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchContinuity::Pending
+            ),
+            "fixture should shut the detached-owner continuity gate so the stale target-ownership override is the only fallback path"
+        );
+        assert!(
+            parked_retained_target_stop_transport_contradiction(&resolved),
+            "target fixture must retain stale member-runtime ownership truth before refused stop transport invalidates it"
+        );
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        assert!(
+            transport_path.exists(),
+            "stale private stop socket path should remain present without a listener"
+        );
+
+        let connection_refused =
+            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+
+        assert!(
+            detached_stop_world_worker_closeout_available(
+                &store,
+                &resolved,
+                &transport_path,
+                Some(&connection_refused),
+            ),
+            "parked retained stop fallback should treat ECONNREFUSED on the exact target private stop socket as authoritative proof that stale member-runtime ownership truth must be overridden"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_rechecks_fresh_session_truth_after_refused_transport(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        let connection_refused =
+            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+
+        assert!(
+            !detached_stop_world_worker_closeout_available(
+                &store,
+                &resolved,
+                &transport_path,
+                Some(&connection_refused),
+            ),
+            "stale pre-error session truth should not unlock detached stop fallback before the authoritative posture flips"
+        );
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load authoritative session")
+            .expect("authoritative session");
+        session.mark_parked_resumable("owner detached after refused private stop");
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist refreshed parked session");
+
+        assert!(
+            detached_stop_world_worker_closeout_available_after_transport_failure(
+                &store,
+                &resolved,
+                &transport_path,
+                &connection_refused,
+            ),
+            "fresh authoritative session truth should unlock detached stop fallback once the session becomes parked resumable after a refused private stop"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_recheck_stays_closed_for_missing_socket_not_found(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        assert!(
+            !transport_path.exists(),
+            "missing-socket regression fixture must exercise the path-absent transport seam"
+        );
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load authoritative session")
+            .expect("authoritative session");
+        session.mark_parked_resumable("owner detached after missing private stop transport");
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist refreshed parked session");
+
+        let not_found = anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::NotFound));
+
+        assert!(
+            !detached_stop_world_worker_closeout_available_after_transport_failure(
+                &store,
+                &resolved,
+                &transport_path,
+                &not_found,
+            ),
+            "fresh-session recheck must remain fail-closed for missing-socket NotFound transport failures even after session truth flips"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_persists_detached_recoverable_closeout_for_stale_active_attached_owner(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_attached_continue_dispatch_state(
+            &store,
+            workspace_root.path(),
+            "world-17",
+            2,
+        );
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        assert!(
+            !transport_path.exists(),
+            "stale active_attached owner-loss should not need a private stop transport to persist durable closeout"
+        );
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch stale active_attached stop request");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(
+            outcome.closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            outcome.closeout.session_state,
+            OrchestrationSessionState::Active
+        );
+        assert!(
+            outcome.summary.contains("detached durable closeout"),
+            "stale owner-loss should route through detached durable closeout: {}",
+            outcome.summary
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after stale-owner stop")
+            .expect("retained participant after stale-owner stop");
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("stopped")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_prefers_private_stop_surface_for_parked_resumable_with_live_transport(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let (stop_tx, mut stop_rx) =
+            crate::execution::agent_runtime::control::private_stop_request_channel();
+        let mut stop_transport =
+            crate::execution::agent_runtime::control::register_private_stop_transport(
+                &store,
+                "sess_dispatch",
+                "ash_member",
+                stop_tx,
+            )
+            .await
+            .expect("register private stop transport for parked resumable session");
+        let store_for_task = store.clone();
+        let stop_owner = tokio::spawn(async move {
+            let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
+                .await
+                .expect("timed out waiting for parked private stop request")
+                .expect("parked private stop request");
+            let mut session = store_for_task
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for parked stop closeout")
+                .expect("authoritative orchestration session for parked stop closeout");
+            let mut participant = store_for_task
+                .load_participant("ash_member")
+                .expect("load retained participant for parked stop closeout")
+                .expect("authoritative retained participant for parked stop closeout");
+            participant.transition_state(AgentRuntimeSessionState::Stopped);
+            participant.mark_terminal_state("worker stopped through private parked transport");
+            participant.touch_heartbeat();
+            session.touch_active();
+            crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                &store_for_task,
+                &session,
+                &participant,
+            )
+            .expect("persist retained parked stop closeout");
+            let _ = request
+                .response_tx
+                .send(crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted);
+        });
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch parked resumable stop request should still use private transport");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert!(
+            outcome
+                .summary
+                .contains("existing private owner stop surface"),
+            "parked resumable session must keep using the live private stop surface: {}",
+            outcome.summary
+        );
+        assert!(
+            !outcome.summary.contains("detached durable closeout"),
+            "detached closeout must stay gated behind actual private-surface loss: {}",
+            outcome.summary
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after parked private stop")
+            .expect("retained participant after parked private stop");
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("worker stopped through private parked transport")
+        );
+
+        stop_owner
+            .await
+            .expect("parked private stop owner task should join");
+        stop_transport.close().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_backend_drift() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve detached stop target before backend drift");
+        let mut participant = store
+            .load_participant("ash_member")
+            .expect("load retained participant before backend drift")
+            .expect("retained participant before backend drift");
+        participant.handle.backend_id = "cli:other-world".to_string();
+        store
+            .persist_participant(&participant)
+            .expect("persist backend drift");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect_err("backend drift must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "backend_mismatch: orchestration session sess_dispatch retained worker ash_member backend is cli:other-world not cli:codex-world"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_terminal_target_race() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve detached stop target before terminal race");
+
+        let mut participant = store
+            .load_participant("ash_member")
+            .expect("load retained participant")
+            .expect("retained participant");
+        participant.mark_terminal_state("worker invalidated");
+        participant.transition_state(AgentRuntimeSessionState::Invalidated);
+        store
+            .persist_participant(&participant)
+            .expect("persist invalidated participant");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect_err("terminal target race must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "target_already_terminal: orchestration session sess_dispatch retained worker ash_member is already terminal (invalidated)"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_stale_owner_successor_drift() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_attached_continue_dispatch_state(
+            &store,
+            workspace_root.path(),
+            "world-17",
+            2,
+        );
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve stale-owner stop target before successor drift");
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load stale-owner orchestration session")
+            .expect("stale-owner orchestration session");
+        let mut successor = sample_orchestrator_participant();
+        successor.handle.participant_id = "orch_successor".to_string();
+        successor.internal.shell_owner_pid = 999_999_998;
+        successor.internal.uaa_session_id = Some("uaa_orch_successor".to_string());
+        successor.internal.attached_client_present = true;
+        successor.internal.last_attached_at = Some(chrono::Utc::now());
+        successor.internal.resume_eligible = true;
+        session.bind_active_session_handle("orch_successor".to_string());
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&successor);
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist successor active session");
+        store
+            .persist_participant(&successor)
+            .expect("persist stale-owner successor participant");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect_err("successor drift must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "stale_linkage: orchestration session sess_dispatch retained worker ash_member is not linked to authoritative orchestrator orch_successor"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after successor drift")
+            .expect("retained participant after successor drift");
+        assert!(
+            participant_after.handle.state.is_live(),
+            "fallback must not mutate retained worker state after successor drift"
+        );
+        assert!(
+            participant_after.internal.termination_reason.is_none(),
+            "fallback must not persist stop closeout after successor drift"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_stale_owner_linkage_drift() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_attached_continue_dispatch_state(
+            &store,
+            workspace_root.path(),
+            "world-17",
+            2,
+        );
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve stale-owner stop target before linkage drift");
+
+        let mut participant = store
+            .load_participant("ash_member")
+            .expect("load stale-owner retained participant")
+            .expect("stale-owner retained participant");
+        participant.handle.orchestrator_participant_id = Some("orch_unrelated".to_string());
+        store
+            .persist_participant(&participant)
+            .expect("persist stale-owner linkage drift");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect_err("linkage drift must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "stale_linkage: orchestration session sess_dispatch retained worker ash_member is not linked to authoritative orchestrator orch_dispatch"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after linkage drift")
+            .expect("retained participant after linkage drift");
+        assert!(
+            participant_after.handle.state.is_live(),
+            "fallback must not mutate retained worker state after linkage drift"
+        );
+        assert!(
+            participant_after.internal.termination_reason.is_none(),
+            "fallback must not persist stop closeout after linkage drift"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_fails_closed_for_non_refused_transport_errors(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve detached stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        std::fs::write(&transport_path, b"stale inode")
+            .expect("persist placeholder transport path");
+
+        let permission_denied =
+            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+
+        assert!(
+            !detached_stop_world_worker_closeout_available(
+                &store,
+                &resolved,
+                &transport_path,
+                Some(&permission_denied),
+            ),
+            "parked resumable detached fallback must stay fail-closed for non-ECONNREFUSED transport errors"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_rejects_active_missing_transport_without_observed_unavailability(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        assert!(
+            !transport_path.exists(),
+            "active authoritative test fixture should start before private stop transport publication"
+        );
+
+        assert!(
+            !detached_stop_world_worker_closeout_available(
+                &store,
+                &resolved,
+                &transport_path,
+                None,
+            ),
+            "active authoritative retained targets must wait for late private transport publication instead of taking detached fallback on a missing path alone"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_rejects_active_missing_transport_after_not_found_error(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let not_found = anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::NotFound));
+
+        assert!(
+            !detached_stop_world_worker_closeout_available(
+                &store,
+                &resolved,
+                &transport_path,
+                Some(&not_found),
+            ),
+            "late-publication timeout must stay fail-closed for live active_attached sessions when the private stop socket never appears"
+        );
     }
 
     #[cfg(target_os = "linux")]

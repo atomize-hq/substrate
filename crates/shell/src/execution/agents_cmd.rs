@@ -1577,11 +1577,19 @@ fn build_attach_launch_plan(
     intent: AttachLaunchIntent,
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
     let store = AgentRuntimeStateStore::new()?;
+    build_attach_launch_plan_with_store(&store, orchestration_session_id, intent)
+}
+
+fn build_attach_launch_plan_with_store(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    intent: AttachLaunchIntent,
+) -> Result<HiddenOwnerHelperLaunchPlan> {
     let mut target = store
         .resolve_public_attach_target(orchestration_session_id, intent.public_attach_action())
         .map_err(|err| config_model::user_error(err.to_string()))?;
     #[cfg(target_os = "linux")]
-    refresh_public_attach_target_world_binding(&store, &mut target)?;
+    refresh_public_attach_target_world_binding(store, &mut target)?;
     let attach_contract = target.host_attach_contract.clone().ok_or_else(|| {
         config_model::user_error(format!(
             "owner_unreachable: orchestration session {} is missing durable host attach contract state",
@@ -4337,6 +4345,23 @@ mod tests {
         result
     }
 
+    fn with_state_store_and_shared_world_root<T>(
+        test: impl FnOnce(&AgentRuntimeStateStore, &Path) -> T,
+    ) -> T {
+        let temp = TempDir::new().expect("tempdir");
+        let shared_world_root = temp.path().join("shared-worlds");
+        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", temp.path());
+        let _shared_world_root_guard = EnvVarGuard::set(
+            SHARED_WORLD_METADATA_ROOT_TEST_ENV,
+            shared_world_root.as_path(),
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let result = test(&store, &shared_world_root);
+        std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
+        std::env::remove_var("SUBSTRATE_HOME");
+        result
+    }
+
     fn host_descriptor() -> RuntimeSelectionDescriptor {
         RuntimeSelectionDescriptor {
             agent_id: "codex-host".to_string(),
@@ -4379,15 +4404,12 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     fn write_shared_world_metadata_for_test(
+        metadata_root: &Path,
         world_id: &str,
         orchestration_session_id: &str,
         world_generation: u64,
     ) -> PathBuf {
-        let metadata_dir = PathBuf::from(
-            std::env::var(SHARED_WORLD_METADATA_ROOT_TEST_ENV)
-                .expect("shared world metadata root override"),
-        )
-        .join(world_id);
+        let metadata_dir = metadata_root.join(world_id);
         fs::create_dir_all(&metadata_dir).expect("shared world metadata dir");
         let metadata_path = metadata_dir.join("session.json");
         fs::write(
@@ -4721,14 +4743,21 @@ mod tests {
                 .persist_participant(&participant)
                 .expect("persist detached participant");
 
-            let reattach_plan =
-                build_attach_launch_plan(orchestration_session_id, AttachLaunchIntent::Reattach)
-                    .expect("build reattach plan");
+            let reattach_plan = build_attach_launch_plan_with_store(
+                store,
+                orchestration_session_id,
+                AttachLaunchIntent::Reattach,
+            )
+            .expect("build reattach plan");
             assert_eq!(reattach_plan.mode, OwnerHelperMode::Attach);
             assert_eq!(reattach_plan.startup_prompt, None);
 
-            let detached_turn_plan = build_resumed_turn_launch_plan(orchestration_session_id)
-                .expect("build detached-turn attach plan");
+            let detached_turn_plan = build_attach_launch_plan_with_store(
+                store,
+                orchestration_session_id,
+                AttachLaunchIntent::DetachedTurn,
+            )
+            .expect("build detached-turn attach plan");
             assert_eq!(detached_turn_plan.mode, OwnerHelperMode::ResumeOneTurn);
             assert_eq!(
                 detached_turn_plan
@@ -4752,7 +4781,7 @@ mod tests {
     #[test]
     #[serial]
     fn build_attach_launch_plan_refreshes_stale_shared_world_binding_from_local_metadata() {
-        with_state_store(|store| {
+        with_state_store_and_shared_world_root(|store, shared_world_root| {
             let orchestration_session_id = "sess_attach_binding_refresh";
             let (mut session, participant) =
                 detached_orchestrator(orchestration_session_id, "ash_attach_binding_refresh");
@@ -4765,12 +4794,19 @@ mod tests {
                 .expect("persist detached participant");
 
             let world_id = format!("wld_attach_binding_refresh_{}", Uuid::now_v7());
-            let metadata_dir =
-                write_shared_world_metadata_for_test(&world_id, orchestration_session_id, 0);
+            let metadata_dir = write_shared_world_metadata_for_test(
+                shared_world_root,
+                &world_id,
+                orchestration_session_id,
+                0,
+            );
 
-            let plan =
-                build_attach_launch_plan(orchestration_session_id, AttachLaunchIntent::Reattach)
-                    .expect("build attach launch plan");
+            let plan = build_attach_launch_plan_with_store(
+                store,
+                orchestration_session_id,
+                AttachLaunchIntent::Reattach,
+            )
+            .expect("build attach launch plan");
 
             assert_eq!(plan.session.world_id.as_deref(), Some(world_id.as_str()));
             assert_eq!(plan.session.world_generation, Some(0));
