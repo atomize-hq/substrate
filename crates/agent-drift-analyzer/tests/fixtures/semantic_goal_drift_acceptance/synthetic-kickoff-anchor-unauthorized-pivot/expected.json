@@ -11,5 +11,9 @@
   "required_reason_prefixes": [
     "semantic goal drift current goal:",
     "semantic goal drift kickoff anchor:"
+  ],
+  "forbidden_reason_prefixes": [
+    "rolling semantic goal drift current goal:",
+    "rolling semantic goal drift previous goal:"
   ]
 }

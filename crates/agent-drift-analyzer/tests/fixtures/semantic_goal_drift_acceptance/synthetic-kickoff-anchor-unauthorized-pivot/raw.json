@@ -2,7 +2,7 @@
   "case_id": "synthetic-kickoff-anchor-unauthorized-pivot",
   "session_id": "semantic-goal-drift-r6-2-4",
   "source_artifact": "Synthetic compact-row acceptance fixture for Packet R6-2.4 semantic goal drift coverage.",
-  "notes": "Turn 1 anchors the session on crates/agent-drift-analyzer/tests/checkpoints.rs. Turn 2 pivots to docs/specs/r6/MAP.md without a sanctioned replan marker, so the live analyzer/checkpoint/objective path must preserve the kickoff anchor and flag the later objective drift end to end.",
+  "notes": "Turn 1 anchors the session on crates/agent-drift-analyzer/tests/checkpoints.rs. Turn 2 pivots to docs/specs/r6/MAP.md without a sanctioned replan marker. Turn 3 stays on docs/specs/r6/MAP.md so the final checkpoint remains kickoff-drifted but must not pick up rolling semantic-goal-drift evidence; the dedicated R6-3.3 rolling fixture owns that co-fire proof.",
   "rows": [
     {
       "turn_id": "turn-001",
@@ -35,6 +35,22 @@
       "turn_id": "turn-002",
       "kind": "tool_output",
       "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed MAP witness excerpts"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update docs/specs/r6/MAP.md only.\n\n## Verification\n- cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,220p' docs/specs/r6/MAP.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nrechecked MAP witness excerpts"
     }
   ]
 }
