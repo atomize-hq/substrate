@@ -15,7 +15,10 @@ does not match the signature described in the SPEC (it must already receive `ana
 Surfacing decision (load-bearing): rolling drift is tagged evidence on the existing `SemanticGoalDrift`
 class, **not** a new `DriftClass` variant, and there is **no** `schema_version` bump (SPEC Resolved
 Decisions 1-2). The three flip-conditions that would promote rolling to its own variant in a later `R6`
-iteration are recorded in the SPEC; none holds today. Do not reopen the variant question mid-implementation.
+iteration are: (i) rolling needs a different `raw_score` / threshold / debounce / warning policy than
+kickoff drift; (ii) operators need separate sentinel labels/actions; or (iii) acceptance evidence shows
+aggregate `SemanticGoalDrift` reporting hides gradual-vs-abrupt in a way that matters operationally. None
+holds today. Do not reopen the variant question mid-implementation.
 
 ## R6-3.0: Docs Lock
 
@@ -23,9 +26,11 @@ iteration are recorded in the SPEC; none holds today. Do not reopen the variant 
   - Acceptance: `docs/specs/r6/R6-3/` contains the spec, plan, and this tasks ledger, and they record: the
     evidence-not-variant surfacing decision plus its three flip-conditions; the no-`schema_version`-bump /
     analyzer-local boundary; the symmetric eligibility bar (both adjacent goals at the current-goal bar);
-    the symmetric-extraction reuse of the `R6-2` disjoint-set distance primitive; the `sanctioned_replan`
-    reuse; and the independent-compute / co-fire contract. Content is consistent with `docs/specs/r6/MAP.md`
-    item 6, the DESIGN `R6-3` charter, and the landed `R6-2` SPEC.
+    the symmetric-extraction reuse of the `R6-2` disjoint-set distance primitive
+    (`goal_specific_terms(.., Some(summary))` on both sides); the `sanctioned_replan` reuse; and the
+    independent-compute / co-fire contract, including that an absent or ineligible kickoff anchor must not
+    short-circuit the rolling comparison. Content is consistent with `docs/specs/r6/MAP.md` item 6, the
+    DESIGN `R6-3` charter, and the landed `R6-2` SPEC.
   - Verify: manual review against the `R6` MAP, the DESIGN doc, the `R6-2` SPEC, and live
     `checkpoint/mod.rs` (`analysis.previous`, `sanctioned_replan`) + `scoring/semantic_goal_drift.rs`.
   - Files:
@@ -37,8 +42,11 @@ iteration are recorded in the SPEC; none holds today. Do not reopen the variant 
   convention.
   - Acceptance: if full parity with the earlier packets is wanted, a
     `agent-drift-analyzer-rolling-semantic-goal-drift-packet-prompts.md` artifact exists using the live
-    `R6-3.0`-`R6-3.4` numbering and the same source-of-truth constraints as this ledger. Not required for
-    implementation to proceed.
+    `R6-3.0`-`R6-3.4` numbering and the same source-of-truth constraints as this ledger, including the
+    evidence-not-variant decision, the three flip-conditions, the analyzer-local / no-`schema_version`-bump
+    boundary, the symmetric `Some(summary)` extraction rule, the `analysis.sanctioned_replan` reuse, and the
+    independence rule that an absent or ineligible kickoff anchor must not short-circuit rolling. Not
+    required for implementation to proceed.
   - Verify: manual review against the `R6-2` packet-prompts artifact for shape/numbering parity.
   - Files:
     - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-packet-prompts.md` (new, optional)

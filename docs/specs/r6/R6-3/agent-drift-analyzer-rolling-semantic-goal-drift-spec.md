@@ -45,8 +45,10 @@ this SPEC/PLAN/TASKS family owns the `R6-3` implementation contract; the live cr
    if either fires (resolved — see Resolved Decision 6).** `score_semantic_goal_drift` computes the
    kickoff-anchored comparison (as landed) and the rolling comparison (new), and flags `SemanticGoalDrift`
    when either diverges and the checkpoint is not a sanctioned replan. Evidence names which comparison
-   fired; both may co-fire on the same checkpoint with distinct evidence lines. The posture, `raw_score`
-   (`DRIFT_RAW_SCORE`), and `confidence` shape are unchanged from `R6-2` — one class, one posture.
+   fired; both may co-fire on the same checkpoint with distinct evidence lines. Critically, an absent or
+   ineligible kickoff anchor is a **kickoff no-claim only** — it must **not** short-circuit the rolling
+   comparison when the previous checkpoint goal is eligible. The posture, `raw_score` (`DRIFT_RAW_SCORE`),
+   and `confidence` shape are unchanged from `R6-2` — one class, one posture.
 5. **The distance primitive is reused, but extraction is symmetric (resolved — see Resolved Decision 4).**
    Rolling drift reuses the same disjoint-set overlap over normalized structured-goal terms that `R6-2`'s
    `semantic_goal_diverged` uses (SPEC `R6-2` Resolved Decision 7). Because both the current and previous
@@ -359,8 +361,10 @@ Conventions for this packet:
    either fires.** `score_semantic_goal_drift` keeps returning a single `ScoredDrift` for
    `SemanticGoalDrift`; it flags when the kickoff-anchored comparison OR the rolling comparison diverges
    (and the checkpoint is not a sanctioned replan), attaching the evidence for whichever fired. Co-firing is
-   allowed and surfaces both tagged evidence lines. This preserves `R6-2`'s single-posture contract while
-   adding the step-size reason.
+   allowed and surfaces both tagged evidence lines. Critically, the landed kickoff-anchor early return must
+   be restructured so an absent or ineligible kickoff anchor is a kickoff-side no-claim, **not** a whole-
+   scorer no-claim: rolling still evaluates when the previous checkpoint goal is eligible. This preserves
+   `R6-2`'s single-posture contract while adding the step-size reason.
 7. **Resolved (2026-07-02): `progress.rs` comparability/reset is not migrated in this packet.** As in
    `R6-2`, any structured-state migration of the reset surface is the conditional `R6-4`, evidence-gated, to
    honor Guardrail 4. `R6-3` reads `analysis.previous` for scoring only; it does not touch interval/reset

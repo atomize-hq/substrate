@@ -17,8 +17,11 @@ extraction and the existing `sanctioned_replan` exclusion, with no new `DriftCla
 ## Planning Decisions Locked For This Draft
 
 1. Surface rolling drift as tagged evidence on the existing `SemanticGoalDrift` class, **not** a new variant
-   (SPEC Resolved Decision 1). The three flip-conditions that would promote it to its own variant later are
-   recorded in the SPEC; none holds today.
+   (SPEC Resolved Decision 1). The three flip-conditions that would promote it to its own variant later are:
+   (i) rolling needs a different `raw_score` / threshold / debounce / warning policy than kickoff drift;
+   (ii) operators need separate sentinel labels/actions; or (iii) acceptance evidence shows aggregate
+   `SemanticGoalDrift` reporting hides gradual-vs-abrupt in a way that matters operationally. None holds
+   today.
 2. No `schema_version` bump; the change is analyzer-local to `scoring/semantic_goal_drift.rs` + evidence
    (SPEC Resolved Decision 2). There is no `R6-2.2`-style cross-crate variant-blast-radius packet.
 3. The previous goal is read from `analysis.previous` with no new plumbing — the scorer already receives
@@ -32,7 +35,9 @@ extraction and the existing `sanctioned_replan` exclusion, with no new `DriftCla
 6. Reuse the existing `analysis.sanctioned_replan` exclusion; add no new replan detection (SPEC Resolved
    Decision 5).
 7. Rolling and kickoff-anchored are computed independently in the same scorer; the class flags if either
-   fires, with distinct evidence tags and co-fire allowed (SPEC Resolved Decision 6).
+   fires, with distinct evidence tags and co-fire allowed (SPEC Resolved Decision 6). An absent or
+   ineligible kickoff anchor is a kickoff-side no-claim only and must not short-circuit the rolling
+   comparison.
 8. `progress.rs` comparability/reset is **not** migrated here (SPEC Resolved Decision 7); that is the
    conditional `R6-4`, honoring Guardrail 4.
 9. The scorer stays rule-based and interpretable; learned monitors deferred.
@@ -83,11 +88,14 @@ explicitly deferred / out of scope:
 ### Scope
 
 - commit the bounded SPEC/PLAN/TASKS family under `docs/specs/r6/R6-3/`
-- record the evidence-not-variant surfacing decision and its flip-conditions, the no-schema-bump boundary,
-  the symmetric eligibility bar, the symmetric-extraction reuse of the disjoint-set primitive, the
-  `sanctioned_replan` reuse, and the independent-compute / co-fire contract
-- optional parity: a `agent-drift-analyzer-rolling-semantic-goal-drift-packet-prompts.md` artifact matching
-  the `R6-1`/`R6-2` four-file convention, if full parity is wanted (not required for implementation)
+- record the evidence-not-variant surfacing decision and its three flip-conditions, the no-schema-bump /
+  analyzer-local boundary, the symmetric eligibility bar, the symmetric-extraction reuse of the disjoint-set
+  primitive (`goal_specific_terms(.., Some(summary))` on both sides), the `sanctioned_replan` reuse, and the
+  independent-compute / co-fire contract including that an absent or ineligible kickoff anchor must not
+  short-circuit the rolling comparison
+- keep the packet-prompts artifact, when present, aligned to the live source-of-truth packet numbering
+  (`R6-3.0` through `R6-3.4`) and constraints. It remains optional parity for implementation sequencing, but
+  once present it is part of the locked doc set for this packet
 
 ### Why First
 

@@ -7,7 +7,7 @@ self-contained: paste one into a fresh session to land exactly one `R6-3` sub-pa
 
 These prompts map:
 
-- Packet `R6-3.0` -> Task `R6-3.0.1` (docs lock), plus Task `R6-3.0.2` (this packet-prompts artifact — **optional parity** per the ledger, "not required for implementation to proceed"; produced and committed here for `R6-1`/`R6-2` four-file parity)
+- Packet `R6-3.0` -> Task `R6-3.0.1` (docs lock), plus Task `R6-3.0.2` (this packet-prompts artifact — **optional parity** per the ledger, "not required for implementation to proceed"; but because the artifact now exists in-tree, Packet `R6-3.0` keeps it aligned with the live source-of-truth numbering and constraints for `R6-3.0` through `R6-3.4`)
 - Packet `R6-3.1` -> Task `R6-3.1.1` (previous-checkpoint reachability + analyzer-local confirmation + eligibility/threshold corpus check; hard stop/go gate)
 - Packet `R6-3.2` -> Task `R6-3.2.1` (rolling scorer extension + rolling-tagged evidence; anchor early-return restructure + minimal proof)
 - Packet `R6-3.3` -> Tasks `R6-3.3.1` (full rolling regression matrix + acceptance fixture), `R6-3.3.2` (sentinel evidence-rendering test, test-only), and `R6-3.3.3` (`R6-2`/`R5.75`/`R6-1` non-regression)
@@ -65,8 +65,11 @@ Global rules for every packet prompt below:
     not short-circuit the rolling comparison; and distinct rolling reason prefixes.
 13. Rolling drift is tagged evidence on the existing `SemanticGoalDrift` class, **not** a new variant, and
     there is **no** `schema_version` bump (SPEC Resolved Decisions 1-2). The three flip-conditions that
-    would promote rolling to its own variant in a later `R6` iteration are recorded in the SPEC; none
-    holds today. Do not reopen the variant question mid-implementation.
+    would promote rolling to its own variant in a later `R6` iteration are: (i) rolling needs a different
+    `raw_score` / threshold / debounce / warning policy than kickoff drift; (ii) operators need separate
+    sentinel labels/actions; or (iii) acceptance evidence shows aggregate `SemanticGoalDrift` reporting
+    hides gradual-vs-abrupt in a way that matters operationally. None holds today. Do not reopen the
+    variant question mid-implementation.
 14. Do not advance to the next packet until the current packet is committed and a fresh review subagent
     reports it review-clean, or for verification-only packets with no file changes, explicitly reports
     there was nothing to commit.
@@ -82,7 +85,7 @@ You are the orchestration agent. Stay strictly scoped to Packet `R6-3.0` only. D
 
 Packet `R6-3.0` scope only:
 - commit the bounded `R6-3` SPEC/PLAN/TASKS family and this packet-prompts file under `docs/specs/r6/R6-3/` (the packet-prompts file is the **optional-parity** Task `R6-3.0.2` artifact; committing it here satisfies `R6-1`/`R6-2` four-file parity, but the ledger does not require it for implementation to proceed — do not treat its absence as a blocker on any later packet)
-- ensure those docs explicitly record: the evidence-not-variant surfacing decision plus its three flip-conditions; the no-`schema_version`-bump / analyzer-local boundary; the symmetric eligibility bar (both adjacent goals at the current-goal bar); the symmetric-extraction reuse of the `R6-2` disjoint-set distance primitive; the `sanctioned_replan` reuse; and the independent-compute / co-fire contract (an absent/ineligible kickoff anchor must not short-circuit rolling)
+- ensure those docs explicitly record: the evidence-not-variant surfacing decision plus its three flip-conditions; the no-`schema_version`-bump / analyzer-local boundary; the symmetric eligibility bar (both adjacent goals at the current-goal bar); the symmetric-extraction reuse of the `R6-2` disjoint-set distance primitive (`goal_specific_terms(.., Some(summary))` on both sides); the `analysis.sanctioned_replan` reuse; and the independent-compute / co-fire contract, including that an absent or ineligible kickoff anchor must not short-circuit the rolling comparison
 - verify the docs against `docs/specs/r6/MAP.md` item 6, the DESIGN `R6-3` charter, the landed `R6-2` SPEC, and live `crates/agent-drift-analyzer/src/checkpoint/mod.rs` (`analysis.previous`, `sanctioned_replan`) + `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
 
 Primary files:
