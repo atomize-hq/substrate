@@ -23,8 +23,8 @@ pub(crate) fn score_semantic_goal_drift(
     };
     let anchor_goal = eligible_anchor_goal(kickoff_anchor);
     let previous_goal = eligible_previous_goal(analysis);
-    let kickoff_drift = anchor_goal
-        .is_some_and(|anchor| semantic_goal_diverged(&current_goal, anchor));
+    let kickoff_drift =
+        anchor_goal.is_some_and(|anchor| semantic_goal_diverged(&current_goal, anchor));
     let rolling_drift = previous_goal
         .as_ref()
         .is_some_and(|previous| rolling_goal_diverged(&current_goal, previous));
@@ -96,13 +96,18 @@ impl EligibleCurrentGoal<'_> {
         if !self.summary.comparison_key.trim().is_empty() {
             return self.summary.comparison_key.clone();
         }
-        self.specific_terms.iter().cloned().collect::<Vec<_>>().join("|")
+        self.specific_terms
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("|")
     }
 }
 
 fn eligible_current_goal(summary: &ObjectiveSummary) -> Option<EligibleCurrentGoal<'_>> {
     let structured = summary.structured.as_ref()?;
-    if !structured_matches_current_goal_bar(structured) || summary.comparison_key.trim().is_empty() {
+    if !structured_matches_current_goal_bar(structured) || summary.comparison_key.trim().is_empty()
+    {
         return None;
     }
 
@@ -170,7 +175,9 @@ fn rolling_goal_diverged(
         return false;
     }
 
-    current_goal.specific_terms.is_disjoint(&previous_goal.specific_terms)
+    current_goal
+        .specific_terms
+        .is_disjoint(&previous_goal.specific_terms)
 }
 
 fn goal_specific_terms(
@@ -385,7 +392,10 @@ mod tests {
         let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
 
         assert!(scored.score.flagged);
-        assert_eq!(scored.score.class, crate::checkpoint::DriftClass::SemanticGoalDrift);
+        assert_eq!(
+            scored.score.class,
+            crate::checkpoint::DriftClass::SemanticGoalDrift
+        );
         assert!(scored
             .score
             .evidence
@@ -542,6 +552,55 @@ mod tests {
     }
 
     #[test]
+    fn semantic_goal_drift_flags_kickoff_only_when_previous_goal_matches_current_goal() {
+        let anchor = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let previous = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(scored.score.flagged);
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(CURRENT_GOAL_REASON_PREFIX)));
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(KICKOFF_ANCHOR_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_PREVIOUS_REASON_PREFIX)));
+    }
+
+    #[test]
     fn semantic_goal_drift_rolling_still_flags_without_confident_anchor() {
         let previous = structured_goal(
             "crates/agent-drift-analyzer/src/scoring/mod.rs",
@@ -577,6 +636,16 @@ mod tests {
             .evidence
             .iter()
             .any(|item| item.reason.starts_with(ROLLING_PREVIOUS_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(CURRENT_GOAL_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(KICKOFF_ANCHOR_REASON_PREFIX)));
     }
 
     #[test]
@@ -592,6 +661,40 @@ mod tests {
         );
 
         let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(!scored.score.flagged);
+        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_skips_rolling_when_previous_goal_is_present_but_unknown() {
+        let anchor = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let previous = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            vec![ObjectiveUnknown {
+                field_name: "target".to_string(),
+                reason: "previous checkpoint goal stayed ambiguous".to_string(),
+                evidence: vec![objective_span(2, "unknown previous target")],
+            }],
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs",
+                Some(previous),
+                "previous structured goal remained unknown",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
 
         assert!(!scored.score.flagged);
         assert!(scored.score.evidence.is_empty());
@@ -623,6 +726,44 @@ mod tests {
         let scored = score_semantic_goal_drift(&analysis, None);
 
         assert!(!scored.score.flagged);
+        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_shared_boundary_keeps_slow_evolution_out_of_rolling_drift() {
+        let previous = structured_goal_with_constraints(
+            Some("crates/agent-drift-analyzer/src/scoring/mod.rs"),
+            Confidence::High,
+            vec![platform_boundary_constraint("linux")],
+            Vec::new(),
+        );
+        let current = structured_goal_with_constraints(
+            Some("docs/specs/r6/MAP.md"),
+            Confidence::High,
+            vec![platform_boundary_constraint("linux")],
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md|linux",
+                Some(current),
+                "current structured goal stayed on the linux verification frontier",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs|linux",
+                Some(previous),
+                "previous structured goal on the same linux verification frontier",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            !scored.score.flagged,
+            "shared boundary terms should keep slow evolution out of rolling semantic_goal_drift"
+        );
         assert!(scored.score.evidence.is_empty());
     }
 
@@ -679,6 +820,61 @@ mod tests {
             2,
             "co-fire keeps one current-goal line per comparison family instead of cross-family de-duping"
         );
+    }
+
+    #[test]
+    fn semantic_goal_drift_rolling_previous_uses_summary_comparison_key_symmetrically() {
+        let previous =
+            structured_goal_with_constraints(None, Confidence::High, Vec::new(), Vec::new());
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "docs|spec_or_design_doc|docs_specs_r6_r6_2_agent_drift_analyzer_semantic_goal_drift_spec_md",
+                Some(previous),
+                "previous goal is only distinguishable through its comparison_key",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "rolling drift must keep extracting the previous goal's comparison_key even when its structured target is empty"
+        );
+        assert!(scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(ROLLING_CURRENT_REASON_PREFIX)));
+        let previous_reason = scored
+            .score
+            .evidence
+            .iter()
+            .find(|item| item.reason.starts_with(ROLLING_PREVIOUS_REASON_PREFIX))
+            .expect("rolling previous evidence");
+        assert!(
+            previous_reason.reason.contains(
+                "docs|spec_or_design_doc|docs_specs_r6_r6_2_agent_drift_analyzer_semantic_goal_drift_spec_md"
+            ),
+            "the previous goal's distinguishing term must come from its summary comparison_key; a naive structured-only reuse would drop it"
+        );
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(CURRENT_GOAL_REASON_PREFIX)));
+        assert!(!scored
+            .score
+            .evidence
+            .iter()
+            .any(|item| item.reason.starts_with(KICKOFF_ANCHOR_REASON_PREFIX)));
     }
 
     #[test]
@@ -844,10 +1040,19 @@ mod tests {
         confidence: Confidence,
         unknowns: Vec<ObjectiveUnknown>,
     ) -> StructuredObjective {
+        structured_goal_with_constraints(Some(target_display), confidence, Vec::new(), unknowns)
+    }
+
+    fn structured_goal_with_constraints(
+        target_display: Option<&str>,
+        confidence: Confidence,
+        constraints: Vec<crate::checkpoint::ObjectiveConstraint>,
+        unknowns: Vec<ObjectiveUnknown>,
+    ) -> StructuredObjective {
         StructuredObjective {
             objective_class: ObjectiveClass::TaskStatement,
             primary_intent: ObjectiveIntent::Implement,
-            target: Some(ObjectiveTarget {
+            target: target_display.map(|target_display| ObjectiveTarget {
                 display: target_display.to_string(),
                 kind: ObjectiveTargetKind::FileOrDirectory,
                 paths: vec![target_display.to_string()],
@@ -857,7 +1062,7 @@ mod tests {
                 evidence: vec![objective_span(3, target_display)],
                 confidence,
             }),
-            constraints: Vec::new(),
+            constraints,
             success_conditions: vec![SuccessCondition {
                 display: "cargo test -p agent-drift-analyzer -- --nocapture".to_string(),
                 evidence: vec![objective_span(4, "test wall")],
@@ -869,10 +1074,23 @@ mod tests {
                 evidence: vec![objective_span(5, "deliverable")],
                 confidence,
             }],
-            verification_commands: vec!["cargo test -p agent-drift-analyzer -- --nocapture".to_string()],
-            evidence_spans: vec![objective_span(3, target_display)],
+            verification_commands: vec![
+                "cargo test -p agent-drift-analyzer -- --nocapture".to_string()
+            ],
+            evidence_spans: target_display
+                .map(|target_display| vec![objective_span(3, target_display)])
+                .unwrap_or_default(),
             confidence,
             unknowns,
+        }
+    }
+
+    fn platform_boundary_constraint(display: &str) -> crate::checkpoint::ObjectiveConstraint {
+        crate::checkpoint::ObjectiveConstraint {
+            display: display.to_string(),
+            constraint_kind: crate::checkpoint::ObjectiveConstraintKind::PlatformBoundary,
+            evidence: vec![objective_span(6, display)],
+            confidence: Confidence::High,
         }
     }
 
@@ -898,5 +1116,4 @@ mod tests {
             row_ordinal: 0,
         }
     }
-
 }

@@ -3,8 +3,9 @@
 use std::fs;
 
 use agent_drift_analyzer::{
-    analyze_bundle, AnalyzeRequest, Confidence, DriftClass, ProgressDimension, ProgressSignalCode,
-    ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress,
+    analyze_bundle, AnalyzeRequest, Checkpoint, Confidence, DriftClass, DriftScore, DriftState,
+    ProgressDimension, ProgressSignalCode, ProgressStatus, SessionArchetype, SessionArchetypeLabel,
+    SessionProgress,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
@@ -342,11 +343,16 @@ fn progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary() {
         "R5.75-4 zero-verifier witness must not regain verification_clean"
     );
     assert!(
-        !zero_verifier_checkpoint
-            .drift_scores
-            .iter()
-            .any(|score| score.class == DriftClass::SemanticGoalDrift && score.flagged),
-        "R5.75-4 zero-verifier witness must not pick up semantic_goal_drift while its planning boundary stays intact"
+        !semantic_goal_drift_score(zero_verifier_checkpoint).flagged,
+        "R5.75-4 zero-verifier witness must stay unflagged while its planning boundary stays intact"
+    );
+    assert_eq!(
+        semantic_goal_drift_score(zero_verifier_checkpoint).state,
+        DriftState::Cleared
+    );
+    assert_eq!(
+        semantic_goal_drift_score(zero_verifier_checkpoint).raw_score,
+        0
     );
 
     let adapted_parent_visible_case =
@@ -395,11 +401,16 @@ fn progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary() {
         "adapted delegated guardrail witness must not regain verification_clean"
     );
     assert!(
-        !adapted_parent_visible_checkpoint
-            .drift_scores
-            .iter()
-            .any(|score| score.class == DriftClass::SemanticGoalDrift && score.flagged),
-        "combined R5.75-3/R5.75-4 delegated witness must not pick up semantic_goal_drift"
+        !semantic_goal_drift_score(adapted_parent_visible_checkpoint).flagged,
+        "combined R5.75-3/R5.75-4 delegated witness must stay unflagged"
+    );
+    assert_eq!(
+        semantic_goal_drift_score(adapted_parent_visible_checkpoint).state,
+        DriftState::Cleared
+    );
+    assert_eq!(
+        semantic_goal_drift_score(adapted_parent_visible_checkpoint).raw_score,
+        0
     );
 
     let native_parent_visible_case =
@@ -431,12 +442,25 @@ fn progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary() {
     );
     assert_eq!(native_parent_visible_progress.status, ProgressStatus::Mixed);
     assert!(
-        !native_parent_visible_checkpoint
-            .drift_scores
-            .iter()
-            .any(|score| score.class == DriftClass::SemanticGoalDrift && score.flagged),
-        "native delegated parent-visible witness must not pick up semantic_goal_drift"
+        !semantic_goal_drift_score(native_parent_visible_checkpoint).flagged,
+        "native delegated parent-visible witness must stay unflagged"
     );
+    assert_eq!(
+        semantic_goal_drift_score(native_parent_visible_checkpoint).state,
+        DriftState::Cleared
+    );
+    assert_eq!(
+        semantic_goal_drift_score(native_parent_visible_checkpoint).raw_score,
+        0
+    );
+}
+
+fn semantic_goal_drift_score(checkpoint: &Checkpoint) -> &DriftScore {
+    checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::SemanticGoalDrift)
+        .expect("semantic_goal_drift score")
 }
 
 fn assert_progress_case(case_id: &str) {

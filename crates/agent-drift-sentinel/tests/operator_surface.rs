@@ -628,12 +628,16 @@ fn operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end() 
     ));
     let fixture =
         support::ReplayFixture::from_checkpoints(vec![checkpoint], support::sample_summary());
+    let warning_policy = WarningPolicy {
+        max_evidence_lines: 4,
+        ..WarningPolicy::default()
+    };
     let result = execute(&SentinelRequest {
         checkpoint_dir: fixture.checkpoint_dir.clone(),
         mode: SentinelMode::Replay,
         cursor: None,
         scheduler_policy: SchedulerPolicy::default(),
-        warning_policy: WarningPolicy::default(),
+        warning_policy,
         adjudication: AdjudicationConfig::default(),
     })
     .expect("run replay");
@@ -649,6 +653,63 @@ fn operator_surface_renders_flagged_semantic_goal_drift_checkpoint_end_to_end() 
         .evidence_lines
         .iter()
         .any(|line| line.contains("semantic goal drift current goal:")));
+}
+
+#[test]
+fn operator_surface_renders_flagged_semantic_goal_drift_rolling_evidence_lines() {
+    let mut checkpoint = checkpoint_with_drift(
+        "session-semantic-goal-drift-rolling",
+        3,
+        DriftClass::SemanticGoalDrift,
+        80,
+        true,
+        "confirm the pivot is intentional or return to the anchored goal",
+        &[
+            "semantic goal drift kickoff anchor: crates_agent_drift_analyzer_tests_checkpoints_rs",
+            "semantic goal drift current goal: docs_specs_r6_map_md",
+            "rolling semantic goal drift current goal: docs_specs_r6_map_md",
+            "rolling semantic goal drift previous goal: crates_agent_drift_analyzer_tests_checkpoints_rs",
+        ],
+    );
+    checkpoint.schema_version = "v0.7".to_string();
+    checkpoint.drift_scores[0].state = DriftState::Active;
+    checkpoint.turn_context = Some(sample_turn_context(3));
+    checkpoint.session_archetype = Some(sample_session_archetype(
+        &checkpoint,
+        SessionArchetypeLabel::AutonomousImplementation,
+    ));
+    checkpoint.session_progress = Some(sample_session_progress(
+        &checkpoint,
+        ProgressStatus::Advancing,
+        ProgressDimension::ImplementationVerificationWall,
+    ));
+
+    let fixture =
+        support::ReplayFixture::from_checkpoints(vec![checkpoint], support::sample_summary());
+    let warning_policy = WarningPolicy {
+        max_evidence_lines: 4,
+        ..WarningPolicy::default()
+    };
+    let result = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy,
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run replay");
+
+    let visible = &result.report.visible_warnings[0];
+    assert_eq!(visible.posture, Some(CheckpointPosture::Active));
+    assert!(visible
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("rolling semantic goal drift current goal:")));
+    assert!(visible
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("rolling semantic goal drift previous goal:")));
 }
 
 #[test]

@@ -4,7 +4,9 @@ mod support;
 
 use std::fs;
 
-use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, Checkpoint, DriftClass, DriftScore, DriftState};
+use agent_drift_analyzer::{
+    analyze_bundle, AnalyzeRequest, Checkpoint, DriftClass, DriftScore, DriftState,
+};
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
@@ -15,8 +17,10 @@ const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT: &str = concat!(
     "/tests/fixtures/semantic_goal_drift_acceptance"
 );
 
-const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 1] =
-    ["synthetic-kickoff-anchor-unauthorized-pivot"];
+const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 2] = [
+    "synthetic-kickoff-anchor-unauthorized-pivot",
+    "synthetic-rolling-mid-session-pivot",
+];
 
 #[derive(Debug, Deserialize)]
 struct AcceptanceFixtureRaw {
@@ -47,10 +51,17 @@ struct AcceptanceExpectedScore {
 struct AcceptanceFixtureExpected {
     case_id: String,
     session_id: String,
-    kickoff_target_display: String,
+    #[serde(default)]
+    kickoff_target_display: Option<String>,
     final_target_display: String,
+    #[serde(default)]
+    penultimate_target_display: Option<String>,
+    #[serde(default)]
+    penultimate_semantic_goal_drift_flagged: Option<bool>,
     final_semantic_goal_drift: AcceptanceExpectedScore,
     required_reason_prefixes: Vec<String>,
+    #[serde(default)]
+    forbidden_reason_prefixes: Vec<String>,
 }
 
 #[test]
@@ -88,6 +99,12 @@ fn semantic_goal_drift_acceptance_corpus_stays_bounded_and_bundle_shaped() {
             raw.rows.len() >= 4,
             "acceptance case {case_id} must provide enough rows to build kickoff and pivot checkpoints"
         );
+        if expected.penultimate_target_display.is_some() {
+            assert!(
+                raw.rows.len() >= 7,
+                "acceptance case {case_id} must provide enough rows to build a mid-session rolling pivot"
+            );
+        }
     }
 }
 
@@ -114,15 +131,36 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
         );
 
         let kickoff_checkpoint = session.checkpoints.first().expect("kickoff checkpoint");
-        assert_eq!(
-            checkpoint_target_display(kickoff_checkpoint),
-            expected.kickoff_target_display,
-            "kickoff checkpoint must preserve the original anchored target"
-        );
+        if let Some(expected_kickoff_target) = expected.kickoff_target_display.as_deref() {
+            assert_eq!(
+                checkpoint_target_display(kickoff_checkpoint),
+                expected_kickoff_target,
+                "kickoff checkpoint must preserve the original anchored target"
+            );
+        }
         assert!(
             !semantic_goal_drift_score(kickoff_checkpoint).flagged,
             "kickoff checkpoint must not flag semantic_goal_drift before the objective pivots"
         );
+
+        if let Some(expected_penultimate_target) = expected.penultimate_target_display.as_deref() {
+            let penultimate_checkpoint = session
+                .checkpoints
+                .get(session.checkpoints.len().saturating_sub(2))
+                .expect("penultimate checkpoint");
+            assert_eq!(
+                checkpoint_target_display(penultimate_checkpoint),
+                expected_penultimate_target,
+                "penultimate checkpoint must preserve the pre-pivot rolling anchor"
+            );
+            if let Some(expected_flagged) = expected.penultimate_semantic_goal_drift_flagged {
+                assert_eq!(
+                    semantic_goal_drift_score(penultimate_checkpoint).flagged,
+                    expected_flagged,
+                    "penultimate checkpoint semantic_goal_drift flagged bit drifted for {case_id}"
+                );
+            }
+        }
 
         let final_checkpoint = session.checkpoints.last().expect("final checkpoint");
         assert_eq!(
@@ -153,28 +191,34 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
                 "acceptance case {case_id} must preserve evidence prefix `{prefix}` on the live analyzer path"
             );
         }
+        for prefix in &expected.forbidden_reason_prefixes {
+            assert!(
+                final_semantic_goal_drift
+                    .evidence
+                    .iter()
+                    .all(|item| !item.reason.starts_with(prefix)),
+                "acceptance case {case_id} must not pick up forbidden evidence prefix `{prefix}`"
+            );
+        }
     }
 }
 
 fn load_raw_fixture(case_id: &str) -> AcceptanceFixtureRaw {
-    read_json(
-        &Utf8PathBuf::from(format!(
-            "{SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT}/{case_id}/raw.json"
-        )),
-    )
+    read_json(&Utf8PathBuf::from(format!(
+        "{SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT}/{case_id}/raw.json"
+    )))
 }
 
 fn load_expected_fixture(case_id: &str) -> AcceptanceFixtureExpected {
-    read_json(
-        &Utf8PathBuf::from(format!(
-            "{SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT}/{case_id}/expected.json"
-        )),
-    )
+    read_json(&Utf8PathBuf::from(format!(
+        "{SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT}/{case_id}/expected.json"
+    )))
 }
 
 fn rows_from_raw_fixture(case_id: &str, raw: &AcceptanceFixtureRaw) -> Vec<CompactionRow> {
-    let source_file =
-        Utf8PathBuf::from(format!("/fixtures/semantic_goal_drift_acceptance/{case_id}.jsonl"));
+    let source_file = Utf8PathBuf::from(format!(
+        "/fixtures/semantic_goal_drift_acceptance/{case_id}.jsonl"
+    ));
     raw.rows
         .iter()
         .enumerate()
@@ -203,7 +247,12 @@ fn checkpoint_target_display(checkpoint: &Checkpoint) -> String {
         .as_ref()
         .and_then(|objective| objective.target.as_ref())
         .map(|target| target.display.clone())
-        .unwrap_or_else(|| panic!("checkpoint {} missing structured target", checkpoint.checkpoint_id))
+        .unwrap_or_else(|| {
+            panic!(
+                "checkpoint {} missing structured target",
+                checkpoint.checkpoint_id
+            )
+        })
 }
 
 fn semantic_goal_drift_score(checkpoint: &Checkpoint) -> &DriftScore {
