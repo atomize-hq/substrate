@@ -53,7 +53,7 @@ holds today. Do not reopen the variant question mid-implementation.
 
 ## R6-3.1: Confirm Previous-Checkpoint Reachability And Run The Eligibility/Threshold Corpus Check
 
-- [ ] Task R6-3.1.1: Confirm the previous-goal access path and the analyzer-local surfacing; run the
+- [x] Task R6-3.1.1: Confirm the previous-goal access path and the analyzer-local surfacing; run the
   eligibility/threshold corpus check.
   - Acceptance: (a) recorded confirmation, from live code, that `CheckpointAnalysis` exposes `previous` and
     that the previous goal is reachable at `analysis.previous.<slice>.context.objective` with the same
@@ -75,6 +75,35 @@ holds today. Do not reopen the variant question mid-implementation.
     - (read-only) `crates/agent-drift-analyzer/src/checkpoint/mod.rs`
     - (read-only) `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
     - (read-only) `crates/agent-drift-analyzer/src/context/objective.rs`
+  - Result (2026-07-02):
+    - **Previous-goal access path confirmed from live code:** `CheckpointAnalysis.previous` is
+      `Option<CheckpointSlice>`, so the previous goal is reachable at
+      `analysis.previous.as_ref()?.context.objective` (and the rolling scorer's structured side would be
+      `analysis.previous.as_ref()?.context.objective.structured.as_ref()?`). Both the current side
+      (`analysis.current.context.objective`) and the previous side
+      (`analysis.previous.as_ref()?.context.objective`) are `ObjectiveSummary`. No new plumbing is needed,
+      and `score_semantic_goal_drift(analysis, kickoff_anchor)` already receives the `analysis` handle that
+      carries `.previous`, so no signature change is required.
+    - **Analyzer-local surfacing confirmed:** the `R6-2` prerequisites are landed in live code
+      (`score_semantic_goal_drift`, `DriftClass::SemanticGoalDrift`, `CheckpointAnalysis.sanctioned_replan`,
+      and `CheckpointAnalysis.previous`). Extending the scorer plus adding rolling evidence prefixes stays
+      analyzer-local to `scoring/semantic_goal_drift.rs`; it does **not** require a new `DriftClass`,
+      any `checkpoint/export.rs` class-list change, any sentinel
+      `crates/agent-drift-sentinel/src/operator_surface.rs` source change, or a `schema_version` bump.
+    - **Corpus finding:** across the committed bundle-shaped fixture corpus used here, the check covered
+      `18` fixtures, `120` emitted checkpoints, and `102` adjacent checkpoint pairs. Of those adjacent
+      pairs, `23` were eligible adjacent `Medium+` / confident `TaskStatement` pairs on **both** sides, and
+      `0` of those `23` eligible adjacent pairs were fully disjoint under the reused disjoint-set
+      distance primitive. That is: adjacent confident goals do occur in the corpus, but this committed
+      corpus contains no real abrupt-pivot witness for the rolling signal and shows no over-fire on
+      ordinary evolution.
+    - **Decision:** **GO-with-synthetic-fixture.** Proceed on the symmetric `Medium+` bar because the live
+      corpus shows no over-fire that would force a retune / tighter eligibility / graduated-distance-first
+      prerequisite, but add the explicit synthetic rolling acceptance witness in `R6-3.3` (the same style
+      of proof move `R6-2.4` used) because abrupt pivots are too rare in the current committed corpus to
+      prove positive firing honestly.
+    - **Explicit stop/go gate:** this is **not** a `NO-GO`. `R6-3.2` may proceed on the symmetric
+      `Medium+` bar, with the synthetic positive witness deferred to `R6-3.3`.
 
 ## R6-3.2: Rolling Scorer Extension + Evidence Tag
 
