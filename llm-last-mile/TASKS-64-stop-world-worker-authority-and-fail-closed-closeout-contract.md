@@ -44,7 +44,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task: Add focused regression coverage for stale attached-host owner rejection
+- [x] Task: Add focused regression coverage for stale attached-host owner rejection
   - Acceptance: automated coverage proves that a stop attempt bound to a stale or disproven attached-host owner path is rejected before it can count as valid delivery, and the failure remains explanation-ready rather than collapsing into generic transport error handling.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`

@@ -11918,6 +11918,64 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_stale_attached_host_owner_after_successor_attach(
+    ) {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex", "sess_stop", "orch_stop_launch");
+            let mut successor = live_orchestrator("codex", "sess_stop", "orch_stop_successor");
+            successor.handle.resumed_from_participant_id = Some("orch_stop_launch".to_string());
+            successor.handle.resumed_from_session_handle_id = Some("orch_stop_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop_launch");
+
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.bind_active_session_handle("orch_stop_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop_launch",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err("stale attached-host owner must fail closed before stop delivery");
+
+            assert_eq!(
+                err.to_string(),
+                "caller_not_authoritative: orchestration session sess_stop authoritative orchestrator participant is orch_stop_successor not orch_stop_launch"
+            );
+
+            let participant_after = store
+                .load_participant("ash_stop")
+                .expect("load retained worker after stale owner rejection")
+                .expect("retained worker after stale owner rejection");
+            assert_eq!(
+                participant_after.handle.state,
+                AgentRuntimeSessionState::Ready
+            );
+            assert!(
+                participant_after.internal.termination_reason.is_none(),
+                "pre-delivery stale owner rejection must not persist any stop closeout"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_internal_stop_world_dispatch_target_accepts_non_authoritative_live_worker() {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");

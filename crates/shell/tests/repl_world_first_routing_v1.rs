@@ -6161,6 +6161,251 @@ fn c3_internal_toolbox_fork_command_fail_closed_before_child_registration() {
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
+fn c3_internal_toolbox_stop_world_worker_rejects_stale_attached_host_owner_before_delivery() {
+    let temp = temp_dir("substrate-c3-toolbox-stop-stale-attached-owner-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config_with_toolbox(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+    write_member_runtime_policy_with_world_dispatch(
+        &substrate_home,
+        WorldDispatchPolicyArgs {
+            require_world: true,
+            member_backend_id: "cli:codex-world",
+            enabled: true,
+            allowed_backends: &["cli:codex-world"],
+            allowed_actions: &["spawn_world_worker", "stop_world_worker"],
+            allowed_modes: &["retained"],
+            max_live_retained_workers: 8,
+            control_directives_allowed: false,
+            progress_acks_allowed: false,
+            fork_commands_allowed: false,
+        },
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-toolbox-stop-stale-attached-owner-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-toolbox-stop-stale-attached-owner".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code-host");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let toolbox_path = toolbox_transport_path_for_home(&substrate_home, &orchestration_session_id);
+    let toolbox_deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < toolbox_deadline && !toolbox_path.exists() {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        toolbox_path.exists(),
+        "internal toolbox transport must exist for the active orchestrator runtime: {}",
+        toolbox_path.display()
+    );
+
+    launch_world_member_via_targeted_turn(&mut repl, &records, "cli:codex-world", "first");
+
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let orchestrator = authoritative_live_participant_manifest_for_backend(
+        &live_participants,
+        "cli:claude_code-host",
+    );
+    let stale_orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let member_orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+    assert_eq!(
+        member_orchestrator_participant_id, stale_orchestrator_participant_id,
+        "stale-owner regression fixture must begin with the retained worker bound to the original attached host"
+    );
+
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+    let mut persisted_session = read_orchestration_session(&session_path);
+    let mut stale_orchestrator = read_participant_manifest(
+        &substrate_home,
+        &stale_orchestrator_participant_id,
+    );
+    let successor_participant_id = format!("{stale_orchestrator_participant_id}_successor");
+    let successor_uaa_session_id = "uaa_toolbox_stop_stale_owner_successor";
+
+    let mut successor = stale_orchestrator.clone();
+    successor["participant_id"] = Value::String(successor_participant_id.clone());
+    successor["resumed_from_participant_id"] =
+        Value::String(stale_orchestrator_participant_id.clone());
+    successor["internal"]["uaa_session_id"] = Value::String(successor_uaa_session_id.to_string());
+    successor["internal"]["attached_client_present"] = Value::Bool(true);
+    successor["internal"]["resume_eligible"] = Value::Bool(true);
+
+    stale_orchestrator["internal"]["attached_client_present"] = Value::Bool(false);
+    stale_orchestrator["internal"]["resume_eligible"] = Value::Bool(true);
+
+    persisted_session["active_session_handle_id"] =
+        Value::String(successor_participant_id.clone());
+    persisted_session["attached_participant_id"] =
+        Value::String(successor_participant_id.clone());
+    persisted_session["posture"] = Value::String("active_attached".to_string());
+    if let Some(contract) = persisted_session
+        .get_mut("host_attach_contract")
+        .and_then(Value::as_object_mut)
+    {
+        contract.insert(
+            "continuity_uaa_session_id".to_string(),
+            Value::String(successor_uaa_session_id.to_string()),
+        );
+    }
+
+    fs::write(
+        &session_path,
+        serde_json::to_vec_pretty(&persisted_session).expect("serialize persisted successor session"),
+    )
+    .expect("persist successor session truth");
+    fs::write(
+        canonical_participant_path(
+            &substrate_home,
+            &orchestration_session_id,
+            &stale_orchestrator_participant_id,
+        ),
+        serde_json::to_vec_pretty(&stale_orchestrator)
+            .expect("serialize stale orchestrator participant"),
+    )
+    .expect("persist stale orchestrator participant");
+    fs::write(
+        canonical_participant_path(
+            &substrate_home,
+            &orchestration_session_id,
+            &successor_participant_id,
+        ),
+        serde_json::to_vec_pretty(&successor).expect("serialize successor orchestrator participant"),
+    )
+    .expect("persist successor orchestrator participant");
+
+    let response = send_internal_toolbox_world_dispatch_request(
+        &toolbox_path,
+        &serde_json::json!({
+            "request_id": "req_toolbox_stop_stale_attached_owner",
+            "idempotency_key": "idem_toolbox_stop_stale_attached_owner",
+            "orchestration_session_id": orchestration_session_id.clone(),
+            "caller_participant_id": stale_orchestrator_participant_id.clone(),
+            "action": "stop_world_worker",
+            "mode": "retained",
+            "target_backend_id": "cli:codex-world",
+            "target_participant_id": member_participant_id.clone(),
+            "world_id": world_id.clone(),
+            "world_generation": world_generation,
+            "payload": {
+                "payload_kind": "worker_stop"
+            }
+        }),
+    );
+
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
+    assert_eq!(
+        response.get("error").and_then(Value::as_str),
+        Some(
+            format!(
+                "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
+                orchestration_session_id,
+                successor_participant_id,
+                stale_orchestrator_participant_id
+            )
+            .as_str()
+        ),
+        "stale attached-host owner stop requests must fail at the authoritative caller gate"
+    );
+    assert!(
+        response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| !error.contains("owner_unreachable")),
+        "stale attached-host owner rejection must stay explanation-ready instead of collapsing into generic transport handling: {response:#?}"
+    );
+
+    let live_members_after = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(3),
+    );
+    assert_eq!(
+        live_members_after[0]
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some(member_participant_id.as_str()),
+        "stale attached-host owner rejection must leave the exact retained worker authoritative-live"
+    );
+    let member_after = read_participant_manifest(&substrate_home, &member_participant_id);
+    assert_eq!(
+        member_after.get("state").and_then(Value::as_str),
+        Some("ready"),
+        "pre-delivery stale owner rejection must not stop the retained worker: {member_after:?}"
+    );
+    assert!(
+        member_after
+            .pointer("/internal/termination_reason")
+            .is_none_or(Value::is_null),
+        "pre-delivery stale owner rejection must not persist stop closeout state: {member_after:?}"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
 fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     let temp = temp_dir("substrate-c3-targeted-world-relaunch-");
     let home = temp.path().join("home");
