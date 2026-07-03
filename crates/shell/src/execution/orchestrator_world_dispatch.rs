@@ -2,6 +2,8 @@
 use std::collections::BTreeMap;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::Arc;
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 use std::sync::{LazyLock, Mutex};
 #[cfg(target_os = "linux")]
@@ -4104,9 +4106,19 @@ fn summarize_spawn_world_worker_result(receipt: &SpawnWorldWorkerReceipt) -> Str
 async fn request_private_stop_after_transport_registration(
     transport_path: &Path,
 ) -> Result<PrivateStopOutcome> {
+    #[cfg(test)]
+    notify_private_stop_transport_retry_event(
+        transport_path,
+        PrivateStopTransportRetryEvent::InitialAttempt,
+    );
     match request_private_stop(transport_path).await {
         Ok(outcome) => Ok(outcome),
         Err(err) if !transport_path.exists() => {
+            #[cfg(test)]
+            notify_private_stop_transport_retry_event(
+                transport_path,
+                PrivateStopTransportRetryEvent::RetryWaitStarted,
+            );
             let started_at = Instant::now();
             while !transport_path.exists() {
                 if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
@@ -4114,9 +4126,71 @@ async fn request_private_stop_after_transport_registration(
                 }
                 tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
             }
+            #[cfg(test)]
+            notify_private_stop_transport_retry_event(
+                transport_path,
+                PrivateStopTransportRetryEvent::RetryAttempt,
+            );
             request_private_stop(transport_path).await
         }
         Err(err) => Err(err),
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PrivateStopTransportRetryEvent {
+    InitialAttempt,
+    RetryWaitStarted,
+    RetryAttempt,
+}
+
+#[cfg(test)]
+type PrivateStopTransportRetryHook =
+    Arc<dyn Fn(PrivateStopTransportRetryEvent, &Path) + Send + Sync>;
+
+#[cfg(test)]
+fn private_stop_transport_retry_hook() -> &'static Mutex<Option<PrivateStopTransportRetryHook>> {
+    static HOOK: LazyLock<Mutex<Option<PrivateStopTransportRetryHook>>> =
+        LazyLock::new(|| Mutex::new(None));
+    &HOOK
+}
+
+#[cfg(test)]
+struct PrivateStopTransportRetryHookGuard;
+
+#[cfg(test)]
+impl PrivateStopTransportRetryHookGuard {
+    fn install(hook: PrivateStopTransportRetryHook) -> Self {
+        private_stop_transport_retry_hook()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .replace(hook);
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for PrivateStopTransportRetryHookGuard {
+    fn drop(&mut self) {
+        private_stop_transport_retry_hook()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+    }
+}
+
+#[cfg(test)]
+fn notify_private_stop_transport_retry_event(
+    transport_path: &Path,
+    event: PrivateStopTransportRetryEvent,
+) {
+    let hook = private_stop_transport_retry_hook()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone();
+    if let Some(hook) = hook {
+        hook(event, transport_path);
     }
 }
 
@@ -14014,18 +14088,16 @@ agents:
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let resolved = store
-            .resolve_internal_stop_world_dispatch_target(
-                "sess_dispatch",
-                "orch_dispatch",
-                "ash_member",
-                "cli:codex-world",
-            )
-            .expect("resolve authoritative stop target before refused transport");
 
         let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
         assert!(
@@ -14038,113 +14110,134 @@ agents:
             "SPEC-64 recovery harness must not silently fall back to the shared /tmp stop namespace: {}",
             transport_path.display()
         );
-        let transport_parent = transport_path
-            .parent()
-            .expect("private stop transport path parent");
-        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
-        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
-            .expect("bind stale private stop socket");
-        drop(stale_listener);
         assert!(
-            transport_path.exists(),
-            "SPEC-64 recovery harness must enter the refused live-transport seam through a published but dead stop socket"
+            !transport_path.exists(),
+            "SPEC-64 recovery harness must begin from the isolated private stop namespace without pre-published shared fallback state: {}",
+            transport_path.display()
         );
 
-        let transport_error = request_private_stop_after_transport_registration(&transport_path)
+        let retry_events = Arc::new(Mutex::new(
+            Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
+        ));
+        let store_for_hook = store.clone();
+        let transport_path_for_hook = transport_path.clone();
+        let retry_events_for_hook = retry_events.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock retry events")
+                .push((event, path.to_path_buf()));
+            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+                return;
+            }
+
+            let mut launch_orchestrator = store_for_hook
+                .load_participant("orch_dispatch")
+                .expect("load launch orchestrator")
+                .expect("launch orchestrator");
+            let mut successor = launch_orchestrator.clone();
+            successor.handle.participant_id = "orch_dispatch_successor".to_string();
+            successor.handle.resumed_from_participant_id = Some("orch_dispatch".to_string());
+            successor.handle.resumed_from_session_handle_id = Some("orch_dispatch".to_string());
+            successor.internal.uaa_session_id = Some("uaa_orch_dispatch_successor".to_string());
+            successor.internal.attached_client_present = false;
+            successor.internal.resume_eligible = true;
+
+            launch_orchestrator.mark_client_detached("successor parked after stop retry wait");
+            store_for_hook
+                .persist_participant(&launch_orchestrator)
+                .expect("persist detached launch orchestrator");
+            store_for_hook
+                .persist_participant(&successor)
+                .expect("persist parked successor orchestrator");
+
+            let mut session = store_for_hook
+                .load_orchestration_session("sess_dispatch")
+                .expect("load authoritative orchestration session")
+                .expect("authoritative orchestration session");
+            session.bind_active_session_handle("orch_dispatch_successor".to_string());
+            session.host_attach_contract = HostAttachContract::from_manifest_for_test(&successor);
+            session.mark_parked_resumable("owner detached after refused private stop retry");
+            store_for_hook
+                .persist_orchestration_session(&session)
+                .expect("persist parked-resumable successor session");
+
+            let continuity = store_for_hook
+                .classify_hidden_owner_helper_launch_continuity(
+                    "sess_dispatch",
+                    "orch_dispatch_successor",
+                    true,
+                )
+                .expect("classify parked successor continuity");
+            assert_eq!(
+                continuity,
+                HiddenOwnerHelperLaunchContinuity::DetachedReconciled(
+                    OrchestrationSessionPosture::ParkedResumable
+                ),
+                "the production recovery seam should narrow to detached continuity on the refreshed authoritative successor instead of widening attach scope"
+            );
+
+            let transport_parent = transport_path_for_hook
+                .parent()
+                .expect("private stop transport path parent");
+            std::fs::create_dir_all(transport_parent)
+                .expect("create private stop transport parent");
+            let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path_for_hook)
+                .expect("bind stale private stop socket for exact-target retry");
+            drop(stale_listener);
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
             .await
-            .expect_err("dead private stop socket must refuse the transport request");
-        assert!(
-            detached_stop_transport_is_unusable(&transport_error),
-            "SPEC-64 recovery harness must drive the real refused private stop transport seam"
-        );
-        assert!(
-            !detached_stop_world_worker_closeout_available_after_transport_failure(
-                &store,
-                &resolved,
-                &transport_path,
-                &transport_error,
-            ),
-            "fresh-session recheck must stay fail-closed until authoritative detached truth is persisted"
-        );
+            .expect("dispatch refreshed stop recovery request");
 
-        let mut session = store
-            .load_orchestration_session("sess_dispatch")
-            .expect("load authoritative orchestration session")
-            .expect("authoritative orchestration session");
-        session.mark_parked_resumable("owner detached after refused private stop");
-        store
-            .persist_orchestration_session(&session)
-            .expect("persist parked-resumable orchestration session");
-        let mut orchestrator = store
-            .load_participant("orch_dispatch")
-            .expect("load authoritative orchestrator")
-            .expect("authoritative orchestrator");
-        orchestrator.mark_client_detached("owner detached after refused private stop");
-        store
-            .persist_participant(&orchestrator)
-            .expect("persist detached orchestrator truth");
-
-        let continuity = store
-            .classify_hidden_owner_helper_launch_continuity("sess_dispatch", "orch_dispatch", true)
-            .expect("classify refreshed detached continuity");
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(outcome.target_backend_id, "cli:codex-world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
         assert_eq!(
-            continuity,
-            HiddenOwnerHelperLaunchContinuity::DetachedReconciled(
-                OrchestrationSessionPosture::ParkedResumable
-            ),
-            "the production recovery seam should narrow to detached continuity on the same authoritative session instead of widening attach scope"
-        );
-        assert!(
-            detached_stop_world_worker_closeout_available_after_transport_failure(
-                &store,
-                &resolved,
-                &transport_path,
-                &transport_error,
-            ),
-            "recoverable refused transport should unlock the real refreshed detached closeout seam once authoritative detached truth lands"
-        );
-        let refreshed_resolved = store
-            .resolve_internal_stop_world_dispatch_target(
-                "sess_dispatch",
-                "orch_dispatch",
-                "ash_member",
-                "cli:codex-world",
-            )
-            .expect("re-resolve exact stop target after authoritative detached refresh");
-        assert_eq!(
-            refreshed_resolved.orchestration_session_id(),
-            resolved.orchestration_session_id()
-        );
-        assert_eq!(
-            refreshed_resolved.caller_participant.participant_id(),
-            resolved.caller_participant.participant_id()
-        );
-        assert_eq!(
-            refreshed_resolved.target_participant.participant_id(),
-            resolved.target_participant.participant_id()
-        );
-        assert_eq!(
-            refreshed_resolved.target_participant.handle.backend_id,
-            resolved.target_participant.handle.backend_id
-        );
-        assert_eq!(
-            refreshed_resolved.target_participant.handle.world_id,
-            resolved.target_participant.handle.world_id
-        );
-        assert_eq!(
-            refreshed_resolved
-                .target_participant
-                .handle
-                .world_generation,
-            resolved.target_participant.handle.world_generation
-        );
-        let closeout = persist_detached_stop_world_worker_closeout(&store, &resolved)
-            .expect("persist detached durable stop closeout after refreshed refused transport");
-        assert_eq!(
-            closeout.participant_state,
+            outcome.closeout.participant_state,
             AgentRuntimeSessionState::Stopped
         );
-        assert_eq!(closeout.session_state, OrchestrationSessionState::Active);
+        assert_eq!(
+            outcome.closeout.session_state,
+            OrchestrationSessionState::Active
+        );
+        assert!(
+            outcome.summary.contains("detached durable closeout"),
+            "the real production stop-dispatch path must surface detached durable closeout wording after the refreshed refused transport branch: {}",
+            outcome.summary
+        );
+
+        let retry_events = retry_events.lock().expect("lock retry events");
+        assert_eq!(retry_events.len(), 3, "the bounded recovery path must emit exactly one initial stop attempt, one bounded wait, and one exact-target retry: {retry_events:?}");
+        assert_eq!(
+            retry_events[0].0,
+            PrivateStopTransportRetryEvent::InitialAttempt
+        );
+        assert_eq!(
+            retry_events[1].0,
+            PrivateStopTransportRetryEvent::RetryWaitStarted
+        );
+        assert_eq!(
+            retry_events[2].0,
+            PrivateStopTransportRetryEvent::RetryAttempt
+        );
+        assert!(
+            retry_events
+                .iter()
+                .all(|(_, path)| path == &transport_path),
+            "bounded recovery must keep both stop attempts on the exact isolated private stop socket without transport-family widening: {retry_events:?}"
+        );
+        drop(retry_events);
+
         let participant_after = store
             .load_participant("ash_member")
             .expect("load retained participant after refreshed closeout")
@@ -14165,6 +14258,15 @@ agents:
                 .posture,
             OrchestrationSessionPosture::ParkedResumable,
             "the refreshed exact-target re-attempt must stay bound to the same session, worker, backend, and world binding without attach-scope widening"
+        );
+        assert!(
+            store
+                .load_orchestration_session("sess_dispatch")
+                .expect("load refreshed orchestration session attached participant")
+                .expect("refreshed orchestration session attached participant")
+                .attached_participant_id()
+                .is_none(),
+            "the refreshed exact-target re-attempt must not widen back into attached scope"
         );
     }
 

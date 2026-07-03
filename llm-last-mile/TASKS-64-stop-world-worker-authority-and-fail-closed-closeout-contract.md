@@ -71,7 +71,7 @@ Session goal:
     - [`crates/shell/tests/repl_world_first_routing_v1.rs`](../crates/shell/tests/repl_world_first_routing_v1.rs)
     - [`crates/shell/tests/agent_public_control_surface_v1.rs`](../crates/shell/tests/agent_public_control_surface_v1.rs)
 
-- [ ] Task: Add harness coverage for the required bounded recovery-and-one-retry path
+- [x] Task: Add harness coverage for the required bounded recovery-and-one-retry path
   - Acceptance: automated coverage proves that when `SPEC-64` recovery conditions hold, exactly one bounded recovery attempt and one exact-target re-attempt are expected, and the harness is narrow enough that later implementation can satisfy it without reopening transport or attach scope.
   - Verify:
     - `cargo test -p shell dispatch_contract -- --nocapture`
