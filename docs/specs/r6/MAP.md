@@ -156,14 +156,17 @@ touched sentinel spot-checks green (`cargo test -p agent-drift-analyzer -- --noc
 analyzer wall plus the full sentinel wall green on 2026-07-01 (`cargo test -p agent-drift-analyzer -- --nocapture`,
 `cargo test -p agent-drift-sentinel -- --nocapture`), and no `R6-1`/`R6-2` replay evidence showed
 `progress.rs` reset errors caused by objective-string quality, so `R6-4` remains deferred to the later
-full-migration phase. The next active execution sequence is `R6-3`.
+full-migration phase. `R6-3` then closed on 2026-07-03 with the same full analyzer + sentinel walls green,
+no `DriftClass` / `schema_version` / `checkpoint/export.rs` / sentinel `operator_surface.rs` source
+changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` replay evidence showing a
+`progress.rs` reset error caused by objective-string quality.
 
 ### Packet Documents
 
 - `R6-1` (objective-independent scorer cutover): `docs/specs/r6/R6-1/agent-drift-analyzer-dead-end-thrash-cutover-{spec,plan,tasks}.md`
 - `R6-2` (structured-objective consumer, kickoff-anchored first cut): `docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-{spec,plan,tasks}.md`
-- `R6-3` (rolling / previous-checkpoint semantic drift): `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-{spec,plan,tasks}.md` — committed follow-up to `R6-2`; SPEC/PLAN/TASKS written 2026-07-02, **not yet implemented**. Surfacing resolved (codex-consulted) to **tagged evidence on the existing `SemanticGoalDrift` class, not a new variant**, so no `schema_version` bump and no sentinel/`export.rs` lockstep; the flip-conditions that would promote it to its own variant are recorded in the `R6-3` SPEC Resolved Decision 1.
-- `R6-4` (conditional reset migration): not written — deferred after `R6-2.5` closeout because no `R6-1`/`R6-2` replay evidence showed `progress.rs` reset errors caused by objective-string quality; remains evidence-gated per the DESIGN doc.
+- `R6-3` (rolling / previous-checkpoint semantic drift): `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-{spec,plan,tasks}.md` — landed on 2026-07-03. The scorer now adds rolling / previous-checkpoint semantic drift as **tagged evidence on the existing `SemanticGoalDrift` class, not a new variant**, and the closeout proof confirmed no `schema_version` bump and no sentinel/`export.rs` lockstep source change.
+- `R6-4` (conditional reset migration): not written — still deferred after the `R6-3` closeout because no `R6-1`/`R6-2`/`R6-3` replay evidence showed `progress.rs` reset errors caused by objective-string quality; remains evidence-gated per the DESIGN doc.
 
 1. **[done] Complete the consumer/failure-mode investigation.** Finish the scorer-input audit (turn context,
    archetype inputs, interval/reset history carry, how `truth_artifacts` are sourced), and enumerate
@@ -194,14 +197,18 @@ full-migration phase. The next active execution sequence is `R6-3`.
    concrete target and no boundary constraint (an empty anchor term set suppresses the claim). Anyone
    building `R6-3` or a future distance-metric pass should read that Resolved Decision before assuming the
    current check is graduated.
-6. **Next active seam: `R6-3` (rolling / previous-checkpoint semantic drift), with `R6-4` still conditional.**
-   Land the committed follow-up that adds **rolling / previous-checkpoint** semantic drift (current
-   checkpoint's structured goal vs the immediately-previous checkpoint's, reachable via `analysis.previous`
-   with no new plumbing) to catch **abrupt single-checkpoint goal pivots** cheaply — the complement to the
-   kickoff-anchored signal, which is the cumulative measure that catches gradual drift from the original ask.
-   Open the conditional `R6-4` reset migration only if later evidence warrants. Guardrails enforced in tests
-   throughout. `R6-3` reuses the same disjoint-set distance primitive unless it explicitly revisits it (see
-   item 5's known-limitation note) — decide deliberately, don't inherit it silently.
+6. **[done] `R6-3` (rolling / previous-checkpoint semantic drift), with `R6-4` still conditional.**
+   Landed per the `R6-3` SPEC/PLAN/TASKS on 2026-07-03. The analyzer now scores **rolling /
+   previous-checkpoint** semantic drift (current checkpoint's structured goal vs the immediately-previous
+   checkpoint's, reached through `analysis.previous` with no new plumbing) as tagged evidence on the
+   existing `SemanticGoalDrift` class, complementing the kickoff-anchored cumulative signal from `R6-2`.
+   Closeout is confirmed by the green full analyzer wall plus the green full sentinel wall on 2026-07-03
+   (`cargo test -p agent-drift-analyzer -- --nocapture`, `cargo test -p agent-drift-sentinel -- --nocapture`),
+   with explicit grep/diff proof that no new `DriftClass` variant, no `schema_version` bump, and no
+   `checkpoint/export.rs` / sentinel `operator_surface.rs` source change landed across the committed `R6-3`
+   range. `R6-4` stays **deferred** because no `R6-1`/`R6-2`/`R6-3` replay evidence showed a `progress.rs`
+   reset error caused by objective-string quality. The disjoint-set semantic-distance limitation from item 5
+   remains accepted debt; any future reset migration or distance revisit stays evidence-gated and deliberate.
 
 ## Non-Goals For This Rescope
 

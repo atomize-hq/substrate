@@ -1,10 +1,10 @@
 # Tasks: Agent Drift Analyzer Rolling / Previous-Checkpoint Semantic Goal Drift (R6-3)
 
-Status: task ledger created on 2026-07-02 from the `R6-3` SPEC/PLAN in this directory. `R6-3` is in
-progress; completed items are marked inline below, and the remaining tasks stay open. Sequenced after
-`R6-2` (the kickoff-anchored `semantic_goal_drift` scorer + `SemanticGoalDrift` class), which closed on
-2026-07-01 and passed a final sign-off review on 2026-07-02. This ledger becomes the closeout record as
-tasks land.
+Status: task ledger created on 2026-07-02 from the `R6-3` SPEC/PLAN in this directory. `R6-3` landed on
+2026-07-03 after the full analyzer + sentinel walls, with the closeout evidence recorded inline below.
+Sequenced after `R6-2` (the kickoff-anchored `semantic_goal_drift` scorer + `SemanticGoalDrift` class),
+which closed on 2026-07-01 and passed a final sign-off review on 2026-07-02. This ledger is the closeout
+record for the full packet.
 
 Packet prerequisite rule: this packet names `R6-2` (the landed `score_semantic_goal_drift` scorer, the
 `DriftClass::SemanticGoalDrift` variant, the `CheckpointAnalysis.sanctioned_replan` field, and the
@@ -23,7 +23,7 @@ holds today. Do not reopen the variant question mid-implementation.
 
 ## R6-3.0: Docs Lock
 
-- [ ] Task R6-3.0.1: Lock the SPEC/PLAN/TASKS family.
+- [x] Task R6-3.0.1: Lock the SPEC/PLAN/TASKS family.
   - Acceptance: `docs/specs/r6/R6-3/` contains the spec, plan, and this tasks ledger, and they record: the
     evidence-not-variant surfacing decision plus its three flip-conditions; the no-`schema_version`-bump /
     analyzer-local boundary; the symmetric eligibility bar (both adjacent goals at the current-goal bar);
@@ -38,8 +38,12 @@ holds today. Do not reopen the variant question mid-implementation.
     - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-spec.md`
     - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-plan.md`
     - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-tasks.md`
+  - Result (2026-07-02): locked by commit `2d023ecc9` (`docs: lock R6-3 rolling semantic goal drift spec
+    family`). The spec family records the evidence-not-variant surfacing decision, the no-schema-bump
+    analyzer-local boundary, the symmetric eligibility/extraction rules, the `sanctioned_replan` reuse, and
+    the independence/co-fire contract required by the MAP and DESIGN docs.
 
-- [ ] Task R6-3.0.2 (optional parity): Add a packet-prompts artifact matching the `R6-1`/`R6-2` four-file
+- [x] Task R6-3.0.2 (optional parity): Add a packet-prompts artifact matching the `R6-1`/`R6-2` four-file
   convention.
   - Acceptance: if full parity with the earlier packets is wanted, a
     `agent-drift-analyzer-rolling-semantic-goal-drift-packet-prompts.md` artifact exists using the live
@@ -51,6 +55,9 @@ holds today. Do not reopen the variant question mid-implementation.
   - Verify: manual review against the `R6-2` packet-prompts artifact for shape/numbering parity.
   - Files:
     - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-packet-prompts.md` (new, optional)
+  - Result (2026-07-02): added in commit `28d782c05` (`docs: add R6-3 rolling semantic goal drift packet
+    prompts`), keeping the four-file packet-parity artifact in sync with the live `R6-3.0`-`R6-3.4`
+    numbering and source-of-truth constraints.
 
 ## R6-3.1: Confirm Previous-Checkpoint Reachability And Run The Eligibility/Threshold Corpus Check
 
@@ -162,7 +169,7 @@ holds today. Do not reopen the variant question mid-implementation.
 
 ## R6-3.3: Regressions And Acceptance Fixture
 
-- [ ] Task R6-3.3.1: Complete the rolling regression matrix and commit the acceptance fixture.
+- [x] Task R6-3.3.1: Complete the rolling regression matrix and commit the acceptance fixture.
   - Acceptance: regressions cover all rolling guard states (flag / first-checkpoint-`None` /
     previous-present-but-unknown); step-size pivot (adjacent goals fully disjoint) → flagged vs slow
     evolution (adjacent goals share one specific term) → not flagged; rolling-vs-sanctioned-replan → not
@@ -180,8 +187,14 @@ holds today. Do not reopen the variant question mid-implementation.
   - Files:
     - `crates/agent-drift-analyzer/tests/...` (new rolling acceptance + scorer regressions)
     - `crates/agent-drift-analyzer/tests/checkpoints.rs`
+  - Result (2026-07-02): landed in commit `74fc7eb19` (`test: lock R6-3.3 rolling semantic goal drift
+    coverage`). The scorer regression matrix now covers the rolling guard states, rolling-only /
+    kickoff-only / co-fire independence, the anchor-absent path, the structured-source proof, and the
+    symmetric-`comparison_key` extraction lock. The bounded acceptance fixture
+    `tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-mid-session-pivot` is committed and
+    exercised by `crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs`.
 
-- [ ] Task R6-3.3.2: Add the sentinel evidence-rendering test (test-only, no sentinel source change).
+- [x] Task R6-3.3.2: Add the sentinel evidence-rendering test (test-only, no sentinel source change).
   - Acceptance: a sentinel test constructs a checkpoint with a flagged rolling-tagged `SemanticGoalDrift`
     score and asserts the operator surface renders the rolling evidence line(s) on the existing
     `SemanticGoalDrift` posture — mirroring the `R6-2` `operator_surface_renders_flagged_semantic_goal_drift_*`
@@ -190,8 +203,12 @@ holds today. Do not reopen the variant question mid-implementation.
   - Verify: `cargo test -p agent-drift-sentinel operator_surface -- --nocapture`.
   - Files:
     - `crates/agent-drift-sentinel/tests/operator_surface.rs` (test-only)
+  - Result (2026-07-02): the test-only sentinel coverage now includes
+    `operator_surface_renders_flagged_semantic_goal_drift_rolling_evidence_lines` in
+    `crates/agent-drift-sentinel/tests/operator_surface.rs`, proving rolling-tagged evidence renders on the
+    existing `SemanticGoalDrift` posture with no `operator_surface.rs` source change.
 
-- [ ] Task R6-3.3.3: Assert `R6-2` / `R5.75` / `R6-1` non-regression.
+- [x] Task R6-3.3.3: Assert `R6-2` / `R5.75` / `R6-1` non-regression.
   - Acceptance: the `R6-2` kickoff-anchored acceptance witnesses, `R5.75-3` (delegated stability) /
     `R5.75-4` (zero-verifier anti-flap) witnesses, and the `R6-1` `dead_end_thrash` posture are unchanged by
     the rolling extension. Any change to a prior witness is treated as a regression, not a rebaseline.
@@ -200,10 +217,15 @@ holds today. Do not reopen the variant question mid-implementation.
   - Files:
     - `crates/agent-drift-analyzer/tests/progress_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs`
+  - Result (2026-07-03): the follow-up commits `8605f78d2` (`test: restore R6-2 kickoff witness in R6-3.3
+    coverage`) and `2738d9e0c` (`test: fail-close R6-2 semantic goal drift witness`) finished the
+    non-regression lock. On 2026-07-03 the full walls are green again, including
+    `tests/progress_acceptance.rs`, `tests/semantic_goal_drift_acceptance.rs`, and the full
+    `agent-drift-sentinel` package wall, so the `R6-2` / `R5.75` / `R6-1` witnesses remain unchanged.
 
 ## R6-3.4: Smoke And Closeout
 
-- [ ] Task R6-3.4.1: Full walls, confirm no schema/variant/sentinel-source change, and close out `R6-3`.
+- [x] Task R6-3.4.1: Full walls, confirm no schema/variant/sentinel-source change, and close out `R6-3`.
   - Acceptance: the full analyzer wall and full sentinel wall are green; a recorded confirmation that no new
     `DriftClass` variant, no `schema_version` bump, and no `export.rs` / sentinel `operator_surface.rs`
     source change landed (grep/diff evidence in this ledger). The `R6-4` open/defer decision is recorded:
@@ -215,6 +237,25 @@ holds today. Do not reopen the variant question mid-implementation.
     `schema_version` / `export.rs` / `operator_surface.rs` source change.
   - Files:
     - `docs/specs/r6/MAP.md` (R6-3 status/routing + R6-4 open/defer decision)
+  - Result (2026-07-03): Packets `R6-3.0` through `R6-3.3` are confirmed landed in the committed range
+    (`2d023ecc9`, `28d782c05`, `ba05e6c3e`, `d47c5e751`, `486c0729d`, `74fc7eb19`, `8605f78d2`,
+    `2738d9e0c`), and the required full walls are green:
+    `cargo test -p agent-drift-analyzer -- --nocapture` and
+    `cargo test -p agent-drift-sentinel -- --nocapture`.
+  - Finding: No new variant/schema/sentinel-source fallout landed across `R6-3`. Using pre-`R6-3` base
+    commit `169dd2757` (`docs: reconcile R6-2 anchor-term wording and file sign-off backlog`),
+    `git diff 169dd2757..HEAD -- crates/agent-drift-analyzer/src/checkpoint/schema.rs crates/agent-drift-analyzer/src/checkpoint/export.rs crates/agent-drift-sentinel/src/operator_surface.rs`
+    is empty. Live grep confirms the only relevant analyzer/sentinel surfacing remains the existing
+    `DriftClass::SemanticGoalDrift` entry in `checkpoint/schema.rs`, `checkpoint/export.rs`, and sentinel
+    `operator_surface.rs`, with no `RollingSemanticGoalDrift` symbol and the schema gates still capped at
+    `v0.7`.
+  - Finding: `R6-4` stays **deferred**. The existing MAP already recorded that no `R6-1`/`R6-2` replay
+    evidence showed a `progress.rs` reset error caused by objective-string quality, and the committed
+    `R6-3` range itself does not touch `crates/agent-drift-analyzer/src/checkpoint/progress.rs`
+    (`git diff 169dd2757..HEAD -- crates/agent-drift-analyzer/src/checkpoint/progress.rs` is empty;
+    `git log 169dd2757..HEAD -- crates/agent-drift-analyzer/src/checkpoint/progress.rs` is empty). The
+    2026-07-03 analyzer wall still includes the progress and semantic-goal-drift acceptance corpora green,
+    so no new replay/reset evidence justifies opening conditional `R6-4`.
 
 ## Deferred / Ask-First
 
