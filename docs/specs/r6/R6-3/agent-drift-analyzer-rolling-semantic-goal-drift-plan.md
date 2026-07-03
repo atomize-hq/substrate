@@ -254,8 +254,11 @@ distance to a later `R6` iteration (do not silently ship an over-firing signal).
 ### Risk: the evidence-not-variant choice conflates the two signals for operators
 
 Mitigation: distinct rolling reason prefixes keep the cumulative-vs-step-size distinction visible on the
-one `SemanticGoalDrift` posture; the co-fire regression proves both tags surface; the sentinel rendering
-test proves the operator surface shows the rolling reason. If a SPEC Resolved Decision 1 flip-condition
+one `SemanticGoalDrift` posture; the co-fire regression proves both comparison families surface (on co-fire
+the shared current-goal line is de-duped — see SPEC Open Question 2 and the "Post-Landing Codex Review
+Fixes" in the TASKS ledger — so the kickoff `kickoff anchor:` line and the `rolling ... previous goal:` line
+each remain as the surviving proof that their family fired); the sentinel rendering test proves the operator
+surface shows the rolling reason under the default evidence cap. If a SPEC Resolved Decision 1 flip-condition
 later holds (separate threshold/posture/handling, or acceptance shows aggregate reporting hides
 gradual-vs-abrupt), promoting rolling to its own variant is the recorded escape hatch.
 

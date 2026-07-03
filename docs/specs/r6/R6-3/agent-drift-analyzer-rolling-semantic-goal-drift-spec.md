@@ -385,7 +385,20 @@ Conventions for this packet:
    confidence-bar corpus check, except `R6-2.1` had already returned clean (9/9 `High` anchors) when its
    decision was called resolved; here the check is still pending, so Resolved Decision 3 is marked
    provisional.
-2. **Open — resolve in `R6-3.2` (evidence ordering).** When both comparisons co-fire, in what order do the
-   kickoff-anchored and rolling evidence lines render, and does the operator surface de-duplicate the shared
-   current-goal line? Decide during scorer implementation; assert the rendered ordering in the sentinel
-   rendering test (Testing Strategy item 7). This is a presentation detail, not a posture change.
+2. **Resolved (2026-07-03, post-landing codex review): de-duplicate the shared current-goal line on
+   co-fire; do not keep both.** The first `R6-3.2` cut kept both current-goal lines (kickoff-family and
+   rolling-family) and ordered co-fire evidence `[current, kickoff-anchor, rolling-current, rolling-previous]`.
+   A post-landing codex second-opinion review found that this ordering is unsafe under the sentinel's
+   **default** `WarningPolicy` (`max_evidence_lines = 3`, `operator_surface.rs`): the redundant
+   `rolling ... current goal:` line (same goal already named by the kickoff `current goal:` line) occupies a
+   slot, so the informative `rolling ... previous goal:` line — the only line naming what the goal lurched
+   away from — is truncated and never rendered to the operator. The original sentinel rendering test masked
+   this by widening the cap to 4. **Resolution:** when kickoff drift already surfaced the current goal, the
+   scorer suppresses the redundant `ROLLING_CURRENT_REASON_PREFIX` line, so co-fire emits exactly
+   `[current, kickoff-anchor, rolling-previous]` (3 lines) and the previous-goal line survives the default
+   cap. The rolling current-goal line is still emitted for a rolling-**only** claim (where no kickoff current
+   line exists). Rendered ordering under the default policy is asserted in the sentinel test
+   (`operator_surface_renders_cofire_rolling_previous_line_in_order_under_default_policy`), the analyzer-side
+   de-dup is locked by `semantic_goal_drift_cofire_dedupes_current_goal_and_surfaces_rolling_previous`, and
+   the acceptance fixture forbids the redundant prefix on co-fire. This is a presentation/evidence change,
+   not a posture change (still one `SemanticGoalDrift` claim, same `raw_score`/`confidence`).

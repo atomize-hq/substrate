@@ -152,10 +152,13 @@ holds today. Do not reopen the variant question mid-implementation.
       short-circuits rolling, while `analysis.sanctioned_replan` still suppresses both paths.
     - Evidence/boundary confirmation: rolling evidence lands with distinct
       `ROLLING_CURRENT_REASON_PREFIX` / `ROLLING_PREVIOUS_REASON_PREFIX` tags, co-fire ordering is asserted
-      in `semantic_goal_drift_cofire_preserves_family_order_and_keeps_both_current_goal_lines`, and no new
-      `DriftClass`, no `schema_version` bump, and no `scoring/mod.rs` signature change landed — the
-      implementation commit `d47c5e751` touched only
-      `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`.
+      in the co-fire scorer test (originally
+      `semantic_goal_drift_cofire_preserves_family_order_and_keeps_both_current_goal_lines`; superseded on
+      2026-07-03 by `semantic_goal_drift_cofire_dedupes_current_goal_and_surfaces_rolling_previous` — see the
+      "Post-Landing Codex Review Fixes" section, which de-dups the redundant rolling current-goal line so the
+      previous-goal line survives the default evidence cap), and no new `DriftClass`, no `schema_version`
+      bump, and no `scoring/mod.rs` signature change landed — the implementation commit `d47c5e751` touched
+      only `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`.
     - Minimal proof confirmation: the scorer test module covers rolling flag, rolling-fires-when-kickoff-
       anchor-absent, first-checkpoint-`None` no-claim, and rolling-vs-replan via
       `semantic_goal_drift_flags_rolling_pivot_with_named_previous_and_current_evidence`,
@@ -258,6 +261,49 @@ holds today. Do not reopen the variant question mid-implementation.
     The 2026-07-03 analyzer wall still includes the progress and semantic-goal-drift acceptance corpora
     green, so no new replay/reset evidence justifies opening conditional `R6-4`.
 
+## Post-Landing Codex Review Fixes (2026-07-03)
+
+A post-landing codex second-opinion review (consult session `019f2894`) confirmed the packet landed to
+intent (no new `DriftClass` variant, no `schema_version` bump, no `schema.rs`/`export.rs`/sentinel
+`operator_surface.rs` source change, symmetric extraction, `sanctioned_replan` reuse, anchor does not
+short-circuit rolling, both walls green) and surfaced one operator-visibility defect plus two test gaps,
+all fixed here.
+
+- [x] Fix R6-3.F1: De-dup the shared current-goal line on co-fire (SPEC Open Question 2 re-resolved).
+  - Defect: under the sentinel's **default** `WarningPolicy` (`max_evidence_lines = 3`), a co-firing
+    `SemanticGoalDrift` checkpoint emitted 4 evidence lines ordered
+    `[current, kickoff-anchor, rolling-current, rolling-previous]`; the redundant rolling current-goal line
+    (same goal already named by the kickoff current line) pushed the informative `rolling ... previous goal:`
+    line — the one naming what the goal lurched away from — past the cap, so the operator never saw it. The
+    only sentinel rolling test masked this by widening the cap to 4.
+  - Fix: `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs` now suppresses the
+    `ROLLING_CURRENT_REASON_PREFIX` line when kickoff drift already surfaced the current goal, so co-fire
+    emits `[current, kickoff-anchor, rolling-previous]` (3 lines, survives the default cap). The rolling
+    current-goal line is still emitted for a rolling-**only** claim. No posture / `raw_score` / `confidence`
+    change; still a single `SemanticGoalDrift` claim.
+  - Locked by: `semantic_goal_drift_cofire_dedupes_current_goal_and_surfaces_rolling_previous` (analyzer,
+    asserts 3 de-duped lines in order and no rolling current-goal line) and the acceptance fixture
+    `synthetic-rolling-mid-session-pivot/expected.json` (drops `rolling semantic goal drift current goal:`
+    from `required_reason_prefixes`; adds it to `forbidden_reason_prefixes`).
+- [x] Fix R6-3.F2: Assert rolling co-fire evidence ordering at the sentinel surface under the **default**
+  policy (Testing Strategy item 7 / Open Question 2 gap).
+  - Gap: the sentinel rolling render test overrode `max_evidence_lines` to 4 and only asserted presence, not
+    ordering, so it never exercised default-policy rendering.
+  - Fix: replaced with `operator_surface_renders_cofire_rolling_previous_line_in_order_under_default_policy`
+    in `crates/agent-drift-sentinel/tests/operator_surface.rs` — uses `WarningPolicy::default()` (cap 3),
+    asserts exactly three rendered lines in order (`current`, `kickoff anchor`, `rolling previous goal`), and
+    that the rolling current-goal line does not render. Test-only; no sentinel source change.
+- [x] Fix R6-3.F3: Add the present-but-below-`High` kickoff-anchor rolling case (Testing Strategy item 4d
+  claimed "absent or below `High`" but only `None` was tested).
+  - Gap: `semantic_goal_drift_rolling_still_flags_without_confident_anchor` passed `None`; the distinct
+    `eligible_anchor_goal` confidence-filter rejection path (a present anchor below the `High` bar) was
+    unexercised.
+  - Fix: added `semantic_goal_drift_rolling_still_flags_with_below_high_anchor` (analyzer) — a
+    `Medium`-confidence anchor is passed as `Some(&anchor)`, rejected by the `High` bar, and rolling still
+    flags with rolling-only evidence, proving an ineligible anchor does not short-circuit rolling.
+- Verification: `cargo test -p agent-drift-analyzer -- --nocapture` and
+  `cargo test -p agent-drift-sentinel -- --nocapture` both green on 2026-07-03 after the fixes.
+
 ## Deferred / Ask-First
 
 - [ ] Task R6-3.X.1: Promote rolling drift to its own `DriftClass::RollingSemanticGoalDrift` variant.
@@ -283,3 +329,58 @@ holds today. Do not reopen the variant question mid-implementation.
   - Verify: to be defined when (and if) opened.
   - Files:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
+
+- [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
+  target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see
+  "Batch scan outcome" below. Still deferred / ask-first; a codex second-opinion on the batch is being sought.**
+  - Motivation: real-session probes on 2026-07-03 (`019e9864-…` exploratory, `019f2837-…` concrete-goal)
+    run through the live `agent-session-compactor` -> `agent-drift-analyzer` pipeline both produced `0`
+    eligible checkpoints and `0` rolling/kickoff drift, and a codex consult (`019f2927`) confirmed the cause:
+    `eligible_current_goal` requires `unknowns.is_empty()` — every structured field resolved, including
+    off-surface `success_conditions` / `deliverables` cues the extractor deliberately rejected (normal
+    scaffolding like "Verify…" / "Return with…"). For a drift signal only the grounded target's movement
+    matters; `deliverables` do not participate in divergence and `success_conditions` barely do. So the bar
+    is mismatched to the drift question, and the real-world bottleneck is objective-decomposition coverage
+    upstream of the disjoint-set metric, not the metric itself.
+  - Proposed change (codex-recommended, not yet locked): gate `eligible_current_goal` on `TaskStatement` +
+    `confidence >= Medium` (High for the anchor) + a **grounded target present** (+ optionally no
+    `primary_goal` unknown) — **not** "non-empty `comparison_key` alone," which would admit `unknown_target`
+    and is too weak.
+  - Blast radius / risk: local to `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`, but the
+    helper is shared, so this affects **both** the `R6-2` kickoff-anchored path and the `R6-3` rolling path.
+    The main risk is not missing deliverables — it is that once more checkpoints qualify, the coarse binary
+    disjoint-set distance fires more often, including **over-fire** on legitimate narrowing/reframing
+    (`R6-2` Resolved Decision 7 / MAP item 5 debt). This task is therefore coupled to the graduated-distance
+    revisit (`R6-3.X.2`): loosening eligibility without addressing the distance metric may trade under-fire
+    for over-fire.
+  - Batch scan outcome (2026-07-03, done): 110 real sessions across 43 repos and 11 analyzable months
+    (2025-09 → 2026-07; pre-`session_meta` rollouts before ~2025-09 do not produce session-scoped rows and
+    cannot be analyzed), 882 checkpoints, run through the live compactor -> analyzer pipeline.
+    - Coverage: `TaskStatement`+confident = 714/882 (81%). Current-bar eligible (`unknowns.is_empty()`) =
+      156/882 (**17.7%** — so the bar is NOT inert; the two-session probe was unrepresentative). Failure
+      blockers among TS+confident: `target` 366, `deliverables` 284, `success_conditions` 202.
+    - Loosening yield: a target-resolved bar would admit 348/882 (39.5%), **+192 checkpoints (2.2×)**. Of 299
+      adjacent target-eligible pairs, 286 (95.7%) keep the same target, 13 change, **12 are term-disjoint**
+      (~12 rolling firing candidates vs the 1 rolling fire the current bar produced).
+    - **The decisive finding — the firings are false positives.** The current bar's only 6 flagged
+      checkpoints are all ONE session (`0199f9ec`, docs, 2025-10, ords 36-41) and are driven by GARBAGE
+      target extraction (current goal parsed as coordinate/fragment noise `0_0_0_0_4000_n|5_n_n|…` while the
+      real goal per the kickoff anchor was architecture/auth docs); the single real rolling fire is the same
+      garbage. Eyeballing all 12 hypothetical target-only disjoint pairs: they are dominated by (a) garbage /
+      fragment targets (`isolated.\n-`->`\n-`, `README.md`->`5\n\n`, `SKILL.md`->`GPT-5.4`) and (b)
+      legitimate narrowing / progression (`audit-trio.report.json`->`audit-trio.model-selection/…report.json`;
+      `PLAN-04.md`->`exec.rs:1537`->findings->`PLAN-04.md`, a normal plan->code->plan cycle). **No clear
+      "abandoned goal A for unrelated goal B" pivot appeared.**
+  - Revised verdict (2026-07-03, pending codex second-opinion): **do NOT loosen the eligibility bar in
+    isolation.** The batch shows the problem is not only low coverage but that both the current firings and
+    the firings loosening would add are dominated by two over-fire sources — garbage target extraction and
+    the disjoint-set metric misreading narrowing/progression as drift. The strict `unknowns.is_empty()` bar
+    currently acts as an accidental over-fire suppressor. Gate any loosening behind BOTH (a) objective-
+    extraction robustness (suppress garbage/fragment targets in `context/objective.rs`) and (b) the
+    graduated-distance metric (`R6-3.X.2`); loosening alone would multiply false positives (~1 -> ~12, nearly
+    all spurious), not surface real drift.
+  - Verify: to be defined when (and if) opened, with its own SPEC/PLAN/TASKS delta and impact analysis on
+    the shared `eligible_current_goal` helper.
+  - Files:
+    - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
+    - (upstream, weaker lever) `crates/agent-drift-analyzer/src/context/objective.rs`

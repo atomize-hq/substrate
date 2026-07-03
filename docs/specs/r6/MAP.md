@@ -209,6 +209,40 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    range. `R6-4` stays **deferred** because no `R6-1`/`R6-2`/`R6-3` replay evidence showed a `progress.rs`
    reset error caused by objective-string quality. The disjoint-set semantic-distance limitation from item 5
    remains accepted debt; any future reset migration or distance revisit stays evidence-gated and deliberate.
+   **Open validation debt (rolling):** the `R6-3.1` corpus check found `0 of 23` eligible adjacent
+   `Medium+` `TaskStatement` pairs disjoint, so rolling drift never fired on the committed corpus — its
+   positive firing rests entirely on the synthetic `synthetic-rolling-mid-session-pivot` fixture, and its
+   real-corpus firing rate and over-fire rate are **unvalidated**. Measure both against real replay sessions
+   with genuine mid-session pivots before trusting rolling operationally or building the graduated-distance
+   revisit (`R6-3.X.2`) on top of it; real over-fire is the trigger to open that revisit.
+   **Real-session probe (2026-07-03):** two live sessions run through the `agent-session-compactor` ->
+   `agent-drift-analyzer` pipeline (`019e9864-…` exploratory/review; `019f2837-…` concrete-goal work) both
+   produced `0` eligible checkpoints and `0` rolling evidence. The dominant gate is upstream of the distance
+   metric: `eligible_current_goal` requires `unknowns.is_empty()`, and neither session cleared it —
+   `019e9864` never resolved a `target` (`unknowns=[target,deliverables]`), and `019f2837` had a concrete
+   high-confidence stable target on all 9 checkpoints but left `unknowns=[success_conditions,deliverables]`.
+   So rolling's real-world non-firing is dominated by **objective-decomposition coverage**, not by the
+   disjoint-set distance debt. A codex second-opinion (consult `019f2927`, 2026-07-03) sharpened the
+   mechanism: empty `success_conditions` / `deliverables` do **not** disqualify on their own — they become
+   `unknowns` only when the extractor saw those cues *off the goal surface* and rejected them (normal
+   scaffolding like "Verify…" / "Return with…"), and neither field participates in divergence anyway. The
+   load-bearing lever is therefore to **loosen the shared `eligible_current_goal` bar to a target-resolved
+   gate** (grounded target present + confidence, not all-fields-resolved), not to chase `success_conditions`
+   / `deliverables` extraction (the weaker lever, since those fields do not drive divergence). That bar is
+   shared with `R6-2`'s kickoff-anchored path, so it is a deliberate cross-signal change whose payoff is
+   gated by the disjoint-set over-fire risk — tracked as deferred task `R6-3.X.3`.
+   **Diagnostic batch scan (2026-07-03, done):** 110 real sessions across 43 repos and 11 analyzable months
+   (2025-09 → 2026-07; pre-`session_meta` rollouts cannot be analyzed), 882 checkpoints. Current-bar
+   eligibility is `17.7%` (not inert), a target-resolved bar would reach `39.5%` (2.2×), and rolling's
+   firing surface would grow from `1` real fire to ~`12` disjoint adjacent-pair candidates. But the decisive
+   finding is that the firings are **false positives**: the current bar's only `6` flags are one session's
+   garbage target extraction, and all `12` hypothetical target-only disjoint pairs are garbage/fragment
+   targets or legitimate narrowing/progression — no genuine "goal A abandoned for unrelated goal B" pivot
+   appeared. **Revised verdict:** do **not** loosen the bar in isolation; the strict `unknowns.is_empty()`
+   gate currently suppresses over-fire, and loosening would multiply false positives from garbage extraction
+   and the disjoint-set narrowing debt. Gate any loosening behind BOTH objective-extraction robustness
+   (`context/objective.rs`) and the graduated-distance metric (`R6-3.X.2`). Full data in the `R6-3` TASKS
+   ledger, `R6-3.X.3` "Batch scan outcome."
 
 ## Non-Goals For This Rescope
 
