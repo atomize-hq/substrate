@@ -1173,18 +1173,25 @@ fn comparison_key_target_kind(kind: ObjectiveTargetKind) -> &'static str {
 fn comparison_key_segments_for_target(target: &ObjectiveTarget) -> Vec<String> {
     let mut segments = vec![comparison_key_target_kind(target.kind).to_string()];
 
+    // R6-3.5 defense-in-depth: even if a junk specific slipped past extraction, it must not seed a
+    // comparison segment. Drop `Junk`-quality specifics (log/coordinate/model noise); keep typed
+    // and plausible artifacts (paths, workspace refs, instruction surfaces).
     let mut specifics = target
         .paths
         .iter()
         .chain(target.workspace_refs.iter())
         .chain(target.named_artifacts.iter())
+        .filter(|value| anchor_quality(value) != TargetAnchorQuality::Junk)
         .map(|value| normalize_comparison_key_segment(value))
         .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
 
     if specifics.is_empty() {
         let display = normalize_comparison_key_segment(&target.display);
-        if !display.is_empty() && display != comparison_key_target_kind(target.kind) {
+        if !display.is_empty()
+            && display != comparison_key_target_kind(target.kind)
+            && is_stable_goal_term(&display)
+        {
             specifics.push(display);
         }
     }
@@ -3696,6 +3703,29 @@ mod tests {
             Some("SO-2.3B".to_string())
         );
         assert_eq!(extract_work_item_identifier("Use GPT-5.4 to review"), None);
+    }
+
+    #[test]
+    fn comparison_key_drops_junk_target_specifics_keeps_stable() {
+        let target = ObjectiveTarget {
+            display: "0.0.0.0:4000".to_string(),
+            kind: ObjectiveTargetKind::FileOrDirectory,
+            paths: vec!["0.0.0.0:4000".to_string(), "crates/foo/bar.rs".to_string()],
+            symbols: Vec::new(),
+            named_artifacts: Vec::new(),
+            workspace_refs: Vec::new(),
+            evidence: Vec::new(),
+            confidence: Confidence::High,
+        };
+        let segments = comparison_key_segments_for_target(&target);
+        assert!(
+            segments.iter().any(|s| s.contains("bar")),
+            "stable path must be retained: {segments:?}"
+        );
+        assert!(
+            !segments.iter().any(|s| s.contains("4000")),
+            "junk host:port specific must be dropped: {segments:?}"
+        );
     }
 
     #[test]
