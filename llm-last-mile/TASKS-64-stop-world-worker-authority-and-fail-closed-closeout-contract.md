@@ -114,7 +114,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task: Resolve current authoritative attached-host ownership at stop-dispatch time
+- [x] Task: Resolve current authoritative attached-host ownership at stop-dispatch time
   - Acceptance: stop dispatch resolves the current sanctioned owner path from persisted/session truth instead of trusting stale attached-host snapshots or transport discovery alone, and stale/disproven owner paths fail closed with explanation-ready output.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`

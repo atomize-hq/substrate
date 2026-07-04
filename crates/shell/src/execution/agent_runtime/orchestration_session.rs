@@ -410,6 +410,11 @@ impl OrchestrationSessionRecord {
         self.active_session_handle_id.as_deref()
     }
 
+    // Stop dispatch must bind to durable active owner truth, not an attached snapshot fallback.
+    pub(crate) fn sanctioned_stop_owner_participant_id(&self) -> Option<&str> {
+        self.active_participant_id()
+    }
+
     pub(crate) fn attached_participant_id(&self) -> Option<&str> {
         self.attached_participant_id.as_deref()
     }

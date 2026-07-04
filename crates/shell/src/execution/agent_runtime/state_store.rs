@@ -2085,13 +2085,15 @@ impl AgentRuntimeStateStore {
             );
         };
 
-        let authoritative =
-            resolve_authoritative_session_control(&record, orchestration_session_id)?;
-        if authoritative.participant.participant_id() != caller_participant_id {
+        let authoritative_participant = resolve_authoritative_stop_dispatch_owner_participant(
+            &record,
+            orchestration_session_id,
+        )?;
+        if authoritative_participant.participant_id() != caller_participant_id {
             anyhow::bail!(
                 "caller_not_authoritative: orchestration session {} authoritative orchestrator participant is {} not {}",
                 orchestration_session_id,
-                authoritative.participant.participant_id(),
+                authoritative_participant.participant_id(),
                 caller_participant_id
             );
         }
@@ -2141,10 +2143,10 @@ impl AgentRuntimeStateStore {
         }
         validate_retained_worker_authoritative_lineage(
             &record,
-            &authoritative.participant,
+            &authoritative_participant,
             &target_participant,
         )?;
-        if !target_participant.matches_authoritative_parent_world_binding(&authoritative.session) {
+        if !target_participant.matches_authoritative_parent_world_binding(&record.session) {
             anyhow::bail!(
                 "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
                 orchestration_session_id,
@@ -2173,8 +2175,8 @@ impl AgentRuntimeStateStore {
         }
 
         Ok(ResolvedInternalStopWorldDispatchTarget {
-            session: authoritative.session,
-            caller_participant: authoritative.participant,
+            session: record.session.clone(),
+            caller_participant: authoritative_participant,
             target_participant,
         })
     }
@@ -5178,6 +5180,63 @@ fn resolve_authoritative_session_participant(
             )
         },
     )?;
+    let participant = record
+        .participants
+        .iter()
+        .find(|participant| participant.participant_id() == active_participant_id)
+        .cloned()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "stale_linkage: orchestration session {} references missing participant {}",
+                orchestration_session_id,
+                active_participant_id
+            )
+        })?;
+
+    if !participant.handle.state.is_live() {
+        anyhow::bail!(
+            "stale_linkage: orchestration session {} references inactive participant {}",
+            orchestration_session_id,
+            active_participant_id
+        );
+    }
+    if !participant.matches_public_parent_linkage(&record.session) {
+        anyhow::bail!(
+            "stale_linkage: orchestration session {} active participant {} does not match exact orchestrator linkage",
+            orchestration_session_id,
+            active_participant_id
+        );
+    }
+
+    Ok(participant)
+}
+
+fn resolve_authoritative_stop_dispatch_owner_participant(
+    record: &AgentRuntimeSessionRecord,
+    orchestration_session_id: &str,
+) -> Result<AgentRuntimeParticipantRecord> {
+    if !record.has_authoritative_parent() {
+        anyhow::bail!(
+            "missing_active_parent: orchestration session {} is missing authoritative parent metadata",
+            orchestration_session_id
+        );
+    }
+    if record.session.state != OrchestrationSessionState::Active {
+        anyhow::bail!(
+            "missing_active_parent: orchestration session {} is not active",
+            orchestration_session_id
+        );
+    }
+
+    let active_participant_id = record
+        .session
+        .sanctioned_stop_owner_participant_id()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "stale_linkage: orchestration session {} is missing authoritative orchestrator participant linkage",
+                orchestration_session_id
+            )
+        })?;
     let participant = record
         .participants
         .iter()
@@ -12031,6 +12090,85 @@ mod tests {
             assert!(
                 participant_after.internal.termination_reason.is_none(),
                 "pre-delivery stale owner rejection must not persist any stop closeout"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_attached_snapshot_without_active_owner_truth(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.active_session_handle_id = None;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist attached orchestrator snapshot");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err(
+                    "stop dispatch must fail closed when only an attached snapshot remains",
+                );
+
+            assert_eq!(
+                err.to_string(),
+                "stale_linkage: orchestration session sess_stop is missing authoritative orchestrator participant linkage"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_rejects_inactive_session_with_stale_stop_owner_linkage(
+    ) {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            parent.transition_state(OrchestrationSessionState::Stopped);
+
+            assert_eq!(parent.active_participant_id(), Some("orch_stop"));
+            assert_eq!(parent.attached_participant_id(), None);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist terminal session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist stale stop owner");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect_err(
+                    "terminalized sessions must fail closed before stop-owner resolution",
+                );
+
+            assert_eq!(
+                err.to_string(),
+                "missing_active_parent: orchestration session sess_stop is not active"
             );
         });
     }
