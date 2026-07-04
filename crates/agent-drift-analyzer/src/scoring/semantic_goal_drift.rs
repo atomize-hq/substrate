@@ -6,6 +6,7 @@ use crate::checkpoint::{
     ObjectiveTarget, StructuredObjective,
 };
 use crate::context::ObjectiveSummary;
+use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const CURRENT_GOAL_REASON_PREFIX: &str = "semantic goal drift current goal:";
@@ -23,11 +24,28 @@ pub(crate) fn score_semantic_goal_drift(
     };
     let anchor_goal = eligible_anchor_goal(kickoff_anchor);
     let previous_goal = eligible_previous_goal(analysis);
-    let kickoff_drift =
+    let mut kickoff_drift =
         anchor_goal.is_some_and(|anchor| semantic_goal_diverged(&current_goal, anchor));
-    let rolling_drift = previous_goal
+    let mut rolling_drift = previous_goal
         .as_ref()
         .is_some_and(|previous| rolling_goal_diverged(&current_goal, previous));
+
+    // R6-3.5 delegation guardrail (bounded; full parent/child semantics stay in R7). On an OPAQUE
+    // delegating-parent trace the analyzer sees only parent orchestration, so apparent objective
+    // churn may be child work it cannot observe. Require a stable parent-visible *target anchor* on
+    // both compared goals before claiming drift; otherwise fall through to limited-evidence
+    // no-claim. Partial / MixedOrAmbiguous visibility is NOT hard-suppressed (codex review §5) — it
+    // relies on the shared stable-term backstop already applied in eligibility.
+    if is_opaque_delegated_parent(&analysis.delegation) {
+        let current_anchor = has_stable_target_anchor(current_goal.structured);
+        kickoff_drift =
+            kickoff_drift && current_anchor && anchor_goal.is_some_and(has_stable_target_anchor);
+        rolling_drift = rolling_drift
+            && current_anchor
+            && previous_goal
+                .as_ref()
+                .is_some_and(|previous| has_stable_target_anchor(previous.structured));
+    }
 
     if analysis.sanctioned_replan {
         return no_claim(current_goal.structured.confidence);
@@ -156,6 +174,29 @@ fn has_stable_distinguishing_term(
     }
     terms.retain(|term| !constraint_terms.contains(term));
     !terms.is_empty()
+}
+
+/// A checkpoint whose parent delegates work to a child it cannot observe (`DelegatingParent` +
+/// `Opaque`). The scorer only sees parent-side orchestration here, so it must not read parent-side
+/// objective churn as drift without a concrete, parent-visible target anchor on both sides.
+fn is_opaque_delegated_parent(delegation: &DelegationContext) -> bool {
+    matches!(
+        delegation.topology,
+        Some(DelegationTopology::DelegatingParent)
+    ) && matches!(
+        delegation.child_work_visibility,
+        Some(ChildWorkVisibility::Opaque)
+    )
+}
+
+/// Stricter than `has_stable_distinguishing_term`: requires the *structured target* itself (not a
+/// comparison_key-only term) to contribute a stable, non-junk term.
+fn has_stable_target_anchor(structured: &StructuredObjective) -> bool {
+    structured.target.as_ref().is_some_and(|target| {
+        let mut terms = BTreeSet::new();
+        collect_target_terms(&mut terms, target);
+        !terms.is_empty()
+    })
 }
 
 fn eligible_previous_goal(analysis: &CheckpointAnalysis) -> Option<EligibleCurrentGoal<'_>> {
@@ -411,8 +452,100 @@ mod tests {
         CandidateTruthArtifact, CommandObservation, ContextPack, ObjectiveSummary, ToolObservation,
         WorkingSetPath,
     };
-    use crate::inference::DelegationContext;
+    use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
     use crate::input::BundleSession;
+
+    fn opaque_delegating_parent() -> DelegationContext {
+        DelegationContext {
+            topology: Some(DelegationTopology::DelegatingParent),
+            child_work_visibility: Some(ChildWorkVisibility::Opaque),
+            confidence: Some(Confidence::Medium),
+            markers: vec!["spawn_agent".to_string()],
+            supporting_evidence: Vec::new(),
+            counter_evidence: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn semantic_goal_drift_suppressed_on_opaque_delegated_parent_without_current_target_anchor() {
+        let anchor = structured_goal("crates/foo/anchor.rs", Confidence::High, Vec::new());
+        // Current goal is distinguished only through its comparison_key (no structured target).
+        let current =
+            structured_goal_with_constraints(None, Confidence::High, Vec::new(), Vec::new());
+        let mut analysis = analysis_with_summary(
+            objective_summary(
+                "implement|file_or_directory|docs_specs_r6_map_md",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+
+        // Control: without delegation, comparison-key-only churn fires.
+        assert!(
+            score_semantic_goal_drift(&analysis, Some(&anchor))
+                .score
+                .flagged
+        );
+
+        // Opaque delegating parent: no parent-visible target anchor -> limited-evidence no-claim.
+        analysis.delegation = opaque_delegating_parent();
+        assert!(
+            !score_semantic_goal_drift(&analysis, Some(&anchor))
+                .score
+                .flagged,
+            "opaque delegated parent without a current target anchor must not fire"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_fires_on_opaque_delegated_parent_with_target_anchors_both_sides() {
+        let anchor = structured_goal("crates/foo/anchor.rs", Confidence::High, Vec::new());
+        let current = structured_goal("docs/specs/r6/map.md", Confidence::High, Vec::new());
+        let mut analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+        analysis.delegation = opaque_delegating_parent();
+
+        assert!(
+            score_semantic_goal_drift(&analysis, Some(&anchor))
+                .score
+                .flagged,
+            "opaque delegated parent with stable target anchors on both sides still fires"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_not_hard_suppressed_on_partial_delegated_parent() {
+        let anchor = structured_goal("crates/foo/anchor.rs", Confidence::High, Vec::new());
+        let current =
+            structured_goal_with_constraints(None, Confidence::High, Vec::new(), Vec::new());
+        let mut analysis = analysis_with_summary(
+            objective_summary(
+                "implement|file_or_directory|docs_specs_r6_map_md",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+        // Partial visibility relies on the stable-term backstop, not hard suppression (codex §5).
+        analysis.delegation = DelegationContext {
+            child_work_visibility: Some(ChildWorkVisibility::Partial),
+            ..opaque_delegating_parent()
+        };
+
+        assert!(
+            score_semantic_goal_drift(&analysis, Some(&anchor))
+                .score
+                .flagged,
+            "partial delegated-parent visibility must not be hard-suppressed"
+        );
+    }
 
     #[test]
     fn semantic_goal_drift_rejects_junk_only_current_goal_eligibility() {
