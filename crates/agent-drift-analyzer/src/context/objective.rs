@@ -2228,6 +2228,383 @@ fn looks_like_explicit_named_target(token: &str) -> bool {
         || (cleaned.contains('-') && cleaned.chars().any(|ch| ch.is_ascii_alphabetic()))
 }
 
+// ---------------------------------------------------------------------------
+// R6-3.5 shared target-anchor taxonomy (see
+// docs/specs/r6/R6-3.5/agent-drift-analyzer-objective-target-hygiene-spec.md).
+//
+// A single deterministic classifier shared by target extraction (this module) and the
+// semantic-goal-drift scorer, so junk classification cannot diverge between the two layers.
+// Grammar-first: a token that validates a typed anchor grammar is `Stable` and is never re-masked
+// as noise; otherwise the log-template variable masks decide `Junk` vs (plausible-but-untyped)
+// `Weak`. Only `Stable` tokens may seed target specifics / comparison_key / scorer term sets.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TargetAnchorQuality {
+    Stable,
+    Weak,
+    Junk,
+}
+
+/// File extensions recognized as a durable file/doc anchor leaf.
+const RECOGNIZED_ANCHOR_EXTENSIONS: &[&str] = &[
+    ".rs", ".md", ".toml", ".json", ".yaml", ".yml", ".py", ".ts", ".tsx", ".js", ".jsx", ".sh",
+    ".lock", ".html", ".txt", ".cfg", ".rlib",
+];
+
+/// Conventional repository top-level directories accepted as a path root even without a recognized
+/// leaf extension. Broadened per the codex review so legit roots (`benches/`, `examples/`,
+/// `.github/`, …) are not dropped. The analyzer processes bundles from many repos, so this is a
+/// portable convention list, not the current repo's `ls`.
+const CONVENTIONAL_REPO_ROOTS: &[&str] = &[
+    "crates", "src", "lib", "libs", "app", "apps", "pkg", "pkgs", "packages", "cmd", "internal",
+    "docs", "doc", "spec", "specs", "test", "tests", "bench", "benches", "example", "examples",
+    "fixtures", "proto", "schema", "scripts", "tools", "config", ".github", ".claude", ".codex",
+];
+
+/// Extension-less filenames that are still durable named artifacts.
+const WELL_KNOWN_ROOTLESS_FILES: &[&str] = &[
+    "readme",
+    "makefile",
+    "dockerfile",
+    "license",
+    "changelog",
+    "contributing",
+    "security",
+    "cargo",
+    "agents",
+    "claude",
+    "justfile",
+    "taskfile",
+];
+
+/// Known model / assistant name prefixes. A work-item-shaped token whose alphabetic prefix is a
+/// model name (`GPT-5.4`, `Claude-3`) is runtime metadata, not a task target. Domain gazetteer,
+/// analogous to a log-parser variable dictionary.
+const MODEL_NAME_PREFIXES: &[&str] = &[
+    "gpt", "claude", "gemini", "llama", "mistral", "qwen", "deepseek", "grok", "sonnet", "opus",
+    "haiku", "o1", "o3", "o4", "phi", "gemma", "command", "codex",
+];
+
+/// Grammar-first anchor quality shared by extraction and the scorer.
+pub(crate) fn anchor_quality(raw_token: &str) -> TargetAnchorQuality {
+    let token = clean_anchor_token(raw_token);
+    if token.is_empty() {
+        return TargetAnchorQuality::Junk;
+    }
+    if stable_target_anchor_kind(&token).is_some() {
+        TargetAnchorQuality::Stable
+    } else if is_variable_noise_token(&token) {
+        TargetAnchorQuality::Junk
+    } else {
+        TargetAnchorQuality::Weak
+    }
+}
+
+/// Trim wrapping punctuation/quotes and a single trailing sentence period while preserving a leading
+/// `.` (dotfiles / `./` relative) and internal `:` (`host:port`, `file.rs:line`).
+fn clean_anchor_token(token: &str) -> String {
+    let trimmed = token.trim_matches(|c: char| {
+        matches!(
+            c,
+            '`' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';' | '!' | '?'
+        )
+    });
+    trimmed.strip_suffix('.').unwrap_or(trimmed).to_string()
+}
+
+/// Strip a trailing `:line` / `:line:col` reference so `exec.rs:1537` validates as `exec.rs`.
+fn strip_line_ref(token: &str) -> &str {
+    match token.split_once(':') {
+        Some((head, tail))
+            if !head.is_empty()
+                && !tail.is_empty()
+                && tail.chars().all(|c| c.is_ascii_digit() || c == ':') =>
+        {
+            head
+        }
+        _ => token,
+    }
+}
+
+/// True iff `leaf` is `<stem><recognized-ext>` with a non-empty alphanumeric stem.
+fn leaf_has_recognized_extension(leaf: &str) -> bool {
+    let base = strip_line_ref(leaf).to_ascii_lowercase();
+    RECOGNIZED_ANCHOR_EXTENSIONS.iter().any(|ext| {
+        base.len() > ext.len()
+            && base.ends_with(ext)
+            && base[..base.len() - ext.len()]
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric())
+    })
+}
+
+/// Typed-slot grammar validation (schema-guided DST pattern). Returns a stable anchor kind iff the
+/// token validates one grammar; `None` means "not a durable typed anchor".
+fn stable_target_anchor_kind(token: &str) -> Option<ObjectiveTargetKind> {
+    if validates_repo_relative_path(token) || validates_windows_path(token) {
+        return Some(if looks_like_doc_path(token) {
+            ObjectiveTargetKind::SpecOrDesignDoc
+        } else {
+            ObjectiveTargetKind::FileOrDirectory
+        });
+    }
+    if validates_recognized_extension_file(token) {
+        return Some(if looks_like_doc_path(token) {
+            ObjectiveTargetKind::SpecOrDesignDoc
+        } else {
+            ObjectiveTargetKind::FileOrDirectory
+        });
+    }
+    if validates_rust_symbol_ref(token) {
+        return Some(ObjectiveTargetKind::FileOrDirectory);
+    }
+    if validates_well_known_rootless_file(token) {
+        return Some(ObjectiveTargetKind::FileOrDirectory);
+    }
+    if token.starts_with('@') && token.len() > 1 {
+        return Some(ObjectiveTargetKind::RepoSlice);
+    }
+    if validates_bare_package_name(token) {
+        return Some(ObjectiveTargetKind::CrateOrPackage);
+    }
+    if is_stable_work_item_identifier(token) {
+        return Some(ObjectiveTargetKind::RepoSlice);
+    }
+    None
+}
+
+fn validates_repo_relative_path(token: &str) -> bool {
+    if token.contains("://") {
+        return false;
+    }
+    if token.starts_with("./") || token.starts_with("../") {
+        return token.len() > 2;
+    }
+    let segments = token
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
+    if segments.is_empty() {
+        return false;
+    }
+    if leaf_has_recognized_extension(segments[segments.len() - 1]) {
+        return true;
+    }
+    let first = segments[0].to_ascii_lowercase();
+    CONVENTIONAL_REPO_ROOTS.contains(&first.as_str()) && segments.len() >= 2
+}
+
+fn validates_windows_path(token: &str) -> bool {
+    let bytes = token.as_bytes();
+    let drive_absolute = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/');
+    if drive_absolute {
+        return true;
+    }
+    // A backslash-separated relative path only counts when its leaf carries a recognized
+    // extension; otherwise escaped-control residue (`isolated.\n-`) would masquerade as a path.
+    if token.contains('\\') {
+        let segments = token.split('\\').filter(|s| !s.is_empty()).collect::<Vec<_>>();
+        return segments.len() >= 2 && segments.last().is_some_and(|leaf| leaf_has_recognized_extension(leaf));
+    }
+    false
+}
+
+fn validates_recognized_extension_file(token: &str) -> bool {
+    !token.contains('/') && !token.contains('\\') && leaf_has_recognized_extension(token)
+}
+
+fn validates_rust_symbol_ref(token: &str) -> bool {
+    if !token.contains("::") {
+        return false;
+    }
+    token.split("::").all(|segment| {
+        !segment.is_empty()
+            && segment
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && segment.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+    })
+}
+
+fn validates_well_known_rootless_file(token: &str) -> bool {
+    let stem = strip_line_ref(token);
+    let stem = stem.split('.').next().unwrap_or(stem).to_ascii_lowercase();
+    WELL_KNOWN_ROOTLESS_FILES.contains(&stem.as_str())
+}
+
+/// Bare workspace package/crate name: all-lowercase kebab, ≥2 alphabetic segments, no digits/dots.
+/// Admits `agent-drift-analyzer`; rejects `GPT-5.4`, `closeout/review-ready`.
+fn validates_bare_package_name(token: &str) -> bool {
+    if token.contains('/') || token.contains('.') || token.contains(':') {
+        return false;
+    }
+    let segments = token.split('-').collect::<Vec<_>>();
+    segments.len() >= 2
+        && segments.iter().all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() && c.is_ascii_alphabetic())
+        })
+}
+
+/// Work-item identifier grammar (existing shape) minus model/version tokens.
+fn is_stable_work_item_identifier(token: &str) -> bool {
+    if !looks_like_work_item_identifier(token) {
+        return false;
+    }
+    let prefix = token
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    !MODEL_NAME_PREFIXES.contains(&prefix.as_str())
+}
+
+/// Log-template variable masks (Drain/LogPai preprocessing). Whole-token classification: only a
+/// token whose entire value is a dynamic parameter is noise.
+fn is_variable_noise_token(token: &str) -> bool {
+    if token.contains("://") {
+        return true; // URL scheme
+    }
+    let authority = token.split('/').next().unwrap_or(token);
+    if is_host_port(authority) {
+        return true; // ip:port / host:port, optionally followed by a route
+    }
+    if token.starts_with('/')
+        && token.split('/').filter(|s| !s.is_empty()).count() == 1
+        && !leaf_has_recognized_extension(token.trim_start_matches('/'))
+    {
+        return true; // bare `/graphql`-style endpoint
+    }
+    if is_numeric_run(token) {
+        return true; // coordinate / port / number run
+    }
+    if is_hex_blob(token) {
+        return true;
+    }
+    if is_duration_or_timestamp(token) {
+        return true;
+    }
+    if is_control_residue(token) {
+        return true;
+    }
+    false
+}
+
+fn is_host_port(token: &str) -> bool {
+    let Some((host, port)) = token.rsplit_once(':') else {
+        return false;
+    };
+    if port.is_empty() || !port.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    host == "localhost"
+        || (!host.is_empty()
+            && host
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '.' || c == '-' || c.is_ascii_alphabetic())
+            && host.chars().any(|c| c == '.' || c.is_ascii_digit()))
+}
+
+fn is_numeric_run(token: &str) -> bool {
+    let stripped = strip_line_ref(token);
+    let mut saw_digit = false;
+    for c in stripped.chars() {
+        if c.is_ascii_digit() {
+            saw_digit = true;
+        } else if !matches!(c, '.' | '_' | '-' | ':' | 'x' | 'X') {
+            return false;
+        }
+    }
+    saw_digit
+}
+
+fn is_hex_blob(token: &str) -> bool {
+    let body = token.strip_prefix("0x").or_else(|| token.strip_prefix("0X"));
+    match body {
+        Some(rest) => rest.len() >= 4 && rest.chars().all(|c| c.is_ascii_hexdigit()),
+        None => {
+            token.len() >= 8
+                && token.chars().all(|c| c.is_ascii_hexdigit())
+                && token.chars().any(|c| c.is_ascii_alphabetic())
+                && token.chars().any(|c| c.is_ascii_digit())
+        }
+    }
+}
+
+fn is_duration_or_timestamp(token: &str) -> bool {
+    // duration: <digits><unit>, e.g. 5s, 120ms, 2h
+    let lowered = token.to_ascii_lowercase();
+    for unit in ["ms", "us", "ns", "s", "m", "h", "sec", "min"] {
+        if let Some(head) = lowered.strip_suffix(unit) {
+            if !head.is_empty() && head.chars().all(|c| c.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    // ISO-ish timestamp or clock: contains 'T' between digit runs, or HH:MM:SS
+    let clockish = token.split(':').count() == 3
+        && token
+            .split(':')
+            .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()));
+    clockish
+}
+
+fn is_control_residue(token: &str) -> bool {
+    if token.contains("\\n") || token.contains("\\t") || token.contains("\\r") {
+        return true;
+    }
+    // stray control letters left by escaped-newline splitting: only n/t/r and digits/separators
+    let mut saw_control = false;
+    for c in token.chars() {
+        match c {
+            'n' | 't' | 'r' => saw_control = true,
+            c if c.is_ascii_digit() || matches!(c, '_' | '-' | '.') => {}
+            _ => return false,
+        }
+    }
+    saw_control
+}
+
+/// Scorer-side guard operating on the normalized (`[a-z0-9_]+`) term form. Shares the taxonomy:
+/// rejects numeric/coordinate runs, control residue, single-char, and model-version tokens.
+pub(crate) fn is_stable_goal_term(term: &str) -> bool {
+    if term.len() < 2 {
+        return false;
+    }
+    let segments = term.split('_').filter(|s| !s.is_empty()).collect::<Vec<_>>();
+    if segments.is_empty() {
+        return false;
+    }
+    // numeric/coordinate run: no segment carries a real word
+    let has_wordy = segments.iter().any(|s| {
+        s.len() >= 2 && s.chars().all(|c| c.is_ascii_alphabetic()) && !is_control_word(s)
+    });
+    if !has_wordy {
+        return false;
+    }
+    // model/version token: `<model>_<digits...>` (gpt_5_4)
+    if MODEL_NAME_PREFIXES.contains(&segments[0])
+        && segments[1..]
+            .iter()
+            .all(|s| s.chars().all(|c| c.is_ascii_digit()))
+        && segments.len() >= 2
+    {
+        return false;
+    }
+    true
+}
+
+fn is_control_word(segment: &str) -> bool {
+    !segment.is_empty() && segment.chars().all(|c| matches!(c, 'n' | 't' | 'r'))
+}
+
 /// Derive `primary_intent` from the selected goal clause's request **action**, not incidental
 /// substrings (architecture "Minimum Semantic Coverage #2" + Stage 4 intent inference). We match
 /// whole action words so the noun "implementation" never trips the verb "implement" and "Planning
@@ -3112,5 +3489,99 @@ mod tests {
     fn classifies_status_rows_as_non_objective_tool_output_context() {
         let row = status_row("task_complete: success=true");
         assert_eq!(source_kind_for_row(&row), ObjectiveSourceKind::ToolOutput);
+    }
+
+    // --- R6-3.5 shared target-anchor taxonomy ---
+
+    #[test]
+    fn anchor_quality_marks_typed_grammars_stable() {
+        for stable in [
+            "crates/agent-drift-analyzer/src/context/objective.rs",
+            "docs/architecture_overview.md",
+            ".github/workflows/ci.yml",
+            "Cargo.lock",
+            "README.md",
+            "README",
+            "Makefile",
+            "v2.3.1/notes.md",
+            "2024-report.md",
+            "docs/graphql/overview.md",
+            "0xdeadbeef.rs",
+            "./relative/path.rs",
+            "exec.rs:1537",
+            "foo::bar",
+            "score_semantic_goal_drift::inner",
+            "agent-drift-analyzer",
+            "@workspace-ref",
+            "R6-3.5",
+            "SO-2.3B",
+        ] {
+            assert_eq!(
+                anchor_quality(stable),
+                TargetAnchorQuality::Stable,
+                "expected `{stable}` to be a stable anchor"
+            );
+        }
+    }
+
+    #[test]
+    fn anchor_quality_marks_variable_noise_junk() {
+        for junk in [
+            "http://0.0.0.0:4000/graphql",
+            "0.0.0.0:4000",
+            "localhost:4000",
+            "127.0.0.1:8080",
+            "/graphql",
+            "0_0_0_0_4000",
+            "1920x1080",
+            "5s",
+            "120ms",
+            "11:58:13",
+            "isolated.\\n-",
+            "5\\n\\n",
+        ] {
+            assert_eq!(
+                anchor_quality(junk),
+                TargetAnchorQuality::Junk,
+                "expected `{junk}` to be junk"
+            );
+        }
+    }
+
+    #[test]
+    fn anchor_quality_marks_untyped_prose_and_truncated_paths_weak() {
+        for weak in [
+            "/Users/spenser/Library/Application",
+            "closeout",
+            "narrowing",
+        ] {
+            assert_eq!(
+                anchor_quality(weak),
+                TargetAnchorQuality::Weak,
+                "expected `{weak}` to be weak (non-scoring), not stable or junk"
+            );
+        }
+    }
+
+    #[test]
+    fn anchor_quality_rejects_bare_model_tokens() {
+        assert_ne!(anchor_quality("GPT-5.4"), TargetAnchorQuality::Stable);
+        assert_ne!(anchor_quality("gpt-4o"), TargetAnchorQuality::Stable);
+    }
+
+    #[test]
+    fn is_stable_goal_term_rejects_normalized_junk() {
+        for junk in ["0_0_0_0_4000", "5_n_n", "0_0_0_0_4000_n", "n", "gpt_5_4", "5s"] {
+            assert!(
+                !is_stable_goal_term(junk),
+                "normalized term `{junk}` must not be a stable goal term"
+            );
+        }
+        for stable in ["objective_rs", "architecture_overview_md", "readme_md", "agent_drift_analyzer"] {
+            assert!(
+                is_stable_goal_term(stable),
+                "normalized term `{stable}` must remain a stable goal term"
+            );
+        }
     }
 }
