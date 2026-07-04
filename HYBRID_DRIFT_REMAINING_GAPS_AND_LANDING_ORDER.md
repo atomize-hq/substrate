@@ -17,6 +17,16 @@ landed `R5.75` family. Authority for the active `R6` seam now lives under `docs/
 for `R6` scope and decisions. The Ground Truth Sources list below is historical context, not an
 exhaustive index of current authority.
 
+> **Status note (2026-07-04):** `R5`/`R5.5`/`R5.75` structured-objective work has advanced well beyond the
+> older root sequence, through `R6` scorer cutover and into `R6` real-world validation. The current blocker
+> before any further `semantic_goal_drift` promotion is objective **target hygiene** (`R6-3.5`): a 110-session
+> batch showed the signal's live fires were false positives caused by junk target extraction. Landing order is
+> locked — `R6-3.5` extraction hardening → `R6-3.X.2` graduated distance → `R6-3.X.3` eligibility-bar revisit.
+> **Do not loosen `semantic_goal_drift` eligibility until the `R6-3` validation gate is re-run.** Full
+> delegated-session (subagent) semantics remain deferred to `R7`; `R6-3.5` only adds a bounded opaque-parent
+> guardrail so parent-only traces do not over-claim. See `docs/specs/r6/R6-3.5/` and
+> `docs/specs/r6/FINDINGS-r6-3-real-world-drift-validation.md`.
+
 ## Ground Truth Sources
 
 - `docs/specs/hybrid-drift-sentinel-implementation-order.md`

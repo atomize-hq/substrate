@@ -246,6 +246,14 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    dominant lever — `0/6` fires survive and the `12` disjoint pairs drop to `9`, none a real pivot. The
    batch + pipeline scripts are preserved at `scripts/dev/drift-batch-scan/`. Full data in the `R6-3` TASKS
    ledger, `R6-3.X.3` "Batch scan outcome," and `FINDINGS-r6-3-real-world-drift-validation.md` "Gate Result."
+   **Next packet — `R6-3.5` Objective Target Hygiene (kickoff 2026-07-04):** the charter's Step 1
+   extraction-hardening lands here — a shared deterministic target-anchor classifier
+   (`TargetAnchorQuality{Stable,Weak,Junk}`) in `context/objective.rs` plus a scorer stable-term backstop and
+   a bounded opaque-delegated-parent guardrail in `semantic_goal_drift.rs`. See
+   `docs/specs/r6/R6-3.5/` (spec/plan/tasks) and the `FINDINGS` "R6-3.5 Result" section. **Landing order stays
+   locked:** `R6-3.5` (extraction) → `R6-3.X.2` (graduated/weighted distance) → `R6-3.X.3` (eligibility-bar
+   revisit, only if evidence supports it). Do not reorder; do not loosen the eligibility bar before the
+   graduated-distance work lands.
 
 ## Non-Goals For This Rescope
 
