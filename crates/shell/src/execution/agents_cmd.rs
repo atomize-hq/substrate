@@ -4332,6 +4332,7 @@ mod tests {
     }
 
     fn with_state_store<T>(test: impl FnOnce(&AgentRuntimeStateStore) -> T) -> T {
+        let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", temp.path());
         let _shared_world_root_guard = EnvVarGuard::set(
@@ -4348,6 +4349,7 @@ mod tests {
     fn with_state_store_and_shared_world_root<T>(
         test: impl FnOnce(&AgentRuntimeStateStore, &Path) -> T,
     ) -> T {
+        let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let shared_world_root = temp.path().join("shared-worlds");
         let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", temp.path());

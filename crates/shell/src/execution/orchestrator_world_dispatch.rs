@@ -4564,10 +4564,10 @@ async fn wait_for_stop_world_worker_closeout(
             );
         }
         if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
-            return Err(stop_world_worker_recovery_failed(format!(
-                "timed out waiting for retained worker {} to reach durable stopped closeout",
+            anyhow::bail!(
+                "owner_unreachable: timed out waiting for retained worker {} to reach durable stopped closeout",
                 participant_id
-            )));
+            );
         }
         tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
     }
@@ -14385,7 +14385,7 @@ agents:
             "republishing the socket path alone must not count as owner recovery"
         );
         assert_eq!(
-            session_after.attached_participant_id().as_deref(),
+            session_after.attached_participant_id(),
             Some("orch_dispatch"),
             "the original attached owner path must remain authoritative in the fail-closed timeout branch"
         );

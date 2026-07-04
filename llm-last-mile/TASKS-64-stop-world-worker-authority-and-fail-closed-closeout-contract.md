@@ -235,7 +235,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task: Run the targeted validation wall for the stop contract correction
+- [x] Task: Run the targeted validation wall for the stop contract correction
   - Acceptance: formatting, lint, targeted shell/world-service suites, and final workspace validation are green after the stop contract repair, with no evidence that the slice widened into public CLI redesign, general attach/router redesign, or a typed outcome-taxonomy change.
   - Verify:
     - `cargo fmt --all -- --check`
