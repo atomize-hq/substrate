@@ -2272,10 +2272,19 @@ fn is_model_or_version_token(token: &str) -> bool {
     if lower.chars().any(|c| c.is_ascii_digit()) {
         for model in MODEL_NAME_PREFIXES {
             if let Some(rest) = lower.strip_prefix(model) {
-                if rest.is_empty()
-                    || rest
-                        .starts_with(|c: char| c.is_ascii_digit() || matches!(c, '-' | '.' | '_'))
-                {
+                if rest.is_empty() {
+                    return true;
+                }
+                // Short `o1`/`o3`/`o4` families collide with ordinary identifiers, so they only count
+                // as model metadata across a model-style separator (`o4-mini`, `o4.x`, `o40`) — never
+                // an underscore, which marks a symbol (`o4_router`). Distinctive prefixes (`gpt`,
+                // `claude`, …) keep the looser separator rule (codex re-review finding 2).
+                let separator_ok = if AMBIGUOUS_SHORT_MODEL_PREFIXES.contains(model) {
+                    rest.starts_with(|c: char| c.is_ascii_digit() || matches!(c, '-' | '.'))
+                } else {
+                    rest.starts_with(|c: char| c.is_ascii_digit() || matches!(c, '-' | '.' | '_'))
+                };
+                if separator_ok {
                     return true;
                 }
             }
@@ -2322,7 +2331,10 @@ const CONVENTIONAL_REPO_ROOTS: &[&str] = &[
     "fixtures", "proto", "schema", "scripts", "tools", "config", ".github", ".claude", ".codex",
 ];
 
-/// Extension-less filenames that are still durable named artifacts.
+/// Extension-less filenames that are still durable named artifacts. Deliberately excludes stems that
+/// double as ordinary repo vocabulary (`cargo`, `agents`, `claude`): the real files carry extensions
+/// (`Cargo.toml`, `AGENTS.md`, `CLAUDE.md`) and are already anchored by the extension/instruction
+/// paths, so listing the bare stems here only mis-anchored plain prose (codex re-review finding 3).
 const WELL_KNOWN_ROOTLESS_FILES: &[&str] = &[
     "readme",
     "makefile",
@@ -2331,9 +2343,6 @@ const WELL_KNOWN_ROOTLESS_FILES: &[&str] = &[
     "changelog",
     "contributing",
     "security",
-    "cargo",
-    "agents",
-    "claude",
     "justfile",
     "taskfile",
 ];
@@ -2346,6 +2355,10 @@ const MODEL_NAME_PREFIXES: &[&str] = &[
     "gpt", "claude", "gemini", "llama", "mistral", "qwen", "deepseek", "grok", "sonnet", "opus",
     "haiku", "o1", "o3", "o4", "phi", "gemma",
 ];
+
+/// Model families short enough to collide with ordinary identifiers; only treated as model metadata
+/// across a model-style separator (never `_`, which marks a symbol). See `is_model_or_version_token`.
+const AMBIGUOUS_SHORT_MODEL_PREFIXES: &[&str] = &["o1", "o3", "o4"];
 
 /// Grammar-first anchor quality shared by extraction and the scorer.
 pub(crate) fn anchor_quality(raw_token: &str) -> TargetAnchorQuality {
@@ -2707,13 +2720,12 @@ pub(crate) fn is_stable_goal_term(term: &str) -> bool {
     if !has_content {
         return false;
     }
-    // Model/version token: `<model>_<digits...>` (`gpt_5_4`).
-    if MODEL_NAME_PREFIXES.contains(&segments[0])
-        && segments.len() >= 2
-        && segments[1..]
-            .iter()
-            .all(|s| s.chars().all(|c| c.is_ascii_digit()))
-    {
+    // Reject normalized model/version junk by round-tripping the segments through the shared
+    // model/version classifier. `normalize_comparison_key_segment` flattens the `.`/`-` version and
+    // variant separators to `_`, so rejoin on `.` to reunite them: `o4-mini`->`o4_mini`->`o4.mini`
+    // (model branch) and `v2.3.1`->`v2_3_1`->`v2.3.1` (version branch) both fire, while work-item IDs
+    // (`r6.3.5`, `so.2.3b`) match neither grammar (codex re-review finding 1).
+    if is_model_or_version_token(&segments.join(".")) {
         return false;
     }
     true
@@ -3793,6 +3805,10 @@ mod tests {
             "gpt_5_4",
             "5s",
             "1920x1080",
+            // codex re-review finding 1: normalized model/version junk must not survive the
+            // comparison-key gate (`o4-mini`->`o4_mini`, `v2.3.1`->`v2_3_1`).
+            "o4_mini",
+            "v2_3_1",
         ] {
             assert!(
                 !is_stable_goal_term(junk),
@@ -3838,13 +3854,50 @@ mod tests {
                 "`{model}` must not be a stable anchor"
             );
         }
-        // repo/domain tokens that must NOT be swept up as model metadata
-        for keep in ["SO-2.3B", "R6-3.5", "codex-wrapper", "agent-drift-analyzer"] {
+        // repo/domain tokens that must NOT be swept up as model metadata. `o4_router` is the codex
+        // re-review finding 2 case: a short-family prefix over an underscore is a symbol, not a model.
+        for keep in [
+            "SO-2.3B",
+            "R6-3.5",
+            "codex-wrapper",
+            "agent-drift-analyzer",
+            "o4_router",
+        ] {
             assert!(
                 !is_model_or_version_token(keep),
                 "`{keep}` must not be treated as model metadata"
             );
         }
+    }
+
+    #[test]
+    fn generic_repo_vocabulary_is_not_a_rootless_file_anchor() {
+        // codex re-review finding 3: `cargo`/`agents`/`claude` are ordinary prose words; the real
+        // files carry extensions and are anchored by the extension/instruction paths instead.
+        for word in ["cargo", "agents", "claude"] {
+            assert!(
+                !validates_well_known_rootless_file(word),
+                "`{word}` must not validate as a rootless-file anchor"
+            );
+            assert_eq!(
+                stable_target_anchor_kind(word),
+                None,
+                "`{word}` must not be a stable target anchor"
+            );
+        }
+        // A goal that merely mentions the build tool must not anchor `cargo` as a file target.
+        if let Some(anchor) = explicit_target_anchor_for_text("run cargo test for the suite") {
+            assert!(
+                anchor.named_artifacts.iter().all(|a| a != "cargo") && anchor.display != "cargo",
+                "bare `cargo` must not become a file target, got {anchor:?}"
+            );
+        }
+        // The extension-bearing real files must still anchor.
+        assert_eq!(
+            stable_target_anchor_kind("Cargo.toml"),
+            Some(ObjectiveTargetKind::FileOrDirectory),
+            "`Cargo.toml` must remain a file anchor via the extension path"
+        );
     }
 
     #[test]
