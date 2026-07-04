@@ -162,7 +162,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/control.rs`](../crates/shell/src/execution/agent_runtime/control.rs)
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
 
-- [ ] Task: Enforce exactly one bounded exact-target stop re-attempt after successful recovery
+- [x] Task: Enforce exactly one bounded exact-target stop re-attempt after successful recovery
   - Acceptance: after successful recovery, the stop episode performs exactly one exact-target re-attempt through the recovered owner path; no second retry, fuzzy retargeting, or transport-family widening occurs, and failed recovery still returns fail-closed non-success output.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`

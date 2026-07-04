@@ -4169,7 +4169,7 @@ async fn request_private_stop_after_transport_registration_for_stop_episode(
         PrivateStopTransportRetryEvent::RetryWaitStarted,
     );
     let started_at = Instant::now();
-    while !transport_path.exists() {
+    while !exact_target_stop_recovery_retry_ready(store, resolved, transport_path) {
         if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
             return initial_result;
         }
@@ -4181,6 +4181,28 @@ async fn request_private_stop_after_transport_registration_for_stop_episode(
         PrivateStopTransportRetryEvent::RetryAttempt,
     );
     request_private_stop(transport_path).await
+}
+
+#[cfg(target_os = "linux")]
+fn exact_target_stop_recovery_retry_ready(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+    transport_path: &Path,
+) -> bool {
+    if !transport_path.exists() {
+        return false;
+    }
+
+    let Some(refreshed_resolved) = refreshed_sanctioned_stop_world_dispatch_target(store, resolved)
+    else {
+        return false;
+    };
+
+    // A republished socket alone is not enough: the bounded retry only unlocks once
+    // authoritative owner truth has actually recovered for the same exact retained target.
+    refreshed_resolved.caller_participant.participant_id()
+        != resolved.caller_participant.participant_id()
+        || refreshed_resolved.session.posture != resolved.session.posture
 }
 
 #[cfg(test)]
@@ -13750,8 +13772,8 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn dispatch_contract_stop_world_worker_waits_for_late_private_stop_transport_publication()
-    {
+    async fn dispatch_contract_stop_world_worker_waits_for_late_private_stop_transport_publication_after_recovered_owner_path(
+    ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -13768,6 +13790,27 @@ agents:
         let store_for_task = store.clone();
         let stop_owner = tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(80)).await;
+            let mut orchestrator = store_for_task
+                .load_participant("orch_dispatch")
+                .expect("load authoritative stop owner for late transport recovery")
+                .expect("authoritative stop owner for late transport recovery");
+            orchestrator
+                .mark_client_detached("late private stop transport published after owner recovery");
+            store_for_task
+                .persist_participant(&orchestrator)
+                .expect("persist detached stop owner for late transport recovery");
+            let mut session = store_for_task
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for late transport recovery")
+                .expect("authoritative orchestration session for late transport recovery");
+            session.host_attach_contract =
+                HostAttachContract::from_manifest_for_test(&orchestrator);
+            session.mark_parked_resumable(
+                "late private stop transport published after owner recovery",
+            );
+            store_for_task
+                .persist_orchestration_session(&session)
+                .expect("persist orchestration session for late transport recovery");
             let (stop_tx, mut stop_rx) =
                 crate::execution::agent_runtime::control::private_stop_request_channel();
             let mut stop_transport =
@@ -13829,7 +13872,7 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_response_level_refusals(
+    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_response_level_refusals_after_recovered_owner_path(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -13847,23 +13890,66 @@ agents:
             )
             .expect("resolve authoritative stop target");
         let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
-        let server = spawn_scripted_private_stop_server(
+        let initial_server = spawn_scripted_private_stop_server(
             &transport_path,
-            vec![
-                PrivateStopOutcome::OwnerUnreachable,
-                PrivateStopOutcome::Accepted,
-            ],
+            vec![PrivateStopOutcome::OwnerUnreachable],
         );
 
         let retry_events = Arc::new(Mutex::new(
             Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
         ));
+        let store_for_hook = store.clone();
         let retry_events_for_hook = retry_events.clone();
+        let initial_server = Arc::new(Mutex::new(Some(initial_server)));
+        let initial_server_for_hook = initial_server.clone();
+        let retry_server = Arc::new(Mutex::new(None::<std::thread::JoinHandle<()>>));
+        let retry_server_for_hook = retry_server.clone();
         let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
             retry_events_for_hook
                 .lock()
                 .expect("lock retry events")
                 .push((event, path.to_path_buf()));
+            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+                return;
+            }
+
+            initial_server_for_hook
+                .lock()
+                .expect("lock initial response-level private stop server")
+                .take()
+                .expect("the original response-level private stop server must still be owned by the fixture")
+                .join()
+                .expect("the original response-level private stop server must exit before the retry publishes the recovered owner surface");
+
+            let mut orchestrator = store_for_hook
+                .load_participant("orch_dispatch")
+                .expect("load authoritative stop owner for refusal recovery")
+                .expect("authoritative stop owner for refusal recovery");
+            orchestrator.mark_client_detached(
+                "response-level refusal recovered through detached owner path",
+            );
+            store_for_hook
+                .persist_participant(&orchestrator)
+                .expect("persist detached stop owner for refusal recovery");
+            let mut session = store_for_hook
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for refusal recovery")
+                .expect("authoritative orchestration session for refusal recovery");
+            session.host_attach_contract =
+                HostAttachContract::from_manifest_for_test(&orchestrator);
+            session.mark_parked_resumable(
+                "response-level refusal recovered through detached owner path",
+            );
+            store_for_hook
+                .persist_orchestration_session(&session)
+                .expect("persist orchestration session for refusal recovery");
+
+            let retry_server =
+                spawn_scripted_private_stop_server(path, vec![PrivateStopOutcome::Accepted]);
+            retry_server_for_hook
+                .lock()
+                .expect("lock retry server for recovered owner surface")
+                .replace(retry_server);
         }) as PrivateStopTransportRetryHook;
         let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
@@ -13880,9 +13966,13 @@ agents:
             "response-level owner_unreachable must enter the bounded sanctioned recovery retry"
         );
 
-        server
+        retry_server
+            .lock()
+            .expect("lock retry server after recovered owner surface")
+            .take()
+            .expect("the recovered owner surface must publish a fresh retry server")
             .join()
-            .expect("scripted response-level private stop server should join");
+            .expect("the recovered owner retry server should join");
 
         let retry_events = retry_events.lock().expect("lock retry events");
         assert_eq!(
@@ -13908,6 +13998,161 @@ agents:
                 .all(|(_, path)| path == &transport_path),
             "response-level owner_unreachable must stay on the exact private stop transport without widening attach scope: {retry_events:?}"
         );
+        assert!(
+            initial_server
+                .lock()
+                .expect("lock initial response-level private stop server after retry")
+                .is_none(),
+            "the recovered retry proof must consume and retire the original one-shot refusal server before the retry succeeds"
+        );
+        let session_after = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session after response-level retry recovery")
+            .expect("orchestration session after response-level retry recovery");
+        assert_eq!(
+            session_after.posture,
+            OrchestrationSessionPosture::ParkedResumable,
+            "the recovered response-level retry must only unlock after authoritative owner posture changes away from the original attached path"
+        );
+        assert!(
+            session_after.attached_participant_id().is_none(),
+            "the recovered response-level retry must not succeed by keeping the original attached owner path alive"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn request_private_stop_after_transport_registration_for_stop_episode_returns_original_owner_unreachable_when_recovery_never_becomes_ready(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let initial_server = spawn_scripted_private_stop_server(
+            &transport_path,
+            vec![PrivateStopOutcome::OwnerUnreachable],
+        );
+
+        let retry_events = Arc::new(Mutex::new(
+            Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
+        ));
+        let retry_events_for_hook = retry_events.clone();
+        let initial_server = Arc::new(Mutex::new(Some(initial_server)));
+        let initial_server_for_hook = initial_server.clone();
+        let republished_socket = Arc::new(Mutex::new(None::<std::os::unix::net::UnixListener>));
+        let republished_socket_for_hook = republished_socket.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock retry events")
+                .push((event, path.to_path_buf()));
+            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+                return;
+            }
+
+            initial_server_for_hook
+                .lock()
+                .expect("lock initial fail-closed private stop server")
+                .take()
+                .expect("the original fail-closed private stop server must still be owned by the fixture")
+                .join()
+                .expect("the original fail-closed private stop server should exit before the timeout branch republishes the stale socket path");
+
+            let parent = path
+                .parent()
+                .expect("republished private stop socket parent");
+            std::fs::create_dir_all(parent).expect("create republished private stop socket parent");
+            let listener = std::os::unix::net::UnixListener::bind(path)
+                .expect("bind republished private stop socket without recovered owner truth");
+            republished_socket_for_hook
+                .lock()
+                .expect("lock republished private stop socket")
+                .replace(listener);
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let started_at = Instant::now();
+        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
+            &store,
+            &resolved,
+            &transport_path,
+        )
+        .await
+        .expect(
+            "qualifying owner_unreachable should return fail-closed without a successful retry",
+        );
+        assert_eq!(
+            outcome,
+            PrivateStopOutcome::OwnerUnreachable,
+            "when recovery never becomes ready, the helper must return the original qualifying non-success result fail-closed"
+        );
+        assert!(
+            started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT,
+            "the fail-closed owner_unreachable branch must wait through the bounded recovery window before returning the original result"
+        );
+
+        let retry_events = retry_events.lock().expect("lock retry events");
+        assert_eq!(
+            retry_events.len(),
+            2,
+            "qualifying owner_unreachable without recovered owner truth must emit one initial attempt and one bounded wait, but no retry attempt: {retry_events:?}"
+        );
+        assert_eq!(
+            retry_events[0].0,
+            PrivateStopTransportRetryEvent::InitialAttempt
+        );
+        assert_eq!(
+            retry_events[1].0,
+            PrivateStopTransportRetryEvent::RetryWaitStarted
+        );
+        assert!(
+            retry_events
+                .iter()
+                .all(|(_, path)| path == &transport_path),
+            "the fail-closed timeout branch must stay pinned to the exact private stop transport path while refusing to widen scope: {retry_events:?}"
+        );
+        drop(retry_events);
+
+        assert!(
+            initial_server
+                .lock()
+                .expect("lock initial fail-closed private stop server after timeout")
+                .is_none(),
+            "the fail-closed timeout proof must consume the original one-shot refusal server before returning its result"
+        );
+        let session_after = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session after fail-closed timeout")
+            .expect("orchestration session after fail-closed timeout");
+        assert_eq!(
+            session_after.posture,
+            OrchestrationSessionPosture::ActiveAttached,
+            "republishing the socket path alone must not count as owner recovery"
+        );
+        assert_eq!(
+            session_after.attached_participant_id().as_deref(),
+            Some("orch_dispatch"),
+            "the original attached owner path must remain authoritative in the fail-closed timeout branch"
+        );
+
+        republished_socket
+            .lock()
+            .expect("lock republished private stop socket after timeout")
+            .take();
+        let _ = std::fs::remove_file(&transport_path);
     }
 
     #[cfg(target_os = "linux")]
@@ -13980,7 +14225,7 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_initial_connection_refused_transport(
+    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_initial_connection_refused_transport_after_recovered_owner_path(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -14013,6 +14258,7 @@ agents:
         let retry_events = Arc::new(Mutex::new(
             Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
         ));
+        let store_for_hook = store.clone();
         let retry_events_for_hook = retry_events.clone();
         let retry_server = Arc::new(Mutex::new(None::<std::thread::JoinHandle<()>>));
         let retry_server_for_hook = retry_server.clone();
@@ -14024,6 +14270,28 @@ agents:
             if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
                 return;
             }
+            let mut orchestrator = store_for_hook
+                .load_participant("orch_dispatch")
+                .expect("load authoritative stop owner for transport recovery")
+                .expect("authoritative stop owner for transport recovery");
+            orchestrator.mark_client_detached(
+                "connection-refused recovery published a detached owner path",
+            );
+            store_for_hook
+                .persist_participant(&orchestrator)
+                .expect("persist detached stop owner for transport recovery");
+            let mut session = store_for_hook
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for transport recovery")
+                .expect("authoritative orchestration session for transport recovery");
+            session.host_attach_contract =
+                HostAttachContract::from_manifest_for_test(&orchestrator);
+            session.mark_parked_resumable(
+                "connection-refused recovery published a detached owner path",
+            );
+            store_for_hook
+                .persist_orchestration_session(&session)
+                .expect("persist orchestration session for transport recovery");
             let server =
                 spawn_scripted_private_stop_server(path, vec![PrivateStopOutcome::Accepted]);
             retry_server_for_hook
