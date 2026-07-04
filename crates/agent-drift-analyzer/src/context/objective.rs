@@ -2375,8 +2375,33 @@ fn stable_target_anchor_kind(token: &str) -> Option<ObjectiveTargetKind> {
     None
 }
 
+/// A path/file token must not carry structural punctuation from surrounding prose or markup
+/// (`[label](path)` leftovers, quotes, glob/redirect chars); those are not real path characters.
+fn has_path_punctuation_noise(token: &str) -> bool {
+    token.chars().any(|c| {
+        matches!(
+            c,
+            '[' | ']'
+                | '('
+                | ')'
+                | '`'
+                | '"'
+                | '\''
+                | '<'
+                | '>'
+                | '|'
+                | '*'
+                | '?'
+                | '{'
+                | '}'
+                | ' '
+                | '\t'
+        )
+    })
+}
+
 fn validates_repo_relative_path(token: &str) -> bool {
-    if token.contains("://") {
+    if token.contains("://") || has_path_punctuation_noise(token) {
         return false;
     }
     if token.starts_with("./") || token.starts_with("../") {
@@ -2397,6 +2422,9 @@ fn validates_repo_relative_path(token: &str) -> bool {
 }
 
 fn validates_windows_path(token: &str) -> bool {
+    if has_path_punctuation_noise(token) {
+        return false;
+    }
     let bytes = token.as_bytes();
     let drive_absolute = bytes.len() >= 3
         && bytes[0].is_ascii_alphabetic()
@@ -2415,7 +2443,10 @@ fn validates_windows_path(token: &str) -> bool {
 }
 
 fn validates_recognized_extension_file(token: &str) -> bool {
-    !token.contains('/') && !token.contains('\\') && leaf_has_recognized_extension(token)
+    !has_path_punctuation_noise(token)
+        && !token.contains('/')
+        && !token.contains('\\')
+        && leaf_has_recognized_extension(token)
 }
 
 fn validates_rust_symbol_ref(token: &str) -> bool {
@@ -2718,47 +2749,67 @@ fn deliverable_kind_for_text(text: &str) -> RequestedDeliverableKind {
 }
 
 fn extract_inline_paths(text: &str) -> Vec<String> {
-    text.split_whitespace()
-        .map(|token| {
-            token.trim_matches(|c: char| matches!(c, ',' | '.' | ';' | ':' | '`' | '"' | '\''))
-        })
-        .filter(|token| looks_like_repo_path_token(token))
-        .map(ToString::to_string)
-        .collect()
+    let mut paths: Vec<String> = Vec::new();
+    let mut push_if_path = |candidate: &str, paths: &mut Vec<String>| {
+        let cleaned = clean_anchor_token(candidate);
+        if is_stable_path_anchor(&cleaned) && !paths.contains(&cleaned) {
+            paths.push(cleaned);
+        }
+    };
+    // Parse-before-split (codex review §6): markdown-link / backtick / quoted path targets survive
+    // whitespace tokenization that would otherwise mangle `[label](path)` and `` `path` ``.
+    for candidate in extract_delimited_path_candidates(text) {
+        push_if_path(&candidate, &mut paths);
+    }
+    for token in text.split_whitespace() {
+        push_if_path(token, &mut paths);
+    }
+    paths
 }
 
-fn looks_like_repo_path_token(token: &str) -> bool {
-    if token.ends_with(".rs")
-        || token.ends_with(".md")
-        || token.ends_with(".toml")
-        || token.ends_with(".json")
-    {
-        return true;
-    }
+/// Path-family anchors only (repo-relative / recognized-extension / Windows), excluding symbol,
+/// crate, and work-item anchors that `stable_target_anchor_kind` also accepts.
+fn is_stable_path_anchor(token: &str) -> bool {
+    validates_repo_relative_path(token)
+        || validates_windows_path(token)
+        || validates_recognized_extension_file(token)
+}
 
-    if token.starts_with("./")
-        || token.starts_with("../")
-        || token.starts_with('/')
-        || token.contains('\\')
-    {
-        return true;
+/// Extract path candidates wrapped in a markdown link `](target)`, backticks, or quotes, before
+/// whitespace splitting can break them apart.
+fn extract_delimited_path_candidates(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut search = text;
+    while let Some(open) = search.find("](") {
+        let after = &search[open + 2..];
+        match after.find(')') {
+            Some(close) => {
+                let target = after[..close].trim();
+                if !target.is_empty() {
+                    out.push(target.to_string());
+                }
+                search = &after[close + 1..];
+            }
+            None => break,
+        }
     }
-
-    if !token.contains('/') {
-        return false;
+    for delim in ['`', '"', '\''] {
+        let mut rest = text;
+        while let Some(start) = rest.find(delim) {
+            let after = &rest[start + 1..];
+            match after.find(delim) {
+                Some(end) => {
+                    let inner = after[..end].trim();
+                    if !inner.is_empty() && !inner.contains(char::is_whitespace) {
+                        out.push(inner.to_string());
+                    }
+                    rest = &after[end + 1..];
+                }
+                None => break,
+            }
+        }
     }
-
-    let segments = token
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect::<Vec<_>>();
-    segments.len() >= 3
-        || segments.iter().any(|segment| {
-            segment.contains('.')
-                || segment.contains('_')
-                || segment.contains('-')
-                || segment.chars().any(|ch| ch.is_ascii_digit())
-        })
+    out
 }
 
 fn extract_named_artifacts(text: &str) -> Vec<String> {
@@ -3567,6 +3618,42 @@ mod tests {
     fn anchor_quality_rejects_bare_model_tokens() {
         assert_ne!(anchor_quality("GPT-5.4"), TargetAnchorQuality::Stable);
         assert_ne!(anchor_quality("gpt-4o"), TargetAnchorQuality::Stable);
+    }
+
+    #[test]
+    fn extract_inline_paths_rejects_graphql_startup_log_targets() {
+        let paths =
+            extract_inline_paths("Server listening on http://0.0.0.0:4000/graphql (5s, supergraph)");
+        assert!(
+            paths.is_empty(),
+            "graphql startup log must yield no path targets, got {paths:?}"
+        );
+    }
+
+    #[test]
+    fn extract_inline_paths_preserves_repo_paths_and_markdown_links() {
+        assert_eq!(
+            extract_inline_paths(
+                "Review crates/agent-drift-analyzer/src/context/objective.rs only."
+            ),
+            vec!["crates/agent-drift-analyzer/src/context/objective.rs".to_string()]
+        );
+        assert_eq!(
+            extract_inline_paths("See [architecture overview](docs/architecture_overview.md) first."),
+            vec!["docs/architecture_overview.md".to_string()]
+        );
+        let mixed = extract_inline_paths("touch .github/workflows/ci.yml and Cargo.lock");
+        assert!(mixed.iter().any(|p| p == ".github/workflows/ci.yml"));
+        assert!(mixed.iter().any(|p| p == "Cargo.lock"));
+    }
+
+    #[test]
+    fn extract_inline_paths_drops_truncated_external_path_fragments() {
+        let paths = extract_inline_paths("saw /Users/spenser/Library/Application in the log");
+        assert!(
+            paths.is_empty(),
+            "truncated external path fragment is not a stable path, got {paths:?}"
+        );
     }
 
     #[test]
