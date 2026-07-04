@@ -4624,7 +4624,8 @@ fn detached_stop_world_worker_closeout_available_after_transport_failure(
         Ok(Some(session)) => session,
         Ok(None) | Err(_) => return false,
     };
-    let Some(authoritative_caller_participant_id) = session.active_participant_id() else {
+    let Some(authoritative_caller_participant_id) = session.sanctioned_stop_owner_participant_id()
+    else {
         return false;
     };
     let refreshed_resolved = match store.resolve_internal_stop_world_dispatch_target(
@@ -4684,20 +4685,24 @@ fn persist_detached_stop_world_worker_closeout(
                 resolved.session.orchestration_session_id
             )
         })?;
-    let authoritative_caller_participant_id = session.active_participant_id().ok_or_else(|| {
-        anyhow::anyhow!(
-            "stale_linkage: orchestration session {} lost its authoritative orchestrator before detached durable stop closeout could be persisted",
-            resolved.session.orchestration_session_id
-        )
-    })?;
-    let resolved = store.resolve_internal_stop_world_dispatch_target(
+    let authoritative_caller_participant_id =
+        session.sanctioned_stop_owner_participant_id().ok_or_else(|| {
+            anyhow::anyhow!(
+                "stale_linkage: orchestration session {} lost its sanctioned stop owner before detached durable stop closeout could be persisted",
+                resolved.session.orchestration_session_id
+            )
+        })?;
+    let refreshed_resolved = store.resolve_internal_stop_world_dispatch_target(
         &resolved.session.orchestration_session_id,
         authoritative_caller_participant_id,
         resolved.target_participant.participant_id(),
         &resolved.target_participant.handle.backend_id,
     )?;
-    let mut session = resolved.session;
-    let mut participant = resolved.target_participant;
+    // Preserve the original exact retained-worker contract across owner rebinding.
+    // The refreshed sanctioned owner may change, but the retained worker tuple must not.
+    resolved.ensure_exact_target_match(&refreshed_resolved)?;
+    let mut session = refreshed_resolved.session;
+    let mut participant = refreshed_resolved.target_participant;
 
     persist_runtime_stop_closeout(store, &mut session, &mut participant)
         .context("failed to persist detached durable stop closeout for retained worker")?;
@@ -14501,6 +14506,161 @@ agents:
         assert!(
             participant_after.internal.termination_reason.is_none(),
             "fallback must not persist stop closeout after successor drift"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_owner_rebinding_lineage_mutation() {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_attached_continue_dispatch_state(
+            &store,
+            workspace_root.path(),
+            "world-17",
+            2,
+        );
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve stale-owner stop target before lineage mutation");
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load stale-owner orchestration session")
+            .expect("stale-owner orchestration session");
+        let mut successor = sample_orchestrator_participant();
+        successor.handle.participant_id = "orch_successor".to_string();
+        successor.handle.resumed_from_participant_id = Some("orch_dispatch".to_string());
+        successor.handle.resumed_from_session_handle_id = Some("orch_dispatch".to_string());
+        successor.internal.shell_owner_pid = 999_999_998;
+        successor.internal.uaa_session_id = Some("uaa_orch_successor".to_string());
+        successor.internal.attached_client_present = true;
+        successor.internal.last_attached_at = Some(chrono::Utc::now());
+        successor.internal.resume_eligible = true;
+        session.bind_active_session_handle("orch_successor".to_string());
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&successor);
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist successor active session");
+        store
+            .persist_participant(&successor)
+            .expect("persist stale-owner successor participant");
+
+        let mut participant = store
+            .load_participant("ash_member")
+            .expect("load retained participant before lineage mutation")
+            .expect("retained participant before lineage mutation");
+        participant.handle.orchestrator_participant_id = Some("orch_successor".to_string());
+        store
+            .persist_participant(&participant)
+            .expect("persist rebound retained lineage");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect_err("owner rebinding must not rewrite retained lineage");
+
+        assert_eq!(
+            err.to_string(),
+            "stale_linkage: orchestration session sess_dispatch retained worker ash_member exact stop target lineage changed from orch_dispatch to orch_successor"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after lineage mutation")
+            .expect("retained participant after lineage mutation");
+        assert!(
+            participant_after.handle.state.is_live(),
+            "fallback must not mutate retained worker state after lineage mutation"
+        );
+        assert!(
+            participant_after.internal.termination_reason.is_none(),
+            "fallback must not persist stop closeout after lineage mutation"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_owner_rebinding_world_binding_mutation()
+    {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_stale_attached_continue_dispatch_state(
+            &store,
+            workspace_root.path(),
+            "world-17",
+            2,
+        );
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve stale-owner stop target before world-binding mutation");
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load stale-owner orchestration session")
+            .expect("stale-owner orchestration session");
+        let mut successor = sample_orchestrator_participant();
+        successor.handle.participant_id = "orch_successor".to_string();
+        successor.handle.resumed_from_participant_id = Some("orch_dispatch".to_string());
+        successor.handle.resumed_from_session_handle_id = Some("orch_dispatch".to_string());
+        successor.internal.shell_owner_pid = 999_999_998;
+        successor.internal.uaa_session_id = Some("uaa_orch_successor".to_string());
+        successor.internal.attached_client_present = true;
+        successor.internal.last_attached_at = Some(chrono::Utc::now());
+        successor.internal.resume_eligible = true;
+        session.bind_active_session_handle("orch_successor".to_string());
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&successor);
+        session.set_world_binding("world-19".to_string(), 3);
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist successor rebound session");
+        store
+            .persist_participant(&successor)
+            .expect("persist rebound successor participant");
+
+        let mut participant = store
+            .load_participant("ash_member")
+            .expect("load retained participant before world-binding mutation")
+            .expect("retained participant before world-binding mutation");
+        participant.handle.world_id = Some("world-19".to_string());
+        participant.handle.world_generation = Some(3);
+        store
+            .persist_participant(&participant)
+            .expect("persist rebound retained world binding");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect_err("owner rebinding must not rewrite retained world binding");
+
+        assert_eq!(
+            err.to_string(),
+            "world_binding_mismatch: orchestration session sess_dispatch retained worker ash_member exact stop target world binding changed from world-17/2 to world-19/3"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after world-binding mutation")
+            .expect("retained participant after world-binding mutation");
+        assert!(
+            participant_after.handle.state.is_live(),
+            "fallback must not mutate retained worker state after world-binding mutation"
+        );
+        assert!(
+            participant_after.internal.termination_reason.is_none(),
+            "fallback must not persist stop closeout after world-binding mutation"
         );
     }
 

@@ -559,12 +559,143 @@ impl ResolvedInternalInspectWorldDispatchTarget {
 
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Debug)]
+pub(crate) struct ExactRetainedWorkerStopDispatchTarget {
+    orchestration_session_id: String,
+    participant_id: String,
+    backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    orchestrator_participant_id: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ExactRetainedWorkerStopDispatchTarget {
+    fn capture(
+        orchestration_session_id: &str,
+        target_participant: &AgentRuntimeParticipantRecord,
+    ) -> Result<Self> {
+        let world_id = target_participant
+            .handle
+            .world_id
+            .clone()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "world_binding_mismatch: orchestration session {} retained worker {} is missing exact stop target world binding",
+                    orchestration_session_id,
+                    target_participant.participant_id()
+                )
+            })?;
+        let world_generation = target_participant.handle.world_generation.ok_or_else(|| {
+            anyhow::anyhow!(
+                "world_binding_mismatch: orchestration session {} retained worker {} is missing exact stop target world binding",
+                orchestration_session_id,
+                target_participant.participant_id()
+            )
+        })?;
+        let orchestrator_participant_id = target_participant
+            .handle
+            .orchestrator_participant_id
+            .clone()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "stale_linkage: orchestration session {} retained worker {} is missing exact stop target lineage",
+                    orchestration_session_id,
+                    target_participant.participant_id()
+                )
+            })?;
+
+        Ok(Self {
+            orchestration_session_id: orchestration_session_id.to_string(),
+            participant_id: target_participant.participant_id().to_string(),
+            backend_id: target_participant.handle.backend_id.clone(),
+            world_id,
+            world_generation,
+            orchestrator_participant_id,
+        })
+    }
+
+    fn ensure_matches(&self, target_participant: &AgentRuntimeParticipantRecord) -> Result<()> {
+        if target_participant.participant_id() != self.participant_id {
+            anyhow::bail!(
+                "target_not_in_session: orchestration session {} exact stop target changed from {} to {}",
+                self.orchestration_session_id,
+                self.participant_id,
+                target_participant.participant_id()
+            );
+        }
+        if target_participant.handle.backend_id != self.backend_id {
+            anyhow::bail!(
+                "backend_mismatch: orchestration session {} retained worker {} exact stop target backend changed from {} to {}",
+                self.orchestration_session_id,
+                self.participant_id,
+                self.backend_id,
+                target_participant.handle.backend_id
+            );
+        }
+
+        let refreshed_world_id = target_participant.handle.world_id.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "world_binding_mismatch: orchestration session {} retained worker {} is missing exact stop target world binding",
+                self.orchestration_session_id,
+                self.participant_id
+            )
+        })?;
+        let refreshed_world_generation =
+            target_participant.handle.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "world_binding_mismatch: orchestration session {} retained worker {} is missing exact stop target world binding",
+                    self.orchestration_session_id,
+                    self.participant_id
+                )
+            })?;
+        if refreshed_world_id != self.world_id
+            || refreshed_world_generation != self.world_generation
+        {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} retained worker {} exact stop target world binding changed from {}/{} to {}/{}",
+                self.orchestration_session_id,
+                self.participant_id,
+                self.world_id,
+                self.world_generation,
+                refreshed_world_id,
+                refreshed_world_generation
+            );
+        }
+
+        let refreshed_orchestrator_participant_id = target_participant
+            .handle
+            .orchestrator_participant_id
+            .as_deref()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "stale_linkage: orchestration session {} retained worker {} is missing exact stop target lineage",
+                    self.orchestration_session_id,
+                    self.participant_id
+                )
+            })?;
+        if refreshed_orchestrator_participant_id != self.orchestrator_participant_id {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} retained worker {} exact stop target lineage changed from {} to {}",
+                self.orchestration_session_id,
+                self.participant_id,
+                self.orchestrator_participant_id,
+                refreshed_orchestrator_participant_id
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalStopWorldDispatchTarget {
     pub session: OrchestrationSessionRecord,
     #[allow(dead_code)]
     pub caller_participant: AgentRuntimeParticipantRecord,
     #[allow(dead_code)]
     pub target_participant: AgentRuntimeParticipantRecord,
+    exact_target: ExactRetainedWorkerStopDispatchTarget,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -572,6 +703,11 @@ impl ResolvedInternalStopWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
         &self.session.orchestration_session_id
+    }
+
+    pub(crate) fn ensure_exact_target_match(&self, refreshed: &Self) -> Result<()> {
+        self.exact_target
+            .ensure_matches(&refreshed.target_participant)
     }
 }
 
@@ -2174,10 +2310,16 @@ impl AgentRuntimeStateStore {
             );
         }
 
+        let exact_target = ExactRetainedWorkerStopDispatchTarget::capture(
+            orchestration_session_id,
+            &target_participant,
+        )?;
+
         Ok(ResolvedInternalStopWorldDispatchTarget {
             session: record.session.clone(),
             caller_participant: authoritative_participant,
             target_participant,
+            exact_target,
         })
     }
 
@@ -12038,6 +12180,81 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_internal_stop_world_dispatch_target_keeps_exact_lineage_distinct_from_owner_rebinding(
+    ) {
+        with_store(|store| {
+            let mut launch_orchestrator =
+                live_orchestrator("codex", "sess_stop", "orch_stop_launch");
+            let mut parent = active_parent(&launch_orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop_launch");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist launch orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let initial = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop_launch",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect("resolve initial exact retained stop target");
+
+            let mut successor = live_orchestrator("codex", "sess_stop", "orch_stop_successor");
+            successor.handle.resumed_from_participant_id = Some("orch_stop_launch".to_string());
+            successor.handle.resumed_from_session_handle_id = Some("orch_stop_launch".to_string());
+            launch_orchestrator.mark_client_detached("successor attached");
+            parent.bind_active_session_handle("orch_stop_successor".to_string());
+
+            let mut rebound_member = store
+                .load_participant("ash_stop")
+                .expect("load retained worker before rebinding")
+                .expect("retained worker before rebinding");
+            rebound_member.handle.orchestrator_participant_id =
+                Some("orch_stop_successor".to_string());
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist rebound session");
+            store
+                .persist_participant(&launch_orchestrator)
+                .expect("persist detached launch orchestrator");
+            store
+                .persist_participant(&successor)
+                .expect("persist successor orchestrator");
+            store
+                .persist_participant(&rebound_member)
+                .expect("persist rebound member lineage");
+
+            let rebound = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop_successor",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect("resolve rebound stop target");
+
+            let err = initial
+                .ensure_exact_target_match(&rebound)
+                .expect_err("owner rebinding must not silently rewrite retained lineage");
+
+            assert_eq!(
+                err.to_string(),
+                "stale_linkage: orchestration session sess_stop retained worker ash_stop exact stop target lineage changed from orch_stop_launch to orch_stop_successor"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_internal_stop_world_dispatch_target_rejects_stale_attached_host_owner_after_successor_attach(
     ) {
         with_store(|store| {
@@ -12162,9 +12379,7 @@ mod tests {
                     "ash_stop",
                     "cli:codex_world",
                 )
-                .expect_err(
-                    "terminalized sessions must fail closed before stop-owner resolution",
-                );
+                .expect_err("terminalized sessions must fail closed before stop-owner resolution");
 
             assert_eq!(
                 err.to_string(),

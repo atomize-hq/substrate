@@ -123,7 +123,7 @@ Session goal:
     - [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](../crates/shell/src/execution/agent_runtime/orchestration_session.rs)
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- [ ] Task: Keep retained-worker exact-target resolution distinct from owner rebinding
+- [x] Task: Keep retained-worker exact-target resolution distinct from owner rebinding
   - Acceptance: the exact retained-worker tuple remains mandatory across stop dispatch and recovery, and a valid owner rebinding never silently broadens, guesses, or mutates retained-worker identity, world binding, or lineage.
   - Verify:
     - `cargo test -p shell state_store -- --nocapture`
