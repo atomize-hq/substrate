@@ -8,6 +8,8 @@ use std::sync::Arc;
 use std::sync::{LazyLock, Mutex};
 #[cfg(target_os = "linux")]
 use std::time::{Duration, Instant};
+#[cfg(target_os = "linux")]
+use std::{fs::OpenOptions, io::Write};
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -86,6 +88,40 @@ use transport_api_types::ExecuteCancelRequestV1;
 
 #[cfg(target_os = "linux")]
 const CONTINUE_WORLD_WORKER_ROUTER_IDENTITY: &str = "router::continue_world_worker";
+
+#[cfg(target_os = "linux")]
+fn stop_order_probe_log(
+    session_id: &str,
+    participant_id: Option<&str>,
+    event: &str,
+    fields: serde_json::Value,
+) {
+    let Ok(filtered_session_id) = std::env::var("SUBSTRATE_STOP_ORDER_DEBUG_SESSION") else {
+        return;
+    };
+    if filtered_session_id != session_id {
+        return;
+    }
+    if let Ok(filtered_participant_id) = std::env::var("SUBSTRATE_STOP_ORDER_DEBUG_PARTICIPANT") {
+        if participant_id != Some(filtered_participant_id.as_str()) {
+            return;
+        }
+    }
+    let log_path = std::env::var("SUBSTRATE_STOP_ORDER_DEBUG_LOG")
+        .unwrap_or_else(|_| "/tmp/substrate-stop-order-debug.jsonl".to_string());
+    let record = serde_json::json!({
+        "ts": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        "pid": std::process::id(),
+        "event": event,
+        "session_id": session_id,
+        "participant_id": participant_id,
+        "fields": fields,
+    });
+    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) else {
+        return;
+    };
+    let _ = writeln!(file, "{record}");
+}
 
 #[cfg(target_os = "linux")]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2371,34 +2407,86 @@ async fn stop_world_worker(
         .await
         {
             Err(transport_err) => {
+                let immediate_detached_closeout_available =
+                    detached_stop_world_worker_closeout_available(
+                        &prepared.store,
+                        &resolved,
+                        &transport_path,
+                        Some(&transport_err),
+                    );
+                stop_order_probe_log(
+                    &resolved.session.orchestration_session_id,
+                    Some(resolved.target_participant.participant_id()),
+                    "stop_world_worker_transport_failure_classified",
+                    serde_json::json!({
+                        "caller_participant_id": resolved.caller_participant.participant_id(),
+                        "target_participant_id": resolved.target_participant.participant_id(),
+                        "transport_path": transport_path.display().to_string(),
+                        "transport_path_exists": transport_path.exists(),
+                        "transport_error_kind": private_stop_transport_error_kind(&transport_err)
+                            .map(|kind| kind.to_string()),
+                        "transport_error": format!("{transport_err:#}"),
+                        "immediate_detached_closeout_available": immediate_detached_closeout_available,
+                    }),
+                );
                 if let Some(closeout) = observed_stop_world_worker_closeout(
                     &prepared.store,
                     &resolved.session.orchestration_session_id,
                     resolved.target_participant.participant_id(),
                 )? {
                     closeout
-                } else if detached_stop_world_worker_closeout_available(
-                    &prepared.store,
-                    &resolved,
-                    &transport_path,
-                    Some(&transport_err),
-                )
-                    || detached_stop_world_worker_closeout_available_after_transport_failure(
-                        &prepared.store,
-                        &resolved,
-                        &transport_path,
-                        &transport_err,
-                    )?
-                {
-                    used_private_stop_surface = false;
-                    persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
-                } else if private_stop_transport_error_kind(&transport_err).is_none() {
-                    return Err(transport_err);
                 } else {
-                    return Err(stop_world_worker_recovery_failed(format!(
-                    "failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({transport_err:#})",
-                    resolved.target_participant.participant_id()
-                )));
+                    let refreshed_detached_closeout_available =
+                        if immediate_detached_closeout_available {
+                            false
+                        } else {
+                            detached_stop_world_worker_closeout_available_after_transport_failure(
+                                &prepared.store,
+                                &resolved,
+                                &transport_path,
+                                &transport_err,
+                            )?
+                        };
+                    stop_order_probe_log(
+                        &resolved.session.orchestration_session_id,
+                        Some(resolved.target_participant.participant_id()),
+                        "stop_world_worker_transport_failure_gate_result",
+                        serde_json::json!({
+                            "immediate_detached_closeout_available": immediate_detached_closeout_available,
+                            "refreshed_detached_closeout_available": refreshed_detached_closeout_available,
+                        }),
+                    );
+                    if immediate_detached_closeout_available
+                        || refreshed_detached_closeout_available
+                    {
+                        used_private_stop_surface = false;
+                        persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
+                    } else if private_stop_transport_error_kind(&transport_err).is_none() {
+                        stop_order_probe_log(
+                            &resolved.session.orchestration_session_id,
+                            Some(resolved.target_participant.participant_id()),
+                            "stop_world_worker_transport_failure_returning_raw_error",
+                            serde_json::json!({
+                                "error": format!("{transport_err:#}"),
+                            }),
+                        );
+                        return Err(transport_err);
+                    } else {
+                        let err = stop_world_worker_recovery_failed(format!(
+                            "failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({transport_err:#})",
+                            resolved.target_participant.participant_id()
+                        ));
+                        stop_order_probe_log(
+                            &resolved.session.orchestration_session_id,
+                            Some(resolved.target_participant.participant_id()),
+                            "stop_world_worker_fail_closed_return",
+                            serde_json::json!({
+                                "reason": "transport_error_without_durable_closeout",
+                                "error": format!("{err:#}"),
+                            }),
+                        );
+                        return Err(err);
+                    }
                 }
             }
             Ok(transport_outcome) => match transport_outcome {
@@ -4154,12 +4242,46 @@ async fn request_private_stop_after_transport_registration_for_stop_episode(
         PrivateStopTransportRetryEvent::InitialAttempt,
     );
     let initial_result = request_private_stop(transport_path).await;
-    if !stop_world_worker_sanctioned_recovery_retry_available(
+    stop_order_probe_log(
+        &resolved.session.orchestration_session_id,
+        Some(resolved.target_participant.participant_id()),
+        "private_stop_transport_initial_result",
+        serde_json::json!({
+            "caller_participant_id": resolved.caller_participant.participant_id(),
+            "target_participant_id": resolved.target_participant.participant_id(),
+            "transport_path": transport_path.display().to_string(),
+            "transport_path_exists": transport_path.exists(),
+            "result": match &initial_result {
+                Ok(outcome) => format!("{outcome:?}"),
+                Err(_) => "transport_error".to_string(),
+            },
+            "transport_error_kind": initial_result
+                .as_ref()
+                .err()
+                .and_then(private_stop_transport_error_kind)
+                .map(|kind| kind.to_string()),
+            "transport_error": initial_result
+                .as_ref()
+                .err()
+                .map(|err| format!("{err:#}")),
+        }),
+    );
+    let retry_available = stop_world_worker_sanctioned_recovery_retry_available(
         store,
         resolved,
         transport_path,
         &initial_result,
-    )? {
+    )?;
+    stop_order_probe_log(
+        &resolved.session.orchestration_session_id,
+        Some(resolved.target_participant.participant_id()),
+        "private_stop_transport_retry_decision",
+        serde_json::json!({
+            "retry_available": retry_available,
+            "transport_path": transport_path.display().to_string(),
+        }),
+    );
+    if !retry_available {
         return initial_result;
     }
     #[cfg(test)]
@@ -4170,6 +4292,15 @@ async fn request_private_stop_after_transport_registration_for_stop_episode(
     let started_at = Instant::now();
     while !exact_target_stop_recovery_retry_ready(store, resolved, transport_path)? {
         if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
+            stop_order_probe_log(
+                &resolved.session.orchestration_session_id,
+                Some(resolved.target_participant.participant_id()),
+                "private_stop_transport_retry_timed_out",
+                serde_json::json!({
+                    "transport_path": transport_path.display().to_string(),
+                    "timeout_ms": STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT.as_millis(),
+                }),
+            );
             return initial_result;
         }
         tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
@@ -4814,13 +4945,25 @@ fn detached_stop_world_worker_closeout_available_after_transport_failure(
         return Ok(false);
     }
 
-    let Some(refreshed_resolved) = (if let Some(refreshed) =
-        refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?
-    {
+    let refreshed_sanctioned = refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?;
+    if refreshed_sanctioned.as_ref().is_some_and(|refreshed| {
+        refused_exact_target_stop_transport_proves_current_attached_owner_stale(
+            resolved,
+            refreshed,
+            transport_path,
+            transport_error,
+        )
+    }) {
+        return Ok(true);
+    }
+    let refreshed_resolved = if let Some(refreshed) = refreshed_sanctioned {
         Some(refreshed)
     } else {
-        refreshed_detached_exact_stop_world_dispatch_target(store, resolved)?
-    }) else {
+        let refreshed_detached =
+            refreshed_detached_exact_stop_world_dispatch_target(store, resolved)?;
+        refreshed_detached
+    };
+    let Some(refreshed_resolved) = refreshed_resolved else {
         return Ok(false);
     };
 
@@ -4830,6 +4973,27 @@ fn detached_stop_world_worker_closeout_available_after_transport_failure(
         transport_path,
         Some(transport_error),
     ))
+}
+
+#[cfg(target_os = "linux")]
+fn refused_exact_target_stop_transport_proves_current_attached_owner_stale(
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+    refreshed: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+    transport_path: &Path,
+    transport_error: &anyhow::Error,
+) -> bool {
+    transport_path.exists()
+        && detached_stop_transport_is_unusable(transport_error)
+        && refreshed.session.state
+            == crate::execution::agent_runtime::orchestration_session::OrchestrationSessionState::Active
+        && refreshed.session.posture
+            == crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::ActiveAttached
+        && refreshed.session.active_participant_id()
+            == Some(resolved.caller_participant.participant_id())
+        && refreshed.session.attached_participant_id()
+            == Some(resolved.caller_participant.participant_id())
+        && refreshed.caller_participant.participant_id()
+            == resolved.caller_participant.participant_id()
 }
 
 #[cfg(target_os = "linux")]
@@ -15001,6 +15165,58 @@ agents:
     #[cfg(target_os = "linux")]
     #[test]
     #[serial]
+    fn detached_stop_world_worker_closeout_availability_recheck_accepts_same_caller_active_attached_after_refused_transport(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        let connection_refused =
+            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+
+        assert!(
+            !detached_stop_world_worker_closeout_available(
+                &store,
+                &resolved,
+                &transport_path,
+                Some(&connection_refused),
+            ),
+            "the initial gate must stay closed while the authoritative session still reads as the current caller's ActiveAttached truth"
+        );
+        assert!(
+            detached_stop_world_worker_closeout_available_after_transport_failure(
+                &store,
+                &resolved,
+                &transport_path,
+                &connection_refused,
+            )
+            .expect("same-caller active_attached recheck"),
+            "after the exact retained-worker stop socket has already refused, unchanged ActiveAttached truth for the same caller must no longer veto detached stop recovery"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
     fn detached_stop_world_worker_closeout_availability_recheck_accepts_parked_truth_without_sanctioned_owner(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
@@ -15048,6 +15264,90 @@ agents:
             )
             .expect("parked no-owner recheck"),
             "fresh parked truth without a sanctioned owner should still unlock detached fallback when the exact worker stop socket is stale"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn dispatch_contract_stop_world_worker_persists_detached_closeout_after_refused_transport_for_same_caller_active_attached_truth(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        let connection_refused =
+            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+
+        assert!(
+            detached_stop_world_worker_closeout_available_after_transport_failure(
+                &store,
+                &resolved,
+                &transport_path,
+                &connection_refused,
+            )
+            .expect("same-caller active_attached recheck"),
+            "the refreshed refusal gate must unlock detached recovery before any later parked persistence lands"
+        );
+
+        let closeout = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect("persist detached durable stop closeout");
+        assert_eq!(
+            closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(closeout.session_state, OrchestrationSessionState::Active);
+
+        let session_after = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session after detached fallback")
+            .expect("orchestration session after detached fallback");
+        assert_eq!(
+            session_after.posture,
+            OrchestrationSessionPosture::ActiveAttached
+        );
+        assert_eq!(session_after.active_participant_id(), Some("orch_dispatch"));
+        assert_eq!(
+            session_after.attached_participant_id(),
+            Some("orch_dispatch")
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after detached fallback")
+            .expect("retained participant after detached fallback");
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("stopped")
         );
     }
 

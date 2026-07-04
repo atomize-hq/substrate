@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -54,6 +55,57 @@ pub(crate) struct AgentRuntimeSessionRecord {
     has_authoritative_parent: bool,
     #[allow(dead_code)]
     complete: bool,
+}
+
+fn stop_order_probe_should_log_parked_write(
+    existing: Option<&OrchestrationSessionRecord>,
+    session: &OrchestrationSessionRecord,
+) -> bool {
+    let Ok(filtered_session_id) = std::env::var("SUBSTRATE_STOP_ORDER_DEBUG_SESSION") else {
+        return false;
+    };
+    if filtered_session_id != session.orchestration_session_id {
+        return false;
+    }
+    session.posture == OrchestrationSessionPosture::ParkedResumable
+        && existing
+            .is_some_and(|value| value.posture != OrchestrationSessionPosture::ParkedResumable)
+}
+
+fn stop_order_probe_log_parked_write(
+    existing: Option<&OrchestrationSessionRecord>,
+    session: &OrchestrationSessionRecord,
+) {
+    let log_path = std::env::var("SUBSTRATE_STOP_ORDER_DEBUG_LOG")
+        .unwrap_or_else(|_| "/tmp/substrate-stop-order-debug.jsonl".to_string());
+    let record = serde_json::json!({
+        "ts": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        "pid": std::process::id(),
+        "event": "persist_orchestration_session_parked_write",
+        "session_id": session.orchestration_session_id,
+        "participant_id": serde_json::Value::Null,
+        "fields": {
+            "previous_posture": existing.map(|value| format!("{:?}", value.posture)),
+            "previous_active_session_handle_id": existing.and_then(OrchestrationSessionRecord::active_participant_id),
+            "previous_attached_participant_id": existing.and_then(OrchestrationSessionRecord::attached_participant_id),
+            "new_posture": format!("{:?}", session.posture),
+            "new_active_session_handle_id": session.active_participant_id(),
+            "new_attached_participant_id": session.attached_participant_id(),
+            "latest_run_id": session.latest_run_id,
+            "parked_reason": session.parked_reason,
+            "last_parked_at": session
+                .last_parked_at
+                .map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)),
+        },
+    });
+    let Ok(mut file) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+    else {
+        return;
+    };
+    let _ = writeln!(file, "{record}");
 }
 
 impl AgentRuntimeSessionRecord {
@@ -2876,14 +2928,19 @@ impl AgentRuntimeStateStore {
             .lock()
             .expect("snapshot write mutex poisoned");
         self.validate_session_record(session)?;
-        if let Some(existing) =
-            self.load_authoritative_session(&session.orchestration_session_id)?
-        {
-            if !should_persist_orchestration_session_snapshot(&existing, session) {
+        let existing = self.load_authoritative_session(&session.orchestration_session_id)?;
+        if let Some(existing_session) = existing.as_ref() {
+            if !should_persist_orchestration_session_snapshot(existing_session, session) {
                 return Ok(());
             }
         }
-        self.persist_parent_session_snapshot(session)
+        let should_log_parked_write =
+            stop_order_probe_should_log_parked_write(existing.as_ref(), session);
+        self.persist_parent_session_snapshot(session)?;
+        if should_log_parked_write {
+            stop_order_probe_log_parked_write(existing.as_ref(), session);
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]

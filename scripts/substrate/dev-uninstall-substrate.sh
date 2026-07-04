@@ -14,7 +14,7 @@ Substrate Dev Uninstaller
 Removes development shims and helper files produced by dev-install-substrate.sh.
 
 Usage:
-  dev-uninstall-substrate.sh [--prefix <path>] [--profile <debug|release>] [--bin <path>] [--version-label <name>]
+  dev-uninstall-substrate.sh [--prefix <path>] [--profile <debug|release>] [--bin <path>] [--version-label <name>] [--kill-live-processes]
   dev-uninstall-substrate.sh --help
 
 Options:
@@ -22,6 +22,7 @@ Options:
   --profile <name>       Cargo profile whose binary should be used for shim removal
   --bin <path>           Explicit path to substrate binary to invoke for shim removal
   --version-label <name> Version directory label used during dev install (default: dev)
+  --kill-live-processes  Kill matching live dev owner-helper processes before removing files
   --remove-world-service Remove the Linux world-service systemd service (requires sudo)
   --cleanup-state        Remove installer-recorded group membership/lingering (opt-in)
   --help                 Show this message
@@ -407,10 +408,77 @@ perform_auto_cleanup() {
   fi
 }
 
+kill_live_dev_owner_helpers() {
+  if [[ "${KILL_LIVE_PROCESSES}" -ne 1 ]]; then
+    return 0
+  fi
+  if ! command -v ps >/dev/null 2>&1; then
+    warn "ps not available; cannot discover live dev owner-helper processes."
+    return 0
+  fi
+
+  local -a candidate_pids=()
+  local line=""
+  local pid=""
+  local cmd=""
+  while IFS= read -r line; do
+    [[ "${line}" =~ ^[[:space:]]*([0-9]+)[[:space:]]+(.*)$ ]] || continue
+    pid="${BASH_REMATCH[1]}"
+    cmd="${BASH_REMATCH[2]}"
+
+    [[ "${cmd}" == *" agent __owner-helper "* ]] || continue
+
+    case "${cmd}" in
+      "${REPO_ROOT}/target/debug/substrate "*|\
+      "${REPO_ROOT}/target/release/substrate "*|\
+      "${PREFIX%/}/bin/substrate "*|\
+      "${VERSION_DIR}/substrate "*)
+        candidate_pids+=("${pid}")
+        ;;
+      *)
+        if [[ "${cmd}" == *" --plan-file ${PREFIX%/}/run/agent-hub/handles/owner-helper/"* ]]; then
+          candidate_pids+=("${pid}")
+        fi
+        ;;
+    esac
+  done < <(ps -eo pid=,args=)
+
+  if [[ "${#candidate_pids[@]}" -eq 0 ]]; then
+    log "No matching live dev owner-helper processes found."
+    return 0
+  fi
+
+  log "Stopping ${#candidate_pids[@]} matching live dev owner-helper process(es): ${candidate_pids[*]}"
+  kill "${candidate_pids[@]}" 2>/dev/null || true
+  sleep 1
+
+  local -a remaining_pids=()
+  for pid in "${candidate_pids[@]}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      remaining_pids+=("${pid}")
+    fi
+  done
+
+  if [[ "${#remaining_pids[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  warn "Escalating to SIGKILL for surviving dev owner-helper process(es): ${remaining_pids[*]}"
+  kill -9 "${remaining_pids[@]}" 2>/dev/null || true
+  sleep 1
+
+  for pid in "${remaining_pids[@]}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      warn "Failed to terminate dev owner-helper process ${pid}"
+    fi
+  done
+}
+
 PREFIX="${HOME}/.substrate"
 PROFILE=""
 SUBSTRATE_BIN=""
 VERSION_LABEL="dev"
+KILL_LIVE_PROCESSES=0
 REMOVE_WORLD_SERVICE=0
 AUTO_CLEANUP=0
 HOST_STATE_PATH=""
@@ -452,6 +520,10 @@ while [[ $# -gt 0 ]]; do
       VERSION_LABEL="$2"
       shift 2
       ;;
+    --kill-live-processes)
+      KILL_LIVE_PROCESSES=1
+      shift
+      ;;
     --remove-world-service)
       REMOVE_WORLD_SERVICE=1
       shift
@@ -481,6 +553,7 @@ HOST_STATE_PATH="${PREFIX%/}/install_state.json"
 SHIMS_DIR="${PREFIX%/}/shims"
 ENV_FILE="${PREFIX%/}/dev-shim-env.sh"
 TRACE_LOG_PATH="${PREFIX%/}/trace.jsonl"
+RUN_DIR="${PREFIX%/}/run"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANAGED_STATE_DIR="${PREFIX%/}/.dev-install-managed"
 MANAGED_MAC_LINUX_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-linux-binaries.txt"
@@ -514,6 +587,8 @@ if [[ -n "${SUBSTRATE_BIN}" && ! -x "${SUBSTRATE_BIN}" ]]; then
   warn "Specified substrate binary (${SUBSTRATE_BIN}) is not executable; shim removal may be incomplete."
   SUBSTRATE_BIN=""
 fi
+
+kill_live_dev_owner_helpers
 
 if [[ -n "${SUBSTRATE_BIN}" ]]; then
   log "Removing shims via ${SUBSTRATE_BIN}"
@@ -562,6 +637,11 @@ fi
 if [[ -f "${TRACE_LOG_PATH}" ]]; then
   log "Removing ${TRACE_LOG_PATH}"
   rm -f "${TRACE_LOG_PATH}"
+fi
+
+if [[ -d "${RUN_DIR}" ]]; then
+  log "Removing ${RUN_DIR}"
+  rm -rf "${RUN_DIR}"
 fi
 
 if [[ -d "${BIN_DIR}" ]]; then
