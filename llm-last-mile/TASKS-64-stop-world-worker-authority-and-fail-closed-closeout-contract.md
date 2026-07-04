@@ -82,7 +82,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs) only if file-local tests are needed
     - [`crates/shell/src/execution/agent_runtime/state_store.rs`](../crates/shell/src/execution/agent_runtime/state_store.rs) only if file-local tests are needed
 
-- [ ] Task: Pin the stable textual distinction floor for caller-visible non-success outcomes
+- [x] Task: Pin the stable textual distinction floor for caller-visible non-success outcomes
   - Acceptance: automated coverage proves that caller-visible non-success outputs remain stably distinguishable using the existing shape for `missing_transport`, `refused_transport`, `stale_authority`, and `recovery_failed`, without requiring a new typed outcome family.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`

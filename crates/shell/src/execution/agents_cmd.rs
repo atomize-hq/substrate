@@ -1185,7 +1185,7 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
             .context("failed to initialize stop transport runtime")?;
         let outcome = rt
             .block_on(async { request_private_stop(&transport_path).await })
-            .map_err(|err| config_model::user_error(format!("owner_unreachable: {err}")))?;
+            .map_err(|err| config_model::user_error(format!("owner_unreachable: {err:#}")))?;
         match outcome {
             crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted
             | crate::execution::agent_runtime::control::PrivateStopOutcome::AlreadyTerminal => {}

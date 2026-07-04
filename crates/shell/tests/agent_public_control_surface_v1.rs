@@ -11,6 +11,8 @@ use std::fs;
 use std::io::{BufRead, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -838,6 +840,44 @@ fn find_status_session_by_orchestration_session_id<'a>(
 
 fn stderr_text(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
+}
+
+#[cfg(unix)]
+fn spawn_private_stop_transport_once(path: &Path, outcome: &str) -> std::thread::JoinHandle<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap_or_else(|_| {
+            panic!("create private stop transport parent {}", parent.display())
+        });
+    }
+    let _ = fs::remove_file(path);
+    let listener = UnixListener::bind(path)
+        .unwrap_or_else(|_| panic!("bind private stop transport fixture {}", path.display()));
+    let path = path.to_path_buf();
+    let outcome = outcome.to_string();
+    thread::spawn(move || {
+        let (mut stream, _) = listener
+            .accept()
+            .expect("accept private stop transport client");
+        let mut request = String::new();
+        let mut reader = std::io::BufReader::new(
+            stream
+                .try_clone()
+                .expect("clone private stop transport stream"),
+        );
+        reader
+            .read_line(&mut request)
+            .expect("read private stop transport request");
+        let response = format!("{{\"version\":1,\"outcome\":\"{outcome}\"}}\n");
+        stream
+            .write_all(response.as_bytes())
+            .expect("write private stop transport response");
+        stream
+            .flush()
+            .expect("flush private stop transport response");
+        drop(stream);
+        drop(listener);
+        let _ = fs::remove_file(&path);
+    })
 }
 
 fn assert_plain_human_prompt_streams_before_summary(
@@ -6729,6 +6769,21 @@ fn public_stop_fails_closed_without_same_episode_terminal_proof_even_if_later_st
         Some(2),
         "public stop must fail closed when the same stop episode cannot return terminal proof: {stop_output:?}"
     );
+    let stop_stderr = stderr_text(&stop_output);
+    assert!(
+        stop_stderr.contains("owner_unreachable: failed to connect to private stop transport"),
+        "public stop missing-transport failures must preserve the existing caller-visible shape: {stop_output:?}"
+    );
+    assert!(
+        stop_stderr.contains("No such file or directory"),
+        "public stop missing-transport failures must preserve the missing transport detail on the public surface: {stop_output:?}"
+    );
+    assert!(
+        !stop_stderr.contains("Connection refused")
+            && !stop_stderr.contains("timed out waiting for orchestration session")
+            && !stop_stderr.contains("caller_not_authoritative"),
+        "public stop missing-transport failures must stay textually distinct from recovery timeouts and stale-authority rejections: {stop_output:?}"
+    );
 
     write_orchestration_session(
         &fixture,
@@ -6765,5 +6820,172 @@ fn public_stop_fails_closed_without_same_episode_terminal_proof_even_if_later_st
         stop_output.status.code(),
         Some(2),
         "later public status must not retroactively convert the earlier public stop result into success"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+#[serial]
+fn public_stop_refused_transport_stays_on_existing_connect_failure_surface() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let orchestration_session_id = "sess_public_stop_refused_transport";
+    let participant_id = "ash_public_stop_refused_transport";
+    let ts = "2026-07-03T00:00:00Z";
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        Some(participant_id),
+        "active",
+        None,
+        None,
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        participant_id,
+        "codex",
+        orchestration_session_id,
+        "running",
+        true,
+        Some("uaa-public-stop-refused-transport"),
+        None,
+        ts,
+    );
+
+    let transport_path = stop_transport_path(&fixture, orchestration_session_id, participant_id);
+    if let Some(parent) = transport_path.parent() {
+        fs::create_dir_all(parent).unwrap_or_else(|_| {
+            panic!(
+                "create refused-transport stop fixture parent {}",
+                parent.display()
+            )
+        });
+    }
+    let _ = fs::remove_file(&transport_path);
+    let stale_listener = UnixListener::bind(&transport_path).unwrap_or_else(|_| {
+        panic!(
+            "bind refused-transport stop fixture {}",
+            transport_path.display()
+        )
+    });
+    drop(stale_listener);
+    assert!(
+        transport_path.exists(),
+        "refused-transport fixture must leave a stale private stop socket path behind"
+    );
+
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert_eq!(
+        stop_output.status.code(),
+        Some(2),
+        "public stop must fail closed when the private stop transport path exists but has no live listener: {stop_output:?}"
+    );
+    let stop_stderr = stderr_text(&stop_output);
+    assert!(
+        stop_stderr.contains("owner_unreachable: failed to connect to private stop transport"),
+        "public stop refused-transport failures must preserve the caller-visible connect-failure wording floor: {stop_output:?}"
+    );
+    assert!(
+        stop_stderr.contains("Connection refused"),
+        "public stop refused-transport failures must preserve the refused transport detail on the public surface: {stop_output:?}"
+    );
+    assert!(
+        !stop_stderr.contains("No such file or directory"),
+        "public stop refused-transport failures must stay textually distinct from missing transport: {stop_output:?}"
+    );
+    assert!(
+        transport_path.exists(),
+        "public stop refused-transport coverage must exercise a present stale socket path instead of the missing-transport fixture: {stop_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_stop_timeout_wording_stays_distinct_from_missing_transport_and_stale_authority() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let orchestration_session_id = "sess_public_stop_timeout_distinction";
+    let participant_id = "ash_public_stop_timeout_distinction";
+    let ts = "2026-07-03T00:00:00Z";
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        Some(participant_id),
+        "active",
+        None,
+        None,
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        participant_id,
+        "codex",
+        orchestration_session_id,
+        "running",
+        true,
+        Some("uaa-public-stop-timeout-distinction"),
+        None,
+        ts,
+    );
+
+    let transport_path = stop_transport_path(&fixture, orchestration_session_id, participant_id);
+    let stop_transport = spawn_private_stop_transport_once(&transport_path, "accepted");
+
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    stop_transport
+        .join()
+        .expect("join timeout-distinction stop transport fixture");
+
+    assert_eq!(
+        stop_output.status.code(),
+        Some(2),
+        "public stop must fail closed when delivery succeeds but same-episode terminal proof never arrives: {stop_output:?}"
+    );
+    let stop_stderr = stderr_text(&stop_output);
+    assert!(
+        stop_stderr.contains(
+            format!(
+                "owner_unreachable: timed out waiting for orchestration session {} to reach a terminal state",
+                orchestration_session_id
+            )
+            .as_str()
+        ),
+        "public stop timeout failures must preserve the recovery-failed wording floor: {stop_output:?}"
+    );
+    assert!(
+        !stop_stderr.contains("failed to connect to private stop transport"),
+        "public stop timeout failures must stay textually distinct from missing transport: {stop_output:?}"
+    );
+    assert!(
+        !stop_stderr.contains("caller_not_authoritative"),
+        "public stop timeout failures must stay textually distinct from stale-authority rejections: {stop_output:?}"
+    );
+
+    let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
+    assert_eq!(
+        persisted_session.get("state").and_then(Value::as_str),
+        Some("active"),
+        "timeout-distinction stop fixture must not fabricate terminal session state"
     );
 }
