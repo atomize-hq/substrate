@@ -31,6 +31,33 @@ def find_repo_root(start: str) -> str:
     raise SystemExit("could not locate repo root (Cargo.toml + crates/) above " + start)
 
 
+# Session-level delegation stratification (R6-3.5). Coarse marker scan over the raw rollout using
+# the analyzer's own delegation vocabulary (crates/agent-drift-analyzer/src/inference/mod.rs). This
+# is a *reporting* tag so the batch precision numbers can be reported separately for delegated vs
+# single-agent traces; it is intentionally coarser than the analyzer's per-checkpoint
+# DelegationContext (topology + child_work_visibility). Categories mirror the R6-3.5 charter:
+# single_agent / delegated_parent_opaque / delegated_child_visible / unknown.
+_DELEGATION_MARKERS = ("multi_agent_v1", "spawn_agent", "wait_agent", "close_agent")
+_CHILD_VISIBILITY_SIGNALS = (
+    "child rollout", "separate rollout", "subagent", "spawned agent", "child session id",
+)
+
+
+def classify_session_delegation(rollout_path: str) -> str:
+    try:
+        with open(rollout_path, "r", errors="replace") as f:
+            blob = f.read().lower()
+    except OSError:
+        return "unknown"
+    has_marker = any(m in blob for m in _DELEGATION_MARKERS)
+    has_child_visibility = any(s in blob for s in _CHILD_VISIBILITY_SIGNALS)
+    if not has_marker and not has_child_visibility:
+        return "single_agent"
+    if has_child_visibility:
+        return "delegated_child_visible"
+    return "delegated_parent_opaque"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -74,6 +101,8 @@ def main() -> None:
         os.makedirs(analysis, exist_ok=True)
         rec = {"session_id": sid, "month": s["month"], "repo": s["repo"],
                "size": s["size"], "ok": False, "n_checkpoints": 0, "error": None}
+        delegation = classify_session_delegation(path)
+        rec["delegation"] = delegation
         try:
             shutil.copy(path, ch)
             r1 = subprocess.run([compact, "--codex-home", os.path.join(tmp, "codex-home"),
@@ -99,6 +128,7 @@ def main() -> None:
                     cp["_month"] = s["month"]
                     cp["_repo"] = s["repo"]
                     cp["_session_file_id"] = sid
+                    cp["_delegation"] = delegation
                     out.write(json.dumps(cp) + "\n")
                     n += 1
             rec["ok"] = True

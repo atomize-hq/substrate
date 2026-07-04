@@ -42,7 +42,22 @@ python3 "$REPO/$S/filter_junk.py" --checkpoints-dir batch/checkpoints
 ```
 
 Each row written to `batch/checkpoints/<session_id>.jsonl` is the analyzer's checkpoint record with
-three added keys — `_month`, `_repo`, `_session_file_id` — used by the tabulators.
+four added keys — `_month`, `_repo`, `_session_file_id`, and `_delegation` — used by the tabulators.
+
+## Delegation stratification (R6-3.5)
+
+`run_batch.py` tags each session with a coarse `_delegation` category by scanning the raw rollout for
+the analyzer's delegation markers (`spawn_agent` / `wait_agent` / `close_agent` / `multi_agent_v1`
+and child-visibility signals like `child rollout` / `subagent`): `single_agent`,
+`delegated_parent_opaque`, `delegated_child_visible`, or `unknown`. `tabulate.py` then reports
+checkpoints / eligibility / fires / disjoint-pairs **separately per category**, so precision claims
+from the batch are not made by treating delegated or opaque parent-only traces as equal-weight
+evidence for single-agent sessions.
+
+This tag is a *reporting* aid and is intentionally coarser than the analyzer's own per-checkpoint
+`DelegationContext` (topology + `child_work_visibility`), which is not serialized into the checkpoint
+export. Opaque delegated sessions remain **secondary** evidence until R7-style parent/child semantic
+support exists; see the FINDINGS delegation caveat.
 
 ## What `filter_junk.py` answers (the cheapest gate)
 

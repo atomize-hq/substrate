@@ -70,14 +70,20 @@ def main() -> None:
     sgd_flagged = rolling_lines = kickoff_lines = 0
     by_month = defaultdict(lambda: {"cp": 0, "ts_conf": 0, "cur_elig": 0, "tgt_elig": 0})
     by_repo = defaultdict(lambda: {"cp": 0, "cur_elig": 0, "tgt_elig": 0})
+    # R6-3.5 delegation stratification: report precision-relevant metrics separately per delegation
+    # category so single-agent and delegated/opaque traces are not treated as equal-weight evidence.
+    by_delegation = defaultdict(
+        lambda: {"cp": 0, "cur_elig": 0, "tgt_elig": 0, "sgd": 0, "disjoint": 0})
 
     for sid, cps in by_session.items():
         for cp in cps:
             tot_cp += 1
             m = cp["_month"]
             r = cp["_repo"]
+            d = cp.get("_delegation", "unknown")
             by_month[m]["cp"] += 1
             by_repo[r]["cp"] += 1
+            by_delegation[d]["cp"] += 1
             so = cp.get("structured_objective") or {}
             oc = so.get("objective_class")
             conf = so.get("confidence")
@@ -94,6 +100,7 @@ def main() -> None:
                     cur_eligible += 1
                     by_month[m]["cur_elig"] += 1
                     by_repo[r]["cur_elig"] += 1
+                    by_delegation[d]["cur_elig"] += 1
                 else:
                     for f in unk:
                         fail_reason[f] += 1
@@ -101,6 +108,7 @@ def main() -> None:
                     target_resolved += 1
                     by_month[m]["tgt_elig"] += 1
                     by_repo[r]["tgt_elig"] += 1
+                    by_delegation[d]["tgt_elig"] += 1
                     if "primary_goal" not in unk:
                         target_resolved_no_primary += 1
                     if unk <= {"success_conditions", "deliverables"} and unk:
@@ -109,6 +117,7 @@ def main() -> None:
                 if s.get("class") == "semantic_goal_drift":
                     if s.get("flagged"):
                         sgd_flagged += 1
+                        by_delegation[d]["sgd"] += 1
                     for e in s.get("evidence", []):
                         rr = e.get("reason", "")
                         if rr.startswith("rolling semantic goal drift"):
@@ -137,6 +146,7 @@ def main() -> None:
                     changed_target += 1
                     if ta and tb and ta.isdisjoint(tb):
                         changed_disjoint += 1
+                        by_delegation[a.get("_delegation", "unknown")]["disjoint"] += 1
 
     def pct(a, b):
         return f"{100 * a / b:.1f}%" if b else "n/a"
@@ -185,6 +195,18 @@ def main() -> None:
     print("  repo                 | cp  | cur-elig | tgt-elig")
     for r, d in top:
         print(f"  {r[:20]:20s} | {d['cp']:3d} | {d['cur_elig']:7d}  | {d['tgt_elig']}")
+    print()
+    print("BY DELEGATION CATEGORY (R6-3.5 stratification — do NOT treat delegated/opaque traces as")
+    print("equal-weight proof of scorer precision; session-level marker heuristic, coarser than the")
+    print("analyzer's per-checkpoint DelegationContext):")
+    print("  category                 | cp  | cur-elig | tgt-elig | sgd-fired | disjoint-pairs")
+    order = ["single_agent", "delegated_parent_opaque", "delegated_child_visible", "unknown"]
+    for cat in order + [c for c in sorted(by_delegation) if c not in order]:
+        if cat not in by_delegation:
+            continue
+        d = by_delegation[cat]
+        print(f"  {cat:24s} | {d['cp']:3d} | {d['cur_elig']:7d}  | {d['tgt_elig']:7d}  | "
+              f"{d['sgd']:8d}  | {d['disjoint']}")
 
 
 if __name__ == "__main__":
