@@ -2785,7 +2785,7 @@ fn deliverable_kind_for_text(text: &str) -> RequestedDeliverableKind {
 
 fn extract_inline_paths(text: &str) -> Vec<String> {
     let mut paths: Vec<String> = Vec::new();
-    let mut push_if_path = |candidate: &str, paths: &mut Vec<String>| {
+    let push_if_path = |candidate: &str, paths: &mut Vec<String>| {
         let cleaned = clean_anchor_token(candidate);
         if is_stable_path_anchor(&cleaned) && !paths.contains(&cleaned) {
             paths.push(cleaned);

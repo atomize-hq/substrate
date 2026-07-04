@@ -118,6 +118,15 @@ fn eligible_current_goal(summary: &ObjectiveSummary) -> Option<EligibleCurrentGo
     {
         return None;
     }
+    // R6-3.5 backstop: a semantically eligible goal must carry at least one stable, non-junk
+    // *distinguishing* term (from the structured target or the summary comparison_key) that is not
+    // merely a constraint. This keeps the strict posture meaningful — a checkpoint resting on a
+    // junk-only target (the F2 finding: 8/156 eligible checkpoints) can no longer fire, while a goal
+    // whose distinguishing term lives only in its comparison_key stays eligible. Constraint terms
+    // (platform/scope boundaries) alone never satisfy the requirement.
+    if !has_stable_distinguishing_term(structured, Some(summary)) {
+        return None;
+    }
 
     Some(EligibleCurrentGoal {
         summary,
@@ -127,7 +136,26 @@ fn eligible_current_goal(summary: &ObjectiveSummary) -> Option<EligibleCurrentGo
 }
 
 fn eligible_anchor_goal(anchor: Option<&StructuredObjective>) -> Option<&StructuredObjective> {
-    anchor.filter(|structured| structured_matches_anchor_bar(structured))
+    anchor.filter(|structured| {
+        structured_matches_anchor_bar(structured)
+            && has_stable_distinguishing_term(structured, None)
+    })
+}
+
+/// True iff the goal contributes at least one stable, non-junk term (from its target or
+/// comparison_key) that is not merely a constraint. Applied symmetrically to current, previous, and
+/// anchor goals; the junk filter itself lives in the shared `push_goal_term` -> `is_stable_goal_term`.
+fn has_stable_distinguishing_term(
+    structured: &StructuredObjective,
+    summary: Option<&ObjectiveSummary>,
+) -> bool {
+    let mut terms = goal_specific_terms(structured, summary);
+    let mut constraint_terms = BTreeSet::new();
+    for constraint in &structured.constraints {
+        collect_constraint_terms(&mut constraint_terms, constraint);
+    }
+    terms.retain(|term| !constraint_terms.contains(term));
+    !terms.is_empty()
 }
 
 fn eligible_previous_goal(analysis: &CheckpointAnalysis) -> Option<EligibleCurrentGoal<'_>> {
@@ -234,7 +262,13 @@ fn collect_constraint_terms(terms: &mut BTreeSet<String>, constraint: &Objective
 
 fn push_goal_term(terms: &mut BTreeSet<String>, raw: &str) {
     let normalized = normalize_goal_term(raw);
-    if normalized.is_empty() || is_generic_goal_term(&normalized) {
+    // R6-3.5 backstop: share the extraction taxonomy so junk (coordinate/number runs, control
+    // residue, model-version tokens) can never become a distinguishing goal term, whatever ingestion
+    // path produced it. Real-word constraint terms (`linux`, `windows`) pass `is_stable_goal_term`.
+    if normalized.is_empty()
+        || is_generic_goal_term(&normalized)
+        || !crate::context::objective::is_stable_goal_term(&normalized)
+    {
         return;
     }
     terms.insert(normalized);
@@ -363,8 +397,8 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        score_semantic_goal_drift, CURRENT_GOAL_REASON_PREFIX, KICKOFF_ANCHOR_REASON_PREFIX,
-        ROLLING_CURRENT_REASON_PREFIX, ROLLING_PREVIOUS_REASON_PREFIX,
+        eligible_current_goal, score_semantic_goal_drift, CURRENT_GOAL_REASON_PREFIX,
+        KICKOFF_ANCHOR_REASON_PREFIX, ROLLING_CURRENT_REASON_PREFIX, ROLLING_PREVIOUS_REASON_PREFIX,
     };
     use crate::checkpoint::{
         CheckpointAnalysis, CheckpointSlice, Confidence, EvidenceRef, ObjectiveClass,
@@ -379,6 +413,55 @@ mod tests {
     };
     use crate::inference::DelegationContext;
     use crate::input::BundleSession;
+
+    #[test]
+    fn semantic_goal_drift_rejects_junk_only_current_goal_eligibility() {
+        // R6-3.5 backstop: a target resting entirely on log/coordinate junk (F2 finding) is not
+        // a semantically eligible goal, even though it clears TaskStatement + Medium + no-unknowns.
+        let junk = structured_goal("0.0.0.0:4000", Confidence::High, Vec::new());
+        let summary =
+            objective_summary("implement|file_or_directory|0_0_0_0_4000", Some(junk), "goal");
+        assert!(
+            eligible_current_goal(&summary).is_none(),
+            "junk-only target must not be an eligible current goal"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_keeps_stable_target_goal_eligible() {
+        let stable = structured_goal(
+            "crates/agent-drift-analyzer/src/context/objective.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let summary = objective_summary(
+            "implement|file_or_directory|crates_agent_drift_analyzer_src_context_objective_rs",
+            Some(stable),
+            "goal",
+        );
+        assert!(
+            eligible_current_goal(&summary).is_some(),
+            "a stable repo-path target goal must remain eligible"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_does_not_fire_on_junk_only_current_goal() {
+        let anchor =
+            structured_goal("docs/architecture_overview.md", Confidence::High, Vec::new());
+        let current = structured_goal("0.0.0.0:4000", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary("implement|file_or_directory|0_0_0_0_4000", Some(current), "goal"),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            !scored.score.flagged,
+            "junk-only current goal must not fire semantic goal drift"
+        );
+    }
 
     #[test]
     fn semantic_goal_drift_flags_unauthorized_pivot_with_named_anchor_and_current_evidence() {
