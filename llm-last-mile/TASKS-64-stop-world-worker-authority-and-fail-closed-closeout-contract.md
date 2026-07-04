@@ -202,7 +202,7 @@ Session goal:
     - [`crates/shell/src/execution/orchestrator_world_dispatch.rs`](../crates/shell/src/execution/orchestrator_world_dispatch.rs)
     - [`crates/world-service/src/member_runtime.rs`](../crates/world-service/src/member_runtime.rs) only if narrow runtime proof wiring is needed
 
-- [ ] Task: Standardize caller-visible non-success wording using the existing shape
+- [x] Task: Standardize caller-visible non-success wording using the existing shape
   - Acceptance: this slice does not introduce a new typed stop-outcome taxonomy; instead, caller-visible non-success outputs keep the existing shape and stably distinguish `missing_transport`, `refused_transport`, `stale_authority`, and `recovery_failed` through reviewable wording that tests can assert.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`

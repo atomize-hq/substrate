@@ -2390,10 +2390,10 @@ async fn stop_world_worker(
                 used_private_stop_surface = false;
                 persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
             } else {
-                return Err(anyhow::anyhow!(
-                    "owner_unreachable: failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({transport_err:#})",
+                return Err(stop_world_worker_recovery_failed(format!(
+                    "failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({transport_err:#})",
                     resolved.target_participant.participant_id()
-                ));
+                )));
             }
         } else {
             let transport_outcome = match transport_result {
@@ -2419,10 +2419,10 @@ async fn stop_world_worker(
                     )? {
                         closeout
                     } else {
-                        return Err(anyhow::anyhow!(
-                            "owner_unreachable: private stop transport for retained worker {} did not stay reachable before durable stop closeout was observed",
+                        return Err(stop_world_worker_recovery_failed(format!(
+                            "private stop transport for retained worker {} did not stay reachable before durable stop closeout was observed",
                             resolved.target_participant.participant_id()
-                        ));
+                        )));
                     }
                 }
                 PrivateStopOutcome::ProtocolError => {
@@ -2433,10 +2433,10 @@ async fn stop_world_worker(
                     )? {
                         closeout
                     } else {
-                        return Err(anyhow::anyhow!(
-                            "owner_unreachable: private stop transport for retained worker {} returned a protocol error before durable stop closeout was observed",
+                        return Err(stop_world_worker_recovery_failed(format!(
+                            "private stop transport for retained worker {} returned a protocol error before durable stop closeout was observed",
                             resolved.target_participant.participant_id()
-                        ));
+                        )));
                     }
                 }
             }
@@ -4564,10 +4564,10 @@ async fn wait_for_stop_world_worker_closeout(
             );
         }
         if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
-            anyhow::bail!(
-                "owner_unreachable: timed out waiting for retained worker {} to reach durable stopped closeout",
+            return Err(stop_world_worker_recovery_failed(format!(
+                "timed out waiting for retained worker {} to reach durable stopped closeout",
                 participant_id
-            );
+            )));
         }
         tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
     }
@@ -4870,6 +4870,14 @@ fn summarize_stop_world_worker_result(
 
     format!(
         "stop_world_worker drove durable stopped closeout for retained worker {participant_id} on backend {backend_id} via detached durable closeout because the retained runtime owner was no longer reachable"
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn stop_world_worker_recovery_failed(detail: impl AsRef<str>) -> anyhow::Error {
+    anyhow::anyhow!(
+        "owner_unreachable: recovery_failed: {}",
+        detail.as_ref().trim()
     )
 }
 
@@ -13877,7 +13885,9 @@ agents:
             "proof-gap fixture must not synthesize terminal reason"
         );
 
-        stop_owner.await.expect("proof-gap stop owner task should join");
+        stop_owner
+            .await
+            .expect("proof-gap stop owner task should join");
         stop_transport.close().await;
     }
 
@@ -13975,8 +13985,9 @@ agents:
         )
         .expect("persist late terminal proof");
 
-        let later_closeout = observed_stop_world_worker_closeout(&store, "sess_dispatch", "ash_member")
-            .expect("read stop closeout after late proof");
+        let later_closeout =
+            observed_stop_world_worker_closeout(&store, "sess_dispatch", "ash_member")
+                .expect("read stop closeout after late proof");
         assert!(
             later_closeout.is_some(),
             "later proof may surface authoritative stopped closeout to read-side observers"
@@ -13994,7 +14005,9 @@ agents:
             "later proof must leave the earlier fail-closed result unchanged"
         );
 
-        stop_owner.await.expect("late-proof stop owner task should join");
+        stop_owner
+            .await
+            .expect("late-proof stop owner task should join");
         stop_transport.close().await;
     }
 

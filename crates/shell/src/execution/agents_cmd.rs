@@ -1144,7 +1144,7 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
             wait_for_terminal_session_state(&store, orchestration_session_id.as_str())?
                 .ok_or_else(|| {
                     config_model::user_error(format!(
-                        "owner_unreachable: timed out waiting for orchestration session {} to reach a terminal state",
+                        "owner_unreachable: recovery_failed: timed out waiting for orchestration session {} to reach a terminal state",
                         orchestration_session_id
                     ))
                 })?;
@@ -1205,7 +1205,7 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
 
         let final_state = wait_for_terminal_session_state(&store, &args.session)?.ok_or_else(|| {
             config_model::user_error(format!(
-                "owner_unreachable: timed out waiting for orchestration session {} to reach a terminal state",
+                "owner_unreachable: recovery_failed: timed out waiting for orchestration session {} to reach a terminal state",
                 args.session
             ))
         })?;

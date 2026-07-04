@@ -2476,12 +2476,14 @@ fn validate_public_prompt_command_request(
 #[cfg(unix)]
 #[allow(dead_code)]
 pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutcome> {
-    let mut stream = UnixStream::connect(path).await.with_context(|| {
-        format!(
-            "failed to connect to private stop transport {}",
-            path.display()
-        )
-    })?;
+    let mut stream = match UnixStream::connect(path).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            let kind = err.kind();
+            return Err(anyhow::Error::new(err)
+                .context(format_private_stop_transport_connect_error(path, kind)));
+        }
+    };
     let request = serde_json::json!({
         "version": 1,
         "action": "stop",
@@ -2508,6 +2510,19 @@ pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutco
 pub(crate) fn private_stop_transport_error_kind(err: &anyhow::Error) -> Option<io::ErrorKind> {
     err.chain()
         .find_map(|cause| cause.downcast_ref::<io::Error>().map(std::io::Error::kind))
+}
+
+#[cfg(unix)]
+fn format_private_stop_transport_connect_error(path: &Path, kind: io::ErrorKind) -> String {
+    let prefix = match kind {
+        io::ErrorKind::NotFound => "missing_transport: ",
+        io::ErrorKind::ConnectionRefused => "refused_transport: ",
+        _ => "",
+    };
+    format!(
+        "{prefix}failed to connect to private stop transport {}",
+        path.display()
+    )
 }
 
 #[cfg(unix)]

@@ -6771,7 +6771,9 @@ fn public_stop_fails_closed_without_same_episode_terminal_proof_even_if_later_st
     );
     let stop_stderr = stderr_text(&stop_output);
     assert!(
-        stop_stderr.contains("owner_unreachable: failed to connect to private stop transport"),
+        stop_stderr.contains(
+            "owner_unreachable: missing_transport: failed to connect to private stop transport",
+        ),
         "public stop missing-transport failures must preserve the existing caller-visible shape: {stop_output:?}"
     );
     assert!(
@@ -6893,7 +6895,9 @@ fn public_stop_refused_transport_stays_on_existing_connect_failure_surface() {
     );
     let stop_stderr = stderr_text(&stop_output);
     assert!(
-        stop_stderr.contains("owner_unreachable: failed to connect to private stop transport"),
+        stop_stderr.contains(
+            "owner_unreachable: refused_transport: failed to connect to private stop transport",
+        ),
         "public stop refused-transport failures must preserve the caller-visible connect-failure wording floor: {stop_output:?}"
     );
     assert!(
@@ -6966,7 +6970,7 @@ fn public_stop_timeout_wording_stays_distinct_from_missing_transport_and_stale_a
     assert!(
         stop_stderr.contains(
             format!(
-                "owner_unreachable: timed out waiting for orchestration session {} to reach a terminal state",
+                "owner_unreachable: recovery_failed: timed out waiting for orchestration session {} to reach a terminal state",
                 orchestration_session_id
             )
             .as_str()

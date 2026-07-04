@@ -6599,9 +6599,16 @@ fn c3_internal_toolbox_stop_world_worker_treats_disappearing_private_stop_delive
         .and_then(Value::as_str)
         .expect("disappearing private stop delivery must surface an error");
     assert!(
+        response
+            .get("error")
+            .and_then(Value::as_str)
+            .is_some_and(|error| error.contains("missing_transport:")),
+        "disappearing private stop delivery must surface the stable missing_transport wording: {response:#?}"
+    );
+    assert!(
         error.contains(
             format!(
-                "owner_unreachable: failed to deliver stop_world_worker to retained worker {}",
+                "owner_unreachable: recovery_failed: failed to deliver stop_world_worker to retained worker {}",
                 member_participant_id
             )
             .as_str()
@@ -6814,9 +6821,13 @@ fn c3_internal_toolbox_stop_world_worker_keeps_refused_transport_text_distinct_f
         .and_then(Value::as_str)
         .expect("refused private stop delivery must surface an error");
     assert!(
+        error.contains("refused_transport:"),
+        "refused private stop delivery must surface the stable refused_transport wording: {response:#?}"
+    );
+    assert!(
         error.contains(
             format!(
-                "owner_unreachable: failed to deliver stop_world_worker to retained worker {}",
+                "owner_unreachable: recovery_failed: failed to deliver stop_world_worker to retained worker {}",
                 member_participant_id
             )
             .as_str()
@@ -7008,6 +7019,10 @@ fn c3_internal_toolbox_stop_world_worker_keeps_caller_result_failed_when_later_s
         .get("error")
         .and_then(Value::as_str)
         .expect("missing terminal proof must surface an error");
+    assert!(
+        error.contains("owner_unreachable: recovery_failed:"),
+        "missing terminal proof must surface the stable recovery_failed wording: {response:#?}"
+    );
     assert!(
         error.contains("durable stop closeout was not observed"),
         "missing terminal proof must fail closed instead of claiming durable stop success: {response:#?}"
