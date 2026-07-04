@@ -1939,6 +1939,27 @@ fn explicit_target_anchor_for_text(text: &str) -> Option<ExplicitTargetAnchor> {
         });
     }
 
+    // R6-3.5 (codex review): a bare well-known rootless file (`README`, `Makefile`) or a Rust symbol
+    // ref (`foo::bar`) is a durable typed anchor even without a path or a doc/crate cue. Without this
+    // fallback `update README` loses its structured target, which also makes the opaque-parent
+    // guardrail suppress genuine drift. Scoped to the unambiguous grammars only — bare kebab package
+    // names are deliberately excluded here to avoid promoting ordinary hyphenated prose.
+    if let Some((token, kind)) = cleaned_target_tokens(&goal).into_iter().find_map(|token| {
+        if validates_well_known_rootless_file(&token) || validates_rust_symbol_ref(&token) {
+            stable_target_anchor_kind(&token).map(|kind| (token, kind))
+        } else {
+            None
+        }
+    }) {
+        return Some(ExplicitTargetAnchor {
+            display: token.clone(),
+            kind,
+            paths: Vec::new(),
+            named_artifacts: vec![token],
+            workspace_refs: Vec::new(),
+        });
+    }
+
     let conceptual_target = extract_named_conceptual_target(&goal)?;
     Some(ExplicitTargetAnchor {
         display: conceptual_target.clone(),
@@ -2242,19 +2263,23 @@ fn looks_like_explicit_named_target(token: &str) -> bool {
         || (cleaned.contains('-') && cleaned.chars().any(|ch| ch.is_ascii_alphabetic()))
 }
 
-/// Bare model/assistant name (`GPT-5.4`, `claude-3`) or bare version token (`v2.3.1`, `1.2.0`).
-/// Runtime metadata, never a task target.
+/// Bare model/assistant name (`GPT-5.4`, `claude-3`, `o4-mini`) or bare version token (`v2.3.1`,
+/// `1.2.0`). Runtime metadata, never a task target. Matches model names by prefix — including the
+/// alphanumeric `o1`/`o3`/`o4` families that a `take_while(alpha)` prefix scan would miss — where the
+/// name is followed by a version-ish continuation and the token carries a digit.
 fn is_model_or_version_token(token: &str) -> bool {
     let lower = token.to_ascii_lowercase();
-    let prefix = lower
-        .chars()
-        .take_while(|c| c.is_ascii_alphabetic())
-        .collect::<String>();
-    if !prefix.is_empty()
-        && MODEL_NAME_PREFIXES.contains(&prefix.as_str())
-        && lower.chars().any(|c| c.is_ascii_digit())
-    {
-        return true;
+    if lower.chars().any(|c| c.is_ascii_digit()) {
+        for model in MODEL_NAME_PREFIXES {
+            if let Some(rest) = lower.strip_prefix(model) {
+                if rest.is_empty()
+                    || rest
+                        .starts_with(|c: char| c.is_ascii_digit() || matches!(c, '-' | '.' | '_'))
+                {
+                    return true;
+                }
+            }
+        }
     }
     let body = lower.strip_prefix('v').unwrap_or(&lower);
     !body.is_empty()
@@ -2313,12 +2338,13 @@ const WELL_KNOWN_ROOTLESS_FILES: &[&str] = &[
     "taskfile",
 ];
 
-/// Known model / assistant name prefixes. A work-item-shaped token whose alphabetic prefix is a
-/// model name (`GPT-5.4`, `Claude-3`) is runtime metadata, not a task target. Domain gazetteer,
-/// analogous to a log-parser variable dictionary.
+/// Known model / assistant name prefixes. A token that is a model name followed by a version
+/// (`GPT-5.4`, `claude-3`, `o4-mini`) is runtime metadata, not a task target. Domain gazetteer,
+/// analogous to a log-parser variable dictionary. Deliberately excludes tokens that collide with
+/// this repo's own vocabulary (`codex`, `command`).
 const MODEL_NAME_PREFIXES: &[&str] = &[
     "gpt", "claude", "gemini", "llama", "mistral", "qwen", "deepseek", "grok", "sonnet", "opus",
-    "haiku", "o1", "o3", "o4", "phi", "gemma", "command", "codex",
+    "haiku", "o1", "o3", "o4", "phi", "gemma",
 ];
 
 /// Grammar-first anchor quality shared by extraction and the scorer.
@@ -2650,7 +2676,9 @@ fn is_control_residue(token: &str) -> bool {
 }
 
 /// Scorer-side guard operating on the normalized (`[a-z0-9_]+`) term form. Shares the taxonomy:
-/// rejects numeric/coordinate runs, control residue, single-char, and model-version tokens.
+/// rejects numeric/coordinate runs, control residue, and model-version tokens, while accepting
+/// alphanumeric work-item / packet IDs (`r6_3_5`, `so_2_3b`) that extraction treats as stable
+/// anchors — the two sides must agree or packet-only goals silently lose eligibility.
 pub(crate) fn is_stable_goal_term(term: &str) -> bool {
     if term.len() < 2 {
         return false;
@@ -2662,19 +2690,29 @@ pub(crate) fn is_stable_goal_term(term: &str) -> bool {
     if segments.is_empty() {
         return false;
     }
-    // numeric/coordinate run: no segment carries a real word
-    let has_wordy = segments
-        .iter()
-        .any(|s| s.len() >= 2 && s.chars().all(|c| c.is_ascii_alphabetic()) && !is_control_word(s));
-    if !has_wordy {
+    // A term is content-bearing if some segment is either a real alphabetic word (`objective`) or a
+    // letter-led alphanumeric identifier (`r6`, `so2`). This accepts work-item / packet IDs
+    // (`r6_3_5`, `so_2_3b`) while rejecting pure number/coordinate runs (`0_0_0_0_4000`,
+    // `1920x1080`), control residue (`5_n_n`), and digit-led duration units (`5s`, `120ms`) — those
+    // never start a segment with a letter.
+    let has_content = segments.iter().any(|s| {
+        let alpha_word =
+            s.len() >= 2 && s.chars().all(|c| c.is_ascii_alphabetic()) && !is_control_word(s);
+        let id_segment = s.len() >= 2
+            && s.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+            && s.chars().any(|c| c.is_ascii_digit())
+            && s.chars().all(|c| c.is_ascii_alphanumeric());
+        alpha_word || id_segment
+    });
+    if !has_content {
         return false;
     }
-    // model/version token: `<model>_<digits...>` (gpt_5_4)
+    // Model/version token: `<model>_<digits...>` (`gpt_5_4`).
     if MODEL_NAME_PREFIXES.contains(&segments[0])
+        && segments.len() >= 2
         && segments[1..]
             .iter()
             .all(|s| s.chars().all(|c| c.is_ascii_digit()))
-        && segments.len() >= 2
     {
         return false;
     }
@@ -3754,6 +3792,7 @@ mod tests {
             "n",
             "gpt_5_4",
             "5s",
+            "1920x1080",
         ] {
             assert!(
                 !is_stable_goal_term(junk),
@@ -3765,11 +3804,59 @@ mod tests {
             "architecture_overview_md",
             "readme_md",
             "agent_drift_analyzer",
+            // work-item / packet IDs must agree with the extraction side (codex review finding 1)
+            "r6_3_5",
+            "so_2_3b",
+            "r5_75_6_4",
         ] {
             assert!(
                 is_stable_goal_term(stable),
                 "normalized term `{stable}` must remain a stable goal term"
             );
         }
+    }
+
+    #[test]
+    fn model_mask_catches_alphanumeric_o_families() {
+        // codex review finding 2: `take_while(alpha)` reduced `o4-mini` to prefix `o` and missed it.
+        for model in [
+            "o4-mini",
+            "o3",
+            "o1-preview",
+            "GPT-5.4",
+            "claude-3",
+            "gemma-2",
+            "v2.3.1",
+        ] {
+            assert!(
+                is_model_or_version_token(model),
+                "`{model}` must be recognized as model/version metadata"
+            );
+            assert_ne!(
+                anchor_quality(model),
+                TargetAnchorQuality::Stable,
+                "`{model}` must not be a stable anchor"
+            );
+        }
+        // repo/domain tokens that must NOT be swept up as model metadata
+        for keep in ["SO-2.3B", "R6-3.5", "codex-wrapper", "agent-drift-analyzer"] {
+            assert!(
+                !is_model_or_version_token(keep),
+                "`{keep}` must not be treated as model metadata"
+            );
+        }
+    }
+
+    #[test]
+    fn extraction_recovers_bare_rootless_files_and_rust_symbols() {
+        // codex review finding 3: without a path or cue, `update README` / `refactor foo::bar` must
+        // still yield a structured target (otherwise the opaque-parent guardrail suppresses drift).
+        let readme = explicit_target_anchor_for_text("update README and tidy it")
+            .expect("README should be a stable target");
+        assert!(readme.named_artifacts.iter().any(|a| a == "README"));
+
+        let symbol = explicit_target_anchor_for_text("refactor foo::bar for clarity")
+            .expect("a rust symbol ref should be a stable target");
+        assert!(symbol.named_artifacts.iter().any(|a| a == "foo::bar"));
     }
 }
