@@ -192,7 +192,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task: Require authoritative stopped closeout plus terminal proof for caller-visible success
+- [x] Task: Require authoritative stopped closeout plus terminal proof for caller-visible success
   - Acceptance: a stop episode reports caller-visible success only when authoritative retained-worker stopped closeout is proven and terminal proof returns for that same episode; a proof gap still fails closed from the caller’s perspective, and later read-side observation does not retroactively convert the earlier attempt into success.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`

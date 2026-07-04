@@ -4540,7 +4540,7 @@ async fn wait_for_stop_world_worker_closeout(
                 participant_id
             )
         })?;
-        if participant.handle.state == AgentRuntimeSessionState::Stopped {
+        if retained_worker_stop_terminal_proof_observed(&participant) {
             let session = store
                 .load_orchestration_session(orchestration_session_id)?
                 .ok_or_else(|| {
@@ -4554,7 +4554,9 @@ async fn wait_for_stop_world_worker_closeout(
                 session_state: session.state,
             });
         }
-        if !participant.handle.state.is_live() {
+        if participant.handle.state != AgentRuntimeSessionState::Stopped
+            && !participant.handle.state.is_live()
+        {
             anyhow::bail!(
                 "stop_closeout_failed: retained worker {} reached terminal state {} instead of stopped",
                 participant_id,
@@ -4572,6 +4574,15 @@ async fn wait_for_stop_world_worker_closeout(
 }
 
 #[cfg(target_os = "linux")]
+fn retained_worker_stop_terminal_proof_observed(
+    participant: &AgentRuntimeParticipantRecord,
+) -> bool {
+    participant.handle.state == AgentRuntimeSessionState::Stopped
+        && participant.internal.terminal_observed_at.is_some()
+        && participant.internal.termination_reason.is_some()
+}
+
+#[cfg(target_os = "linux")]
 fn observed_stop_world_worker_closeout(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -4580,7 +4591,7 @@ fn observed_stop_world_worker_closeout(
     let Some(participant) = store.load_participant(participant_id)? else {
         return Ok(None);
     };
-    if participant.handle.state != AgentRuntimeSessionState::Stopped {
+    if !retained_worker_stop_terminal_proof_observed(&participant) {
         return Ok(None);
     }
     let Some(session) = store.load_orchestration_session(orchestration_session_id)? else {
@@ -13766,6 +13777,224 @@ agents:
         );
 
         stop_owner.await.expect("stop owner task should join");
+        stop_transport.close().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_fails_closed_when_participant_reaches_stopped_without_terminal_proof(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let (stop_tx, mut stop_rx) =
+            crate::execution::agent_runtime::control::private_stop_request_channel();
+        let mut stop_transport =
+            crate::execution::agent_runtime::control::register_private_stop_transport(
+                &store,
+                "sess_dispatch",
+                "ash_member",
+                stop_tx,
+            )
+            .await
+            .expect("register private stop transport");
+        let store_for_task = store.clone();
+        let stop_owner = tokio::spawn(async move {
+            let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
+                .await
+                .expect("timed out waiting for private stop request")
+                .expect("private stop request");
+            let mut session = store_for_task
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for proof-gap closeout")
+                .expect("authoritative orchestration session for proof-gap closeout");
+            let mut participant = store_for_task
+                .load_participant("ash_member")
+                .expect("load retained participant for proof-gap closeout")
+                .expect("authoritative retained participant for proof-gap closeout");
+            participant.transition_state(AgentRuntimeSessionState::Stopped);
+            participant.touch_heartbeat();
+            session.touch_active();
+            crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                &store_for_task,
+                &session,
+                &participant,
+            )
+            .expect("persist retained proof-gap stop state");
+            let _ = request
+                .response_tx
+                .send(crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted);
+        });
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let started_at = Instant::now();
+        let err = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect_err("stopped without terminal proof must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "owner_unreachable: timed out waiting for retained worker ash_member to reach durable stopped closeout"
+        );
+        assert!(
+            started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT,
+            "proof-gap stop must keep waiting for terminal proof before failing closed"
+        );
+        assert!(
+            observed_stop_world_worker_closeout(&store, "sess_dispatch", "ash_member")
+                .expect("read proof-gap stop closeout")
+                .is_none(),
+            "stopped state alone must not count as authoritative stop closeout"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after proof-gap stop")
+            .expect("retained participant after proof-gap stop");
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert!(
+            participant_after.internal.terminal_observed_at.is_none(),
+            "proof-gap fixture must leave terminal proof absent"
+        );
+        assert!(
+            participant_after.internal.termination_reason.is_none(),
+            "proof-gap fixture must not synthesize terminal reason"
+        );
+
+        stop_owner.await.expect("proof-gap stop owner task should join");
+        stop_transport.close().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_late_terminal_proof_does_not_retroactively_convert_earlier_failure(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let (stop_tx, mut stop_rx) =
+            crate::execution::agent_runtime::control::private_stop_request_channel();
+        let mut stop_transport =
+            crate::execution::agent_runtime::control::register_private_stop_transport(
+                &store,
+                "sess_dispatch",
+                "ash_member",
+                stop_tx,
+            )
+            .await
+            .expect("register private stop transport");
+        let store_for_task = store.clone();
+        let stop_owner = tokio::spawn(async move {
+            let request = tokio::time::timeout(Duration::from_secs(3), stop_rx.recv())
+                .await
+                .expect("timed out waiting for private stop request")
+                .expect("private stop request");
+            let mut session = store_for_task
+                .load_orchestration_session("sess_dispatch")
+                .expect("load orchestration session for late-proof closeout")
+                .expect("authoritative orchestration session for late-proof closeout");
+            let mut participant = store_for_task
+                .load_participant("ash_member")
+                .expect("load retained participant for late-proof closeout")
+                .expect("authoritative retained participant for late-proof closeout");
+            participant.transition_state(AgentRuntimeSessionState::Stopped);
+            participant.touch_heartbeat();
+            session.touch_active();
+            crate::execution::agent_runtime::control::persist_runtime_snapshots(
+                &store_for_task,
+                &session,
+                &participant,
+            )
+            .expect("persist retained late-proof gap state");
+            let _ = request
+                .response_tx
+                .send(crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted);
+        });
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let earlier_attempt = dispatch_prepared_orchestrator_world_request(prepared).await;
+        let err = earlier_attempt
+            .as_ref()
+            .expect_err("proof-gap stop must fail closed before late proof arrives");
+        let earlier_error = err.to_string();
+        assert_eq!(
+            earlier_error,
+            "owner_unreachable: timed out waiting for retained worker ash_member to reach durable stopped closeout"
+        );
+        assert!(
+            observed_stop_world_worker_closeout(&store, "sess_dispatch", "ash_member")
+                .expect("read stop closeout before late proof")
+                .is_none(),
+            "before late proof, the earlier stop attempt must still have no authoritative closeout"
+        );
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session for late proof write")
+            .expect("authoritative orchestration session for late proof write");
+        let mut participant = store
+            .load_participant("ash_member")
+            .expect("load retained participant for late proof write")
+            .expect("authoritative retained participant for late proof write");
+        participant.mark_terminal_state("late stop proof after caller-visible failure");
+        participant.touch_heartbeat();
+        session.touch_active();
+        crate::execution::agent_runtime::control::persist_runtime_snapshots(
+            &store,
+            &session,
+            &participant,
+        )
+        .expect("persist late terminal proof");
+
+        let later_closeout = observed_stop_world_worker_closeout(&store, "sess_dispatch", "ash_member")
+            .expect("read stop closeout after late proof");
+        assert!(
+            later_closeout.is_some(),
+            "later proof may surface authoritative stopped closeout to read-side observers"
+        );
+        assert!(
+            earlier_attempt.is_err(),
+            "later proof must not retroactively convert the earlier caller-visible stop attempt into success"
+        );
+        assert_eq!(
+            earlier_attempt
+                .as_ref()
+                .expect_err("earlier attempt should remain failed")
+                .to_string(),
+            earlier_error,
+            "later proof must leave the earlier fail-closed result unchanged"
+        );
+
+        stop_owner.await.expect("late-proof stop owner task should join");
         stop_transport.close().await;
     }
 
