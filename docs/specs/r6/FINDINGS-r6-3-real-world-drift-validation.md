@@ -207,6 +207,73 @@ defect list: escaped-`\n` blobs ingested as paths (the dominant poison), unparse
 markdown links, space-split truncated paths, JSON agent-status blobs, prose enumerations, and bare
 model tokens.
 
+## R6-3.5 Result (executed 2026-07-04): Extraction Hardening Landed + Full Re-Run
+
+The charter's Step 1 (extraction hardening) landed as packet `R6-3.5` (see
+`docs/specs/r6/R6-3.5/` spec/plan/tasks), and Step 2's full shadow-eval — the real batch re-run with
+the new extraction code applied, scorer distance metric unchanged — has now been run.
+
+Design (deterministic, no model): a shared `TargetAnchorQuality{Stable,Weak,Junk}` classifier in
+`context/objective.rs`, grounded in two established literatures — log-template variable masking
+(Drain/LogPai "Preprocessing is All You Need"; LogPPT) for the noise masks, and schema-guided
+dialogue typed slots (SGD/DSTC8/FastSGT) for the typed-anchor grammars. Grammar-first: a token
+validating a typed anchor grammar (repo-relative path, recognized-extension file, well-known rootless
+file, Windows path, Rust symbol ref, bare crate name, work-item id, workspace ref, instruction
+surface) is `Stable` and never re-masked; otherwise variable masks (URL/endpoint, `host:port`,
+numeric/coordinate run, hex, duration/timestamp, escaped-control residue) decide `Junk` vs
+plausible-but-untyped `Weak`. Only `Stable` seeds `target`/`comparison_key`. The same taxonomy backs a
+scorer stable-term backstop (`eligible_current_goal` requires ≥1 stable, non-constraint distinguishing
+term) and a bounded opaque-delegated-parent guardrail. The design was reviewed read-only by Codex
+before implementation (widen Stage-B grammars, keep `Weak` non-scoring, one shared classifier, hard-gate
+only `Opaque` parents) and all its deltas were folded in.
+
+Batch re-run (110 sessions, 43 repos, seeded sample; `877` checkpoints — a fresh draw from the grown
+`~/.codex/sessions` store, so this is a directional before→after, not the identical corpus):
+
+| metric | before (F1–F4 / Gate) | after (R6-3.5) |
+| --- | --- | --- |
+| `semantic_goal_drift` fired checkpoints | `6` (all false positives) | **`0`** |
+| rolling + kickoff evidence lines | `1` + `6` | **`0` + `0`** |
+| current-bar eligible | `156` (17.7%) | `137` (15.6%) |
+| current-bar eligible resting on 100%-junk targets | `8 / 156` | **`0 / 137`** |
+| target-resolved eligible | `348` (39.5%) | `234` (26.7%) |
+| target-resolved disjoint adjacent pairs | `12` | `5` |
+| …that survive a stable-only junk filter | `9` | **`5` (0 killed as junk)** |
+| …that are genuine "abandoned goal A for goal B" pivots | `0` | **`0`** |
+
+The `6 → 0` fires and `8 → 0` junk-only eligible are the decisive, sample-robust signals: the junk
+targets that produced 100% of the observed over-fire no longer become eligible. The lower
+target-resolved count (39.5% → 26.7%) is the intended junk removal (garbage no longer counts as a
+grounded target), not a false-negative regression — the surviving eligible targets are legitimate
+typed anchors on hand inspection (`README.md`, `architecture-overview.md`, `sprint-planning.md`,
+`test_azure_blob_client.py`, `templates.contract.ts`, `R6-2.2`, `tests/fixtures`), and the codex
+false-negative watch-list (`Cargo.lock`, `.github/workflows/ci.yml`, bare crate names, `foo::bar`,
+`v2.3.1/notes.md`) is covered by committed unit tests.
+
+All `5` surviving disjoint pairs are legitimate narrowing / progression / work-cycles, not pivots:
+`risks.md,status.md → sprint-planning.md` (doc progression); a `plan/spec/tasks → spec_plan` narrowing;
+the canonical `audit-trio.report.json → audit-trio.model-selection/cohesion-audit.report.json`;
+`…seam-6b…handoff-boundary.md → …harness-convergence-threading.md`; and the
+`async_repl.rs:497 → llm-last-mile/PLAN-04.md` plan→code→plan cycle. This is exactly the residue the
+graduated-distance metric (`R6-3.X.2`, Step 3) is designed to absorb, so the eligibility bar
+(`R6-3.X.3`, Step 4) stays deferred. Locked ordering re-confirmed on real data.
+
+**Delegation caveat (R6-3.5 stratification).** The batch is now reported stratified by a coarse
+session-level delegation marker scan (`scripts/dev/drift-batch-scan/`): `single_agent` = `761` cp /
+`130` current-bar eligible / **`0`** fired / `2` disjoint pairs; `delegated_child_visible` = `116` cp /
+`7` eligible / **`0`** fired / `3` disjoint pairs (no `delegated_parent_opaque` surfaced in this
+sample). Fires are `0` in every category. Precision claims are reported per category rather than
+pooled; opaque delegated sessions remain **secondary** evidence until R7-style parent/child semantic
+support exists. This tag is a reporting heuristic, coarser than the analyzer's per-checkpoint
+`DelegationContext`, which is not serialized into the checkpoint export.
+
+Source map (deterministic design inputs, not repo authority): log-template variable abstraction —
+[Preprocessing is All You Need (arXiv 2412.05254)](https://arxiv.org/pdf/2412.05254),
+[Drain3](https://github.com/logpai/Drain3), [LogPPT (arXiv 2302.07435)](https://arxiv.org/abs/2302.07435);
+schema-guided typed slots — [SGD (arXiv 1909.05855)](https://arxiv.org/pdf/1909.05855),
+[FastSGT (arXiv 2008.12335)](https://arxiv.org/pdf/2008.12335) (the R5 objective-classifier taxonomy
+already cites this family).
+
 ## Next-Steps Charter (for a dedicated fresh session)
 
 ### Step 1 (primary) — Objective-extraction robustness in `context/objective.rs`
@@ -230,7 +297,9 @@ dominant fix. If many survive, they are the narrowing/progression cases that pro
 work (`R6-3.X.2`) is the next blocker. A cheaper first cut can be done as an analysis-only junk-target filter
 over the existing batch data before writing extraction code. **Done (2026-07-03): see the "Gate Result"
 section above — the cheap cut confirmed extraction is the dominant lever (0/6 fires survive, 12→9 pairs,
-no genuine pivot). A full shadow-eval with real extraction code applied is still the remaining Step 2 work.**
+no genuine pivot). Full shadow-eval DONE (2026-07-04): extraction code landed as `R6-3.5` and the real
+re-run confirmed `6 → 0` fires, `8 → 0` junk-only eligible, `12 → 5` disjoint pairs (all legitimate
+progression). See the "R6-3.5 Result" section above.**
 
 ### Step 3 (conditional) — Graduated / weighted distance (`R6-3.X.2`)
 
