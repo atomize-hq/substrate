@@ -2471,8 +2471,14 @@ fn validates_windows_path(token: &str) -> bool {
     // A backslash-separated relative path only counts when its leaf carries a recognized
     // extension; otherwise escaped-control residue (`isolated.\n-`) would masquerade as a path.
     if token.contains('\\') {
-        let segments = token.split('\\').filter(|s| !s.is_empty()).collect::<Vec<_>>();
-        return segments.len() >= 2 && segments.last().is_some_and(|leaf| leaf_has_recognized_extension(leaf));
+        let segments = token
+            .split('\\')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+        return segments.len() >= 2
+            && segments
+                .last()
+                .is_some_and(|leaf| leaf_has_recognized_extension(leaf));
     }
     false
 }
@@ -2493,7 +2499,10 @@ fn validates_rust_symbol_ref(token: &str) -> bool {
             && segment
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_')
-            && segment.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && segment
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
     })
 }
 
@@ -2592,7 +2601,9 @@ fn is_numeric_run(token: &str) -> bool {
 }
 
 fn is_hex_blob(token: &str) -> bool {
-    let body = token.strip_prefix("0x").or_else(|| token.strip_prefix("0X"));
+    let body = token
+        .strip_prefix("0x")
+        .or_else(|| token.strip_prefix("0X"));
     match body {
         Some(rest) => rest.len() >= 4 && rest.chars().all(|c| c.is_ascii_hexdigit()),
         None => {
@@ -2644,14 +2655,17 @@ pub(crate) fn is_stable_goal_term(term: &str) -> bool {
     if term.len() < 2 {
         return false;
     }
-    let segments = term.split('_').filter(|s| !s.is_empty()).collect::<Vec<_>>();
+    let segments = term
+        .split('_')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
     if segments.is_empty() {
         return false;
     }
     // numeric/coordinate run: no segment carries a real word
-    let has_wordy = segments.iter().any(|s| {
-        s.len() >= 2 && s.chars().all(|c| c.is_ascii_alphabetic()) && !is_control_word(s)
-    });
+    let has_wordy = segments
+        .iter()
+        .any(|s| s.len() >= 2 && s.chars().all(|c| c.is_ascii_alphabetic()) && !is_control_word(s));
     if !has_wordy {
         return false;
     }
@@ -3657,8 +3671,9 @@ mod tests {
 
     #[test]
     fn extract_inline_paths_rejects_graphql_startup_log_targets() {
-        let paths =
-            extract_inline_paths("Server listening on http://0.0.0.0:4000/graphql (5s, supergraph)");
+        let paths = extract_inline_paths(
+            "Server listening on http://0.0.0.0:4000/graphql (5s, supergraph)",
+        );
         assert!(
             paths.is_empty(),
             "graphql startup log must yield no path targets, got {paths:?}"
@@ -3674,7 +3689,9 @@ mod tests {
             vec!["crates/agent-drift-analyzer/src/context/objective.rs".to_string()]
         );
         assert_eq!(
-            extract_inline_paths("See [architecture overview](docs/architecture_overview.md) first."),
+            extract_inline_paths(
+                "See [architecture overview](docs/architecture_overview.md) first."
+            ),
             vec!["docs/architecture_overview.md".to_string()]
         );
         let mixed = extract_inline_paths("touch .github/workflows/ci.yml and Cargo.lock");
@@ -3730,13 +3747,25 @@ mod tests {
 
     #[test]
     fn is_stable_goal_term_rejects_normalized_junk() {
-        for junk in ["0_0_0_0_4000", "5_n_n", "0_0_0_0_4000_n", "n", "gpt_5_4", "5s"] {
+        for junk in [
+            "0_0_0_0_4000",
+            "5_n_n",
+            "0_0_0_0_4000_n",
+            "n",
+            "gpt_5_4",
+            "5s",
+        ] {
             assert!(
                 !is_stable_goal_term(junk),
                 "normalized term `{junk}` must not be a stable goal term"
             );
         }
-        for stable in ["objective_rs", "architecture_overview_md", "readme_md", "agent_drift_analyzer"] {
+        for stable in [
+            "objective_rs",
+            "architecture_overview_md",
+            "readme_md",
+            "agent_drift_analyzer",
+        ] {
             assert!(
                 is_stable_goal_term(stable),
                 "normalized term `{stable}` must remain a stable goal term"

@@ -439,7 +439,8 @@ mod tests {
 
     use super::{
         eligible_current_goal, score_semantic_goal_drift, CURRENT_GOAL_REASON_PREFIX,
-        KICKOFF_ANCHOR_REASON_PREFIX, ROLLING_CURRENT_REASON_PREFIX, ROLLING_PREVIOUS_REASON_PREFIX,
+        KICKOFF_ANCHOR_REASON_PREFIX, ROLLING_CURRENT_REASON_PREFIX,
+        ROLLING_PREVIOUS_REASON_PREFIX,
     };
     use crate::checkpoint::{
         CheckpointAnalysis, CheckpointSlice, Confidence, EvidenceRef, ObjectiveClass,
@@ -552,8 +553,11 @@ mod tests {
         // R6-3.5 backstop: a target resting entirely on log/coordinate junk (F2 finding) is not
         // a semantically eligible goal, even though it clears TaskStatement + Medium + no-unknowns.
         let junk = structured_goal("0.0.0.0:4000", Confidence::High, Vec::new());
-        let summary =
-            objective_summary("implement|file_or_directory|0_0_0_0_4000", Some(junk), "goal");
+        let summary = objective_summary(
+            "implement|file_or_directory|0_0_0_0_4000",
+            Some(junk),
+            "goal",
+        );
         assert!(
             eligible_current_goal(&summary).is_none(),
             "junk-only target must not be an eligible current goal"
@@ -580,11 +584,18 @@ mod tests {
 
     #[test]
     fn semantic_goal_drift_does_not_fire_on_junk_only_current_goal() {
-        let anchor =
-            structured_goal("docs/architecture_overview.md", Confidence::High, Vec::new());
+        let anchor = structured_goal(
+            "docs/architecture_overview.md",
+            Confidence::High,
+            Vec::new(),
+        );
         let current = structured_goal("0.0.0.0:4000", Confidence::High, Vec::new());
         let analysis = analysis_with_summary(
-            objective_summary("implement|file_or_directory|0_0_0_0_4000", Some(current), "goal"),
+            objective_summary(
+                "implement|file_or_directory|0_0_0_0_4000",
+                Some(current),
+                "goal",
+            ),
             false,
         );
 
