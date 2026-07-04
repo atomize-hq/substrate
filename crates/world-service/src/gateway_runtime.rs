@@ -1961,9 +1961,12 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
             if let Ok(raw) = fs::read_to_string(&path) {
-                let pid = raw.trim().parse::<u32>().expect("parse pid");
-                if pid > 0 {
-                    return pid;
+                let trimmed = raw.trim();
+                if !trimmed.is_empty() {
+                    let pid = trimmed.parse::<u32>().expect("parse pid");
+                    if pid > 0 {
+                        return pid;
+                    }
                 }
             }
             assert!(

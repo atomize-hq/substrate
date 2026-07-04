@@ -426,9 +426,9 @@ This spec is satisfied only when implementation and smoke validation prove all o
 7. When sanctioned recovery is available and exact-target authority can still be proven, stop requires one bounded authority recovery attempt plus exactly one bounded exact-target re-attempt within the same stop episode.
 8. Linux-first smoke validation proves both the positive recovered-stop path and the negative dead-transport fail-closed path.
 
-## Open Questions
+## Resolved Planning Decision
 
-1. Should the corrected stop outcome surface use one stable error taxonomy for `missing_transport`, `refused_transport`, `stale_authority`, and `recovery_failed`, or is the existing error-shape contract already sufficient if those distinctions are preserved textually? This should be settled in the follow-on plan before implementation starts.
+1. This slice keeps the existing caller-visible error/result shape and preserves stable textual distinctions for `missing_transport`, `refused_transport`, `stale_authority`, and `recovery_failed`; it does not introduce a new typed stop-outcome taxonomy.
 
 ## Expected Follow-On Plan
 

@@ -250,7 +250,7 @@ Session goal:
   - Files:
     - no planned source edits; validation only
 
-- [ ] Task: Capture Linux-first positive and negative proof for the corrected stop episode
+- [x] Task: Capture Linux-first positive and negative proof for the corrected stop episode
   - Acceptance: the post-implementation proof wall includes one Linux-first positive path where sanctioned recovery succeeds and one exact-target re-attempt reaches terminal stopped proof, plus one Linux-first negative path where delivery fails and durable closeout cannot be proven, producing a fail-closed caller-visible outcome; non-Linux remains explicitly fail-closed rather than semantically divergent.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`
@@ -258,7 +258,7 @@ Session goal:
   - Files:
     - no planned source edits; validation and smoke evidence only
 
-- [ ] Task: Align slice-local artifacts and capture final proof for review
+- [x] Task: Align slice-local artifacts and capture final proof for review
   - Acceptance: the slice-local planning/closeout artifacts accurately reflect the implemented stop contract and its validation proof: `SPEC-64`, `PLAN-64`, and `TASKS-64` remain consistent with the landed behavior; any slice-local closeout or review note added during implementation names the Linux-first positive and negative proof paths actually exercised; and no artifact text implies public stop redesign, transport-defined success, non-Linux semantic parity, or a new typed stop-outcome taxonomy in this slice.
   - Verify:
     - `rg -n "typed stop-outcome taxonomy|public stop|transport.*success|Linux-first|fail-closed|recovery_failed|missing_transport|refused_transport|stale_authority" llm-last-mile/SPEC-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md llm-last-mile/PLAN-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md llm-last-mile/TASKS-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`
@@ -268,6 +268,8 @@ Session goal:
     - [`llm-last-mile/PLAN-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`](./PLAN-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md) only if wording must be updated to match landed truth
     - [`llm-last-mile/TASKS-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`](./TASKS-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md) only if wording must be updated to match landed truth
     - one slice-local closeout or implementation note in `llm-last-mile/` only if implementation adds one as the review evidence carrier
+  - Evidence:
+    - [`llm-last-mile/NOTE-64-stop-world-worker-authority-and-fail-closed-closeout-proof.md`](./NOTE-64-stop-world-worker-authority-and-fail-closed-closeout-proof.md)
 
 ### Packet 5 Checkpoint
 

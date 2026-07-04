@@ -709,6 +709,89 @@ impl ResolvedInternalStopWorldDispatchTarget {
         self.exact_target
             .ensure_matches(&refreshed.target_participant)
     }
+
+    pub(crate) fn project_refreshed_exact_target(
+        &self,
+        record: AgentRuntimeSessionRecord,
+    ) -> Result<Self> {
+        let session = record.session;
+        let mut matching_participants = record
+            .participants
+            .into_iter()
+            .filter(|participant| {
+                participant.participant_id() == self.target_participant.participant_id()
+            })
+            .collect::<Vec<_>>();
+
+        if matching_participants.is_empty() {
+            anyhow::bail!(
+                "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                session.orchestration_session_id,
+                self.target_participant.participant_id()
+            );
+        }
+        if matching_participants.len() > 1 {
+            anyhow::bail!(
+                "ambiguous_target_participant: orchestration session {} has multiple retained worker records for {}",
+                session.orchestration_session_id,
+                self.target_participant.participant_id()
+            );
+        }
+
+        let target_participant = matching_participants
+            .pop()
+            .expect("target participant count checked above");
+        if target_participant.handle.orchestration_session_id != session.orchestration_session_id {
+            anyhow::bail!(
+                "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                session.orchestration_session_id,
+                self.target_participant.participant_id()
+            );
+        }
+        if target_participant.handle.role != MEMBER_ROLE
+            || target_participant.handle.execution.scope != AgentExecutionScope::World
+        {
+            anyhow::bail!(
+                "invalid_target_participant: orchestration session {} participant {} is not a retained world worker",
+                session.orchestration_session_id,
+                target_participant.participant_id()
+            );
+        }
+        self.exact_target.ensure_matches(&target_participant)?;
+        if !target_participant.matches_authoritative_parent_world_binding(&session) {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} retained worker {} no longer matches the authoritative world binding",
+                session.orchestration_session_id,
+                target_participant.participant_id()
+            );
+        }
+        if !target_participant.handle.state.is_live()
+            || target_participant.internal.terminal_observed_at.is_some()
+        {
+            let terminal_state = match target_participant.handle.state {
+                super::session::AgentRuntimeSessionState::Stopped => "stopped",
+                super::session::AgentRuntimeSessionState::Failed => "failed",
+                super::session::AgentRuntimeSessionState::Invalidated => "invalidated",
+                super::session::AgentRuntimeSessionState::Allocating
+                | super::session::AgentRuntimeSessionState::Ready
+                | super::session::AgentRuntimeSessionState::Running
+                | super::session::AgentRuntimeSessionState::Restarting
+                | super::session::AgentRuntimeSessionState::Stopping => "terminal",
+            };
+            anyhow::bail!(
+                "target_already_terminal: orchestration session {} retained worker {} is already terminal ({})",
+                session.orchestration_session_id,
+                target_participant.participant_id(),
+                terminal_state
+            );
+        }
+        Ok(Self {
+            session,
+            caller_participant: self.caller_participant.clone(),
+            target_participant,
+            exact_target: self.exact_target.clone(),
+        })
+    }
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -12120,6 +12203,56 @@ mod tests {
                     .orchestrator_participant_id
                     .as_deref(),
                 Some("orch_stop")
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn project_refreshed_exact_target_rejects_target_missing_from_session_participant_set() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_stop", "orch_stop");
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            let member = live_member("codex_world", "sess_stop", "ash_stop", "orch_stop");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let resolved = store
+                .resolve_internal_stop_world_dispatch_target(
+                    "sess_stop",
+                    "orch_stop",
+                    "ash_stop",
+                    "cli:codex_world",
+                )
+                .expect("resolve exact retained stop target");
+
+            let mut refreshed = store
+                .load_session("sess_stop")
+                .expect("load refreshed session")
+                .expect("refreshed session");
+            refreshed.session.active_session_handle_id = None;
+            refreshed
+                .session
+                .mark_parked_resumable("owner detached before refreshed projection");
+            refreshed
+                .participants
+                .retain(|participant| participant.participant_id() != "ash_stop");
+
+            let err = resolved
+                .project_refreshed_exact_target(refreshed)
+                .expect_err("refreshed projection must fail when the exact target is absent from the session participant set");
+
+            assert_eq!(
+                err.to_string(),
+                "target_not_in_session: orchestration session sess_stop has no exact retained worker ash_stop"
             );
         });
     }

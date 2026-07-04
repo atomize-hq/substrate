@@ -2363,46 +2363,45 @@ async fn stop_world_worker(
         used_private_stop_surface = false;
         persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
     } else {
-        let transport_result = request_private_stop_after_transport_registration_for_stop_episode(
+        match request_private_stop_after_transport_registration_for_stop_episode(
             &prepared.store,
             &resolved,
             &transport_path,
         )
-        .await;
-        if let Err(transport_err) = &transport_result {
-            if let Some(closeout) = observed_stop_world_worker_closeout(
-                &prepared.store,
-                &resolved.session.orchestration_session_id,
-                resolved.target_participant.participant_id(),
-            )? {
-                closeout
-            } else if detached_stop_world_worker_closeout_available(
-                &prepared.store,
-                &resolved,
-                &transport_path,
-                Some(transport_err),
-            ) || detached_stop_world_worker_closeout_available_after_transport_failure(
-                &prepared.store,
-                &resolved,
-                &transport_path,
-                transport_err,
-            ) {
-                used_private_stop_surface = false;
-                persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
-            } else {
-                return Err(stop_world_worker_recovery_failed(format!(
+        .await
+        {
+            Err(transport_err) => {
+                if let Some(closeout) = observed_stop_world_worker_closeout(
+                    &prepared.store,
+                    &resolved.session.orchestration_session_id,
+                    resolved.target_participant.participant_id(),
+                )? {
+                    closeout
+                } else if detached_stop_world_worker_closeout_available(
+                    &prepared.store,
+                    &resolved,
+                    &transport_path,
+                    Some(&transport_err),
+                )
+                    || detached_stop_world_worker_closeout_available_after_transport_failure(
+                        &prepared.store,
+                        &resolved,
+                        &transport_path,
+                        &transport_err,
+                    )?
+                {
+                    used_private_stop_surface = false;
+                    persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
+                } else if private_stop_transport_error_kind(&transport_err).is_none() {
+                    return Err(transport_err);
+                } else {
+                    return Err(stop_world_worker_recovery_failed(format!(
                     "failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({transport_err:#})",
                     resolved.target_participant.participant_id()
                 )));
-            }
-        } else {
-            let transport_outcome = match transport_result {
-                Ok(outcome) => outcome,
-                Err(_) => {
-                    unreachable!("Ok transport_result branch must carry only private stop outcomes")
                 }
-            };
-            match transport_outcome {
+            }
+            Ok(transport_outcome) => match transport_outcome {
                 PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal => {
                     wait_for_stop_world_worker_closeout(
                         &prepared.store,
@@ -2439,7 +2438,7 @@ async fn stop_world_worker(
                         )));
                     }
                 }
-            }
+            },
         }
     };
     let summary = summarize_stop_world_worker_result(
@@ -4160,7 +4159,7 @@ async fn request_private_stop_after_transport_registration_for_stop_episode(
         resolved,
         transport_path,
         &initial_result,
-    ) {
+    )? {
         return initial_result;
     }
     #[cfg(test)]
@@ -4169,7 +4168,7 @@ async fn request_private_stop_after_transport_registration_for_stop_episode(
         PrivateStopTransportRetryEvent::RetryWaitStarted,
     );
     let started_at = Instant::now();
-    while !exact_target_stop_recovery_retry_ready(store, resolved, transport_path) {
+    while !exact_target_stop_recovery_retry_ready(store, resolved, transport_path)? {
         if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
             return initial_result;
         }
@@ -4188,21 +4187,22 @@ fn exact_target_stop_recovery_retry_ready(
     store: &AgentRuntimeStateStore,
     resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
     transport_path: &Path,
-) -> bool {
+) -> Result<bool> {
     if !transport_path.exists() {
-        return false;
+        return Ok(false);
     }
 
-    let Some(refreshed_resolved) = refreshed_sanctioned_stop_world_dispatch_target(store, resolved)
+    let Some(refreshed_resolved) =
+        refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?
     else {
-        return false;
+        return Ok(false);
     };
 
     // A republished socket alone is not enough: the bounded retry only unlocks once
     // authoritative owner truth has actually recovered for the same exact retained target.
-    refreshed_resolved.caller_participant.participant_id()
+    Ok(refreshed_resolved.caller_participant.participant_id()
         != resolved.caller_participant.participant_id()
-        || refreshed_resolved.session.posture != resolved.session.posture
+        || refreshed_resolved.session.posture != resolved.session.posture)
 }
 
 #[cfg(test)]
@@ -4707,7 +4707,7 @@ fn stop_world_worker_sanctioned_recovery_retry_available(
     resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
     transport_path: &Path,
     initial_result: &Result<PrivateStopOutcome>,
-) -> bool {
+) -> Result<bool> {
     let qualifies_current_owner_delivery_refusal = match initial_result {
         Ok(PrivateStopOutcome::OwnerUnreachable) => true,
         Err(err) => {
@@ -4720,7 +4720,7 @@ fn stop_world_worker_sanctioned_recovery_retry_available(
         Ok(_) => false,
     };
     if !qualifies_current_owner_delivery_refusal {
-        return false;
+        return Ok(false);
     }
     if observed_stop_world_worker_closeout(
         store,
@@ -4731,35 +4731,73 @@ fn stop_world_worker_sanctioned_recovery_retry_available(
     .flatten()
     .is_some()
     {
-        return false;
+        return Ok(false);
     }
 
-    refreshed_sanctioned_stop_world_dispatch_target(store, resolved).is_some()
+    Ok(refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?.is_some())
 }
 
 #[cfg(target_os = "linux")]
 fn refreshed_sanctioned_stop_world_dispatch_target(
     store: &AgentRuntimeStateStore,
     resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
-) -> Option<crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget> {
+) -> Result<
+    Option<crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget>,
+> {
     let session = match store.load_orchestration_session(&resolved.session.orchestration_session_id)
     {
         Ok(Some(session)) => session,
-        Ok(None) | Err(_) => return None,
+        Ok(None) => return Ok(None),
+        Err(err) => return Err(err),
     };
-    let authoritative_caller_participant_id = session.sanctioned_stop_owner_participant_id()?;
-    let refreshed_resolved = store
-        .resolve_internal_stop_world_dispatch_target(
-            &resolved.session.orchestration_session_id,
-            authoritative_caller_participant_id,
-            resolved.target_participant.participant_id(),
-            &resolved.target_participant.handle.backend_id,
-        )
-        .ok()?;
-    resolved
-        .ensure_exact_target_match(&refreshed_resolved)
-        .ok()?;
-    Some(refreshed_resolved)
+    let Some(authoritative_caller_participant_id) = session.sanctioned_stop_owner_participant_id()
+    else {
+        return Ok(None);
+    };
+    let refreshed_resolved = store.resolve_internal_stop_world_dispatch_target(
+        &resolved.session.orchestration_session_id,
+        authoritative_caller_participant_id,
+        resolved.target_participant.participant_id(),
+        &resolved.target_participant.handle.backend_id,
+    )?;
+    resolved.ensure_exact_target_match(&refreshed_resolved)?;
+    Ok(Some(refreshed_resolved))
+}
+
+#[cfg(target_os = "linux")]
+fn refreshed_detached_exact_stop_world_dispatch_target(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+) -> Result<
+    Option<crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget>,
+> {
+    let session = match store.load_orchestration_session(&resolved.session.orchestration_session_id)
+    {
+        Ok(Some(session)) => session,
+        Ok(None) => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    if session.state
+        != crate::execution::agent_runtime::orchestration_session::OrchestrationSessionState::Active
+    {
+        return Ok(None);
+    }
+    if session.posture
+        == crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::ActiveAttached
+    {
+        return Ok(None);
+    }
+
+    let record = match store.load_session(&resolved.session.orchestration_session_id) {
+        Ok(Some(record)) => record,
+        Ok(None) => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    debug_assert_eq!(
+        record.session.orchestration_session_id, session.orchestration_session_id,
+        "detached exact-target refresh must keep authoritative session identity aligned"
+    );
+    Ok(Some(resolved.project_refreshed_exact_target(record)?))
 }
 
 #[cfg(target_os = "linux")]
@@ -4768,25 +4806,30 @@ fn detached_stop_world_worker_closeout_available_after_transport_failure(
     resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
     transport_path: &Path,
     transport_error: &anyhow::Error,
-) -> bool {
+) -> Result<bool> {
     // The refreshed re-resolution path is only intended for the stale live-socket seam:
     // we saw a stop socket, attempted delivery, and got ECONNREFUSED while session truth
     // may have flipped to parked resumable during that wait window.
     if !transport_path.exists() || !detached_stop_transport_is_unusable(transport_error) {
-        return false;
+        return Ok(false);
     }
 
-    let Some(refreshed_resolved) = refreshed_sanctioned_stop_world_dispatch_target(store, resolved)
-    else {
-        return false;
+    let Some(refreshed_resolved) = (if let Some(refreshed) =
+        refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?
+    {
+        Some(refreshed)
+    } else {
+        refreshed_detached_exact_stop_world_dispatch_target(store, resolved)?
+    }) else {
+        return Ok(false);
     };
 
-    detached_stop_world_worker_closeout_available(
+    Ok(detached_stop_world_worker_closeout_available(
         store,
         &refreshed_resolved,
         transport_path,
         Some(transport_error),
-    )
+    ))
 }
 
 #[cfg(target_os = "linux")]
@@ -4820,29 +4863,40 @@ fn persist_detached_stop_world_worker_closeout(
     store: &AgentRuntimeStateStore,
     resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
 ) -> Result<RetainedWorkerStopCloseoutV1> {
-    let session = store
-        .load_orchestration_session(&resolved.session.orchestration_session_id)?
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "missing_orchestration_session: orchestration session {} disappeared before detached durable stop closeout could be persisted",
-                resolved.session.orchestration_session_id
-            )
-        })?;
-    let authoritative_caller_participant_id =
-        session.sanctioned_stop_owner_participant_id().ok_or_else(|| {
-            anyhow::anyhow!(
-                "stale_linkage: orchestration session {} lost its sanctioned stop owner before detached durable stop closeout could be persisted",
-                resolved.session.orchestration_session_id
-            )
-        })?;
-    let refreshed_resolved = store.resolve_internal_stop_world_dispatch_target(
-        &resolved.session.orchestration_session_id,
-        authoritative_caller_participant_id,
-        resolved.target_participant.participant_id(),
-        &resolved.target_participant.handle.backend_id,
-    )?;
+    let refreshed_resolved = if let Some(refreshed_resolved) =
+        refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?
+    {
+        refreshed_resolved
+    } else if let Some(refreshed_resolved) =
+        refreshed_detached_exact_stop_world_dispatch_target(store, resolved)?
+    {
+        refreshed_resolved
+    } else {
+        let session = store
+            .load_orchestration_session(&resolved.session.orchestration_session_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing_orchestration_session: orchestration session {} disappeared before detached durable stop closeout could be persisted",
+                    resolved.session.orchestration_session_id
+                )
+            })?;
+        let authoritative_caller_participant_id =
+            session.sanctioned_stop_owner_participant_id().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "stale_linkage: orchestration session {} lost its sanctioned stop owner before detached durable stop closeout could be persisted",
+                    resolved.session.orchestration_session_id
+                )
+            })?;
+        store.resolve_internal_stop_world_dispatch_target(
+            &resolved.session.orchestration_session_id,
+            authoritative_caller_participant_id,
+            resolved.target_participant.participant_id(),
+            &resolved.target_participant.handle.backend_id,
+        )?
+    };
     // Preserve the original exact retained-worker contract across owner rebinding.
-    // The refreshed sanctioned owner may change, but the retained worker tuple must not.
+    // Detached fallback may no longer have a sanctioned owner to re-resolve through,
+    // but the retained worker tuple must still remain exact.
     resolved.ensure_exact_target_match(&refreshed_resolved)?;
     let mut session = refreshed_resolved.session;
     let mut participant = refreshed_resolved.target_participant;
@@ -14889,7 +14943,8 @@ agents:
                 &resolved,
                 &transport_path,
                 &connection_refused,
-            ),
+            )
+            .expect("refreshed parked session recheck"),
             "fresh authoritative session truth should unlock detached stop fallback once the session becomes parked resumable after a refused private stop"
         );
     }
@@ -14937,8 +14992,62 @@ agents:
                 &resolved,
                 &transport_path,
                 &not_found,
-            ),
+            )
+            .expect("missing-socket fail-closed recheck"),
             "fresh-session recheck must remain fail-closed for missing-socket NotFound transport failures even after session truth flips"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn detached_stop_world_worker_closeout_availability_recheck_accepts_parked_truth_without_sanctioned_owner(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative active stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        let connection_refused =
+            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load authoritative session")
+            .expect("authoritative session");
+        session.active_session_handle_id = None;
+        session.mark_parked_resumable("owner detached after refused private stop");
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist refreshed parked session without sanctioned owner");
+
+        assert!(
+            detached_stop_world_worker_closeout_available_after_transport_failure(
+                &store,
+                &resolved,
+                &transport_path,
+                &connection_refused,
+            )
+            .expect("parked no-owner recheck"),
+            "fresh parked truth without a sanctioned owner should still unlock detached fallback when the exact worker stop socket is stale"
         );
     }
 
@@ -15202,6 +15311,297 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
+    async fn dispatch_contract_stop_world_worker_persists_detached_closeout_after_refused_transport_when_session_parks_without_sanctioned_owner(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        let store_for_hook = store.clone();
+        let transport_path_for_hook = transport_path.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+                return;
+            }
+            assert_eq!(
+                path,
+                transport_path_for_hook.as_path(),
+                "retry wait must stay pinned to the exact retained worker stop socket"
+            );
+
+            let mut launch_orchestrator = store_for_hook
+                .load_participant("orch_dispatch")
+                .expect("load launch orchestrator")
+                .expect("launch orchestrator");
+            launch_orchestrator.mark_client_detached("parked after refused private stop");
+            store_for_hook
+                .persist_participant(&launch_orchestrator)
+                .expect("persist detached launch orchestrator");
+
+            let mut session = store_for_hook
+                .load_orchestration_session("sess_dispatch")
+                .expect("load authoritative orchestration session")
+                .expect("authoritative orchestration session");
+            session.active_session_handle_id = None;
+            session.mark_parked_resumable("owner detached after refused private stop");
+            store_for_hook
+                .persist_orchestration_session(&session)
+                .expect("persist parked-resumable session without sanctioned owner");
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch parked detached stop request without sanctioned owner");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
+        assert_eq!(
+            outcome.closeout.participant_state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            outcome.closeout.session_state,
+            OrchestrationSessionState::Active
+        );
+        assert!(
+            outcome.summary.contains("detached durable closeout"),
+            "parked session without a sanctioned owner should still persist detached durable closeout after refused exact-target stop transport: {}",
+            outcome.summary
+        );
+
+        let session_after = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session after detached fallback")
+            .expect("orchestration session after detached fallback");
+        assert_eq!(
+            session_after.posture,
+            OrchestrationSessionPosture::ParkedResumable
+        );
+        assert!(
+            session_after.active_participant_id().is_none(),
+            "detached fallback must not synthesize a sanctioned owner after the session has parked"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after detached fallback")
+            .expect("retained participant after detached fallback");
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Stopped
+        );
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("stopped")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_surfaces_detached_revalidation_contract_error_after_refused_transport(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+
+        let store_for_hook = store.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, _path: &Path| {
+            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+                return;
+            }
+
+            let mut launch_orchestrator = store_for_hook
+                .load_participant("orch_dispatch")
+                .expect("load launch orchestrator")
+                .expect("launch orchestrator");
+            launch_orchestrator
+                .mark_client_detached("parked before detached exact-target contract failure");
+            store_for_hook
+                .persist_participant(&launch_orchestrator)
+                .expect("persist detached launch orchestrator");
+
+            let mut session = store_for_hook
+                .load_orchestration_session("sess_dispatch")
+                .expect("load authoritative orchestration session")
+                .expect("authoritative orchestration session");
+            session.active_session_handle_id = None;
+            session.mark_parked_resumable(
+                "owner detached before detached exact-target contract failure",
+            );
+            store_for_hook
+                .persist_orchestration_session(&session)
+                .expect("persist parked-resumable session without sanctioned owner");
+
+            let mut participant = store_for_hook
+                .load_participant("ash_member")
+                .expect("load retained participant")
+                .expect("retained participant");
+            participant.mark_terminal_state("worker invalidated");
+            participant.transition_state(AgentRuntimeSessionState::Invalidated);
+            store_for_hook
+                .persist_participant(&participant)
+                .expect("persist invalidated retained participant");
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let err = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect_err("detached exact-target contract error should surface directly");
+
+        assert_eq!(
+            err.to_string(),
+            "target_already_terminal: orchestration session sess_dispatch retained worker ash_member is already terminal (invalidated)"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_stop_world_worker_surfaces_sanctioned_refresh_contract_error_after_owner_unreachable(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["stop_world_worker"],
+            &["retained"],
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let initial_server = Arc::new(Mutex::new(Some(spawn_scripted_private_stop_server(
+            &transport_path,
+            vec![PrivateStopOutcome::OwnerUnreachable],
+        ))));
+        let retry_events = Arc::new(Mutex::new(
+            Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
+        ));
+        let retry_events_for_hook = retry_events.clone();
+        let store_for_hook = store.clone();
+        let initial_server_for_hook = initial_server.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock retry events")
+                .push((event, path.to_path_buf()));
+            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+                return;
+            }
+
+            initial_server_for_hook
+                .lock()
+                .expect("lock initial owner_unreachable server")
+                .take()
+                .expect("initial owner_unreachable server must still be owned by the fixture")
+                .join()
+                .expect("initial owner_unreachable server should exit before revalidation");
+
+            let mut session = store_for_hook
+                .load_orchestration_session("sess_dispatch")
+                .expect("load authoritative orchestration session")
+                .expect("authoritative orchestration session");
+            session.set_world_binding("world-19".to_string(), 3);
+            store_for_hook
+                .persist_orchestration_session(&session)
+                .expect("persist drifted authoritative session");
+
+            let transport_parent = path.parent().expect("private stop transport path parent");
+            std::fs::create_dir_all(transport_parent)
+                .expect("create private stop transport parent");
+            let stale_listener = std::os::unix::net::UnixListener::bind(path)
+                .expect("bind stale private stop socket for sanctioned refresh revalidation");
+            drop(stale_listener);
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let err = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect_err("sanctioned refresh contract error should surface directly");
+
+        assert_eq!(
+            err.to_string(),
+            "world_binding_mismatch: orchestration session sess_dispatch retained worker ash_member no longer matches the authoritative world binding"
+        );
+
+        let retry_events = retry_events.lock().expect("lock retry events");
+        assert_eq!(
+            retry_events.as_slice(),
+            &[
+                (
+                    PrivateStopTransportRetryEvent::InitialAttempt,
+                    transport_path.clone(),
+                ),
+                (
+                    PrivateStopTransportRetryEvent::RetryWaitStarted,
+                    transport_path.clone(),
+                ),
+            ],
+            "sanctioned refresh contract failure must stop before issuing a generic retry or widening transport scope"
+        );
+        assert!(
+            initial_server
+                .lock()
+                .expect("lock initial owner_unreachable server after revalidation")
+                .is_none(),
+            "the response-level refusal fixture must retire the original owner_unreachable server before sanctioned refresh revalidation"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
     async fn dispatch_contract_stop_world_worker_prefers_private_stop_surface_for_parked_resumable_with_live_transport(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
@@ -15365,6 +15765,67 @@ agents:
         assert_eq!(
             err.to_string(),
             "target_already_terminal: orchestration session sess_dispatch retained worker ash_member is already terminal (invalidated)"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_terminal_target_race_without_sanctioned_owner(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative stop target before terminal race");
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session")
+            .expect("orchestration session");
+        session.active_session_handle_id = None;
+        session.mark_parked_resumable("owner detached before detached fallback closeout");
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist parked session without sanctioned owner");
+
+        let mut participant = store
+            .load_participant("ash_member")
+            .expect("load retained participant")
+            .expect("retained participant");
+        participant.mark_terminal_state("worker invalidated");
+        participant.transition_state(AgentRuntimeSessionState::Invalidated);
+        store
+            .persist_participant(&participant)
+            .expect("persist invalidated participant");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved)
+            .expect_err("terminal target race without sanctioned owner must fail closed");
+
+        assert_eq!(
+            err.to_string(),
+            "target_already_terminal: orchestration session sess_dispatch retained worker ash_member is already terminal (invalidated)"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after rejected closeout")
+            .expect("retained participant after rejected closeout");
+        assert_eq!(
+            participant_after.handle.state,
+            AgentRuntimeSessionState::Invalidated
+        );
+        assert_eq!(
+            participant_after.internal.termination_reason.as_deref(),
+            Some("worker invalidated")
         );
     }
 
@@ -15585,6 +16046,59 @@ agents:
         assert!(
             participant_after.internal.termination_reason.is_none(),
             "fallback must not persist stop closeout after world-binding mutation"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn persist_detached_stop_world_worker_closeout_rejects_session_only_world_binding_drift_without_sanctioned_owner(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative stop target before session-only world drift");
+
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session")
+            .expect("orchestration session");
+        session.active_session_handle_id = None;
+        session.mark_parked_resumable("owner detached before world-binding drift");
+        session.set_world_binding("world-19".to_string(), 3);
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist parked session with drifted authoritative world binding");
+
+        let err = persist_detached_stop_world_worker_closeout(&store, &resolved).expect_err(
+            "session-only authoritative world-binding drift without sanctioned owner must fail closed",
+        );
+
+        assert_eq!(
+            err.to_string(),
+            "world_binding_mismatch: orchestration session sess_dispatch retained worker ash_member no longer matches the authoritative world binding"
+        );
+
+        let participant_after = store
+            .load_participant("ash_member")
+            .expect("load retained participant after world-binding rejection")
+            .expect("retained participant after world-binding rejection");
+        assert!(
+            participant_after.handle.state.is_live(),
+            "session-only world-binding drift must not persist detached stop closeout"
+        );
+        assert!(
+            participant_after.internal.termination_reason.is_none(),
+            "session-only world-binding drift must not stamp stop proof"
         );
     }
 
