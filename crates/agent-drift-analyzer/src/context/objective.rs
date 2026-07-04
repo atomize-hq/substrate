@@ -1985,7 +1985,7 @@ fn is_insufficient_target_reference(text: &str) -> bool {
 fn extract_work_item_identifier(text: &str) -> Option<String> {
     cleaned_target_tokens(text)
         .into_iter()
-        .find(|token| looks_like_work_item_identifier(token))
+        .find(|token| is_stable_work_item_identifier(token))
 }
 
 fn looks_like_work_item_identifier(token: &str) -> bool {
@@ -2216,6 +2216,13 @@ fn looks_like_explicit_named_target(token: &str) -> bool {
         return false;
     }
 
+    // R6-3.5: never treat log/coordinate noise or bare model/version tokens (`GPT-5.4`, `v2.3.1`)
+    // as a named target — the `>= 2 uppercase` / `contains('-')` rules below would otherwise admit
+    // them. The work-item grammar is the model-aware `is_stable_work_item_identifier`.
+    if is_variable_noise_token(&cleaned) || is_model_or_version_token(&cleaned) {
+        return false;
+    }
+
     cleaned.starts_with('@')
         || cleaned.contains('/')
         || cleaned.contains('\\')
@@ -2223,9 +2230,30 @@ fn looks_like_explicit_named_target(token: &str) -> bool {
         || cleaned.contains('_')
         || cleaned.ends_with(".md")
         || cleaned.ends_with(".rs")
-        || looks_like_work_item_identifier(&cleaned)
+        || is_stable_work_item_identifier(&cleaned)
         || cleaned.chars().filter(|ch| ch.is_ascii_uppercase()).count() >= 2
         || (cleaned.contains('-') && cleaned.chars().any(|ch| ch.is_ascii_alphabetic()))
+}
+
+/// Bare model/assistant name (`GPT-5.4`, `claude-3`) or bare version token (`v2.3.1`, `1.2.0`).
+/// Runtime metadata, never a task target.
+fn is_model_or_version_token(token: &str) -> bool {
+    let lower = token.to_ascii_lowercase();
+    let prefix = lower
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>();
+    if !prefix.is_empty()
+        && MODEL_NAME_PREFIXES.contains(&prefix.as_str())
+        && lower.chars().any(|c| c.is_ascii_digit())
+    {
+        return true;
+    }
+    let body = lower.strip_prefix('v').unwrap_or(&lower);
+    !body.is_empty()
+        && body.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && body.contains('.')
+        && body.chars().any(|c| c.is_ascii_digit())
 }
 
 // ---------------------------------------------------------------------------
@@ -3654,6 +3682,20 @@ mod tests {
             paths.is_empty(),
             "truncated external path fragment is not a stable path, got {paths:?}"
         );
+    }
+
+    #[test]
+    fn named_target_extraction_rejects_model_tokens_but_keeps_work_items() {
+        assert!(!looks_like_explicit_named_target("GPT-5.4"));
+        assert!(!looks_like_explicit_named_target("gpt-4o"));
+        assert!(is_model_or_version_token("GPT-5.4"));
+        assert!(is_model_or_version_token("v2.3.1"));
+        assert!(!is_model_or_version_token("SO-2.3B"));
+        assert_eq!(
+            extract_work_item_identifier("Land SO-2.3B packet"),
+            Some("SO-2.3B".to_string())
+        );
+        assert_eq!(extract_work_item_identifier("Use GPT-5.4 to review"), None);
     }
 
     #[test]
