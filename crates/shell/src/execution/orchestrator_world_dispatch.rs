@@ -31,8 +31,9 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
-    persist_runtime_stop_closeout, private_cancel_transport_path, private_stop_transport_path,
-    request_private_cancel, request_private_stop, PrivateCancelOutcome, PrivateStopOutcome,
+    persist_runtime_stop_closeout, private_cancel_transport_path,
+    private_stop_transport_error_kind, private_stop_transport_path, request_private_cancel,
+    request_private_stop, PrivateCancelOutcome, PrivateStopOutcome,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::dispatch_contract::{
@@ -2362,10 +2363,20 @@ async fn stop_world_worker(
         used_private_stop_surface = false;
         persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
     } else {
-        let transport_result =
-            request_private_stop_after_transport_registration(&transport_path).await;
+        let transport_result = request_private_stop_after_transport_registration_for_stop_episode(
+            &prepared.store,
+            &resolved,
+            &transport_path,
+        )
+        .await;
         if let Err(transport_err) = &transport_result {
-            if detached_stop_world_worker_closeout_available(
+            if let Some(closeout) = observed_stop_world_worker_closeout(
+                &prepared.store,
+                &resolved.session.orchestration_session_id,
+                resolved.target_participant.participant_id(),
+            )? {
+                closeout
+            } else if detached_stop_world_worker_closeout_available(
                 &prepared.store,
                 &resolved,
                 &transport_path,
@@ -2379,24 +2390,10 @@ async fn stop_world_worker(
                 used_private_stop_surface = false;
                 persist_detached_stop_world_worker_closeout(&prepared.store, &resolved)?
             } else {
-                let closeout = wait_for_stop_world_worker_closeout(
-                    &prepared.store,
-                    &resolved.session.orchestration_session_id,
-                    resolved.target_participant.participant_id(),
-                )
-                .await;
-                match (transport_result, closeout) {
-                    (Err(_), Ok(closeout)) => closeout,
-                    (Err(connect_err), Err(closeout_err)) => {
-                        return Err(anyhow::anyhow!(
-                            "owner_unreachable: failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({connect_err:#}; {closeout_err})",
-                            resolved.target_participant.participant_id()
-                        ));
-                    }
-                    _ => {
-                        unreachable!("Err transport_result branch must carry only transport errors")
-                    }
-                }
+                return Err(anyhow::anyhow!(
+                    "owner_unreachable: failed to deliver stop_world_worker to retained worker {} and durable stop closeout was not observed ({transport_err:#})",
+                    resolved.target_participant.participant_id()
+                ));
             }
         } else {
             let transport_outcome = match transport_result {
@@ -2405,33 +2402,42 @@ async fn stop_world_worker(
                     unreachable!("Ok transport_result branch must carry only private stop outcomes")
                 }
             };
-            let closeout = wait_for_stop_world_worker_closeout(
-                &prepared.store,
-                &resolved.session.orchestration_session_id,
-                resolved.target_participant.participant_id(),
-            )
-            .await;
-            match (transport_outcome, closeout) {
-                (
-                    PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal,
-                    Ok(closeout),
-                ) => closeout,
-                (PrivateStopOutcome::OwnerUnreachable, Ok(closeout))
-                | (PrivateStopOutcome::ProtocolError, Ok(closeout)) => closeout,
-                (PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal, Err(err)) => {
-                    return Err(err);
+            match transport_outcome {
+                PrivateStopOutcome::Accepted | PrivateStopOutcome::AlreadyTerminal => {
+                    wait_for_stop_world_worker_closeout(
+                        &prepared.store,
+                        &resolved.session.orchestration_session_id,
+                        resolved.target_participant.participant_id(),
+                    )
+                    .await?
                 }
-                (PrivateStopOutcome::OwnerUnreachable, Err(err)) => {
-                    return Err(anyhow::anyhow!(
-                        "owner_unreachable: private stop transport for retained worker {} did not stay reachable until durable stop closeout completed: {err}",
-                        resolved.target_participant.participant_id()
-                    ));
+                PrivateStopOutcome::OwnerUnreachable => {
+                    if let Some(closeout) = observed_stop_world_worker_closeout(
+                        &prepared.store,
+                        &resolved.session.orchestration_session_id,
+                        resolved.target_participant.participant_id(),
+                    )? {
+                        closeout
+                    } else {
+                        return Err(anyhow::anyhow!(
+                            "owner_unreachable: private stop transport for retained worker {} did not stay reachable before durable stop closeout was observed",
+                            resolved.target_participant.participant_id()
+                        ));
+                    }
                 }
-                (PrivateStopOutcome::ProtocolError, Err(err)) => {
-                    return Err(anyhow::anyhow!(
-                        "owner_unreachable: private stop transport for retained worker {} returned a protocol error before durable stop closeout completed: {err}",
-                        resolved.target_participant.participant_id()
-                    ));
+                PrivateStopOutcome::ProtocolError => {
+                    if let Some(closeout) = observed_stop_world_worker_closeout(
+                        &prepared.store,
+                        &resolved.session.orchestration_session_id,
+                        resolved.target_participant.participant_id(),
+                    )? {
+                        closeout
+                    } else {
+                        return Err(anyhow::anyhow!(
+                            "owner_unreachable: private stop transport for retained worker {} returned a protocol error before durable stop closeout was observed",
+                            resolved.target_participant.participant_id()
+                        ));
+                    }
                 }
             }
         }
@@ -4137,6 +4143,46 @@ async fn request_private_stop_after_transport_registration(
     }
 }
 
+#[cfg(target_os = "linux")]
+async fn request_private_stop_after_transport_registration_for_stop_episode(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+    transport_path: &Path,
+) -> Result<PrivateStopOutcome> {
+    #[cfg(test)]
+    notify_private_stop_transport_retry_event(
+        transport_path,
+        PrivateStopTransportRetryEvent::InitialAttempt,
+    );
+    let initial_result = request_private_stop(transport_path).await;
+    if !stop_world_worker_sanctioned_recovery_retry_available(
+        store,
+        resolved,
+        transport_path,
+        &initial_result,
+    ) {
+        return initial_result;
+    }
+    #[cfg(test)]
+    notify_private_stop_transport_retry_event(
+        transport_path,
+        PrivateStopTransportRetryEvent::RetryWaitStarted,
+    );
+    let started_at = Instant::now();
+    while !transport_path.exists() {
+        if started_at.elapsed() >= STOP_WORLD_WORKER_CLOSEOUT_WAIT_TIMEOUT {
+            return initial_result;
+        }
+        tokio::time::sleep(STOP_WORLD_WORKER_CLOSEOUT_POLL_INTERVAL).await;
+    }
+    #[cfg(test)]
+    notify_private_stop_transport_retry_event(
+        transport_path,
+        PrivateStopTransportRetryEvent::RetryAttempt,
+    );
+    request_private_stop(transport_path).await
+}
+
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PrivateStopTransportRetryEvent {
@@ -4504,6 +4550,27 @@ async fn wait_for_stop_world_worker_closeout(
 }
 
 #[cfg(target_os = "linux")]
+fn observed_stop_world_worker_closeout(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<Option<RetainedWorkerStopCloseoutV1>> {
+    let Some(participant) = store.load_participant(participant_id)? else {
+        return Ok(None);
+    };
+    if participant.handle.state != AgentRuntimeSessionState::Stopped {
+        return Ok(None);
+    }
+    let Some(session) = store.load_orchestration_session(orchestration_session_id)? else {
+        return Ok(None);
+    };
+    Ok(Some(RetainedWorkerStopCloseoutV1 {
+        participant_state: participant.handle.state,
+        session_state: session.state,
+    }))
+}
+
+#[cfg(target_os = "linux")]
 async fn wait_for_cancel_world_work_closeout(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -4598,11 +4665,68 @@ fn detached_stop_world_worker_closeout_available(
 
 #[cfg(target_os = "linux")]
 fn detached_stop_transport_is_unusable(err: &anyhow::Error) -> bool {
-    err.chain().any(|cause| {
-        cause
-            .downcast_ref::<std::io::Error>()
-            .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::ConnectionRefused)
-    })
+    private_stop_transport_error_kind(err) == Some(std::io::ErrorKind::ConnectionRefused)
+}
+
+#[cfg(target_os = "linux")]
+fn stop_world_worker_sanctioned_recovery_retry_available(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+    transport_path: &Path,
+    initial_result: &Result<PrivateStopOutcome>,
+) -> bool {
+    let qualifies_current_owner_delivery_refusal = match initial_result {
+        Ok(PrivateStopOutcome::OwnerUnreachable) => true,
+        Err(err) => {
+            matches!(
+                private_stop_transport_error_kind(err),
+                Some(std::io::ErrorKind::ConnectionRefused)
+            ) || (!transport_path.exists()
+                && private_stop_transport_error_kind(err) == Some(std::io::ErrorKind::NotFound))
+        }
+        Ok(_) => false,
+    };
+    if !qualifies_current_owner_delivery_refusal {
+        return false;
+    }
+    if observed_stop_world_worker_closeout(
+        store,
+        &resolved.session.orchestration_session_id,
+        resolved.target_participant.participant_id(),
+    )
+    .ok()
+    .flatten()
+    .is_some()
+    {
+        return false;
+    }
+
+    refreshed_sanctioned_stop_world_dispatch_target(store, resolved).is_some()
+}
+
+#[cfg(target_os = "linux")]
+fn refreshed_sanctioned_stop_world_dispatch_target(
+    store: &AgentRuntimeStateStore,
+    resolved: &crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget,
+) -> Option<crate::execution::agent_runtime::state_store::ResolvedInternalStopWorldDispatchTarget> {
+    let session = match store.load_orchestration_session(&resolved.session.orchestration_session_id)
+    {
+        Ok(Some(session)) => session,
+        Ok(None) | Err(_) => return None,
+    };
+    let authoritative_caller_participant_id = session.sanctioned_stop_owner_participant_id()?;
+    let refreshed_resolved = store
+        .resolve_internal_stop_world_dispatch_target(
+            &resolved.session.orchestration_session_id,
+            authoritative_caller_participant_id,
+            resolved.target_participant.participant_id(),
+            &resolved.target_participant.handle.backend_id,
+        )
+        .ok()?;
+    resolved
+        .ensure_exact_target_match(&refreshed_resolved)
+        .ok()?;
+    Some(refreshed_resolved)
 }
 
 #[cfg(target_os = "linux")]
@@ -4619,23 +4743,9 @@ fn detached_stop_world_worker_closeout_available_after_transport_failure(
         return false;
     }
 
-    let session = match store.load_orchestration_session(&resolved.session.orchestration_session_id)
-    {
-        Ok(Some(session)) => session,
-        Ok(None) | Err(_) => return false,
-    };
-    let Some(authoritative_caller_participant_id) = session.sanctioned_stop_owner_participant_id()
+    let Some(refreshed_resolved) = refreshed_sanctioned_stop_world_dispatch_target(store, resolved)
     else {
         return false;
-    };
-    let refreshed_resolved = match store.resolve_internal_stop_world_dispatch_target(
-        &resolved.session.orchestration_session_id,
-        authoritative_caller_participant_id,
-        resolved.target_participant.participant_id(),
-        &resolved.target_participant.handle.backend_id,
-    ) {
-        Ok(refreshed_resolved) => refreshed_resolved,
-        Err(_) => return false,
     };
 
     detached_stop_world_worker_closeout_available(
@@ -4833,6 +4943,8 @@ mod tests {
     use std::collections::HashMap;
     #[cfg(target_os = "linux")]
     use std::fs;
+    #[cfg(target_os = "linux")]
+    use std::io::{BufRead, Write};
     #[cfg(target_os = "linux")]
     use std::path::Path;
     #[cfg(target_os = "linux")]
@@ -5526,6 +5638,54 @@ mod tests {
                 crate::execution::agent_runtime::dispatch_contract::WorkerStopPayloadV1::default(),
             ),
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn spawn_scripted_private_stop_server(
+        path: &Path,
+        outcomes: Vec<PrivateStopOutcome>,
+    ) -> std::thread::JoinHandle<()> {
+        let parent = path.parent().expect("scripted private stop path parent");
+        std::fs::create_dir_all(parent).expect("create scripted private stop parent");
+        let _ = std::fs::remove_file(path);
+        let listener = std::os::unix::net::UnixListener::bind(path)
+            .expect("bind scripted private stop socket");
+        let path = path.to_path_buf();
+        std::thread::spawn(move || {
+            for outcome in outcomes {
+                let (mut stream, _) = listener
+                    .accept()
+                    .expect("accept scripted private stop connection");
+                let mut request_line = String::new();
+                let mut reader = std::io::BufReader::new(
+                    stream
+                        .try_clone()
+                        .expect("clone scripted private stop stream"),
+                );
+                reader
+                    .read_line(&mut request_line)
+                    .expect("read scripted private stop request");
+                let response = serde_json::json!({
+                    "version": 1,
+                    "outcome": outcome,
+                });
+                stream
+                    .write_all(
+                        serde_json::to_string(&response)
+                            .expect("serialize scripted private stop response")
+                            .as_bytes(),
+                    )
+                    .expect("write scripted private stop response");
+                stream
+                    .write_all(b"\n")
+                    .expect("terminate scripted private stop response");
+                stream
+                    .flush()
+                    .expect("flush scripted private stop response");
+            }
+            drop(listener);
+            let _ = std::fs::remove_file(&path);
+        })
     }
 
     #[cfg(target_os = "linux")]
@@ -13664,6 +13824,260 @@ agents:
         );
 
         stop_owner.await.expect("late stop owner task should join");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_response_level_refusals(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let server = spawn_scripted_private_stop_server(
+            &transport_path,
+            vec![
+                PrivateStopOutcome::OwnerUnreachable,
+                PrivateStopOutcome::Accepted,
+            ],
+        );
+
+        let retry_events = Arc::new(Mutex::new(
+            Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
+        ));
+        let retry_events_for_hook = retry_events.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock retry events")
+                .push((event, path.to_path_buf()));
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
+            &store,
+            &resolved,
+            &transport_path,
+        )
+        .await
+        .expect("response-level owner_unreachable should be retried once");
+        assert_eq!(
+            outcome,
+            PrivateStopOutcome::Accepted,
+            "response-level owner_unreachable must enter the bounded sanctioned recovery retry"
+        );
+
+        server
+            .join()
+            .expect("scripted response-level private stop server should join");
+
+        let retry_events = retry_events.lock().expect("lock retry events");
+        assert_eq!(
+            retry_events.len(),
+            3,
+            "response-level owner_unreachable must emit exactly one initial attempt, one bounded wait, and one retry: {retry_events:?}"
+        );
+        assert_eq!(
+            retry_events[0].0,
+            PrivateStopTransportRetryEvent::InitialAttempt
+        );
+        assert_eq!(
+            retry_events[1].0,
+            PrivateStopTransportRetryEvent::RetryWaitStarted
+        );
+        assert_eq!(
+            retry_events[2].0,
+            PrivateStopTransportRetryEvent::RetryAttempt
+        );
+        assert!(
+            retry_events
+                .iter()
+                .all(|(_, path)| path == &transport_path),
+            "response-level owner_unreachable must stay on the exact private stop transport without widening attach scope: {retry_events:?}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn request_private_stop_after_transport_registration_for_stop_episode_does_not_retry_response_level_protocol_error(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let server = spawn_scripted_private_stop_server(
+            &transport_path,
+            vec![PrivateStopOutcome::ProtocolError],
+        );
+
+        let retry_events = Arc::new(Mutex::new(
+            Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
+        ));
+        let retry_events_for_hook = retry_events.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock retry events")
+                .push((event, path.to_path_buf()));
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
+            &store,
+            &resolved,
+            &transport_path,
+        )
+        .await
+        .expect("response-level protocol_error should return directly");
+        assert_eq!(
+            outcome,
+            PrivateStopOutcome::ProtocolError,
+            "response-level protocol_error must remain fail-closed instead of entering sanctioned recovery"
+        );
+
+        server
+            .join()
+            .expect("scripted protocol-error private stop server should join");
+
+        let retry_events = retry_events.lock().expect("lock retry events");
+        assert_eq!(
+            retry_events.len(),
+            1,
+            "response-level protocol_error must not emit bounded retry events: {retry_events:?}"
+        );
+        assert_eq!(
+            retry_events[0].0,
+            PrivateStopTransportRetryEvent::InitialAttempt
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_initial_connection_refused_transport(
+    ) {
+        let substrate_home = tempdir().expect("substrate home tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
+
+        let resolved = store
+            .resolve_internal_stop_world_dispatch_target(
+                "sess_dispatch",
+                "orch_dispatch",
+                "ash_member",
+                "cli:codex-world",
+            )
+            .expect("resolve authoritative stop target");
+        let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
+        let transport_parent = transport_path
+            .parent()
+            .expect("private stop transport path parent");
+        std::fs::create_dir_all(transport_parent).expect("create private stop transport parent");
+        let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
+            .expect("bind stale private stop socket");
+        drop(stale_listener);
+        assert!(
+            transport_path.exists(),
+            "connection-refused retry fixture must begin from a stale private stop socket"
+        );
+
+        let retry_events = Arc::new(Mutex::new(
+            Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
+        ));
+        let retry_events_for_hook = retry_events.clone();
+        let retry_server = Arc::new(Mutex::new(None::<std::thread::JoinHandle<()>>));
+        let retry_server_for_hook = retry_server.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock retry events")
+                .push((event, path.to_path_buf()));
+            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+                return;
+            }
+            let server =
+                spawn_scripted_private_stop_server(path, vec![PrivateStopOutcome::Accepted]);
+            retry_server_for_hook
+                .lock()
+                .expect("lock retry server")
+                .replace(server);
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
+
+        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
+            &store,
+            &resolved,
+            &transport_path,
+        )
+        .await
+        .expect("connection-refused transport should be retried once");
+        assert_eq!(
+            outcome,
+            PrivateStopOutcome::Accepted,
+            "initial ECONNREFUSED must enter the bounded sanctioned recovery retry"
+        );
+
+        retry_server
+            .lock()
+            .expect("lock retry server after helper")
+            .take()
+            .expect("retry hook should publish the exact-target retry server")
+            .join()
+            .expect("scripted connection-refused retry server should join");
+
+        let retry_events = retry_events.lock().expect("lock retry events");
+        assert_eq!(
+            retry_events.len(),
+            3,
+            "initial ECONNREFUSED must emit exactly one initial attempt, one bounded wait, and one retry: {retry_events:?}"
+        );
+        assert_eq!(
+            retry_events[0].0,
+            PrivateStopTransportRetryEvent::InitialAttempt
+        );
+        assert_eq!(
+            retry_events[1].0,
+            PrivateStopTransportRetryEvent::RetryWaitStarted
+        );
+        assert_eq!(
+            retry_events[2].0,
+            PrivateStopTransportRetryEvent::RetryAttempt
+        );
+        assert!(
+            retry_events
+                .iter()
+                .all(|(_, path)| path == &transport_path),
+            "initial ECONNREFUSED must stay on the exact private stop transport without widening attach scope: {retry_events:?}"
+        );
     }
 
     #[cfg(target_os = "linux")]

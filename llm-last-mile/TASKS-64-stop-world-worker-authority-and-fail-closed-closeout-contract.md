@@ -153,7 +153,7 @@ Session goal:
 
 ### Tasks
 
-- [ ] Task: Implement one bounded sanctioned recovery attempt for qualifying stop-delivery failures
+- [x] Task: Implement one bounded sanctioned recovery attempt for qualifying stop-delivery failures
   - Acceptance: when the stop episode has no terminal proof yet, exact-target authority still holds, and the failure is stale/missing/refused current-owner delivery rather than disproven worker identity, the implementation performs one bounded sanctioned recovery attempt; otherwise it fails closed immediately without hidden fallback behavior.
   - Verify:
     - `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture`

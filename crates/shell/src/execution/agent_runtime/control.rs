@@ -2505,6 +2505,12 @@ pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutco
 }
 
 #[cfg(unix)]
+pub(crate) fn private_stop_transport_error_kind(err: &anyhow::Error) -> Option<io::ErrorKind> {
+    err.chain()
+        .find_map(|cause| cause.downcast_ref::<io::Error>().map(std::io::Error::kind))
+}
+
+#[cfg(unix)]
 #[allow(dead_code)]
 pub(crate) async fn request_private_cancel(
     path: &Path,
