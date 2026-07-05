@@ -2356,11 +2356,42 @@ const WELL_KNOWN_ROOTLESS_FILES: &[&str] = &[
 
 /// Known model / assistant name prefixes. A token that is a model name followed by a version
 /// (`GPT-5.4`, `claude-3`, `o4-mini`) is runtime metadata, not a task target. Domain gazetteer,
-/// analogous to a log-parser variable dictionary. Deliberately excludes tokens that collide with
-/// this repo's own vocabulary (`codex`, `command`).
+/// analogous to a log-parser variable dictionary. The model branch of `is_model_or_version_token`
+/// is digit-gated, so a bare prefix word (`sonnet`, `opus`, `granite`) is never masked — only a
+/// versioned form (`granite-3.1`) is.
+///
+/// Curated set: the widely-used families plus distinctive, low-collision additions seeded from the
+/// models.dev catalog (codex design review). Deliberately EXCLUDES tokens that double as ordinary
+/// code/repo/English vocabulary — `codex`, `command`, `nova`, `sonar`, `chat`, `vision`, `max` —
+/// which would mask legitimate targets; masking those safely needs provider-qualified matching
+/// (`cohere/command-r-08-2024`), which is deferred to the full models.dev vendored-catalog packet.
 const MODEL_NAME_PREFIXES: &[&str] = &[
-    "gpt", "claude", "gemini", "llama", "mistral", "qwen", "deepseek", "grok", "sonnet", "opus",
-    "haiku", "o1", "o3", "o4", "phi", "gemma",
+    "gpt",
+    "claude",
+    "gemini",
+    "llama",
+    "mistral",
+    "qwen",
+    "deepseek",
+    "grok",
+    "sonnet",
+    "opus",
+    "haiku",
+    "o1",
+    "o3",
+    "o4",
+    "phi",
+    "gemma",
+    "glm",
+    "kimi",
+    "nemotron",
+    "granite",
+    "codestral",
+    "pixtral",
+    "mixtral",
+    "dbrx",
+    "hunyuan",
+    "reka",
 ];
 
 /// Model families short enough to collide with ordinary identifiers (`o4_router`); a separator into
@@ -2368,11 +2399,14 @@ const MODEL_NAME_PREFIXES: &[&str] = &[
 /// variant/version. See `is_model_or_version_token` and `ambiguous_short_model_rest_is_variant`.
 const AMBIGUOUS_SHORT_MODEL_PREFIXES: &[&str] = &["o1", "o3", "o4"];
 
-/// Recognized model variant words that disambiguate a short-family suffix (`o4-mini`, `o4_mini`)
-/// from an arbitrary symbol (`o4_router`). Kept small and specific to real model variants.
+/// Recognized model variant words that disambiguate a short-family suffix (`o4-mini`, `o4_mini`,
+/// `o3-deep-research`) from an arbitrary symbol (`o4_router`). Consulted ONLY for the ambiguous
+/// short `o*` families, so it stays a short curated list of variants those families actually use —
+/// distinctive-prefix families (`gemini-2.0-flash`) match on any separator and never reach here, so
+/// non-`o*` variant words (`flash`, `lite`) would only be dead entries.
 const MODEL_VARIANT_SUFFIXES: &[&str] = &[
     "mini", "preview", "pro", "high", "turbo", "nano", "max", "instruct", "chat", "latest",
-    "vision",
+    "vision", "deep",
 ];
 
 /// For a short-family remainder (begins with a separator), the trailing component is model metadata
@@ -3896,6 +3930,14 @@ mod tests {
             // caught on the extraction side too, not only in the scorer's `.`-joined form.
             "o4_mini",
             "v2_3_1",
+            // curated models.dev-seeded family expansion (digit-gated, so only versioned forms mask).
+            "glm-4.6",
+            "kimi-2",
+            "nemotron-4",
+            "granite-3.1",
+            "codestral-2",
+            "pixtral-12b",
+            "o3-deep-research",
         ] {
             assert!(
                 is_model_or_version_token(model),
@@ -3919,6 +3961,14 @@ mod tests {
             // is an ordinary identifier, not model metadata, and must not be dropped.
             "o4mini",
             "o4mini_router",
+            // Curated-expansion boundary: word-like model colliders are deliberately NOT masked as
+            // bare families (they would eat legitimate targets); provider-qualified masking is
+            // deferred to the models.dev catalog packet. `command-r1` stays a target for now.
+            "command",
+            "codex",
+            "nova-2",
+            "sonar-pro",
+            "command-r1",
         ] {
             assert!(
                 !is_model_or_version_token(keep),
