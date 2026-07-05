@@ -297,28 +297,33 @@ fn goal_sets_diverged(
     !goals_in_structural_containment(current_structured, other_structured)
 }
 
-/// True iff one goal's target is wholly contained in the other's subtree. Every concrete anchor of
-/// the narrower goal must sit within some anchor of the broader goal (codex re-review §P2): a single
-/// nested pair is not enough. A `/goal` clause can name several concrete targets, all preserved on
-/// `target.paths`/`symbols`, so `docs/specs/r6` -> `docs/specs/r6/MAP.md + crates/other/src/lib.rs`
-/// narrows one target but adds an unrelated one — real drift that must still fire, not be masked by
-/// the one nested pair. Directional: containment holds if the current set is within the other
-/// (narrowing) or the other is within the current (broadening).
+/// True iff the two goals describe the same path/symbol region differing only in depth — a pure
+/// narrowing or broadening, with no unrelated anchor on either side. A `/goal` clause can name
+/// several concrete targets (all preserved on `target.paths`/`symbols`), so this is checked
+/// SYMMETRICALLY: every concrete anchor of each goal must be structurally related (ancestor-or-equal,
+/// either direction) to some anchor of the other. That closes both leaks codex review found — a
+/// narrowing that adds an unrelated target (`docs/specs/r6` -> `docs/specs/r6/MAP.md +
+/// crates/other/src/lib.rs`) and a broadening that adds one (`docs/specs/r6/MAP.md` ->
+/// `docs/specs/r6 + crates/other/src/lib.rs`) — because in each case the unrelated anchor is related
+/// to nothing on the other side, so the symmetric test fails and the pivot fires. A one-directional
+/// "all within" test would mask the broadening case.
 fn goals_in_structural_containment(a: &StructuredObjective, b: &StructuredObjective) -> bool {
     let a_anchors = target_concrete_anchors(a);
     let b_anchors = target_concrete_anchors(b);
     if a_anchors.is_empty() || b_anchors.is_empty() {
         return false;
     }
-    all_anchors_within(&a_anchors, &b_anchors) || all_anchors_within(&b_anchors, &a_anchors)
+    every_anchor_related(&a_anchors, &b_anchors) && every_anchor_related(&b_anchors, &a_anchors)
 }
 
-/// Every `inner` anchor is contained-or-equal within some `outer` anchor (`inner` ⊆ subtree(`outer`)).
-fn all_anchors_within(inner: &[&str], outer: &[&str]) -> bool {
-    inner.iter().all(|inner_anchor| {
-        outer
-            .iter()
-            .any(|outer_anchor| structural_path_ancestor_or_equal(outer_anchor, inner_anchor))
+/// Every `from` anchor is structurally related — ancestor-or-equal in either direction — to at least
+/// one `to` anchor.
+fn every_anchor_related(from: &[&str], to: &[&str]) -> bool {
+    from.iter().all(|from_anchor| {
+        to.iter().any(|to_anchor| {
+            structural_path_ancestor_or_equal(from_anchor, to_anchor)
+                || structural_path_ancestor_or_equal(to_anchor, from_anchor)
+        })
     })
 }
 
@@ -913,6 +918,70 @@ mod tests {
         assert!(
             scored.score.flagged,
             "an unrelated second target must not be masked by one nested target"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_when_broadening_adds_unrelated_target() {
+        // codex re-review §P2 (broadening direction): the current goal broadens the previous file to
+        // its directory (docs/specs/r6/MAP.md -> docs/specs/r6) but ALSO adds an unrelated target.
+        // The old file sits under the broadened directory, so a one-directional all-within test would
+        // mask it; the symmetric relatedness test must fire because crates/other relates to nothing
+        // on the previous side.
+        let previous = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let current = structured_goal_with_paths(
+            &["docs/specs/r6", "crates/other/src/lib.rs"],
+            Confidence::High,
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "implement|file_or_directory|docs_specs_r6|crates_other_src_lib_rs",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "broadening that also adds an unrelated target must still fire"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_suppresses_pure_broadening_to_a_containing_directory() {
+        // Complement: a pure broadening (previous file -> its enclosing directory, nothing unrelated
+        // added) is a legitimate scope change and must stay suppressed.
+        let previous = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let current = structured_goal("docs/specs/r6", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "review|spec_or_design_doc|docs_specs_r6",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            !scored.score.flagged,
+            "pure broadening into a containing directory is not drift"
         );
     }
 

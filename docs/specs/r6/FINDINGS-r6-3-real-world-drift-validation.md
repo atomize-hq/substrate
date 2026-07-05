@@ -320,9 +320,10 @@ collapses `/`, `-`, and `.` to the same `_`; splitting the raw path on structura
 `-`/`.` inside a segment, so that pivot still fires. Sibling artifacts sharing a stem still fire and every
 pinned true-positive fixture is preserved; a new acceptance case
 (`synthetic-kickoff-narrowing-into-anchored-subtree`) pins the suppression through the live analyzer path,
-and a scorer-level regression guard pins the hyphen/slash collision. Containment is all-within, not
-any-pair (codex re-review §P2: a multi-target goal that narrows one target but adds an unrelated one still
-fires — every concrete anchor must stay in one subtree). Segment comparison is case-sensitive
+and a scorer-level regression guard pins the hyphen/slash collision. Multi-anchor containment is symmetric,
+not any-pair (codex re-review §P2, two rounds: a multi-target goal that adds an unrelated target — whether
+narrowing or broadening the others — still fires, because every concrete anchor of both goals must be
+structurally related to some anchor of the other). Segment comparison is case-sensitive
 (codex re-review §P3: `Foo::Bar` ≠ `foo::bar` for Rust symbols and case-sensitive filesystems, so a
 case-only difference stays a real pivot). Still open under this step: the genuinely graduated/weighted
 metric for family-stem narrowing (`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc
