@@ -2379,6 +2379,11 @@ const MODEL_VARIANT_SUFFIXES: &[&str] = &[
 /// when its first `-`/`_`/`.`-delimited segment is a known variant word or an all-numeric version /
 /// date component. `-mini` / `_mini` / `-mini-high` / `-2024-05` → variant; `_router` → symbol.
 fn ambiguous_short_model_rest_is_variant(rest: &str) -> bool {
+    // A glued continuation (`o4mini`, `o4mini_router`) is an ordinary identifier, not model
+    // metadata — only a real separator introduces a variant (codex re-review 4).
+    if !rest.starts_with(['-', '.', '_']) {
+        return false;
+    }
     let after_sep = rest.trim_start_matches(['-', '.', '_']);
     let first = after_sep.split(['-', '_', '.']).next().unwrap_or("");
     !first.is_empty()
@@ -2941,7 +2946,6 @@ fn extract_named_artifacts(text: &str) -> Vec<String> {
     let lowered = text.to_ascii_lowercase();
     for (needle, display) in [
         ("agents.md", "AGENTS.md"),
-        ("claude.md", "CLAUDE.md"),
         ("<skill>", "<skill>"),
         ("available skills", "Available skills"),
         ("plugin instructions", "plugin instructions"),
@@ -3906,6 +3910,10 @@ mod tests {
             "codex-wrapper",
             "agent-drift-analyzer",
             "o4_router",
+            // codex re-review 4: a variant word glued to the prefix without a separator (`o4mini`)
+            // is an ordinary identifier, not model metadata, and must not be dropped.
+            "o4mini",
+            "o4mini_router",
         ] {
             assert!(
                 !is_model_or_version_token(keep),
@@ -3989,6 +3997,15 @@ mod tests {
         assert!(
             prose.is_empty(),
             "lowercase prose must not anchor, got {prose:?}"
+        );
+
+        // codex re-review 4: a `claude.md` substring inside pasted boilerplate must NOT auto-promote
+        // CLAUDE.md (there is no upstream boilerplate suppression for it, unlike AGENTS.md); only the
+        // explicit bare-uppercase shorthand anchors.
+        let pasted = extract_named_artifacts("see the claude.md file and # CLAUDE.md header block");
+        assert!(
+            pasted.iter().all(|a| a != "CLAUDE.md"),
+            "a claude.md substring must not promote the instruction surface, got {pasted:?}"
         );
 
         let anchor = explicit_target_anchor_for_text("update AGENTS with the new policy")
