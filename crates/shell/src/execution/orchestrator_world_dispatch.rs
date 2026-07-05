@@ -4971,9 +4971,7 @@ fn detached_stop_world_worker_closeout_available_after_transport_failure(
     let refreshed_resolved = if let Some(refreshed) = refreshed_sanctioned {
         Some(refreshed)
     } else {
-        let refreshed_detached =
-            refreshed_detached_exact_stop_world_dispatch_target(store, resolved)?;
-        refreshed_detached
+        refreshed_detached_exact_stop_world_dispatch_target(store, resolved)?
     };
     let Some(refreshed_resolved) = refreshed_resolved else {
         return Ok(false);
@@ -15661,23 +15659,28 @@ agents:
         let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
             .expect("bind stale private stop socket");
         drop(stale_listener);
+
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+
         let store_for_hook = store.clone();
         let transport_path_for_hook = transport_path.clone();
         let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
-            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+            if event != PrivateStopTransportRetryEvent::InitialAttempt {
                 return;
             }
             assert_eq!(
                 path,
                 transport_path_for_hook.as_path(),
-                "retry wait must stay pinned to the exact retained worker stop socket"
+                "initial refused stop attempt must stay pinned to the exact retained worker stop socket"
             );
 
             let mut launch_orchestrator = store_for_hook
                 .load_participant("orch_dispatch")
                 .expect("load launch orchestrator")
                 .expect("launch orchestrator");
-            launch_orchestrator.mark_client_detached("parked after refused private stop");
+            launch_orchestrator.mark_client_detached("parked after refused private stop attempt");
             store_for_hook
                 .persist_participant(&launch_orchestrator)
                 .expect("persist detached launch orchestrator");
@@ -15687,16 +15690,13 @@ agents:
                 .expect("load authoritative orchestration session")
                 .expect("authoritative orchestration session");
             session.active_session_handle_id = None;
-            session.mark_parked_resumable("owner detached after refused private stop");
+            session.mark_parked_resumable("owner detached after refused private stop attempt");
             store_for_hook
                 .persist_orchestration_session(&session)
                 .expect("persist parked-resumable session without sanctioned owner");
         }) as PrivateStopTransportRetryHook;
         let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let prepared =
-            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
-                .expect("prepare stop dispatch request");
         let outcome = dispatch_prepared_orchestrator_world_request(prepared)
             .await
             .expect("dispatch parked detached stop request without sanctioned owner");
@@ -15773,11 +15773,21 @@ agents:
             .expect("bind stale private stop socket");
         drop(stale_listener);
 
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+
         let store_for_hook = store.clone();
-        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, _path: &Path| {
-            if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
+        let transport_path_for_hook = transport_path.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            if event != PrivateStopTransportRetryEvent::InitialAttempt {
                 return;
             }
+            assert_eq!(
+                path,
+                transport_path_for_hook.as_path(),
+                "initial refused stop attempt must stay pinned to the exact retained worker stop socket"
+            );
 
             let mut launch_orchestrator = store_for_hook
                 .load_participant("orch_dispatch")
@@ -15813,9 +15823,6 @@ agents:
         }) as PrivateStopTransportRetryHook;
         let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let prepared =
-            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
-                .expect("prepare stop dispatch request");
         let err = dispatch_prepared_orchestrator_world_request(prepared)
             .await
             .expect_err("detached exact-target contract error should surface directly");

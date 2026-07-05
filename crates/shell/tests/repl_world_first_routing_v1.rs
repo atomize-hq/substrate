@@ -6815,53 +6815,40 @@ fn c3_internal_toolbox_stop_world_worker_keeps_refused_transport_text_distinct_f
         }),
     );
 
-    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(false));
-    let error = response
-        .get("error")
-        .and_then(Value::as_str)
-        .expect("refused private stop delivery must surface an error");
-    assert!(
-        error.contains("refused_transport:"),
-        "refused private stop delivery must surface the stable refused_transport wording: {response:#?}"
+    assert_eq!(response.get("ok").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        response
+            .pointer("/outcome/outcome_kind")
+            .and_then(Value::as_str),
+        Some("stop_world_worker"),
+        "refused private stop delivery should now complete through detached durable closeout on the exact same-caller stop seam: {response:#?}"
+    );
+    assert_eq!(
+        response
+            .pointer("/outcome/target_participant_id")
+            .and_then(Value::as_str),
+        Some(member_participant_id.as_str())
     );
     assert!(
-        error.contains(
-            format!(
-                "owner_unreachable: recovery_failed: failed to deliver stop_world_worker to retained worker {}",
-                member_participant_id
-            )
-            .as_str()
-        ),
-        "refused private stop delivery must stay fail-closed instead of claiming durable stop success: {response:#?}"
-    );
-    assert!(
-        error.contains("failed to connect to private stop transport"),
-        "refused private stop delivery must preserve the transport-connect wording floor: {response:#?}"
-    );
-    assert!(
-        error.contains("Connection refused"),
-        "refused private stop delivery must stay textually distinct from missing transport: {response:#?}"
-    );
-    assert!(
-        !error.contains("No such file or directory"),
-        "refused private stop delivery must not collapse into missing-transport wording: {response:#?}"
-    );
-    assert!(
-        error.contains("durable stop closeout was not observed"),
-        "refused private stop delivery must explain the missing durable stop closeout proof: {response:#?}"
+        response
+            .pointer("/outcome/summary")
+            .and_then(Value::as_str)
+            .is_some_and(|summary| summary.contains("detached durable closeout")),
+        "refused private stop delivery should disclose detached durable closeout after the stale exact-target stop socket refuses: {response:#?}"
     );
 
     let member_after = read_participant_manifest(&substrate_home, &member_participant_id);
     assert_eq!(
         member_after.get("state").and_then(Value::as_str),
-        Some("ready"),
-        "refused private stop delivery must not mark the retained worker stopped: {member_after:?}"
+        Some("stopped"),
+        "refused private stop delivery should persist durable stopped state through detached closeout: {member_after:?}"
     );
     assert!(
         member_after
             .pointer("/internal/termination_reason")
-            .is_none_or(Value::is_null),
-        "refused private stop delivery must not persist durable stop closeout state: {member_after:?}"
+            .and_then(Value::as_str)
+            .is_some_and(|reason| reason.contains("stopped")),
+        "refused private stop delivery should persist the detached durable stop closeout proof: {member_after:?}"
     );
 
     repl.send_line("exit");
