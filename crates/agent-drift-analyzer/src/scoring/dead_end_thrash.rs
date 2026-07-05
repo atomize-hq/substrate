@@ -211,7 +211,7 @@ fn frontier_advanced_in_interval(session_progress: &SessionProgress) -> bool {
         && session_progress
             .signals
             .iter()
-            .any(|signal| is_direct_troubleshooting_advancement_signal(signal))
+            .any(is_direct_troubleshooting_advancement_signal)
 }
 
 fn is_direct_troubleshooting_advancement_signal(signal: &ProgressSignal) -> bool {

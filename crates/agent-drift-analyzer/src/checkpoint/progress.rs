@@ -64,16 +64,15 @@ pub(crate) fn build_session_progress(
         && verifier_failure_evidence(analysis).is_empty()
         && source_edits(analysis).is_empty()
         && zero_verifier_exploratory_interval(analysis)
+        && explicit_failure_evidence(analysis).is_empty()
     {
-        if explicit_failure_evidence(analysis).is_empty() {
-            let planning_progress =
-                assess_planning_progress(analysis, ProgressDimension::PlanningConvergence);
-            if !matches!(
-                planning_progress.status,
-                ProgressStatus::Advancing | ProgressStatus::Mixed
-            ) {
-                progress = annotate_zero_verifier_fallback(analysis, planning_progress);
-            }
+        let planning_progress =
+            assess_planning_progress(analysis, ProgressDimension::PlanningConvergence);
+        if !matches!(
+            planning_progress.status,
+            ProgressStatus::Advancing | ProgressStatus::Mixed
+        ) {
+            progress = annotate_zero_verifier_fallback(analysis, planning_progress);
         }
     }
 
