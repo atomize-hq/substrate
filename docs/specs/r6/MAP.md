@@ -274,9 +274,11 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    segment, not the whole string, so a Windows drive colon — `C:/repo/src/lib.rs:42` — does not defeat
    it [codex re-review round 5]). The graduated / weighted remainder of `R6-3.X.2` (family-stem narrowing, doc
    progression, plan→code→plan cycles, dotted work-item narrowing, a residual bare-`CrateOrPackage`
-   over-fire [codex §P2, deferred], shared-constraint masking, anchor comparison_key asymmetry) stays
-   open; the eligibility-bar revisit (`R6-3.X.3`) stays gated behind it. See the `R6-3` TASKS ledger
-   `R6-3.X.2` and the `FINDINGS` Step 3 note.
+   over-fire [codex §P2, deferred], a residual case-only-respelling over-fire on case-insensitive
+   filesystems [codex round 6, deliberately declined — the flip side of the accepted §P3
+   drift-masking fix; over-firing never masks drift], shared-constraint masking, anchor
+   comparison_key asymmetry) stays open; the eligibility-bar revisit (`R6-3.X.3`) stays gated behind
+   it. See the `R6-3` TASKS ledger `R6-3.X.2` and the `FINDINGS` Step 3 note.
 
 ## Non-Goals For This Rescope
 

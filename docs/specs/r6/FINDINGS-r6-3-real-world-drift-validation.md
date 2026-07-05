@@ -339,8 +339,15 @@ metric for family-stem narrowing (`audit-trio.report.json → audit-trio.model-s
 progression, plan→code→plan cycles, and dotted work-item narrowing (`R6-3 → R6-3.5`, no structural
 separator); a known residual over-fire where a bare `CrateOrPackage` name is not matched as an ancestor of
 the crate's path form (codex re-review §P2, deferred — closing it needs the package-root convention and
-over-firing never masks drift); plus the shared-constraint-masking false negative and the anchor
-comparison_key asymmetry. See the `R6-3` TASKS ledger `R6-3.X.2` for the landed/open split.
+over-firing never masks drift); a known residual over-fire on case-insensitive filesystems (codex round 6,
+deliberately declined): a case-only respelling of the same path (`C:/Repo/src` → `c:/repo/src/lib.rs`,
+`MAP.md` → `map.md`) fails containment and still fires — codex round 2 (§P3) demanded the opposite
+(case-insensitive comparison masks `Foo::Bar` → `foo::bar` symbol pivots and real path pivots on Linux, the
+drift-masking direction), the analyzer cannot know the traced filesystem's case semantics from the bundle,
+and over-firing never masks drift, so the case-sensitive §P3 decision stands until filesystem-semantics
+metadata or an anchor-type-aware rule lands with the graduated metric; plus the shared-constraint-masking
+false negative and the anchor comparison_key asymmetry. See the `R6-3` TASKS ledger `R6-3.X.2` for the
+landed/open split.
 
 ### Step 4 (conditional) — Revisit loosening the eligibility bar (`R6-3.X.3`)
 

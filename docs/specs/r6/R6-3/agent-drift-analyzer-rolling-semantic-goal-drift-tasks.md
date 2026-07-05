@@ -377,7 +377,17 @@ all fixed here.
     `Update crates/agent-drift-analyzer/src/…` still fires. Closing it needs the package-root convention
     (which lives in `context/objective.rs`, not the scorer); a loose "segment appears anywhere" rule would
     reintroduce the §P1 false negatives, and over-firing never masks drift, so it waits for the graduated
-    metric.
+    metric. **Known residual over-fire on case-insensitive filesystems, deliberately declined (codex
+    round 6):** a case-only respelling of the same path (`C:/Repo/src` → `c:/repo/src/lib.rs`, `MAP.md` →
+    `map.md`) fails containment and still fires on filesystems where those are the same file (default
+    macOS/Windows). This is the flip side of the accepted §P3 decision — codex round 2 flagged
+    case-INSENSITIVE comparison as a drift-masking false negative (`Foo::Bar` ≠ `foo::bar` for Rust
+    symbols; case-distinct paths are different files on Linux, the dominant traced environment), and codex
+    round 6 flags case-SENSITIVE comparison as an over-fire; both cannot be satisfied without knowing the
+    traced filesystem's case semantics, which the bundle does not carry. Per the scorer's standing rule
+    (a false positive is recoverable, a masked pivot is not), the case-sensitive §P3 decision stands;
+    closing this needs filesystem-semantics metadata on the bundle or an anchor-type-aware rule
+    (symbols case-sensitive, paths per-platform), deferred to the graduated metric.
   - Verify (first cut, run green 2026-07-05, incl. post-codex-review fix): scorer unit tests
     (`cargo test -p agent-drift-analyzer --lib scoring::semantic_goal_drift`, incl. the
     `structural_path_ancestry_respects_real_separators_only` unit test and the
