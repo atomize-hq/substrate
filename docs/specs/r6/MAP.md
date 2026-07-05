@@ -255,13 +255,18 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    revisit, only if evidence supports it). Do not reorder; do not loosen the eligibility bar before the
    graduated-distance work lands.
    **`R6-3.X.2` containment first cut (landed 2026-07-05):** with `R6-3.5` closed, the first bounded cut of
-   the distance work landed — divergence in `scoring/semantic_goal_drift.rs` now recognizes hierarchical
-   containment (one normalized goal term extending the other at a segment boundary) as relatedness, so the
-   canonical narrowing (crate/directory root → one file inside it) no longer flags on either the
-   kickoff-anchored or rolling comparison. Whole-term containment only; sibling artifacts sharing a stem
-   still fire, and all pinned true-positive fixtures are preserved (new acceptance case
-   `synthetic-kickoff-narrowing-into-anchored-subtree` pins the suppression end-to-end). The graduated /
-   weighted remainder of `R6-3.X.2` (family-stem narrowing, doc progression, plan→code→plan cycles,
+   the distance work landed — divergence in `scoring/semantic_goal_drift.rs` now recognizes structural
+   path/symbol containment as relatedness, so the canonical narrowing (crate/directory root → one file
+   inside it, and `foo::bar` → `foo::bar::baz`) no longer flags on either the kickoff-anchored or rolling
+   comparison. Containment is computed on the **raw structured-target strings** split only on real
+   structural separators (`/`, `\`, `::`), never on the normalized term set — a codex review of the first
+   draft caught that a normalized-prefix test would collapse `/`, `-`, and `.` to the same `_` boundary and
+   silently drop a real pivot (`docs/specs/r6-map` vs `docs/specs/r6/map.md`); the raw-path split keeps
+   `-`/`.` inside a segment so that pivot still fires. Sibling artifacts sharing a stem still fire, and all
+   pinned true-positive fixtures are preserved (new acceptance case
+   `synthetic-kickoff-narrowing-into-anchored-subtree` pins the suppression end-to-end; a scorer-level
+   regression guard pins the hyphen/slash collision). The graduated / weighted remainder of `R6-3.X.2`
+   (family-stem narrowing, doc progression, plan→code→plan cycles, dotted work-item narrowing,
    shared-constraint masking, anchor comparison_key asymmetry) stays open; the eligibility-bar revisit
    (`R6-3.X.3`) stays gated behind it. See the `R6-3` TASKS ledger `R6-3.X.2` and the `FINDINGS` Step 3 note.
 

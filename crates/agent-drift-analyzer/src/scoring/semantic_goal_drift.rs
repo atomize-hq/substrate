@@ -224,60 +224,126 @@ fn structured_matches_confident_task_statement(
 // docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-spec.md Resolved Decision 7,
 // docs/specs/r6/MAP.md item 5, and the R6-3 TASKS ledger `R6-3.X.2`): divergence is a binary
 // set comparison, not a graduated distance. The R6-3.X.2 first cut absorbs one relation beyond
-// exact term equality: hierarchical containment (`goal_terms_hierarchically_related`), so a goal
-// narrowing from a crate/directory root to one file inside it — or broadening back out — no
-// longer reads as a pivot. Everything else stays accepted v1 debt: sibling artifacts and shared
-// family stems (`audit-trio.report.json` -> `audit-trio.model-selection/…report.json`), doc
-// progression, and plan->code->plan work cycles still read as fully disjoint; any single shared
-// constraint term (PlatformBoundary/ScopeBoundary) masks real drift. The check is also
-// asymmetric: the anchor's term set is built without its comparison_key (it is a bare
-// StructuredObjective with no ObjectiveSummary), so a High-confidence anchor with no concrete
-// target and no boundary constraint collapses to an empty set and produces no claim at all (a
-// conservative miss, never a false positive). The full weighted/graduated distance, and
-// threading the anchor's own comparison_key so both sides extract symmetrically, remain
-// deferred; do not assume this already grades partial overlap.
+// exact term equality: structural path/symbol containment (`goals_in_structural_containment`), so a
+// goal narrowing from a crate/directory root to one file inside it — or broadening back out — no
+// longer reads as a pivot. Containment is computed on the RAW structured-target strings
+// (`target.display` / `paths` / `symbols` / …), split only on real structural separators
+// (`/`, `\`, `::`), NOT on the normalized `specific_terms` set. That matters: `normalize_goal_term`
+// flattens `/`, `-`, and `.` all to `_`, so a normalized-prefix test would treat `docs/specs/r6-map`
+// and `docs/specs/r6/map.md` as ancestor/descendant and silently drop a real pivot (codex review
+// finding). Splitting the raw path on structural separators only keeps `-`/`.` inside a segment, so
+// `r6-map` and `r6` stay distinct and the pivot still fires.
+//
+// Everything else stays accepted v1 debt: sibling artifacts and shared family stems
+// (`audit-trio.report.json` -> `audit-trio.model-selection/…report.json`), doc progression,
+// plan->code->plan work cycles, and dotted work-item narrowing (`R6-3` -> `R6-3.5`, no structural
+// separator) still read as fully disjoint; any single shared constraint term (PlatformBoundary/
+// ScopeBoundary) masks real drift. Containment also only applies when both goals expose a concrete
+// structured target — comparison_key-only goals fall through to the disjoint check. The full
+// weighted/graduated distance, and threading the anchor's own comparison_key so both sides extract
+// symmetrically, remain deferred; do not assume this already grades partial overlap.
 fn semantic_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     anchor_goal: &StructuredObjective,
 ) -> bool {
     let anchor_terms = goal_specific_terms(anchor_goal, None);
-    goal_term_sets_diverged(&current_goal.specific_terms, &anchor_terms)
+    goal_sets_diverged(
+        &current_goal.specific_terms,
+        current_goal.structured,
+        &anchor_terms,
+        anchor_goal,
+    )
 }
 
 fn rolling_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     previous_goal: &EligibleCurrentGoal<'_>,
 ) -> bool {
-    goal_term_sets_diverged(&current_goal.specific_terms, &previous_goal.specific_terms)
+    goal_sets_diverged(
+        &current_goal.specific_terms,
+        current_goal.structured,
+        &previous_goal.specific_terms,
+        previous_goal.structured,
+    )
 }
 
-/// Two goal term sets diverge only when no cross-pair of terms is related. Term relation is exact
-/// equality (the original disjoint-set rule) plus hierarchical containment, so a narrowing or
-/// broadening within one namespace is progression, not drift.
-fn goal_term_sets_diverged(current: &BTreeSet<String>, other: &BTreeSet<String>) -> bool {
-    if current.is_empty() || other.is_empty() {
+/// Two goals diverge when their term sets are fully disjoint AND their structured targets are not in
+/// a structural path/symbol containment relationship. The disjoint check is the original binary rule;
+/// the containment carve-out (computed on raw target strings, never normalized terms) rescues a
+/// legitimate narrowing/broadening within one namespace so it does not read as drift.
+fn goal_sets_diverged(
+    current_terms: &BTreeSet<String>,
+    current_structured: &StructuredObjective,
+    other_terms: &BTreeSet<String>,
+    other_structured: &StructuredObjective,
+) -> bool {
+    if current_terms.is_empty() || other_terms.is_empty() {
         return false;
     }
-    !current.iter().any(|current_term| {
-        other
-            .iter()
-            .any(|other_term| goal_terms_hierarchically_related(current_term, other_term))
+    if !current_terms.is_disjoint(other_terms) {
+        return false;
+    }
+    !goals_in_structural_containment(current_structured, other_structured)
+}
+
+/// True iff either structured target is a structural ancestor of the other. Operates on the raw
+/// target anchor strings (path/symbol form preserved) so `-`/`.` punctuation inside a segment cannot
+/// forge a false boundary.
+fn goals_in_structural_containment(a: &StructuredObjective, b: &StructuredObjective) -> bool {
+    let a_anchors = target_anchor_strings(a);
+    let b_anchors = target_anchor_strings(b);
+    a_anchors.iter().any(|a_anchor| {
+        b_anchors.iter().any(|b_anchor| {
+            structural_path_ancestor_or_equal(a_anchor, b_anchor)
+                || structural_path_ancestor_or_equal(b_anchor, a_anchor)
+        })
     })
 }
 
-/// R6-3.X.2 containment first cut. Normalized goal terms (`[a-z0-9_]` with `_` as the segment
-/// separator) are hierarchically related when they are equal or one extends the other at a segment
-/// boundary: `crates_agent_drift_analyzer` vs `crates_agent_drift_analyzer_src_scoring_mod_rs` is
-/// the same namespace narrowed to one file, not an abandoned goal. The boundary requirement keeps
-/// this whole-term containment, never common-prefix similarity — `docs_specs_r6_map_md` vs
-/// `docs_specs_r6_mapping_guide_md` (sibling artifacts sharing a stem) stays unrelated, so real
-/// pivots between siblings still fire.
-fn goal_terms_hierarchically_related(a: &str, b: &str) -> bool {
-    if a == b {
-        return true;
+/// Raw specific strings for the structured target (display plus every concrete anchor list), with
+/// original separators intact. Empty when the goal has no concrete target.
+fn target_anchor_strings(structured: &StructuredObjective) -> Vec<&str> {
+    let Some(target) = structured.target.as_ref() else {
+        return Vec::new();
+    };
+    let mut anchors = vec![target.display.as_str()];
+    for value in target
+        .paths
+        .iter()
+        .chain(target.symbols.iter())
+        .chain(target.named_artifacts.iter())
+        .chain(target.workspace_refs.iter())
+    {
+        anchors.push(value.as_str());
     }
-    let (short, long) = if a.len() < b.len() { (a, b) } else { (b, a) };
-    !short.is_empty() && long.starts_with(short) && long.as_bytes()[short.len()] == b'_'
+    anchors
+}
+
+/// `ancestor` structurally contains (or equals) `descendant`: split both on real structural
+/// separators (`/`, `\`, `::`) — never `-`/`.` — and require the ancestor's segments to be a
+/// case-insensitive prefix of the descendant's. `crates/foo` contains `crates/foo/bar.rs` and
+/// `a::b` contains `a::b::c`; `docs/specs/r6-map` does NOT contain `docs/specs/r6/map.md`.
+fn structural_path_ancestor_or_equal(ancestor: &str, descendant: &str) -> bool {
+    let ancestor_segments = structural_path_segments(ancestor);
+    let descendant_segments = structural_path_segments(descendant);
+    if ancestor_segments.is_empty() || ancestor_segments.len() > descendant_segments.len() {
+        return false;
+    }
+    ancestor_segments
+        .iter()
+        .zip(descendant_segments.iter())
+        .all(|(ancestor_segment, descendant_segment)| {
+            ancestor_segment.eq_ignore_ascii_case(descendant_segment)
+        })
+}
+
+/// Split a raw target string into structural segments on `/`, `\`, and `::` only, dropping empties.
+fn structural_path_segments(value: &str) -> Vec<&str> {
+    value
+        .split(['/', '\\'])
+        .flat_map(|segment| segment.split("::"))
+        .filter(|segment| !segment.is_empty())
+        .collect()
 }
 
 fn goal_specific_terms(
@@ -631,31 +697,70 @@ mod tests {
     }
 
     #[test]
-    fn goal_terms_hierarchical_relation_requires_a_segment_boundary() {
-        use super::goal_terms_hierarchically_related;
+    fn structural_path_ancestry_respects_real_separators_only() {
+        use super::structural_path_ancestor_or_equal;
 
-        assert!(goal_terms_hierarchically_related(
-            "docs_specs_r6_map_md",
-            "docs_specs_r6_map_md"
+        // Directory / crate root contains a file inside it (either split direction).
+        assert!(structural_path_ancestor_or_equal(
+            "crates/agent-drift-analyzer/src/context",
+            "crates/agent-drift-analyzer/src/context/objective.rs"
         ));
-        // Containment at a `_` boundary in either direction is narrowing/broadening.
-        assert!(goal_terms_hierarchically_related(
-            "crates_agent_drift_analyzer",
-            "crates_agent_drift_analyzer_src_scoring_mod_rs"
+        // Rust symbol-path narrowing (`::` is a structural separator).
+        assert!(structural_path_ancestor_or_equal(
+            "foo::bar",
+            "foo::bar::baz"
         ));
-        assert!(goal_terms_hierarchically_related(
-            "crates_agent_drift_analyzer_src_scoring_mod_rs",
-            "crates_agent_drift_analyzer"
+        // Equal paths are trivially ancestor-or-equal.
+        assert!(structural_path_ancestor_or_equal(
+            "docs/specs/r6/MAP.md",
+            "docs/specs/r6/map.md"
         ));
-        // A shared stem without a whole-term boundary is a sibling, not containment.
-        assert!(!goal_terms_hierarchically_related(
-            "docs_specs_r6_map_md",
-            "docs_specs_r6_mapping_guide_md"
+        // Codex finding: `-`/`.` are intra-segment punctuation, not separators, so a hyphen
+        // collision must NOT forge ancestry (`r6-map` segment != `r6` segment).
+        assert!(!structural_path_ancestor_or_equal(
+            "docs/specs/r6-map",
+            "docs/specs/r6/map.md"
         ));
-        assert!(!goal_terms_hierarchically_related(
+        // Same-basename with/without extension is a leaf difference, not containment.
+        assert!(!structural_path_ancestor_or_equal(
+            "crates/foo/objective",
+            "crates/foo/objective.rs"
+        ));
+        // Siblings sharing a parent are not ancestors.
+        assert!(!structural_path_ancestor_or_equal(
+            "docs/specs/r6/MAP.md",
+            "docs/specs/r6/MAPPING-guide.md"
+        ));
+        // Empty ancestor never contains anything.
+        assert!(!structural_path_ancestor_or_equal(
             "",
-            "docs_specs_r6_map_md"
+            "docs/specs/r6/map.md"
         ));
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_hyphen_collision_pivot_through_scorer() {
+        // Codex review regression guard: `docs/specs/r6-map` (a file) and `docs/specs/r6/map.md`
+        // (a different file) both normalize to `docs_specs_r6_map*`, so a normalized-prefix
+        // containment test would silently drop this pivot. The structural check splits on real
+        // separators only, so `r6-map` != `r6` and the pivot still fires.
+        let anchor = structured_goal("docs/specs/r6-map", Confidence::High, Vec::new());
+        let current = structured_goal("docs/specs/r6/map.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "a hyphen/slash normalization collision must not suppress a real pivot"
+        );
     }
 
     #[test]

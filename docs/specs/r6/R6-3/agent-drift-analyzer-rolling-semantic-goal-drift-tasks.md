@@ -329,19 +329,29 @@ all fixed here.
   - **Containment first cut LANDED (2026-07-05).** The acceptance condition was met by the `R6-3.5`
     batch re-run (FINDINGS "R6-3.5 Result": all 5 surviving target-resolved disjoint pairs are legitimate
     narrowing/progression, i.e. the binary rule's over-fire residue). The bounded first cut adds one
-    relation beyond exact term equality: **hierarchical containment**
-    (`goal_terms_hierarchically_related` in `scoring/semantic_goal_drift.rs`) — two normalized goal terms
-    are related when one extends the other at a `_` segment boundary, so the canonical narrowing (crate/
-    directory root → one file inside it, and the broadening direction back out) no longer reads as a
-    pivot on either the kickoff-anchored or rolling comparison. Containment is whole-term only: sibling
-    artifacts sharing a lexical stem (`docs_specs_r6_map_md` vs `docs_specs_r6_mapping_guide_md`) stay
-    unrelated and still fire, preserving every pinned true-positive fixture. Still open for the full
+    relation beyond exact term equality: **structural path/symbol containment**
+    (`goals_in_structural_containment` / `structural_path_ancestor_or_equal` in
+    `scoring/semantic_goal_drift.rs`) — a goal is related to another when one structured target
+    structurally contains the other, so the canonical narrowing (crate/directory root → one file inside
+    it, `foo::bar` → `foo::bar::baz`, and the broadening direction back out) no longer reads as a pivot on
+    either the kickoff-anchored or rolling comparison. **Containment is computed on the raw target strings
+    (`target.display`/`paths`/`symbols`/…) split only on real structural separators (`/`, `\`, `::`), NOT
+    on the normalized term set.** A codex review of the first draft (which ran containment on the
+    normalized `_`-flattened terms) found that `normalize_goal_term` collapses `/`, `-`, and `.` to the
+    same `_`, so a normalized-prefix test treated `docs/specs/r6-map` and `docs/specs/r6/map.md` as
+    ancestor/descendant and silently dropped a real pivot; splitting the raw path on structural separators
+    only keeps `-`/`.` inside a segment, so that pivot still fires. Sibling artifacts sharing a lexical
+    stem stay unrelated and still fire, preserving every pinned true-positive fixture; comparison_key-only
+    goals (no concrete target) fall through to the disjoint check unchanged. Still open for the full
     graduated/weighted metric: family-stem narrowing (`audit-trio.report.json` →
-    `audit-trio.model-selection/…report.json`), doc progression, plan→code→plan work cycles, the
-    shared-constraint-term masking false negative, and the anchor comparison_key asymmetry.
-  - Verify (first cut, run green 2026-07-05): scorer unit tests
-    (`cargo test -p agent-drift-analyzer --lib scoring::semantic_goal_drift`), the acceptance corpus with
-    the new `synthetic-kickoff-narrowing-into-anchored-subtree` case
+    `audit-trio.model-selection/…report.json`), doc progression, plan→code→plan work cycles, dotted
+    work-item narrowing (`R6-3` → `R6-3.5`, no structural separator), the shared-constraint-term masking
+    false negative, and the anchor comparison_key asymmetry.
+  - Verify (first cut, run green 2026-07-05, incl. post-codex-review fix): scorer unit tests
+    (`cargo test -p agent-drift-analyzer --lib scoring::semantic_goal_drift`, incl. the
+    `structural_path_ancestry_respects_real_separators_only` unit test and the
+    `semantic_goal_drift_still_flags_hyphen_collision_pivot_through_scorer` regression guard), the
+    acceptance corpus with the new `synthetic-kickoff-narrowing-into-anchored-subtree` case
     (`cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture`), and the
     full analyzer wall. Verify for the full graduated metric: to be defined when (and if) opened.
   - Files:

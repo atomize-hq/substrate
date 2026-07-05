@@ -309,16 +309,23 @@ narrowing (crate root → one file inside it) or a plan→code→plan cycle is n
 
 **Containment first cut DONE (2026-07-05).** Step 2's condition was met (all 5 post-`R6-3.5` disjoint
 pairs are legitimate narrowing/progression), so the bounded first cut of this step landed: divergence in
-`scoring/semantic_goal_drift.rs` now treats two normalized goal terms as related when one extends the
-other at a `_` segment boundary (hierarchical containment), absorbing the canonical crate/directory →
-contained-file narrowing (and its broadening direction) on both the kickoff-anchored and rolling
-comparisons. Containment is whole-term only, so sibling artifacts sharing a stem still fire and every
+`scoring/semantic_goal_drift.rs` now treats two goals as related when one structured target
+structurally contains the other, absorbing the canonical crate/directory → contained-file narrowing
+(and `foo::bar` → `foo::bar::baz`, and the broadening direction) on both the kickoff-anchored and rolling
+comparisons. Containment is computed on the **raw target strings** split only on real structural
+separators (`/`, `\`, `::`). A codex review of the first draft (which tested containment on the
+normalized `_`-flattened terms) found that approach would treat `docs/specs/r6-map` and
+`docs/specs/r6/map.md` as ancestor/descendant and silently drop a real pivot, because `normalize_goal_term`
+collapses `/`, `-`, and `.` to the same `_`; splitting the raw path on structural separators only keeps
+`-`/`.` inside a segment, so that pivot still fires. Sibling artifacts sharing a stem still fire and every
 pinned true-positive fixture is preserved; a new acceptance case
-(`synthetic-kickoff-narrowing-into-anchored-subtree`) pins the suppression through the live analyzer
-path. Still open under this step: the genuinely graduated/weighted metric for family-stem narrowing
-(`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc progression, and
-plan→code→plan cycles, plus the shared-constraint-masking false negative and the anchor
-comparison_key asymmetry. See the `R6-3` TASKS ledger `R6-3.X.2` for the landed/open split.
+(`synthetic-kickoff-narrowing-into-anchored-subtree`) pins the suppression through the live analyzer path,
+and a scorer-level regression guard pins the hyphen/slash collision. Still open under this step: the
+genuinely graduated/weighted metric for family-stem narrowing
+(`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc progression, plan→code→plan
+cycles, and dotted work-item narrowing (`R6-3 → R6-3.5`, no structural separator), plus the
+shared-constraint-masking false negative and the anchor comparison_key asymmetry. See the `R6-3` TASKS
+ledger `R6-3.X.2` for the landed/open split.
 
 ### Step 4 (conditional) — Revisit loosening the eligibility bar (`R6-3.X.3`)
 
