@@ -239,9 +239,20 @@ fn structured_matches_confident_task_statement(
 // plan->code->plan work cycles, and dotted work-item narrowing (`R6-3` -> `R6-3.5`, no structural
 // separator) still read as fully disjoint; any single shared constraint term (PlatformBoundary/
 // ScopeBoundary) masks real drift. Containment also only applies when both goals expose a concrete
-// structured target — comparison_key-only goals fall through to the disjoint check. The full
-// weighted/graduated distance, and threading the anchor's own comparison_key so both sides extract
-// symmetrically, remain deferred; do not assume this already grades partial overlap.
+// structured target — comparison_key-only goals fall through to the disjoint check.
+//
+// Known residual OVER-fire, deliberately NOT closed here (codex re-review §P2): a bare
+// `ObjectiveTargetKind::CrateOrPackage` target (`agent-drift-analyzer`) is not matched as an
+// ancestor of a path form of the same crate (`crates/agent-drift-analyzer/src/…`), because the bare
+// name is not a structural path prefix of the path. So `Review the agent-drift-analyzer crate` ->
+// `Update crates/agent-drift-analyzer/src/…` still fires. This is left as open debt rather than
+// widened here: matching a bare crate name against an interior path segment needs the
+// package-root convention (which lives in `context/objective.rs`, not the scorer) and a loose
+// "segment appears anywhere" rule would reintroduce exactly the false negatives §P1 just fixed.
+// Over-firing is the conservative direction (it never masks drift), so it waits for the graduated
+// metric. The full weighted/graduated distance, and threading the anchor's own comparison_key so
+// both sides extract symmetrically, remain deferred; do not assume this already grades partial
+// overlap.
 fn semantic_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     anchor_goal: &StructuredObjective,
@@ -320,9 +331,12 @@ fn target_anchor_strings(structured: &StructuredObjective) -> Vec<&str> {
 }
 
 /// `ancestor` structurally contains (or equals) `descendant`: split both on real structural
-/// separators (`/`, `\`, `::`) — never `-`/`.` — and require the ancestor's segments to be a
-/// case-insensitive prefix of the descendant's. `crates/foo` contains `crates/foo/bar.rs` and
-/// `a::b` contains `a::b::c`; `docs/specs/r6-map` does NOT contain `docs/specs/r6/map.md`.
+/// separators (`/`, `\`, `::`) — never `-`/`.` — and require the ancestor's segments to be a prefix
+/// of the descendant's. `crates/foo` contains `crates/foo/bar.rs` and `a::b` contains `a::b::c`;
+/// `docs/specs/r6-map` does NOT contain `docs/specs/r6/map.md`. Segment comparison is
+/// case-SENSITIVE (codex re-review §P3): the same carve-out is applied to raw Rust symbol refs and
+/// to paths on case-sensitive filesystems, where `Foo::Bar` and `foo::bar` are different items, so
+/// a case-only difference must read as a real pivot, never as a benign narrowing.
 fn structural_path_ancestor_or_equal(ancestor: &str, descendant: &str) -> bool {
     let ancestor_segments = structural_path_segments(ancestor);
     let descendant_segments = structural_path_segments(descendant);
@@ -332,9 +346,7 @@ fn structural_path_ancestor_or_equal(ancestor: &str, descendant: &str) -> bool {
     ancestor_segments
         .iter()
         .zip(descendant_segments.iter())
-        .all(|(ancestor_segment, descendant_segment)| {
-            ancestor_segment.eq_ignore_ascii_case(descendant_segment)
-        })
+        .all(|(ancestor_segment, descendant_segment)| ancestor_segment == descendant_segment)
 }
 
 /// Split a raw target string into structural segments on `/`, `\`, and `::` only, dropping empties.
@@ -710,10 +722,21 @@ mod tests {
             "foo::bar",
             "foo::bar::baz"
         ));
-        // Equal paths are trivially ancestor-or-equal.
+        // Genuinely equal paths are ancestor-or-equal.
         assert!(structural_path_ancestor_or_equal(
+            "docs/specs/r6/map.md",
+            "docs/specs/r6/map.md"
+        ));
+        // Codex re-review §P3: comparison is case-SENSITIVE. Rust symbol refs and case-sensitive
+        // filesystems treat these as different items, so a case-only difference must NOT be read as
+        // benign containment (it would mask a real pivot).
+        assert!(!structural_path_ancestor_or_equal(
             "docs/specs/r6/MAP.md",
             "docs/specs/r6/map.md"
+        ));
+        assert!(!structural_path_ancestor_or_equal(
+            "Foo::Bar",
+            "foo::bar::baz"
         ));
         // Codex finding: `-`/`.` are intra-segment punctuation, not separators, so a hyphen
         // collision must NOT forge ancestry (`r6-map` segment != `r6` segment).

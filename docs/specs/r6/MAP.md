@@ -265,10 +265,12 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    `-`/`.` inside a segment so that pivot still fires. Sibling artifacts sharing a stem still fire, and all
    pinned true-positive fixtures are preserved (new acceptance case
    `synthetic-kickoff-narrowing-into-anchored-subtree` pins the suppression end-to-end; a scorer-level
-   regression guard pins the hyphen/slash collision). The graduated / weighted remainder of `R6-3.X.2`
-   (family-stem narrowing, doc progression, plan→code→plan cycles, dotted work-item narrowing,
-   shared-constraint masking, anchor comparison_key asymmetry) stays open; the eligibility-bar revisit
-   (`R6-3.X.3`) stays gated behind it. See the `R6-3` TASKS ledger `R6-3.X.2` and the `FINDINGS` Step 3 note.
+   regression guard pins the hyphen/slash collision). Segment comparison is case-sensitive (codex
+   re-review §P3). The graduated / weighted remainder of `R6-3.X.2` (family-stem narrowing, doc
+   progression, plan→code→plan cycles, dotted work-item narrowing, a residual bare-`CrateOrPackage`
+   over-fire [codex §P2, deferred], shared-constraint masking, anchor comparison_key asymmetry) stays
+   open; the eligibility-bar revisit (`R6-3.X.3`) stays gated behind it. See the `R6-3` TASKS ledger
+   `R6-3.X.2` and the `FINDINGS` Step 3 note.
 
 ## Non-Goals For This Rescope
 

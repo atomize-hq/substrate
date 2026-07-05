@@ -320,12 +320,15 @@ collapses `/`, `-`, and `.` to the same `_`; splitting the raw path on structura
 `-`/`.` inside a segment, so that pivot still fires. Sibling artifacts sharing a stem still fire and every
 pinned true-positive fixture is preserved; a new acceptance case
 (`synthetic-kickoff-narrowing-into-anchored-subtree`) pins the suppression through the live analyzer path,
-and a scorer-level regression guard pins the hyphen/slash collision. Still open under this step: the
-genuinely graduated/weighted metric for family-stem narrowing
-(`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc progression, plan→code→plan
-cycles, and dotted work-item narrowing (`R6-3 → R6-3.5`, no structural separator), plus the
-shared-constraint-masking false negative and the anchor comparison_key asymmetry. See the `R6-3` TASKS
-ledger `R6-3.X.2` for the landed/open split.
+and a scorer-level regression guard pins the hyphen/slash collision. Segment comparison is case-sensitive
+(codex re-review §P3: `Foo::Bar` ≠ `foo::bar` for Rust symbols and case-sensitive filesystems, so a
+case-only difference stays a real pivot). Still open under this step: the genuinely graduated/weighted
+metric for family-stem narrowing (`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc
+progression, plan→code→plan cycles, and dotted work-item narrowing (`R6-3 → R6-3.5`, no structural
+separator); a known residual over-fire where a bare `CrateOrPackage` name is not matched as an ancestor of
+the crate's path form (codex re-review §P2, deferred — closing it needs the package-root convention and
+over-firing never masks drift); plus the shared-constraint-masking false negative and the anchor
+comparison_key asymmetry. See the `R6-3` TASKS ledger `R6-3.X.2` for the landed/open split.
 
 ### Step 4 (conditional) — Revisit loosening the eligibility bar (`R6-3.X.3`)
 

@@ -342,11 +342,20 @@ all fixed here.
     ancestor/descendant and silently dropped a real pivot; splitting the raw path on structural separators
     only keeps `-`/`.` inside a segment, so that pivot still fires. Sibling artifacts sharing a lexical
     stem stay unrelated and still fire, preserving every pinned true-positive fixture; comparison_key-only
-    goals (no concrete target) fall through to the disjoint check unchanged. Still open for the full
-    graduated/weighted metric: family-stem narrowing (`audit-trio.report.json` →
-    `audit-trio.model-selection/…report.json`), doc progression, plan→code→plan work cycles, dotted
-    work-item narrowing (`R6-3` → `R6-3.5`, no structural separator), the shared-constraint-term masking
-    false negative, and the anchor comparison_key asymmetry.
+    goals (no concrete target) fall through to the disjoint check unchanged. Segment comparison is
+    **case-sensitive** (codex re-review §P3): the carve-out is applied to raw Rust symbol refs and to
+    paths on case-sensitive filesystems, where `Foo::Bar` ≠ `foo::bar`, so a case-only difference stays a
+    real pivot rather than a masked narrowing. Still open for the full graduated/weighted metric:
+    family-stem narrowing (`audit-trio.report.json` → `audit-trio.model-selection/…report.json`), doc
+    progression, plan→code→plan work cycles, dotted work-item narrowing (`R6-3` → `R6-3.5`, no structural
+    separator), the shared-constraint-term masking false negative, and the anchor comparison_key
+    asymmetry. **Known residual over-fire, deliberately deferred (codex re-review §P2):** a bare
+    `CrateOrPackage` target (`agent-drift-analyzer`) is not matched as an ancestor of a path form of the
+    same crate (`crates/agent-drift-analyzer/src/…`), so `Review the agent-drift-analyzer crate` →
+    `Update crates/agent-drift-analyzer/src/…` still fires. Closing it needs the package-root convention
+    (which lives in `context/objective.rs`, not the scorer); a loose "segment appears anywhere" rule would
+    reintroduce the §P1 false negatives, and over-firing never masks drift, so it waits for the graduated
+    metric.
   - Verify (first cut, run green 2026-07-05, incl. post-codex-review fix): scorer unit tests
     (`cargo test -p agent-drift-analyzer --lib scoring::semantic_goal_drift`, incl. the
     `structural_path_ancestry_respects_real_separators_only` unit test and the
