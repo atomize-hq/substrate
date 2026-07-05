@@ -351,7 +351,17 @@ all fixed here.
     (`docs/specs/r6/MAP.md` → `docs/specs/r6 + crates/other/src/lib.rs`); a one-directional all-within test
     masked the broadening case. Segment comparison is **case-sensitive** (codex re-review §P3): the carve-out is applied to raw Rust symbol refs and to
     paths on case-sensitive filesystems, where `Foo::Bar` ≠ `foo::bar`, so a case-only difference stays a
-    real pivot rather than a masked narrowing. Still open for the full graduated/weighted metric:
+    real pivot rather than a masked narrowing. Segmentation canonicalizes identity-preserving spellings
+    before comparison (codex re-review round 4, an over-fire fix): a `./` current-dir segment is dropped
+    and a trailing `:line`/`:line:col` reference is stripped (`strip_line_suffix`, mirroring the upstream
+    `strip_line_ref` in `context/objective.rs`), so `src/lib.rs` relates to `./src/lib.rs` and `exec.rs`
+    to `exec.rs:1537` — a narrowing that only adds one of those common accepted-upstream forms no longer
+    fires. Both spellings are no-ops, so canonicalizing them can only remove over-fires, never mask a
+    pivot: a Rust `a::b` symbol tail is non-numeric and left intact, and a leading-dot dotfile dir
+    (`.github`) remains a real segment (only an exact `.` segment is dropped). Pinned by unit assertions
+    in `structural_path_ancestry_respects_real_separators_only` and the scorer-level
+    `semantic_goal_drift_does_not_flag_line_suffix_narrowing_of_same_file` test (mutation-checked
+    load-bearing against the line-strip). Still open for the full graduated/weighted metric:
     family-stem narrowing (`audit-trio.report.json` → `audit-trio.model-selection/…report.json`), doc
     progression, plan→code→plan work cycles, dotted work-item narrowing (`R6-3` → `R6-3.5`, no structural
     separator), the shared-constraint-term masking false negative, and the anchor comparison_key

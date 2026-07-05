@@ -325,7 +325,12 @@ not any-pair (codex re-review §P2, two rounds: a multi-target goal that adds an
 narrowing or broadening the others — still fires, because every concrete anchor of both goals must be
 structurally related to some anchor of the other). Segment comparison is case-sensitive
 (codex re-review §P3: `Foo::Bar` ≠ `foo::bar` for Rust symbols and case-sensitive filesystems, so a
-case-only difference stays a real pivot). Still open under this step: the genuinely graduated/weighted
+case-only difference stays a real pivot). Segmentation canonicalizes identity-preserving spellings first
+(codex re-review round 4): a `./` current-dir segment is dropped and a trailing `:line`/`:line:col`
+reference is stripped, so a narrowing that only adds a `./` prefix or pins a line (`exec.rs` →
+`exec.rs:1537`) no longer fires — both forms are no-ops, so the canonicalization can only remove
+over-fires, never mask a pivot (a Rust `a::b` tail is non-numeric and left intact; a dotfile dir like
+`.github` stays a real segment). Still open under this step: the genuinely graduated/weighted
 metric for family-stem narrowing (`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc
 progression, plan→code→plan cycles, and dotted work-item narrowing (`R6-3 → R6-3.5`, no structural
 separator); a known residual over-fire where a bare `CrateOrPackage` name is not matched as an ancestor of

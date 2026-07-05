@@ -352,7 +352,11 @@ fn target_concrete_anchors(structured: &StructuredObjective) -> Vec<&str> {
 /// `docs/specs/r6-map` does NOT contain `docs/specs/r6/map.md`. Segment comparison is
 /// case-SENSITIVE (codex re-review §P3): the same carve-out is applied to raw Rust symbol refs and
 /// to paths on case-sensitive filesystems, where `Foo::Bar` and `foo::bar` are different items, so
-/// a case-only difference must read as a real pivot, never as a benign narrowing.
+/// a case-only difference must read as a real pivot, never as a benign narrowing. Segmentation
+/// canonicalizes identity-preserving spellings (codex re-review round 4): a `./` current-dir prefix
+/// and a trailing `:line`/`:line:col` reference are no-ops, so `src/lib.rs` relates to
+/// `./src/lib.rs` and `exec.rs` to `exec.rs:1537` — otherwise a narrowing that only adds one of
+/// those common forms would spuriously fire.
 fn structural_path_ancestor_or_equal(ancestor: &str, descendant: &str) -> bool {
     let ancestor_segments = structural_path_segments(ancestor);
     let descendant_segments = structural_path_segments(descendant);
@@ -365,13 +369,34 @@ fn structural_path_ancestor_or_equal(ancestor: &str, descendant: &str) -> bool {
         .all(|(ancestor_segment, descendant_segment)| ancestor_segment == descendant_segment)
 }
 
-/// Split a raw target string into structural segments on `/`, `\`, and `::` only, dropping empties.
+/// Split a raw target string into structural segments on `/`, `\`, and `::` only, after stripping a
+/// trailing `:line` reference, and dropping empty and `.` (current-dir) segments. `-`/`.` inside a
+/// segment are never separators; a leading-dot dotfile dir (`.github`) is a real segment, only an
+/// exact `.` segment is dropped.
 fn structural_path_segments(value: &str) -> Vec<&str> {
-    value
+    strip_line_suffix(value)
         .split(['/', '\\'])
         .flat_map(|segment| segment.split("::"))
-        .filter(|segment| !segment.is_empty())
+        .filter(|segment| !segment.is_empty() && *segment != ".")
         .collect()
+}
+
+/// Strip a trailing `:line` / `:line:col` reference (`exec.rs:1537` -> `exec.rs`) so narrowing to a
+/// specific line stays the same file, not a pivot. Mirrors the upstream `strip_line_ref` in
+/// `context/objective.rs`, kept local to avoid widening that module's visibility. A `::`-style Rust
+/// symbol ref (`a::b`) or a Windows drive (`C:/…`) has a non-numeric tail after the first colon and
+/// is left intact.
+fn strip_line_suffix(value: &str) -> &str {
+    match value.split_once(':') {
+        Some((head, tail))
+            if !head.is_empty()
+                && !tail.is_empty()
+                && tail.chars().all(|c| c.is_ascii_digit() || c == ':') =>
+        {
+            head
+        }
+        _ => value,
+    }
 }
 
 fn goal_specific_terms(
@@ -775,6 +800,24 @@ mod tests {
             "",
             "docs/specs/r6/map.md"
         ));
+        // Codex re-review round 4: identity-preserving spellings canonicalize. A `./` current-dir
+        // prefix and a `:line`/`:line:col` suffix are no-ops, so these count as related.
+        assert!(structural_path_ancestor_or_equal(
+            "src/lib.rs",
+            "./src/lib.rs"
+        ));
+        assert!(structural_path_ancestor_or_equal("exec.rs", "exec.rs:1537"));
+        assert!(structural_path_ancestor_or_equal(
+            "crates/foo",
+            "crates/foo/exec.rs:1537:5"
+        ));
+        // A leading-dot dotfile dir is a real segment, not a current-dir no-op.
+        assert!(structural_path_ancestor_or_equal(
+            ".github/workflows",
+            ".github/workflows/ci.yml"
+        ));
+        // A Rust symbol ref keeps its `::` tail (non-numeric), not stripped as a line ref.
+        assert!(!structural_path_ancestor_or_equal("a::b", "a::c"));
     }
 
     #[test]
@@ -918,6 +961,38 @@ mod tests {
         assert!(
             scored.score.flagged,
             "an unrelated second target must not be masked by one nested target"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_does_not_flag_line_suffix_narrowing_of_same_file() {
+        // codex re-review round 4: narrowing to a specific line of the same file
+        // (mod.rs -> mod.rs:42) is the same target, not a pivot. The `:line` suffix must
+        // canonicalize away so structural containment (equal file) suppresses the claim.
+        let anchor = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/mod.rs:42",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs_42",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            !scored.score.flagged,
+            "a :line suffix on the same file must canonicalize away, not read as a pivot"
         );
     }
 
