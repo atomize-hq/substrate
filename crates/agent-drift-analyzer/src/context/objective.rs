@@ -2275,12 +2275,14 @@ fn is_model_or_version_token(token: &str) -> bool {
                 if rest.is_empty() {
                     return true;
                 }
-                // Short `o1`/`o3`/`o4` families collide with ordinary identifiers, so they only count
-                // as model metadata across a model-style separator (`o4-mini`, `o4.x`, `o40`) — never
-                // an underscore, which marks a symbol (`o4_router`). Distinctive prefixes (`gpt`,
-                // `claude`, …) keep the looser separator rule (codex re-review finding 2).
+                // Short `o1`/`o3`/`o4` families collide with ordinary identifiers, so a bare digit
+                // continuation (`o40`) or a recognized variant/version component after a separator
+                // (`o4-mini`, `o4_mini`, `o4.5`) is model metadata, while a separator into an
+                // arbitrary word (`o4_router`, `o4-gateway`) is a symbol. Distinctive prefixes
+                // (`gpt`, `claude`, …) keep the looser separator rule (codex re-review 2 + 3).
                 let separator_ok = if AMBIGUOUS_SHORT_MODEL_PREFIXES.contains(model) {
-                    rest.starts_with(|c: char| c.is_ascii_digit() || matches!(c, '-' | '.'))
+                    rest.starts_with(|c: char| c.is_ascii_digit())
+                        || ambiguous_short_model_rest_is_variant(rest)
                 } else {
                     rest.starts_with(|c: char| c.is_ascii_digit() || matches!(c, '-' | '.' | '_'))
                 };
@@ -2290,10 +2292,15 @@ fn is_model_or_version_token(token: &str) -> bool {
             }
         }
     }
+    // Version token: `v2.3.1` / `1.2.0`, and the underscore-normalized comparison-key spelling
+    // `v2_3_1` (both `.` and `_` are version separators here) so extraction and the scorer agree on
+    // the same junk (codex re-review 3).
     let body = lower.strip_prefix('v').unwrap_or(&lower);
     !body.is_empty()
-        && body.chars().all(|c| c.is_ascii_digit() || c == '.')
-        && body.contains('.')
+        && body
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, '.' | '_'))
+        && body.chars().any(|c| matches!(c, '.' | '_'))
         && body.chars().any(|c| c.is_ascii_digit())
 }
 
@@ -2356,9 +2363,27 @@ const MODEL_NAME_PREFIXES: &[&str] = &[
     "haiku", "o1", "o3", "o4", "phi", "gemma",
 ];
 
-/// Model families short enough to collide with ordinary identifiers; only treated as model metadata
-/// across a model-style separator (never `_`, which marks a symbol). See `is_model_or_version_token`.
+/// Model families short enough to collide with ordinary identifiers (`o4_router`); a separator into
+/// one of these families only reads as model metadata when the trailing component is a recognized
+/// variant/version. See `is_model_or_version_token` and `ambiguous_short_model_rest_is_variant`.
 const AMBIGUOUS_SHORT_MODEL_PREFIXES: &[&str] = &["o1", "o3", "o4"];
+
+/// Recognized model variant words that disambiguate a short-family suffix (`o4-mini`, `o4_mini`)
+/// from an arbitrary symbol (`o4_router`). Kept small and specific to real model variants.
+const MODEL_VARIANT_SUFFIXES: &[&str] = &[
+    "mini", "preview", "pro", "high", "turbo", "nano", "max", "instruct", "chat", "latest",
+    "vision",
+];
+
+/// For a short-family remainder (begins with a separator), the trailing component is model metadata
+/// when its first `-`/`_`/`.`-delimited segment is a known variant word or an all-numeric version /
+/// date component. `-mini` / `_mini` / `-mini-high` / `-2024-05` → variant; `_router` → symbol.
+fn ambiguous_short_model_rest_is_variant(rest: &str) -> bool {
+    let after_sep = rest.trim_start_matches(['-', '.', '_']);
+    let first = after_sep.split(['-', '_', '.']).next().unwrap_or("");
+    !first.is_empty()
+        && (first.chars().all(|c| c.is_ascii_digit()) || MODEL_VARIANT_SUFFIXES.contains(&first))
+}
 
 /// Grammar-first anchor quality shared by extraction and the scorer.
 pub(crate) fn anchor_quality(raw_token: &str) -> TargetAnchorQuality {
@@ -2916,6 +2941,7 @@ fn extract_named_artifacts(text: &str) -> Vec<String> {
     let lowered = text.to_ascii_lowercase();
     for (needle, display) in [
         ("agents.md", "AGENTS.md"),
+        ("claude.md", "CLAUDE.md"),
         ("<skill>", "<skill>"),
         ("available skills", "Available skills"),
         ("plugin instructions", "plugin instructions"),
@@ -2927,6 +2953,20 @@ fn extract_named_artifacts(text: &str) -> Vec<String> {
         ("instructions block", "instructions block"),
     ] {
         if lowered.contains(needle) && !artifacts.iter().any(|existing| existing == display) {
+            artifacts.push(display.to_string());
+        }
+    }
+    // Bare uppercase instruction-file shorthands (`update AGENTS`, `review CLAUDE`) point at the
+    // AGENTS.md / CLAUDE.md instruction surfaces. Case-sensitive whole-word match over the original
+    // text so ordinary prose words ("the agents", "Claude") are not promoted — dropping these stems
+    // from WELL_KNOWN_ROOTLESS_FILES otherwise left bare shorthands with no target (codex re-review 3).
+    for raw in text.split_whitespace() {
+        let display = match raw.trim_matches(|c: char| !c.is_ascii_alphanumeric()) {
+            "AGENTS" => "AGENTS.md",
+            "CLAUDE" => "CLAUDE.md",
+            _ => continue,
+        };
+        if !artifacts.iter().any(|existing| existing == display) {
             artifacts.push(display.to_string());
         }
     }
@@ -3843,6 +3883,10 @@ mod tests {
             "claude-3",
             "gemma-2",
             "v2.3.1",
+            // codex re-review 3: underscore-normalized model/variant and version spellings must be
+            // caught on the extraction side too, not only in the scorer's `.`-joined form.
+            "o4_mini",
+            "v2_3_1",
         ] {
             assert!(
                 is_model_or_version_token(model),
@@ -3911,5 +3955,45 @@ mod tests {
         let symbol = explicit_target_anchor_for_text("refactor foo::bar for clarity")
             .expect("a rust symbol ref should be a stable target");
         assert!(symbol.named_artifacts.iter().any(|a| a == "foo::bar"));
+    }
+
+    #[test]
+    fn named_target_extraction_stays_consistent_for_underscore_model_tokens() {
+        // codex re-review 3: the extraction guard must agree with the scorer. Underscore-form model
+        // and version tokens are metadata (not targets); an underscore into an arbitrary symbol word
+        // is a real target — the `o4_router` case round 2 required us to preserve.
+        assert!(
+            !looks_like_explicit_named_target("o4_mini"),
+            "`o4_mini` is a model variant, not a named target"
+        );
+        assert!(
+            !looks_like_explicit_named_target("v2_3_1"),
+            "`v2_3_1` is a version token, not a named target"
+        );
+        assert!(
+            looks_like_explicit_named_target("o4_router"),
+            "`o4_router` is a symbol and must remain a named target"
+        );
+    }
+
+    #[test]
+    fn bare_instruction_file_shorthands_anchor_as_instruction_surface() {
+        // codex re-review 3: dropping agents/claude from the rootless set left `update AGENTS` /
+        // `review CLAUDE` with no target; route the uppercase shorthands to the instruction surface.
+        let artifacts = extract_named_artifacts("update AGENTS and review CLAUDE");
+        assert!(artifacts.iter().any(|a| a == "AGENTS.md"));
+        assert!(artifacts.iter().any(|a| a == "CLAUDE.md"));
+
+        // Ordinary prose words must not be promoted (case-sensitive whole-word discriminator).
+        let prose = extract_named_artifacts("the agents fixed it and Claude approved");
+        assert!(
+            prose.is_empty(),
+            "lowercase prose must not anchor, got {prose:?}"
+        );
+
+        let anchor = explicit_target_anchor_for_text("update AGENTS with the new policy")
+            .expect("bare AGENTS should anchor an instruction surface");
+        assert_eq!(anchor.kind, ObjectiveTargetKind::SkillOrInstructionSurface);
+        assert!(anchor.named_artifacts.iter().any(|a| a == "AGENTS.md"));
     }
 }
