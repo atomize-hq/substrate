@@ -369,23 +369,31 @@ fn structural_path_ancestor_or_equal(ancestor: &str, descendant: &str) -> bool {
         .all(|(ancestor_segment, descendant_segment)| ancestor_segment == descendant_segment)
 }
 
-/// Split a raw target string into structural segments on `/`, `\`, and `::` only, after stripping a
-/// trailing `:line` reference, and dropping empty and `.` (current-dir) segments. `-`/`.` inside a
-/// segment are never separators; a leading-dot dotfile dir (`.github`) is a real segment, only an
-/// exact `.` segment is dropped.
+/// Split a raw target string into structural segments on `/`, `\`, and `::` only, dropping empty
+/// and `.` (current-dir) segments, then stripping a trailing `:line` reference from the final
+/// segment. `-`/`.` inside a segment are never separators; a leading-dot dotfile dir (`.github`) is
+/// a real segment, only an exact `.` segment is dropped. The line strip runs on the leaf, not the
+/// whole string (codex re-review round 5): on a Windows absolute path (`C:/repo/src/lib.rs:42`) a
+/// whole-string strip stops at the drive-letter colon and never removes the `:42`, so the same-file
+/// narrowing would still read as a pivot.
 fn structural_path_segments(value: &str) -> Vec<&str> {
-    strip_line_suffix(value)
+    let mut segments: Vec<&str> = value
         .split(['/', '\\'])
         .flat_map(|segment| segment.split("::"))
         .filter(|segment| !segment.is_empty() && *segment != ".")
-        .collect()
+        .collect();
+    if let Some(last) = segments.last_mut() {
+        *last = strip_line_suffix(last);
+    }
+    segments
 }
 
-/// Strip a trailing `:line` / `:line:col` reference (`exec.rs:1537` -> `exec.rs`) so narrowing to a
-/// specific line stays the same file, not a pivot. Mirrors the upstream `strip_line_ref` in
-/// `context/objective.rs`, kept local to avoid widening that module's visibility. A `::`-style Rust
-/// symbol ref (`a::b`) or a Windows drive (`C:/…`) has a non-numeric tail after the first colon and
-/// is left intact.
+/// Strip a trailing `:line` / `:line:col` reference from a leaf segment (`exec.rs:1537` ->
+/// `exec.rs`) so narrowing to a specific line stays the same file, not a pivot. Mirrors the
+/// upstream `strip_line_ref` in `context/objective.rs` — including its per-leaf application, which
+/// is what keeps a Windows drive colon out of reach — kept local to avoid widening that module's
+/// visibility. A `:`-joined non-numeric tail (`a:b`) or a bare drive (`C:`, empty tail) is left
+/// intact.
 fn strip_line_suffix(value: &str) -> &str {
     match value.split_once(':') {
         Some((head, tail))
@@ -818,6 +826,23 @@ mod tests {
         ));
         // A Rust symbol ref keeps its `::` tail (non-numeric), not stripped as a line ref.
         assert!(!structural_path_ancestor_or_equal("a::b", "a::c"));
+        // Codex re-review round 5: the line strip runs on the leaf, not the whole string, so a
+        // Windows absolute path canonicalizes too — a whole-string strip would stop at the
+        // drive-letter colon and leave the `:42` in place.
+        assert!(structural_path_ancestor_or_equal(
+            "C:/repo/src/lib.rs",
+            "C:/repo/src/lib.rs:42"
+        ));
+        assert!(structural_path_ancestor_or_equal(
+            r"C:\repo\src",
+            "C:/repo/src/lib.rs:42"
+        ));
+        // A bare drive segment (empty tail after the colon) is left intact, and a drive-only
+        // ancestor still requires matching path segments below it.
+        assert!(!structural_path_ancestor_or_equal(
+            "C:/other",
+            "C:/repo/src/lib.rs:42"
+        ));
     }
 
     #[test]

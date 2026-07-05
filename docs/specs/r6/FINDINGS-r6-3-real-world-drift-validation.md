@@ -330,7 +330,11 @@ case-only difference stays a real pivot). Segmentation canonicalizes identity-pr
 reference is stripped, so a narrowing that only adds a `./` prefix or pins a line (`exec.rs` →
 `exec.rs:1537`) no longer fires — both forms are no-ops, so the canonicalization can only remove
 over-fires, never mask a pivot (a Rust `a::b` tail is non-numeric and left intact; a dotfile dir like
-`.github` stays a real segment). Still open under this step: the genuinely graduated/weighted
+`.github` stays a real segment). The line strip runs on the leaf segment after path splitting, not on
+the whole string (codex re-review round 5): a whole-string strip stops at a Windows drive-letter colon
+(`C:/repo/src/lib.rs:42` has non-numeric tail `/repo/src/lib.rs:42`), so the same-file narrowing would
+still fire on Windows absolute paths; per-leaf application mirrors how the upstream `strip_line_ref` in
+`context/objective.rs` is applied. Still open under this step: the genuinely graduated/weighted
 metric for family-stem narrowing (`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc
 progression, plan→code→plan cycles, and dotted work-item narrowing (`R6-3 → R6-3.5`, no structural
 separator); a known residual over-fire where a bare `CrateOrPackage` name is not matched as an ancestor of

@@ -270,7 +270,9 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    broadening — still fires), and segment comparison is case-sensitive (codex re-review §P3), with
    identity-preserving spellings canonicalized first (codex re-review round 4: a `./` current-dir prefix
    and a trailing `:line`/`:line:col` reference are no-ops and are stripped before comparison, so
-   `exec.rs` → `exec.rs:1537` reads as the same file, not a pivot). The graduated / weighted remainder of `R6-3.X.2` (family-stem narrowing, doc
+   `exec.rs` → `exec.rs:1537` reads as the same file, not a pivot; the line strip runs on the leaf
+   segment, not the whole string, so a Windows drive colon — `C:/repo/src/lib.rs:42` — does not defeat
+   it [codex re-review round 5]). The graduated / weighted remainder of `R6-3.X.2` (family-stem narrowing, doc
    progression, plan→code→plan cycles, dotted work-item narrowing, a residual bare-`CrateOrPackage`
    over-fire [codex §P2, deferred], shared-constraint masking, anchor comparison_key asymmetry) stays
    open; the eligibility-bar revisit (`R6-3.X.3`) stays gated behind it. See the `R6-3` TASKS ledger

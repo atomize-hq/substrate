@@ -358,8 +358,14 @@ all fixed here.
     to `exec.rs:1537` — a narrowing that only adds one of those common accepted-upstream forms no longer
     fires. Both spellings are no-ops, so canonicalizing them can only remove over-fires, never mask a
     pivot: a Rust `a::b` symbol tail is non-numeric and left intact, and a leading-dot dotfile dir
-    (`.github`) remains a real segment (only an exact `.` segment is dropped). Pinned by unit assertions
-    in `structural_path_ancestry_respects_real_separators_only` and the scorer-level
+    (`.github`) remains a real segment (only an exact `.` segment is dropped). The line strip runs on
+    the leaf segment after path splitting, not on the whole string (codex re-review round 5): a
+    whole-string `split_once(':')` stops at a Windows drive-letter colon, so `C:/repo/src/lib.rs:42`
+    never canonicalized and a same-file narrowing still fired on Windows absolute paths; per-leaf
+    application mirrors how the upstream `strip_line_ref` is applied (to leaves) in
+    `context/objective.rs`. Pinned by unit assertions in
+    `structural_path_ancestry_respects_real_separators_only` (incl. Windows drive forms,
+    mutation-checked load-bearing against the whole-string variant) and the scorer-level
     `semantic_goal_drift_does_not_flag_line_suffix_narrowing_of_same_file` test (mutation-checked
     load-bearing against the line-strip). Still open for the full graduated/weighted metric:
     family-stem narrowing (`audit-trio.report.json` → `audit-trio.model-selection/…report.json`), doc
