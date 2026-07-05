@@ -2960,18 +2960,23 @@ fn extract_named_artifacts(text: &str) -> Vec<String> {
             artifacts.push(display.to_string());
         }
     }
-    // Bare uppercase instruction-file shorthands (`update AGENTS`, `review CLAUDE`) point at the
-    // AGENTS.md / CLAUDE.md instruction surfaces. Case-sensitive whole-word match over the original
-    // text so ordinary prose words ("the agents", "Claude") are not promoted — dropping these stems
-    // from WELL_KNOWN_ROOTLESS_FILES otherwise left bare shorthands with no target (codex re-review 3).
+    // Bare uppercase instruction-file shorthand (`update AGENTS`) points at the AGENTS.md
+    // instruction surface. Case-sensitive whole-word match over the original text so ordinary prose
+    // ("the agents") is not promoted — dropping the stem from WELL_KNOWN_ROOTLESS_FILES otherwise
+    // left the shorthand with no target (codex re-review 3).
+    //
+    // Only AGENTS is promoted: it has full boilerplate-suppression support in checkpoint/mod.rs, so a
+    // first-class anchor stays consistent. CLAUDE.md is deliberately NOT promoted here — the token is
+    // indistinguishable between an explicit goal and a pasted `# CLAUDE.md` boilerplate header, so
+    // anchoring it collides with boilerplate suppression (round 4) and with comparison-key kind
+    // consistency vs the `.md` doc path (round 5). Giving CLAUDE.md AGENTS.md-equivalent treatment
+    // needs symmetric handling in the checkpoint boilerplate taxonomy, which is out of this packet's
+    // objective-local scope; until then CLAUDE.md keeps its existing `.md` doc-path classification.
     for raw in text.split_whitespace() {
-        let display = match raw.trim_matches(|c: char| !c.is_ascii_alphanumeric()) {
-            "AGENTS" => "AGENTS.md",
-            "CLAUDE" => "CLAUDE.md",
-            _ => continue,
-        };
-        if !artifacts.iter().any(|existing| existing == display) {
-            artifacts.push(display.to_string());
+        if raw.trim_matches(|c: char| !c.is_ascii_alphanumeric()) == "AGENTS"
+            && !artifacts.iter().any(|existing| existing == "AGENTS.md")
+        {
+            artifacts.push("AGENTS.md".to_string());
         }
     }
     artifacts
@@ -3985,12 +3990,18 @@ mod tests {
     }
 
     #[test]
-    fn bare_instruction_file_shorthands_anchor_as_instruction_surface() {
-        // codex re-review 3: dropping agents/claude from the rootless set left `update AGENTS` /
-        // `review CLAUDE` with no target; route the uppercase shorthands to the instruction surface.
-        let artifacts = extract_named_artifacts("update AGENTS and review CLAUDE");
+    fn bare_agents_shorthand_anchors_while_claude_defers_to_supported_surfaces() {
+        // codex re-review 3 asked bare instruction-file shorthands to anchor; only AGENTS is promoted
+        // because it has full boilerplate-suppression support. CLAUDE.md first-class treatment is
+        // deferred (rounds 4/5): promoting the bare token collides with pasted-boilerplate
+        // suppression and comparison-key kind consistency, resolvable only in the checkpoint
+        // boilerplate taxonomy (out of this packet's objective-local scope).
+        let artifacts = extract_named_artifacts("update AGENTS and tidy CLAUDE");
         assert!(artifacts.iter().any(|a| a == "AGENTS.md"));
-        assert!(artifacts.iter().any(|a| a == "CLAUDE.md"));
+        assert!(
+            artifacts.iter().all(|a| a != "CLAUDE.md"),
+            "bare CLAUDE is deliberately not promoted yet, got {artifacts:?}"
+        );
 
         // Ordinary prose words must not be promoted (case-sensitive whole-word discriminator).
         let prose = extract_named_artifacts("the agents fixed it and Claude approved");
@@ -4000,8 +4011,7 @@ mod tests {
         );
 
         // codex re-review 4: a `claude.md` substring inside pasted boilerplate must NOT auto-promote
-        // CLAUDE.md (there is no upstream boilerplate suppression for it, unlike AGENTS.md); only the
-        // explicit bare-uppercase shorthand anchors.
+        // CLAUDE.md (there is no upstream boilerplate suppression for it, unlike AGENTS.md).
         let pasted = extract_named_artifacts("see the claude.md file and # CLAUDE.md header block");
         assert!(
             pasted.iter().all(|a| a != "CLAUDE.md"),
