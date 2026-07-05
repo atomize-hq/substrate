@@ -5,6 +5,9 @@ This directory freezes the bounded semantic-goal-drift acceptance corpus for Pac
 Included cases:
 
 - `synthetic-kickoff-anchor-unauthorized-pivot`
+- `synthetic-kickoff-narrowing-into-anchored-subtree` (admitted by the `R6-3.X.2`
+  hierarchical-containment first cut: a goal narrowing from an anchored directory to a file inside
+  it must produce no kickoff or rolling drift claim)
 - `synthetic-rolling-mid-session-pivot`
 
 Maintenance rules:

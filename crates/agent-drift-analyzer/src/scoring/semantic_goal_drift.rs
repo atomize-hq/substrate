@@ -220,41 +220,64 @@ fn structured_matches_confident_task_statement(
         && structured.unknowns.is_empty()
 }
 
-// KNOWN LIMITATION (accepted v1 debt, not a bug to silently "fix" here — see
-// docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-spec.md Resolved Decision 7 and
-// docs/specs/r6/MAP.md item 5): this is a binary disjoint-set check, not a graduated distance.
-// A legitimate narrowing (e.g. a target path narrowing from a crate root to one file inside it)
-// reads as fully disjoint and gets flagged; any single shared constraint term (PlatformBoundary/
-// ScopeBoundary) masks real drift. The check is also asymmetric: the anchor's term set is built
-// without its comparison_key (it is a bare StructuredObjective with no ObjectiveSummary), so a
-// High-confidence anchor with no concrete target and no boundary constraint collapses to an empty
-// set and produces no claim at all (a conservative miss, never a false positive). Revisiting this
-// as a weighted/graduated distance, or threading the anchor's own comparison_key so both sides
-// extract symmetrically, is deferred to a later R6 iteration; do not assume this already grades
-// partial overlap or extracts the anchor's comparison_key.
+// KNOWN LIMITATION (accepted debt, partially retired by the R6-3.X.2 containment first cut — see
+// docs/specs/r6/R6-2/agent-drift-analyzer-semantic-goal-drift-spec.md Resolved Decision 7,
+// docs/specs/r6/MAP.md item 5, and the R6-3 TASKS ledger `R6-3.X.2`): divergence is a binary
+// set comparison, not a graduated distance. The R6-3.X.2 first cut absorbs one relation beyond
+// exact term equality: hierarchical containment (`goal_terms_hierarchically_related`), so a goal
+// narrowing from a crate/directory root to one file inside it — or broadening back out — no
+// longer reads as a pivot. Everything else stays accepted v1 debt: sibling artifacts and shared
+// family stems (`audit-trio.report.json` -> `audit-trio.model-selection/…report.json`), doc
+// progression, and plan->code->plan work cycles still read as fully disjoint; any single shared
+// constraint term (PlatformBoundary/ScopeBoundary) masks real drift. The check is also
+// asymmetric: the anchor's term set is built without its comparison_key (it is a bare
+// StructuredObjective with no ObjectiveSummary), so a High-confidence anchor with no concrete
+// target and no boundary constraint collapses to an empty set and produces no claim at all (a
+// conservative miss, never a false positive). The full weighted/graduated distance, and
+// threading the anchor's own comparison_key so both sides extract symmetrically, remain
+// deferred; do not assume this already grades partial overlap.
 fn semantic_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     anchor_goal: &StructuredObjective,
 ) -> bool {
     let anchor_terms = goal_specific_terms(anchor_goal, None);
-    if current_goal.specific_terms.is_empty() || anchor_terms.is_empty() {
-        return false;
-    }
-
-    current_goal.specific_terms.is_disjoint(&anchor_terms)
+    goal_term_sets_diverged(&current_goal.specific_terms, &anchor_terms)
 }
 
 fn rolling_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     previous_goal: &EligibleCurrentGoal<'_>,
 ) -> bool {
-    if current_goal.specific_terms.is_empty() || previous_goal.specific_terms.is_empty() {
+    goal_term_sets_diverged(&current_goal.specific_terms, &previous_goal.specific_terms)
+}
+
+/// Two goal term sets diverge only when no cross-pair of terms is related. Term relation is exact
+/// equality (the original disjoint-set rule) plus hierarchical containment, so a narrowing or
+/// broadening within one namespace is progression, not drift.
+fn goal_term_sets_diverged(current: &BTreeSet<String>, other: &BTreeSet<String>) -> bool {
+    if current.is_empty() || other.is_empty() {
         return false;
     }
+    !current.iter().any(|current_term| {
+        other
+            .iter()
+            .any(|other_term| goal_terms_hierarchically_related(current_term, other_term))
+    })
+}
 
-    current_goal
-        .specific_terms
-        .is_disjoint(&previous_goal.specific_terms)
+/// R6-3.X.2 containment first cut. Normalized goal terms (`[a-z0-9_]` with `_` as the segment
+/// separator) are hierarchically related when they are equal or one extends the other at a segment
+/// boundary: `crates_agent_drift_analyzer` vs `crates_agent_drift_analyzer_src_scoring_mod_rs` is
+/// the same namespace narrowed to one file, not an abandoned goal. The boundary requirement keeps
+/// this whole-term containment, never common-prefix similarity — `docs_specs_r6_map_md` vs
+/// `docs_specs_r6_mapping_guide_md` (sibling artifacts sharing a stem) stays unrelated, so real
+/// pivots between siblings still fire.
+fn goal_terms_hierarchically_related(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    let (short, long) = if a.len() < b.len() { (a, b) } else { (b, a) };
+    !short.is_empty() && long.starts_with(short) && long.as_bytes()[short.len()] == b'_'
 }
 
 fn goal_specific_terms(
@@ -604,6 +627,125 @@ mod tests {
         assert!(
             !scored.score.flagged,
             "junk-only current goal must not fire semantic goal drift"
+        );
+    }
+
+    #[test]
+    fn goal_terms_hierarchical_relation_requires_a_segment_boundary() {
+        use super::goal_terms_hierarchically_related;
+
+        assert!(goal_terms_hierarchically_related(
+            "docs_specs_r6_map_md",
+            "docs_specs_r6_map_md"
+        ));
+        // Containment at a `_` boundary in either direction is narrowing/broadening.
+        assert!(goal_terms_hierarchically_related(
+            "crates_agent_drift_analyzer",
+            "crates_agent_drift_analyzer_src_scoring_mod_rs"
+        ));
+        assert!(goal_terms_hierarchically_related(
+            "crates_agent_drift_analyzer_src_scoring_mod_rs",
+            "crates_agent_drift_analyzer"
+        ));
+        // A shared stem without a whole-term boundary is a sibling, not containment.
+        assert!(!goal_terms_hierarchically_related(
+            "docs_specs_r6_map_md",
+            "docs_specs_r6_mapping_guide_md"
+        ));
+        assert!(!goal_terms_hierarchically_related(
+            "",
+            "docs_specs_r6_map_md"
+        ));
+    }
+
+    #[test]
+    fn semantic_goal_drift_does_not_flag_kickoff_narrowing_into_anchored_subtree() {
+        // R6-3.X.2 containment first cut: a kickoff anchor naming a crate/directory root and a
+        // current goal naming one file inside it is the canonical legitimate narrowing (R6-2 SPEC
+        // Resolved Decision 7); it must not read as an abandoned goal.
+        let anchor = structured_goal("crates/agent-drift-analyzer", Confidence::High, Vec::new());
+        let current = structured_goal(
+            "crates/agent-drift-analyzer/src/context/objective.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_context_objective_rs",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            !scored.score.flagged,
+            "narrowing from an anchored crate root into one of its files must not flag kickoff semantic_goal_drift"
+        );
+        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_does_not_flag_rolling_narrowing_from_directory_to_contained_file() {
+        let previous = structured_goal("docs/specs/r6", Confidence::High, Vec::new());
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "review|spec_or_design_doc|docs_specs_r6",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            !scored.score.flagged,
+            "narrowing from a directory goal into a file it contains must not flag rolling semantic_goal_drift"
+        );
+        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_sibling_artifacts_sharing_a_stem() {
+        // Boundary guard: containment is whole-term, never common-prefix similarity. Sibling
+        // artifacts under the same tree remain a real pivot (the existing co-fire and rolling
+        // fixtures pin the same semantics for docs/specs/r6 siblings).
+        let previous = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let current = structured_goal(
+            "docs/specs/r6/MAPPING-guide.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_mapping_guide_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "sibling artifacts sharing a lexical stem are not hierarchically related and must still fire"
         );
     }
 

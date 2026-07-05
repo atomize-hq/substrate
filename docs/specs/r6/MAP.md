@@ -254,6 +254,16 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    locked:** `R6-3.5` (extraction) → `R6-3.X.2` (graduated/weighted distance) → `R6-3.X.3` (eligibility-bar
    revisit, only if evidence supports it). Do not reorder; do not loosen the eligibility bar before the
    graduated-distance work lands.
+   **`R6-3.X.2` containment first cut (landed 2026-07-05):** with `R6-3.5` closed, the first bounded cut of
+   the distance work landed — divergence in `scoring/semantic_goal_drift.rs` now recognizes hierarchical
+   containment (one normalized goal term extending the other at a segment boundary) as relatedness, so the
+   canonical narrowing (crate/directory root → one file inside it) no longer flags on either the
+   kickoff-anchored or rolling comparison. Whole-term containment only; sibling artifacts sharing a stem
+   still fire, and all pinned true-positive fixtures are preserved (new acceptance case
+   `synthetic-kickoff-narrowing-into-anchored-subtree` pins the suppression end-to-end). The graduated /
+   weighted remainder of `R6-3.X.2` (family-stem narrowing, doc progression, plan→code→plan cycles,
+   shared-constraint masking, anchor comparison_key asymmetry) stays open; the eligibility-bar revisit
+   (`R6-3.X.3`) stays gated behind it. See the `R6-3` TASKS ledger `R6-3.X.2` and the `FINDINGS` Step 3 note.
 
 ## Non-Goals For This Rescope
 

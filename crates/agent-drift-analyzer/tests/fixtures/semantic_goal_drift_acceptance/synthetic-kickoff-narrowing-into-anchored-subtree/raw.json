@@ -1,0 +1,62 @@
+{
+  "case_id": "synthetic-kickoff-narrowing-into-anchored-subtree",
+  "session_id": "semantic-goal-drift-r6-3-x2-narrowing",
+  "source_artifact": "Synthetic compact-row acceptance fixture for the R6-3.X.2 hierarchical-containment first cut (legitimate narrowing must not read as drift).",
+  "notes": "Turn 1 stays boilerplate-only, so checkpoint 1 exports no structured target. Turn 2 records a steer objective for the directory crates/agent-drift-analyzer/src/context, which establishes the kickoff anchor. Turn 3 narrows the goal to crates/agent-drift-analyzer/src/context/objective.rs, a file inside the anchored directory. Under the pre-R6-3.X.2 binary disjoint-set rule the normalized directory and file terms are fully disjoint, so both the kickoff and rolling comparisons flagged this canonical legitimate narrowing (R6-2 SPEC Resolved Decision 7) as drift; with hierarchical containment neither may fire.",
+  "rows": [
+    {
+      "turn_id": "turn-001",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Continue the packet work using the existing evidence wall."
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,220p' docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-plan.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed rolling plan excerpts"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Continue the packet work using the existing evidence wall."
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "steer",
+      "text": "Review crates/agent-drift-analyzer/src/context only."
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_call",
+      "text": "{\"command\":\"ls crates/agent-drift-analyzer/src/context\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed context module listing"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update crates/agent-drift-analyzer/src/context/objective.rs only.\n\n## Verification\n- cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,200p' crates/agent-drift-analyzer/src/context/objective.rs\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed objective extraction excerpts"
+    }
+  ]
+}

@@ -307,6 +307,19 @@ Only if Step 2 shows narrowing/progression false positives survive extraction ha
 disjoint-set overlap with a graduated distance across both the kickoff-anchored and rolling comparisons so a
 narrowing (crate root → one file inside it) or a plan→code→plan cycle is not read as drift.
 
+**Containment first cut DONE (2026-07-05).** Step 2's condition was met (all 5 post-`R6-3.5` disjoint
+pairs are legitimate narrowing/progression), so the bounded first cut of this step landed: divergence in
+`scoring/semantic_goal_drift.rs` now treats two normalized goal terms as related when one extends the
+other at a `_` segment boundary (hierarchical containment), absorbing the canonical crate/directory →
+contained-file narrowing (and its broadening direction) on both the kickoff-anchored and rolling
+comparisons. Containment is whole-term only, so sibling artifacts sharing a stem still fire and every
+pinned true-positive fixture is preserved; a new acceptance case
+(`synthetic-kickoff-narrowing-into-anchored-subtree`) pins the suppression through the live analyzer
+path. Still open under this step: the genuinely graduated/weighted metric for family-stem narrowing
+(`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc progression, and
+plan→code→plan cycles, plus the shared-constraint-masking false negative and the anchor
+comparison_key asymmetry. See the `R6-3` TASKS ledger `R6-3.X.2` for the landed/open split.
+
 ### Step 4 (conditional) — Revisit loosening the eligibility bar (`R6-3.X.3`)
 
 Only after Steps 1–3. With garbage suppressed and the distance metric graduated, re-measure whether a

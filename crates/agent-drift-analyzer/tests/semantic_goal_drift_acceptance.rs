@@ -17,8 +17,9 @@ const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT: &str = concat!(
     "/tests/fixtures/semantic_goal_drift_acceptance"
 );
 
-const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 2] = [
+const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 3] = [
     "synthetic-kickoff-anchor-unauthorized-pivot",
+    "synthetic-kickoff-narrowing-into-anchored-subtree",
     "synthetic-rolling-mid-session-pivot",
 ];
 

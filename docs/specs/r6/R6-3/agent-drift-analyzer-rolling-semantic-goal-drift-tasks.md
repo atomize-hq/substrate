@@ -326,9 +326,28 @@ all fixed here.
     over-fires (rolling is the more likely over-fire path, since adjacent checkpoints evolve more often than
     kickoff-vs-current). Replace the disjoint-set overlap with a graduated/weighted distance across both the
     kickoff-anchored and rolling comparisons. Deferred to a later `R6` iteration; not written here.
-  - Verify: to be defined when (and if) opened.
+  - **Containment first cut LANDED (2026-07-05).** The acceptance condition was met by the `R6-3.5`
+    batch re-run (FINDINGS "R6-3.5 Result": all 5 surviving target-resolved disjoint pairs are legitimate
+    narrowing/progression, i.e. the binary rule's over-fire residue). The bounded first cut adds one
+    relation beyond exact term equality: **hierarchical containment**
+    (`goal_terms_hierarchically_related` in `scoring/semantic_goal_drift.rs`) — two normalized goal terms
+    are related when one extends the other at a `_` segment boundary, so the canonical narrowing (crate/
+    directory root → one file inside it, and the broadening direction back out) no longer reads as a
+    pivot on either the kickoff-anchored or rolling comparison. Containment is whole-term only: sibling
+    artifacts sharing a lexical stem (`docs_specs_r6_map_md` vs `docs_specs_r6_mapping_guide_md`) stay
+    unrelated and still fire, preserving every pinned true-positive fixture. Still open for the full
+    graduated/weighted metric: family-stem narrowing (`audit-trio.report.json` →
+    `audit-trio.model-selection/…report.json`), doc progression, plan→code→plan work cycles, the
+    shared-constraint-term masking false negative, and the anchor comparison_key asymmetry.
+  - Verify (first cut, run green 2026-07-05): scorer unit tests
+    (`cargo test -p agent-drift-analyzer --lib scoring::semantic_goal_drift`), the acceptance corpus with
+    the new `synthetic-kickoff-narrowing-into-anchored-subtree` case
+    (`cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture`), and the
+    full analyzer wall. Verify for the full graduated metric: to be defined when (and if) opened.
   - Files:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
+    - `crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs`
+    - `crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-narrowing-into-anchored-subtree/`
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see
