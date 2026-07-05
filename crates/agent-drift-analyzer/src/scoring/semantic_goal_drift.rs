@@ -297,37 +297,48 @@ fn goal_sets_diverged(
     !goals_in_structural_containment(current_structured, other_structured)
 }
 
-/// True iff either structured target is a structural ancestor of the other. Operates on the raw
-/// target anchor strings (path/symbol form preserved) so `-`/`.` punctuation inside a segment cannot
-/// forge a false boundary.
+/// True iff one goal's target is wholly contained in the other's subtree. Every concrete anchor of
+/// the narrower goal must sit within some anchor of the broader goal (codex re-review §P2): a single
+/// nested pair is not enough. A `/goal` clause can name several concrete targets, all preserved on
+/// `target.paths`/`symbols`, so `docs/specs/r6` -> `docs/specs/r6/MAP.md + crates/other/src/lib.rs`
+/// narrows one target but adds an unrelated one — real drift that must still fire, not be masked by
+/// the one nested pair. Directional: containment holds if the current set is within the other
+/// (narrowing) or the other is within the current (broadening).
 fn goals_in_structural_containment(a: &StructuredObjective, b: &StructuredObjective) -> bool {
-    let a_anchors = target_anchor_strings(a);
-    let b_anchors = target_anchor_strings(b);
-    a_anchors.iter().any(|a_anchor| {
-        b_anchors.iter().any(|b_anchor| {
-            structural_path_ancestor_or_equal(a_anchor, b_anchor)
-                || structural_path_ancestor_or_equal(b_anchor, a_anchor)
-        })
+    let a_anchors = target_concrete_anchors(a);
+    let b_anchors = target_concrete_anchors(b);
+    if a_anchors.is_empty() || b_anchors.is_empty() {
+        return false;
+    }
+    all_anchors_within(&a_anchors, &b_anchors) || all_anchors_within(&b_anchors, &a_anchors)
+}
+
+/// Every `inner` anchor is contained-or-equal within some `outer` anchor (`inner` ⊆ subtree(`outer`)).
+fn all_anchors_within(inner: &[&str], outer: &[&str]) -> bool {
+    inner.iter().all(|inner_anchor| {
+        outer
+            .iter()
+            .any(|outer_anchor| structural_path_ancestor_or_equal(outer_anchor, inner_anchor))
     })
 }
 
-/// Raw specific strings for the structured target (display plus every concrete anchor list), with
-/// original separators intact. Empty when the goal has no concrete target.
-fn target_anchor_strings(structured: &StructuredObjective) -> Vec<&str> {
+/// Raw concrete anchor strings for the structured target (paths / symbols / named artifacts /
+/// workspace refs), with original separators intact. Excludes `target.display`, which is a derived
+/// summary (e.g. a comma-joined artifact list) that every extraction path also mirrors into one of
+/// these concrete lists — including it would let a synthetic join string distort the all-within test.
+/// Empty when the goal has no concrete target.
+fn target_concrete_anchors(structured: &StructuredObjective) -> Vec<&str> {
     let Some(target) = structured.target.as_ref() else {
         return Vec::new();
     };
-    let mut anchors = vec![target.display.as_str()];
-    for value in target
+    target
         .paths
         .iter()
         .chain(target.symbols.iter())
         .chain(target.named_artifacts.iter())
         .chain(target.workspace_refs.iter())
-    {
-        anchors.push(value.as_str());
-    }
-    anchors
+        .map(String::as_str)
+        .collect()
 }
 
 /// `ancestor` structurally contains (or equals) `descendant`: split both on real structural
@@ -874,6 +885,63 @@ mod tests {
         assert!(
             scored.score.flagged,
             "sibling artifacts sharing a lexical stem are not hierarchically related and must still fire"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_when_only_one_of_several_current_targets_is_nested() {
+        // codex re-review §P2 (multi-anchor): the current goal narrows one target into the kickoff
+        // anchor's subtree (docs/specs/r6 -> docs/specs/r6/MAP.md) but also picks up an unrelated
+        // second target (crates/other/src/lib.rs). Containment must require ALL concrete anchors to
+        // stay in one subtree, so the one nested pair cannot mask the unrelated work.
+        let anchor = structured_goal("docs/specs/r6", Confidence::High, Vec::new());
+        let current = structured_goal_with_paths(
+            &["docs/specs/r6/MAP.md", "crates/other/src/lib.rs"],
+            Confidence::High,
+        );
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "implement|file_or_directory|docs_specs_r6_map_md|crates_other_src_lib_rs",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "an unrelated second target must not be masked by one nested target"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_suppresses_when_all_current_targets_stay_in_anchor_subtree() {
+        // Complement of the multi-anchor guard: when EVERY concrete target narrows into the anchor
+        // subtree, it is a legitimate narrowing and must stay suppressed.
+        let anchor = structured_goal("crates/agent-drift-analyzer", Confidence::High, Vec::new());
+        let current = structured_goal_with_paths(
+            &[
+                "crates/agent-drift-analyzer/src/scoring/mod.rs",
+                "crates/agent-drift-analyzer/src/context/objective.rs",
+            ],
+            Confidence::High,
+        );
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs|crates_agent_drift_analyzer_src_context_objective_rs",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            !scored.score.flagged,
+            "every concrete target staying inside the anchor subtree is a narrowing, not drift"
         );
     }
 
@@ -1612,6 +1680,21 @@ mod tests {
         unknowns: Vec<ObjectiveUnknown>,
     ) -> StructuredObjective {
         structured_goal_with_constraints(Some(target_display), confidence, Vec::new(), unknowns)
+    }
+
+    /// A TaskStatement goal whose structured target carries several concrete paths (multi-anchor),
+    /// for the codex re-review §P2 all-within containment coverage.
+    fn structured_goal_with_paths(paths: &[&str], confidence: Confidence) -> StructuredObjective {
+        let mut goal = structured_goal_with_constraints(
+            paths.first().copied(),
+            confidence,
+            Vec::new(),
+            Vec::new(),
+        );
+        if let Some(target) = goal.target.as_mut() {
+            target.paths = paths.iter().map(|path| path.to_string()).collect();
+        }
+        goal
     }
 
     fn structured_goal_with_constraints(

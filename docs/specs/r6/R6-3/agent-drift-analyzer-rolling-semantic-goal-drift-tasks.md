@@ -342,7 +342,11 @@ all fixed here.
     ancestor/descendant and silently dropped a real pivot; splitting the raw path on structural separators
     only keeps `-`/`.` inside a segment, so that pivot still fires. Sibling artifacts sharing a lexical
     stem stay unrelated and still fire, preserving every pinned true-positive fixture; comparison_key-only
-    goals (no concrete target) fall through to the disjoint check unchanged. Segment comparison is
+    goals (no concrete target) fall through to the disjoint check unchanged. Containment is **all-within,
+    not any-pair** (codex re-review §P2): a `/goal` clause can name several concrete targets (all preserved
+    on `target.paths`/`symbols`), so containment holds only when EVERY concrete anchor of one goal stays
+    inside the other's subtree — a goal that narrows one target but adds an unrelated one
+    (`docs/specs/r6` → `docs/specs/r6/MAP.md + crates/other/src/lib.rs`) still fires. Segment comparison is
     **case-sensitive** (codex re-review §P3): the carve-out is applied to raw Rust symbol refs and to
     paths on case-sensitive filesystems, where `Foo::Bar` ≠ `foo::bar`, so a case-only difference stays a
     real pivot rather than a masked narrowing. Still open for the full graduated/weighted metric:
