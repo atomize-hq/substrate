@@ -4865,7 +4865,19 @@ fn stop_world_worker_sanctioned_recovery_retry_available(
         return Ok(false);
     }
 
-    Ok(refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?.is_some())
+    let refreshed_sanctioned = refreshed_sanctioned_stop_world_dispatch_target(store, resolved)?;
+    if let (Err(err), Some(refreshed)) = (initial_result.as_ref(), refreshed_sanctioned.as_ref()) {
+        if refused_exact_target_stop_transport_proves_current_attached_owner_stale(
+            resolved,
+            refreshed,
+            transport_path,
+            err,
+        ) {
+            return Ok(false);
+        }
+    }
+
+    Ok(refreshed_sanctioned.is_some())
 }
 
 #[cfg(target_os = "linux")]
@@ -14685,7 +14697,7 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
-    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_initial_connection_refused_transport_after_recovered_owner_path(
+    async fn request_private_stop_after_transport_registration_for_stop_episode_retries_initial_connection_refused_transport_after_already_recovered_owner_path(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -14715,10 +14727,31 @@ agents:
             "connection-refused retry fixture must begin from a stale private stop socket"
         );
 
+        let mut orchestrator = store
+            .load_participant("orch_dispatch")
+            .expect("load authoritative stop owner for transport recovery")
+            .expect("authoritative stop owner for transport recovery");
+        orchestrator.mark_client_detached(
+            "connection-refused recovery already published a detached owner path",
+        );
+        store
+            .persist_participant(&orchestrator)
+            .expect("persist detached stop owner for transport recovery");
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load orchestration session for transport recovery")
+            .expect("authoritative orchestration session for transport recovery");
+        session.host_attach_contract = HostAttachContract::from_manifest_for_test(&orchestrator);
+        session.mark_parked_resumable(
+            "connection-refused recovery already published a detached owner path",
+        );
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist orchestration session for transport recovery");
+
         let retry_events = Arc::new(Mutex::new(
             Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
         ));
-        let store_for_hook = store.clone();
         let retry_events_for_hook = retry_events.clone();
         let retry_server = Arc::new(Mutex::new(None::<std::thread::JoinHandle<()>>));
         let retry_server_for_hook = retry_server.clone();
@@ -14730,28 +14763,6 @@ agents:
             if event != PrivateStopTransportRetryEvent::RetryWaitStarted {
                 return;
             }
-            let mut orchestrator = store_for_hook
-                .load_participant("orch_dispatch")
-                .expect("load authoritative stop owner for transport recovery")
-                .expect("authoritative stop owner for transport recovery");
-            orchestrator.mark_client_detached(
-                "connection-refused recovery published a detached owner path",
-            );
-            store_for_hook
-                .persist_participant(&orchestrator)
-                .expect("persist detached stop owner for transport recovery");
-            let mut session = store_for_hook
-                .load_orchestration_session("sess_dispatch")
-                .expect("load orchestration session for transport recovery")
-                .expect("authoritative orchestration session for transport recovery");
-            session.host_attach_contract =
-                HostAttachContract::from_manifest_for_test(&orchestrator);
-            session.mark_parked_resumable(
-                "connection-refused recovery published a detached owner path",
-            );
-            store_for_hook
-                .persist_orchestration_session(&session)
-                .expect("persist orchestration session for transport recovery");
             let server =
                 spawn_scripted_private_stop_server(path, vec![PrivateStopOutcome::Accepted]);
             retry_server_for_hook
@@ -14771,7 +14782,7 @@ agents:
         assert_eq!(
             outcome,
             PrivateStopOutcome::Accepted,
-            "initial ECONNREFUSED must enter the bounded sanctioned recovery retry"
+            "initial ECONNREFUSED must still enter the sanctioned recovery retry once authoritative owner truth has already refreshed away from the original attached caller"
         );
 
         retry_server
@@ -14786,7 +14797,7 @@ agents:
         assert_eq!(
             retry_events.len(),
             3,
-            "initial ECONNREFUSED must emit exactly one initial attempt, one bounded wait, and one retry: {retry_events:?}"
+            "already-refreshed initial ECONNREFUSED must emit exactly one initial attempt, one bounded wait, and one retry: {retry_events:?}"
         );
         assert_eq!(
             retry_events[0].0,
@@ -14804,7 +14815,7 @@ agents:
             retry_events
                 .iter()
                 .all(|(_, path)| path == &transport_path),
-            "initial ECONNREFUSED must stay on the exact private stop transport without widening attach scope: {retry_events:?}"
+            "already-refreshed initial ECONNREFUSED must stay on the exact private stop transport without widening attach scope: {retry_events:?}"
         );
     }
 
@@ -15268,9 +15279,9 @@ agents:
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
+    #[tokio::test(flavor = "current_thread")]
     #[serial]
-    fn dispatch_contract_stop_world_worker_persists_detached_closeout_after_refused_transport_for_same_caller_active_attached_truth(
+    async fn dispatch_contract_stop_world_worker_persists_detached_closeout_after_refused_transport_for_same_caller_active_attached_truth(
     ) {
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
@@ -15285,14 +15296,6 @@ agents:
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
 
-        let resolved = store
-            .resolve_internal_stop_world_dispatch_target(
-                "sess_dispatch",
-                "orch_dispatch",
-                "ash_member",
-                "cli:codex-world",
-            )
-            .expect("resolve authoritative active stop target");
         let transport_path = private_stop_transport_path(&store, "sess_dispatch", "ash_member");
         let transport_parent = transport_path
             .parent()
@@ -15301,27 +15304,51 @@ agents:
         let stale_listener = std::os::unix::net::UnixListener::bind(&transport_path)
             .expect("bind stale private stop socket");
         drop(stale_listener);
-        let connection_refused =
-            anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
 
-        assert!(
-            detached_stop_world_worker_closeout_available_after_transport_failure(
-                &store,
-                &resolved,
-                &transport_path,
-                &connection_refused,
-            )
-            .expect("same-caller active_attached recheck"),
-            "the refreshed refusal gate must unlock detached recovery before any later parked persistence lands"
-        );
+        let retry_events = Arc::new(Mutex::new(
+            Vec::<(PrivateStopTransportRetryEvent, PathBuf)>::new(),
+        ));
+        let retry_events_for_hook = retry_events.clone();
+        let retry_hook = Arc::new(move |event: PrivateStopTransportRetryEvent, path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock retry events")
+                .push((event, path.to_path_buf()));
+        }) as PrivateStopTransportRetryHook;
+        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let closeout = persist_detached_stop_world_worker_closeout(&store, &resolved)
-            .expect("persist detached durable stop closeout");
+        let prepared =
+            prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
+                .expect("prepare stop dispatch request");
+        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+            .await
+            .expect("dispatch same-caller active_attached refused stop request");
+
+        let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
+            panic!("expected stop_world_worker outcome envelope");
+        };
+        assert_eq!(outcome.target_participant_id, "ash_member");
         assert_eq!(
-            closeout.participant_state,
+            outcome.closeout.participant_state,
             AgentRuntimeSessionState::Stopped
         );
-        assert_eq!(closeout.session_state, OrchestrationSessionState::Active);
+        assert_eq!(
+            outcome.closeout.session_state,
+            OrchestrationSessionState::Active
+        );
+        assert!(
+            outcome.summary.contains("detached durable closeout"),
+            "same-caller active_attached refused stop transport should route directly into detached durable closeout without the sanctioned retry wait: {}",
+            outcome.summary
+        );
+
+        let retry_events = retry_events.lock().expect("lock retry events");
+        assert_eq!(
+            retry_events.as_slice(),
+            &[(PrivateStopTransportRetryEvent::InitialAttempt, transport_path.clone())],
+            "same-caller active_attached ECONNREFUSED should stop after the initial exact-target stop attempt so the refreshed detached-closeout gate can run immediately: {retry_events:?}"
+        );
+        drop(retry_events);
 
         let session_after = store
             .load_orchestration_session("sess_dispatch")
