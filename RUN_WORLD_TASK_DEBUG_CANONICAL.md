@@ -1,6 +1,6 @@
 # `run_world_task` / retained-world-member debug synthesis
 
-Last updated: 2026-07-03 (stop-path design/spec follow-through)  
+Last updated: 2026-07-04 (retained stop race reproduced, fixed, and re-proven)  
 Status: working canonical memo for this issue family; live code/tests/docs remain final authority.
 
 ## Purpose
@@ -26,6 +26,8 @@ Merged from:
 - `llm-last-mile/SPEC-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`
 - `llm-last-mile/PLAN-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`
 - `llm-last-mile/TASKS-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`
+- `llm-last-mile/NOTE-64-stop-world-worker-authority-and-fail-closed-closeout-proof.md`
+- `/tmp/substrate-stop-order-debug-live.jsonl`
 
 Primary repo-truth surfaces repeatedly cited by those logs:
 - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
@@ -47,9 +49,9 @@ Primary repo-truth surfaces repeatedly cited by those logs:
 
 ## Active symptom family
 
-The live issue family has narrowed, but it has also moved through several distinct retained-fork stages. Some earlier blockers are now closed by real manual smoke; the active work is no longer the original bootstrap mismatch, no longer the first exposed `authoritative-live` seam, no longer best summarized as only the stream-launch/bootstrap wrapper or post-registration child-publication gate either, and no longer centered on exact retained continue. The newest valid smoke now gets all the way through retained fork creation and exact retained continue on both the source worker and the fork child, and leaves a later seam cluster around source-worker stop authority/delivery truth, with durable closeout still one visible failure surface rather than the whole current diagnosis, and host-visible file semantics still secondary.
+The live issue family narrowed again after the previous meaningful memo update. The exact retained source-worker `stop_world_worker` seam that was red in the 2026-07-02 / 2026-07-03 writeup was reproduced from preserved live trace, narrowed to a gate-before-park-persist race/order bug, and then fixed. This memo should no longer read as if exact retained stop is the top live blocker.
 
-What is now **confirmed fixed** by fresh manual smoke:
+What is now **confirmed fixed** by landed code plus the latest proof chain:
 
 1. public world-scoped lifecycle path:
    - `substrate agent start --backend cli:codex-world --scope world ...`
@@ -77,42 +79,38 @@ What is now **confirmed fixed** by fresh manual smoke:
    - the REPL strict follow-up path now passes,
    - the public `substrate agent start --backend cli:codex-host ...` then `substrate agent turn --session ... --backend cli:codex-host ...` strict follow-up smoke also now passes,
    - and the validated public smoke kept the same `orchestration_session_id`, surfaced `resumed_from_participant_id`, preserved the same UAA session id across `start` and `turn`, and returned the correct semantic answer: `Just reply OK`.
-
-The still-live issues being debugged are now the combination of:
-
-1. the latest valid world-bound smoke now shows:
-   - `agent start`: pass,
+6. retained-worker fork/continue progression:
    - retained `spawn_world_worker`: pass,
    - retained `fork_world_worker`: pass,
-   - the fork call returned a real child `participant_id`,
    - exact retained `continue_world_worker` on the source worker: pass,
-   - exact retained `continue_world_worker` on the fork child: pass;
-2. but retained follow-up/control lifecycle is still broken later in the same smoke:
-   - generic same-backend follow-up now correctly fails closed with:
-     - `ambiguous_backend_slot: orchestration session ... has multiple authoritative retained turn targets for backend cli:codex-world (...)`
-   - exact retained `stop_world_worker` on the original retained source worker now fails in live smoke with the newer later-stop seam:
-     - `owner_unreachable: failed to deliver stop_world_worker to retained worker ... and durable stop closeout was not observed (failed to connect to private stop transport ...; owner_unreachable: timed out waiting for retained worker ... to reach durable stopped closeout)`;
-   - after that failed stop attempt, a later exact retained `continue_world_worker` against the same source `participant_id` succeeded and returned exactly `SOURCE_CONTINUE_OK`,
-   - so the failed stop attempt did **not** actually stop that worker; the original retained source worker remained live/routable after the failed stop surface;
-   - current post hoc runtime evidence also shows the source-worker stop socket still exists on disk but has no live listener, while only the current host orchestrator stop socket has a live listener; that is useful narrowing evidence, but it does **not** by itself prove what the authoritative owner/posture truth was at the exact failed stop moment;
-3. the older retained successor `authoritative-live` seam, the intermediate stream-launch/bootstrap wrapper seam, the later post-registration durability/publication seam, and the later exact-retained-continue seam all exposed real bugs, but the newest smoke now places the active seam **after** successful fork creation and successful exact retained continue rather than before it;
-4. the strongest current read is therefore no longer “fork child creation/publication never happened,” no longer “backend-only post-fork routing still picks the wrong target,” and no longer “exact retained continue still uses an over-strict `authoritative-live` seam after fork succeeds,” but rather “backend-only routing now ambiguity-closes correctly, exact retained continue is green, and source-worker stop now falls over later in stop-owner / transport / posture discrimination after successful fork/continue, with durable closeout still relevant but not sufficient to explain the whole failure”;
-5. retained-worker follow-up/control operations still remain intentionally split by seam boundary:
-   - retained `fork_world_worker` and retained-mode `cancel_world_work` are supposed to keep successor-lineage authority,
-   - **branch-local landed / committed truth (`484a17b6`):** successor-authority lineage is now accepted for retained follow-up selector resolution, including retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker`, and exact retained continue no longer depends on owner PID liveness as a correctness condition,
-   - the remaining live failure is later than lineage/world-binding selection and later than exact retained continue routing; the real current discriminator is whether exact source-worker stop was still expected to target an `active_attached` source-worker truth at the failed-stop moment, or whether truth had already shifted to detached/parked before stop delivery resolved,
-6. the branch-local shell observability patch and timeout-split / durable-publication wait improvements were both useful and review-clean during this chain, and later landed retained-worker routing work moved the seam far enough that the newest smoke now reaches the later source-stop authority/delivery seam;
-7. the Boyle/Nash follow-up patch chain improved same-backend routing, workspace-root handling, and test coverage, and committed `484a17b6` changed retained follow-up and public-target selector behavior enough that generic backend-only post-fork routing now ambiguity-closes instead of stale-linking to a single target while exact retained continue goes green on both exact handles;
-8. adjacent retained-mode `cancel_world_work` has not yet been fully re-smoked through the newer retained-fork patch chain and may still expose either the older `authoritative-live` seam or a newer downstream eligibility seam,
-9. worker turn execution failure (`codex exited non-zero`) remains unresolved and distinct from the retained follow-up/control-plane failures,
-10. and the older host-visible-file question still remains secondary to those routing/control-plane issues.
+   - exact retained `continue_world_worker` on the fork child: pass.
+7. the exact retained source-worker `stop_world_worker` seam was reproduced, narrowed, and fixed:
+   - the preserved negative trace in `/tmp/substrate-stop-order-debug-live.jsonl` shows refused exact-target private stop delivery, then a bounded wait, then a detached-closeout gate that still read the same-caller session as `ActiveAttached`, then a fail-closed return, and only **later** `persist_orchestration_session_parked_write`,
+   - that proves the old failure was a gate-before-park-persist race/order bug rather than durable proof ambiguity alone,
+   - the repaired path now succeeds with authoritative closeout and the caller-visible wording:
+     - `stop_world_worker drove durable stopped closeout for retained worker ... on backend cli:codex-world via detached durable closeout because the retained runtime owner was no longer reachable`
+   - the important distinction is now explicit:
+     - the retained runtime owner path was unreachable,
+     - but orchestration-authoritative closeout still succeeded,
+     - and the worker is durably `stopped`.
+8. retained fork-child stop also now succeeds:
+   - exact-target retained stop on the fork child is green,
+   - when the live private owner stop surface is still present, the success wording stays:
+     - `stop_world_worker drove durable stopped closeout for retained worker ... on backend cli:codex-world via the existing private owner stop surface`
+   - stopping the child reaps only that child and keeps the original source runtime retained.
 
-The current repo still exposes multiple relevant seams, but they no longer all sit at the same priority:
+Current canonical runtime truth:
 
-- the host-visible file/write question remains open and likely still points at overlay/sync behavior,
-- while the top active blockers have shifted away from the old retained-worker bootstrap mismatch, then through retained successor `authoritative-live`, then through the temporary stream-launch/bootstrap wrapper seam, then through the post-registration durability/publication seam, then through backend-only post-fork retained-target ambiguity, then through exact retained continue routability, and now to the narrower source-worker stop discriminator: whether stop was still supposed to target `active_attached` truth at the failed-stop moment or whether session/owner truth had already transitioned to detached/parked.
+1. generic backend-only `cli:codex-world` follow-up after multiple retained world targets exist is now expected to fail closed with `ambiguous_backend_slot`; older smoke instructions that expected backend-only success there are stale under the newer no-auto-route contract.
+2. `cli:codex-host` follow-up success after the retained stops is the correct health check for orchestration-session continuity; backend-only `cli:codex-world` follow-up is no longer the right check once source and child both exist.
+3. the old exact source-stop red seam is no longer best described as “maybe closeout happened but proof never surfaced”; the preserved negative trace proves the old fail-closed return happened before parked truth was persisted, and the landed repair closes that exact order bug.
+4. host-visible file/write semantics remain open and are still most likely an overlay/sync question rather than a stop/control-plane question.
+5. the highest-signal remaining open questions are now:
+   - retained-mode `cancel_world_work` on top of the newer retained-fork/stop chain,
+   - worker turn execution failure (`codex exited non-zero`) as a separate seam,
+   - and the older host-visible file/sync question.
 
-Live code alone does **not** settle the host-visible write question, and the latest manual smoke only proves that certain routing/control surfaces now succeed. It does **not** yet prove the full end-to-end host-visible side-effect contract is settled.
+Live code alone still does **not** settle the host-visible write question, and the latest stop proof only settles the retained stop contract seam. It does **not** by itself prove the full end-to-end host-visible side-effect contract is settled.
 
 ## Latest observed repros
 
@@ -299,7 +297,7 @@ Those 2026-07-01 observations now sort into three different truth buckets:
      wrapper context flattens it;
    - **local/worktree truth only:** timeout-split / durable-publication wait work widened child participant visibility budget while keeping private stop-transport publication on the original bounded budget, and added targeted regression coverage for that split;
    - **local/worktree truth only:** the Boyle/Nash follow-up patch chain is review-clean and improved same-backend routing, authoritative workspace-root handling, and test coverage;
-   - the newest smoke on top of the combined landed/local chain now shows that fork create is green, backend-only follow-up ambiguity-closes, exact retained continue is green on both workers, and the remaining live seam is the later source-stop authority/delivery seam.
+   - the newest smoke at that stage showed fork create green, backend-only follow-up ambiguity-closing, and exact retained continue green on both workers; later work moved past the then-live source-stop authority/delivery seam, fixed exact retained source stop, and kept fork-child stop green.
 
 3. **latest live smoke chronology**
 
@@ -390,9 +388,11 @@ Why this mattered at that stage:
 - backend-only post-fork routing was already behaving more honestly by ambiguity-closing instead of pretending there was one authoritative retained target;
 - and that stage narrowed the then-live seam to exact retained continue rather than fork-lineage persistence.
 
-### Repro H (2026-07-02 later): exact retained continue is green on both workers; source stop now fails later in stop authority/delivery
+### Repro H (2026-07-02 later, historical/superseded): exact retained continue was green on both workers before the later exact-stop repair landed
 
-In the newest later live smoke on top of committed `484a17b6` plus the retained-fork patch chain already captured above:
+This block records the then-current later-stop failure stage before the subsequent exact retained stop repair; do not read it as current branch truth.
+
+In the newest later live smoke at that time on top of committed `484a17b6` plus the retained-fork patch chain already captured above:
 
 - world-bound `agent start`: pass;
 - retained `spawn_world_worker`: pass;
@@ -446,57 +446,86 @@ Why this matters:
   - with still-possible alternates including stale-or-missing worker stop transport, wrong stop-owner routing, retry-unlock conditions, or closeout observation lag,
   - so the best current seam should not be centered as a pure `stop-closeout` problem.
 
+### Repro I (2026-07-04): the retained source-stop seam was proved as an order bug and both retained stops now succeed
+
+Preserved negative proof first:
+
+- `/tmp/substrate-stop-order-debug-live.jsonl` captured the exact retained source-worker failure shape that was red in Repro H:
+  - `2026-07-04T23:13:27Z`: initial exact-target private stop transport attempt failed with `refused_transport`
+  - `2026-07-04T23:13:32Z`: the bounded retry wait expired
+  - `2026-07-04T23:13:32Z`: detached-closeout gate refresh still found the same caller/session as `ActiveAttached`
+  - `2026-07-04T23:13:32Z`: the stop path returned fail-closed with `owner_unreachable: recovery_failed: failed to deliver stop_world_worker ... and durable stop closeout was not observed`
+  - `2026-07-04T23:13:38Z`: only **after** that fail-closed return did `persist_orchestration_session_parked_write` record the parked transition
+
+What this proved:
+
+- the old red seam was a narrow gate-before-park-persist race/order bug,
+- not just a generic “stop proof missing” story,
+- and not a renewed retained-worker lineage or exact-target selection failure.
+
+Current repaired success floor:
+
+1. exact retained stop on the original source worker now succeeds on the previously failing refused-transport seam:
+   - authoritative closeout persists `participant_state = stopped`
+   - session state remains `Active`
+   - caller-visible summary now says:
+     - `stop_world_worker drove durable stopped closeout for retained worker ... on backend cli:codex-world via detached durable closeout because the retained runtime owner was no longer reachable`
+   - this is the key contract distinction:
+     - the retained runtime owner path was unreachable,
+     - but orchestration-authoritative closeout still succeeded.
+2. exact retained stop on the fork child also now succeeds:
+   - the child stop remains exact-targeted,
+   - and when the live private stop surface is still present the success wording stays:
+     - `stop_world_worker drove durable stopped closeout for retained worker ... on backend cli:codex-world via the existing private owner stop surface`
+3. generic backend-only `cli:codex-world` follow-up remains expected to ambiguity-close once both retained targets exist:
+   - `ambiguous_backend_slot: orchestration session ... has multiple authoritative retained turn targets for backend cli:codex-world (...)`
+   - old smoke instructions that expected backend-only success there are now stale.
+4. `cli:codex-host` follow-up success after those retained stops is the correct continuity/health check for the durable orchestration session.
+
 ### Landed since the previous memo snapshot
 
-The seam-moving patches that now matter most to the live state are:
+The seam-moving packets that now matter most are:
 
-1. **`382a63a8` (`Refactor retained worker authority checks and enhance follow-up resolution for non-authoritative live workers`)**
-   - moved retained follow-up resolution away from the older strict authoritative-live shape;
-   - advanced exact retained follow-up eligibility for non-authoritative-live workers;
-   - materially shifted the live seam away from the first exposed successor `authoritative-live` gate.
+1. **earlier retained-fork/continue chain already recorded here**
+   - `382a63a8`
+   - `7732d839`
+   - `1374775e`
+   - `484a17b6`
+   - these got the retained path from bootstrap mismatch and `authoritative-live` failure to:
+     - successful retained fork creation,
+     - expected backend-only ambiguity closure,
+     - and exact retained continue success on both source and child.
+2. **`dcd1374a` (`Implement enhanced error handling and validation for stop world worker authority`)**
+   - landed the first stop-contract repair packet after the last meaningful memo snapshot;
+   - at a high level it fixed:
+     - detached exact-target fallback / sanctioned-owner refresh seams,
+     - same-session participant-set revalidation with non-flattened contract errors,
+     - and preservation of sanctioned refresh revalidation errors instead of collapsing them into generic retry noise.
+3. **`db0d382e` (`Refactor stop world worker recovery logic to enhance handling of connection refusals and improve retry event tracking`)**
+   - landed the order-sensitive follow-up packet;
+   - at a high level it fixed:
+     - the same-caller `ActiveAttached` detached-gate behavior after refused exact-target stop transport,
+     - and the sanctioned-retry timeout short-circuit for that same-caller refused-stop seam, so the path no longer waits out a pointless retry window before detached durable closeout is allowed.
+4. **`db0fb1d4` (`Refactor stop world worker test to validate detached durable closeout and improve error assertions`)**
+   - is proof-wall hardening rather than a new semantic change;
+   - it tightened the detached durable closeout assertions and kept the exact success/failure wording reviewable.
 
-2. **`7732d839` (`Refactor retained member management in MemberRuntimeManager`)**
-   - introduced retained-slot cleanup/restructure needed for retained fork-child handling;
-   - carried the wrapper-era retained bootstrap / dispatch diagnostics that were needed to get past the earlier bootstrap and publication stages.
+Which previously-plausible assumptions later proof has now disproven or materially weakened:
 
-3. **`1374775e` (`Implement stale fork child slot pruning and add smoke test for retained world worker`)**
-   - made stale fork-child slot replacement explicit;
-   - added retained-world-worker smoke coverage that helped validate fork advancement past the earlier stale-slot seam.
-
-4. **`484a17b6` (`Refactor tool invocation contract and enhance retained worker handling`)**
-   - is the most important committed `HEAD` packet for the latest shift;
-   - removed owner PID liveness as a correctness condition for exact retained follow-up routing;
-   - tightened exact retained continue/stop target resolution and successor-authority handling;
-   - and aligns with the newest live smoke where exact retained `continue_world_worker` is now green for both source and child.
-
-Which previously-plausible assumptions later smoke has now disproven or materially weakened:
-
-- **disproven:** the retained path is still primarily blocked by the old bootstrap/world-binding mismatch;
-- **disproven:** fork child creation/publication never really happened;
-- **disproven:** backend-only post-fork routing still quietly chooses one retained world target instead of failing closed on ambiguity;
-- **disproven:** exact retained `continue_world_worker` is still the current live blocker after fork;
-- **materially weakened / likely wrong as primary diagnosis:** source-worker stop is failing mainly because the detached host session posture or narrow public-control gate no longer treats the session as stoppable.
-  - later live state instead shows:
-    - host session posture still `parked_resumable`,
-    - target retained worker ownership truth bits still all `true`,
-    - stop socket path still present,
-    - but the stop transport itself refusing connections.
+- **disproven:** the retained path is still primarily blocked by the old bootstrap/world-binding mismatch.
+- **disproven:** fork child creation/publication never really happened.
+- **disproven:** backend-only post-fork routing should still auto-pick one retained `cli:codex-world` target after multiple retained workers exist.
+- **disproven:** exact retained `continue_world_worker` is still the current live blocker after fork.
+- **disproven:** the old source-stop failure was only durable-closeout ambiguity.
+- **materially weakened / now wrong as the main story:** the source-stop failure was primarily a generic detached-host/public-control gating problem.
 
 Current provenance boundary:
 
-- the retained-fork / exact-continue seam-moving work above is **branch-local landed / committed truth** on current `HEAD`;
-- the newest stop seam is **current live local/worktree truth** observed on top of that code:
-  - `owner_unreachable ... failed to connect to private stop transport ... durable stop closeout was not observed`
-- the newer stop-path contradiction is also **current live local/worktree truth**, not committed history:
-  - host session still `parked_resumable`,
-  - target retained source worker still persists `control_owner_retained/event_stream_active/completion_observer_retained/ownership_valid = true`,
-  - source-worker stop socket path still exists on disk but has no live listener,
-  - only the current host orchestrator stop socket has a live listener,
-  - and older supporting probe evidence also included a direct-connect `ConnectionRefused` on the worker stop socket;
-- these observations are post hoc narrowing evidence, not full proof of root cause at the exact failed stop moment;
-- as of this memo update, no later committed `HEAD` patch is yet recorded here as resolving that later source-stop seam.
+- the earlier retained-fork / exact-continue movement plus the later stop repair packets above are now **branch-local landed / committed truth** on current `HEAD`;
+- `/tmp/substrate-stop-order-debug-live.jsonl` is preserved **live negative proof** for the pre-fix exact source-stop seam;
+- the repaired stop success wording and closeout states are now backed by committed tests and slice-local proof artifacts rather than only by speculative local/worktree direction.
 
-## 2026-07-03 stop-path probe, design-validation, and Slice 64 follow-through
+## 2026-07-03 and 2026-07-04 stop-path probe, design-validation, and Slice 64 follow-through
 
 This is the main delta since the last meaningful memo snapshot.
 
@@ -510,81 +539,69 @@ Distinguish these buckets explicitly:
      - `7732d839`
      - `1374775e`
      - `484a17b6`
-   - committed code truth here is:
-     - the retained follow-up selector/authority direction has materially changed,
+     - `dcd1374a`
+     - `db0d382e`
+     - `db0fb1d4`
+   - committed code truth here is now:
+     - retained follow-up selector/authority direction has materially changed,
      - owner PID liveness is no longer treated as a correctness condition for exact retained follow-up routing,
-     - and there is still **no committed `HEAD` proof** here that exact retained `stop_world_worker` on the original source worker is solved.
+     - exact retained source-stop authority/closeout repair is landed,
+     - and the detached durable closeout path is no longer just local/worktree experimentation.
 
-2. **current live smoke truth**
-   - the newest valid smoke floor is:
-     - retained `fork_world_worker`: green
-     - exact retained `continue_world_worker` on the original source worker: green
-     - exact retained `continue_world_worker` on the fork child: green
-   - the active red seam is still:
+2. **preserved live negative proof**
+   - `/tmp/substrate-stop-order-debug-live.jsonl` is the important saved failure trace for the old exact source-stop seam:
+     - refused exact-target private stop transport was observed first,
+     - then the bounded retry wait elapsed,
+     - then detached-closeout gate refresh still saw same-caller `ActiveAttached` truth,
+     - then fail-closed return happened,
+     - and only later did parked persistence write land.
+   - that preserved order matters more than the earlier symptom narrative:
+     - it proves the old source-stop failure was a gate-before-park-persist race/order bug.
 
-> `owner_unreachable: failed to deliver stop_world_worker to retained worker ... and durable stop closeout was not observed (failed to connect to private stop transport ...; owner_unreachable: timed out waiting for retained worker ... to reach durable stopped closeout)`
+3. **current proven success floor**
+   - retained `fork_world_worker`: green
+   - exact retained `continue_world_worker` on the original source worker: green
+   - exact retained `continue_world_worker` on the fork child: green
+   - exact retained `stop_world_worker` on the original source worker: green again on the formerly failing refused-transport seam, with:
+     - `participant_state = stopped`
+     - `session_state = Active`
+     - detached durable closeout wording because the retained runtime owner was no longer reachable
+   - exact retained `stop_world_worker` on the fork child: green
+   - backend-only `cli:codex-world` follow-up remains expected to ambiguity-close when multiple retained targets exist
+   - `cli:codex-host` follow-up success is the right continuity/health signal for the durable orchestration session.
 
-   - the newest manual evidence now tightens that floor further:
-     - after the failed retained `stop_world_worker` attempt, an exact retained `continue_world_worker` against the same source `participant_id` succeeded and returned exactly `SOURCE_CONTINUE_OK`,
-     - so the failed stop attempt did **not** actually stop the original retained source worker,
-     - and the worker remained live/routable after the failed stop surface.
-   - current post hoc runtime evidence after that failure now also shows:
-     - the source-worker stop socket still exists on disk,
-     - but it has no live listener,
-     - and only the current host orchestrator stop socket has a live listener.
-   - older supporting evidence from an earlier probe also included a direct-connect `ConnectionRefused` on that worker stop socket; keep that as prior support, not as newly re-proven smoke truth.
+### What the preserved negative trace and the landed fix chain now prove
 
-3. **current local/worktree implementation truth**
-   - there is newer stop-path work in:
-     - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
-     - `crates/shell/src/execution/agents_cmd.rs`
-   - the stop-path worktree direction now includes detached-closeout / refused-transport handling experiments and targeted tests such as:
-     - `dispatch_contract_stop_world_worker_persists_parked_resumable_closeout_when_private_stop_socket_is_stale`
-     - `detached_stop_world_worker_closeout_availability_rechecks_fresh_session_truth_after_refused_transport`
-   - but this remains **local/worktree truth only**, and the latest live source-stop smoke is still red, so do **not** describe stop as fixed.
+The stop-focused probe plus the landed repair now establish these points:
 
-### Important stop-path probe findings after the latest smoke
+1. **the old failure was a narrow order bug**
+   - the important sequence was:
+     - refused transport
+     - bounded wait
+     - stale same-caller `ActiveAttached` gate result
+     - fail-closed return
+     - only later parked persistence
+   - that is why the old seam is now best described as gate-before-park-persist, not as a broad authority-model failure.
 
-The later stop-focused probe changed the highest-confidence diagnosis in four important ways:
+2. **detached exact-target fallback is now part of the committed contract**
+   - the repaired source-stop path no longer requires the retained runtime owner path itself to remain reachable if orchestration-authoritative stopped closeout can still be proven for the exact retained worker.
 
-1. **current post hoc socket/listener state is narrower than the earlier writeup implied**
-   - the retained source-worker private stop socket path can still exist on disk after the failed stop,
-   - but there is no live listener on that worker stop socket now,
-   - and only the current host orchestrator stop socket has a live listener.
+3. **same-session revalidation matters and must stay exact**
+   - the landed stop repair explicitly revalidates:
+     - exact target participant,
+     - same orchestration session,
+     - current participant set,
+     - current world binding,
+     - and target terminality,
+   - and it preserves those specific contract failures instead of flattening them into generic `owner_unreachable`.
 
-2. **older `ConnectionRefused` evidence still matters, but only as prior support**
-   - an earlier stop-focused probe did show direct connect against the worker stop socket returning `ConnectionRefused`,
-   - but that refusal is older supporting evidence for the same shape, not part of the newly re-proven active fact bundle.
+4. **same-caller refused-stop transport now has a narrower recovery rule**
+   - if the exact retained worker stop socket already refused for the same caller and the refreshed truth is still the same-caller `ActiveAttached` session, the path now short-circuits into detached durable closeout instead of idling through a doomed sanctioned retry timeout first.
 
-3. **persisted truth often matches the contradiction shape after the failure**
-   - after the failed source stop, live persisted state could still show:
-     - host session posture `parked_resumable`
-     - `control_owner_retained = true`
-     - `event_stream_active = true`
-     - `completion_observer_retained = true`
-     - `ownership_valid = true`
-   - that means the contradiction is not just “public stop gate said no”; persisted orchestration/runtime truth can still present a live retained-control picture while the worker stop socket/listener picture no longer matches it.
-
-4. **the key unresolved discriminator is still stop-time posture / authoritative-owner truth**
-   - Euler's narrowing is useful here:
-     - stale worker stop sockets with no listener can be expected after detach/park,
-     - so post hoc socket/listener evidence alone does **not** prove root cause;
-   - the unresolved discriminator is whether the failed stop happened while session truth was still `active_attached` or had already transitioned to detached/parked truth,
-   - because that determines whether the failure is better read as wrong owner/posture selection, stale-or-missing worker transport after a legitimate detach/park transition, retry-unlock timing, or something narrower in closeout observation.
-
-5. **the current implementation direction had one-shot fallback timing assumptions**
-   - the repo/worktree stop experiments now clearly revolve around one bounded transport publication / connect / recheck window in `crates/shell/src/execution/orchestrator_world_dispatch.rs`,
-   - which is useful as a probe and test-shaping step,
-   - but it is also why the seam should still be read as unresolved retained stop delivery / owner-routing / retry-unlock work rather than as a finished transport retry fix.
-
-6. **the latest manual evidence shifts the highest-confidence blocker away from pure stop-proof ambiguity**
-   - because the source worker was still exact-continueable after the failed stop,
-   - the current blocker is no longer best summarized as only “maybe stop happened but durable closeout proof never surfaced,”
-   - but this evidence alone still does **not** prove which narrower retained-stop seam is responsible:
-     - stale/missing worker stop transport,
-     - wrong stop-owner routing at the exact failed-stop moment,
-     - retry/unlock conditions never opening on the exact retained target,
-     - or a detached/parked transition boundary being crossed before stop delivery resolved.
+5. **the success wording now correctly encodes the contract distinction**
+   - source-stop detached success explicitly says the retained runtime owner was no longer reachable,
+   - while still affirming durable stopped closeout,
+   - and fork-child/private-surface success still distinguishes the live-owner-path case with `existing private owner stop surface`.
 
 ### Important design findings highlighted by the design-validation pass
 
@@ -615,17 +632,20 @@ The new Slice 64 chain now exists:
 - `llm-last-mile/SPEC-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`
 - `llm-last-mile/PLAN-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`
 - `llm-last-mile/TASKS-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md`
+- `llm-last-mile/NOTE-64-stop-world-worker-authority-and-fail-closed-closeout-proof.md`
 
 Provenance/status note:
 
 - **repo-file truth:** the files currently still carry `draft for review` headers;
-- **latest local planning status from the investigation chain:** the `SPEC-64` -> `PLAN-64` -> `TASKS-64` chain is currently being treated locally as review-clean / execution-ready planning input for this stop seam, but that is stronger than the on-disk headers themselves.
+- **latest implementation truth from the investigation chain:** the `SPEC-64` -> `PLAN-64` -> `TASKS-64` chain is no longer just planning input for this seam; the bounded stop-contract repair and proof wall have now landed, while the headers themselves still lag behind that execution status.
 
 What that means operationally:
 
-1. the current **local execution posture** is to proceed from `TASKS-64` one task at a time, even though `TASKS-64` itself is written as a packet-based execution model;
-2. Packet 1 was deliberately split into smaller implementation-safe units because this seam is easy to confuse;
-3. the planning direction captured by the local Slice 64 chain is to correct stop authority / fail-closed closeout semantics without reopening public stop, general attach design, or unrelated retained-worker verbs.
+1. the Slice 64 direction was implemented narrowly rather than widened into public stop redesign, general attach redesign, or unrelated retained-worker verbs;
+2. the proof note now records both:
+   - the positive detached-closeout success path,
+   - and the negative fail-closed proof path;
+3. the remaining work is no longer “finish stop semantics first,” but “preserve the repaired stop contract while re-checking adjacent seams.”
 
 ## Synthesized working model
 
@@ -797,7 +817,7 @@ The newer smokes add one more refinement:
   - `cd ../` is blocked by the caged-root guard as expected
 - and the later continuity-selector precedence fix closed the resumed targeted host-turn semantic continuity bug on both REPL and public CLI.
 
-So by the end of the 2026-06-30 stage, the live mismatch was narrower than “reattach is broken” or “all world dispatch is broken.” At that point the main remaining runtime failures were the retained parked/resumable `authoritative-live` seam for successor `fork_world_worker`, then adjacent retained `cancel_world_work`, and only later worker execution. That ordering is now superseded by the later 2026-07-01 / 2026-07-02 patch-chain smokes, which moved first through the wrapper seam, then through the post-registration durability/publication seam, then through backend-only post-fork retained-target ambiguity, then through exact retained continue, and now point first at source-worker `stop_world_worker` failing in private-stop delivery / durable stop closeout after successful fork creation.
+So by the end of the 2026-06-30 stage, the live mismatch was narrower than “reattach is broken” or “all world dispatch is broken.” At that point the main remaining runtime failures were the retained parked/resumable `authoritative-live` seam for successor `fork_world_worker`, then adjacent retained `cancel_world_work`, and only later worker execution. That ordering is now superseded by the later 2026-07-01 / 2026-07-02 patch-chain smokes, which moved first through the wrapper seam, then through the post-registration durability/publication seam, then through backend-only post-fork retained-target ambiguity, then through exact retained continue, and then into the later source-stop seam that was subsequently fixed; current branch truth is later than this historical sequence, with exact retained source stop fixed, fork-child stop green, and backend-only `cli:codex-world` ambiguity expected under the no-auto-route contract.
 
 ## What the cited runtime/docs actually establish
 
@@ -884,50 +904,25 @@ Both should also validate:
 
 These are the best next debugging checks to separate confirmed truth from still-likely theory:
 
-1. **Investigate exact failed-stop posture / authority truth on the original source worker next**
-   - Goal: preserve the current confirmed smoke truth:
-     - retained `spawn_world_worker`: pass
-     - retained `fork_world_worker`: pass and returns a real child `participant_id`
-     - backend-only post-fork follow-up now correctly ambiguity-closes
-     - exact retained `continue_world_worker` on the source worker: pass
-     - exact retained `continue_world_worker` on the fork child: pass
-     - current blocker is exact retained `stop_world_worker` on the source worker failing with `owner_unreachable ... failed to connect to private stop transport ... durable stop closeout was not observed`
-     - and, after that failed stop, a later exact retained `continue_world_worker` against the same source `participant_id` still succeeded and returned exactly `SOURCE_CONTINUE_OK`
-   - Focus the next discriminator on whether exact retained stop on the original source worker failed while authoritative session truth was still `active_attached` or only after it had already transitioned to detached/parked truth.
-   - Preserve the newest post hoc contradiction explicitly while debugging:
-     - host session posture can still be `parked_resumable`,
-     - target retained source worker can still persist `control_owner_retained/event_stream_active/completion_observer_retained/ownership_valid = true`,
-     - the source-worker stop socket can still exist on disk but have no live listener,
-     - only the current host orchestrator stop socket has a live listener,
-     - and older supporting probe evidence also included worker-socket `ConnectionRefused`.
-   - Do **not** over-read that post hoc evidence:
-     - stale worker stop sockets with no listener can be expected after detach/park,
-     - so the best current seam is stop-time owner/posture discrimination, not a pure `stop-closeout` conclusion.
-   - Most likely seams:
-     - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
-     - `crates/shell/src/execution/agent_runtime/control.rs`
-     - retained source-runtime / private stop transport lifecycle in `crates/shell/src/repl/async_repl.rs`
+1. **Re-smoke retained-mode `cancel_world_work` on top of the repaired stop contract**
+   - Goal: establish whether cancel now shares the repaired exact-target/detached-closeout authority model, or whether it still exposes an adjacent seam.
 
-2. **Use the already-clean timeout-split / durable-publication work only as stage-separation evidence**
-   - Goal: preserve the earlier finding that the post-registration publication seam was real, while also keeping clear that the newest valid smoke now moves past it.
-   - Current read:
-     - the earlier `missing_fork_child_registration ... missing_target_participant, missing_stop_transport` seam was a real intermediate stage,
-     - but the newest valid smoke now proves retained `fork_world_worker` can return a child, exact retained continue can run on both workers, and the active failure sits later at the source-worker stop authority/delivery seam.
+2. **Keep the no-auto-route contract explicit**
+   - Goal: preserve the now-correct expectation that backend-only `cli:codex-world` follow-up ambiguity is a healthy fail-closed result once multiple retained world targets exist.
+   - Do not use older smoke instructions that expected generic backend-only success there.
 
-3. **Then re-check retained-mode `cancel_world_work`**
-   - Goal: establish whether `cancel_world_work` still shares the newer source-stop closeout reachability seam on current code, or whether later retained-fork changes shifted cancel differently.
+3. **Use `cli:codex-host` follow-up as the continuity health check**
+   - Goal: confirm the durable orchestration session still survives the retained stop chain.
+   - This is now the correct health check; backend-only `cli:codex-world` follow-up is not.
 
-4. **Separate worker execution failure from control-plane failure**
-   - Goal: keep `continue_world_worker` worker-turn `codex exited non-zero` analysis separate from retained fork/cancel launch and control-plane failures.
+4. **Separate worker execution failure from control-plane truth**
+   - Goal: keep `continue_world_worker` worker-turn `codex exited non-zero` analysis separate from the now-repaired retained stop control-plane seam.
 
-5. **Keep ordinary-command survivability as a regression baseline**
-   - Goal: preserve live `ls` / `pwd` success and expected caged-root `cd ../` denial after park while working retained-worker seams.
+5. **Keep ordinary-command survivability and REPL/CLI parity green**
+   - Goal: preserve live `ls` / `pwd` success, expected caged-root `cd ../` denial, and host-turn continuity across both wrappers while adjacent retained-worker checks continue.
 
-6. **Keep the REPL and CLI parity regressions green**
-   - Goal: confirm both wrappers continue to preserve the same durable session truth, the same resumed continuity markers, and the correct session-local conversation continuity.
-
-7. **Keep the file-visibility question secondary**
-   - Goal: only revisit host-visible side-effect sync once the retained-worker and REPL parity/control-plane bugs are cleanly separated.
+6. **Keep the file-visibility question secondary**
+   - Goal: revisit host-visible side-effect sync only after the retained-worker control-plane surfaces are separated cleanly from execution and overlay/sync behavior.
 
 ## 2026-06-29 patch sequence and current truth
 
@@ -1126,7 +1121,7 @@ That led to several thin patches and reviews.
   - fork create is green,
   - backend-only post-fork routing is correctly ambiguity-closed,
   - exact retained continue is green on both the source worker and the fork child,
-  - and the remaining live seam is source-worker `stop_world_worker` private-stop delivery / durable stop closeout.
+  - and at that historical stage the then-live seam was source-worker `stop_world_worker` private-stop delivery / durable stop closeout; later work fixed exact retained source stop, kept fork-child stop green, and left backend-only `cli:codex-world` ambiguity as expected no-auto-route contract behavior.
 
 ### 7. Positive success regression was dead code, then fixed
 
@@ -1219,7 +1214,7 @@ Best current seam split:
      - `stale_linkage ... retained worker ... is no longer authoritative-live`
    - design intent says a retained worker that exits clean bootstrap should become parked/resumable, not become an invalid control target,
    - this seam was the next active bug after bootstrap parity improved,
-   - but it should now be read as a previously exposed / committed-history retained-fork stage rather than the current top live blocker, because later smokes moved through the wrapper seam, then through the post-registration durability/publication seam, then through backend-only post-fork ambiguity closure, then through exact retained continue, and now to the later source-stop authority/delivery seam.
+   - but it should now be read as a previously exposed / committed-history retained-fork stage rather than the current top live blocker, because later smokes moved through the wrapper seam, then through the post-registration durability/publication seam, then through backend-only post-fork ambiguity closure, then through exact retained continue, and then through the reproduced-and-fixed exact source-stop seam.
 
 6. **Seam F: worker execution after continue**
    - `continue_world_worker` reaching the retained worker and then failing with `codex exited non-zero` remains real,
@@ -1249,12 +1244,12 @@ Best current seam split:
      - successor-authority lineage is accepted during retained follow-up selector resolution,
      - and targeted retained follow-up now reaches the real later seam.
 
-10. **Seam J: exact retained stop on the source worker now fails later in stop authority / delivery discrimination**
-   - the newest later smoke now fails exact-handle retained `stop_world_worker` on the original retained source worker with:
-     - `owner_unreachable: failed to deliver stop_world_worker to retained worker ... and durable stop closeout was not observed (failed to connect to private stop transport ...; owner_unreachable: timed out waiting for retained worker ... to reach durable stopped closeout)`
-   - a later exact retained `continue_world_worker` against that same source worker still succeeded and returned `SOURCE_CONTINUE_OK`,
-   - so this is now the top live blocker after fork create, backend-only ambiguity closure, and exact retained continue all went green,
-   - but the best current seam should still be read as stop-time owner / transport / posture discrimination rather than as a pure closeout-only problem.
+10. **Seam J: exact retained stop is now green with two intentionally different success shapes**
+   - exact retained stop on the original source worker now succeeds on the formerly failing refused-transport seam via:
+     - `detached durable closeout because the retained runtime owner was no longer reachable`
+   - exact retained stop on the fork child also succeeds, and when the live exact private stop surface is still present the wording remains:
+     - `existing private owner stop surface`
+   - so the older source-stop authority/delivery seam should now be read as reproduced, explained, and fixed rather than still-open.
 
 ### Public `agent start` / `agent turn` continuity strict smoke now validates semantically
 
@@ -1314,16 +1309,16 @@ At this point the following narrow claims appear trustworthy:
    - explicit `:pty` positive persistent-session routing coverage exists
    - the positive parked-host -> ordinary unprefixed implicit-PTY command -> targeted host resume regression now actually executes
 
-6. **But the live failure has moved above the current regression focus**
+6. **The retained-worker queue has moved past the old stop red seam**
    - tests currently validate important routing boundaries,
-   - while the retained-worker queue has since moved through local 2026-07-01 patch-chain stages:
+   - and the retained-worker queue has since moved through:
      - retained successor `authoritative-live` gating,
-     - then the landed world-service retained-slot cleanup,
-     - then temporary stream-launch/bootstrap wrapper recovery,
-     - then re-exposed post-registration child durability/publication failure,
-      - then backend-only post-fork ambiguity closure,
-      - then exact retained continue routing repair,
-      - and with the newest probe now pointing at the later source-stop authority/delivery seam rather than failed fork creation itself.
+     - landed retained-slot cleanup,
+     - temporary stream-launch/bootstrap wrapper recovery,
+     - post-registration child durability/publication failure,
+     - backend-only post-fork ambiguity closure,
+     - exact retained continue routing repair,
+     - and now the reproduced-and-fixed exact source-stop order bug.
 
 7. **ID taxonomy / continuity documentation is landed enough for this seam**
    - the canonical internal doc exists:
@@ -1345,9 +1340,9 @@ At this point the following narrow claims appear trustworthy:
 9. **The retained-worker adapter seam boundary is now explicitly validated in tests**
    - retained `fork_world_worker` and retained-mode `cancel_world_work` keep successor-lineage authority,
    - **branch-local landed / committed truth (`484a17b6`):** retained `continue_world_worker`, `inspect_world_worker`, and `stop_world_worker` also now accept successor-authority lineage during retained follow-up selector resolution,
-   - so the current live blocker is no longer generic retained authority or fork-lineage persistence,
+   - so the current live blocker is no longer generic retained authority, fork-lineage persistence, or the older exact-stop selector seam,
    - targeted adapter follow-up tests now pass on that newer selector/lineage behavior,
-   - and the remaining live seam should now be read as later stop-owner / transport / posture discrimination rather than lineage boundary resolution itself.
+   - and the repaired stop chain now shows that later owner-loss can still produce successful authoritative closeout without widening selector scope.
 
 10. **The old retained `authoritative-live` fork seam has supportable committed history**
    - the supportable committed branch history here is:
@@ -1355,91 +1350,45 @@ At this point the following narrow claims appear trustworthy:
      - `02940fb6` — `Refactor retained worker linkage validation and bootstrap context`
    - those are the safe inline commit refs for the earlier retained-fork authority / linkage stage.
 
-11. **The later shell observability / timeout-split / Boyle-Nash follow-up chain should still be read as local/worktree truth unless separately cited, but the core exact-continue routing work is now committed `HEAD`**
+11. **The later shell observability / timeout-split / Boyle-Nash follow-up chain should still be read as local/worktree truth unless separately cited, but the core exact-continue and exact-stop repair work is now committed `HEAD`**
    - those later 2026-07-01 stages materially changed the observed live failure point,
    - the shell observability and timeout-split / durable-publication wait improvements were useful and review-clean in the local chain,
    - the Boyle/Nash follow-up work also improved same-backend routing, authoritative workspace-root handling, and coverage,
-   - `484a17b6` is now the cited committed ref for the core successor-authority / exact-continue / owner-PID-liveness changes that this memo previously described as later local-only truth,
+   - `484a17b6` is the cited committed ref for the core successor-authority / exact-continue / owner-PID-liveness changes that this memo previously described as later local-only truth,
+   - `dcd1374a` and `db0d382e` are now the cited committed refs for the exact-stop authority/revalidation and refused-transport order repair,
    - but absent further explicit commit refs the remaining observations should not be described here as committed `HEAD` history.
 
-12. **The current top blocker under the newest valid smoke is exact retained `stop_world_worker` on the original source worker after successful fork and continue**
-   - the newest valid 2026-07-02 smoke now shows:
-     - retained `spawn_world_worker`: pass
-     - retained `fork_world_worker`: pass
-     - fork returned a real child `participant_id`
-     - exact retained `continue_world_worker` on the source worker: pass
-     - exact retained `continue_world_worker` on the fork child: pass
-   - backend-only follow-up now correctly fails closed with:
+12. **The newest trustworthy stop truth is now success, not red-seam diagnosis**
+   - exact retained stop on the original source worker is no longer the top blocker:
+     - the preserved negative trace proved the old order bug,
+     - and the landed repair now returns detached durable closeout success on that seam.
+   - exact retained stop on the fork child also succeeds.
+   - backend-only follow-up still correctly fails closed with:
      - `ambiguous_backend_slot: orchestration session ... has multiple authoritative retained turn targets for backend cli:codex-world (...)`
-   - but exact-handle retained `stop_world_worker` on the original retained source worker now fails with:
-     - `owner_unreachable: failed to deliver stop_world_worker to retained worker ... and durable stop closeout was not observed (failed to connect to private stop transport ...; owner_unreachable: timed out waiting for retained worker ... to reach durable stopped closeout)`
-   - session lineage, retained-worker lineage, world binding, and exact retained continue are already structurally correct on that path,
-   - so the current top blocker is no longer the temporary stream-launch/bootstrap wrapper seam, no longer the post-registration child-publication seam, no longer backend-only post-fork target selection itself, and no longer best described as exact retained continue routability or fork-lineage persistence.
+   - that ambiguity is now expected contract truth, not a regression.
 
 ## Updated active blockers
 
-The open bug buckets should now be read in this order:
+The open buckets should now be read in this order:
 
-1. **successful retained fork create now leaves exact retained stop on the source worker as the top live seam**
-   - current valid smoke still shows:
-     - world-bound `agent start`: pass
-     - retained `spawn_world_worker`: pass
-     - retained `fork_world_worker`: pass
-     - fork returned a real child `participant_id`
-     - exact retained `continue_world_worker` on the source worker: pass
-     - exact retained `continue_world_worker` on the fork child: pass
-   - backend-only post-fork follow-up now correctly fails closed with:
-     - `ambiguous_backend_slot: orchestration session ... has multiple authoritative retained turn targets for backend cli:codex-world (...)`
-   - but exact-handle retained `stop_world_worker` on the original source worker now fails with:
-     - `owner_unreachable: failed to deliver stop_world_worker to retained worker ... and durable stop closeout was not observed (failed to connect to private stop transport ...; owner_unreachable: timed out waiting for retained worker ... to reach durable stopped closeout)`
-   - and the newest manual follow-up after that failed stop now shows:
-     - exact retained `continue_world_worker` against the same source `participant_id`: pass
-     - worker reply text: `SOURCE_CONTINUE_OK`
-   - so this is no longer best framed as only “durable stop proof might be missing after a real stop”;
-   - the original retained source worker was still live/routable after the failed stop surface,
-   - session lineage, retained-worker lineage, world binding, and exact retained continue remain structurally correct here,
-   - current post hoc evidence also shows the source-worker stop socket still exists on disk but has no live listener, while only the current host orchestrator stop socket has a live listener,
-   - but stale worker stop sockets with no listener can be expected after detach/park,
-   - so the top live blocker is better framed as stop-time owner / transport / posture discrimination than as a pure `stop-closeout` problem.
-2. **the older retained `authoritative-live` seam should now be read as code-addressed / historically important, not the current top blocker**
-   - it was a real live seam,
-   - it drove multiple shell-side stale-owner / authority / continue-fork-command narrowing patches,
-   - but the newest valid fork smoke has moved past that stage.
-3. **the temporary retained fork stream-launch/bootstrap wrapper seam should now be read as intermediate, not current top-of-queue**
-   - it was real and useful because it exposed a hidden inner `ApiError`,
-   - but the newest valid rerun moved past it.
-4. **the post-registration durability/publication seam should now be read as earlier 2026-07-01 stage history, not the newest top blocker**
-   - `fork_lineage_persist_failed ... missing_fork_child_registration ... missing_target_participant, missing_stop_transport ...` was real,
-   - the timeout-split / durable-publication wait work was useful,
-   - but the newest smoke now gets past fork creation and exposes a later lifecycle seam.
-5. **adjacent retained-mode `cancel_world_work` still needs renewed live validation after the later retained-fork patch chain**
-   - older live smoke showed the same `authoritative-live` class,
-   - and cancel now needs to be checked specifically against the newer source-stop authority/delivery seam rather than the already-closed backend-only routing or exact-continue issues.
-6. **worker turn execution failure (`codex exited non-zero`) remains a separate follow-up issue**
-   - keep this deferred until retained fork/cancel control-plane posture is stable again.
-7. **the current strongest diagnosis has moved from publication timing to the later source-worker stop seam after fork**
-   - the local timeout-split patch was reviewed clean and added useful coverage,
-   - committed `484a17b6` plus the newer selector work now make backend-only routing fail closed as ambiguity and exact retained continue pass,
-   - but the newest valid smoke still shows source-worker stop failing later in stop-owner / transport / posture discrimination,
-   - session lineage, retained-worker lineage, world binding, and exact retained continue remain structurally correct on that failing path,
-   - later stop-focused investigation also weakens the simpler host-posture/public-control-gating explanation, while not fully ruling posture out at the exact failed-stop moment:
-     - persisted host posture can still be `parked_resumable`,
-     - persisted target-worker ownership truth can still remain all-true,
-     - the source-worker stop socket can still exist on disk with no live listener,
-     - only the current host orchestrator stop socket has a live listener,
-     - and older supporting probe evidence also included worker-socket `ConnectionRefused`,
-   - the newer manual exact-continue-after-failed-stop evidence tightens that further:
-     - the source worker stayed live/routable after the failed stop surface,
-     - so do not treat the current blocker as pure durable-closeout ambiguity unless newer evidence proves the worker actually stopped,
-   - Euler's narrowing still applies:
-     - stale worker stop sockets with no listener can be expected after detach/park,
-     - so the key unresolved discriminator remains whether the failed stop happened while truth was still `active_attached` or had already transitioned to detached/parked,
-   - so the active local direction should center on stop-time owner / transport / posture discrimination after fork rather than fork-lineage persistence.
-8. **implicit-PTY ordinary-command caller-boundary clarification/coverage is still useful, but it is no longer the top live blocker**
-9. **test harness still does not fully model every live caller boundary**
-10. **host-visible file/write semantics remain open but are not first in priority**
-11. **low-severity unrelated `docs/TRACE.md` stale absolute-link cleanup remains**
-12. **enum/type cleanup remains post-stabilization hardening, not the next live blocker**
+1. **exact retained stop is no longer the top blocker**
+   - source stop on the formerly failing seam is fixed and now succeeds via detached durable closeout,
+   - fork-child stop also succeeds,
+   - and the memo should no longer center the runtime queue around exact retained stop repair.
+2. **backend-only `cli:codex-world` follow-up ambiguity is expected contract truth**
+   - once multiple authoritative retained world targets exist, generic same-backend follow-up should fail closed with `ambiguous_backend_slot`,
+   - so old smoke instructions that expected backend-only success there are stale.
+3. **`cli:codex-host` follow-up success is now the right continuity health check**
+   - once source and child both exist, host-scoped follow-up is the meaningful check for orchestration-session continuity.
+4. **adjacent retained-mode `cancel_world_work` still needs renewed live validation**
+   - stop is fixed,
+   - cancel has not yet been re-baselined cleanly on top of the same retained-fork chain.
+5. **worker turn execution failure (`codex exited non-zero`) remains a separate follow-up issue**
+   - keep this isolated from the now-repaired retained stop control-plane seam.
+6. **test harness still does not fully model every live caller boundary**
+7. **host-visible file/write semantics remain open but are not first in priority**
+8. **low-severity unrelated `docs/TRACE.md` stale absolute-link cleanup remains**
+9. **enum/type cleanup remains post-stabilization hardening, not the next live blocker**
    - keep the pre-UAA enum/type cleanup as structural hardening after the retained-worker queue above is stabilized.
 
 Do not describe ordinary-command survivability after parked host as the primary open bug in this memo anymore:
@@ -1449,38 +1398,28 @@ Do not describe ordinary-command survivability after parked host as the primary 
 
 ## Next planned landing order
 
-1. **Make retained exact stop authority / delivery discrimination the active patch direction**
-   - next live target is no longer exact retained continue;
-   - current local worktree direction should be framed around why successful fork plus successful exact continue still leaves exact retained `stop_world_worker` on the source worker failing with:
-     - `owner_unreachable ... failed to connect to private stop transport ... durable stop closeout was not observed`
-   - the latest manual evidence now adds:
-     - a subsequent exact retained `continue_world_worker` against that same source `participant_id` succeeded and returned exactly `SOURCE_CONTINUE_OK`,
-     - so the current source-worker stop blocker should be treated first as retained stop delivery / owner-routing / retry-unlock / transport reachability, not as pure proof-only ambiguity;
-   - the newest post hoc runtime evidence also now shows:
-     - the source-worker stop socket can still exist on disk but have no live listener,
-     - only the current host orchestrator stop socket has a live listener,
-     - and stale worker stop sockets with no listener can be expected after detach/park,
-     - so the key unresolved discriminator is whether the failed stop happened while session truth was still `active_attached` or had already transitioned to detached/parked;
-   - current local execution posture is to work from `llm-last-mile/TASKS-64-stop-world-worker-authority-and-fail-closed-closeout-contract.md` one task at a time, layered on top of its packet-based structure;
-   - Packet 1 was deliberately split into smaller implementation-safe units because this seam is easy to confuse;
-   - treat this as a retained stop authority/delivery seam, not a revived fork or continue seam.
+1. **Preserve the repaired stop contract**
+   - keep exact retained source stop green on the refused-transport seam,
+   - keep fork-child stop green,
+   - and preserve the two distinct success summaries:
+     - detached durable closeout for owner-unreachable exact source stop,
+     - existing private owner stop surface when the exact private stop transport is still live.
 
-2. **Then re-check stop against the fork child**
-   - after the source-worker stop seam is understood/fixed, re-smoke exact retained `stop_world_worker` against the fork child;
-   - verify whether source-stop and child-stop share the same stop-time posture / exact-targeting expectations or diverge.
+2. **Re-check retained-mode `cancel_world_work`**
+   - this is now the highest-signal adjacent control-plane seam still lacking a fresh post-fix baseline.
 
-3. **Then re-check retained-mode `cancel_world_work`**
-   - older live smoke tied it to the same retained successor queue,
-   - but it now needs fresh validation after the later fork patch chain and after the later source-stop seam is addressed.
+3. **Keep the no-auto-route contract explicit in future smoke**
+   - treat backend-only `cli:codex-world` follow-up ambiguity as expected,
+   - and use `cli:codex-host` follow-up for orchestration-session continuity checks instead.
 
 4. **Only then separate worker execution failure**
-   - revisit `continue_world_worker` `codex exited non-zero` only after retained fork/cancel control-plane seams are stable again, so worker execution is analyzed from a correct baseline.
+   - revisit `continue_world_worker` `codex exited non-zero` only after adjacent retained control-plane seams are stable again.
 
 5. **Keep ordinary-command survivability as the live regression baseline**
-   - do not regress parked-host -> ordinary unprefixed `ls` / `pwd` success, expected caged-root `cd ../` denial, or the adjacent implicit-PTY regression while fixing retained-worker/runtime seams.
+   - do not regress parked-host -> ordinary unprefixed `ls` / `pwd` success, expected caged-root `cd ../` denial, or the adjacent implicit-PTY regression while checking retained-worker/runtime seams.
 
 6. **Keep the docs/contract work stable, with only bounded cleanup left**
-   - avoid reopening the landed ID taxonomy / continuity docs unless retained-worker work proves a real contract gap;
+   - avoid reopening the landed ID taxonomy / continuity docs unless a fresh retained-worker repro proves a real contract gap;
    - the remaining `docs/TRACE.md` stale absolute-link cleanup is low severity and unrelated to the active runtime bugs.
 
 7. **Do the structural enum/type cleanup before the UAA boundary as post-stabilization hardening**
@@ -1506,34 +1445,17 @@ If we need the shortest honest current diagnosis:
 - explicit `:pty` should not be described as fail-closed on this memo's current truth;
 - REPL and public CLI both now appear to reuse the same transport/session continuity markers on resumed targeted host turns;
 - the resumed targeted host-turn continuity seam is now validated enough on both surfaces, including the strict public `start` -> `turn` smoke returning `Just reply OK`;
-- branch-local landed `382a63a8`, `7732d839`, `1374775e`, and `484a17b6` are the seam-moving committed packets that got the retained path from bootstrap/world-binding and exact-continue failure into the current later source-stop seam;
+- branch-local landed `382a63a8`, `7732d839`, `1374775e`, `484a17b6`, `dcd1374a`, and `db0d382e` are the seam-moving committed packets that got the retained path from bootstrap/world-binding and exact-continue failure through the later exact-stop repair;
 - exact retained `continue_world_worker` is now green in live smoke on both exact handles:
   - source returns `SOURCE_CONTINUE_OK`
   - fork child returns `CHILD_CONTINUE_OK`
 - generic same-backend follow-up after fork now correctly fails closed with `ambiguous_backend_slot ... multiple authoritative retained turn targets for backend cli:codex-world (...)`, which is expected once two retained world workers are live in the same orchestration session;
-- the newest valid retained fork smoke now shows:
-  - retained `fork_world_worker` succeeds
-  - the fork call returns a real child `participant_id`
-  - exact retained continue on the source worker succeeds
-  - exact retained continue on the fork child succeeds
-  - but exact retained `stop_world_worker` on the source worker now fails with:
-    - `owner_unreachable ... failed to connect to private stop transport ... durable stop closeout was not observed`
-- the newest stop-path investigation also shows the active contradiction is no longer best summarized as detached host posture or selector denial:
-  - host session can still persist as `parked_resumable`
-  - target retained source worker can still persist `control_owner_retained = true`
-  - target retained source worker can still persist `event_stream_active = true`
-  - target retained source worker can still persist `completion_observer_retained = true`
-  - target retained source worker can still persist `ownership_valid = true`
-  - the source-worker stop socket can still exist on disk with no live listener
-  - only the current host orchestrator stop socket has a live listener
-  - older supporting probe evidence also included worker-socket `ConnectionRefused`
-- Euler's narrowing keeps that evidence in bounds:
-  - stale worker stop sockets with no listener can be expected after detach/park
-  - so the key unresolved discriminator remains whether the failed stop happened while truth was still `active_attached` or had already transitioned to detached/parked
+- the previously failing exact retained source-stop seam is now fixed:
+  - preserved live trace proved the old gate-before-park-persist order bug,
+  - source stop now succeeds via detached durable closeout because the retained runtime owner was no longer reachable,
+  - and the fork child stop also succeeds when its exact private stop surface remains live.
 - still-open likely bug buckets are therefore now:
-  - exact retained stop owner / transport / posture discrimination after successful `fork_world_worker`,
-  - then child-stop validation,
-  - then renewed retained `cancel_world_work` validation,
+  - renewed retained `cancel_world_work` validation,
   - then worker non-zero execution failures,
   - then remaining caller-boundary / harness realism gaps,
   - and host-visible file/write semantics;
@@ -1551,13 +1473,12 @@ When using this file during debugging, keep these constraints explicit:
 - do not assume shared-world metadata absence/unreadability is repairable on this REPL surface unless the design/docs explicitly say so;
 - do not describe `active_attached` or auto-attach in process-liveness terms; the transcript clarified that all durable truth is Substrate-owned and backend execution is headless/ephemeral;
 - do not reintroduce owner PID liveness as a correctness condition for exact retained follow-up routing; committed `484a17b6` explicitly moved that out of the contract;
-- do not collapse the current source-stop seam back into a generic host-posture/public-control gating story unless fresh state disproves the latest contradiction:
-  - current live local truth says the host session can still be `parked_resumable`,
-  - the target retained worker can still persist all four ownership truth bits as `true`,
-  - the source-worker stop socket can still exist on disk with no live listener,
-  - only the current host orchestrator stop socket can be listener-live,
-  - older supporting probe evidence also included worker-socket `ConnectionRefused`,
-  - and stale worker stop sockets with no listener can be expected after detach/park anyway;
+- do not regress the repaired exact-stop contract back into transport-only semantics:
+  - preserved negative trace says the old failure was an order bug,
+  - committed stop repair says detached authoritative closeout can still succeed when the retained runtime owner is unreachable,
+  - and same-caller refused-stop transport should no longer spend the full sanctioned retry wait before detached closeout is allowed;
+- do not treat backend-only `cli:codex-world` follow-up ambiguity as a regression once multiple retained world targets exist;
+- do use `cli:codex-host` follow-up success as the continuity/health check for the orchestration session after retained source/child stops;
 - do not say explicit `:pty` fail-closed coverage exists; current adjacent truth is positive persistent-session `:pty` routing coverage;
 - do not treat REPL as a semantically distinct lifecycle surface from CLI; parity is part of the product contract;
 - distinguish:

@@ -3,6 +3,15 @@
 Status: living document capturing near-term and upcoming work.
 Keep concise, actionable, and security-focused.
 
+## Current Investigation
+
+- **Status/stop seam: fallback-only orchestration session with unknown posture and late world member registration**
+  - `substrate agent status` surfaced orchestration session `019f3079-8e8c-7432-b2a8-a32e03db0d7d` only via `source_kind=trace_fallback`, with `<unknown>` posture / attached participant / inbox fields, while also listing host participant `ash_019f3079-8e8c-7432-b2a8-a2f02c31d541` and world participant `ash_019f3080-5d8e-7581-909a-1cea5c415ec3`.
+  - `substrate agent stop --session 019f3079-8e8c-7432-b2a8-a32e03db0d7d` returned `missing_active_parent: orchestration session 019f3079-8e8c-7432-b2a8-a32e03db0d7d is not active`.
+  - Trace evidence: host orchestrator detached/parked cleanly; a later targeted `cli:codex-host` follow-up exited non-zero; then a `cli:codex-world` member registration appeared under the same orchestration session.
+  - Important scope note: this looked like a transitional fallback-status / stopability window, not a permanently stuck final state; the same session later settled on disk to `state: "stopped"` with terminal posture.
+  - Conservative read: likely a separate host-session lifecycle / fallback-status seam, not the retained worker stop bug that was just fixed; requires further research before treating it as the same defect.
+
 ## P0 MUST RESOLVE
 
 - **P0 – Store-level atomic publication for orchestration session / world binding / member state**
