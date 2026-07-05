@@ -276,9 +276,13 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    progression, plan→code→plan cycles, dotted work-item narrowing, a residual bare-`CrateOrPackage`
    over-fire [codex §P2, deferred], a residual case-only-respelling over-fire on case-insensitive
    filesystems [codex round 6, deliberately declined — the flip side of the accepted §P3
-   drift-masking fix; over-firing never masks drift], shared-constraint masking, anchor
-   comparison_key asymmetry) stays open; the eligibility-bar revisit (`R6-3.X.3`) stays gated behind
-   it. See the `R6-3` TASKS ledger `R6-3.X.2` and the `FINDINGS` Step 3 note.
+   drift-masking fix; over-firing never masks drift], a residual absolute-vs-repo-relative
+   respelling over-fire [2026-07-05 corpus re-check; closable via session cwd prefix-stripping],
+   shared-constraint masking, anchor comparison_key asymmetry) stays open; the eligibility-bar
+   revisit (`R6-3.X.3`) stays gated behind it. A post-containment corpus re-check (2026-07-05, fresh
+   seed-42 draw: 110 sessions / 890 checkpoints) confirmed `0` fires under the shipping bar and `0`
+   genuine pivots among the 7 loosened-bar disjoint pairs — see the `FINDINGS` re-check note. See the
+   `R6-3` TASKS ledger `R6-3.X.2` and the `FINDINGS` Step 3 note.
 
 ## Non-Goals For This Rescope
 

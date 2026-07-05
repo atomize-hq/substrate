@@ -387,7 +387,13 @@ all fixed here.
     traced filesystem's case semantics, which the bundle does not carry. Per the scorer's standing rule
     (a false positive is recoverable, a masked pivot is not), the case-sensitive §P3 decision stands;
     closing this needs filesystem-semantics metadata on the bundle or an anchor-type-aware rule
-    (symbols case-sensitive, paths per-platform), deferred to the graduated metric.
+    (symbols case-sensitive, paths per-platform), deferred to the graduated metric. **Known residual
+    over-fire, absolute vs repo-relative respelling (2026-07-05 corpus re-check):** an absolute and a
+    repo-relative spelling of the same subtree do not relate on raw segments (`docs/legacy` vs
+    `/Users/…/handbook/docs/legacy/HARNESS.md`), so a survey→specific-files progression spelled across
+    the two forms stays disjoint. Conservative direction (over-fire, never drift-masking); unlike the
+    bare-crate case the bundle already carries `session_meta.payload.cwd`, so cwd-prefix stripping is a
+    plausible bounded close under the graduated metric.
   - Verify (first cut, run green 2026-07-05, incl. post-codex-review fix): scorer unit tests
     (`cargo test -p agent-drift-analyzer --lib scoring::semantic_goal_drift`, incl. the
     `structural_path_ancestry_respects_real_separators_only` unit test and the

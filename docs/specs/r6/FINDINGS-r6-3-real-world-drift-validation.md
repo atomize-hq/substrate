@@ -267,6 +267,30 @@ pooled; opaque delegated sessions remain **secondary** evidence until R7-style p
 support exists. This tag is a reporting heuristic, coarser than the analyzer's per-checkpoint
 `DelegationContext`, which is not serialized into the checkpoint export.
 
+**Post-containment corpus re-check (2026-07-05, analyzer at the `R6-3.X.2` containment first cut plus
+codex re-review rounds 1–6).** Fresh seed-42 draw from the grown store: `110` sessions / `44` repos /
+`890` checkpoints, `110/110` analyzed clean. Fires: **`0`** flagged checkpoints, `0` rolling + `0`
+kickoff evidence lines — the six rounds of containment changes introduced no over-fire regression and
+live precision under the shipping bar holds at 100%. Current-bar eligible `139` (15.6%),
+target-resolved eligible `237` (26.6%) — both stable vs R6-3.5 (`137` / `234`). Target-resolved
+disjoint adjacent pairs: `7` (all five R6-3.5 pairs recur, plus two new: an attachment
+`goal-objective.md` → `docs/specs/r6/MAP.md` kickoff-to-work progression, and a `handbook` docs survey
+(`docs/legacy` + `docs/contracts` dirs) → specific legacy/contract files). `0` killed as junk (the
+R6-3.5 extraction cleanup is holding: extraction garbage stayed dead) and **`0` are genuine pivots**.
+None of the `7` is a subtree narrowing the containment carve-out should have absorbed — on hand
+inspection each falls in a documented open class (doc progression ×2, generic `spec/plan` respelling,
+family-stem `audit-trio.…`, plan→code→plan `async_repl.rs:497`, sibling work under one dir, mixed
+progression). One new residue pattern observed (pairs 5 and 7): **absolute vs repo-relative respelling
+of the same subtree** defeats raw-structure containment (`docs/legacy` cannot be an ancestor of
+`/Users/…/handbook/docs/legacy/HARNESS.md` on raw segments). Like the bare-`CrateOrPackage` over-fire
+this is a conservative miss (over-fire direction, never drift-masking); unlike it, the bundle already
+carries the session `cwd` (`session_meta.payload.cwd`), so cwd-prefix stripping is a plausible bounded
+close under the graduated metric. Delegation split: `single_agent` `760` cp / `130` eligible / `0`
+fired / `2` disjoint; `delegated_child_visible` `130` cp / `9` eligible / `0` fired / `5` disjoint; no
+`delegated_parent_opaque` in this draw. Conclusion unchanged: the shipping bar is precise on real data,
+the loosened-bar residue is exactly the graduated-metric family, and the eligibility-bar revisit
+(`R6-3.X.3`) stays deferred behind it.
+
 Source map (deterministic design inputs, not repo authority): log-template variable abstraction —
 [Preprocessing is All You Need (arXiv 2412.05254)](https://arxiv.org/pdf/2412.05254),
 [Drain3](https://github.com/logpai/Drain3), [LogPPT (arXiv 2302.07435)](https://arxiv.org/abs/2302.07435);
@@ -345,9 +369,12 @@ deliberately declined): a case-only respelling of the same path (`C:/Repo/src` �
 (case-insensitive comparison masks `Foo::Bar` → `foo::bar` symbol pivots and real path pivots on Linux, the
 drift-masking direction), the analyzer cannot know the traced filesystem's case semantics from the bundle,
 and over-firing never masks drift, so the case-sensitive §P3 decision stands until filesystem-semantics
-metadata or an anchor-type-aware rule lands with the graduated metric; plus the shared-constraint-masking
-false negative and the anchor comparison_key asymmetry. See the `R6-3` TASKS ledger `R6-3.X.2` for the
-landed/open split.
+metadata or an anchor-type-aware rule lands with the graduated metric; a known residual over-fire where an
+absolute and a repo-relative spelling of the same subtree do not relate on raw segments (`docs/legacy` vs
+`/Users/…/handbook/docs/legacy/HARNESS.md`; observed in the 2026-07-05 corpus re-check — closable via
+`session_meta.payload.cwd` prefix-stripping under the graduated metric, and over-firing never masks drift);
+plus the shared-constraint-masking false negative and the anchor comparison_key asymmetry. See the `R6-3`
+TASKS ledger `R6-3.X.2` for the landed/open split.
 
 ### Step 4 (conditional) — Revisit loosening the eligibility bar (`R6-3.X.3`)
 
