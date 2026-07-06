@@ -1,0 +1,19 @@
+{
+  "case_id": "synthetic-kickoff-generic-spec-plan-tasks-pivot",
+  "session_id": "semantic-goal-drift-r6-3-x-2b-generic-spec-plan-tasks-pivot",
+  "kickoff_target_display": "docs/specs/r6/R6-1/plan.md",
+  "final_target_display": "docs/specs/design-arch/tasks.md",
+  "final_semantic_goal_drift": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 80
+  },
+  "required_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift previous goal:"
+  ],
+  "forbidden_reason_prefixes": [
+    "rolling semantic goal drift current goal:"
+  ]
+}

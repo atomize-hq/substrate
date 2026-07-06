@@ -7,6 +7,7 @@ Included cases:
 
 ## Positive controls
 - `synthetic-kickoff-anchor-unauthorized-pivot`
+- `synthetic-kickoff-generic-spec-plan-tasks-pivot`
 - `synthetic-kickoff-hyphen-collision-pivot`
 - `synthetic-kickoff-objective-vs-objective-rs-pivot`
 - `synthetic-rolling-mid-session-pivot`
@@ -18,6 +19,10 @@ Included cases:
 - `synthetic-rolling-directory-to-file-narrowing`
 - `synthetic-rolling-file-to-containing-directory-broadening`
 - `synthetic-rolling-map-review-to-map-verify-progression`
+- `synthetic-rolling-artifact-family-progression`
+- `synthetic-rolling-work-item-family-progression`
+- `synthetic-rolling-plan-code-role-shift`
+- `synthetic-rolling-review-verify-role-shift`
 
 Maintenance rules:
 

@@ -1,0 +1,40 @@
+{
+  "case_id": "synthetic-kickoff-generic-spec-plan-tasks-pivot",
+  "session_id": "semantic-goal-drift-r6-3-x-2b-generic-spec-plan-tasks-pivot",
+  "source_artifact": "Synthetic compact-row acceptance fixture proving generic spec/plan/tasks overlap does not suppress a real pivot.",
+  "notes": "Turn 1 anchors on docs/specs/r6/R6-1/plan.md. Turn 2 pivots to docs/specs/design-arch/tasks.md. Generic plan/tasks overlap without shared lineage must still fire.",
+  "rows": [
+    {
+      "turn_id": "turn-001",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Review docs/specs/r6/R6-1/plan.md only."
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,220p' docs/specs/r6/R6-1/plan.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed plan witness excerpts"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update docs/specs/design-arch/tasks.md only.\n\n## Verification\n- cargo fmt --all -- --check"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,220p' docs/specs/design-arch/tasks.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed tasks witness excerpts"
+    }
+  ]
+}

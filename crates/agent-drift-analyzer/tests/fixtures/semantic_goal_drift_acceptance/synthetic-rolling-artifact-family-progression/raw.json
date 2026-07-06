@@ -1,0 +1,62 @@
+{
+  "case_id": "synthetic-rolling-artifact-family-progression",
+  "session_id": "semantic-goal-drift-r6-3-x-2b-artifact-family-progression",
+  "source_artifact": "Synthetic compact-row acceptance fixture for same-artifact-family progression.",
+  "notes": "Turn 1 is boilerplate-only. Turn 2 establishes a rolling previous goal on outputs/audit-trio.report.json. Turn 3 progresses to outputs/audit-trio.model-selection/report.json. The same artifact family should stay quiet.",
+  "rows": [
+    {
+      "turn_id": "turn-001",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Continue the packet work using the existing evidence wall."
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_call",
+      "text": "{\"command\":\"echo packet-context\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed packet context"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Continue the packet work using the existing evidence wall."
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "steer",
+      "text": "Review outputs/audit-trio.report.json only."
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_call",
+      "text": "{\"command\":\"cat outputs/audit-trio.report.json\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed artifact-family witness excerpts"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update outputs/audit-trio.model-selection/report.json only.\n\n## Verification\n- cargo fmt --all -- --check"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_call",
+      "text": "{\"command\":\"cat outputs/audit-trio.model-selection/report.json\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed progressed artifact witness excerpts"
+    }
+  ]
+}

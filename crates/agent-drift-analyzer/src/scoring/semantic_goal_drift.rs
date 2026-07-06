@@ -130,6 +130,162 @@ impl EligibleCurrentGoal<'_> {
     }
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum GoalRelation {
+    Exact,
+    StructuralContainment,
+    RepoRelativeEquivalentAfterCwdStrip,
+    SameArtifactFamily,
+    SameWorkItemFamily,
+    SameDocFamily,
+    PlanCodeRoleShift,
+    ReviewFixVerifyRoleShift,
+    SharedConstraintOnly,
+    WeakOrGenericOnly,
+    Unrelated,
+    Unknown,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AnchorRelationEvidence {
+    left_anchor: String,
+    right_anchor: Option<String>,
+    note: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct WeightedRelationAssessment {
+    relation: GoalRelation,
+    score: u8,
+    confidence: Confidence,
+    decisive_evidence: Vec<AnchorRelationEvidence>,
+    counter_evidence: Vec<AnchorRelationEvidence>,
+}
+
+impl WeightedRelationAssessment {
+    fn suppressive(
+        relation: GoalRelation,
+        score: u8,
+        confidence: Confidence,
+        decisive_evidence: Vec<AnchorRelationEvidence>,
+        counter_evidence: Vec<AnchorRelationEvidence>,
+    ) -> Self {
+        Self {
+            relation,
+            score,
+            confidence,
+            decisive_evidence,
+            counter_evidence,
+        }
+    }
+
+    fn drift(
+        relation: GoalRelation,
+        score: u8,
+        confidence: Confidence,
+        decisive_evidence: Vec<AnchorRelationEvidence>,
+        counter_evidence: Vec<AnchorRelationEvidence>,
+    ) -> Self {
+        Self {
+            relation,
+            score,
+            confidence,
+            decisive_evidence,
+            counter_evidence,
+        }
+    }
+
+    fn no_claim(
+        relation: GoalRelation,
+        score: u8,
+        confidence: Confidence,
+        decisive_evidence: Vec<AnchorRelationEvidence>,
+        counter_evidence: Vec<AnchorRelationEvidence>,
+    ) -> Self {
+        Self {
+            relation,
+            score,
+            confidence,
+            decisive_evidence,
+            counter_evidence,
+        }
+    }
+
+    fn claims_drift(&self) -> bool {
+        matches!(
+            self.relation,
+            GoalRelation::SharedConstraintOnly
+                | GoalRelation::WeakOrGenericOnly
+                | GoalRelation::Unrelated
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum AnchorKind {
+    Path,
+    Symbol,
+    NamedArtifact,
+    WorkspaceRef,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum AnchorRole {
+    Plan,
+    Spec,
+    Tasks,
+    Review,
+    Findings,
+    Verify,
+    Code,
+    GenericDoc,
+    Other,
+}
+
+impl AnchorRole {
+    fn is_docish(&self) -> bool {
+        matches!(
+            self,
+            Self::Plan
+                | Self::Spec
+                | Self::Tasks
+                | Self::Review
+                | Self::Findings
+                | Self::GenericDoc
+        )
+    }
+
+    fn is_plan_spec_task(&self) -> bool {
+        matches!(self, Self::Plan | Self::Spec | Self::Tasks)
+    }
+
+    fn is_review_or_findings(&self) -> bool {
+        matches!(self, Self::Review | Self::Findings)
+    }
+
+    fn is_code_or_verify(&self) -> bool {
+        matches!(self, Self::Code | Self::Verify)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PreparedAnchor {
+    raw: String,
+    kind: AnchorKind,
+    normalized: String,
+    segments: Vec<String>,
+    family_tokens: BTreeSet<String>,
+    work_item_lineages: Vec<Vec<String>>,
+    role: AnchorRole,
+}
+
+#[derive(Clone, Debug, Default)]
+struct PreparedGoalSide {
+    anchors: Vec<PreparedAnchor>,
+    constraint_terms: BTreeSet<String>,
+}
+
 fn eligible_current_goal(summary: &ObjectiveSummary) -> Option<EligibleCurrentGoal<'_>> {
     let structured = summary.structured.as_ref()?;
     if !structured_matches_current_goal_bar(structured) || summary.comparison_key.trim().is_empty()
@@ -257,44 +413,653 @@ fn semantic_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     anchor_goal: &StructuredObjective,
 ) -> bool {
-    let anchor_terms = goal_specific_terms(anchor_goal, None);
-    goal_sets_diverged(
+    semantic_goal_relation(
         &current_goal.specific_terms,
         current_goal.structured,
-        &anchor_terms,
+        Some(current_goal.summary),
+        &goal_specific_terms(anchor_goal, None),
         anchor_goal,
+        None,
     )
+    .claims_drift()
 }
 
 fn rolling_goal_diverged(
     current_goal: &EligibleCurrentGoal<'_>,
     previous_goal: &EligibleCurrentGoal<'_>,
 ) -> bool {
-    goal_sets_diverged(
+    semantic_goal_relation(
         &current_goal.specific_terms,
         current_goal.structured,
+        Some(current_goal.summary),
         &previous_goal.specific_terms,
         previous_goal.structured,
+        Some(previous_goal.summary),
+    )
+    .claims_drift()
+}
+
+/// Relation-authoritative assessment over the stable target anchors. Numeric score remains explanatory
+/// only; suppression vs drift routing is decided by the relation family itself.
+fn semantic_goal_relation(
+    current_terms: &BTreeSet<String>,
+    current_structured: &StructuredObjective,
+    current_summary: Option<&ObjectiveSummary>,
+    other_terms: &BTreeSet<String>,
+    other_structured: &StructuredObjective,
+    other_summary: Option<&ObjectiveSummary>,
+) -> WeightedRelationAssessment {
+    let current_side = prepare_goal_side(current_structured, current_summary);
+    let other_side = prepare_goal_side(other_structured, other_summary);
+    let shared_terms = intersect_terms(current_terms, other_terms);
+    let shared_constraint_terms = intersect_terms(&current_side.constraint_terms, &other_side.constraint_terms);
+
+    if current_terms.is_empty() || other_terms.is_empty() {
+        return WeightedRelationAssessment::no_claim(
+            GoalRelation::Unknown,
+            50,
+            Confidence::Low,
+            Vec::new(),
+            vec![AnchorRelationEvidence {
+                left_anchor: current_structured
+                    .target
+                    .as_ref()
+                    .map(|target| target.display.clone())
+                    .unwrap_or_default(),
+                right_anchor: other_structured
+                    .target
+                    .as_ref()
+                    .map(|target| target.display.clone()),
+                note: "not enough stable goal terms to classify relation".to_string(),
+            }],
+        );
+    }
+
+    if exact_anchor_sets(current_structured, other_structured) {
+        return WeightedRelationAssessment::suppressive(
+            GoalRelation::Exact,
+            5,
+            Confidence::High,
+            target_pair_evidence(current_structured, other_structured, "exact stable target match"),
+            Vec::new(),
+        );
+    }
+
+    if goals_in_structural_containment(current_structured, other_structured) {
+        return WeightedRelationAssessment::suppressive(
+            GoalRelation::StructuralContainment,
+            10,
+            Confidence::High,
+            target_pair_evidence(
+                current_structured,
+                other_structured,
+                "structural containment on stable anchors",
+            ),
+            Vec::new(),
+        );
+    }
+
+    if let Some(assessment) = all_anchors_match_relation(
+        &current_side.anchors,
+        &other_side.anchors,
+        GoalRelation::SameArtifactFamily,
+        same_artifact_family_anchor,
+        24,
+    ) {
+        return assessment;
+    }
+
+    if let Some(assessment) = all_anchors_match_relation(
+        &current_side.anchors,
+        &other_side.anchors,
+        GoalRelation::SameWorkItemFamily,
+        same_work_item_family_anchor,
+        30,
+    ) {
+        return assessment;
+    }
+
+    if let Some(assessment) = all_anchors_match_relation(
+        &current_side.anchors,
+        &other_side.anchors,
+        GoalRelation::SameDocFamily,
+        same_doc_family_anchor,
+        34,
+    ) {
+        return assessment;
+    }
+
+    if let Some(assessment) = all_anchors_match_relation(
+        &current_side.anchors,
+        &other_side.anchors,
+        GoalRelation::PlanCodeRoleShift,
+        plan_code_role_shift_anchor,
+        38,
+    ) {
+        return assessment;
+    }
+
+    if let Some(assessment) = all_anchors_match_relation(
+        &current_side.anchors,
+        &other_side.anchors,
+        GoalRelation::ReviewFixVerifyRoleShift,
+        review_fix_verify_role_shift_anchor,
+        40,
+    ) {
+        return assessment;
+    }
+
+    if !shared_terms.is_empty() && shared_terms == shared_constraint_terms {
+        return WeightedRelationAssessment::drift(
+            GoalRelation::SharedConstraintOnly,
+            72,
+            Confidence::High,
+            shared_term_evidence(&shared_terms, "shared constraint terms only"),
+            target_pair_evidence(
+                current_structured,
+                other_structured,
+                "anchors still disagree outside shared constraints",
+            ),
+        );
+    }
+
+    if !shared_terms.is_empty()
+        && shared_terms
+            .iter()
+            .all(|term| is_weak_overlap_term(term) || shared_constraint_terms.contains(term))
+    {
+        return WeightedRelationAssessment::drift(
+            GoalRelation::WeakOrGenericOnly,
+            76,
+            Confidence::Medium,
+            shared_term_evidence(&shared_terms, "only weak/generic overlap remains"),
+            target_pair_evidence(
+                current_structured,
+                other_structured,
+                "no suppressive stable-anchor relation found",
+            ),
+        );
+    }
+
+    if current_side.anchors.is_empty() || other_side.anchors.is_empty() {
+        if current_terms.is_disjoint(other_terms) {
+            return WeightedRelationAssessment::drift(
+                GoalRelation::Unrelated,
+                DRIFT_RAW_SCORE,
+                Confidence::Medium,
+                Vec::new(),
+                target_pair_evidence(
+                    current_structured,
+                    other_structured,
+                    "stable terms disagree and one side lacks enough stable anchors",
+                ),
+            );
+        }
+        return WeightedRelationAssessment::no_claim(
+            GoalRelation::Unknown,
+            50,
+            Confidence::Low,
+            shared_term_evidence(&shared_terms, "some overlap remains but anchor proof is incomplete"),
+            Vec::new(),
+        );
+    }
+
+    WeightedRelationAssessment::drift(
+        GoalRelation::Unrelated,
+        DRIFT_RAW_SCORE,
+        Confidence::High,
+        Vec::new(),
+        target_pair_evidence(
+            current_structured,
+            other_structured,
+            "stable anchors disagree with no accepted family or role-shift explanation",
+        ),
     )
 }
 
-/// Two goals diverge when their term sets are fully disjoint AND their structured targets are not in
-/// a structural path/symbol containment relationship. The disjoint check is the original binary rule;
-/// the containment carve-out (computed on raw target strings, never normalized terms) rescues a
-/// legitimate narrowing/broadening within one namespace so it does not read as drift.
-fn goal_sets_diverged(
-    current_terms: &BTreeSet<String>,
-    current_structured: &StructuredObjective,
-    other_terms: &BTreeSet<String>,
-    other_structured: &StructuredObjective,
-) -> bool {
-    if current_terms.is_empty() || other_terms.is_empty() {
-        return false;
+fn exact_anchor_sets(a: &StructuredObjective, b: &StructuredObjective) -> bool {
+    let a_anchors = target_concrete_anchors(a)
+        .into_iter()
+        .map(structural_path_segments_owned)
+        .collect::<Vec<_>>();
+    let b_anchors = target_concrete_anchors(b)
+        .into_iter()
+        .map(structural_path_segments_owned)
+        .collect::<Vec<_>>();
+    !a_anchors.is_empty() && a_anchors == b_anchors
+}
+
+fn prepare_goal_side(
+    structured: &StructuredObjective,
+    summary: Option<&ObjectiveSummary>,
+) -> PreparedGoalSide {
+    let mut side = PreparedGoalSide::default();
+    for constraint in &structured.constraints {
+        collect_constraint_terms(&mut side.constraint_terms, constraint);
     }
-    if !current_terms.is_disjoint(other_terms) {
-        return false;
+    if let Some(target) = structured.target.as_ref() {
+        for value in &target.paths {
+            side.anchors
+                .push(prepare_anchor(value, AnchorKind::Path));
+        }
+        for value in &target.symbols {
+            side.anchors
+                .push(prepare_anchor(value, AnchorKind::Symbol));
+        }
+        for value in &target.named_artifacts {
+            side.anchors
+                .push(prepare_anchor(value, AnchorKind::NamedArtifact));
+        }
+        for value in &target.workspace_refs {
+            side.anchors
+                .push(prepare_anchor(value, AnchorKind::WorkspaceRef));
+        }
     }
-    !goals_in_structural_containment(current_structured, other_structured)
+    if side.anchors.is_empty() {
+        if let Some(summary) = summary {
+            for segment in summary.comparison_key.split('|') {
+                if !segment.trim().is_empty() {
+                    side.anchors
+                        .push(prepare_anchor(segment, AnchorKind::NamedArtifact));
+                }
+            }
+        }
+    }
+    side
+}
+
+fn prepare_anchor(raw: &str, kind: AnchorKind) -> PreparedAnchor {
+    let normalized = normalize_goal_term(raw);
+    let segments = structural_path_segments(raw)
+        .into_iter()
+        .map(normalize_goal_term)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    let token_stream = normalized
+        .split('_')
+        .filter(|token| !token.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    PreparedAnchor {
+        raw: raw.to_string(),
+        kind,
+        normalized,
+        segments,
+        family_tokens: extract_family_tokens(&token_stream),
+        work_item_lineages: extract_work_item_lineages(&token_stream),
+        role: classify_anchor_role(raw, &token_stream),
+    }
+}
+
+fn structural_path_segments_owned(value: &str) -> Vec<String> {
+    structural_path_segments(value)
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn intersect_terms(left: &BTreeSet<String>, right: &BTreeSet<String>) -> BTreeSet<String> {
+    left.intersection(right).cloned().collect()
+}
+
+fn all_anchors_match_relation<F>(
+    current: &[PreparedAnchor],
+    other: &[PreparedAnchor],
+    relation: GoalRelation,
+    predicate: F,
+    score: u8,
+) -> Option<WeightedRelationAssessment>
+where
+    F: Fn(&PreparedAnchor, &PreparedAnchor) -> Option<AnchorRelationEvidence>,
+{
+    if current.is_empty() || other.is_empty() {
+        return None;
+    }
+
+    let current_matches = relation_matches(current, other, &predicate)?;
+    let other_matches = relation_matches(other, current, &predicate)?;
+
+    Some(WeightedRelationAssessment::suppressive(
+        relation,
+        score,
+        Confidence::Medium,
+        current_matches.into_iter().chain(other_matches).collect(),
+        Vec::new(),
+    ))
+}
+
+fn relation_matches<F>(
+    from: &[PreparedAnchor],
+    to: &[PreparedAnchor],
+    predicate: &F,
+) -> Option<Vec<AnchorRelationEvidence>>
+where
+    F: Fn(&PreparedAnchor, &PreparedAnchor) -> Option<AnchorRelationEvidence>,
+{
+    let mut evidence = Vec::new();
+    for from_anchor in from {
+        let matched = to
+            .iter()
+            .find_map(|to_anchor| predicate(from_anchor, to_anchor));
+        let matched = matched?;
+        evidence.push(matched);
+    }
+    Some(evidence)
+}
+
+fn same_artifact_family_anchor(
+    left: &PreparedAnchor,
+    right: &PreparedAnchor,
+) -> Option<AnchorRelationEvidence> {
+    if extension_only_leaf_variant(left, right) {
+        return None;
+    }
+    let shared_family = shared_family_tokens(left, right);
+    if shared_family.len() < 2 {
+        return None;
+    }
+    if left.role.is_docish() && right.role.is_docish() {
+        return None;
+    }
+    Some(AnchorRelationEvidence {
+        left_anchor: left.raw.clone(),
+        right_anchor: Some(right.raw.clone()),
+        note: format!("same artifact-family tokens: {}", shared_family.join(",")),
+    })
+}
+
+fn same_work_item_family_anchor(
+    left: &PreparedAnchor,
+    right: &PreparedAnchor,
+) -> Option<AnchorRelationEvidence> {
+    let lineage = shared_work_item_lineage(left, right)?;
+    Some(AnchorRelationEvidence {
+        left_anchor: left.raw.clone(),
+        right_anchor: Some(right.raw.clone()),
+        note: format!("same work-item lineage: {}", lineage.join(".")),
+    })
+}
+
+fn same_doc_family_anchor(left: &PreparedAnchor, right: &PreparedAnchor) -> Option<AnchorRelationEvidence> {
+    if !(left.role.is_docish() && right.role.is_docish()) {
+        return None;
+    }
+    let shared_family = shared_family_tokens(left, right);
+    let shared_prefix = shared_segment_prefix_len(left, right);
+    if shared_prefix < 3 {
+        return None;
+    }
+    if shared_family.len() < 2 && shared_work_item_lineage(left, right).is_none() {
+        return None;
+    }
+    Some(AnchorRelationEvidence {
+        left_anchor: left.raw.clone(),
+        right_anchor: Some(right.raw.clone()),
+        note: format!("same doc family under shared prefix depth {}", shared_prefix),
+    })
+}
+
+fn plan_code_role_shift_anchor(
+    left: &PreparedAnchor,
+    right: &PreparedAnchor,
+) -> Option<AnchorRelationEvidence> {
+    if !((left.role.is_plan_spec_task() && right.role.is_code_or_verify())
+        || (right.role.is_plan_spec_task() && left.role.is_code_or_verify()))
+    {
+        return None;
+    }
+    if !shares_workstream(left, right) {
+        return None;
+    }
+    Some(AnchorRelationEvidence {
+        left_anchor: left.raw.clone(),
+        right_anchor: Some(right.raw.clone()),
+        note: "plan/spec/tasks ↔ code/verify role shift in one workstream".to_string(),
+    })
+}
+
+fn review_fix_verify_role_shift_anchor(
+    left: &PreparedAnchor,
+    right: &PreparedAnchor,
+) -> Option<AnchorRelationEvidence> {
+    if !((left.role.is_review_or_findings() && right.role.is_code_or_verify())
+        || (right.role.is_review_or_findings() && left.role.is_code_or_verify()))
+    {
+        return None;
+    }
+    if !shares_workstream(left, right) {
+        return None;
+    }
+    Some(AnchorRelationEvidence {
+        left_anchor: left.raw.clone(),
+        right_anchor: Some(right.raw.clone()),
+        note: "review/findings ↔ fix/verify role shift in one workstream".to_string(),
+    })
+}
+
+fn shared_family_tokens(left: &PreparedAnchor, right: &PreparedAnchor) -> Vec<String> {
+    left.family_tokens
+        .intersection(&right.family_tokens)
+        .cloned()
+        .collect()
+}
+
+fn shares_workstream(left: &PreparedAnchor, right: &PreparedAnchor) -> bool {
+    shared_family_tokens(left, right).len() >= 2 || shared_work_item_lineage(left, right).is_some()
+}
+
+fn shared_work_item_lineage(left: &PreparedAnchor, right: &PreparedAnchor) -> Option<Vec<String>> {
+    let mut best: Option<Vec<String>> = None;
+    for left_chain in &left.work_item_lineages {
+        for right_chain in &right.work_item_lineages {
+            let common = left_chain
+                .iter()
+                .zip(right_chain.iter())
+                .take_while(|(l, r)| l == r)
+                .map(|(value, _)| value.clone())
+                .collect::<Vec<_>>();
+            if common.len() >= 2 && best.as_ref().is_none_or(|best| common.len() > best.len()) {
+                best = Some(common);
+            }
+        }
+    }
+    best
+}
+
+fn shared_segment_prefix_len(left: &PreparedAnchor, right: &PreparedAnchor) -> usize {
+    left.segments
+        .iter()
+        .zip(right.segments.iter())
+        .take_while(|(l, r)| l == r)
+        .count()
+}
+
+fn extension_only_leaf_variant(left: &PreparedAnchor, right: &PreparedAnchor) -> bool {
+    let Some(left_leaf) = left.segments.last() else {
+        return false;
+    };
+    let Some(right_leaf) = right.segments.last() else {
+        return false;
+    };
+    let left_stripped = strip_known_extension_suffix(left_leaf);
+    let right_stripped = strip_known_extension_suffix(right_leaf);
+    left_stripped == right_stripped
+        && left_leaf != right_leaf
+        && (left_leaf != left_stripped || right_leaf != right_stripped)
+}
+
+fn strip_known_extension_suffix(value: &str) -> &str {
+    for suffix in [
+        "_md", "_rs", "_py", "_ts", "_tsx", "_js", "_jsx", "_json", "_yaml", "_yml", "_toml",
+        "_txt", "_sql", "_go", "_java", "_kt", "_c", "_cpp",
+    ] {
+        if let Some(stripped) = value.strip_suffix(suffix) {
+            return stripped;
+        }
+    }
+    value
+}
+
+fn extract_family_tokens(tokens: &[String]) -> BTreeSet<String> {
+    tokens
+        .iter()
+        .filter(|token| !is_generic_family_token(token))
+        .cloned()
+        .collect()
+}
+
+fn extract_work_item_lineages(tokens: &[String]) -> Vec<Vec<String>> {
+    let mut lineages = Vec::new();
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = &tokens[index];
+        if is_work_item_start_token(token) {
+            let mut lineage = vec![token.clone()];
+            let mut lookahead = index + 1;
+            while lookahead < tokens.len() && is_work_item_continuation_token(&tokens[lookahead]) {
+                lineage.push(tokens[lookahead].clone());
+                lookahead += 1;
+            }
+            if lineage.len() >= 2 {
+                lineages.push(lineage);
+            }
+            index = lookahead;
+            continue;
+        }
+        index += 1;
+    }
+    lineages
+}
+
+fn is_work_item_start_token(token: &str) -> bool {
+    matches!(token, "packet" | "slice" | "set" | "phase")
+        || (token.starts_with('r')
+            && token.len() > 1
+            && token[1..].chars().all(|ch| ch.is_ascii_digit()))
+}
+
+fn is_work_item_continuation_token(token: &str) -> bool {
+    token.chars().all(|ch| ch.is_ascii_digit())
+        || (token.len() == 1 && token.chars().all(|ch| ch.is_ascii_alphabetic()))
+        || (token.len() == 2
+            && token.chars().next().is_some_and(|ch| ch.is_ascii_digit())
+            && token.chars().nth(1).is_some_and(|ch| ch.is_ascii_alphabetic()))
+}
+
+fn classify_anchor_role(raw: &str, tokens: &[String]) -> AnchorRole {
+    let normalized = normalize_goal_term(raw);
+    let has = |needle: &str| normalized.contains(needle);
+    if has("findings") || has("finding") {
+        return AnchorRole::Findings;
+    }
+    if has("review") {
+        return AnchorRole::Review;
+    }
+    if has("verify") || has("verification") || has("acceptance") || has("regression") {
+        return AnchorRole::Verify;
+    }
+    if has("plan") {
+        return AnchorRole::Plan;
+    }
+    if has("tasks") || has("task_ledger") {
+        return AnchorRole::Tasks;
+    }
+    if has("spec") || has("design") {
+        return AnchorRole::Spec;
+    }
+    if matches!(
+        tokens.last().map(String::as_str),
+        Some("rs" | "py" | "ts" | "tsx" | "js" | "jsx" | "go" | "java" | "kt" | "c" | "cpp")
+    ) || normalized.contains("_src_")
+        || normalized.contains("crates_")
+        || normalized.contains("_tests_")
+    {
+        return AnchorRole::Code;
+    }
+    if normalized.contains("docs_") || normalized.contains("readme") || normalized.ends_with("_md") {
+        return AnchorRole::GenericDoc;
+    }
+    AnchorRole::Other
+}
+
+fn is_generic_family_token(token: &str) -> bool {
+    matches!(
+        token,
+        "docs"
+            | "doc"
+            | "spec"
+            | "specs"
+            | "design"
+            | "plan"
+            | "task"
+            | "tasks"
+            | "review"
+            | "verify"
+            | "verification"
+            | "finding"
+            | "findings"
+            | "fix"
+            | "tests"
+            | "test"
+            | "acceptance"
+            | "regression"
+            | "readme"
+            | "crates"
+            | "crate"
+            | "src"
+            | "scripts"
+            | "dev"
+            | "md"
+            | "rs"
+            | "py"
+            | "ts"
+            | "tsx"
+            | "js"
+            | "jsx"
+            | "json"
+            | "yml"
+            | "yaml"
+            | "toml"
+            | "repo"
+            | "only"
+            | "file"
+            | "directory"
+    ) || token.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn is_weak_overlap_term(term: &str) -> bool {
+    term.len() <= 3
+        || term.ends_with("_md")
+        || term.ends_with("_rs")
+        || term.contains("spec")
+        || term.contains("plan")
+        || term.contains("tasks")
+}
+
+fn shared_term_evidence(terms: &BTreeSet<String>, note: &str) -> Vec<AnchorRelationEvidence> {
+    terms.iter()
+        .map(|term| AnchorRelationEvidence {
+            left_anchor: term.clone(),
+            right_anchor: None,
+            note: note.to_string(),
+        })
+        .collect()
+}
+
+fn target_pair_evidence(
+    left: &StructuredObjective,
+    right: &StructuredObjective,
+    note: &str,
+) -> Vec<AnchorRelationEvidence> {
+    vec![AnchorRelationEvidence {
+        left_anchor: left
+            .target
+            .as_ref()
+            .map(|target| target.display.clone())
+            .unwrap_or_default(),
+        right_anchor: right.target.as_ref().map(|target| target.display.clone()),
+        note: note.to_string(),
+    }]
 }
 
 /// True iff the two goals describe the same path/symbol region differing only in depth — a pure
@@ -1563,10 +2328,302 @@ mod tests {
         let scored = score_semantic_goal_drift(&analysis, None);
 
         assert!(
-            !scored.score.flagged,
-            "shared boundary terms should keep slow evolution out of rolling semantic_goal_drift"
+            scored.score.flagged,
+            "shared-constraint-only overlap must no longer suppress rolling semantic_goal_drift"
         );
-        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_suppresses_same_work_item_family_progression() {
+        let previous = structured_goal(
+            "docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-tasks.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal(
+            "docs/specs/r6/R6-3.5/agent-drift-analyzer-objective-target-hygiene-spec.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_r6_3_5_agent_drift_analyzer_objective_target_hygiene_spec_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "docs|spec_or_design_doc|docs_specs_r6_r6_3_agent_drift_analyzer_rolling_semantic_goal_drift_tasks_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            !scored.score.flagged,
+            "same work-item family progression must not flag rolling semantic_goal_drift"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_crate_package_pivot() {
+        let anchor = structured_goal_with_target(
+            "agent-drift-analyzer",
+            ObjectiveTargetKind::CrateOrPackage,
+            Vec::new(),
+            Vec::new(),
+            vec!["agent-drift-analyzer".to_string()],
+            Vec::new(),
+            Confidence::High,
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "a bare crate/package kickoff anchor must still fire when the work pivots to unrelated docs"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_workspace_ref_pivot() {
+        let anchor = structured_goal_with_target(
+            "@shared-cab-app",
+            ObjectiveTargetKind::RepoSlice,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec!["@shared-cab-app".to_string()],
+            Confidence::High,
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "a workspace-ref kickoff anchor must still fire when the work pivots to unrelated docs"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_verification_target_pivot() {
+        let anchor = structured_goal_with_target(
+            "objective_acceptance harness",
+            ObjectiveTargetKind::TestOrVerifier,
+            Vec::new(),
+            Vec::new(),
+            vec!["objective_acceptance harness".to_string()],
+            Vec::new(),
+            Confidence::High,
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "a verification-target kickoff anchor must still fire when the work pivots to unrelated docs"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_still_flags_repo_work_item_pivot() {
+        let anchor = structured_goal_with_target(
+            "B2.2",
+            ObjectiveTargetKind::RepoSlice,
+            Vec::new(),
+            Vec::new(),
+            vec!["B2.2".to_string()],
+            Vec::new(),
+            Confidence::High,
+        );
+        let current = structured_goal("docs/specs/r6/MAP.md", Confidence::High, Vec::new());
+        let analysis = analysis_with_summary(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md",
+                Some(current),
+                "current structured goal",
+            ),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            scored.score.flagged,
+            "a repo/work-item kickoff anchor must still fire when the work pivots to unrelated docs"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_suppresses_plan_code_role_shift_with_shared_workstream() {
+        let previous = structured_goal(
+            "docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-plan.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_semantic_goal_drift_rs",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "plan|spec_or_design_doc|docs_specs_r6_r6_3_x_2b_agent_drift_analyzer_semantic_goal_drift_graduated_weighted_distance_plan_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            !scored.score.flagged,
+            "plan-doc to code work inside one semantic-goal-drift workstream must stay suppressed"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_suppresses_review_fix_verify_role_shift_with_shared_workstream() {
+        let previous = structured_goal(
+            "docs/specs/r6/FINDINGS-semantic-goal-drift-validation.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal(
+            "crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "verify|test_or_verifier|crates_agent_drift_analyzer_tests_semantic_goal_drift_acceptance_rs",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "review|spec_or_design_doc|docs_specs_r6_findings_semantic_goal_drift_validation_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            !scored.score.flagged,
+            "review/findings to verify work inside one semantic-goal-drift workstream must stay suppressed"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_shared_constraint_only_overlap_still_flags_pivot() {
+        let previous = structured_goal_with_constraints(
+            Some("crates/agent-drift-analyzer/src/scoring/mod.rs"),
+            Confidence::High,
+            vec![platform_boundary_constraint("linux")],
+            Vec::new(),
+        );
+        let current = structured_goal_with_constraints(
+            Some("docs/specs/r6/MAP.md"),
+            Confidence::High,
+            vec![platform_boundary_constraint("linux")],
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "docs|spec_or_design_doc|docs_specs_r6_map_md|linux",
+                Some(current),
+                "current structured goal stayed on the linux verification frontier",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_mod_rs|linux",
+                Some(previous),
+                "previous structured goal on the same linux verification frontier",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "shared-constraint-only overlap must not suppress an unrelated pivot"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_generic_spec_plan_tasks_overlap_still_flags_pivot() {
+        let previous = structured_goal(
+            "docs/specs/r6/R6-1/plan.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal(
+            "docs/specs/design-arch/tasks.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "plan|spec_or_design_doc|docs_specs_design_arch_tasks_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "plan|spec_or_design_doc|docs_specs_r6_r6_1_plan_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "generic spec/plan/tasks overlap without shared lineage must still flag a pivot"
+        );
     }
 
     #[test]
@@ -1849,6 +2906,30 @@ mod tests {
         unknowns: Vec<ObjectiveUnknown>,
     ) -> StructuredObjective {
         structured_goal_with_constraints(Some(target_display), confidence, Vec::new(), unknowns)
+    }
+
+    fn structured_goal_with_target(
+        target_display: &str,
+        kind: ObjectiveTargetKind,
+        paths: Vec<String>,
+        symbols: Vec<String>,
+        named_artifacts: Vec<String>,
+        workspace_refs: Vec<String>,
+        confidence: Confidence,
+    ) -> StructuredObjective {
+        let mut goal = structured_goal_with_constraints(None, confidence, Vec::new(), Vec::new());
+        goal.target = Some(ObjectiveTarget {
+            display: target_display.to_string(),
+            kind,
+            paths,
+            symbols,
+            named_artifacts,
+            workspace_refs,
+            evidence: vec![objective_span(3, target_display)],
+            confidence,
+        });
+        goal.evidence_spans = vec![objective_span(3, target_display)];
+        goal
     }
 
     /// A TaskStatement goal whose structured target carries several concrete paths (multi-anchor),

@@ -1,0 +1,19 @@
+{
+  "case_id": "synthetic-rolling-plan-code-role-shift",
+  "session_id": "semantic-goal-drift-r6-3-x-2b-plan-code-role-shift",
+  "penultimate_target_display": "docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-plan.md",
+  "penultimate_semantic_goal_drift_flagged": false,
+  "final_target_display": "crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs",
+  "final_semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "required_reason_prefixes": [],
+  "forbidden_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift current goal:",
+    "rolling semantic goal drift previous goal:"
+  ]
+}
