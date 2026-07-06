@@ -236,7 +236,7 @@ eligibility loosening.
 
 ## R6-3.X.2B.4: Corpus tooling, rerun, and findings update
 
-- [ ] Task R6-3.X.2B.4.1: Add validation strata reporting when inferable.
+- [x] Task R6-3.X.2B.4.1: Add validation strata reporting when inferable.
   - Acceptance:
     - batch tooling reports delegation topology (mandatory) plus any additional best-effort splits for
       language/repo type, workflow type, and tooling type that can be supported honestly.
@@ -253,6 +253,30 @@ eligibility loosening.
     - `scripts/dev/drift-batch-scan/run_batch.py` (only if the smallest tag addition is required)
     - `scripts/dev/drift-batch-scan/inspect_targets.py` (only if residue labeling needs it)
   - Estimated scope: S
+  - Result (2026-07-06):
+    - `scripts/dev/drift-batch-scan/tabulate.py` now reports three additional best-effort checkpoint-level
+      strata alongside the existing mandatory delegation split: `language / repo type`
+      (`rust` / `js_ts` / `python` / `docs_only` / `mixed` / `unknown`), `workflow type`
+      (`implementation` / `docs_planning` / `verification` / `review_fix` / `mixed` / `unknown`), and
+      `tooling type` (`cargo_rust` / `node_npm` / `python_pytest` / `generic_filesystem_doc` /
+      `unknown`).
+    - Each new table prints its heuristic source explicitly from current export only: language/repo uses
+      `task_frame.working_set_paths` plus `structured_objective.target` values with command/tool and file-
+      extension hints; workflow uses `session_archetype.label` plus `session_progress.dimension` with
+      `structured_objective.primary_intent` / verification-command fallback; tooling uses
+      `task_frame.command_families`, `task_frame.tools`, and `task_frame.verification_commands` with a file-
+      extension fallback when command evidence is absent.
+    - `tabulate.py` now fail-closes the gate when an added stratum resolves to `100% unknown`, printing an
+      explicit unresolved warning instead of silently counting that table as satisfied.
+    - `scripts/dev/drift-batch-scan/README.md` documents the added strata, their buckets, and the
+      reporting-only / best-effort contract.
+    - Narrow TDD proof was added in `scripts/dev/drift-batch-scan/test_tabulate.py`, covering Rust,
+      docs-only, mixed, workflow, and Python/tooling inference before the script changes landed.
+    - Verification:
+      - `python3 -m unittest scripts/dev/drift-batch-scan/test_tabulate.py`
+      - `python3 scripts/dev/drift-batch-scan/tabulate.py --help`
+      - synthetic output inspection via a 3-checkpoint temp corpus exercising the new language/workflow/tooling
+        tables and the existing funnel output
 
 - [ ] Task R6-3.X.2B.4.2: Run the focused wall, full analyzer wall, and 110-session corpus rerun.
   - Acceptance:

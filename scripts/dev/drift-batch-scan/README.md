@@ -62,6 +62,7 @@ four added keys — `_month`, `_repo`, `_session_file_id`, and `_delegation` —
 - remaining disjoint pairs
 - emitted `semantic_goal_drift` fires
 - delegation-category stratification
+- best-effort language / repo type, workflow type, and tooling type strata
 
 What it **cannot** report from the current checkpoint export without either duplicating the Rust scorer or
 widening the analyzer export/schema:
@@ -87,6 +88,26 @@ This tag is a *reporting* aid and is intentionally coarser than the analyzer's o
 `DelegationContext` (topology + `child_work_visibility`), which is not serialized into the checkpoint
 export. Opaque delegated sessions remain **secondary** evidence until R7-style parent/child semantic
 support exists; see the FINDINGS delegation caveat.
+
+## Best-effort validation strata (R6-3.X.2B)
+
+Without widening the checkpoint export, `tabulate.py` also emits three additional checkpoint-level
+strata, each with an explicit heuristic-source note printed alongside the table:
+
+- **language / repo type** — inferred from `task_frame.working_set_paths`,
+  `structured_objective.target.{paths,named_artifacts,workspace_refs,symbols,display}`, plus
+  command/tool and file-extension hints; buckets: `rust`, `js_ts`, `python`, `docs_only`, `mixed`,
+  `unknown`.
+- **workflow type** — inferred from `session_archetype.label` and `session_progress.dimension`, with
+  `structured_objective.primary_intent` / verification-command fallback; buckets: `implementation`,
+  `docs_planning`, `verification`, `review_fix`, `mixed`, `unknown`.
+- **tooling type** — inferred from `task_frame.command_families`, `task_frame.tools`,
+  `task_frame.verification_commands`, with file-extension fallback when command evidence is absent;
+  buckets: `cargo_rust`, `node_npm`, `python_pytest`, `generic_filesystem_doc`, `unknown`.
+
+These are intentionally **best-effort reporting heuristics**, not new analyzer facts. If a whole
+table resolves to `100% unknown`, `tabulate.py` prints an explicit unresolved warning so the packet
+does not claim that stratum as validated.
 
 ## What `filter_junk.py` answers (the cheapest gate)
 
