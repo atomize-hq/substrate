@@ -330,7 +330,7 @@ eligibility loosening.
       - `python3 scripts/dev/drift-batch-scan/tabulate.py --checkpoints-dir /tmp/r6_3_x_2b_batch_after_fix/checkpoints`
       - `python3 scripts/dev/drift-batch-scan/inspect_targets.py --checkpoints-dir /tmp/r6_3_x_2b_batch_after_fix/checkpoints`
 
-- [ ] Task R6-3.X.2B.4.3: Update findings, map, and routing decision.
+- [x] Task R6-3.X.2B.4.3: Update findings, map, and routing decision.
   - Acceptance:
     - `FINDINGS`, `MAP`, and the `R6-3` task ledger record:
       - relation families landed
@@ -350,6 +350,22 @@ eligibility loosening.
     - `docs/specs/r6/MAP.md`
     - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-tasks.md`
   - Estimated scope: S
+  - Result (2026-07-06):
+    - `docs/specs/r6/FINDINGS-r6-3-real-world-drift-validation.md` now records the `R6-3.X.2B` closeout:
+      relation-authoritative routing, the doc-bundle-member false-positive fix, the directional
+      `R6-3.6` → `R6-3.X.2B` rerun comparison (`938` → `892` checkpoints), the final `0`-fire rerun totals,
+      the six hand-labeled non-pivot residue pairs, the populated validation-strata tables, and the explicit
+      deferral of `RepoRelativeEquivalentAfterCwdStrip`.
+    - `docs/specs/r6/MAP.md` now promotes `R6-3.X.2B` from "next remainder packet" to **landed closeout**,
+      updates the routing note to say `R6-3.X.2` is closed through `R6-3.X.2B`, and keeps `R6-3.X.3`
+      deferred because the rerun still shows no genuine pivot suppressed solely by the strict eligibility bar.
+    - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-tasks.md` now marks
+      `R6-3.X.2` complete, preserves the 2026-07-05 first-cut history, and appends the 2026-07-06 weighted
+      closeout result with the final rerun totals, residue labels, validation-strata outcome, and the final
+      `R6-3.X.3` defer decision.
+    - Final routing decision: **do not reopen `R6-3.X.3`**. After the weighted packet landed, the rerun
+      still shows no genuine pivot that is suppressed only by the shared eligibility bar; the remaining
+      residue is progression-family over-fire, not eligibility-bar under-fire.
 
 ## Final checkpoint
 

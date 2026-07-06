@@ -310,6 +310,67 @@ still precise on real data, recall now has an explicit positive-control wall, an
 packet remains the **remaining graduated / weighted-distance work in `R6-3.X.2`**. The
 eligibility-bar revisit (`R6-3.X.3`) stays deferred behind it.
 
+**R6-3.X.2B Result (2026-07-06): relation-authoritative weighted closeout + validation strata.**
+The remaining `R6-3.X.2B` packet landed as an analyzer-local scorer/docs/tooling pass: the relation
+taxonomy is now the authoritative routing surface (numeric score explanatory only), pairwise
+plan↔code and review/findings↔fix/verify shifts are explicit suppressive families, shared-constraint-only
+and weak/generic-only overlap no longer suppress real pivots, and the batch tooling now reports
+delegation plus best-effort language/workflow/tooling strata with explicit heuristic sources and
+fail-closed `100% unknown` warnings.
+
+The required 110-session rerun was repeated from the **current** session store with `--seed 42`, so
+the published `R6-3.6` manifest could not be reused exactly; the closeout is therefore an explicit
+**directional** comparison against the `2026-07-05` seed-42 baseline, not a claim of identical
+session identity. The first 2026-07-06 rerun (`110` sessions / `44` repos / `892` checkpoints,
+`110/110` clean) surfaced a narrow remaining false-positive family: three current-bar fires in one docs
+session were just **doc-bundle → anchored member-doc narrowing**
+(`architecture-overview.md|README.md|…` → `README.md`). A scorer-local failing regression
+(`semantic_goal_drift_suppresses_doc_bundle_member_narrowing`) was added first, then the scorer gained a
+bounded `SameDocFamily` exact-member bundle suppression. Re-running the **same** 110-session manifest
+after that fix returned to **`0` fires** (`0` rolling, `0` kickoff).
+
+Final 2026-07-06 rerun totals:
+- `892` checkpoints with `structured_objective`
+- `240` structured-target checkpoints (`263` in the published `R6-3.6` baseline)
+- `233` analysis-only stable-target-proxy checkpoints (`255` baseline)
+- `137` current-bar eligible checkpoints (`138` baseline)
+- `240` target-resolved eligible checkpoints (`263` baseline)
+- `782` adjacent checkpoint pairs total (`828` baseline)
+- `201` adjacent pairs with both sides target-eligible (`221` baseline)
+- `194` same-target exact-match suppressions (`213` baseline)
+- `7` changed-target candidate pairs (`8` baseline)
+- `6` remaining disjoint pairs (`7` baseline)
+- `0` emitted `semantic_goal_drift` fires (`0` baseline after the doc-bundle fix)
+
+Those `6` remaining disjoint pairs are still all **non-pivots** on hand inspection, now labeled by
+relation family/residue type instead of treated as unexplained count residue:
+1. docs-survey / docs-root progression (`docs/ideas/...` → `docs/README.md` bundle)
+2. planning-doc progression (`status.md,risks.md` → `sprint-planning.md`)
+3. generic `spec/plan/tasks` bundle collapse (`...spec.md|...plan.md|...tasks.md` → `spec/plan`)
+4. artifact-family narrowing (`audit-trio.report.json` → `audit-trio.model-selection/...report.json`)
+5. sibling docs under one workstream directory (`...handoff-boundary.md` → `...threading.md`)
+6. plan → code → plan cycle residue (`async_repl.rs:497` → `llm-last-mile/PLAN-04.md`)
+
+Validation strata are now reported without any added table collapsing to `100% unknown`:
+- delegation: `single_agent` = `760` cp / `186` target-resolved / `0` fires / `2` disjoint;
+  `delegated_child_visible` = `132` cp / `54` target-resolved / `0` fires / `4` disjoint
+- language/repo: `rust` = `172` cp / `34` target-resolved / `0` fires / `0` disjoint; `js_ts` =
+  `97` / `10` / `0` / `1`; `python` = `28` / `9` / `0` / `1`; `docs_only` = `167` / `19` / `0` / `2`;
+  `mixed` = `427` / `167` / `0` / `2`; `unknown` = `1` / `1` / `0` / `0`
+- workflow: `implementation` = `62` cp / `6` target-resolved / `0` fires / `0` disjoint;
+  `docs_planning` = `345` / `20` / `0` / `2`; `review_fix` = `32` / `6` / `0` / `0`;
+  `mixed` = `453` / `208` / `0` / `4`
+- tooling: `cargo_rust` = `285` cp / `76` target-resolved / `0` fires / `1` disjoint; `node_npm` =
+  `275` / `64` / `0` / `2`; `python_pytest` = `96` / `62` / `0` / `1`;
+  `generic_filesystem_doc` = `173` / `21` / `0` / `2`; `unknown` = `63` / `17` / `0` / `0`
+
+`RepoRelativeEquivalentAfterCwdStrip` stays explicitly **deferred**: the batch still shows an
+absolute-vs-repo-relative residue class, but this packet did not prove a scorer-local cwd/session-root
+reachability seam, so widening into `context/objective.rs` or other deferred surfaces would have broken
+packet scope. Final routing decision: **`R6-3.X.2` is now closed through `R6-3.X.2B`; `R6-3.X.3`
+remains deferred** because the rerun still shows no genuine pivot suppressed solely by the strict
+eligibility bar.
+
 Source map (deterministic design inputs, not repo authority): log-template variable abstraction —
 [Preprocessing is All You Need (arXiv 2412.05254)](https://arxiv.org/pdf/2412.05254),
 [Drain3](https://github.com/logpai/Drain3), [LogPPT (arXiv 2302.07435)](https://arxiv.org/abs/2302.07435);

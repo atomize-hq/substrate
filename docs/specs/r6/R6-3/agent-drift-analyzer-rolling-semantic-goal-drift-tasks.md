@@ -321,7 +321,7 @@ all fixed here.
     - `crates/agent-drift-analyzer/src/checkpoint/export.rs`
     - `crates/agent-drift-sentinel/src/operator_surface.rs`
 
-- [ ] Task R6-3.X.2: Graduated/weighted semantic distance (shared with `R6-2` Resolved Decision 7 debt).
+- [x] Task R6-3.X.2: Graduated/weighted semantic distance (shared with `R6-2` Resolved Decision 7 debt).
   - Acceptance: only if `R6-2` or `R6-3` acceptance evidence shows the binary disjoint-set rule under- or
     over-fires (rolling is the more likely over-fire path, since adjacent checkpoints evolve more often than
     kickoff-vs-current). Replace the disjoint-set overlap with a graduated/weighted distance across both the
@@ -430,6 +430,24 @@ all fixed here.
     gate that cannot pass via all-unknown reporting. `RepoRelativeEquivalentAfterCwdStrip` stays conditional:
     land it only if the scorer seam can already reach cwd/session-root truth analyzer-locally; otherwise defer
     / ask-first rather than widening scope into `context/objective.rs` or other deferred surfaces.
+  - Result (`R6-3.X.2B`, 2026-07-06): the remaining weighted packet is now **closed**. The packet landed the
+    explicit relation-authoritative scorer routing described in
+    `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-{spec,plan,tasks}.md`,
+    including pairwise role-shift suppressions, shared-constraint / weak-overlap false-negative guards, a
+    validation-strata-aware batch tabulator, and a narrow scorer-local fix for doc-bundle →
+    anchored-member-doc narrowing (`semantic_goal_drift_suppresses_doc_bundle_member_narrowing`).
+    The fresh seed-42 closeout rerun from the current store (`110` sessions / `44` repos / `892`
+    checkpoints, `110/110` analyzed clean) is compared **directionally** against the published `R6-3.6`
+    sample (`938` checkpoints) because the exact prior manifest was not reusable. Final closeout numbers on
+    the rerun manifest: `0` fires, `137` current-bar eligible checkpoints, `240` target-resolved eligible
+    checkpoints, `201` adjacent target-eligible pairs, `194` same-target exact-match suppressions, `7`
+    changed-target candidates, and `6` remaining disjoint pairs. Those `6` residual pairs are all
+    documented non-pivots: docs-root progression, planning-doc progression, generic `spec/plan/tasks`
+    bundle collapse, artifact-family narrowing, sibling docs under one directory, and the longstanding
+    plan→code→plan cycle residue. Validation strata are no longer delegation-only: the batch tooling now
+    reports best-effort language/repo, workflow, and tooling tables with explicit heuristic sources and
+    fail-closed all-unknown handling, and no added table is `100% unknown` on the closeout run. Final
+    routing decision: **`R6-3.X.2` is now closed through `R6-3.X.2B`; keep `R6-3.X.3` deferred.**
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see

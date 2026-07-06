@@ -280,26 +280,24 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    respelling over-fire [2026-07-05 corpus re-check; closable via session cwd prefix-stripping],
    shared-constraint masking, anchor comparison_key asymmetry) stays open; the eligibility-bar
    revisit (`R6-3.X.3`) stays gated behind it. **R6-3.6 validation follow-on (2026-07-05):** the
-   acceptance corpus is now an explicit 10-case wall with **`5/5` true-positive controls firing** and
-   **`5/5` legitimate non-pivot controls staying quiet**, including acceptance-level coverage for the
-   hyphen-collision / same-basename / sibling-stem non-containment boundaries. The fresh seed-42
-   corpus rerun (`110` sessions / `44` repos / `938` checkpoints) again showed `0` fires under the
-   shipping bar, `221` adjacent target-eligible pairs, `213` same-target exact-match suppressions, and
-   `7` remaining disjoint pairs — all documented non-pivots in the graduated-distance remainder. The
-   batch tooling now prints the export-derivable funnel and explicitly labels what is **not derivable**
-   from current checkpoint exports (structural-containment suppressions, scorer-true stable-target
-   hygiene suppressions, `sanctioned_replan` suppressions) without duplicating scorer logic or widening
-   export/schema. **Next routing decision: proceed to the remaining graduated / weighted-distance work in
-   `R6-3.X.2`; do not reopen `R6-3.X.3` yet.** The next docs-only packet scaffold for that remainder is
-   `R6-3.X.2B` at `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-{spec,plan,tasks}.md`,
-   covering analyzer-local relation taxonomy as the **only authoritative routing surface** (any numeric
-   score stays explanatory only), pairwise role-shift relations instead of implied hidden cycles, tightened
-   family/generic suppression guards, explicit GitNexus impact-analysis requirements before editing shared
-   scorer helpers, prior-witness non-regression, a seed-42 / `R6-3.6`-baseline-pinned 110-session rerun,
-   and a validation-strata gate that does not pass via all-unknown reporting. `RepoRelativeEquivalentAfterCwdStrip`
-   is conditional: only land it if the scorer seam can already reach cwd/session-root truth analyzer-locally;
-   otherwise defer/ask-first rather than widening scope into `context/objective.rs` or other deferred surfaces.
-   See the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.6 Result` note.
+   acceptance corpus became an explicit 10-case wall with **`5/5` true-positive controls firing** and
+   **`5/5` legitimate non-pivot controls staying quiet**, and the fresh seed-42 corpus rerun
+   (`110` sessions / `44` repos / `938` checkpoints) again showed `0` fires under the shipping bar.
+   **R6-3.X.2B closeout (2026-07-06):** the remaining weighted packet landed analyzer-locally. The
+   rerun was repeated on a fresh seed-42 draw from the current store (`110` sessions / `44` repos /
+   `892` checkpoints), so the closeout compares directionally against the published `R6-3.6` numbers
+   rather than claiming the identical manifest. A narrow scorer-local false-positive family
+   (doc-bundle → anchored-member-doc narrowing) surfaced on the first pass, was reproduced with a failing
+   unit test, and was fixed in-scope via a bounded `SameDocFamily` exact-member bundle suppression.
+   The same manifest then reran to **`0` fires**, `201` adjacent target-eligible pairs, `194` same-target
+   exact-match suppressions, and `6` remaining disjoint pairs — all documented non-pivots labeled by
+   relation family/residue type. The batch tooling now also reports validation strata beyond delegation
+   (language/repo, workflow, tooling) with explicit heuristic sources and fail-closed `100% unknown`
+   warnings, and no added table is all-unknown on the closeout run. **Routing decision updated:** the
+   graduated / weighted-distance debt `R6-3.X.2` is now closed through packet `R6-3.X.2B`; keep
+   `R6-3.X.3` deferred, and keep `RepoRelativeEquivalentAfterCwdStrip` deferred unless a scorer-local
+   cwd/session-root seam is proven without widening into `context/objective.rs` or other deferred surfaces.
+   See the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.X.2B Result` note.
 
 ## Non-Goals For This Rescope
 
