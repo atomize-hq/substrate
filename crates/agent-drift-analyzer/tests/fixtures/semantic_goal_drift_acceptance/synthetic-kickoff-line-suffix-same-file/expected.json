@@ -1,0 +1,18 @@
+{
+  "case_id": "synthetic-kickoff-line-suffix-same-file",
+  "session_id": "semantic-goal-drift-r6-3-6-line-suffix",
+  "kickoff_target_display": "crates/agent-drift-analyzer/src/scoring/mod.rs",
+  "final_target_display": "crates/agent-drift-analyzer/src/scoring/mod.rs:42",
+  "final_semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "required_reason_prefixes": [],
+  "forbidden_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift current goal:",
+    "rolling semantic goal drift previous goal:"
+  ]
+}

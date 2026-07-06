@@ -1,0 +1,40 @@
+{
+  "case_id": "synthetic-kickoff-line-suffix-same-file",
+  "session_id": "semantic-goal-drift-r6-3-6-line-suffix",
+  "source_artifact": "Synthetic compact-row acceptance fixture for the R6-3.X.2 per-leaf line-suffix containment guard.",
+  "notes": "Turn 1 anchors the kickoff goal on crates/agent-drift-analyzer/src/scoring/mod.rs. Turn 2 narrows to a line-specific reference inside the same file. This must stay quiet.",
+  "rows": [
+    {
+      "turn_id": "turn-001",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Review crates/agent-drift-analyzer/src/scoring/mod.rs only."
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,220p' crates/agent-drift-analyzer/src/scoring/mod.rs\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed scoring mod excerpts"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update crates/agent-drift-analyzer/src/scoring/mod.rs:42 only.\n\n## Verification\n- cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '42,80p' crates/agent-drift-analyzer/src/scoring/mod.rs\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed scoring mod line witness excerpts"
+    }
+  ]
+}

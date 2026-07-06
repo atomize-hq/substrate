@@ -1,0 +1,40 @@
+{
+  "case_id": "synthetic-kickoff-hyphen-collision-pivot",
+  "session_id": "semantic-goal-drift-r6-3-6-hyphen-collision",
+  "source_artifact": "Synthetic compact-row acceptance fixture for the R6-3.6 hyphen/slash non-containment boundary.",
+  "notes": "Turn 1 anchors the kickoff goal on docs/specs/r6-map. Turn 2 pivots to docs/specs/r6/map.md. These targets normalize similarly but are not structurally related, so kickoff semantic_goal_drift must still fire.",
+  "rows": [
+    {
+      "turn_id": "turn-001",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Review docs/specs/r6-map only."
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,120p' docs/specs/r6-map\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed r6-map witness excerpts"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Update docs/specs/r6/map.md only.\n\n## Verification\n- cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,200p' docs/specs/r6/map.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed lower-case map witness excerpts"
+    }
+  ]
+}

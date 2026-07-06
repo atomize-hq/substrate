@@ -1,0 +1,19 @@
+{
+  "case_id": "synthetic-rolling-directory-to-file-narrowing",
+  "session_id": "semantic-goal-drift-r6-3-6-rolling-dir-file",
+  "penultimate_target_display": "docs/specs/r6",
+  "penultimate_semantic_goal_drift_flagged": false,
+  "final_target_display": "docs/specs/r6/MAP.md",
+  "final_semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "required_reason_prefixes": [],
+  "forbidden_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift current goal:",
+    "rolling semantic goal drift previous goal:"
+  ]
+}

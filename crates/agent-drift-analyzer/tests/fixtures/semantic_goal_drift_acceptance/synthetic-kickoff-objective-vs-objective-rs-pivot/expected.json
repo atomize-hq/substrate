@@ -1,0 +1,19 @@
+{
+  "case_id": "synthetic-kickoff-objective-vs-objective-rs-pivot",
+  "session_id": "semantic-goal-drift-r6-3-6-objective-vs-rs",
+  "kickoff_target_display": "crates/agent-drift-analyzer/src/context/objective",
+  "final_target_display": "crates/agent-drift-analyzer/src/context/objective.rs",
+  "final_semantic_goal_drift": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 80
+  },
+  "required_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift previous goal:"
+  ],
+  "forbidden_reason_prefixes": [
+    "rolling semantic goal drift current goal:"
+  ]
+}

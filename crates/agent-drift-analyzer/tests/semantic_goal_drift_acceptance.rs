@@ -6,6 +6,7 @@ use std::fs;
 
 use agent_drift_analyzer::{
     analyze_bundle, AnalyzeRequest, Checkpoint, DriftClass, DriftScore, DriftState,
+    StructuredObjective,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -17,10 +18,17 @@ const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT: &str = concat!(
     "/tests/fixtures/semantic_goal_drift_acceptance"
 );
 
-const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 3] = [
+const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 10] = [
     "synthetic-kickoff-anchor-unauthorized-pivot",
+    "synthetic-kickoff-hyphen-collision-pivot",
+    "synthetic-kickoff-line-suffix-same-file",
+    "synthetic-kickoff-objective-vs-objective-rs-pivot",
     "synthetic-kickoff-narrowing-into-anchored-subtree",
+    "synthetic-rolling-directory-to-file-narrowing",
+    "synthetic-rolling-file-to-containing-directory-broadening",
+    "synthetic-rolling-map-review-to-map-verify-progression",
     "synthetic-rolling-mid-session-pivot",
+    "synthetic-rolling-sibling-stem-pivot",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -138,6 +146,11 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
                 expected_kickoff_target,
                 "kickoff checkpoint must preserve the original anchored target"
             );
+            assert_checkpoint_has_full_goal_eligibility(
+                kickoff_checkpoint,
+                "kickoff checkpoint",
+                case_id,
+            );
         }
         assert!(
             !semantic_goal_drift_score(kickoff_checkpoint).flagged,
@@ -154,6 +167,11 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
                 expected_penultimate_target,
                 "penultimate checkpoint must preserve the pre-pivot rolling anchor"
             );
+            assert_checkpoint_has_full_goal_eligibility(
+                penultimate_checkpoint,
+                "penultimate checkpoint",
+                case_id,
+            );
             if let Some(expected_flagged) = expected.penultimate_semantic_goal_drift_flagged {
                 assert_eq!(
                     semantic_goal_drift_score(penultimate_checkpoint).flagged,
@@ -169,6 +187,7 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
             expected.final_target_display,
             "final checkpoint must expose the pivoted structured target through the live objective path"
         );
+        assert_checkpoint_has_full_goal_eligibility(final_checkpoint, "final checkpoint", case_id);
 
         let final_semantic_goal_drift = semantic_goal_drift_score(final_checkpoint);
         assert_eq!(
@@ -202,6 +221,27 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
             );
         }
     }
+}
+
+fn assert_checkpoint_has_full_goal_eligibility(
+    checkpoint: &Checkpoint,
+    label: &str,
+    case_id: &str,
+) {
+    let structured = checkpoint_structured_objective(checkpoint);
+    assert!(
+        structured.unknowns.is_empty(),
+        "{label} for {case_id} must clear the full semantic_goal_drift eligibility bar: {:?}",
+        structured.unknowns
+    );
+    let target = structured
+        .target
+        .as_ref()
+        .unwrap_or_else(|| panic!("{label} for {case_id} missing structured target"));
+    assert!(
+        !target.evidence.is_empty(),
+        "{label} for {case_id} must retain non-empty target evidence"
+    );
 }
 
 fn load_raw_fixture(case_id: &str) -> AcceptanceFixtureRaw {
@@ -243,17 +283,11 @@ fn rows_from_raw_fixture(case_id: &str, raw: &AcceptanceFixtureRaw) -> Vec<Compa
 }
 
 fn checkpoint_target_display(checkpoint: &Checkpoint) -> String {
-    checkpoint
-        .structured_objective
+    checkpoint_structured_objective(checkpoint)
+        .target
         .as_ref()
-        .and_then(|objective| objective.target.as_ref())
         .map(|target| target.display.clone())
-        .unwrap_or_else(|| {
-            panic!(
-                "checkpoint {} missing structured target",
-                checkpoint.checkpoint_id
-            )
-        })
+        .unwrap_or_else(|| panic!("checkpoint {} missing structured target", checkpoint.checkpoint_id))
 }
 
 fn semantic_goal_drift_score(checkpoint: &Checkpoint) -> &DriftScore {
@@ -267,6 +301,13 @@ fn semantic_goal_drift_score(checkpoint: &Checkpoint) -> &DriftScore {
                 checkpoint.checkpoint_id
             )
         })
+}
+
+fn checkpoint_structured_objective(checkpoint: &Checkpoint) -> &StructuredObjective {
+    checkpoint
+        .structured_objective
+        .as_ref()
+        .unwrap_or_else(|| panic!("checkpoint {} missing structured objective", checkpoint.checkpoint_id))
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Utf8Path) -> T {

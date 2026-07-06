@@ -1,0 +1,20 @@
+{
+  "case_id": "synthetic-rolling-sibling-stem-pivot",
+  "session_id": "semantic-goal-drift-r6-3-6-sibling-stem",
+  "penultimate_target_display": "docs/specs/r6/MAP.md",
+  "penultimate_semantic_goal_drift_flagged": false,
+  "final_target_display": "docs/specs/r6/MAPPING-guide.md",
+  "final_semantic_goal_drift": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 80
+  },
+  "required_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift previous goal:"
+  ],
+  "forbidden_reason_prefixes": [
+    "rolling semantic goal drift current goal:"
+  ]
+}

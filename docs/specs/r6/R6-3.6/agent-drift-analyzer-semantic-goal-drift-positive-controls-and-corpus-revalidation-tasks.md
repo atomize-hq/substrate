@@ -41,7 +41,7 @@ it does not reopen already-landed precision work.
 
 ## R6-3.6.1: Positive controls
 
-- [ ] Task R6-3.6.1.1: Add at least five true-positive semantic-goal-drift acceptance controls.
+- [x] Task R6-3.6.1.1: Add at least five true-positive semantic-goal-drift acceptance controls.
   - Acceptance: the committed acceptance corpus grows from the current three-case family to include at least
     five true-positive unrelated pivots that run through the live analyzer checkpoint path. Recommended
     families: repo pivot, crate pivot, file pivot, work-item pivot, and verification-target pivot. Update
@@ -54,7 +54,7 @@ it does not reopen already-landed precision work.
     - `crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/**`
 
-- [ ] Task R6-3.6.1.2: Require stable-anchor proof for every positive control.
+- [x] Task R6-3.6.1.2: Require stable-anchor proof for every positive control.
   - Acceptance: each positive control documents stable previous and current targets, and the assertions prove
     the fire is not coming from junk-only anchors, weak-only anchors, or accidental containment suppression.
     Each control must also assert that it clears the full current eligibility gate through the live extractor
@@ -79,8 +79,15 @@ it does not reopen already-landed precision work.
   - Files:
     - `crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/**`
+  - Status note (2026-07-05): the acceptance corpus now includes five quiet containment / exact-target
+    controls (`synthetic-kickoff-narrowing-into-anchored-subtree`,
+    `synthetic-kickoff-line-suffix-same-file`, `synthetic-rolling-directory-to-file-narrowing`,
+    `synthetic-rolling-file-to-containing-directory-broadening`,
+    `synthetic-rolling-map-review-to-map-verify-progression`). The documented residual
+    doc-progression / plan→code→plan classes remain open scorer debt and stay to be called out honestly in
+    closeout docs rather than papered over as resolved.
 
-- [ ] Task R6-3.6.2.2: Pin the non-containment boundary cases.
+- [x] Task R6-3.6.2.2: Pin the non-containment boundary cases.
   - Acceptance: these boundary cases stay explicitly covered:
     - `docs/specs/r6-map` → `docs/specs/r6/map.md`
     - `objective` → `objective.rs`
