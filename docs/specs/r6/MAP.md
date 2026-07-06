@@ -292,10 +292,14 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    export/schema. **Next routing decision: proceed to the remaining graduated / weighted-distance work in
    `R6-3.X.2`; do not reopen `R6-3.X.3` yet.** The next docs-only packet scaffold for that remainder is
    `R6-3.X.2B` at `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-{spec,plan,tasks}.md`,
-   covering analyzer-local relation taxonomy, weighted assessment over stable target anchors, additional
-   positive/negative controls, validation strata, a fresh 110-session rerun gate, and the final routing
-   decision on whether `R6-3.X.3` still stays deferred after the weighted pass. See the `R6-3` TASKS
-   ledger and the `FINDINGS` `R6-3.6 Result` note.
+   covering analyzer-local relation taxonomy as the **only authoritative routing surface** (any numeric
+   score stays explanatory only), pairwise role-shift relations instead of implied hidden cycles, tightened
+   family/generic suppression guards, explicit GitNexus impact-analysis requirements before editing shared
+   scorer helpers, prior-witness non-regression, a seed-42 / `R6-3.6`-baseline-pinned 110-session rerun,
+   and a validation-strata gate that does not pass via all-unknown reporting. `RepoRelativeEquivalentAfterCwdStrip`
+   is conditional: only land it if the scorer seam can already reach cwd/session-root truth analyzer-locally;
+   otherwise defer/ask-first rather than widening scope into `context/objective.rs` or other deferred surfaces.
+   See the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.6 Result` note.
 
 ## Non-Goals For This Rescope
 

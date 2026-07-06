@@ -423,8 +423,13 @@ all fixed here.
     graduated / weighted-distance work in `R6-3.X.2`; keep `R6-3.X.3` deferred. The docs-only scaffold for
     that next remainder packet is `R6-3.X.2B` at
     `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-{spec,plan,tasks}.md`,
-    covering analyzer-local relation taxonomy, weighted assessment shape, additional positive/negative
-    controls, validation strata, the 110-session rerun gate, and the final `R6-3.X.3` routing decision.
+    covering analyzer-local relation taxonomy as the **only authoritative routing surface** (numeric score
+    explanatory only), pairwise role-shift relations instead of implied hidden cycles, stronger family/generic
+    false-negative guards, explicit GitNexus impact-analysis requirements before editing shared scorer helpers,
+    prior-witness non-regression, a seed-42 / `R6-3.6`-baseline-pinned 110-session rerun, and a validation-strata
+    gate that cannot pass via all-unknown reporting. `RepoRelativeEquivalentAfterCwdStrip` stays conditional:
+    land it only if the scorer seam can already reach cwd/session-root truth analyzer-locally; otherwise defer
+    / ask-first rather than widening scope into `context/objective.rs` or other deferred surfaces.
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see

@@ -1,16 +1,18 @@
 # R6-3.X.2B TASKS — Graduated / Weighted Semantic Distance For Semantic Goal Drift
 
-Status: OPEN (created 2026-07-06 from the next-packet planning request plus live `R6` repo truth).
-This packet owns the **remaining** weighted-distance remainder inside the analyzer scorer. It does not reopen
-extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loosening.
+Status: OPEN (created 2026-07-06 from the next-packet planning request plus live `R6` repo truth,
+tightened after review findings). This packet owns the **remaining** weighted-distance remainder inside the
+analyzer scorer. It does not reopen extraction hardening, the containment first cut, or `R6-3.X.3`
+eligibility loosening.
 
 ## R6-3.X.2B.0: Docs lock and live-truth framing
 
-- [ ] Task R6-3.X.2B.0.1: Lock the packet docs against live repo truth.
+- [x] Task R6-3.X.2B.0.1: Lock the packet docs against live repo truth.
   - Acceptance:
     - `docs/specs/r6/R6-3.X.2B/` contains packet-local spec, plan, and tasks docs.
     - The docs state explicitly that `R6-3.5` and the containment first cut are already landed.
     - The docs state explicitly that the next blocker is weighted relation grading, not eligibility loosening.
+    - The docs state explicitly that the relation taxonomy, not any numeric score band, is the routing authority.
   - Verify:
     - manual audit against `docs/specs/r6/FINDINGS-r6-3-real-world-drift-validation.md`
     - manual audit against `docs/specs/r6/MAP.md`
@@ -21,44 +23,83 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
     - `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-plan.md`
     - `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-tasks.md`
   - Estimated scope: S
+  - Result (2026-07-06): packet-local SPEC/PLAN/TASKS now explicitly lock the live repo truth that
+    `R6-3.5` target hygiene and the `R6-3.X.2` containment first cut are already landed, that the
+    remaining blocker is weighted relation grading rather than eligibility loosening, and that the
+    relation taxonomy — not a numeric score band — is the routing authority. `MAP.md` and the
+    parent `R6-3` ledger now route the remainder through `R6-3.X.2B` with the same constraints.
 
-- [ ] Task R6-3.X.2B.0.2: Record the implementation boundary.
+- [x] Task R6-3.X.2B.0.2: Record the implementation boundary and deferred surfaces.
   - Acceptance:
     - The docs lock the analyzer-local boundary: scorer, analyzer tests/fixtures, batch tooling, findings/map/ledger.
-    - The docs explicitly exclude sentinel, compactor, `TaskFrame`, `working_set`, `progress`, and full subagent semantics.
+    - The docs explicitly fence off `crates/agent-drift-analyzer/src/context/objective.rs`, sentinel, compactor,
+      `TaskFrame`, `working_set`, `progress`, and export/schema seams.
     - The docs define the default `R6-3.X.3` defer rule.
+    - The docs mark repo-relative cwd-strip equivalence as ask-first/deferred unless current scorer-seam
+      reachability is proven from live repo truth.
   - Verify: manual review of the packet spec boundaries and non-goals.
   - Dependencies: `R6-3.X.2B.0.1`
   - Files likely touched:
     - packet-local spec/plan/tasks docs
   - Estimated scope: XS
+  - Result (2026-07-06): the packet docs now fence the work to analyzer-local scorer logic,
+    analyzer tests/fixtures, batch tooling, and findings/map/ledger updates; they explicitly keep
+    `context/objective.rs`, checkpoint export/schema/progress/working-set seams, sentinel,
+    compactor, and full delegated-subagent semantics out of scope unless reopened. Repo-relative
+    cwd-strip equivalence is recorded as conditional/deferred unless the scorer seam proves it can
+    already read the needed cwd/session-root truth analyzer-locally.
+
+- [x] Task R6-3.X.2B.0.3: Lock the shared-helper preflight requirements.
+  - Acceptance:
+    - The docs require GitNexus impact analysis before editing shared scorer helpers such as
+      `eligible_current_goal`, `goal_specific_terms`, and any new relation helper shared by kickoff and rolling.
+    - The docs require `gitnexus detect-changes` (or repo-qualified equivalent) before commit.
+    - The docs pin the prior-witness non-regression wall (`R6-1`, `R6-2`, `R6-3.X.2`, `R6-3.6`, carried `R5.75` witnesses).
+  - Verify: manual review of packet-local spec/plan/tasks docs.
+  - Dependencies: `R6-3.X.2B.0.2`
+  - Files likely touched:
+    - packet-local spec/plan/tasks docs
+  - Estimated scope: XS
+  - Result (2026-07-06): the packet docs now require GitNexus impact analysis before editing shared
+    scorer helpers, require `gitnexus detect-changes` before commit, and lock the prior-witness
+    non-regression wall (`R6-1`, `R6-2`, `R6-3.X.2`, `R6-3.6`, carried `R5.75`). Live preflight was
+    run before scorer work: the stale index was refreshed with `npx gitnexus analyze --name
+    97a0-substrate`, then upstream impact was recorded for `eligible_current_goal` (LOW),
+    `goal_specific_terms` (MEDIUM), `goal_sets_diverged` (LOW), and `score_semantic_goal_drift`
+    (HIGH within the scoring/test surface), so the scorer-edit slice remains sign-off gated.
 
 ## R6-3.X.2B.1: Stable-anchor relation model
 
 - [ ] Task R6-3.X.2B.1.1: Define the stable-anchor comparison record and ordered relation taxonomy.
   - Acceptance:
-    - The scorer design names the relation taxonomy: exact, structural containment, repo-relative after cwd stripping,
-      same artifact family, same work-item family, same doc family, plan-code-plan cycle, review-fix-verify cycle,
-      shared-constraint-only, weak/generic-only, unrelated, unknown.
+    - The scorer design names the relation taxonomy: exact, structural containment, conditional repo-relative
+      equivalence after cwd stripping, same artifact family, same work-item family, same doc family,
+      plan-doc ↔ code role shift, review/findings ↔ fix/verify role shift, shared-constraint-only,
+      weak/generic-only, unrelated, unknown.
     - The taxonomy states which relations may suppress and which may not.
+    - The taxonomy states explicitly that role-shift relations are **pairwise** only and do not require any hidden
+      temporal state/history beyond current/kickoff/previous.
     - The design preserves multi-anchor symmetry.
   - Verify:
     - scorer-local unit tests for relation precedence
     - spec/plan/tasks docs reference the same taxonomy names without drift
-  - Dependencies: `R6-3.X.2B.0.2`
+  - Dependencies: `R6-3.X.2B.0.3`
   - Files likely touched:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
     - packet-local docs
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2B.1.2: Add repo-relative normalization after cwd stripping without widening containment.
+- [ ] Task R6-3.X.2B.1.2: Tighten suppressive-family semantics so weak overlap cannot suppress pivots.
   - Acceptance:
-    - Absolute-vs-repo-relative spellings of the same subtree can be classified as related after safe cwd stripping.
-    - The existing raw containment helper remains unchanged except for calling the new later-stage relation path.
-    - Case-sensitive symbol/path protections remain intact.
+    - `SameArtifactFamily` requires decisive same-lineage evidence and does **not** suppress on sibling-stem overlap,
+      same extension alone, or other weak family residue.
+    - `SameWorkItemFamily` requires the same numbered/dotted lineage token and does **not** suppress on generic
+      `spec/plan/tasks` vocabulary alone.
+    - `WeakOrGenericOnly` explicitly includes generic `spec/plan/tasks` overlap and remains non-suppressive.
+    - The docs and tests preserve multi-anchor symmetry and prevent one related pair from masking an unrelated one.
   - Verify:
-    - scorer-local regression tests for absolute-vs-repo-relative same-subtree progression
-    - regression test proving `docs/specs/r6-map` vs `docs/specs/r6/map.md` is still not containment
+    - scorer-local regression tests for sibling-stem and generic-spec/plan/tasks false-negative guards
+    - packet docs reflect the tightened wording without drift
   - Dependencies: `R6-3.X.2B.1.1`
   - Files likely touched:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
@@ -66,27 +107,47 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
     - fixture directories as needed
   - Estimated scope: M
 
+- [ ] Task R6-3.X.2B.1.3: Handle repo-relative normalization only if seam reachability is proven.
+  - Acceptance:
+    - If live implementation proof shows the scorer can already read the needed cwd/session-root truth analyzer-locally,
+      absolute-vs-repo-relative spellings of the same subtree can be classified as related after safe cwd stripping.
+    - If that proof is absent, the relation is recorded as deferred / ask-first instead of guessed into scope.
+    - The existing raw containment helper remains unchanged except for calling the later-stage relation path when
+      the seam proof exists.
+    - Case-sensitive symbol/path protections remain intact.
+  - Verify:
+    - scorer-local regression tests only if the seam proof exists
+    - otherwise docs explicitly record the deferral
+  - Dependencies: `R6-3.X.2B.1.2`
+  - Files likely touched:
+    - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs` (conditional)
+    - packet-local docs
+  - Estimated scope: S
+
 ## R6-3.X.2B.2: Weighted assessment and drift routing
 
 - [ ] Task R6-3.X.2B.2.1: Add the weighted relation assessment shape.
   - Acceptance:
     - The scorer has an analyzer-local assessment object with relation, score, confidence, decisive evidence,
       and counter-evidence.
-    - Score-band meanings are documented and tested.
+    - The code/comments/docs make explicit that relation + confidence drive routing; the numeric score is
+      explanatory only.
     - Kickoff and rolling comparisons use the same assessment surface after exact/containment checks.
   - Verify:
-    - scorer-local tests for score-band routing
+    - scorer-local tests for relation-authoritative routing
     - focused semantic-goal-drift test target
-  - Dependencies: `R6-3.X.2B.1.2`
+  - Dependencies: `R6-3.X.2B.1.3`
   - Files likely touched:
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2B.2.2: Route shared-constraint-only and weak/generic-only cases correctly.
+- [ ] Task R6-3.X.2B.2.2: Route shared-constraint-only, weak/generic-only, and ambiguous cases correctly.
   - Acceptance:
     - shared-constraint-only overlap no longer suppresses an unrelated pivot.
     - weak/generic-only overlap no longer suppresses an unrelated pivot.
     - ambiguous/unknown middle-band cases prefer conservative no-claim over speculative suppression.
+    - family-style suppressions have explicit counter-evidence paths so unmatched anchors can still escalate to
+      `Unrelated` or `Unknown`.
   - Verify:
     - scorer-local tests covering shared-constraint and weak/generic-only paths
     - acceptance-level positive control for shared-constraint false-negative guard
@@ -107,6 +168,8 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
       - verification-target pivot
       - repo/work-item pivot
       - shared-constraint false-negative guard
+      - sibling-stem false-negative guard
+      - generic `spec/plan/tasks` false-negative guard
     - every new positive control clears the current eligibility bar and uses stable target anchors.
   - Verify:
     - `cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture`
@@ -120,11 +183,11 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
 - [ ] Task R6-3.X.2B.3.2: Add the required negative controls.
   - Acceptance:
     - the acceptance corpus includes at least the following legitimate non-pivot families:
-      - absolute-vs-repo-relative subtree
-      - same artifact family
-      - same work-item family
-      - plan→code→plan
-      - review→fix→verify
+      - same artifact family progression
+      - same work-item family progression
+      - plan-doc ↔ code role shift within one workstream
+      - review/findings ↔ fix/verify role shift within one workstream
+      - absolute-vs-repo-relative subtree only if the seam proof exists; otherwise the deferral is explicit
     - existing containment negatives remain intact.
   - Verify:
     - `cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture`
@@ -138,9 +201,11 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
 
 - [ ] Task R6-3.X.2B.3.3: Pair every new suppressive relation with at least one false-negative guard.
   - Acceptance:
-    - same-artifact-family, same-work-item-family, same-doc-family, plan-code-plan, and review-fix-verify each have
-      at least one counter-example proving an unrelated pivot still fires.
+    - same-artifact-family, same-work-item-family, same-doc-family, plan-doc ↔ code role shift, and
+      review/findings ↔ fix/verify role shift each have at least one counter-example proving an unrelated pivot
+      still fires.
     - the packet docs call out any residual over-fire or undecidable relation honestly instead of silently widening.
+    - weak/generic overlap is never promoted into a suppressive family just to make a test pass.
   - Verify:
     - scorer-local tests
     - acceptance corpus assertions
@@ -150,16 +215,38 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
     - packet docs if residual limits remain
   - Estimated scope: M
 
+- [ ] Task R6-3.X.2B.3.4: Preserve prior witnesses without rebaseline.
+  - Acceptance:
+    - the existing `R6-3.6` 10-case acceptance allowlist remains bounded and intact.
+    - the existing `R6-1` dead-end-thrash posture / acceptance witnesses remain intact.
+    - the existing `R6-2` kickoff-anchor witnesses remain intact.
+    - the existing `R6-3.X.2` containment negatives remain intact.
+    - the carried `R5.75-3` delegated-stability / `R5.75-4` zero-verifier anti-flap surfaces remain intact.
+    - any witness change is treated as regression, not as an allowed rebaseline.
+  - Verify:
+    - `cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture`
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+    - `cargo test -p agent-drift-analyzer -- --nocapture`
+  - Dependencies: `R6-3.X.2B.3.3`
+  - Files likely touched:
+    - acceptance harness/fixtures
+    - scorer-local regressions as needed
+    - packet docs if a limit must be called out
+  - Estimated scope: M
+
 ## R6-3.X.2B.4: Corpus tooling, rerun, and findings update
 
 - [ ] Task R6-3.X.2B.4.1: Add validation strata reporting when inferable.
   - Acceptance:
-    - batch tooling reports best-effort splits for language/repo type, workflow type, tooling type, and delegation topology.
-    - any non-derivable category is documented honestly with an `unknown` bucket or a stated blocker.
+    - batch tooling reports delegation topology (mandatory) plus any additional best-effort splits for
+      language/repo type, workflow type, and tooling type that can be supported honestly.
+    - any stratum that remains `100% unknown` is recorded as unresolved/blocked and does **not** count as satisfying
+      the validation gate.
+    - the docs name the heuristic source for each reported non-unknown stratum.
   - Verify:
     - `python3 scripts/dev/drift-batch-scan/tabulate.py --help`
     - sample or real run output inspection
-  - Dependencies: `R6-3.X.2B.3.3`
+  - Dependencies: `R6-3.X.2B.3.4`
   - Files likely touched:
     - `scripts/dev/drift-batch-scan/README.md`
     - `scripts/dev/drift-batch-scan/tabulate.py`
@@ -169,10 +256,12 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
 
 - [ ] Task R6-3.X.2B.4.2: Run the focused wall, full analyzer wall, and 110-session corpus rerun.
   - Acceptance:
-    - focused semantic-goal-drift tests pass
-    - full analyzer wall passes
-    - the 110-session rerun completes or the blocker is explicit and actionable
-    - the remaining disjoint residue is labeled by relation family
+    - focused semantic-goal-drift tests pass.
+    - full analyzer wall passes.
+    - the rerun is seed-pinned with `--seed 42`, or the docs explain why the exact prior sample cannot be reused.
+    - the rerun is baseline-compared against the published `R6-3.6` seed-42 counts.
+    - the remaining disjoint residue is labeled by relation family.
+    - the validation-strata output is not presented as complete if it is all-unknown outside delegation.
   - Verify:
     - the full verification wall from the packet spec
     - the full batch command sequence from the packet spec
@@ -185,8 +274,12 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
   - Acceptance:
     - `FINDINGS`, `MAP`, and the `R6-3` task ledger record:
       - relation families landed
+      - relation-authoritative routing (score explanatory only)
+      - pairwise role-shift semantics
+      - repo-relative-cwd-strip proof or explicit deferral
       - positive/negative control results
-      - rerun totals and strata
+      - prior-witness non-regression status
+      - rerun totals, baseline comparison, and strata
       - remaining residue
       - final yes/no decision on whether `R6-3.X.3` stays deferred
     - default expected decision remains deferred unless the rerun proves otherwise.
@@ -201,9 +294,15 @@ extraction hardening, the containment first cut, or `R6-3.X.3` eligibility loose
 ## Final checkpoint
 
 Before implementation is considered packet-complete:
-- [ ] the weighted relation taxonomy is explicit and tested
-- [ ] the assessment shape is explicit and tested
+- [ ] the relation taxonomy is explicit and relation-authoritative
+- [ ] any numeric score is marked explanatory only
+- [ ] pairwise role-shift relations are explicit and do not rely on hidden temporal history
+- [ ] repo-relative cwd-strip equivalence is either proven reachable or explicitly deferred
 - [ ] shared-constraint-only no longer masks real pivots
+- [ ] weak/generic overlap no longer masks sibling or generic-spec/plan/tasks pivots
 - [ ] new progression families are absorbed without widening containment
-- [ ] the 110-session rerun is complete or blocked honestly
+- [ ] every suppressive family has a false-negative guard
+- [ ] prior witnesses stay locked with no rebaseline
+- [ ] the 110-session rerun is seed-pinned or baseline-compared honestly
+- [ ] validation strata are not closed out via all-unknown reporting
 - [ ] closeout docs make an explicit `R6-3.X.3` defer/reopen decision
