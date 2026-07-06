@@ -420,7 +420,11 @@ all fixed here.
     explicit: structural-containment suppressions, scorer-true stable-target-hygiene suppressions, and
     `sanctioned_replan` suppressions are not derivable from current checkpoint exports without duplicating
     Rust scorer logic or widening export/schema. Routing decision unchanged: proceed to the **remaining**
-    graduated / weighted-distance work in `R6-3.X.2`; keep `R6-3.X.3` deferred.
+    graduated / weighted-distance work in `R6-3.X.2`; keep `R6-3.X.3` deferred. The docs-only scaffold for
+    that next remainder packet is `R6-3.X.2B` at
+    `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-{spec,plan,tasks}.md`,
+    covering analyzer-local relation taxonomy, weighted assessment shape, additional positive/negative
+    controls, validation strata, the 110-session rerun gate, and the final `R6-3.X.3` routing decision.
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see

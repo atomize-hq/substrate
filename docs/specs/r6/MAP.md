@@ -290,8 +290,12 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    from current checkpoint exports (structural-containment suppressions, scorer-true stable-target
    hygiene suppressions, `sanctioned_replan` suppressions) without duplicating scorer logic or widening
    export/schema. **Next routing decision: proceed to the remaining graduated / weighted-distance work in
-   `R6-3.X.2`; do not reopen `R6-3.X.3` yet.** See the `R6-3` TASKS ledger and the `FINDINGS`
-   `R6-3.6 Result` note.
+   `R6-3.X.2`; do not reopen `R6-3.X.3` yet.** The next docs-only packet scaffold for that remainder is
+   `R6-3.X.2B` at `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-{spec,plan,tasks}.md`,
+   covering analyzer-local relation taxonomy, weighted assessment over stable target anchors, additional
+   positive/negative controls, validation strata, a fresh 110-session rerun gate, and the final routing
+   decision on whether `R6-3.X.3` still stays deferred after the weighted pass. See the `R6-3` TASKS
+   ledger and the `FINDINGS` `R6-3.6 Result` note.
 
 ## Non-Goals For This Rescope
 
