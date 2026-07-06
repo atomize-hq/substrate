@@ -278,7 +278,7 @@ eligibility loosening.
       - synthetic output inspection via a 3-checkpoint temp corpus exercising the new language/workflow/tooling
         tables and the existing funnel output
 
-- [ ] Task R6-3.X.2B.4.2: Run the focused wall, full analyzer wall, and 110-session corpus rerun.
+- [x] Task R6-3.X.2B.4.2: Run the focused wall, full analyzer wall, and 110-session corpus rerun.
   - Acceptance:
     - focused semantic-goal-drift tests pass.
     - full analyzer wall passes.
@@ -293,6 +293,42 @@ eligibility loosening.
   - Files likely touched:
     - docs only unless a tiny tooling/report fix is required during rerun
   - Estimated scope: M
+  - Result (2026-07-06):
+    - The packet reran the committed seed-42 batch harness on a fresh manifest from the current
+      `~/.codex/sessions` store: `110` sessions / `44` repos / `892` checkpoints, with `110/110`
+      sessions analyzed clean. This is **directionally** baseline-compared against the published
+      `R6-3.6` rerun (`938` checkpoints) rather than claiming the exact prior manifest was reusable.
+    - The first rerun exposed a narrow scorer-local false positive family still inside packet scope:
+      three current-bar fires in one docs session were just **doc-bundle → anchored member-doc narrowing**
+      (`architecture-overview.md|README.md|…` → `README.md`). A failing scorer regression
+      (`semantic_goal_drift_suppresses_doc_bundle_member_narrowing`) was added first, then the scorer gained a
+      bounded `SameDocFamily` exact-member bundle suppression so that bundle-member narrowing/broadening no
+      longer claims drift.
+    - After that narrow fix, the **same seed-42 manifest** reran cleanly: `0` flagged checkpoints, `0`
+      rolling evidence lines, `0` kickoff-anchor evidence lines, `137` current-bar eligible checkpoints,
+      `240` target-resolved eligible checkpoints, `201` adjacent target-eligible pairs, `194` same-target
+      exact-match suppressions, `7` changed-target candidates, and `6` remaining disjoint pairs.
+    - Remaining disjoint residue was hand-labeled as non-pivot relation families:
+      1. docs-survey / docs-root progression (`docs/ideas/...` → `docs/README.md` family)
+      2. planning-doc progression (`status.md,risks.md` → `sprint-planning.md`)
+      3. generic `spec/plan/tasks` bundle collapse (`...spec.md|...plan.md|...tasks.md` → `spec/plan`)
+      4. artifact-family narrowing (`audit-trio.report.json` → `audit-trio.model-selection/...report.json`)
+      5. sibling docs under one workstream directory (`...handoff-boundary.md` → `...threading.md`)
+      6. plan → code → plan cycle residue (`async_repl.rs:497` → `llm-last-mile/PLAN-04.md`)
+    - Validation strata are now reported without any `100% unknown` table outside the mandatory delegation
+      split: delegation stays explicit (`single_agent` = `760` cp / `186` target-resolved / `0` fires /
+      `2` disjoint; `delegated_child_visible` = `132` cp / `54` target-resolved / `0` fires / `4`
+      disjoint), while best-effort language/workflow/tooling tables are populated from the exported heuristic
+      sources documented in `scripts/dev/drift-batch-scan/README.md` and printed by `tabulate.py`.
+    - Verification:
+      - `cargo test -p agent-drift-analyzer semantic_goal_drift_suppresses_doc_bundle_member_narrowing -- --nocapture`
+      - `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture`
+      - `cargo test -p agent-drift-analyzer -- --nocapture`
+      - `cargo clippy --workspace --all-targets -- -D warnings`
+      - `cargo fmt --all -- --check`
+      - `python3 scripts/dev/drift-batch-scan/run_batch.py --repo "$PWD" --selected /tmp/r6_3_x_2b_selected.jsonl --batch-dir /tmp/r6_3_x_2b_batch_after_fix`
+      - `python3 scripts/dev/drift-batch-scan/tabulate.py --checkpoints-dir /tmp/r6_3_x_2b_batch_after_fix/checkpoints`
+      - `python3 scripts/dev/drift-batch-scan/inspect_targets.py --checkpoints-dir /tmp/r6_3_x_2b_batch_after_fix/checkpoints`
 
 - [ ] Task R6-3.X.2B.4.3: Update findings, map, and routing decision.
   - Acceptance:

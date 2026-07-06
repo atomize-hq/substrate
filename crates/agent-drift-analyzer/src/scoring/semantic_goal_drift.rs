@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use crate::checkpoint::{
@@ -452,7 +453,8 @@ fn semantic_goal_relation(
     let current_side = prepare_goal_side(current_structured, current_summary);
     let other_side = prepare_goal_side(other_structured, other_summary);
     let shared_terms = intersect_terms(current_terms, other_terms);
-    let shared_constraint_terms = intersect_terms(&current_side.constraint_terms, &other_side.constraint_terms);
+    let shared_constraint_terms =
+        intersect_terms(&current_side.constraint_terms, &other_side.constraint_terms);
 
     if current_terms.is_empty() || other_terms.is_empty() {
         return WeightedRelationAssessment::no_claim(
@@ -480,7 +482,11 @@ fn semantic_goal_relation(
             GoalRelation::Exact,
             5,
             Confidence::High,
-            target_pair_evidence(current_structured, other_structured, "exact stable target match"),
+            target_pair_evidence(
+                current_structured,
+                other_structured,
+                "exact stable target match",
+            ),
             Vec::new(),
         );
     }
@@ -497,6 +503,12 @@ fn semantic_goal_relation(
             ),
             Vec::new(),
         );
+    }
+
+    if let Some(assessment) =
+        doc_bundle_member_narrowing_relation(&current_side.anchors, &other_side.anchors)
+    {
+        return assessment;
     }
 
     if let Some(assessment) = all_anchors_match_relation(
@@ -599,7 +611,10 @@ fn semantic_goal_relation(
             GoalRelation::Unknown,
             50,
             Confidence::Low,
-            shared_term_evidence(&shared_terms, "some overlap remains but anchor proof is incomplete"),
+            shared_term_evidence(
+                &shared_terms,
+                "some overlap remains but anchor proof is incomplete",
+            ),
             Vec::new(),
         );
     }
@@ -639,12 +654,10 @@ fn prepare_goal_side(
     }
     if let Some(target) = structured.target.as_ref() {
         for value in &target.paths {
-            side.anchors
-                .push(prepare_anchor(value, AnchorKind::Path));
+            side.anchors.push(prepare_anchor(value, AnchorKind::Path));
         }
         for value in &target.symbols {
-            side.anchors
-                .push(prepare_anchor(value, AnchorKind::Symbol));
+            side.anchors.push(prepare_anchor(value, AnchorKind::Symbol));
         }
         for value in &target.named_artifacts {
             side.anchors
@@ -780,7 +793,47 @@ fn same_work_item_family_anchor(
     })
 }
 
-fn same_doc_family_anchor(left: &PreparedAnchor, right: &PreparedAnchor) -> Option<AnchorRelationEvidence> {
+fn doc_bundle_member_narrowing_relation(
+    current: &[PreparedAnchor],
+    other: &[PreparedAnchor],
+) -> Option<WeightedRelationAssessment> {
+    let (smaller, larger) = match current.len().cmp(&other.len()) {
+        Ordering::Less => (current, other),
+        Ordering::Greater => (other, current),
+        Ordering::Equal => return None,
+    };
+    if smaller.is_empty()
+        || !smaller.iter().all(|anchor| anchor.role.is_docish())
+        || !larger.iter().all(|anchor| anchor.role.is_docish())
+    {
+        return None;
+    }
+
+    let mut evidence = Vec::new();
+    for anchor in smaller {
+        let matched = larger
+            .iter()
+            .find(|candidate| candidate.normalized == anchor.normalized)?;
+        evidence.push(AnchorRelationEvidence {
+            left_anchor: anchor.raw.clone(),
+            right_anchor: Some(matched.raw.clone()),
+            note: "doc bundle member narrowing/broadening via exact anchored doc reuse".to_string(),
+        });
+    }
+
+    Some(WeightedRelationAssessment::suppressive(
+        GoalRelation::SameDocFamily,
+        28,
+        Confidence::Medium,
+        evidence,
+        Vec::new(),
+    ))
+}
+
+fn same_doc_family_anchor(
+    left: &PreparedAnchor,
+    right: &PreparedAnchor,
+) -> Option<AnchorRelationEvidence> {
     if !(left.role.is_docish() && right.role.is_docish()) {
         return None;
     }
@@ -795,7 +848,10 @@ fn same_doc_family_anchor(left: &PreparedAnchor, right: &PreparedAnchor) -> Opti
     Some(AnchorRelationEvidence {
         left_anchor: left.raw.clone(),
         right_anchor: Some(right.raw.clone()),
-        note: format!("same doc family under shared prefix depth {}", shared_prefix),
+        note: format!(
+            "same doc family under shared prefix depth {}",
+            shared_prefix
+        ),
     })
 }
 
@@ -943,7 +999,10 @@ fn is_work_item_continuation_token(token: &str) -> bool {
         || (token.len() == 1 && token.chars().all(|ch| ch.is_ascii_alphabetic()))
         || (token.len() == 2
             && token.chars().next().is_some_and(|ch| ch.is_ascii_digit())
-            && token.chars().nth(1).is_some_and(|ch| ch.is_ascii_alphabetic()))
+            && token
+                .chars()
+                .nth(1)
+                .is_some_and(|ch| ch.is_ascii_alphabetic()))
 }
 
 fn classify_anchor_role(raw: &str, tokens: &[String]) -> AnchorRole {
@@ -976,7 +1035,8 @@ fn classify_anchor_role(raw: &str, tokens: &[String]) -> AnchorRole {
     {
         return AnchorRole::Code;
     }
-    if normalized.contains("docs_") || normalized.contains("readme") || normalized.ends_with("_md") {
+    if normalized.contains("docs_") || normalized.contains("readme") || normalized.ends_with("_md")
+    {
         return AnchorRole::GenericDoc;
     }
     AnchorRole::Other
@@ -1037,7 +1097,8 @@ fn is_weak_overlap_term(term: &str) -> bool {
 }
 
 fn shared_term_evidence(terms: &BTreeSet<String>, note: &str) -> Vec<AnchorRelationEvidence> {
-    terms.iter()
+    terms
+        .iter()
         .map(|term| AnchorRelationEvidence {
             left_anchor: term.clone(),
             right_anchor: None,
@@ -2555,6 +2616,55 @@ mod tests {
     }
 
     #[test]
+    fn semantic_goal_drift_suppresses_doc_bundle_member_narrowing() {
+        let mut anchor = structured_goal_with_paths(
+            &[
+                "architecture-overview.md",
+                "README.md",
+                "authentication-security.md",
+                "graphql-federation.md",
+                "module-development.md",
+                "monitoring.md",
+            ],
+            Confidence::High,
+        );
+        anchor.primary_intent = ObjectiveIntent::Review;
+        if let Some(target) = anchor.target.as_mut() {
+            target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
+            target.display = "architecture-overview.md".to_string();
+        }
+
+        let previous = anchor.clone();
+        let mut current = structured_goal("README.md", Confidence::High, Vec::new());
+        current.primary_intent = ObjectiveIntent::OtherTask;
+        if let Some(target) = current.target.as_mut() {
+            target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
+        }
+
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "other_task|spec_or_design_doc|readme_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "review|spec_or_design_doc|architecture_overview_md|authentication_security_md|graphql_federation_md|module_development_md|monitoring_md|readme_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            !scored.score.flagged,
+            "narrowing from a doc bundle to an anchored member doc must stay suppressed for both kickoff and rolling comparisons"
+        );
+    }
+
+    #[test]
     fn semantic_goal_drift_shared_constraint_only_overlap_still_flags_pivot() {
         let previous = structured_goal_with_constraints(
             Some("crates/agent-drift-analyzer/src/scoring/mod.rs"),
@@ -2593,11 +2703,7 @@ mod tests {
 
     #[test]
     fn semantic_goal_drift_generic_spec_plan_tasks_overlap_still_flags_pivot() {
-        let previous = structured_goal(
-            "docs/specs/r6/R6-1/plan.md",
-            Confidence::High,
-            Vec::new(),
-        );
+        let previous = structured_goal("docs/specs/r6/R6-1/plan.md", Confidence::High, Vec::new());
         let current = structured_goal(
             "docs/specs/design-arch/tasks.md",
             Confidence::High,
