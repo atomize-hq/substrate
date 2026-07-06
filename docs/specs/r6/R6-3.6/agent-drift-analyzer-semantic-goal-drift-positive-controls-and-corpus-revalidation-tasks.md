@@ -6,7 +6,7 @@ it does not reopen already-landed precision work.
 
 ## R6-3.6.0: Docs lock and baseline
 
-- [ ] Task R6-3.6.0.1: Lock the packet docs to live repo truth.
+- [x] Task R6-3.6.0.1: Lock the packet docs to live repo truth.
   - Acceptance: this `R6-3.6` spec/plan/tasks family states explicitly that `R6-3.5` and the `R6-3.X.2`
     containment first cut are already landed, and that this packet validates recall/precision on top of the
     shipping analyzer rather than restarting those packets.
@@ -17,7 +17,7 @@ it does not reopen already-landed precision work.
     - `docs/specs/r6/R6-3.6/agent-drift-analyzer-semantic-goal-drift-positive-controls-and-corpus-revalidation-plan.md`
     - `docs/specs/r6/R6-3.6/agent-drift-analyzer-semantic-goal-drift-positive-controls-and-corpus-revalidation-tasks.md`
 
-- [ ] Task R6-3.6.0.2: Capture the live baseline and confirm review tooling.
+- [x] Task R6-3.6.0.2: Capture the live baseline and confirm review tooling.
   - Acceptance: the run records the current git status, recent history, actual semantic-goal-drift test
     targets, and a working local Claude CLI lane using `--model opus` for later planning-doc and landed-code
     reviews.
@@ -30,7 +30,7 @@ it does not reopen already-landed precision work.
   - Files:
     - none required unless a docs note is needed
 
-- [ ] Task R6-3.6.0.3: Run the Claude planning-doc review gate before fixture implementation.
+- [x] Task R6-3.6.0.3: Run the Claude planning-doc review gate before fixture implementation.
   - Acceptance: the `R6-3.6` spec/plan/tasks files receive a Claude consult pass using `--model opus`, and
     any actionable findings are folded back into the docs before tasks `R6-3.6.1+` begin.
   - Verify: saved Claude review output or quoted findings in the run notes.
@@ -66,7 +66,7 @@ it does not reopen already-landed precision work.
 
 ## R6-3.6.2: Negative controls and guardrails
 
-- [ ] Task R6-3.6.2.1: Add at least five legitimate non-pivot controls.
+- [x] Task R6-3.6.2.1: Add at least five legitimate non-pivot controls.
   - Acceptance: the corpus covers path narrowing, symbol narrowing, plan→code→plan, review→fix→verify, and
     same-family doc progression, all proving `semantic_goal_drift` stays quiet on the current analyzer.
     Reuse already-landed coverage where it already exists
@@ -131,7 +131,7 @@ it does not reopen already-landed precision work.
 
 ## R6-3.6.4: Verification and corpus rerun
 
-- [ ] Task R6-3.6.4.1: Run the focused semantic-goal-drift wall and the full analyzer wall.
+- [x] Task R6-3.6.4.1: Run the focused semantic-goal-drift wall and the full analyzer wall.
   - Acceptance: the focused tests, full analyzer wall, workspace clippy, and workspace fmt all pass after
     the validation packet changes.
   - Verify:
@@ -144,7 +144,7 @@ it does not reopen already-landed precision work.
   - Files:
     - any touched packet files
 
-- [ ] Task R6-3.6.4.2: Re-run the 110-session corpus harness or record the blocker honestly.
+- [x] Task R6-3.6.4.2: Re-run the 110-session corpus harness or record the blocker honestly.
   - Acceptance: the committed `scripts/dev/drift-batch-scan/` flow is rerun with the canonical live command
     sequence, or the exact blocker is recorded with an actionable rerun command. No private generated batch
     artifacts are committed.
@@ -157,10 +157,14 @@ it does not reopen already-landed precision work.
     - `python3 scripts/dev/drift-batch-scan/filter_junk.py ...`
   - Files:
     - docs only, unless a tiny reporting improvement was required
+  - Result note (2026-07-05): reran the committed harness on a fresh seed-42 draw in scratch space:
+    `110/110` sessions analyzed clean, `44` repos, `938` checkpoints, `0` fires, `221` adjacent
+    target-eligible pairs, `213` same-target exact-match suppressions, `8` changed-target candidates,
+    `7` remaining disjoint pairs, `0` genuine pivots.
 
 ## R6-3.6.5: Docs closeout and Claude review
 
-- [ ] Task R6-3.6.5.1: Update findings and routing docs with the validation outcome.
+- [x] Task R6-3.6.5.1: Update findings and routing docs with the validation outcome.
   - Acceptance: `FINDINGS`, `MAP`, and the `R6-3` task ledger record:
     - positive controls passed/failed
     - negative controls passed/failed

@@ -279,10 +279,19 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    drift-masking fix; over-firing never masks drift], a residual absolute-vs-repo-relative
    respelling over-fire [2026-07-05 corpus re-check; closable via session cwd prefix-stripping],
    shared-constraint masking, anchor comparison_key asymmetry) stays open; the eligibility-bar
-   revisit (`R6-3.X.3`) stays gated behind it. A post-containment corpus re-check (2026-07-05, fresh
-   seed-42 draw: 110 sessions / 890 checkpoints) confirmed `0` fires under the shipping bar and `0`
-   genuine pivots among the 7 loosened-bar disjoint pairs — see the `FINDINGS` re-check note. See the
-   `R6-3` TASKS ledger `R6-3.X.2` and the `FINDINGS` Step 3 note.
+   revisit (`R6-3.X.3`) stays gated behind it. **R6-3.6 validation follow-on (2026-07-05):** the
+   acceptance corpus is now an explicit 10-case wall with **`5/5` true-positive controls firing** and
+   **`5/5` legitimate non-pivot controls staying quiet**, including acceptance-level coverage for the
+   hyphen-collision / same-basename / sibling-stem non-containment boundaries. The fresh seed-42
+   corpus rerun (`110` sessions / `44` repos / `938` checkpoints) again showed `0` fires under the
+   shipping bar, `221` adjacent target-eligible pairs, `213` same-target exact-match suppressions, and
+   `7` remaining disjoint pairs — all documented non-pivots in the graduated-distance remainder. The
+   batch tooling now prints the export-derivable funnel and explicitly labels what is **not derivable**
+   from current checkpoint exports (structural-containment suppressions, scorer-true stable-target
+   hygiene suppressions, `sanctioned_replan` suppressions) without duplicating scorer logic or widening
+   export/schema. **Next routing decision: proceed to the remaining graduated / weighted-distance work in
+   `R6-3.X.2`; do not reopen `R6-3.X.3` yet.** See the `R6-3` TASKS ledger and the `FINDINGS`
+   `R6-3.6 Result` note.
 
 ## Non-Goals For This Rescope
 

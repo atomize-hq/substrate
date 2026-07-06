@@ -405,6 +405,22 @@ all fixed here.
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
     - `crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs`
     - `crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-narrowing-into-anchored-subtree/`
+  - Follow-on validation result (R6-3.6, 2026-07-05): the bounded acceptance wall now has `10` cases with
+    **`5/5` positive controls firing** and **`5/5` negative controls staying quiet**, including
+    acceptance-level coverage for the hyphen-collision / same-basename-without-extension / sibling-stem
+    non-containment boundaries. The fresh seed-42 corpus rerun (`110` sessions / `44` repos / `938`
+    checkpoints, `110/110` analyzed clean) held at **`0` fires**, with the explicit export-derivable
+    funnel now reported by `scripts/dev/drift-batch-scan/tabulate.py`: `263` structured-target
+    checkpoints, `255` analysis-only stable-target-proxy checkpoints, `138` current-bar eligible,
+    `263` target-resolved eligible, `221` adjacent target-eligible pairs, `213` same-target exact-match
+    suppressions, `8` changed-target candidates, and `7` remaining disjoint pairs. All `7` are still
+    documented non-pivots in the open graduated-distance remainder (doc progression, generic
+    `spec/plan` respelling, family-stem narrowing, sibling work under one dir, plan→code→plan,
+    absolute-vs-repo-relative subtree respelling, broad spec→examples progression). Export limits are now
+    explicit: structural-containment suppressions, scorer-true stable-target-hygiene suppressions, and
+    `sanctioned_replan` suppressions are not derivable from current checkpoint exports without duplicating
+    Rust scorer logic or widening export/schema. Routing decision unchanged: proceed to the **remaining**
+    graduated / weighted-distance work in `R6-3.X.2`; keep `R6-3.X.3` deferred.
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see

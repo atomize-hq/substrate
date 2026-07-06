@@ -267,29 +267,48 @@ pooled; opaque delegated sessions remain **secondary** evidence until R7-style p
 support exists. This tag is a reporting heuristic, coarser than the analyzer's per-checkpoint
 `DelegationContext`, which is not serialized into the checkpoint export.
 
-**Post-containment corpus re-check (2026-07-05, analyzer at the `R6-3.X.2` containment first cut plus
-codex re-review rounds 1–6).** Fresh seed-42 draw from the grown store: `110` sessions / `44` repos /
-`890` checkpoints, `110/110` analyzed clean. Fires: **`0`** flagged checkpoints, `0` rolling + `0`
-kickoff evidence lines — the six rounds of containment changes introduced no over-fire regression and
-live precision under the shipping bar holds at 100%. Current-bar eligible `139` (15.6%),
-target-resolved eligible `237` (26.6%) — both stable vs R6-3.5 (`137` / `234`). Target-resolved
-disjoint adjacent pairs: `7` (all five R6-3.5 pairs recur, plus two new: an attachment
-`goal-objective.md` → `docs/specs/r6/MAP.md` kickoff-to-work progression, and a `handbook` docs survey
-(`docs/legacy` + `docs/contracts` dirs) → specific legacy/contract files). `0` killed as junk (the
-R6-3.5 extraction cleanup is holding: extraction garbage stayed dead) and **`0` are genuine pivots**.
-None of the `7` is a subtree narrowing the containment carve-out should have absorbed — on hand
-inspection each falls in a documented open class (doc progression ×2, generic `spec/plan` respelling,
-family-stem `audit-trio.…`, plan→code→plan `async_repl.rs:497`, sibling work under one dir, mixed
-progression). One new residue pattern observed (pairs 5 and 7): **absolute vs repo-relative respelling
-of the same subtree** defeats raw-structure containment (`docs/legacy` cannot be an ancestor of
-`/Users/…/handbook/docs/legacy/HARNESS.md` on raw segments). Like the bare-`CrateOrPackage` over-fire
-this is a conservative miss (over-fire direction, never drift-masking); unlike it, the bundle already
-carries the session `cwd` (`session_meta.payload.cwd`), so cwd-prefix stripping is a plausible bounded
-close under the graduated metric. Delegation split: `single_agent` `760` cp / `130` eligible / `0`
-fired / `2` disjoint; `delegated_child_visible` `130` cp / `9` eligible / `0` fired / `5` disjoint; no
-`delegated_parent_opaque` in this draw. Conclusion unchanged: the shipping bar is precise on real data,
-the loosened-bar residue is exactly the graduated-metric family, and the eligibility-bar revisit
-(`R6-3.X.3`) stays deferred behind it.
+**R6-3.6 Result (2026-07-05): positive-control wall + corpus revalidation.** The acceptance corpus now
+holds `10` bounded semantic-goal-drift cases: **`5/5` positive controls pass** (the two pre-existing
+true-positive witnesses plus new hyphen-collision, same-basename-without-extension, and sibling-stem
+boundary pivots) and **`5/5` negative controls stay quiet** (kickoff/rolling containment narrowing,
+same-file `:line` narrowing, pure broadening into a containing directory, and same-target
+review→verify progression). The live acceptance harness now fail-closes on a curated allowlist rather
+than a frozen count of three and asserts full `unknowns.is_empty()` eligibility plus non-empty target
+evidence for every checkpoint whose target it checks, so the positive controls prove real shipping-bar
+eligibility instead of target-only extraction.
+
+The corpus harness was then re-run on a fresh seed-42 draw from the grown store: `110` sessions /
+`44` repos / `938` checkpoints, `110/110` analyzed clean. Fires remain **`0`** flagged checkpoints,
+`0` rolling evidence lines, and `0` kickoff-anchor evidence lines — no over-fire regression after the
+containment first cut. Export-derivable funnel counts: `938` checkpoints with `structured_objective`,
+`263` with a structured target, `255` with an analysis-only stable-target proxy, `138`
+current-bar-eligible checkpoints (14.7%), `263` target-resolved eligible checkpoints (28.0%), `828`
+adjacent checkpoint pairs total, `221` adjacent pairs with both sides target-eligible, `213`
+same-target exact-match suppressions, `8` changed-target candidate pairs, `7` remaining disjoint pairs,
+and `0` emitted `semantic_goal_drift` fires. Honest export limits are now printed by
+`scripts/dev/drift-batch-scan/tabulate.py`: structural-containment suppressions, scorer-true
+stable-target-hygiene suppressions, and `sanctioned_replan` suppressions are **not derivable** from the
+current checkpoint export without duplicating Rust scorer logic or widening the export surface.
+
+The `7` remaining disjoint pairs are still **all non-pivots** on hand inspection: doc progression
+(`status.md,risks.md → sprint-planning.md`), generic `spec/plan/tasks → spec_plan` narrowing, family-stem
+`audit-trio.report.json → audit-trio.model-selection/cohesion-audit.report.json`, sibling work under one
+directory (`…handoff-boundary.md → …threading.md`), the longstanding plan→code→plan residue
+(`async_repl.rs:497 → llm-last-mile/PLAN-04.md`), an absolute-vs-repo-relative docs-survey progression
+(`docs/legacy` / `docs/contracts` → specific `handbook` legacy/contract files), and a broad
+spec→examples progression (`spec/task → examples/*`). None is a subtree narrowing the containment
+carve-out should have absorbed. The newly-observed absolute-vs-repo-relative residue is still in the
+conservative direction (over-fire, never drift-masking), and unlike the bare-`CrateOrPackage`
+over-fire it is plausibly closable under the remaining graduated-distance work because the bundle
+already carries `session_meta.payload.cwd`.
+
+Delegation split on this re-run: `single_agent` = `760` cp / `130` current-bar eligible / `186`
+target-resolved eligible / `0` fired / `2` disjoint pairs; `delegated_child_visible` = `178` cp / `8`
+current-bar eligible / `77` target-resolved eligible / `0` fired / `5` disjoint pairs; no
+`delegated_parent_opaque` or `unknown` sessions surfaced in this draw. Conclusion: the shipping bar is
+still precise on real data, recall now has an explicit positive-control wall, and the next justified
+packet remains the **remaining graduated / weighted-distance work in `R6-3.X.2`**. The
+eligibility-bar revisit (`R6-3.X.3`) stays deferred behind it.
 
 Source map (deterministic design inputs, not repo authority): log-template variable abstraction —
 [Preprocessing is All You Need (arXiv 2412.05254)](https://arxiv.org/pdf/2412.05254),
