@@ -6,6 +6,11 @@ Step 3 of the semantic-goal-drift real-world validation pipeline
 eligibility, actual firings, eligibility-failure breakdown, the
 hypothetical target-resolved bar, adjacent-pair (rolling) analysis,
 and per-month / per-repo diversity.
+
+R6-3.6 note: this script now prints an explicit eligibility/firing
+funnel and clearly labels which suppression buckets are NOT derivable
+from the current checkpoint export without duplicating Rust scorer logic
+or widening the export surface.
 """
 from __future__ import annotations
 
@@ -13,6 +18,7 @@ import argparse
 import glob
 import json
 import os
+import re
 from collections import Counter, defaultdict
 
 # objective_class / target-class enum tokens that are not grounded artifacts
@@ -20,6 +26,10 @@ GENERIC = {"implement", "debug", "review", "research", "plan", "validate", "docs
            "repo_slice", "crate_or_package", "file_or_directory", "spec_or_design_doc",
            "test_or_verifier", "skill_or_instruction_surface", "external_artifact",
            "conceptual_topic", "unknown_target", "green"}
+EXT = {"md", "rs", "json", "html", "py", "ts", "tsx", "js", "jsx", "toml", "yaml", "yml",
+       "txt", "css", "sh", "lock", "cfg", "ini", "tsv", "csv", "sql", "proto", "rb", "go",
+       "java", "kt", "c", "h", "cpp", "hpp", "xml", "svg", "png", "jpg", "mdx", "env"}
+MODEL = re.compile(r"^(gpt|claude|gemini|llama|mistral|opus|sonnet|haiku|qwen|deepseek|grok|o1|o3)[_-]?\d")
 
 
 def norm(raw: str) -> str:
@@ -39,6 +49,33 @@ def target_terms(so: dict) -> set[str]:
         if n and n not in GENERIC:
             terms.add(n)
     return terms
+
+
+def toks(term: str) -> list[str]:
+    return [t for t in term.split("_") if t]
+
+
+def has_ext(term: str) -> bool:
+    return any(t in EXT for t in toks(term))
+
+
+def is_junk(term: str) -> bool:
+    ts = toks(term)
+    if not ts:
+        return True
+    if "n" in ts:
+        return True
+    if max((sum(c.isalpha() for c in t) for t in ts), default=0) < 3:
+        return True
+    if MODEL.match(term) and not has_ext(term):
+        return True
+    if ts[-1] == "etc":
+        return True
+    return False
+
+
+def stable_target_proxy_terms(so: dict) -> set[str]:
+    return {term for term in target_terms(so) if not is_junk(term)}
 
 
 def conf_ge_medium(c) -> bool:
@@ -65,6 +102,7 @@ def main() -> None:
     tot_cp = 0
     tot_sessions = len(by_session)
     ts = ts_conf = cur_eligible = 0
+    structured_present = structured_target_present = stable_target_proxy = 0
     fail_reason = Counter()
     target_resolved = target_resolved_no_primary = blocked_only_by_sc_del = 0
     sgd_flagged = rolling_lines = kickoff_lines = 0
@@ -89,6 +127,12 @@ def main() -> None:
             conf = so.get("confidence")
             unk = {u.get("field_name") for u in so.get("unknowns", [])}
             tgt_present = so.get("target") is not None
+            if so:
+                structured_present += 1
+            if tgt_present:
+                structured_target_present += 1
+            if stable_target_proxy_terms(so):
+                stable_target_proxy += 1
             is_ts = oc == "task_statement"
             is_tsconf = is_ts and conf_ge_medium(conf)
             if is_ts:
@@ -125,6 +169,7 @@ def main() -> None:
                         elif rr.startswith("semantic goal drift kickoff anchor"):
                             kickoff_lines += 1
 
+    adjacent_pairs_total = 0
     pairs_both_tgt = same_target = changed_target = changed_disjoint = 0
 
     def tgt_elig(cp: dict) -> bool:
@@ -136,6 +181,7 @@ def main() -> None:
 
     for sid, cps in by_session.items():
         for a, b in zip(cps, cps[1:]):
+            adjacent_pairs_total += 1
             if tgt_elig(a) and tgt_elig(b):
                 pairs_both_tgt += 1
                 ta = target_terms(a.get("structured_objective") or {})
@@ -156,6 +202,9 @@ def main() -> None:
     print("=" * 70)
     print(f"sessions analyzed:        {tot_sessions}")
     print(f"total checkpoints:        {tot_cp}")
+    print(f"checkpoints with structured_objective: {structured_present}")
+    print(f"checkpoints with structured target:    {structured_target_present}")
+    print(f"stable-target proxy (analysis only):   {stable_target_proxy}")
     print(f"TaskStatement:            {ts}  ({pct(ts, tot_cp)})")
     print(f"TaskStatement + conf>=Med:{ts_conf}  ({pct(ts_conf, tot_cp)})")
     print(f"CURRENT-BAR eligible (TS+conf+no-unknowns): {cur_eligible}  "
@@ -175,6 +224,21 @@ def main() -> None:
     print(f"  ...also no primary_goal unknown:     {target_resolved_no_primary}")
     print(f"  checkpoints unlocked ONLY by dropping success_conditions/deliverables gate: {blocked_only_by_sc_del}")
     print(f"  net gain vs current bar:             {target_resolved - cur_eligible} more eligible checkpoints")
+    print()
+    print("ELIGIBILITY / FIRING FUNNEL (available directly from current export + analysis-only target proxy):")
+    print(f"  total sessions:                      {tot_sessions}")
+    print(f"  total checkpoints:                   {tot_cp}")
+    print(f"  structured_objective present:        {structured_present}")
+    print(f"  structured target present:           {structured_target_present}")
+    print(f"  stable-target proxy present:         {stable_target_proxy}")
+    print(f"  current-bar eligible:                {cur_eligible}")
+    print(f"  target-resolved eligible:            {target_resolved}")
+    print(f"  adjacent checkpoint pairs total:     {adjacent_pairs_total}")
+    print(f"  adjacent pairs both target-eligible: {pairs_both_tgt}")
+    print(f"  same-target exact-match suppressions:{same_target}")
+    print(f"  changed-target candidate pairs:      {changed_target}")
+    print(f"  remaining disjoint pairs:            {changed_disjoint}")
+    print(f"  emitted semantic_goal_drift fires:   {sgd_flagged}")
     print()
     print("ADJACENT-PAIR ANALYSIS under target-resolved bar (rolling's real opportunity):")
     print(f"  adjacent pairs both target-eligible: {pairs_both_tgt}")
@@ -207,6 +271,11 @@ def main() -> None:
         d = by_delegation[cat]
         print(f"  {cat:24s} | {d['cp']:3d} | {d['cur_elig']:7d}  | {d['tgt_elig']:7d}  | "
               f"{d['sgd']:8d}  | {d['disjoint']}")
+    print()
+    print("NOT DERIVABLE FROM CURRENT EXPORT WITHOUT DUPLICATING RUST SCORER LOGIC OR WIDENING EXPORT:")
+    print("  - structural-containment suppressions")
+    print("  - scorer-true stable-target-hygiene suppressions (the 'stable-target proxy' above is analysis-only)")
+    print("  - sanctioned_replan suppressions")
 
 
 if __name__ == "__main__":

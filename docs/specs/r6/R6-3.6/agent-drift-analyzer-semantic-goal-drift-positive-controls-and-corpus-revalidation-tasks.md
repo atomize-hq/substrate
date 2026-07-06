@@ -105,7 +105,7 @@ it does not reopen already-landed precision work.
 
 ## R6-3.6.3: Funnel reporting
 
-- [ ] Task R6-3.6.3.1: Add or verify the eligibility/suppression funnel metrics.
+- [x] Task R6-3.6.3.1: Add or verify the eligibility/suppression funnel metrics.
   - Acceptance: the batch tooling reports enough counts to explain why the corpus emitted zero or non-zero
     fires, including sessions, checkpoints, structured-objective coverage, stable-target coverage,
     current-bar eligibility, target-resolved eligibility when available, candidate adjacent pairs,
@@ -123,6 +123,11 @@ it does not reopen already-landed precision work.
     - `scripts/dev/drift-batch-scan/inspect_targets.py`
     - `scripts/dev/drift-batch-scan/filter_junk.py`
     - `scripts/dev/drift-batch-scan/run_batch.py` (only if the smallest reporting tag must be added)
+  - Result note (2026-07-05): `tabulate.py` now prints the explicit export-derivable funnel and
+    labels the current honest limits. Structural-containment suppressions, scorer-true stable-target
+    hygiene suppressions, and `sanctioned_replan` suppressions remain non-derivable from the current
+    checkpoint export without duplicating Rust scorer logic or widening the export surface, so the
+    packet records them as blockers instead of inventing synthetic counts.
 
 ## R6-3.6.4: Verification and corpus rerun
 

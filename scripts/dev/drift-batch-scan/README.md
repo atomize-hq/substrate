@@ -31,7 +31,8 @@ python3 "$REPO/$S/sample_sessions.py" --out selected_sessions.jsonl
 #    (isolation avoids cross-session exact-dedupe contamination in the compactor)
 python3 "$REPO/$S/run_batch.py" --repo "$REPO" --selected selected_sessions.jsonl --batch-dir batch
 
-# 3. coverage diagnostic (F1-F4: eligibility, firings, target-resolved bar, adjacent pairs, diversity)
+# 3. coverage diagnostic (F1-F4 plus the explicit R6-3.6 funnel: eligibility, firings,
+#    target-resolved bar, adjacent pairs, diversity, delegation split, and honest export limits)
 python3 "$REPO/$S/tabulate.py" --checkpoints-dir batch/checkpoints
 
 # 4a. ground truth: raw targets behind the fires and the disjoint pairs
@@ -43,6 +44,34 @@ python3 "$REPO/$S/filter_junk.py" --checkpoints-dir batch/checkpoints
 
 Each row written to `batch/checkpoints/<session_id>.jsonl` is the analyzer's checkpoint record with
 four added keys — `_month`, `_repo`, `_session_file_id`, and `_delegation` — used by the tabulators.
+
+## R6-3.6 funnel coverage and limits
+
+`tabulate.py` now prints an explicit funnel from:
+
+- total sessions / checkpoints
+- `structured_objective` coverage
+- structured-target presence
+- an **analysis-only stable-target proxy** (cheap heuristic over exported targets; not the exact Rust
+  scorer decision)
+- current-bar eligible checkpoints
+- target-resolved eligible checkpoints
+- total adjacent pairs
+- target-resolved adjacent candidate pairs
+- same-target exact-match suppressions
+- remaining disjoint pairs
+- emitted `semantic_goal_drift` fires
+- delegation-category stratification
+
+What it **cannot** report from the current checkpoint export without either duplicating the Rust scorer or
+widening the analyzer export/schema:
+
+- structural-containment suppressions
+- scorer-true stable-target-hygiene suppressions
+- `sanctioned_replan` suppressions
+
+Those limits are printed by `tabulate.py` so a zero-fire or non-zero-fire outcome is not overstated as a
+fully explained scorer funnel.
 
 ## Delegation stratification (R6-3.5)
 

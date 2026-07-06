@@ -287,7 +287,12 @@ fn checkpoint_target_display(checkpoint: &Checkpoint) -> String {
         .target
         .as_ref()
         .map(|target| target.display.clone())
-        .unwrap_or_else(|| panic!("checkpoint {} missing structured target", checkpoint.checkpoint_id))
+        .unwrap_or_else(|| {
+            panic!(
+                "checkpoint {} missing structured target",
+                checkpoint.checkpoint_id
+            )
+        })
 }
 
 fn semantic_goal_drift_score(checkpoint: &Checkpoint) -> &DriftScore {
@@ -304,10 +309,12 @@ fn semantic_goal_drift_score(checkpoint: &Checkpoint) -> &DriftScore {
 }
 
 fn checkpoint_structured_objective(checkpoint: &Checkpoint) -> &StructuredObjective {
-    checkpoint
-        .structured_objective
-        .as_ref()
-        .unwrap_or_else(|| panic!("checkpoint {} missing structured objective", checkpoint.checkpoint_id))
+    checkpoint.structured_objective.as_ref().unwrap_or_else(|| {
+        panic!(
+            "checkpoint {} missing structured objective",
+            checkpoint.checkpoint_id
+        )
+    })
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Utf8Path) -> T {
