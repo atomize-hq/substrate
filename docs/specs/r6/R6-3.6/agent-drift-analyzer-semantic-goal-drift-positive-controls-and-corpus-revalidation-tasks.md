@@ -1,6 +1,7 @@
 # R6-3.6 TASKS — Semantic Goal Drift Positive Controls And Corpus Revalidation
 
-Status: OPEN (created 2026-07-05 from the approved planning kickoff plus live `R6` repo truth). This packet
+Status: CLOSED (created 2026-07-05 from the approved planning kickoff plus live `R6` repo truth; landed and
+review-clean 2026-07-05). This packet
 validates the **current** semantic-goal-drift scorer after `R6-3.5` and the `R6-3.X.2` containment first cut;
 it does not reopen already-landed precision work.
 
@@ -178,9 +179,12 @@ it does not reopen already-landed precision work.
     - `docs/specs/r6/MAP.md`
     - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-tasks.md`
 
-- [ ] Task R6-3.6.5.2: Reserve the Claude landed-code review gate.
+- [x] Task R6-3.6.5.2: Reserve the Claude landed-code review gate.
   - Acceptance: the packet closeout notes state that after implementation lands, the code diff must receive a
     second Claude pass with `--model opus` before claiming review-clean.
   - Verify: final packet closeout notes.
   - Files:
     - this tasks ledger or the future closeout notes
+  - Result note (2026-07-05): completed via local Claude CLI read-only review session
+    `9a42a4fb-980c-4cfd-ac32-3bda7b0eafee` (`--model opus` → `claude-opus-4-8`), verdict `READY`
+    with no actionable findings.
