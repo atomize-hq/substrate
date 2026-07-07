@@ -202,8 +202,7 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
                 .as_ref()
                 .expect("final checkpoint structured target");
             assert_eq!(
-                target.paths,
-                expected.final_target_paths,
+                target.paths, expected.final_target_paths,
                 "final checkpoint must preserve the expected concrete target paths for {case_id}"
             );
         }

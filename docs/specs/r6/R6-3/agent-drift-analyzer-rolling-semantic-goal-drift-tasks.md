@@ -430,24 +430,24 @@ all fixed here.
     gate that cannot pass via all-unknown reporting. `RepoRelativeEquivalentAfterCwdStrip` stays conditional:
     land it only if the scorer seam can already reach cwd/session-root truth analyzer-locally; otherwise defer
     / ask-first rather than widening scope into `context/objective.rs` or other deferred surfaces.
-  - Result (`R6-3.X.2B`, 2026-07-06): the remaining weighted packet is now **closed**. The packet landed the
-    explicit relation-authoritative scorer routing described in
-    `docs/specs/r6/R6-3.X.2B/agent-drift-analyzer-semantic-goal-drift-graduated-weighted-distance-{spec,plan,tasks}.md`,
-    including pairwise role-shift suppressions, shared-constraint / weak-overlap false-negative guards, a
-    validation-strata-aware batch tabulator, and a narrow scorer-local fix for doc-bundle →
-    anchored-member-doc narrowing (`semantic_goal_drift_suppresses_doc_bundle_member_narrowing`).
-    The fresh seed-42 closeout rerun from the current store (`110` sessions / `44` repos / `892`
+  - Result (`R6-3.X.2B` → `R6-3.X.2C`, 2026-07-06): `R6-3.X.2B` landed the relation taxonomy and
+    validation-strata tooling, but it did **not** settle the final routing contract because the scorer
+    still routed via relation-only `claims_drift()`. `R6-3.X.2C` then landed the missing explicit
+    `Suppress` / `Fire` / `NoClaim` decision surface, made confidence + decisive/counter evidence
+    load-bearing for weak suppressive families, tightened same-crate and broad-lineage residue, expanded
+    doc-bundle coverage through the live analyzer path, and reordered role classification so path/extension
+    semantics beat `spec` / `design` substrings.
+    The fresh default seed-42 rerun from the current store (`110` sessions / `44` repos / `929`
     checkpoints, `110/110` analyzed clean) is compared **directionally** against the published `R6-3.6`
-    sample (`938` checkpoints) because the exact prior manifest was not reusable. Final closeout numbers on
-    the rerun manifest: `0` fires, `137` current-bar eligible checkpoints, `240` target-resolved eligible
-    checkpoints, `201` adjacent target-eligible pairs, `194` same-target exact-match suppressions, `7`
-    changed-target candidates, and `6` remaining disjoint pairs. Those `6` residual pairs are all
-    documented non-pivots: docs-root progression, planning-doc progression, generic `spec/plan/tasks`
-    bundle collapse, artifact-family narrowing, sibling docs under one directory, and the longstanding
-    plan→code→plan cycle residue. Validation strata are no longer delegation-only: the batch tooling now
-    reports best-effort language/repo, workflow, and tooling tables with explicit heuristic sources and
-    fail-closed all-unknown handling, and no added table is `100% unknown` on the closeout run. Final
-    routing decision: **`R6-3.X.2` is now closed through `R6-3.X.2B`; keep `R6-3.X.3` deferred.**
+    sample because the exact prior manifest was not reusable. Final `R6-3.X.2C` numbers on that rerun
+    manifest: `3` fires, `137` current-bar eligible checkpoints, `242` target-resolved eligible
+    checkpoints, `203` adjacent target-eligible pairs, `195` same-target exact-match suppressions, `8`
+    changed-target candidates, and `7` remaining disjoint pairs. The `3` fires are one conservative
+    docs-only residue family (root-level doc-bundle → member-doc narrowing with no stable shared prefix),
+    and the junk-filter post-pass confirms they survive stable-only filtering rather than coming from
+    garbage target extraction. Validation strata remain non-degenerate (`0/137` junk-only eligible; no
+    added table collapses to `100% unknown`). Final routing decision: **`R6-3.X.2` is now closed through
+    `R6-3.X.2C`; keep `R6-3.X.3` deferred.**
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see

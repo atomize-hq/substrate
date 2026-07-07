@@ -187,7 +187,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - acceptance harness/fixtures as needed
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2C.3.2: Preserve prior witnesses without rebaseline.
+- [x] Task R6-3.X.2C.3.2: Preserve prior witnesses without rebaseline.
   - Acceptance:
     - the existing `R6-3.6` bounded acceptance allowlist remains intact except for explicit additive cases.
     - existing `R6-1`, `R6-2`, `R6-3`, and `R6-3.X.2B` witnesses remain intact.
@@ -204,7 +204,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
 
 ## R6-3.X.2C.4: Rerun and routing-doc reconciliation
 
-- [ ] Task R6-3.X.2C.4.1: Run the focused wall and full analyzer wall after the routing fix.
+- [x] Task R6-3.X.2C.4.1: Run the focused wall and full analyzer wall after the routing fix.
   - Acceptance:
     - focused semantic-goal-drift tests pass.
     - full analyzer wall passes.
@@ -216,7 +216,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - docs only unless a tiny test/fixture adjustment is required during verification
   - Estimated scope: S
 
-- [ ] Task R6-3.X.2C.4.2: Rerun the seed-42 corpus by default and record the residue honestly.
+- [x] Task R6-3.X.2C.4.2: Rerun the seed-42 corpus by default and record the residue honestly.
   - Acceptance:
     - the seed-42 110-session corpus is rerun with the committed harness unless explicitly waived.
     - the docs compare results directionally against the current published `R6-3.X.2B` closeout numbers.
@@ -229,7 +229,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - docs only unless a tiny reporting fix is required
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2C.4.3: Reconcile `FINDINGS`, `MAP`, and the `R6-3` ledger with the new routing truth.
+- [x] Task R6-3.X.2C.4.3: Reconcile `FINDINGS`, `MAP`, and the `R6-3` ledger with the new routing truth.
   - Acceptance:
     - closeout docs no longer present `R6-3.X.2B` as the final routing-contract closeout.
     - the docs say relation type is primary, score explanatory only, and confidence/evidence gate weaker

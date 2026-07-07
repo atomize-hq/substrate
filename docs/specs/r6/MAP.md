@@ -283,21 +283,21 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    acceptance corpus became an explicit 10-case wall with **`5/5` true-positive controls firing** and
    **`5/5` legitimate non-pivot controls staying quiet**, and the fresh seed-42 corpus rerun
    (`110` sessions / `44` repos / `938` checkpoints) again showed `0` fires under the shipping bar.
-   **R6-3.X.2B closeout (2026-07-06):** the remaining weighted packet landed analyzer-locally. The
-   rerun was repeated on a fresh seed-42 draw from the current store (`110` sessions / `44` repos /
-   `892` checkpoints), so the closeout compares directionally against the published `R6-3.6` numbers
-   rather than claiming the identical manifest. A narrow scorer-local false-positive family
-   (doc-bundle → anchored-member-doc narrowing) surfaced on the first pass, was reproduced with a failing
-   unit test, and was fixed in-scope via a bounded `SameDocFamily` exact-member bundle suppression.
-   The same manifest then reran to **`0` fires**, `201` adjacent target-eligible pairs, `194` same-target
-   exact-match suppressions, and `6` remaining disjoint pairs — all documented non-pivots labeled by
-   relation family/residue type. The batch tooling now also reports validation strata beyond delegation
-   (language/repo, workflow, tooling) with explicit heuristic sources and fail-closed `100% unknown`
-   warnings, and no added table is all-unknown on the closeout run. **Routing decision updated:** the
-   graduated / weighted-distance debt `R6-3.X.2` is now closed through packet `R6-3.X.2B`; keep
-   `R6-3.X.3` deferred, and keep `RepoRelativeEquivalentAfterCwdStrip` deferred unless a scorer-local
-   cwd/session-root seam is proven without widening into `context/objective.rs` or other deferred surfaces.
-   See the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.X.2B Result` note.
+   **R6-3.X.2B / R6-3.X.2C closeout chain (2026-07-06):** `R6-3.X.2B` landed the relation taxonomy,
+   but `R6-3.X.2C` was required to replace relation-only `claims_drift()` routing with an explicit
+   `Suppress` / `Fire` / `NoClaim` contract. Live truth after the default seed-42 rerun from the current
+   store: `110` sessions / `44` repos / `929` checkpoints, `137` current-bar eligible checkpoints,
+   `242` target-resolved eligible checkpoints, `203` adjacent target-eligible pairs, `195` same-target
+   exact-match suppressions, `8` changed-target candidates, `7` remaining disjoint pairs, and **`3`
+   emitted fires**. Those `3` fires are one conservative docs-only residue family (root-level
+   doc-bundle → member-doc narrowing with no stable shared prefix), not a return to relation-only
+   routing and not junk-target noise. The batch tooling continues to report validation strata beyond
+   delegation with explicit heuristic sources, and no added table is all-unknown. **Routing decision
+   updated:** the graduated / weighted-distance debt `R6-3.X.2` is now closed through packet
+   `R6-3.X.2C`; keep `R6-3.X.3` deferred, and keep `RepoRelativeEquivalentAfterCwdStrip` deferred
+   unless a scorer-local cwd/session-root seam is proven without widening into `context/objective.rs`
+   or other deferred surfaces. See the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.X.2B / R6-3.X.2C`
+   result note.
 
 ## Non-Goals For This Rescope
 
