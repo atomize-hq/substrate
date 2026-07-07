@@ -164,6 +164,13 @@ struct WeightedRelationAssessment {
     counter_evidence: Vec<AnchorRelationEvidence>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DriftDecision {
+    Suppress,
+    Fire,
+    NoClaim,
+}
+
 impl WeightedRelationAssessment {
     fn suppressive(
         relation: GoalRelation,
@@ -213,13 +220,30 @@ impl WeightedRelationAssessment {
         }
     }
 
-    fn claims_drift(&self) -> bool {
-        matches!(
-            self.relation,
+    fn drift_decision(&self) -> DriftDecision {
+        match self.relation {
+            GoalRelation::Exact | GoalRelation::StructuralContainment => DriftDecision::Suppress,
+            GoalRelation::SameArtifactFamily
+            | GoalRelation::SameWorkItemFamily
+            | GoalRelation::SameDocFamily
+            | GoalRelation::PlanCodeRoleShift
+            | GoalRelation::ReviewFixVerifyRoleShift => {
+                if self.confidence >= Confidence::Medium
+                    && !self.decisive_evidence.is_empty()
+                    && self.counter_evidence.is_empty()
+                {
+                    DriftDecision::Suppress
+                } else {
+                    DriftDecision::NoClaim
+                }
+            }
             GoalRelation::SharedConstraintOnly
-                | GoalRelation::WeakOrGenericOnly
-                | GoalRelation::Unrelated
-        )
+            | GoalRelation::WeakOrGenericOnly
+            | GoalRelation::Unrelated => DriftDecision::Fire,
+            GoalRelation::RepoRelativeEquivalentAfterCwdStrip | GoalRelation::Unknown => {
+                DriftDecision::NoClaim
+            }
+        }
     }
 }
 
@@ -422,7 +446,8 @@ fn semantic_goal_diverged(
         anchor_goal,
         None,
     )
-    .claims_drift()
+    .drift_decision()
+        == DriftDecision::Fire
 }
 
 fn rolling_goal_diverged(
@@ -437,7 +462,8 @@ fn rolling_goal_diverged(
         previous_goal.structured,
         Some(previous_goal.summary),
     )
-    .claims_drift()
+    .drift_decision()
+        == DriftDecision::Fire
 }
 
 /// Relation-authoritative assessment over the stable target anchors. Numeric score remains explanatory
@@ -1414,7 +1440,8 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        eligible_current_goal, score_semantic_goal_drift, CURRENT_GOAL_REASON_PREFIX,
+        eligible_current_goal, score_semantic_goal_drift, AnchorRelationEvidence, DriftDecision,
+        GoalRelation, WeightedRelationAssessment, CURRENT_GOAL_REASON_PREFIX,
         KICKOFF_ANCHOR_REASON_PREFIX, ROLLING_CURRENT_REASON_PREFIX,
         ROLLING_PREVIOUS_REASON_PREFIX,
     };
@@ -1669,6 +1696,131 @@ mod tests {
             "C:/other",
             "C:/repo/src/lib.rs:42"
         ));
+    }
+
+    #[test]
+    fn semantic_goal_drift_routes_explicit_decision_matrix() {
+        let decisive = vec![AnchorRelationEvidence {
+            left_anchor: "left".to_string(),
+            right_anchor: Some("right".to_string()),
+            note: "decisive continuity".to_string(),
+        }];
+        let counter = vec![AnchorRelationEvidence {
+            left_anchor: "left".to_string(),
+            right_anchor: Some("other".to_string()),
+            note: "counter evidence".to_string(),
+        }];
+
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::Exact,
+                5,
+                Confidence::High,
+                decisive.clone(),
+                Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::Suppress
+        );
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::StructuralContainment,
+                10,
+                Confidence::High,
+                decisive.clone(),
+                Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::Suppress
+        );
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::SameArtifactFamily,
+                24,
+                Confidence::Medium,
+                decisive.clone(),
+                Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::Suppress
+        );
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::SameArtifactFamily,
+                24,
+                Confidence::Low,
+                decisive.clone(),
+                Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::NoClaim
+        );
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::SameArtifactFamily,
+                24,
+                Confidence::Medium,
+                decisive.clone(),
+                counter.clone(),
+            )
+            .drift_decision(),
+            DriftDecision::NoClaim
+        );
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::SameWorkItemFamily,
+                30,
+                Confidence::Medium,
+                Vec::new(),
+                Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::NoClaim
+        );
+        assert_eq!(
+            WeightedRelationAssessment::drift(
+                GoalRelation::SharedConstraintOnly,
+                72,
+                Confidence::High,
+                decisive.clone(),
+                counter.clone(),
+            )
+            .drift_decision(),
+            DriftDecision::Fire
+        );
+        assert_eq!(
+            WeightedRelationAssessment::drift(
+                GoalRelation::WeakOrGenericOnly,
+                76,
+                Confidence::Medium,
+                decisive.clone(),
+                counter.clone(),
+            )
+            .drift_decision(),
+            DriftDecision::Fire
+        );
+        assert_eq!(
+            WeightedRelationAssessment::drift(
+                GoalRelation::Unrelated,
+                80,
+                Confidence::High,
+                Vec::new(),
+                counter,
+            )
+            .drift_decision(),
+            DriftDecision::Fire
+        );
+        assert_eq!(
+            WeightedRelationAssessment::no_claim(
+                GoalRelation::Unknown,
+                50,
+                Confidence::Low,
+                Vec::new(),
+                Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::NoClaim
+        );
     }
 
     #[test]

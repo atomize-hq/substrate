@@ -49,7 +49,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
 
 ## R6-3.X.2C.1: Routing contract
 
-- [ ] Task R6-3.X.2C.1.1: Define the explicit drift-decision contract.
+- [x] Task R6-3.X.2C.1.1: Define the explicit drift-decision contract.
   - Acceptance:
     - The scorer design names an explicit decision surface such as `Suppress`, `Fire`, and `NoClaim`.
     - The design says relation family selects the candidate routing class and remains the primary routing
@@ -69,7 +69,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - packet-local docs
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2C.1.2: Replace `claims_drift()` routing with the explicit decision helper.
+- [x] Task R6-3.X.2C.1.2: Replace `claims_drift()` routing with the explicit decision helper.
   - Acceptance:
     - kickoff-anchor and rolling comparisons no longer route by relation-only `claims_drift()`.
     - `Exact` and `StructuralContainment` suppress directly.
