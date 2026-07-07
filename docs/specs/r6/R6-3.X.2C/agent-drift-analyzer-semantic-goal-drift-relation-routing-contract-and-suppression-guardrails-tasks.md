@@ -84,7 +84,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2C.1.3: Make the weighted assessment fields load-bearing where intended.
+- [x] Task R6-3.X.2C.1.3: Make the weighted assessment fields load-bearing where intended.
   - Acceptance:
     - callers no longer ignore `confidence`, `decisive_evidence`, and `counter_evidence`.
     - weaker suppressive families require explicit evidence support before suppressing.
@@ -102,7 +102,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
 
 ## R6-3.X.2C.2: Suppressive-family guardrails
 
-- [ ] Task R6-3.X.2C.2.1: Tighten `SameArtifactFamily` so same-crate residue alone cannot suppress.
+- [x] Task R6-3.X.2C.2.1: Tighten `SameArtifactFamily` so same-crate residue alone cannot suppress.
   - Acceptance:
     - shared crate/package tokens or sibling-stem crumbs alone do not justify suppression.
     - the scorer requires distinctive non-generic lineage evidence or another explicit continuity signal.
@@ -115,7 +115,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2C.2.2: Tighten `SameWorkItemFamily` so broad lineage alone cannot suppress.
+- [x] Task R6-3.X.2C.2.2: Tighten `SameWorkItemFamily` so broad lineage alone cannot suppress.
   - Acceptance:
     - shared prefixes like `R6-3` do not suppress by themselves.
     - the scorer requires lineage plus at least one stronger continuity signal.

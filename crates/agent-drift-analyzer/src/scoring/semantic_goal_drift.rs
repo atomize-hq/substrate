@@ -800,10 +800,17 @@ fn same_artifact_family_anchor(
     if left.role.is_docish() && right.role.is_docish() {
         return None;
     }
+    let shared_leaf_tokens = shared_leaf_family_tokens(left, right);
+    if shared_leaf_tokens.is_empty() {
+        return None;
+    }
     Some(AnchorRelationEvidence {
         left_anchor: left.raw.clone(),
         right_anchor: Some(right.raw.clone()),
-        note: format!("same artifact-family tokens: {}", shared_family.join(",")),
+        note: format!(
+            "same artifact-family continuity via leaf tokens: {}",
+            shared_leaf_tokens.join(",")
+        ),
     })
 }
 
@@ -812,10 +819,21 @@ fn same_work_item_family_anchor(
     right: &PreparedAnchor,
 ) -> Option<AnchorRelationEvidence> {
     let lineage = shared_work_item_lineage(left, right)?;
+    let shared_family = shared_family_tokens(left, right)
+        .into_iter()
+        .filter(|token| !lineage.contains(token))
+        .collect::<Vec<_>>();
+    if shared_family.len() < 2 {
+        return None;
+    }
     Some(AnchorRelationEvidence {
         left_anchor: left.raw.clone(),
         right_anchor: Some(right.raw.clone()),
-        note: format!("same work-item lineage: {}", lineage.join(".")),
+        note: format!(
+            "same work-item lineage {} with stronger continuity tokens {}",
+            lineage.join("."),
+            shared_family.join(",")
+        ),
     })
 }
 
@@ -954,6 +972,29 @@ fn shared_segment_prefix_len(left: &PreparedAnchor, right: &PreparedAnchor) -> u
         .zip(right.segments.iter())
         .take_while(|(l, r)| l == r)
         .count()
+}
+
+fn leaf_family_tokens(anchor: &PreparedAnchor) -> BTreeSet<String> {
+    anchor
+        .segments
+        .last()
+        .map(|leaf| {
+            leaf.split('_')
+                .filter(|token| !token.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|token| !is_generic_family_token(token))
+        .collect()
+}
+
+fn shared_leaf_family_tokens(left: &PreparedAnchor, right: &PreparedAnchor) -> Vec<String> {
+    leaf_family_tokens(left)
+        .intersection(&leaf_family_tokens(right))
+        .cloned()
+        .collect()
 }
 
 fn extension_only_leaf_variant(left: &PreparedAnchor, right: &PreparedAnchor) -> bool {
@@ -2578,6 +2619,84 @@ mod tests {
         assert!(
             !scored.score.flagged,
             "same work-item family progression must not flag rolling semantic_goal_drift"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_same_crate_residue_without_distinctive_continuity_still_flags() {
+        let previous = structured_goal(
+            "crates/agent-drift-analyzer/src/checkpoint/export.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let current = structured_goal(
+            "crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs",
+            Confidence::High,
+            Vec::new(),
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_scoring_semantic_goal_drift_rs",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "implement|file_or_directory|crates_agent_drift_analyzer_src_checkpoint_export_rs",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "same-crate residue alone must not suppress an unrelated pivot inside agent-drift-analyzer"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_same_work_item_lineage_without_shared_workstream_still_flags() {
+        let previous = structured_goal_with_target(
+            "R6-3-routing-contract",
+            ObjectiveTargetKind::RepoSlice,
+            Vec::new(),
+            Vec::new(),
+            vec!["R6-3-routing-contract".to_string()],
+            Vec::new(),
+            Confidence::High,
+        );
+        let current = structured_goal_with_target(
+            "R6-3-world-hardening",
+            ObjectiveTargetKind::RepoSlice,
+            Vec::new(),
+            Vec::new(),
+            vec!["R6-3-world-hardening".to_string()],
+            Vec::new(),
+            Confidence::High,
+        );
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "implement|repo_slice|r6_3_world_hardening",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "review|repo_slice|r6_3_routing_contract",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "broad R6-3 lineage without a stronger shared workstream must not suppress rolling semantic_goal_drift"
         );
     }
 
