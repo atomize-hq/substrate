@@ -76,6 +76,7 @@ python3 scripts/dev/drift-batch-scan/sample_sessions.py --seed 42 --out /tmp/r6_
 python3 scripts/dev/drift-batch-scan/run_batch.py --repo "$PWD" --selected /tmp/r6_3_x_2c_selected.jsonl --batch-dir /tmp/r6_3_x_2c_batch
 python3 scripts/dev/drift-batch-scan/tabulate.py --checkpoints-dir /tmp/r6_3_x_2c_batch/checkpoints
 python3 scripts/dev/drift-batch-scan/inspect_targets.py --checkpoints-dir /tmp/r6_3_x_2c_batch/checkpoints
+python3 scripts/dev/drift-batch-scan/filter_junk.py --checkpoints-dir /tmp/r6_3_x_2c_batch/checkpoints
 ```
 
 Implementation preflight when code work begins:
@@ -124,6 +125,8 @@ Implementation constraints:
 - keep structural-containment logic frozen; add new logic after containment, not inside it;
 - prefer small explicit enums/helpers over fuzzy score-band branching;
 - classify code/test/verifier anchors from path structure before substring doc/workflow hints;
+- use the live `GoalRelation` / `WeightedRelationAssessment` names where possible; do not create a parallel
+  relation enum or duplicate routing path unless review proves the live type cannot carry the contract;
 - do not reopen extraction or checkpoint seams under the guise of routing cleanup.
 
 Illustrative contract only:
@@ -225,7 +228,8 @@ Routing contract:
   `ReviewFixVerifyRoleShift` suppress only when:
   - confidence is at least `Medium`,
   - decisive evidence is non-empty,
-  - counter-evidence is empty or otherwise explicitly below the packet's suppressive threshold,
+  - counter-evidence is empty; any non-empty material `counter_evidence` blocks weak suppression in this
+    packet,
   - every compared anchor is explained by the chosen relation or a stronger one.
 - `SharedConstraintOnly`, `WeakOrGenericOnly`, and `Unrelated` fire.
 - `Unknown`, low-confidence relation results, or mixed/counter-evidence-heavy family cases no-claim.
@@ -235,6 +239,11 @@ Operationally:
 - confidence plus decisive/counter evidence determine whether a weak suppressive candidate may suppress or
   must fall back to `NoClaim`;
 - numeric score never determines suppress vs fire vs no-claim.
+
+`NoClaim` means the scorer is refusing to make a `semantic_goal_drift` assertion because the evidence is
+under-supported or ambiguous. It is not positive relatedness. `NoClaim` must be distinguishable in scorer
+tests, debug comments, and rerun/funnel reporting from `Suppress`. `Suppress` means "related enough to stay
+quiet." `NoClaim` means "not enough evidence to make a drift claim."
 
 ### 3. Keep the weighted apparatus, but make it coherent
 
@@ -251,18 +260,28 @@ But the packet must make these semantics true in code and docs:
 - score is explanatory only;
 - callers no longer ignore the confidence/evidence fields.
 
+If a weak suppressive-family candidate fails its evidence gate, the implementation must first ask whether the
+relation was over-classified. Cases resting only on broad lineage, same crate/package residue, generic
+artifact tokens, shared constraints, or weak/generic terms should be reclassified to `Unrelated`,
+`SharedConstraintOnly`, or `WeakOrGenericOnly` as appropriate rather than automatically falling into
+`NoClaim`.
+
 ### 4. Tighten suppressive-family guardrails
 
 #### 4.1 `SameArtifactFamily`
 - must not suppress on shared crate-name residue or sibling-stem crumbs alone;
 - require distinctive non-generic lineage evidence, compatible artifact shape, or another explicit continuity
   signal;
+- `SameArtifactFamily` is not a fallback bucket; when the continuity evidence is not distinctive enough, the
+  pair should be reclassified to `Unrelated`, `SharedConstraintOnly`, or `WeakOrGenericOnly` as appropriate;
 - add false-negative guards for same-crate but unrelated pivots.
 
 #### 4.2 `SameWorkItemFamily`
 - lineage alone is insufficient when the only overlap is a broad prefix like `R6-3`;
 - require lineage plus at least one stronger continuity signal such as shared doc family, shared parent path,
   shared non-generic target token, or a recognized role-shift pairing;
+- `SameWorkItemFamily` is not a fallback bucket; when the continuity evidence is not distinctive enough, the
+  pair should be reclassified to `Unrelated`, `SharedConstraintOnly`, or `WeakOrGenericOnly` as appropriate;
 - add false-negative guards for same-lineage unrelated docs/workstreams.
 
 #### 4.3 `SameDocFamily` / doc-bundle-member handling
@@ -273,6 +292,9 @@ But the packet must make these semantics true in code and docs:
   - bundle/member + unrelated addition still firing,
   - bundle → unrelated member firing,
 - carry at least one live acceptance case, not only scorer-local coverage.
+- if feasible in the same bounded fixture style, add one acceptance-level false-negative guard for a
+  high-risk `SameArtifactFamily` or `SameWorkItemFamily` case; scorer-local tests remain the main wall for
+  the rest.
 
 #### 4.4 Role classification ordering
 - detect code/test/verifier anchors from extension/path markers before substring workflow hints;
@@ -288,6 +310,19 @@ still fires. At minimum:
 - same-lineage unrelated docs pivot,
 - doc-bundle-member with unrelated addition,
 - role-shift false positives blocked by code-path role ordering.
+
+Required route-result matrix:
+- `Exact` + High confidence + evidence => `Suppress`
+- `StructuralContainment` + High confidence + evidence => `Suppress`
+- `SameArtifactFamily` + Medium confidence + decisive evidence + no counter-evidence => `Suppress`
+- `SameArtifactFamily` + Low confidence => `NoClaim` or reclassified `Fire` if unrelated
+- `SameArtifactFamily` + counter-evidence => `NoClaim` or `Fire`, never `Suppress`
+- `SameWorkItemFamily` + lineage only => `Fire` or `NoClaim`, never `Suppress`
+- `SameWorkItemFamily` + lineage + stronger continuity => `Suppress`
+- `SharedConstraintOnly` => `Fire`
+- `WeakOrGenericOnly` => `Fire`
+- `Unrelated` => `Fire`
+- `Unknown` => `NoClaim`
 
 ### 6. Reconcile routing docs and reporting language
 
@@ -320,7 +355,8 @@ This packet is complete only when all are true:
 3. Numeric score remains explanatory only in code, tests, and docs.
 4. Weaker suppressive families are gated by confidence and decisive/counter evidence.
 5. `SharedConstraintOnly`, `WeakOrGenericOnly`, and `Unrelated` still fire.
-6. `Unknown` and under-supported suppressive-family matches no-claim rather than suppress.
+6. `Unknown` and under-supported suppressive-family matches no-claim rather than suppress, and `NoClaim`
+   remains distinguishable from `Suppress` in tests/comments/reporting.
 7. `SameArtifactFamily` has explicit false-negative guards against same-crate unrelated pivots.
 8. `SameWorkItemFamily` has explicit false-negative guards against same-lineage unrelated pivots.
 9. Doc-bundle-member logic has scorer-local and acceptance-level positive and negative coverage.
@@ -343,9 +379,11 @@ This packet is complete only when all are true:
 - export/schema/checkpoint seam widening
 - repo-relative cwd-strip equivalence without new scorer-local seam proof
 
-## Open Questions
+## Locked Decisions
 
-1. Should low-confidence suppressive-family matches always no-claim, or are there any families besides
-   `Exact` / `StructuralContainment` allowed to suppress at low confidence? Recommendation: no.
-2. Is the seed-42 110-session rerun still cheap enough to make default-required for this packet, with an
-   explicit waiver path if it is skipped? Recommendation: yes.
+1. The seed-42 corpus rerun is default-required for this packet. It may be waived only with an explicit
+   confidence-loss note in `FINDINGS`, `MAP`, and the `R6-3` ledger.
+2. No suppressive family except `Exact` and `StructuralContainment` may suppress at Low confidence.
+   Low-confidence `SameArtifactFamily`, `SameWorkItemFamily`, `SameDocFamily`, `PlanCodeRoleShift`, and
+   `ReviewFixVerifyRoleShift` must resolve to `NoClaim` or be reclassified as `Unrelated`,
+   `SharedConstraintOnly`, or `WeakOrGenericOnly` when evidence is inadequate.

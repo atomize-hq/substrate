@@ -26,7 +26,7 @@ reconciliation.
 4. **Proof wall**
    - scorer-local false-negative guards, acceptance fixtures, prior-witness preservation.
 5. **Rerun and routing truth**
-   - focused tests, full analyzer wall, preferred seed-42 corpus rerun, findings/map/ledger reconciliation.
+   - focused tests, full analyzer wall, default seed-42 corpus rerun, findings/map/ledger reconciliation.
 
 ## Vertical task sequence
 
@@ -47,9 +47,12 @@ reconciliation.
 
 4. **Proof-wall slice**
    - Add scorer-local false-negative guards for same-artifact, same-work-item, doc-bundle, and role-ordering.
-   - Add at least one live acceptance case for doc-bundle member behavior and any new bounded guard family
+   - Add at least one live acceptance case for doc-bundle member behavior and any newly covered guard case
      that is user-visible at analyzer output level.
    - Preserve prior witnesses without rebaseline.
+   - `R6-3.X.2C.2.1` through `R6-3.X.2C.2.4` may be implemented as independent sub-slices after the routing
+     contract lands; the listed order is the preferred review order, not a semantic dependency unless a
+     later task explicitly consumes an earlier helper.
 
 5. **Rerun + closeout slice**
    - Run the focused wall, the full analyzer wall, and the seed-42 corpus rerun by default unless explicitly
@@ -105,7 +108,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Preferred corpus rerun:
+Default corpus rerun:
 
 ```bash
 cargo build -p agent-session-compactor -p agent-drift-analyzer
@@ -113,6 +116,7 @@ python3 scripts/dev/drift-batch-scan/sample_sessions.py --seed 42 --out /tmp/r6_
 python3 scripts/dev/drift-batch-scan/run_batch.py --repo "$PWD" --selected /tmp/r6_3_x_2c_selected.jsonl --batch-dir /tmp/r6_3_x_2c_batch
 python3 scripts/dev/drift-batch-scan/tabulate.py --checkpoints-dir /tmp/r6_3_x_2c_batch/checkpoints
 python3 scripts/dev/drift-batch-scan/inspect_targets.py --checkpoints-dir /tmp/r6_3_x_2c_batch/checkpoints
+python3 scripts/dev/drift-batch-scan/filter_junk.py --checkpoints-dir /tmp/r6_3_x_2c_batch/checkpoints
 ```
 
 ## Risks and mitigations
@@ -138,9 +142,11 @@ python3 scripts/dev/drift-batch-scan/inspect_targets.py --checkpoints-dir /tmp/r
    - Risk: once touching shared helpers, the packet drifts into eligibility changes.
    - Mitigation: keep `eligible_current_goal(...)` frozen and repeat the defer rule in spec, plan, and tasks.
 
-## Open questions
+## Locked decisions
 
-- Does the seed-42 corpus rerun remain default-required for this packet if the code change proves very
-  narrow, with an explicit waiver path if skipped?
-- Are there any suppressive families besides `Exact` and `StructuralContainment` that should be allowed to
-  suppress with low confidence? Default answer: no.
+- The seed-42 corpus rerun remains default-required for this packet. It may be waived only with an explicit
+  confidence-loss note in `FINDINGS`, `MAP`, and the `R6-3` ledger.
+- No suppressive family besides `Exact` and `StructuralContainment` may suppress with Low confidence.
+  Low-confidence `SameArtifactFamily`, `SameWorkItemFamily`, `SameDocFamily`, `PlanCodeRoleShift`, and
+  `ReviewFixVerifyRoleShift` must resolve to `NoClaim` or be reclassified as `Unrelated`,
+  `SharedConstraintOnly`, or `WeakOrGenericOnly` when evidence is inadequate.

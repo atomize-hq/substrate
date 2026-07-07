@@ -56,6 +56,10 @@ eligibility loosening, extraction hardening, containment widening, or downstream
       authority.
     - The design says numeric score is explanatory only.
     - The design says confidence plus decisive/counter evidence gate weaker suppressive families.
+    - The design says `NoClaim` is distinct from `Suppress`: `NoClaim` means under-supported or ambiguous,
+      not positive relatedness.
+    - The design locks a route-result matrix covering exact, containment, weak suppressive-family, shared-
+      constraint, weak/generic, unrelated, and unknown outcomes.
   - Verify:
     - scorer-local tests for route selection by relation family
     - packet docs reference the same decision contract without drift
@@ -71,6 +75,8 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - `Exact` and `StructuralContainment` suppress directly.
     - `SharedConstraintOnly`, `WeakOrGenericOnly`, and `Unrelated` fire.
     - `Unknown` and under-supported suppressive-family matches no-claim.
+    - low-confidence weak suppressive-family candidates never suppress.
+    - weak suppressive-family candidates with material counter-evidence never suppress.
   - Verify:
     - `cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture`
   - Dependencies: `R6-3.X.2C.1.1`
@@ -82,6 +88,9 @@ eligibility loosening, extraction hardening, containment widening, or downstream
   - Acceptance:
     - callers no longer ignore `confidence`, `decisive_evidence`, and `counter_evidence`.
     - weaker suppressive families require explicit evidence support before suppressing.
+    - any non-empty material `counter_evidence` blocks weak suppression in this packet.
+    - under-supported `SameArtifactFamily` or `SameWorkItemFamily` candidates are reclassified to `Fire`-
+      aligned relations where appropriate instead of automatically becoming `NoClaim`.
     - score remains non-authoritative in code comments, tests, and docs.
   - Verify:
     - scorer-local tests that distinguish supported vs unsupported suppressive-family matches
@@ -97,6 +106,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
   - Acceptance:
     - shared crate/package tokens or sibling-stem crumbs alone do not justify suppression.
     - the scorer requires distinctive non-generic lineage evidence or another explicit continuity signal.
+    - `SameArtifactFamily` is not used as a fallback bucket when the evidence is only broad residue.
     - at least one same-crate unrelated pivot still fires.
   - Verify:
     - scorer-local regression tests for same-crate unrelated pivots
@@ -109,6 +119,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
   - Acceptance:
     - shared prefixes like `R6-3` do not suppress by themselves.
     - the scorer requires lineage plus at least one stronger continuity signal.
+    - `SameWorkItemFamily` is not used as a fallback bucket when the evidence is only broad lineage residue.
     - at least one same-lineage unrelated docs/workstream pivot still fires.
   - Verify:
     - scorer-local regression tests for same-lineage unrelated pivots
@@ -124,6 +135,8 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - bundle/member with an unrelated addition still fires.
     - bundle → unrelated doc still fires.
     - at least one live acceptance fixture covers doc-bundle behavior, not only scorer-local tests.
+    - if feasible in the same bounded fixture style, one acceptance-level false-negative guard covers a
+      high-risk `SameArtifactFamily` or `SameWorkItemFamily` case.
   - Verify:
     - scorer-local regression tests for doc-bundle positive/negative cases
     - `cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture`
@@ -153,6 +166,18 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - same-artifact, same-work-item, same-doc/doc-bundle, and touched role-shift paths each have at least one
       counter-example proving an unrelated pivot still fires.
     - weak/generic overlap is never promoted into suppression to make a test pass.
+    - route-result coverage includes at minimum:
+      - `Exact` + High confidence + evidence => `Suppress`
+      - `StructuralContainment` + High confidence + evidence => `Suppress`
+      - `SameArtifactFamily` + Medium confidence + decisive evidence + no counter-evidence => `Suppress`
+      - `SameArtifactFamily` + Low confidence => `NoClaim` or reclassified `Fire` if unrelated
+      - `SameArtifactFamily` + counter-evidence => `NoClaim` or `Fire`, never `Suppress`
+      - `SameWorkItemFamily` + lineage only => `Fire` or `NoClaim`, never `Suppress`
+      - `SameWorkItemFamily` + lineage + stronger continuity => `Suppress`
+      - `SharedConstraintOnly` => `Fire`
+      - `WeakOrGenericOnly` => `Fire`
+      - `Unrelated` => `Fire`
+      - `Unknown` => `NoClaim`
   - Verify:
     - scorer-local tests
     - acceptance assertions where the behavior is live-analyzer-visible
@@ -198,7 +223,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - any changed residue family is named explicitly.
     - if the corpus rerun is not done, the docs explain exactly why and what confidence is lost.
   - Verify:
-    - the preferred batch command sequence from the packet spec
+    - the default batch command sequence from the packet spec, including `filter_junk.py`
   - Dependencies: `R6-3.X.2C.4.1`
   - Files likely touched:
     - docs only unless a tiny reporting fix is required
@@ -236,3 +261,4 @@ Before implementation is considered packet-complete:
 - [ ] the default corpus rerun is completed or explicitly waived with an honest confidence-loss note
 - [ ] `FINDINGS`, `MAP`, and the `R6-3` ledger no longer overstate `R6-3.X.2B` as the final routing-contract closeout
 - [ ] `R6-3.X.3` remains deferred unless new evidence truly proves otherwise
+- [ ] repo-relative cwd-strip equivalence remains deferred unless explicitly reopened
