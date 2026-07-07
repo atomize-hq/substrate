@@ -20,6 +20,7 @@ Included cases:
 - `synthetic-rolling-file-to-containing-directory-broadening`
 - `synthetic-rolling-map-review-to-map-verify-progression`
 - `synthetic-rolling-artifact-family-progression`
+- `synthetic-rolling-doc-bundle-broadening`
 - `synthetic-rolling-work-item-family-progression`
 - `synthetic-rolling-plan-code-role-shift`
 - `synthetic-rolling-review-verify-role-shift`

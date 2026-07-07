@@ -864,6 +864,20 @@ fn doc_bundle_member_narrowing_relation(
             note: "doc bundle member narrowing/broadening via exact anchored doc reuse".to_string(),
         });
     }
+    for extra in larger {
+        if smaller
+            .iter()
+            .any(|anchor| anchor.normalized == extra.normalized)
+        {
+            continue;
+        }
+        if !smaller
+            .iter()
+            .any(|anchor| same_doc_bundle_family(anchor, extra))
+        {
+            return None;
+        }
+    }
 
     Some(WeightedRelationAssessment::suppressive(
         GoalRelation::SameDocFamily,
@@ -897,6 +911,10 @@ fn same_doc_family_anchor(
             shared_prefix
         ),
     })
+}
+
+fn same_doc_bundle_family(left: &PreparedAnchor, right: &PreparedAnchor) -> bool {
+    left.role.is_docish() && right.role.is_docish() && shared_segment_prefix_len(left, right) >= 3
 }
 
 fn plan_code_role_shift_anchor(
@@ -1075,6 +1093,12 @@ fn is_work_item_continuation_token(token: &str) -> bool {
 fn classify_anchor_role(raw: &str, tokens: &[String]) -> AnchorRole {
     let normalized = normalize_goal_term(raw);
     let has = |needle: &str| normalized.contains(needle);
+    if looks_like_test_or_verifier_path(&normalized, tokens) {
+        return AnchorRole::Verify;
+    }
+    if looks_like_source_code_path(&normalized, tokens) {
+        return AnchorRole::Code;
+    }
     if has("findings") || has("finding") {
         return AnchorRole::Findings;
     }
@@ -1093,20 +1117,34 @@ fn classify_anchor_role(raw: &str, tokens: &[String]) -> AnchorRole {
     if has("spec") || has("design") {
         return AnchorRole::Spec;
     }
-    if matches!(
-        tokens.last().map(String::as_str),
-        Some("rs" | "py" | "ts" | "tsx" | "js" | "jsx" | "go" | "java" | "kt" | "c" | "cpp")
-    ) || normalized.contains("_src_")
-        || normalized.contains("crates_")
-        || normalized.contains("_tests_")
-    {
-        return AnchorRole::Code;
-    }
     if normalized.contains("docs_") || normalized.contains("readme") || normalized.ends_with("_md")
     {
         return AnchorRole::GenericDoc;
     }
     AnchorRole::Other
+}
+
+fn looks_like_test_or_verifier_path(normalized: &str, tokens: &[String]) -> bool {
+    is_code_like_extension(tokens)
+        && (normalized.contains("_tests_")
+            || normalized.contains("_test_")
+            || normalized.contains("_acceptance_")
+            || normalized.contains("_regression_")
+            || normalized.contains("_verifier_"))
+}
+
+fn looks_like_source_code_path(normalized: &str, tokens: &[String]) -> bool {
+    is_code_like_extension(tokens)
+        && (normalized.contains("_src_")
+            || normalized.contains("crates_")
+            || normalized.contains("scripts_"))
+}
+
+fn is_code_like_extension(tokens: &[String]) -> bool {
+    matches!(
+        tokens.last().map(String::as_str),
+        Some("rs" | "py" | "ts" | "tsx" | "js" | "jsx" | "go" | "java" | "kt" | "c" | "cpp")
+    )
 }
 
 fn is_generic_family_token(token: &str) -> bool {
@@ -1481,10 +1519,10 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        eligible_current_goal, score_semantic_goal_drift, AnchorRelationEvidence, DriftDecision,
-        GoalRelation, WeightedRelationAssessment, CURRENT_GOAL_REASON_PREFIX,
-        KICKOFF_ANCHOR_REASON_PREFIX, ROLLING_CURRENT_REASON_PREFIX,
-        ROLLING_PREVIOUS_REASON_PREFIX,
+        eligible_current_goal, prepare_anchor, score_semantic_goal_drift, AnchorKind,
+        AnchorRelationEvidence, AnchorRole, DriftDecision, GoalRelation,
+        WeightedRelationAssessment, CURRENT_GOAL_REASON_PREFIX, KICKOFF_ANCHOR_REASON_PREFIX,
+        ROLLING_CURRENT_REASON_PREFIX, ROLLING_PREVIOUS_REASON_PREFIX,
     };
     use crate::checkpoint::{
         CheckpointAnalysis, CheckpointSlice, Confidence, EvidenceRef, ObjectiveClass,
@@ -2890,23 +2928,27 @@ mod tests {
     fn semantic_goal_drift_suppresses_doc_bundle_member_narrowing() {
         let mut anchor = structured_goal_with_paths(
             &[
-                "architecture-overview.md",
-                "README.md",
-                "authentication-security.md",
-                "graphql-federation.md",
-                "module-development.md",
-                "monitoring.md",
+                "docs/specs/r6/handbook/architecture-overview.md",
+                "docs/specs/r6/handbook/README.md",
+                "docs/specs/r6/handbook/authentication-security.md",
+                "docs/specs/r6/handbook/graphql-federation.md",
+                "docs/specs/r6/handbook/module-development.md",
+                "docs/specs/r6/handbook/monitoring.md",
             ],
             Confidence::High,
         );
         anchor.primary_intent = ObjectiveIntent::Review;
         if let Some(target) = anchor.target.as_mut() {
             target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
-            target.display = "architecture-overview.md".to_string();
+            target.display = "docs/specs/r6/handbook/architecture-overview.md".to_string();
         }
 
         let previous = anchor.clone();
-        let mut current = structured_goal("README.md", Confidence::High, Vec::new());
+        let mut current = structured_goal(
+            "docs/specs/r6/handbook/README.md",
+            Confidence::High,
+            Vec::new(),
+        );
         current.primary_intent = ObjectiveIntent::OtherTask;
         if let Some(target) = current.target.as_mut() {
             target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
@@ -2914,13 +2956,13 @@ mod tests {
 
         let analysis = analysis_with_current_and_previous_summaries(
             objective_summary(
-                "other_task|spec_or_design_doc|readme_md",
+                "other_task|spec_or_design_doc|docs_specs_r6_handbook_readme_md",
                 Some(current),
                 "current structured goal",
             ),
             Some(objective_summary_at(
                 2,
-                "review|spec_or_design_doc|architecture_overview_md|authentication_security_md|graphql_federation_md|module_development_md|monitoring_md|readme_md",
+                "review|spec_or_design_doc|docs_specs_r6_handbook_architecture_overview_md|docs_specs_r6_handbook_authentication_security_md|docs_specs_r6_handbook_graphql_federation_md|docs_specs_r6_handbook_module_development_md|docs_specs_r6_handbook_monitoring_md|docs_specs_r6_handbook_readme_md",
                 Some(previous),
                 "previous structured goal",
             )),
@@ -2932,6 +2974,108 @@ mod tests {
         assert!(
             !scored.score.flagged,
             "narrowing from a doc bundle to an anchored member doc must stay suppressed for both kickoff and rolling comparisons"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_suppresses_doc_member_to_bundle_broadening() {
+        let previous = structured_goal(
+            "docs/specs/r6/handbook/README.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let mut current = structured_goal_with_paths(
+            &[
+                "docs/specs/r6/handbook/architecture-overview.md",
+                "docs/specs/r6/handbook/README.md",
+                "docs/specs/r6/handbook/authentication-security.md",
+            ],
+            Confidence::High,
+        );
+        current.primary_intent = ObjectiveIntent::Review;
+        if let Some(target) = current.target.as_mut() {
+            target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
+            target.display = "docs/specs/r6/handbook/architecture-overview.md".to_string();
+        }
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "review|spec_or_design_doc|docs_specs_r6_handbook_architecture_overview_md|docs_specs_r6_handbook_authentication_security_md|docs_specs_r6_handbook_readme_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "review|spec_or_design_doc|docs_specs_r6_handbook_readme_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            !scored.score.flagged,
+            "broadening from a member doc back to a same-family doc bundle must stay suppressed"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_doc_bundle_with_unrelated_addition_still_flags() {
+        let previous = structured_goal(
+            "docs/specs/r6/handbook/README.md",
+            Confidence::High,
+            Vec::new(),
+        );
+        let mut current = structured_goal_with_paths(
+            &[
+                "docs/specs/r6/handbook/README.md",
+                "docs/specs/r6/handbook/architecture-overview.md",
+                "docs/specs/world/WORLD.md",
+            ],
+            Confidence::High,
+        );
+        current.primary_intent = ObjectiveIntent::Review;
+        if let Some(target) = current.target.as_mut() {
+            target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
+            target.display = "docs/specs/r6/handbook/README.md".to_string();
+        }
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "review|spec_or_design_doc|docs_specs_r6_handbook_architecture_overview_md|docs_specs_r6_handbook_readme_md|docs_specs_world_world_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "review|spec_or_design_doc|docs_specs_r6_handbook_readme_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "doc bundle broadening with an unrelated added doc must still flag semantic_goal_drift"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_prefers_code_and_verify_paths_over_spec_like_substrings() {
+        assert_eq!(
+            prepare_anchor("crates/foo/src/spec_parser.rs", AnchorKind::Path).role,
+            AnchorRole::Code
+        );
+        assert_eq!(
+            prepare_anchor("crates/foo/src/design_tokens.rs", AnchorKind::Path).role,
+            AnchorRole::Code
+        );
+        assert_eq!(
+            prepare_anchor("crates/foo/tests/spec_parser.rs", AnchorKind::Path).role,
+            AnchorRole::Verify
         );
     }
 

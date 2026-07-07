@@ -18,7 +18,7 @@ const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT: &str = concat!(
     "/tests/fixtures/semantic_goal_drift_acceptance"
 );
 
-const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 15] = [
+const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 16] = [
     "synthetic-kickoff-anchor-unauthorized-pivot",
     "synthetic-kickoff-generic-spec-plan-tasks-pivot",
     "synthetic-kickoff-hyphen-collision-pivot",
@@ -32,6 +32,7 @@ const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 15] = [
     "synthetic-rolling-mid-session-pivot",
     "synthetic-rolling-plan-code-role-shift",
     "synthetic-rolling-review-verify-role-shift",
+    "synthetic-rolling-doc-bundle-broadening",
     "synthetic-rolling-sibling-stem-pivot",
     "synthetic-rolling-work-item-family-progression",
 ];
@@ -68,6 +69,8 @@ struct AcceptanceFixtureExpected {
     #[serde(default)]
     kickoff_target_display: Option<String>,
     final_target_display: String,
+    #[serde(default)]
+    final_target_paths: Vec<String>,
     #[serde(default)]
     penultimate_target_display: Option<String>,
     #[serde(default)]
@@ -192,6 +195,18 @@ fn semantic_goal_drift_acceptance_fixture_runs_through_live_analyzer_checkpoint_
             expected.final_target_display,
             "final checkpoint must expose the pivoted structured target through the live objective path"
         );
+        if !expected.final_target_paths.is_empty() {
+            let structured = checkpoint_structured_objective(final_checkpoint);
+            let target = structured
+                .target
+                .as_ref()
+                .expect("final checkpoint structured target");
+            assert_eq!(
+                target.paths,
+                expected.final_target_paths,
+                "final checkpoint must preserve the expected concrete target paths for {case_id}"
+            );
+        }
         assert_checkpoint_has_full_goal_eligibility(final_checkpoint, "final checkpoint", case_id);
 
         let final_semantic_goal_drift = semantic_goal_drift_score(final_checkpoint);

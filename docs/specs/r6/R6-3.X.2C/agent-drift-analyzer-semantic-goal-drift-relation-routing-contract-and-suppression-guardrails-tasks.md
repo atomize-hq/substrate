@@ -128,7 +128,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2C.2.3: Expand doc-bundle-member behavior into explicit positive and negative coverage.
+- [x] Task R6-3.X.2C.2.3: Expand doc-bundle-member behavior into explicit positive and negative coverage.
   - Acceptance:
     - bundle → member suppresses when it is clearly the same doc family.
     - member → bundle suppresses when it is clearly the same doc family.
@@ -147,7 +147,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - `crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/**`
   - Estimated scope: M
 
-- [ ] Task R6-3.X.2C.2.4: Reorder role classification so code/test markers beat substring doc hints.
+- [x] Task R6-3.X.2C.2.4: Reorder role classification so code/test markers beat substring doc hints.
   - Acceptance:
     - obvious code/test/verifier paths are classified by path/extension markers before substring semantics.
     - paths like `src/spec_parser.rs` and `src/design_tokens.rs` no longer misclassify as doc roles.
@@ -161,7 +161,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
 
 ## R6-3.X.2C.3: Proof wall and non-regression
 
-- [ ] Task R6-3.X.2C.3.1: Pair every touched suppressive family with an explicit false-negative guard.
+- [x] Task R6-3.X.2C.3.1: Pair every touched suppressive family with an explicit false-negative guard.
   - Acceptance:
     - same-artifact, same-work-item, same-doc/doc-bundle, and touched role-shift paths each have at least one
       counter-example proving an unrelated pivot still fires.

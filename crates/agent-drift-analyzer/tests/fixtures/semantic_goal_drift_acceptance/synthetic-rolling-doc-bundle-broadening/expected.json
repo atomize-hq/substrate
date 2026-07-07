@@ -1,0 +1,24 @@
+{
+  "case_id": "synthetic-rolling-doc-bundle-broadening",
+  "session_id": "semantic-goal-drift-r6-3-x-2c-doc-bundle-broadening",
+  "penultimate_target_display": "docs/specs/r6/handbook/README.md",
+  "penultimate_semantic_goal_drift_flagged": false,
+  "final_target_display": "docs/specs/r6/handbook/README.md",
+  "final_target_paths": [
+    "docs/specs/r6/handbook/README.md",
+    "docs/specs/r6/handbook/architecture-overview.md",
+    "docs/specs/r6/handbook/authentication-security.md"
+  ],
+  "final_semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "required_reason_prefixes": [],
+  "forbidden_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift current goal:",
+    "rolling semantic goal drift previous goal:"
+  ]
+}
