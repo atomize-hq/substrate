@@ -914,7 +914,35 @@ fn same_doc_family_anchor(
 }
 
 fn same_doc_bundle_family(left: &PreparedAnchor, right: &PreparedAnchor) -> bool {
-    left.role.is_docish() && right.role.is_docish() && shared_segment_prefix_len(left, right) >= 3
+    if !(left.role.is_docish() && right.role.is_docish()) {
+        return false;
+    }
+    shared_segment_prefix_len(left, right) >= 3 || same_root_readme_doc_bundle_family(left, right)
+}
+
+fn same_root_readme_doc_bundle_family(left: &PreparedAnchor, right: &PreparedAnchor) -> bool {
+    (left.normalized == "readme_md" && is_exact_root_readme_bundle_sibling(right))
+        || (right.normalized == "readme_md" && is_exact_root_readme_bundle_sibling(left))
+}
+
+fn is_exact_root_readme_bundle_sibling(anchor: &PreparedAnchor) -> bool {
+    is_root_level_markdown_doc(anchor)
+        && matches!(
+            anchor.normalized.as_str(),
+            "architecture_overview_md"
+                | "authentication_security_md"
+                | "graphql_federation_md"
+                | "module_development_md"
+                | "monitoring_md"
+        )
+}
+
+fn is_root_level_markdown_doc(anchor: &PreparedAnchor) -> bool {
+    anchor.segments.len() == 1
+        && anchor
+            .segments
+            .first()
+            .is_some_and(|segment| segment.ends_with("_md"))
 }
 
 fn plan_code_role_shift_anchor(
@@ -1126,8 +1154,11 @@ fn classify_anchor_role(raw: &str, tokens: &[String]) -> AnchorRole {
 
 fn looks_like_test_or_verifier_path(normalized: &str, tokens: &[String]) -> bool {
     is_code_like_extension(tokens)
-        && (normalized.contains("_tests_")
+        && (normalized.starts_with("tests_")
+            || normalized.contains("_tests_")
             || normalized.contains("_test_")
+            || normalized.starts_with("benches_")
+            || normalized.contains("_benches_")
             || normalized.contains("_acceptance_")
             || normalized.contains("_regression_")
             || normalized.contains("_verifier_"))
@@ -1135,8 +1166,12 @@ fn looks_like_test_or_verifier_path(normalized: &str, tokens: &[String]) -> bool
 
 fn looks_like_source_code_path(normalized: &str, tokens: &[String]) -> bool {
     is_code_like_extension(tokens)
-        && (normalized.contains("_src_")
+        && (normalized == "build_rs"
+            || normalized.starts_with("src_")
+            || normalized.contains("_src_")
             || normalized.contains("crates_")
+            || normalized.starts_with("examples_")
+            || normalized.contains("_examples_")
             || normalized.contains("scripts_"))
 }
 
@@ -1519,8 +1554,9 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        eligible_current_goal, prepare_anchor, score_semantic_goal_drift, AnchorKind,
-        AnchorRelationEvidence, AnchorRole, DriftDecision, GoalRelation,
+        eligible_current_goal, no_claim, prepare_anchor, same_artifact_family_anchor,
+        same_doc_family_anchor, same_work_item_family_anchor, score_semantic_goal_drift,
+        AnchorKind, AnchorRelationEvidence, AnchorRole, DriftDecision, GoalRelation,
         WeightedRelationAssessment, CURRENT_GOAL_REASON_PREFIX, KICKOFF_ANCHOR_REASON_PREFIX,
         ROLLING_CURRENT_REASON_PREFIX, ROLLING_PREVIOUS_REASON_PREFIX,
     };
@@ -1896,6 +1932,51 @@ mod tests {
                 Confidence::Low,
                 Vec::new(),
                 Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::NoClaim
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_no_claim_public_shape_stays_cleared_and_non_fire() {
+        let scored = no_claim(Confidence::Medium);
+
+        assert_eq!(scored.score.state, crate::checkpoint::DriftState::Cleared);
+        assert_eq!(scored.score.raw_score, 0);
+        assert!(!scored.score.flagged);
+        assert_eq!(scored.score.confidence, Confidence::Medium);
+        assert!(scored.score.evidence.is_empty());
+    }
+
+    #[test]
+    fn semantic_goal_drift_weak_doc_family_without_decisive_evidence_stays_no_claim() {
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::SameDocFamily,
+                34,
+                Confidence::Medium,
+                Vec::new(),
+                Vec::new(),
+            )
+            .drift_decision(),
+            DriftDecision::NoClaim
+        );
+        assert_eq!(
+            WeightedRelationAssessment::suppressive(
+                GoalRelation::SameDocFamily,
+                34,
+                Confidence::Medium,
+                vec![AnchorRelationEvidence {
+                    left_anchor: "README.md".to_string(),
+                    right_anchor: Some("architecture-overview.md".to_string()),
+                    note: "tentative doc-family continuity".to_string(),
+                }],
+                vec![AnchorRelationEvidence {
+                    left_anchor: "README.md".to_string(),
+                    right_anchor: Some("CHANGELOG.md".to_string()),
+                    note: "material counter evidence".to_string(),
+                }],
             )
             .drift_decision(),
             DriftDecision::NoClaim
@@ -3021,6 +3102,95 @@ mod tests {
     }
 
     #[test]
+    fn semantic_goal_drift_suppresses_exact_root_readme_doc_bundle_narrowing() {
+        let mut anchor = structured_goal_with_paths(
+            &[
+                "README.md",
+                "architecture-overview.md",
+                "authentication-security.md",
+                "graphql-federation.md",
+                "module-development.md",
+                "monitoring.md",
+            ],
+            Confidence::High,
+        );
+        anchor.primary_intent = ObjectiveIntent::Review;
+        if let Some(target) = anchor.target.as_mut() {
+            target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
+            target.display = "README.md".to_string();
+        }
+
+        let previous = anchor.clone();
+        let mut current = structured_goal("README.md", Confidence::High, Vec::new());
+        current.primary_intent = ObjectiveIntent::OtherTask;
+        if let Some(target) = current.target.as_mut() {
+            target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
+        }
+
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary("other_task|spec_or_design_doc|readme_md", Some(current), "current structured goal"),
+            Some(objective_summary_at(
+                2,
+                "review|spec_or_design_doc|architecture_overview_md|authentication_security_md|graphql_federation_md|module_development_md|monitoring_md|readme_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, Some(&anchor));
+
+        assert!(
+            !scored.score.flagged,
+            "the exact root-level canonical doc bundle -> README narrowing residue must stay suppressed without broad root-level doc-bundle suppression"
+        );
+        assert_eq!(scored.score.raw_score, 0);
+    }
+
+    #[test]
+    fn semantic_goal_drift_root_readme_doc_bundle_with_unrelated_root_doc_still_flags() {
+        let previous = structured_goal("README.md", Confidence::High, Vec::new());
+        let mut current = structured_goal_with_paths(
+            &[
+                "README.md",
+                "architecture-overview.md",
+                "authentication-security.md",
+                "graphql-federation.md",
+                "module-development.md",
+                "monitoring.md",
+                "CHANGELOG.md",
+            ],
+            Confidence::High,
+        );
+        current.primary_intent = ObjectiveIntent::Review;
+        if let Some(target) = current.target.as_mut() {
+            target.kind = ObjectiveTargetKind::SpecOrDesignDoc;
+            target.display = "README.md".to_string();
+        }
+        let analysis = analysis_with_current_and_previous_summaries(
+            objective_summary(
+                "review|spec_or_design_doc|architecture_overview_md|authentication_security_md|changelog_md|graphql_federation_md|module_development_md|monitoring_md|readme_md",
+                Some(current),
+                "current structured goal",
+            ),
+            Some(objective_summary_at(
+                2,
+                "review|spec_or_design_doc|readme_md",
+                Some(previous),
+                "previous structured goal",
+            )),
+            false,
+        );
+
+        let scored = score_semantic_goal_drift(&analysis, None);
+
+        assert!(
+            scored.score.flagged,
+            "adding an unrelated root-level doc must keep the root-level README bundle case firing"
+        );
+    }
+
+    #[test]
     fn semantic_goal_drift_doc_bundle_with_unrelated_addition_still_flags() {
         let previous = structured_goal(
             "docs/specs/r6/handbook/README.md",
@@ -3077,6 +3247,22 @@ mod tests {
             prepare_anchor("crates/foo/tests/spec_parser.rs", AnchorKind::Path).role,
             AnchorRole::Verify
         );
+        assert_eq!(
+            prepare_anchor("build.rs", AnchorKind::Path).role,
+            AnchorRole::Code
+        );
+        assert_eq!(
+            prepare_anchor("examples/spec_parser.rs", AnchorKind::Path).role,
+            AnchorRole::Code
+        );
+        assert_eq!(
+            prepare_anchor("tests/spec_parser.rs", AnchorKind::Path).role,
+            AnchorRole::Verify
+        );
+        assert_eq!(
+            prepare_anchor("benches/spec_parser.rs", AnchorKind::Path).role,
+            AnchorRole::Verify
+        );
     }
 
     #[test]
@@ -3113,6 +3299,82 @@ mod tests {
         assert!(
             scored.score.flagged,
             "shared-constraint-only overlap must not suppress an unrelated pivot"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_same_artifact_family_requires_two_shared_non_generic_tokens() {
+        let one_shared = same_artifact_family_anchor(
+            &prepare_anchor("artifacts/semantic/report.json", AnchorKind::Path),
+            &prepare_anchor("logs/semantic/summary.json", AnchorKind::Path),
+        );
+        assert!(
+            one_shared.is_none(),
+            "one shared non-generic family token must not be enough for same-artifact-family suppression"
+        );
+
+        let two_shared = same_artifact_family_anchor(
+            &prepare_anchor("artifacts/r6_semantic/report.json", AnchorKind::Path),
+            &prepare_anchor("exports/r6_semantic/report.json", AnchorKind::Path),
+        );
+        assert!(
+            two_shared.is_some(),
+            "two shared non-generic family tokens plus shared leaf continuity may suppress"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_same_doc_family_requires_prefix_depth_three() {
+        let shallow_prefix = same_doc_family_anchor(
+            &prepare_anchor("docs/r6_semantic/README.md", AnchorKind::Path),
+            &prepare_anchor("docs/r6_semantic/authentication.md", AnchorKind::Path),
+        );
+        assert!(
+            shallow_prefix.is_none(),
+            "shared doc prefix depth 2 must not count as same-doc-family by default"
+        );
+
+        let deep_prefix = same_doc_family_anchor(
+            &prepare_anchor("docs/specs/r6_semantic/README.md", AnchorKind::Path),
+            &prepare_anchor("docs/specs/r6_semantic/authentication.md", AnchorKind::Path),
+        );
+        assert!(
+            deep_prefix.is_some(),
+            "shared doc prefix depth 3 with stronger family continuity may suppress"
+        );
+    }
+
+    #[test]
+    fn semantic_goal_drift_same_work_item_family_requires_lineage_depth_two_plus_and_extra_continuity(
+    ) {
+        let shallow_lineage = same_work_item_family_anchor(
+            &prepare_anchor(
+                "docs/specs/r6-agent-drift-analyzer-plan.md",
+                AnchorKind::Path,
+            ),
+            &prepare_anchor(
+                "docs/specs/r6-agent-drift-analyzer-tasks.md",
+                AnchorKind::Path,
+            ),
+        );
+        assert!(
+            shallow_lineage.is_none(),
+            "shared lineage depth 1 must not suppress"
+        );
+
+        let stronger_lineage = same_work_item_family_anchor(
+            &prepare_anchor(
+                "docs/specs/r6/R6-3.X.2D-agent-drift-analyzer-semantic-goal-drift-plan.md",
+                AnchorKind::Path,
+            ),
+            &prepare_anchor(
+                "docs/specs/r6/R6-3.X.2D-agent-drift-analyzer-semantic-goal-drift-tasks.md",
+                AnchorKind::Path,
+            ),
+        );
+        assert!(
+            stronger_lineage.is_some(),
+            "shared lineage depth 2+ still needs extra workstream continuity before it may suppress"
         );
     }
 

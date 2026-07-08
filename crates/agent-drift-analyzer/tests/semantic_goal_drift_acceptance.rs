@@ -18,7 +18,7 @@ const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_ROOT: &str = concat!(
     "/tests/fixtures/semantic_goal_drift_acceptance"
 );
 
-const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 16] = [
+const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 18] = [
     "synthetic-kickoff-anchor-unauthorized-pivot",
     "synthetic-kickoff-generic-spec-plan-tasks-pivot",
     "synthetic-kickoff-hyphen-collision-pivot",
@@ -32,6 +32,8 @@ const SEMANTIC_GOAL_DRIFT_ACCEPTANCE_CASE_IDS: [&str; 16] = [
     "synthetic-rolling-mid-session-pivot",
     "synthetic-rolling-plan-code-role-shift",
     "synthetic-rolling-review-verify-role-shift",
+    "synthetic-rolling-root-readme-doc-bundle-narrowing",
+    "synthetic-rolling-root-readme-doc-bundle-unrelated-addition",
     "synthetic-rolling-doc-bundle-broadening",
     "synthetic-rolling-sibling-stem-pivot",
     "synthetic-rolling-work-item-family-progression",

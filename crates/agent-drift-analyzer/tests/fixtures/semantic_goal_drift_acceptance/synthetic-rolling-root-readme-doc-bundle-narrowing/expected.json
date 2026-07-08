@@ -1,0 +1,22 @@
+{
+  "case_id": "synthetic-rolling-root-readme-doc-bundle-narrowing",
+  "session_id": "semantic-goal-drift-r6-3-x-2d-root-readme-doc-bundle-narrowing",
+  "penultimate_target_display": "README.md",
+  "penultimate_semantic_goal_drift_flagged": false,
+  "final_target_display": "README.md",
+  "final_target_paths": [
+    "README.md"
+  ],
+  "final_semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "required_reason_prefixes": [],
+  "forbidden_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift current goal:",
+    "rolling semantic goal drift previous goal:"
+  ]
+}

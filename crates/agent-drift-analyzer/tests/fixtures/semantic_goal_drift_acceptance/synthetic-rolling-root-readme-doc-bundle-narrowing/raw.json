@@ -1,0 +1,62 @@
+{
+  "case_id": "synthetic-rolling-root-readme-doc-bundle-narrowing",
+  "session_id": "semantic-goal-drift-r6-3-x-2d-root-readme-doc-bundle-narrowing",
+  "source_artifact": "Synthetic compact-row acceptance fixture for the exact root-level canonical doc-bundle -> README residue.",
+  "notes": "Turn 1 is boilerplate-only. Turn 2 establishes the rolling/kickoff anchor as the exact root-level canonical doc bundle with README anchored first. Turn 3 narrows back to README only. This exact residue must stay quiet without broad root-level doc-bundle suppression.",
+  "rows": [
+    {
+      "turn_id": "turn-001",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Continue the packet work using the existing evidence wall."
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_call",
+      "text": "{\"command\":\"echo packet-context\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-001",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed packet context"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "Continue the packet work using the existing evidence wall."
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "user_message",
+      "user_message_role": "steer",
+      "text": "Review README.md and architecture-overview.md and authentication-security.md and graphql-federation.md and module-development.md and monitoring.md only."
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,220p' README.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-002",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed root readme bundle witness excerpts"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "user_message",
+      "user_message_role": "prompt",
+      "text": "/goal Review README.md only.\n\n## Verification\n- cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_call",
+      "text": "{\"command\":\"sed -n '1,220p' README.md\",\"workdir\":\"/repo\"}"
+    },
+    {
+      "turn_id": "turn-003",
+      "kind": "tool_output",
+      "text": "Exit code: 0\nWall time: 0 seconds\nOutput:\nreviewed narrowed root README witness excerpts"
+    }
+  ]
+}

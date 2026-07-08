@@ -5,9 +5,9 @@ mod support;
 use std::fs;
 
 use agent_drift_analyzer::{
-    AnalyzeRequest, AnalyzeResult, Confidence, ObjectiveClass, ObjectiveIntent, ObjectiveRole,
-    ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTargetKind, ProgressDimension,
-    ProgressSignalCode, ProgressStatus, SessionArchetypeLabel,
+    AnalyzeRequest, AnalyzeResult, Confidence, DriftClass, DriftState, ObjectiveClass,
+    ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTargetKind,
+    ProgressDimension, ProgressSignalCode, ProgressStatus, SessionArchetypeLabel,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -456,6 +456,66 @@ fn checkpoints_keep_sparse_readable_sessions_at_insufficient_evidence() {
         Confidence::Low,
         "the sparse-readable fixture must stay low-confidence"
     );
+}
+
+#[test]
+fn checkpoints_keep_root_readme_doc_bundle_narrowing_non_fire_public_shape() {
+    let result = analyze_custom_rows(vec![
+        prompt_row(
+            0,
+            "turn-001",
+            "Continue the packet work using the existing evidence wall.",
+        ),
+        tool_call_row(
+            1,
+            "turn-001",
+            "functions.shell_command",
+            r#"{"command":"echo packet-context","workdir":"/repo"}"#,
+        ),
+        tool_output_row(2, "turn-001", "Exit code: 0\nreviewed packet context"),
+        prompt_row(
+            3,
+            "turn-002",
+            "Continue the packet work using the existing evidence wall.",
+        ),
+        steer_row(
+            4,
+            "turn-002",
+            "Review README.md and architecture-overview.md and authentication-security.md and graphql-federation.md and module-development.md and monitoring.md only.",
+        ),
+        tool_call_row(
+            5,
+            "turn-002",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' README.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(6, "turn-002", "Exit code: 0\nreviewed root readme bundle witness excerpts"),
+        prompt_row(
+            7,
+            "turn-003",
+            "/goal Review README.md only.\n\n## Verification\n- cargo test -p agent-drift-analyzer --test semantic_goal_drift_acceptance -- --nocapture",
+        ),
+        tool_call_row(
+            8,
+            "turn-003",
+            "functions.shell_command",
+            r#"{"command":"sed -n '1,220p' README.md","workdir":"/repo"}"#,
+        ),
+        tool_output_row(
+            9,
+            "turn-003",
+            "Exit code: 0\nreviewed narrowed root README witness excerpts",
+        ),
+    ]);
+
+    let checkpoint = result.sessions[0]
+        .checkpoints
+        .last()
+        .expect("final checkpoint");
+    let score = semantic_goal_drift_score(checkpoint);
+    assert_eq!(score.state, DriftState::Cleared);
+    assert_eq!(score.raw_score, 0);
+    assert!(!score.flagged);
 }
 
 #[test]
@@ -7370,6 +7430,16 @@ fn analyze_progress_acceptance_case(case_id: &str) -> AnalyzeResult {
         output_dir,
     })
     .expect("analyze progress acceptance case")
+}
+
+fn semantic_goal_drift_score(
+    checkpoint: &agent_drift_analyzer::Checkpoint,
+) -> &agent_drift_analyzer::DriftScore {
+    checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::SemanticGoalDrift)
+        .expect("semantic_goal_drift score")
 }
 
 #[test]
