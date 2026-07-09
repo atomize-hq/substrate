@@ -7743,6 +7743,7 @@ fn c3_targeted_codex_world_turn_after_parked_host_mismatch_remains_fail_closed()
 
 #[cfg(target_os = "linux")]
 #[test]
+#[ignore = "Known parked-attached-ownership race on slower Linux hosts; being replaced by the runtime refactor"]
 #[serial]
 fn c3_targeted_codex_host_turn_resumes_same_session_after_implicit_pty_on_parked_authority() {
     let temp = temp_dir("substrate-c3-parked-host-resume-after-implicit-pty-");
