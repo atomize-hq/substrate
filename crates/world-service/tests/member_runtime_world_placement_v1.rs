@@ -452,7 +452,11 @@ async fn member_runtime_full_isolation_keeps_relative_writes_in_overlay_and_reje
         .expect("session cgroup path should resolve once authoritative world is prepared")
         .join("cgroup.procs");
     let proof_path = tmp.path().join("overlay-write-proof.txt");
-    let absolute_host_target = tmp.path().join("host-absolute-target.txt");
+    let absolute_host_target = PathBuf::from("/var/tmp").join(format!(
+        "substrate-member-runtime-host-absolute-target-{}",
+        uuid::Uuid::now_v7()
+    ));
+    let _ = fs::remove_file(&absolute_host_target);
 
     let mut env = HashMap::new();
     env.insert(
@@ -566,4 +570,6 @@ async fn member_runtime_full_isolation_keeps_relative_writes_in_overlay_and_reje
         }
         panic!("unexpected member streamed frame: {frame:?}");
     }
+
+    let _ = fs::remove_file(&absolute_host_target);
 }
