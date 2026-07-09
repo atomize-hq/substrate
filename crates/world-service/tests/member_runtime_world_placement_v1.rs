@@ -16,6 +16,7 @@ use transport_api_types::{
 use world_api::{SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode, WorldSpec};
 use world_service::WorldService;
 
+const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 
 fn full_isolation_policy_snapshot() -> PolicySnapshotV3 {
@@ -41,6 +42,7 @@ fn full_isolation_policy_snapshot() -> PolicySnapshotV3 {
 fn make_member_dispatch_request(
     cwd: &Path,
     binary_path: &Path,
+    orchestration_session_id: &str,
     world_id: &str,
     world_generation: u64,
     env: HashMap<String, String>,
@@ -59,7 +61,7 @@ fn make_member_dispatch_request(
         world_fs_mode: None,
         member_dispatch: Some(MemberDispatchRequestV1 {
             schema_version: 1,
-            orchestration_session_id: "orch-member-runtime-world-placement".to_string(),
+            orchestration_session_id: orchestration_session_id.to_string(),
             participant_id: "ash_member_world_placement_test".to_string(),
             orchestrator_participant_id: "ash_orchestrator_world_placement_test".to_string(),
             parent_participant_id: None,
@@ -76,6 +78,18 @@ fn make_member_dispatch_request(
             },
         }),
     }
+}
+
+fn write_seed_home(temp: &Path) -> PathBuf {
+    let seed_home = temp.join("seed-home");
+    fs::create_dir_all(&seed_home).expect("create seed home");
+    fs::write(
+        seed_home.join("auth.json"),
+        r#"{"account_id":"acct_test","access_token":"token_test"}"#,
+    )
+    .expect("write seed auth");
+    fs::write(seed_home.join("config.toml"), "model = \"gpt-5.4\"\n").expect("write seed config");
+    seed_home
 }
 
 fn write_placement_member_runtime(temp: &Path) -> PathBuf {
@@ -260,11 +274,13 @@ async fn member_runtime_launches_inside_authoritative_overlay_and_cgroup() {
     let nested = tmp.path().join("nested");
     fs::create_dir_all(&nested).expect("create nested cwd");
     let member_binary = write_placement_member_runtime(tmp.path());
+    let seed_home = write_seed_home(tmp.path());
+    let orchestration_session_id = "orch-member-runtime-world-placement";
 
     let world_spec = WorldSpec {
         reuse_session: true,
         reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
-            orchestration_session_id: "orch-member-runtime-world-placement".to_string(),
+            orchestration_session_id: orchestration_session_id.to_string(),
             action: SharedWorldOwnerAction::AttachOrCreate,
         }),
         isolate_network: false,
@@ -308,9 +324,14 @@ async fn member_runtime_launches_inside_authoritative_overlay_and_cgroup() {
         "EXPECTED_CGROUP_PROCS".to_string(),
         cgroup_procs.display().to_string(),
     );
+    env.insert(
+        SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+        seed_home.display().to_string(),
+    );
     let request = make_member_dispatch_request(
         &nested,
         &member_binary,
+        orchestration_session_id,
         &binding.world_id,
         binding.world_generation,
         env,
@@ -395,11 +416,13 @@ async fn member_runtime_full_isolation_keeps_relative_writes_in_overlay_and_reje
     let nested = tmp.path().join("nested");
     fs::create_dir_all(&nested).expect("create nested cwd");
     let member_binary = write_overlay_write_member_runtime(tmp.path());
+    let seed_home = write_seed_home(tmp.path());
+    let orchestration_session_id = "orch-member-runtime-overlay-write";
 
     let world_spec = WorldSpec {
         reuse_session: true,
         reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
-            orchestration_session_id: "orch-member-runtime-overlay-write".to_string(),
+            orchestration_session_id: orchestration_session_id.to_string(),
             action: SharedWorldOwnerAction::AttachOrCreate,
         }),
         isolate_network: false,
@@ -448,9 +471,14 @@ async fn member_runtime_full_isolation_keeps_relative_writes_in_overlay_and_reje
         "ABS_HOST_TARGET".to_string(),
         absolute_host_target.display().to_string(),
     );
+    env.insert(
+        SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+        seed_home.display().to_string(),
+    );
     let request = make_member_dispatch_request(
         &nested,
         &member_binary,
+        orchestration_session_id,
         &binding.world_id,
         binding.world_generation,
         env,
