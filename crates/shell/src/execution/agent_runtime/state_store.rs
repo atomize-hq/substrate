@@ -383,9 +383,6 @@ impl ResolvedInternalWorldDispatchCaller {
 }
 
 #[cfg(any(target_os = "linux", test))]
-const SHARED_WORLD_METADATA_ROOT: &str = "/tmp/substrate-worlds";
-
-#[cfg(any(target_os = "linux", test))]
 const SHARED_WORLD_METADATA_FILE: &str = "session.json";
 
 #[cfg(any(target_os = "linux", test))]
@@ -422,7 +419,44 @@ fn shared_world_metadata_root() -> PathBuf {
         return PathBuf::from(root);
     }
 
-    PathBuf::from(SHARED_WORLD_METADATA_ROOT)
+    let uid = current_uid();
+    default_shared_world_metadata_root(
+        uid,
+        std::env::var_os("XDG_RUNTIME_DIR")
+            .as_deref()
+            .map(Path::new),
+        Path::new(&format!("/run/user/{uid}")).is_dir(),
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn default_shared_world_metadata_root(
+    uid: u32,
+    xdg_runtime_dir: Option<&Path>,
+    has_run_user_dir: bool,
+) -> PathBuf {
+    if let Some(xdg_runtime_dir) = xdg_runtime_dir.filter(|path| !path.as_os_str().is_empty()) {
+        return xdg_runtime_dir.join("substrate").join("worlds");
+    }
+
+    if has_run_user_dir {
+        return PathBuf::from(format!("/run/user/{uid}"))
+            .join("substrate")
+            .join("worlds");
+    }
+
+    PathBuf::from(format!("/tmp/substrate-worlds-{uid}"))
+}
+
+#[cfg(all(unix, any(target_os = "linux", test)))]
+fn current_uid() -> u32 {
+    // SAFETY: geteuid reads process credentials without requiring additional invariants.
+    unsafe { libc::geteuid() as u32 }
+}
+
+#[cfg(all(not(unix), any(target_os = "linux", test)))]
+fn current_uid() -> u32 {
+    0
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

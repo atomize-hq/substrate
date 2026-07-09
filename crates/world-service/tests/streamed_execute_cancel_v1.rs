@@ -657,13 +657,7 @@ async fn submit_member_turn_cancel_releases_active_slot_for_next_turn() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplicates() {
-    let service = match WorldService::new() {
-        Ok(svc) => svc,
-        Err(err) => {
-            eprintln!("skipping member backend slot test: service init failed: {err}");
-            return;
-        }
-    };
+    let service = WorldService::new().expect("member backend slot test requires world service");
 
     let tmp = tempdir().expect("tempdir");
     let codex_member_binary = write_fake_member_runtime(tmp.path());
@@ -692,17 +686,13 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         fs_mode: substrate_common::WorldFsMode::Writable,
         backend_policy: None,
     };
-    let world = match service.ensure_session_world(&world_spec) {
-        Ok(world) => world,
-        Err(err) => {
-            eprintln!("skipping member backend slot test: failed to ensure shared world: {err}");
-            return;
-        }
-    };
-    let Some(binding) = world.shared_binding.clone() else {
-        eprintln!("skipping member backend slot test: shared world binding missing");
-        return;
-    };
+    let world = service
+        .ensure_session_world(&world_spec)
+        .expect("member backend slot test should create a shared world");
+    let binding = world
+        .shared_binding
+        .clone()
+        .expect("member backend slot test requires a shared world binding");
 
     let mut codex_request = make_member_dispatch_request_with_backend(
         tmp.path(),
@@ -796,7 +786,13 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
         .expect_err("duplicate cli:codex slot should fail closed");
     let duplicate_message = duplicate_err.to_string();
     assert!(
-        duplicate_message.contains("a retained world member is already active"),
+        duplicate_message.contains("member_dispatch retained member slot conflict"),
+        "unexpected duplicate error: {duplicate_message}"
+    );
+    assert!(
+        duplicate_message.contains(
+            "only a direct fork child of the current retained participant may co-register"
+        ),
         "unexpected duplicate error: {duplicate_message}"
     );
     assert!(

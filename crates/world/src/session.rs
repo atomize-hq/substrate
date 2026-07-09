@@ -108,6 +108,24 @@ struct OverlayExecutionContext<'a> {
 }
 
 impl SessionWorld {
+    fn default_shared_root_dir_for(
+        uid: u32,
+        xdg_runtime_dir: Option<&Path>,
+        has_run_user_dir: bool,
+    ) -> PathBuf {
+        if let Some(xdg_runtime_dir) = xdg_runtime_dir.filter(|path| !path.as_os_str().is_empty()) {
+            return xdg_runtime_dir.join("substrate").join("worlds");
+        }
+
+        if has_run_user_dir {
+            return PathBuf::from(format!("/run/user/{uid}"))
+                .join("substrate")
+                .join("worlds");
+        }
+
+        PathBuf::from(format!("/tmp/substrate-worlds-{uid}"))
+    }
+
     pub(crate) fn shared_root_dir() -> PathBuf {
         #[cfg(feature = "test-support")]
         if let Some(path) = shared_root_dir_override()
@@ -118,7 +136,10 @@ impl SessionWorld {
             return path;
         }
 
-        PathBuf::from("/tmp/substrate-worlds")
+        let uid = current_uid();
+        let xdg_runtime_dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+        let run_user_dir = PathBuf::from(format!("/run/user/{uid}"));
+        Self::default_shared_root_dir_for(uid, xdg_runtime_dir.as_deref(), run_user_dir.is_dir())
     }
 
     #[cfg(feature = "test-support")]
@@ -1434,7 +1455,7 @@ mod tests {
         match SessionWorld::ensure_started(spec) {
             Ok(world) => {
                 assert!(world.id.starts_with("wld_"));
-                assert_eq!(world.root_dir, PathBuf::from("/tmp/substrate-worlds"));
+                assert_eq!(world.root_dir, SessionWorld::shared_root_dir());
                 assert!(world.cgroup_path.ends_with(&world.id));
             }
             Err(e) => {
@@ -1460,7 +1481,7 @@ mod tests {
         };
         let world = SessionWorld {
             id: "wld_test".into(),
-            root_dir: PathBuf::from("/tmp/substrate-worlds"),
+            root_dir: SessionWorld::shared_root_dir(),
             project_dir: base_spec.project_dir.clone(),
             cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate/wld_test"),
             net_namespace: None,
@@ -1499,6 +1520,31 @@ mod tests {
             world.compatible_with(&changed),
             "fs_mode differences should not force a new world; overlay remount handles mode changes"
         );
+    }
+
+    #[test]
+    fn default_shared_root_dir_prefers_xdg_runtime_dir() {
+        let root = SessionWorld::default_shared_root_dir_for(
+            1000,
+            Some(Path::new("/tmp/runtime-dir")),
+            true,
+        );
+
+        assert_eq!(root, PathBuf::from("/tmp/runtime-dir/substrate/worlds"));
+    }
+
+    #[test]
+    fn default_shared_root_dir_uses_run_user_when_xdg_runtime_dir_is_missing() {
+        let root = SessionWorld::default_shared_root_dir_for(1000, None, true);
+
+        assert_eq!(root, PathBuf::from("/run/user/1000/substrate/worlds"));
+    }
+
+    #[test]
+    fn default_shared_root_dir_falls_back_to_user_scoped_tmp_root() {
+        let root = SessionWorld::default_shared_root_dir_for(1000, None, false);
+
+        assert_eq!(root, PathBuf::from("/tmp/substrate-worlds-1000"));
     }
 
     #[test]
