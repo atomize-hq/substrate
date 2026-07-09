@@ -1,4 +1,5 @@
-target
+# Keep repo-local fallback build output ignored; primary workspace target-dir is configured in .cargo/config.toml.
+target/
 .claude
 .codex
 .vscode
@@ -32,3 +33,5 @@ docs/project_management/packs/**/logs/
 .orchestrator-*
 .substrate
 archive
+# Keep local machine-specific Cargo target-dir overrides out of git.
+.cargo/config.toml
