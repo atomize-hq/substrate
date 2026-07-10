@@ -3,7 +3,7 @@
 **Status:** canonical control pack for future runtime-refactor slices
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
-**Repo-truth snapshot:** 2026-07-09; re-check live code before every slice
+**Repo-truth snapshot:** 2026-07-10; re-check live code before every slice
 
 ## Canonical repo location
 
@@ -41,6 +41,43 @@ Unit tests, type names, persisted rows, helper functions, process liveness, sock
 | [`05-debug-regression-ledger.md`](05-debug-regression-ledger.md) | writing tests, smoke plans, or closeout evidence | resolved baselines, open debug seams, permanent regression gates |
 
 Do not load the full historical design/debug stack by default. Start with the applicable crosswalk row, slice row, contract section, and regression row. Follow only the named must-read links. Slice A0 records its authority-leak inventory inside `02-seam-crosswalk.md`; it must not create an untracked seventh control-pack file.
+
+## Per-slice context assembly protocol
+
+Treat context assembly as part of every implementation and review slice. Do not hand an agent the entire directive, design family, debug history, control pack, and source tree at once.
+
+Assemble three bounded packets:
+
+1. **Authority packet — what must be true:** the exact `03` slice row, affected `02` seam rows, applicable `01` invariants, exact `04` contract sections, and only the design sections named by the slice.
+2. **Repo-truth packet — what is true now:** the current production call path, files allowed by the slice, related types and tests, one relevant precedent when available, and fresh call-graph/impact evidence. Separate artifact existence, semantic correctness, real-path adoption, and runtime proof.
+3. **Proof packet — how completion is judged:** exact `05` gate rows, targeted tests, negative/fail-closed cases, required smoke/e2e evidence, and the classification change permitted by that evidence.
+
+Target fewer than 2,000 focused lines per implementation task. Historical debug documents are regression provenance, not current implementation authority. Conversation history and prior summaries are discovery hints only until revalidated against the current tree.
+
+Use this capsule at slice start:
+
+```text
+SLICE / OBJECTIVE:
+TARGET AUTHORITY BOUNDARY:
+CURRENT PRODUCTION PATH / SEMANTIC STATUS:
+MUST-READ SECTIONS:
+LIVE SOURCE / TESTS / PRECEDENT:
+SIBLING SEAMS IN CONTEXT:
+ALLOWED CODE AREAS / EXPLICIT NON-GOALS:
+APPLICABLE CONTRACTS / REGRESSION GATES:
+KNOWN CORRECTIONS OR CONFLICTS:
+EXIT PROOF / STOP CONDITIONS:
+```
+
+If target docs, live code, tests, or fresh runtime evidence conflict, record the conflict in `KNOWN CORRECTIONS OR CONFLICTS` and resolve it before implementation. Never silently select the source that makes the slice appear easiest or most complete.
+
+## Current gateway carrier correction
+
+Keep this split explicit in every D1, D3, or E3 context capsule:
+
+- The managed in-world gateway auth carrier is a landed positive primitive: `world-service` creates a validated `GatewayAuthBundleV1` pipe handoff, launches `substrate-gateway` with `SUBSTRATE_LLM_AUTH_BUNDLE_FD`, scrubs raw secret env vars, and the gateway consumes and validates the bundle once.
+- Direct world Codex/member execution still uses the isolated seed-home compatibility bridge. It is not yet consistently pointed at the managed gateway with a per-worker, Substrate-owned `CODEX_HOME`/`config.toml` projection derived from accepted policy and logical config.
+- Therefore, do not rebuild or describe the secure-FD carrier as missing. Preserve it under `RG-CONFIG-03`. The unresolved adoption/projection seam is `RG-CONFIG-04`, and the complete world-Codex path remains below `ContractCorrectAndProven` until production-path smoke/e2e closes that gate.
 
 ## Semantic status labels
 

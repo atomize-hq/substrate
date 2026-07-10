@@ -366,6 +366,21 @@ Any side-effect channel absent from the envelope is disabled in world scope.
 
 ## 9. `LaunchTimeSecretHandoffV1`
 
+### Existing carrier versus remaining adoption work
+
+The current repo already implements the secure carrier mechanics for the managed in-world gateway: `GatewayAuthBundleV1`, an inherited pipe prepared by `world-service`, the pointer environment variable `SUBSTRATE_LLM_AUTH_BUNDLE_FD`, raw-secret env scrubbing, and gateway-side one-time read plus validation. Focused launcher and consumer integration tests make this a positive landed primitive that later slices must reuse and preserve.
+
+`LaunchTimeSecretHandoffV1` adds the orchestration-facing identity, lifecycle, and non-secret evidence needed to join that carrier to an exact world generation, envelope, retained participant, and gateway receiver. The absence of this complete durable record does not mean the FD carrier itself is absent.
+
+Remaining adoption work is to:
+
+1. expose or persist the non-secret handoff reference/state required by the envelope without persisting secret payloads;
+2. point direct world Codex/UAA provider traffic at the exact managed gateway that consumed the handoff;
+3. construct per-worker runtime-native config from Substrate logical config plus accepted policy instead of copied host config/auth; and
+4. prove the complete joined path with production-path smoke/e2e.
+
+Do not replace the existing carrier merely to make its implementation names resemble this control-plane contract. Extend or adapt it only where one of the identity, evidence, fail-closed, or adoption requirements is genuinely missing.
+
 ```rust
 struct LaunchTimeSecretHandoffV1 {
     schema_version: u32,                 // exactly 1

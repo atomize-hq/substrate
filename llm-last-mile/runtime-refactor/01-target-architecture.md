@@ -149,7 +149,7 @@ Projection identity includes retained-worker identity; workspace plus backend pl
 
 For world-scoped UAA adapters, host credentials must not be copied into the world as durable runtime-native files.
 
-The intended V1 contract is:
+The target V1 end-to-end contract is:
 
 ```text
 host credential authority
@@ -159,6 +159,10 @@ host credential authority
   -> gateway-owned credential/session material
   -> UAA adapter accesses credentials only through the gateway/broker contract
 ```
+
+The carrier segment through the in-world gateway is already a landed positive primitive on the managed gateway path: `GatewayAuthBundleV1`, the `world-service` inherited-pipe launcher, `SUBSTRATE_LLM_AUTH_BUNDLE_FD`, and gateway-side one-time read/validation exist with focused integration coverage. Refactor slices must preserve and adopt that carrier, not recreate it.
+
+The remaining target gap is consumer realization: direct world Codex/member execution must be pointed at the managed gateway, and its per-worker `CODEX_HOME`, `config.toml`, provider endpoint, and other runtime-native files must be constructed by Substrate from logical config plus accepted policy. Current seed-home auth/config copying is a compatibility bridge. The complete Codex-through-gateway path remains unproven until that adoption and projection path is exercised by production-path smoke/e2e.
 
 The in-world Substrate gateway is the credential-receiving boundary. Credentials are passed once at world launch through a secure FD scoped to that gateway. The gateway consumes the payload, prevents inheritance by the UAA child, closes the descriptor, and owns upstream credential application/session material.
 

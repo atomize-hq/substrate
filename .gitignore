@@ -2,6 +2,7 @@
 target/
 .claude
 .codex
+.agents
 .vscode
 .swo
 .swp
