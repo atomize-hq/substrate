@@ -320,7 +320,8 @@ struct WorldRuntimeAdapterExecutionEnvelopeV1 {
     env_projection_ref: EnvProjectionRefV1,
     config_projection_identity: ConfigProjectionIdentityV1,
     config_projection_ref: ConfigProjectionRefV1,
-    secret_handoff_ref: Option<SecretHandoffRefV1>,
+    in_world_gateway_ref: Option<InWorldGatewayRefV1>,
+    credential_posture: AdapterCredentialPostureV1,
     mediation_posture: AdapterMediationPostureV1,
     command_broker_required: bool,
     allowed_side_effect_channels: Vec<BrokeredSideEffectChannelV1>,
@@ -330,11 +331,24 @@ enum AdapterMediationPostureV1 {
     BrokerRequired,
     CompatibilityUnproven { compatibility_mode_id: String },
 }
+
+enum AdapterCredentialPostureV1 {
+    NoCredentialsRequired,
+    SecureGatewayHandoff { secret_handoff_ref: SecretHandoffRefV1 },
+    CompatibilityCopyBridge { compatibility_mode_id: String },
+}
 ```
 
-Envelope kinds are `HostOrchestrator` and `WorldMember`. A `WorldMember` envelope requires exact world binding, guest-realizable entrypoint, immutable policy snapshot, and `command_broker_required=true` for side-effect-capable UAA runtimes.
+Envelope kinds are `HostOrchestrator` and `WorldMember`. A `WorldMember` envelope requires exact world binding, guest-realizable entrypoint, immutable policy snapshot, explicit credential posture, and `command_broker_required=true` for side-effect-capable UAA runtimes.
 
 During D1-before-D2 staging, `CompatibilityUnproven` may preserve explicitly named and logged existing behavior, but it cannot claim Substrate policy mediation, cannot satisfy UAA caging/broker gates, and cannot promote this seam. `BrokerRequired` requires `command_broker_required=true` and fails closed when any declared side-effect channel lacks broker support.
+
+Credential-posture invariants:
+
+1. `SecureGatewayHandoff` requires an exact `in_world_gateway_ref` in the same world generation and a valid `LaunchTimeSecretHandoffV1` ref.
+2. `NoCredentialsRequired` requires no secret-handoff ref and cannot later discover ambient host credentials.
+3. `CompatibilityCopyBridge` requires a named/logged compatibility mode and cannot satisfy credential, projection, or UAA contract-promotion gates.
+4. The UAA child receives the gateway endpoint/session contract, never the raw secret FD or host credential payload.
 
 Allowed channel values describe broker support, not permission to bypass:
 
@@ -350,7 +364,75 @@ ProviderNativeSideEffect
 
 Any side-effect channel absent from the envelope is disabled in world scope.
 
-## 9. Cancel outcome categories
+## 9. `LaunchTimeSecretHandoffV1`
+
+```rust
+struct LaunchTimeSecretHandoffV1 {
+    schema_version: u32,                 // exactly 1
+    handoff_id: String,
+    orchestration_session_id: String,
+    world_id: String,
+    world_generation: u64,
+    retained_participant_id: Option<String>,
+    runtime_family: String,
+
+    // Non-secret authority references only.
+    credential_source_ref: CredentialSourceRefV1,
+    receiving_gateway_ref: InWorldGatewayRefV1,
+    delivery: SecretDeliveryMechanismV1,
+
+    created_at: Timestamp,
+    delivered_at: Option<Timestamp>,
+    consumed_at: Option<Timestamp>,
+    expires_at: Timestamp,
+    state_revision: u64,
+    state: SecretHandoffStateV1,
+    failure_diagnostic_ref: Option<RedactedDiagnosticRefV1>,
+}
+
+enum SecretDeliveryMechanismV1 {
+    SecureFd {
+        fd_name: String,
+        one_time: bool,
+        gateway_receiver_only: bool,
+        deny_child_inheritance: bool,
+        close_after_consume: bool,
+    },
+}
+
+enum SecretHandoffStateV1 {
+    Prepared,
+    Delivered,
+    Consumed,
+    Failed,
+    Expired,
+}
+```
+
+Allowed transitions:
+
+```text
+Prepared -> Delivered -> Consumed
+Prepared|Delivered -> Failed|Expired
+```
+
+`Consumed`, `Failed`, and `Expired` are terminal. Reuse requires a new `handoff_id` and new descriptor.
+
+Launch-time secret handoff rules:
+
+1. Secret material is resolved by host credential authority and must not be persisted in Substrate records, runtime-native config, workspace overlays, manifests, traces, or logs.
+2. `credential_source_ref` is an opaque host-authority reference, not a host filesystem path, credential-store locator exposed to the world, or digest of the secret payload. `fd_name` is a non-secret logical descriptor label.
+3. Contract-correct world execution must not copy host credential files or secret-bearing host config into world-visible `CODEX_HOME`, `.codex`, `config.toml`, auth files, or equivalent runtime homes.
+4. A bounded non-secret runtime config may be rendered from Substrate-owned logical inventory. Copying a host `config.toml` as authority is compatibility bridging, not projection authority.
+5. V1 validation accepts `SecureFd` only when `one_time`, `gateway_receiver_only`, `deny_child_inheritance`, and `close_after_consume` are all `true`.
+6. The secure FD is scoped to the exact `receiving_gateway_ref`, consumed by the in-world Substrate gateway at world launch, closed after consumption, and never inherited by the UAA adapter or its children.
+7. The gateway—not Codex/UAA—owns credential application, gateway session material, and upstream provider forwarding. The UAA talks to the gateway through the envelope's endpoint/session contract.
+8. Logs, receipts, traces, and manifests may contain handoff ID, non-secret refs, state, timestamps, and redacted diagnostics. They must not contain secret payloads, secret-bearing file paths, or reusable hashes/fingerprints derived from the secret payload.
+9. Failure, expiry, receiver mismatch, world-generation mismatch, duplicate consumption, or descriptor inheritance risk fails closed for credential-requiring world adapters.
+10. A compatibility copied-credential mode is temporary, explicitly named and logged, has retirement criteria, and cannot satisfy `ContractCorrectAndProven` or any secure-handoff acceptance gate.
+11. Failed/expired handoffs close the descriptor and clear transient buffers before retry; retry creates a new handoff rather than reopening or replaying the old payload.
+
+## 10. Cancel outcome categories
 
 ```rust
 enum CancelWorldWorkOutcomeV1 {
@@ -375,7 +457,7 @@ Rules:
 5. Repeated cancel after terminal returns `AlreadyTerminal`; it never regresses the receipt.
 6. Stop targets worker lifecycle. Cancel targets one active task/turn. They are not aliases.
 
-## 10. Supervisor idempotency and restart rules
+## 11. Supervisor idempotency and restart rules
 
 1. **Persist before return:** accepted receipt and immutable policy ref/hash are durable before the foreground caller receives success.
 2. **Single logical observer:** supervisors claim a lease with `(active_run_id, receipt_revision, lease_epoch)`. A stale lease cannot write a newer revision.
@@ -390,7 +472,7 @@ Rules:
 11. **Obligation timing:** attention events are persisted/materialized when observed, not deferred until terminal exit.
 12. **Diagnostics:** non-zero exit, stream error, reconciliation failure, and cancel failure retain exact active-run/session/world/policy joins.
 
-## 11. Immutable `PolicySnapshotV3` acceptance rules
+## 12. Immutable `PolicySnapshotV3` acceptance rules
 
 An active task/turn may be accepted only when all are true:
 
@@ -414,7 +496,7 @@ After acceptance:
 - emergency revocation is an explicit audited cancel/revoke path, never silent snapshot mutation; and
 - snapshot mismatch at broker/world-service fails closed.
 
-## 12. Dispatch narrowing monotonicity rules
+## 13. Dispatch narrowing monotonicity rules
 
 The resolver computes:
 
@@ -448,7 +530,7 @@ Path-containment rules:
 7. Narrowing may not enable a dispatch action, backend, mode, capability, network route, or side-effect channel forbidden by the parent.
 8. Adapter config may receive policy hints, but only broker/world-service enforcement counts.
 
-## 13. Contract promotion gates
+## 14. Contract promotion gates
 
 A contract is not considered landed until tests prove:
 
@@ -456,5 +538,7 @@ A contract is not considered landed until tests prove:
 2. atomic persistence and revision conflict handling;
 3. the real ingress/dispatch/runtime path uses it;
 4. restart/replay behavior where durable;
-5. fail-closed negative cases; and
-6. at least one smoke/e2e path joins session, binding, policy, receipt, runtime event, and terminal/obligation truth.
+5. fail-closed negative cases;
+6. at least one smoke/e2e path joins session, binding, policy, receipt, runtime event, and terminal/obligation truth;
+7. credential-requiring world UAA proof joins the envelope to a consumed one-time in-world gateway handoff without copied secret files or inherited descriptors; and
+8. no compatibility copy or `CompatibilityUnproven` evidence is used for contract promotion.

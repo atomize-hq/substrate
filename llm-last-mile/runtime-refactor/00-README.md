@@ -65,6 +65,7 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
 - **Enforcement:** makes the policy unavoidable on the side-effecting path.
 - **Receipt:** durable accepted-work identity returned before terminal completion.
 - **Supervisor:** restart-safe owner of post-acceptance observation and closeout.
+- **Secret handoff:** one-time secure-FD delivery from host credential authority to the in-world Substrate gateway; never a UAA-native credential file projection.
 - **Runtime-family adapter:** provider mechanics only; never Substrate lifecycle or policy semantics.
 
 ## Reading and update rules

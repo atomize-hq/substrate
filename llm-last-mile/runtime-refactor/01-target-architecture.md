@@ -4,7 +4,7 @@
 
 Substrate's permanent runtime architecture is a surface-neutral durable control plane:
 
-> Surfaces are ingress. Sessions are authority. Long-lived work returns receipts. World work is supervised. Obligations are canonical. UAA side effects are brokered. Policy can only narrow. Runtime-family adapters stay thin.
+> Surfaces are ingress. Sessions are authority. Long-lived work returns receipts. World work is supervised. Obligations are canonical. Credentials enter worlds once through the in-world gateway. UAA side effects are brokered. Policy can only narrow. Runtime-family adapters stay thin.
 
 ```mermaid
 flowchart TD
@@ -43,6 +43,9 @@ flowchart TD
     ACP --> ENV["WorldRuntimeAdapterExecutionEnvelope"]
     ENV --> RFA["RuntimeFamilyRealizationAdapter"]
     RFA --> UAA["Codex / Claude Code / future UAA"]
+    HCA["HostCredentialAuthority"] -->|"one-time secure FD at world launch"| GW["In-world Substrate gateway"]
+    ENV -.->|"secret handoff contract"| GW
+    UAA -->|"credentialed provider traffic"| GW
     UAA -->|"side-effect intent"| BROKER["WorldCommandExecutionBroker"]
     BROKER --> WSE["PolicySnapshotV3 world-service path"]
     WSE --> ENF["overlay / full isolation / Landlock / cage / network"]
@@ -66,10 +69,10 @@ flowchart TD
 | RetainedWorkerRuntime | worker create/continue/park/cancel/stop/fork/inspect/invalidate lifecycle | host-session posture or obligation projection |
 | ObligationLedger | canonical attention/review/deferred-action truth | host rendering, prompt replay, direct worker continuation |
 | Inbox / AutoAttach / Router | derived review view, attach eligibility, sanctioned host ownership restoration | approving, answering, forking, or continuing workers |
-| AgentConfigProjectionService | logical inventory to effective/native/secret projection per worker identity | treating `.codex`, `CODEX_HOME`, or workspace files as authority |
-| WorldRuntimeAdapterExecutionEnvelope | guest-realizable launch contract bound to world, worker, config, and policy snapshot | provider-specific parsing or unrestricted side effects |
+| AgentConfigProjectionService | logical inventory and non-secret effective/native projection per worker identity; launch-time secret-handoff intent | treating `.codex`, `CODEX_HOME`, `config.toml`, auth files, or workspace files as credential authority |
+| WorldRuntimeAdapterExecutionEnvelope | guest-realizable launch contract bound to world, worker, config, policy snapshot, credential posture, and secret-handoff ref | raw credential payloads, provider-specific parsing, or unrestricted side effects |
 | WorldCommandExecutionBroker | every UAA shell/edit/write/tool/process/network side effect under the accepted policy snapshot | bypassing world-service because the initial process is in-world |
-| RuntimeFamilyRealizationAdapter | provider launch, resume, output parsing, native config format, provider cancellation mechanics | Substrate authority, policy, binding, receipt, or obligation semantics |
+| RuntimeFamilyRealizationAdapter | provider launch, resume, output parsing, non-secret native config format, gateway endpoint wiring, provider cancellation mechanics | raw host credentials or Substrate authority, policy, binding, receipt, or obligation semantics |
 
 ## Non-negotiable invariants
 
@@ -142,10 +145,33 @@ Dispatch narrowing uses restricted `PolicyPatch.world_fs`, canonical finalizatio
 
 Projection identity includes retained-worker identity; workspace plus backend plus world generation is too coarse. Runtime homes and workspace overlays may be durable or mutable by policy, but never become the source of Substrate authority.
 
+### 13. Credentials are launch-time gateway handoff, not projected files
+
+For world-scoped UAA adapters, host credentials must not be copied into the world as durable runtime-native files.
+
+The intended V1 contract is:
+
+```text
+host credential authority
+  -> launch-time secret handoff
+  -> secure one-time FD
+  -> in-world Substrate gateway
+  -> gateway-owned credential/session material
+  -> UAA adapter accesses credentials only through the gateway/broker contract
+```
+
+The in-world Substrate gateway is the credential-receiving boundary. Credentials are passed once at world launch through a secure FD scoped to that gateway. The gateway consumes the payload, prevents inheritance by the UAA child, closes the descriptor, and owns upstream credential application/session material.
+
+Runtime-native files such as `CODEX_HOME`, `.codex`, `config.toml`, `.mcp.json`, or auth files may contain bounded non-secret projection hints when required, but they must not become durable credential authority. The UAA runtime does not read the secret FD directly.
+
+Copying host credentials and a minimal Codex `config.toml` into the world is a transitional compatibility bridge only. It must be explicitly named and logged, must have retirement criteria, and cannot satisfy `ContractCorrectAndProven`.
+
+If secure gateway handoff is unavailable for a credential-requiring world adapter, that adapter must fail closed or run under the explicitly named, logged, non-promotable compatibility mode. V1 permits no unnamed fallback to ambient host credentials, copied auth, or host keyring discovery.
+
 ## Review question
 
 Every refactor PR must be able to answer:
 
-> Can Substrate prove exact session identity, exact applicable binding, exact applicable policy snapshot, exact applicable work receipt, and durable lifecycle/obligation truth for this action regardless of ingress surface?
+> Can Substrate prove exact session identity, exact applicable binding, exact applicable policy snapshot, exact applicable credential handoff, exact applicable work receipt, and durable lifecycle/obligation truth for this action regardless of ingress surface?
 
 If the answer depends on a helper still running, a socket being reachable, a terminal tool call returning, or an env variable being trusted, the target architecture has not landed.
