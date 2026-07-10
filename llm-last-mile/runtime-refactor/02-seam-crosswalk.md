@@ -1,0 +1,76 @@
+# Seam Crosswalk
+
+## Reading rule
+
+This is a semantic assessment of the target seam, not an inventory-completeness score. `proven by smoke/e2e = no` means the full target seam lacks production-path proof even when component or integration tests exist.
+
+Promotion rule:
+
+```text
+correct owner
++ real call path
++ intended enforcement
++ smoke/e2e/regression proof
+= ContractCorrectAndProven
+```
+
+No required seam currently meets all four conditions.
+
+## A0 authority-leak inventory contract
+
+Slice A0 populates a repo-grounded inventory in this file before authority code moves. Do not create a separate control-pack file. Each inventoried use of helper/PID/socket/heartbeat/attached-client/owner-process/cwd/env state records:
+
+| Code location and decision | Observed value | Current classification | Current durable effect | Proposed owner seam | First migration target | Proof needed |
+|---|---|---|---|---|---|---|
+| _Populated by A0_ | _Exact field/condition_ | `SignalOnly`, `FastPathTransport`, `AuthorityDecision`, or `CompatibilityRead` | _What it currently permits, blocks, or mutates_ | _Target authority boundary_ | _Bounded first change_ | _Regression gate_ |
+
+The inventory is complete only when every current durable decision that depends on process/socket/helper/owner/cwd/env posture is either listed or explicitly proven outside scope. A0 changes diagnostics/tests and this inventory only; it does not introduce the authority facade.
+
+## A. Host authority and ingress
+
+| Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
+|---|---|---|---|---|---|---|---|
+| SurfaceAdapter / HostExecutionEpisode | `crates/shell/src/execution/agents_cmd.rs`; hidden-helper launch/transport code in `agent_runtime/control.rs`; live runtime ownership in `repl/async_repl.rs` | `MissingSeam` | no | not applicable | no | Introduce a generic episode identity/status boundary; make REPL, CLI helper, toolbox, and recovered episodes report observations through it; forbid episode code from deciding durable posture. | HostSessionAuthority; StateStore; InternalToolboxTransport; RouterAttachTrigger |
+| HostSessionAuthority | `agent_runtime/orchestration_session.rs`; resolution and posture logic spread across `state_store.rs`, `agents_cmd.rs`, `control.rs`, and `async_repl.rs` | `MislandedWrongModel` | no | not applicable | no | Centralize exact authority resolution and revision-checked posture transitions; demote PID/socket/attached-client checks to observations; route every surface mutation through this boundary. | SurfaceAdapter; StateStore; CompatibilityReadModel; WorldDispatchControl; ObligationLedger |
+| StateStore | `AgentRuntimeStateStore`, session/participant persistence, atomic JSON writes, active-task records, obligation/inbox persistence in `agent_runtime/state_store.rs` | `UsefulFootholdButWrongBoundary` | no | not applicable | no | Retain persistence/migration primitives; move routing, liveness classification, lifecycle policy, projection, and compatibility decisions behind owning boundaries. | HostSessionAuthority; CompatibilityReadModel; WorldWorkReceiptRegistry; ObligationLedger |
+| CompatibilityReadModel | torn-root fallback, synthesized session records, legacy inbox projection, read repair, status-visible participant logic in `agent_runtime/state_store.rs` | `UsefulFootholdButWrongBoundary` | no | not applicable | no | Extract read-only legacy projection/migration behavior; version its outputs; prevent it from overriding newer authority revisions or writing new lifecycle truth. | StateStore; HostSessionAuthority; InboxProjection |
+| InternalToolboxTransport | `toolbox_transport_path` and endpoint registration in `agent_runtime/control.rs`; toolbox owner lifecycle in `repl/async_repl.rs`; internal endpoint integration coverage in `repl_world_first_routing_v1.rs` | `UsefulFootholdButWrongBoundary` | no | no | no | Preserve internal session-scoped transport, but bind requests through runtime-injected exact authority and make transport availability independent from durable session/work truth. | RuntimeToolInvocationAdapter; HostSessionAuthority; WorldDispatchControl; SurfaceAdapter |
+| RuntimeToolInvocationAdapter | model contract/types and runtime injection in `agent_runtime/tool_invocation_contract.rs`; prompt composition in `execution/prompt_fulfillment.rs`; toolbox env construction in `agent_runtime/control.rs` | `UsefulFootholdButWrongBoundary` | no | no | no | Keep model-visible validation and hidden internal identity; change long-running outputs from terminal-shaped outcomes to accepted receipts; route only through the transport/dispatch authority chain. | InternalToolboxTransport; WorldDispatchControl; WorldWorkReceiptRegistry; SteeringPolicyEngine |
+
+## B. Dispatch, policy, receipts, and retained runtime
+
+| Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
+|---|---|---|---|---|---|---|---|
+| WorldDispatchControl | typed request/outcome contracts in `agent_runtime/dispatch_contract.rs`; orchestration in `execution/orchestrator_world_dispatch.rs`; exact-target state-store resolvers | `MislandedWrongModel` | no | no | no | Turn the file-level orchestration into a facade over HostSessionAuthority, policy resolution, durable receipts, supervisor, messaging, and retained runtime; remove terminal waiting and owner-liveness authority from core semantics. | HostSessionAuthority; RuntimeToolInvocationAdapter; SteeringPolicyEngine; WorldWorkReceiptRegistry; RetainedWorkerRuntime |
+| SteeringPolicyEngine | `agents.world_dispatch.*` fields in `crates/broker`; `enforce_world_dispatch_steering_policy` and event/payload checks in `orchestrator_world_dispatch.rs` | `UsefulFootholdButWrongBoundary` | no | no | no | Consolidate deny-by-default action/mode/backend/session/world/event/autonomy decisions into one explanation-ready boundary used by every ingress path. | WorldDispatchControl; EffectivePolicyResolver; ObligationLedger; WorldWorkerMessagingProtocol |
+| EffectivePolicyResolver | `crates/broker/src/effective_policy.rs`; `execution/policy_model.rs`; `execution/policy_snapshot.rs`; current policy composition in dispatch code | `UsefulFootholdButWrongBoundary` | no | no | no | Add a dispatch acceptance API that composes current parent policy, worker cap, and optional narrowing; canonicalize one immutable `PolicySnapshotV3` and return its ref/hash. | SteeringPolicyEngine; DispatchPolicyNarrowingPatch; WorldWorkReceiptRegistry; WorldCommandExecutionBroker |
+| DispatchPolicyNarrowingPatch | `allow_capability_narrowing` policy flag; boolean capability overrides in `dispatch_contract.rs`; inventory-time `policy_overlay.world_fs` validation in `agent_inventory.rs` | `MissingSeam` | no | no | no | Add request-scoped restricted `PolicyPatch.world_fs`; implement path-containment monotonicity; persist narrowing reason and resulting snapshot on task/turn/worker records. | EffectivePolicyResolver; WorldWorkReceiptRegistry; RetainedWorkerRuntime; AgentConfigProjectionService |
+| WorldWorkReceiptRegistry | terminal-shaped `HostToolRunWorldTaskReceiptV1`; `ActiveEphemeralWorldTaskRecord` plus drop guard in `state_store.rs`; span/run IDs on participant records | `MislandedWrongModel` | no | not applicable | no | Replace temporary/terminal identity with durable accepted task and retained-turn receipts; persist state, policy snapshot, cancel support, observation cursor, and terminal closeout independently of foreground scope. | WorldDispatchControl; WorldWorkExecutionSupervisor; RetainedWorkerRuntime; EffectivePolicyResolver |
+| WorldWorkExecutionSupervisor | foreground stream loops and ephemeral terminal-wait tracker in `orchestrator_world_dispatch.rs`; runtime-side active submitted turns in `world-service/member_runtime.rs` | `MissingSeam` | no | not applicable | no | Add restart-safe receipt claiming, stream continuation, frame/event dedupe, obligation materialization, reconciliation, cancellation closeout, and monotonic terminal publication. | WorldWorkReceiptRegistry; WorldWorkerMessagingProtocol; ObligationLedger; RetainedWorkerRuntime |
+| WorldWorkerMessagingProtocol | typed payloads/events in `dispatch_contract.rs`; event classification and prompt rendering in `orchestrator_world_dispatch.rs`; agent events from `world-service/member_runtime.rs` | `UsefulFootholdButWrongBoundary` | no | no | no | Separate durable message/event envelopes from prompt rendering and stream parsing; preserve exact identities, thread and causation IDs; deliver events to the supervisor/materializer. | WorldWorkExecutionSupervisor; RetainedWorkerRuntime; SteeringPolicyEngine; ObligationLedger |
+| RetainedWorkerRuntime | participant/session manifests in `agent_runtime/session.rs`; lifecycle mutations across `async_repl.rs`, `state_store.rs`, and `orchestrator_world_dispatch.rs`; retained slots in `world-service/member_runtime.rs` | `MislandedWrongModel` | no | no | no | Create one lifecycle owner for worker manifests, caps, resume handles, turn acceptance, park, cancel, stop, fork, inspect, and invalidation; keep host posture separate. | HostSessionAuthority; WorldWorkReceiptRegistry; WorldWorkExecutionSupervisor; WorldWorkerMessagingProtocol |
+
+## C. Obligations and host re-engagement
+
+| Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
+|---|---|---|---|---|---|---|---|
+| ObligationLedger | `agent_runtime/obligation_ledger.rs`; obligation persistence/projection helpers in `state_store.rs`; post-stream materialization in `orchestrator_world_dispatch.rs` | `DefensiveScaffoldingOnly` | no | no | no | Make persisted worker/runtime events the producer; idempotently materialize obligations during supervision before terminal exit; derive host attention posture from unresolved attention-driving obligations. | WorldWorkExecutionSupervisor; WorldWorkerMessagingProtocol; InboxProjection; AutoAttachProjection; HostSessionAuthority |
+| InboxProjection | `agent_runtime/host_inbox.rs`; compatibility durable inbox items in `state_store.rs`; `execution/host_inbox_materialization.rs` | `DefensiveScaffoldingOnly` | no | not applicable | no | Make inbox a read/projection model over canonical obligations; isolate compatibility ingress; prevent inbox rows or counts from becoming independent authority. | ObligationLedger; CompatibilityReadModel; AutoAttachProjection |
+| AutoAttachProjection | attach fields on obligation records; eligibility/claim helpers in `agent_runtime/auto_attach.rs` | `DefensiveScaffoldingOnly` | no | no | no | Derive eligibility and claim state only from canonical obligations plus effective policy; make claims idempotent and session-coalesced. | ObligationLedger; InboxProjection; RouterAttachTrigger; SteeringPolicyEngine |
+| RouterAttachTrigger | router discovery and helper launch in `agent_runtime/auto_attach.rs`; detached `spawn_blocking` trigger in `orchestrator_world_dispatch.rs` | `DefensiveScaffoldingOnly` | no | no | no | Move to an explicit durable trigger/claim/settle path; restore sanctioned host ownership once; record result; prohibit prompt replay and direct worker actions. | AutoAttachProjection; HostSessionAuthority; SurfaceAdapter; ObligationLedger |
+
+## D. UAA realization, projection, and side-effect mediation
+
+| Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
+|---|---|---|---|---|---|---|---|
+| AgentConfigProjectionService | placement-aware inventory in `execution/agent_inventory.rs`; Codex seed-home and bounded startup subset in `world-service/member_runtime.rs`; Codex home helpers in `crates/codex` | `DefensiveScaffoldingOnly` | no | no | no | Establish Substrate-owned logical/effective/native/secret projection with per-retained-worker identity; replace ambient host-home seeding as authority; treat runtime files as projections. | WorldRuntimeAdapterExecutionEnvelope; RuntimeFamilyRealizationAdapter; EffectivePolicyResolver; RetainedWorkerRuntime |
+| WorldRuntimeAdapterExecutionEnvelope | world Codex guest-entrypoint validation in `agent_runtime/validator.rs`; placement config in `config/agents/codex.yaml`; launcher/env/cwd setup in `world-service/member_runtime.rs` | `DefensiveScaffoldingOnly` | no | no | no | Persist one envelope bound to world generation, retained worker, config projection, immutable policy snapshot, runtime deps, and mandatory command-broker posture; fail closed if unrealizable. | AgentConfigProjectionService; RuntimeFamilyRealizationAdapter; WorldCommandExecutionBroker; RetainedWorkerRuntime |
+| WorldCommandExecutionBroker | existing world-service execution, guard, overlay/full-isolation/Landlock/network primitives; no UAA per-operation broker; Codex gateway currently enables external-sandbox bypass | `MissingSeam` | no | no | no | Interpose on every world-UAA shell/edit/write/MCP/tool/process/network side effect; execute under the envelope's `PolicySnapshotV3`; disable or reject unbrokerable channels. | WorldRuntimeAdapterExecutionEnvelope; EffectivePolicyResolver; RuntimeFamilyRealizationAdapter; world-service enforcement |
+| RuntimeFamilyRealizationAdapter | `crates/gateway/src/adapter_runtime.rs`; UAA/client construction in shell and world-service; provider-specific session/output handling | `UsefulFootholdButWrongBoundary` | no | not applicable | no | Keep only provider mechanics; consume Substrate-owned envelope/config/policy/receipt inputs; remove lifecycle, binding, or sandbox-authority decisions from family adapters. | WorldRuntimeAdapterExecutionEnvelope; AgentConfigProjectionService; WorldCommandExecutionBroker; RetainedWorkerRuntime |
+
+## Classification consequences
+
+- `UsefulFootholdButWrongBoundary` means preserve reusable code only after its authority placement is corrected.
+- `DefensiveScaffoldingOnly` means retain it during transition if useful, but do not design later slices as though the target seam exists.
+- `MislandedWrongModel` requires replacing the semantic center, not patching symptoms around it.
+- `MissingSeam` may still have strong neighboring primitives. Those primitives are inputs to the seam, not proof of it.

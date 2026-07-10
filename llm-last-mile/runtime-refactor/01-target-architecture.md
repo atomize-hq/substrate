@@ -1,0 +1,151 @@
+# Target Architecture
+
+## Executive decision
+
+Substrate's permanent runtime architecture is a surface-neutral durable control plane:
+
+> Surfaces are ingress. Sessions are authority. Long-lived work returns receipts. World work is supervised. Obligations are canonical. UAA side effects are brokered. Policy can only narrow. Runtime-family adapters stay thin.
+
+```mermaid
+flowchart TD
+    subgraph I["Ingress and host episodes"]
+      R["REPL"]
+      C["Public CLI"]
+      H["Hidden owner-helper episode"]
+      T["Runtime-owned tool adapter"]
+      O["Operator/debug surface"]
+    end
+
+    R --> A
+    C --> A
+    H --> A
+    O --> A
+    T --> ITT
+
+    A["HostSessionAuthority"] <--> S[("StateStore")]
+    CRM["CompatibilityReadModel"] --> S
+    A --> WDC["WorldDispatchControl"]
+    ITT["InternalToolboxTransport"] --> WDC
+
+    WDC --> SPE["SteeringPolicyEngine"]
+    SPE --> EPR["EffectivePolicyResolver"]
+    EPR --> DPN["DispatchPolicyNarrowingPatch"]
+    DPN --> WRR["WorldWorkReceiptRegistry"]
+    WRR --> SUP["WorldWorkExecutionSupervisor"]
+    SUP --> MSG["WorldWorkerMessagingProtocol"]
+    MSG --> RWR["RetainedWorkerRuntime"]
+    SUP --> OBL["ObligationLedger"]
+    OBL --> INBOX["InboxProjection"]
+    OBL --> AUTO["AutoAttachProjection"]
+    AUTO --> ROUTER["RouterAttachTrigger"]
+
+    RWR --> ACP["AgentConfigProjectionService"]
+    ACP --> ENV["WorldRuntimeAdapterExecutionEnvelope"]
+    ENV --> RFA["RuntimeFamilyRealizationAdapter"]
+    RFA --> UAA["Codex / Claude Code / future UAA"]
+    UAA -->|"side-effect intent"| BROKER["WorldCommandExecutionBroker"]
+    BROKER --> WSE["PolicySnapshotV3 world-service path"]
+    WSE --> ENF["overlay / full isolation / Landlock / cage / network"]
+```
+
+`RuntimeToolInvocationAdapter -> InternalToolboxTransport` is the model-visible ingress route. Native CLI, REPL, and operator surfaces call the same authority and dispatch core through typed internal APIs; they do not detour through an agent-visible tool protocol.
+
+## Authority map
+
+| Boundary | Owns | Must not own |
+|---|---|---|
+| SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations | durable posture, world binding, retained continuity, successor allocation, terminal truth |
+| HostSessionAuthority | exact session/caller/lineage/binding resolution and durable posture transitions | transport loops, provider mechanics, compatibility projection |
+| StateStore | atomic persistence, migrations, schema evolution | lifecycle policy, routing policy, liveness-derived authority |
+| CompatibilityReadModel | legacy reads, torn-root diagnostics, compatibility projection/migration | new authority writes or overriding newer revisions |
+| WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries | provider-specific execution or direct policy invention |
+| SteeringPolicyEngine | deny-by-default action/mode/backend/session/world/autonomy decisions | effective policy materialization or runtime launch |
+| EffectivePolicyResolver | parent-policy composition and immutable `PolicySnapshotV3` materialization | enforcement by advisory flags alone |
+| WorldWorkReceiptRegistry | durable active task/turn identity and monotonic state | stream ownership or worker lifecycle policy |
+| WorldWorkExecutionSupervisor | post-acceptance stream/event observation, reconciliation, obligation materialization, terminal closeout | foreground tool semantics or model-facing identity |
+| RetainedWorkerRuntime | worker create/continue/park/cancel/stop/fork/inspect/invalidate lifecycle | host-session posture or obligation projection |
+| ObligationLedger | canonical attention/review/deferred-action truth | host rendering, prompt replay, direct worker continuation |
+| Inbox / AutoAttach / Router | derived review view, attach eligibility, sanctioned host ownership restoration | approving, answering, forking, or continuing workers |
+| AgentConfigProjectionService | logical inventory to effective/native/secret projection per worker identity | treating `.codex`, `CODEX_HOME`, or workspace files as authority |
+| WorldRuntimeAdapterExecutionEnvelope | guest-realizable launch contract bound to world, worker, config, and policy snapshot | provider-specific parsing or unrestricted side effects |
+| WorldCommandExecutionBroker | every UAA shell/edit/write/tool/process/network side effect under the accepted policy snapshot | bypassing world-service because the initial process is in-world |
+| RuntimeFamilyRealizationAdapter | provider launch, resume, output parsing, native config format, provider cancellation mechanics | Substrate authority, policy, binding, receipt, or obligation semantics |
+
+## Non-negotiable invariants
+
+### 1. Durable session truth is process-independent
+
+Durable truth is the exact session identity, authoritative lineage, workspace/world binding, attach contract, retained-worker refs, resume handles, posture, and policy revision. Helper PID, attached client, socket reachability, startup stream state, and owner-process liveness are observations only.
+
+### 2. Private transports are fast paths
+
+Prompt, stop, cancel, toolbox, and heartbeat channels use one of:
+
+```text
+Available
+UnavailableButDurableAuthorityExists
+UnavailableAndNoAuthoritativeRoute
+StaleOrOrphaned
+```
+
+A stale episode may not overwrite a newer authority revision. An unavailable channel may not block durable closeout when exact authority and closeout rules permit it.
+
+### 3. Routing is exact and fail-closed
+
+Every world verb resolves exact session, caller, backend, world id/generation, and task/worker/active-run identity. Backend-only selection ambiguity fails closed. Model-facing callers never supply internal lease, resume, UAA-session, or participant lineage truth.
+
+### 4. Long-lived work accepts before it completes
+
+`run_world_task` and `continue_world_worker` persist accepted receipts and return durable handles before terminal exit. A blocking UX may wait on the receipt; it may not redefine the core contract. The supervisor—not the foreground tool call—owns the terminal-framed stream.
+
+### 5. Cancel targets active work
+
+Cancel resolves an active task/turn receipt. Worker identity establishes routing context; it does not prove active cancelable work. `NoActiveCancelableWork` is distinct from stale linkage, invalid identity, owner unreachable, and already terminal.
+
+### 6. Obligations are event-derived canonical truth
+
+Attention-driving runtime events are persisted and materialized into idempotent obligations as they arrive, before terminal exit when applicable. Host `awaiting_attention` derives from unresolved obligations. Worker `attention_pending` is a separate lifecycle state.
+
+### 7. Auto-attach restores ownership only
+
+The router may discover, claim, restore/launch a sanctioned host episode, record the outcome, and stop. It may not submit a prompt, approve, fork, answer, or continue a worker.
+
+### 8. World placement and policy mediation are separate proofs
+
+A world-scoped UAA must both:
+
+1. start from a guest-realizable runtime envelope; and
+2. route every side-effecting operation through Substrate-owned policy enforcement.
+
+`cwd`, `CODEX_HOME`, `SUBSTRATE_CAGED`, `add_dirs`, or `external_sandbox=true` do not prove operation mediation.
+
+### 9. `external_sandbox` assigns responsibility
+
+For world-scoped UAA execution, `agent_api.exec.external_sandbox.v1=true` means Substrate's broker/world-service path is the sandbox authority. If that path is unavailable for any side-effecting channel, the operation fails closed.
+
+### 10. Dispatch policy only narrows
+
+```text
+effective_turn_policy =
+  current parent policy
+  AND retained-worker capability cap, when present
+  AND dispatch/turn narrowing patch, when present
+```
+
+Accepted work uses an immutable `PolicySnapshotV3`. Parent policy changes affect future acceptance; they do not silently mutate active work.
+
+### 11. Existing `world_fs` enforcement is the execution path
+
+Dispatch narrowing uses restricted `PolicyPatch.world_fs`, canonical finalization, `PolicySnapshotV3`, and the existing world-service overlay/full-isolation/Landlock/caged/network machinery. Do not create a parallel filesystem sandbox.
+
+### 12. Runtime-native configuration is projection
+
+Projection identity includes retained-worker identity; workspace plus backend plus world generation is too coarse. Runtime homes and workspace overlays may be durable or mutable by policy, but never become the source of Substrate authority.
+
+## Review question
+
+Every refactor PR must be able to answer:
+
+> Can Substrate prove exact session identity, exact applicable binding, exact applicable policy snapshot, exact applicable work receipt, and durable lifecycle/obligation truth for this action regardless of ingress surface?
+
+If the answer depends on a helper still running, a socket being reachable, a terminal tool call returning, or an env variable being trusted, the target architecture has not landed.
