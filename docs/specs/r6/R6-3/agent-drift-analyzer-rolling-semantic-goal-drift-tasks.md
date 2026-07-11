@@ -433,20 +433,24 @@ all fixed here.
   - Result (`R6-3.X.2B` → `R6-3.X.2C`, 2026-07-06): `R6-3.X.2B` landed the relation taxonomy and
     validation-strata tooling, but it did **not** settle the final routing contract because the scorer
     still routed via relation-only `claims_drift()`. `R6-3.X.2C` then landed the missing explicit
-    `Suppress` / `Fire` / `NoClaim` decision surface, made confidence + decisive/counter evidence
-    load-bearing for weak suppressive families, tightened same-crate and broad-lineage residue, expanded
-    doc-bundle coverage through the live analyzer path, and reordered role classification so path/extension
-    semantics beat `spec` / `design` substrings.
+    internal `Suppress` / `Fire` / `NoClaim` decision surface, made confidence + decisive/counter evidence
+    load-bearing for weak suppressive-family abstention/suppression inside the scorer, tightened same-crate
+    and broad-lineage residue, expanded clear doc-bundle/member coverage through the live analyzer path, and
+    reordered role classification so the touched `src/...` / test / verifier path semantics beat `spec` /
+    `design` substrings. At the public `semantic_goal_drift` emission boundary today, only `Fire` emits;
+    both `Suppress` and `NoClaim` remain non-fire unless exported separately later.
     The fresh default seed-42 rerun from the current store (`110` sessions / `44` repos / `929`
     checkpoints, `110/110` analyzed clean) is compared **directionally** against the published `R6-3.6`
     sample because the exact prior manifest was not reusable. Final `R6-3.X.2C` numbers on that rerun
     manifest: `3` fires, `137` current-bar eligible checkpoints, `242` target-resolved eligible
     checkpoints, `203` adjacent target-eligible pairs, `195` same-target exact-match suppressions, `8`
-    changed-target candidates, and `7` remaining disjoint pairs. The `3` fires are one conservative
-    docs-only residue family (root-level doc-bundle → member-doc narrowing with no stable shared prefix),
-    and the junk-filter post-pass confirms they survive stable-only filtering rather than coming from
-    garbage target extraction. Validation strata remain non-degenerate (`0/137` junk-only eligible; no
-    added table collapses to `100% unknown`). Final routing decision: **`R6-3.X.2` is now closed through
+    changed-target candidates, and `7` remaining disjoint pairs. The `3` fires are one accepted
+    conservative docs-only over-fire family (root-level doc-bundle → member-doc narrowing with no stable
+    shared prefix), and the junk-filter post-pass confirms they survive stable-only filtering rather than
+    coming from garbage target extraction. That exact root-level residue family is rerun-observed closeout
+    evidence, not a separately committed witness. Validation strata remain non-degenerate (`0/137` junk-only
+    eligible; no added table collapses to `100% unknown`). Broader non-`src` role-classification collisions
+    were not separately expanded by this packet. Final routing decision: **`R6-3.X.2` is now closed through
     `R6-3.X.2C`; keep `R6-3.X.3` deferred.**
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a

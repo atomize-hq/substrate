@@ -285,14 +285,20 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    (`110` sessions / `44` repos / `938` checkpoints) again showed `0` fires under the shipping bar.
    **R6-3.X.2B / R6-3.X.2C closeout chain (2026-07-06):** `R6-3.X.2B` landed the relation taxonomy,
    but `R6-3.X.2C` was required to replace relation-only `claims_drift()` routing with an explicit
-   `Suppress` / `Fire` / `NoClaim` contract. Live truth after the default seed-42 rerun from the current
+   internal `Suppress` / `Fire` / `NoClaim` contract. At the public `semantic_goal_drift` emission
+   boundary today, only `Fire` emits while both `Suppress` and `NoClaim` stay non-fire. Live truth after
+   the default seed-42 rerun from the current
    store: `110` sessions / `44` repos / `929` checkpoints, `137` current-bar eligible checkpoints,
    `242` target-resolved eligible checkpoints, `203` adjacent target-eligible pairs, `195` same-target
    exact-match suppressions, `8` changed-target candidates, `7` remaining disjoint pairs, and **`3`
-   emitted fires**. Those `3` fires are one conservative docs-only residue family (root-level
-   doc-bundle → member-doc narrowing with no stable shared prefix), not a return to relation-only
-   routing and not junk-target noise. The batch tooling continues to report validation strata beyond
-   delegation with explicit heuristic sources, and no added table is all-unknown. **Routing decision
+   emitted fires**. Those `3` fires are one accepted conservative docs-only over-fire family
+   (root-level doc-bundle → member-doc narrowing with no stable shared prefix), not a return to
+   relation-only routing and not junk-target noise. The exact root-level residue is rerun-observed
+   closeout evidence rather than a separately committed witness. The batch tooling continues to report
+   validation strata beyond
+   delegation with explicit heuristic sources, and no added table is all-unknown. The touched
+   role-classification proof is strongest on the `src/...` / test / verifier-style cases covered by the
+   packet; broader non-`src` substring collisions were not separately expanded here. **Routing decision
    updated:** the graduated / weighted-distance debt `R6-3.X.2` is now closed through packet
    `R6-3.X.2C`; keep `R6-3.X.3` deferred, and keep `RepoRelativeEquivalentAfterCwdStrip` deferred
    unless a scorer-local cwd/session-root seam is proven without widening into `context/objective.rs`

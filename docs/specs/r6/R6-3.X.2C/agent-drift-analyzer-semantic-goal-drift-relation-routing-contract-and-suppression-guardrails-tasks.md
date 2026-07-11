@@ -57,7 +57,8 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - The design says numeric score is explanatory only.
     - The design says confidence plus decisive/counter evidence gate weaker suppressive families.
     - The design says `NoClaim` is distinct from `Suppress`: `NoClaim` means under-supported or ambiguous,
-      not positive relatedness.
+      not positive relatedness, even though at the public `semantic_goal_drift` emission boundary today both
+      remain non-fire unless `NoClaim` is exported separately later.
     - The design locks a route-result matrix covering exact, containment, weak suppressive-family, shared-
       constraint, weak/generic, unrelated, and unknown outcomes.
   - Verify:
@@ -84,7 +85,7 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`
   - Estimated scope: M
 
-- [x] Task R6-3.X.2C.1.3: Make the weighted assessment fields load-bearing where intended.
+- [x] Task R6-3.X.2C.1.3: Make the weighted assessment fields load-bearing where intended inside scorer-local routing/audit semantics.
   - Acceptance:
     - callers no longer ignore `confidence`, `decisive_evidence`, and `counter_evidence`.
     - weaker suppressive families require explicit evidence support before suppressing.
@@ -92,6 +93,8 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - under-supported `SameArtifactFamily` or `SameWorkItemFamily` candidates are reclassified to `Fire`-
       aligned relations where appropriate instead of automatically becoming `NoClaim`.
     - score remains non-authoritative in code comments, tests, and docs.
+    - the docs say the public emission boundary still only fires on `Fire`; `Suppress` and `NoClaim` are
+      both non-fire unless exported separately later.
   - Verify:
     - scorer-local tests that distinguish supported vs unsupported suppressive-family matches
   - Dependencies: `R6-3.X.2C.1.2`
@@ -134,7 +137,10 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - member → bundle suppresses when it is clearly the same doc family.
     - bundle/member with an unrelated addition still fires.
     - bundle → unrelated doc still fires.
-    - at least one live acceptance fixture covers doc-bundle behavior, not only scorer-local tests.
+    - at least one live acceptance fixture covers clear doc-bundle/member behavior, not only scorer-local
+      tests.
+    - the docs do not claim the exact root-level doc-bundle → member-doc residue family is already covered by
+      a separately committed witness.
     - if feasible in the same bounded fixture style, one acceptance-level false-negative guard covers a
       high-risk `SameArtifactFamily` or `SameWorkItemFamily` case.
   - Verify:
@@ -152,6 +158,8 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - obvious code/test/verifier paths are classified by path/extension markers before substring semantics.
     - paths like `src/spec_parser.rs` and `src/design_tokens.rs` no longer misclassify as doc roles.
     - existing plan/review/verify progression cases stay covered.
+    - closeout docs keep any broader non-`src` role-classification residual risk proportionate rather than
+      claiming exhaustive coverage.
   - Verify:
     - scorer-local role-classification regression tests
   - Dependencies: `R6-3.X.2C.2.3`
@@ -237,6 +245,8 @@ eligibility loosening, extraction hardening, containment widening, or downstream
     - the docs record whether the seed-42 rerun was rerun or intentionally skipped.
     - the docs soften unknown-strata wording if it is still only a coarse sanity check.
     - the docs keep `R6-3.X.3` deferred unless this packet proves a real need to reopen it.
+    - the docs say the remaining `3` fires are accepted conservative over-fire from the stricter doc-bundle
+      rule, not a return to relation-only routing.
   - Verify:
     - manual audit against final code/test/rerun outputs
   - Dependencies: `R6-3.X.2C.4.2`

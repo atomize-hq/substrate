@@ -12,6 +12,9 @@ reconciliation.
 - `R6-3.X.2` containment first cut is already landed and must remain intact.
 - `R6-3.X.2B` landed useful relation machinery, but did not settle the final routing contract.
 - The strongest confirmed issue is the relation-only routing mismatch.
+- The explicit `Suppress` / `Fire` / `NoClaim` contract is load-bearing mainly for scorer-local
+  abstention/audit semantics; at the public `semantic_goal_drift` emission boundary today, both
+  `Suppress` and `NoClaim` are non-fire.
 - `R6-3.X.3` stays deferred unless this packet's rerun proves a new blocker.
 
 ## Dependency graph
@@ -36,13 +39,16 @@ reconciliation.
    - Lock the analyzer-local boundary and explicit defers.
 
 2. **Routing contract slice**
-   - Define the decision contract (`Suppress` / `Fire` / `NoClaim`).
+   - Define the decision contract (`Suppress` / `Fire` / `NoClaim`) and document that its
+     present public boundary is still `Fire` vs non-fire.
    - Replace `claims_drift()` callers with the explicit routing helper.
    - Keep the relation taxonomy authoritative and score explanatory only.
 
 3. **Guardrail slice**
    - Tighten suppressive-family semantics where the external review found legitimate risk.
-   - Preserve the landed doc-bundle fix but expand it into a clearly specified relation rule and coverage set.
+   - Preserve the landed doc-bundle fix but expand it into a clearly specified relation rule and
+     coverage set for clear bundle/member doc-family behavior without claiming the exact root-level
+     residue is already a separately committed witness.
    - Fix role classification ordering so path/extension semantics beat substring hints.
 
 4. **Proof-wall slice**
@@ -71,6 +77,7 @@ reconciliation.
 ### Checkpoint B — routing contract settled
 - `claims_drift()` is replaced in the plan/design
 - decision outcomes are explicit
+- public emission boundary remains `Fire` vs non-fire (`Suppress` and `NoClaim` both stay non-fire today)
 - relation remains authoritative
 - score is explanatory only
 
@@ -82,6 +89,7 @@ reconciliation.
 ### Checkpoint D — proof wall defined
 - every touched suppressive family has a paired false-negative guard
 - acceptance-level doc-bundle coverage is explicit
+- closeout wording does not overclaim the exact root-level residue as already separately witness-locked
 - prior-witness non-regression is explicit
 
 ### Checkpoint E — closeout criteria locked

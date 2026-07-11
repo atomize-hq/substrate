@@ -35,7 +35,7 @@ Reopen the semantic-goal-drift weighted-distance closeout just enough to make th
 testable, and honestly documented.
 
 Success means this packet:
-- replaces relation-only `claims_drift()` routing with an explicit drift-decision contract,
+- replaces relation-only `claims_drift()` routing with an explicit drift-decision contract for scorer-local routing/audit semantics; at today's public `semantic_goal_drift` emission boundary, only `Fire` emits while both `Suppress` and `NoClaim` remain non-fire,
 - keeps relation type as the primary routing authority,
 - uses confidence plus decisive/counter evidence as suppressive gates for weaker relation families,
 - preserves numeric score as explanatory/audit-only,
@@ -243,7 +243,9 @@ Operationally:
 `NoClaim` means the scorer is refusing to make a `semantic_goal_drift` assertion because the evidence is
 under-supported or ambiguous. It is not positive relatedness. `NoClaim` must be distinguishable in scorer
 tests, debug comments, and rerun/funnel reporting from `Suppress`. `Suppress` means "related enough to stay
-quiet." `NoClaim` means "not enough evidence to make a drift claim."
+quiet." `NoClaim` means "not enough evidence to make a drift claim." At today's public
+`semantic_goal_drift` emission boundary, both `Suppress` and `NoClaim` are non-fire; `NoClaim` is therefore an
+internal abstention/audit state unless a later packet exports it separately.
 
 ### 3. Keep the weighted apparatus, but make it coherent
 
@@ -292,6 +294,8 @@ artifact tokens, shared constraints, or weak/generic terms should be reclassifie
   - bundle/member + unrelated addition still firing,
   - bundle → unrelated member firing,
 - carry at least one live acceptance case, not only scorer-local coverage.
+- treat the exact rerun-observed root-level doc-bundle → anchored-member residue as closeout evidence, not
+  as a separately committed acceptance witness already locked by this packet.
 - if feasible in the same bounded fixture style, add one acceptance-level false-negative guard for a
   high-risk `SameArtifactFamily` or `SameWorkItemFamily` case; scorer-local tests remain the main wall for
   the rest.
@@ -301,6 +305,8 @@ artifact tokens, shared constraints, or weak/generic terms should be reclassifie
 - only then apply `plan` / `spec` / `design` / `review` / `findings` semantics;
 - add scorer-local guards so obvious code paths like `src/spec_parser.rs` and `src/design_tokens.rs` do not
   misclassify as doc roles.
+- keep any broader non-`src` substring-collision risk out of the closeout claim set unless separately proved;
+  this packet's role-ordering witnesses are strongest on the touched `src/...` / test / verifier-style cases.
 
 ### 5. Keep false-negative guards first-class
 
@@ -359,7 +365,9 @@ This packet is complete only when all are true:
    remains distinguishable from `Suppress` in tests/comments/reporting.
 7. `SameArtifactFamily` has explicit false-negative guards against same-crate unrelated pivots.
 8. `SameWorkItemFamily` has explicit false-negative guards against same-lineage unrelated pivots.
-9. Doc-bundle-member logic has scorer-local and acceptance-level positive and negative coverage.
+9. Doc-bundle-member logic has scorer-local and acceptance-level positive and negative coverage for clear
+   same-doc-family bundle/member behavior, while the exact root-level bundle → member residue remains a
+   rerun-observed conservative family rather than a separately committed witness.
 10. Role classification no longer misclassifies obvious code/test paths due to substring hits.
 11. Prior witnesses remain locked with no silent rebaseline.
 12. Focused tests and the full analyzer wall pass.

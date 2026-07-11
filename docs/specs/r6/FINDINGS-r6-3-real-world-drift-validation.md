@@ -314,20 +314,25 @@ eligibility-bar revisit (`R6-3.X.3`) stays deferred behind it.
 `R6-3.X.2B` landed the analyzer-local relation taxonomy and supporting batch strata, but it did **not**
 finish the routing story: the scorer still routed via relation-only `claims_drift()` even though the
 packet docs described a richer relation + confidence + evidence contract. `R6-3.X.2C` reopened that
-gap and landed the missing decision surface locally in
+gap and landed the missing internal decision surface locally in
 `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs`:
-- explicit `Suppress` / `Fire` / `NoClaim` routing,
+- explicit internal `Suppress` / `Fire` / `NoClaim` routing,
 - relation family remains primary,
 - numeric score is explanatory only,
 - weaker suppressive families now require `confidence >= Medium`, decisive evidence, and no material
   counter-evidence,
 - same-crate residue and broad work-item lineage no longer suppress on their own,
-- doc-bundle behavior is covered scorer-locally plus through a live acceptance fixture, and
-- code/test path markers now beat `spec` / `design` substrings during role classification.
+- clear doc-bundle/member behavior is covered scorer-locally plus through a live acceptance fixture (the
+  exact root-level residue family below is not itself a separately committed witness yet), and
+- the touched `src/...` / test / verifier path markers now beat `spec` / `design` substrings during role
+  classification; broader non-`src` substring collisions were not separately expanded in this packet.
 
-The default seed-42 corpus rerun was repeated from the **current** session store with `--seed 42`, so
-the result is again an explicit **directional** comparison against the published `2026-07-05`
-`R6-3.6` baseline, not a claim of identical session identity. Post-`R6-3.X.2C` rerun totals:
+At the current public `semantic_goal_drift` emission boundary, only `Fire` emits; both `Suppress` and
+`NoClaim` remain non-fire, so `NoClaim` is presently an internal abstention/audit state unless a later
+packet exports it separately. The default seed-42 corpus rerun was repeated from the **current** session
+store with `--seed 42`, so the result is again an explicit **directional** comparison against the
+published `2026-07-05` `R6-3.6` baseline, not a claim of identical session identity. Post-`R6-3.X.2C`
+rerun totals:
 - `110/110` sessions analyzed clean across `44` repos
 - `929` checkpoints with `structured_objective`
 - `242` structured-target checkpoints
@@ -341,12 +346,14 @@ the result is again an explicit **directional** comparison against the published
 - `7` remaining disjoint pairs
 - `3` emitted `semantic_goal_drift` fires (`1` rolling evidence line, `3` kickoff-anchor evidence lines)
 
-Those `3` fires are not a reopened relation-only routing bug. They are one docs-session residue family:
-root-level **doc-bundle → anchored member-doc narrowing**
+Those `3` fires are not a reopened relation-only routing bug and not a reversion to relation-only
+routing. They are one accepted conservative over-fire family created by the stricter doc-bundle rule at
+the public boundary: root-level **doc-bundle → anchored member-doc narrowing**
 (`architecture-overview.md|README.md|…` → `README.md`) where the bundle lacks a stable shared prefix.
 `R6-3.X.2C` intentionally suppresses doc-bundle movement only when the same-doc-family evidence is clear;
-it does **not** suppress ambiguous root-level bundles on relation type alone anymore. The rerun therefore
-remains conservative in the safe direction: over-fire, not drift masking.
+it does **not** suppress ambiguous root-level bundles on relation type alone anymore. The exact root-level
+residue family is rerun-observed closeout evidence, not a directly committed acceptance witness. The rerun
+therefore remains conservative in the safe direction: over-fire, not drift masking.
 
 The junk-filter post-pass confirms this is not garbage-target noise:
 - `3/3` actual fires survive the junk suppression filter
