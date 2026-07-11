@@ -9,12 +9,89 @@
 - Hashes are over canonical serialized content, not presentation JSON.
 - A field marked `ref` identifies a durable object whose hash is verified before use.
 
+### A1 canonical encoding, supporting types, and persistence
+
+A1 uses one exact canonical encoding and digest rule for authority records, intents, and
+authority-owned objects:
+
+1. Structured values are encoded as compact UTF-8 JSON after recursively sorting every object
+   key by Unicode code-point order. Array order is preserved. JSON numbers use `serde_json`'s
+   finite canonical rendering; non-finite or otherwise non-JSON numeric values are rejected.
+2. Structured hashes are lowercase hexadecimal SHA-256 over those canonical JSON bytes.
+   `transition_input_hash` and `target_participant_lease_token_hash` are lowercase hexadecimal
+   SHA-256 over the exact raw input bytes and UTF-8 lease-token bytes respectively.
+3. The same content must therefore produce the same digest across CLI, REPL, helper, restart,
+   and test processes. Presentation JSON, pretty-print whitespace, map insertion order, plan
+   paths, socket paths, and timestamps excluded by the field-specific rules cannot affect a
+   digest.
+4. Raw lease tokens and transition input are authority-store payload only. They never appear in
+   logs, traces, diagnostics, rejection text, hashes-as-identifiers, or compatibility snapshots.
+
+The supporting V1 types are:
+
+```rust
+struct WorkspaceBindingV1 {
+    workspace_root: String,       // normalized absolute path; no `.` or `..`
+    authority_store_root: String, // normalized absolute bound SUBSTRATE_HOME
+}
+
+struct WorldBindingV1 {
+    world_id: String,
+    world_generation: u64,
+}
+
+struct AgentDescriptorRefV1 { ref_id: String }
+struct RetainedWorkerRefV1 { ref_id: String }
+struct ResumeHandleRefV1 { ref_id: String }
+struct PolicyRefV1 { ref_id: String }
+struct HostSessionTransitionTransportPayloadRefV1 { ref_id: String }
+```
+
+Every `ref_id` is an opaque, non-empty, kind-scoped identifier in the same bound authority
+namespace. It is not a caller-selected filesystem path. The authority store records the object
+kind, canonical content or access-controlled raw bytes, and its digest; claim, application,
+reprojection, reconciliation, and release re-read by ref and verify the separately committed
+hash. A ref of the wrong kind fails closed even when its bytes hash to the requested digest.
+
+For A1, `HostAttachContractV1` is the canonical projection of the existing persisted host attach
+contract fields: exact backend ID, host execution scope, protocol, resolved launch descriptor,
+capabilities, attach-launch knobs, already-resolved effective-policy JSON, and optional continuity
+resume-handle identity. A1 does not reinterpret or recompute that policy JSON. The descriptor is
+also persisted as its own authority-owned object so `descriptor_ref`/`descriptor_hash` can be
+verified independently. The continuity handle, when present, is persisted as a
+`ResumeHandleRefV1`; raw provider credentials are prohibited from every A1 object.
+
+A1 persists one schema-versioned state root per bound `authority_store_root`. That root contains
+the authority/tombstone map, intent map, issuer-request index, application journal/result markers,
+and authority-owned object map. Every semantic mutation holds a cross-process exclusive lock,
+re-reads the current root, validates the expected revisions/hashes, and publishes one atomically
+replaced and fsynced root. A process-local mutex or multiple independently replaced semantic files
+is insufficient. The root and raw-payload objects are owner-only (`0600` on Unix) and their parent
+directories are not group/world writable. Authority records and tombstones are never deleted in
+V1; `ExpectedAbsent` means the namespace has no authority record, tombstone, or prior reservation
+for that session ID.
+
+Production A1 timing is fixed:
+
+```text
+HOST_SESSION_TRANSITION_INTENT_DEFAULT_TTL = 300 seconds
+HOST_SESSION_TRANSITION_INTENT_MAX_TTL     = 900 seconds
+HOST_SESSION_TRANSITION_CLAIM_LEASE        = 30 seconds
+HOST_SESSION_TRANSITION_CLAIM_LEASE_MAX    = 60 seconds
+```
+
+CLI, REPL, helper, and auto-attach producers use the default intent TTL and claim lease. Tests may
+use a shorter injected clock/bound only; production environment variables or plan contents cannot
+change these values in V1. Issuance rejects a non-positive TTL, a TTL above the maximum, or a claim
+lease outside the positive maximum. Neither retry nor reclaim extends `expires_at`.
+
 ## 1. `DurableSessionAuthorityV1`
 
 ```rust
 struct DurableSessionAuthorityV1 {
     schema_version: u32,                 // exactly 1
     orchestration_session_id: String,
+    shell_trace_session_id: String,
     authority_revision: u64,
     authoritative_participant_lineage: Vec<String>,
     active_authoritative_participant_id: Option<String>,
@@ -49,6 +126,10 @@ Acceptance rules:
 3. `Terminal` is monotonic unless a separately versioned recovery protocol explicitly creates a successor session; it is never reversed in-place.
 4. World binding is the exact `(world_id, world_generation)` pair. Partial binding is invalid.
 5. PID, socket, heartbeat, and attached-client data do not belong in this contract.
+6. `shell_trace_session_id`, `workspace_binding.authority_store_root`, and the initial
+   `workspace_binding.workspace_root` are immutable for one authority record. Attach and
+   `ResumeOneTurn` must match them exactly; a different store root or workspace requires a
+   separately authorized migration protocol outside A1.
 
 ## 1A. `HostSessionTransitionIntentV1`
 
@@ -269,6 +350,9 @@ A substituted request using a stored `intent_id` or `issuer_request_id` with a d
 7. At most one nonterminal intent may reserve a given `(orchestration_session_id, authority_precondition)`. A different mode, target, or payload against that reservation is a conflict rather than a second candidate transition.
 8. `PublicCli` and `Repl` callers have no auto-attach fields. `RouterAutoAttach` is valid only for `Attach` and commits the already-existing obligation ID and claim owner; A1 neither decides eligibility nor changes claim/settlement semantics. When `caller_participant_id` is present, it must match the exact authoritative caller permitted by the precondition. For a new `Start`, it is absent because no durable session participant exists yet.
 9. For all three A1 modes, legacy `source_orchestration_session_id` plan data is absent. Startup prompt stream paths, helper PIDs, sockets, and plan paths are transport-only and cannot enter the authority record; existing path builders may reproject them from the retained payload without an endpoint/path redesign, and delivered content is accepted only when its committed hash matches.
+10. `shell_trace_session_id` must equal the immutable value in the authority record for `Attach`
+    and `ResumeOneTurn`; `Start` commits it atomically with authority creation. It is included in
+    `payload_hash` and cannot be recovered from ambient tracing state.
 
 ### Exact mode preconditions
 
@@ -338,6 +422,27 @@ On process restart or before retrying a nonterminal intent, `HostSessionAuthorit
 ### Compatibility and migration
 
 Legacy helper plans without `intent_id` and `payload_hash` cannot drive a contract-correct A1 transition. Once a `Start`, `Attach`, or `ResumeOneTurn` producer is switched, a mixed-version consumer fails closed and requires reissuance; it does not reconstruct authority from the plan. Existing durable sessions may be compatibility-read or migrated, but every new transition still requires an exact intent. This contract changes neither helper endpoints/paths nor auto-attach policy, eligibility, claim, or settlement semantics.
+
+The A1 legacy-session migration is a one-time authority transaction with these exact rules:
+
+1. It reads one exact persisted orchestration-session record plus all same-session participant
+   records from the already-bound store root. PID, heartbeat, socket, attached-client liveness,
+   helper readiness, current CWD, and ambient config/env are ignored.
+2. The participant lineage is reconstructed only by following the persisted
+   `resumed_from_participant_id` chain from the persisted active participant. A missing link,
+   duplicate participant ID, cycle, branch ambiguity, cross-session link, or active participant
+   not at the lineage tip migrates to `Invalid` and cannot satisfy an A1 transition.
+3. Legacy `ActiveAttached`, `ParkedResumable`, `AwaitingAttention`, and `Terminal` map to the same
+   V1 posture. Any terminal legacy state maps to `Terminal`. `BornUnattached`, a partial world
+   binding, a relative/unnormalized workspace, missing trace identity, missing attach contract,
+   or otherwise unrepresentable state maps to `Invalid`; migration never invents eligibility.
+4. The legacy store root becomes `workspace_binding.authority_store_root`; the exact normalized
+   persisted workspace becomes `workspace_binding.workspace_root`; the exact legacy trace ID is
+   committed as `shell_trace_session_id`. Descriptor, attach-contract, continuity-resume, and
+   already-resolved policy content are stored and hashed without rereading inventory or policy.
+5. Migration creates authority revision 1 and a permanent session-ID tombstone/entry before
+   intent issuance. Exact repeated migration joins that record. Conflicting legacy data after the
+   authority record exists is compatibility evidence only and cannot rewrite it.
 
 ## 2. `HostExecutionEpisodeV1`
 
