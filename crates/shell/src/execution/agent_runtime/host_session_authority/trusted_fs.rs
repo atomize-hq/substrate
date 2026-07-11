@@ -258,8 +258,8 @@ mod platform {
             let stat = fstat(file.as_raw_fd())?;
             Ok(TrustedFile {
                 file,
-                device_id: stat.st_dev,
-                inode: stat.st_ino,
+                device_id: stat.st_dev as u64,
+                inode: stat.st_ino as u64,
             })
         }
 
@@ -274,8 +274,8 @@ mod platform {
             let stat = fstat(file.as_raw_fd())?;
             Ok(TrustedFile {
                 file,
-                device_id: stat.st_dev,
-                inode: stat.st_ino,
+                device_id: stat.st_dev as u64,
+                inode: stat.st_ino as u64,
             })
         }
 
@@ -316,8 +316,8 @@ mod platform {
                 .stat_entry(&expected.name)?
                 .ok_or_else(|| TrustedFsError::new("scanned authority entry disappeared"))?;
             if kind_from_mode(current.st_mode) != expected.kind
-                || current.st_dev != expected.device_id
-                || current.st_ino != expected.inode
+                || current.st_dev as u64 != expected.device_id
+                || current.st_ino as u64 != expected.inode
             {
                 return Err(TrustedFsError::new(
                     "authority entry changed after safe enumeration",
@@ -338,7 +338,8 @@ mod platform {
                     ));
                 }
             };
-            if opened.st_dev != expected.device_id || opened.st_ino != expected.inode {
+            if opened.st_dev as u64 != expected.device_id || opened.st_ino as u64 != expected.inode
+            {
                 return Err(TrustedFsError::new(
                     "opened authority entry differs from scanned identity",
                 ));
@@ -614,7 +615,7 @@ mod platform {
     ) -> Result<File, TrustedFsError> {
         // SAFETY: parent is live and name is NUL-terminated; mode is used only with O_CREAT.
         owned_file(
-            unsafe { libc::openat(parent, name.as_ptr(), flags, mode) },
+            unsafe { libc::openat(parent, name.as_ptr(), flags, mode as libc::c_uint) },
             "open trusted entry",
         )
     }
@@ -803,7 +804,7 @@ mod platform {
         if kind_from_mode(stat.st_mode) != EntryKind::Directory
             || stat.st_uid != effective_uid()
             || stat.st_dev as u64 != expected_device
-            || (exact_mode && stat.st_mode & 0o777 != DIRECTORY_MODE)
+            || (exact_mode && stat.st_mode & 0o7777 != DIRECTORY_MODE)
             || (!exact_mode && stat.st_mode & 0o022 != 0)
         {
             return Err(TrustedFsError::new(
@@ -819,7 +820,7 @@ mod platform {
         if kind_from_mode(stat.st_mode) != EntryKind::RegularFile
             || stat.st_uid != effective_uid()
             || stat.st_dev as u64 != expected_device
-            || stat.st_mode & 0o777 != FILE_MODE
+            || stat.st_mode & 0o7777 != FILE_MODE
         {
             return Err(TrustedFsError::new(
                 "trusted file type/owner/mode/device mismatch",
@@ -856,15 +857,72 @@ mod platform {
 
     #[cfg(target_os = "macos")]
     fn validate_acl(fd: RawFd) -> Result<(), TrustedFsError> {
+        type Acl = *mut libc::c_void;
+        type AclEntry = *mut libc::c_void;
+        const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
+        const ACL_FIRST_ENTRY: libc::c_int = 0;
+        const ACL_NEXT_ENTRY: libc::c_int = -1;
+        const ACL_EXTENDED_ALLOW: libc::c_int = 1;
+        const ACL_EXTENDED_DENY: libc::c_int = 2;
+
         unsafe extern "C" {
-            fn acl_extended_fd_np(fd: libc::c_int) -> libc::c_int;
+            fn acl_get_fd_np(fd: libc::c_int, acl_type: libc::c_int) -> Acl;
+            fn acl_get_entry(acl: Acl, entry_id: libc::c_int, entry: *mut AclEntry) -> libc::c_int;
+            fn acl_get_tag_type(entry: AclEntry, tag: *mut libc::c_int) -> libc::c_int;
+            fn acl_free(acl: Acl) -> libc::c_int;
         }
-        // SAFETY: fd is live and acl_extended_fd_np only inspects its ACL.
-        match unsafe { acl_extended_fd_np(fd) } {
-            0 => Ok(()),
-            1 => Err(TrustedFsError::new("trusted entry has an extended ACL")),
-            _ => Err(io_error_value("inspect trusted ACL")),
+
+        clear_errno();
+        // SAFETY: fd is live and ACL_TYPE_EXTENDED requests a detached ACL copy.
+        let acl = unsafe { acl_get_fd_np(fd, ACL_TYPE_EXTENDED) };
+        if acl.is_null() {
+            let error = io::Error::last_os_error();
+            return if error.kind() == io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(TrustedFsError::new(format!("inspect trusted ACL: {error}")))
+            };
         }
+
+        let validation = (|| {
+            let mut entry_id = ACL_FIRST_ENTRY;
+            loop {
+                let mut entry = std::ptr::null_mut();
+                clear_errno();
+                // SAFETY: acl is live and entry points to initialized pointer storage.
+                if unsafe { acl_get_entry(acl, entry_id, &mut entry) } != 0 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::EINVAL) {
+                        return Ok(());
+                    }
+                    return Err(TrustedFsError::new(format!(
+                        "enumerate trusted ACL: {error}"
+                    )));
+                }
+                let mut tag = 0;
+                // SAFETY: acl_get_entry returned a live entry owned by acl.
+                if unsafe { acl_get_tag_type(entry, &mut tag) } != 0 {
+                    return Err(io_error_value("inspect trusted ACL entry"));
+                }
+                if tag == ACL_EXTENDED_ALLOW {
+                    return Err(TrustedFsError::new(
+                        "trusted entry ACL grants another principal",
+                    ));
+                }
+                if tag != ACL_EXTENDED_DENY {
+                    return Err(TrustedFsError::new(
+                        "trusted entry ACL has an unsupported tag",
+                    ));
+                }
+                entry_id = ACL_NEXT_ENTRY;
+            }
+        })();
+
+        // SAFETY: acl_get_fd_np returned a uniquely allocated ACL object.
+        if unsafe { acl_free(acl) } != 0 {
+            return Err(io_error_value("free trusted ACL"));
+        }
+        validation
     }
 
     fn acl_grants_named_principal(bytes: &[u8]) -> bool {
@@ -903,13 +961,24 @@ mod platform {
         TrustedFsError::new(format!("{operation}: {}", io::Error::last_os_error()))
     }
 
-    #[cfg(all(test, target_os = "linux"))]
+    #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
     mod tests {
         use std::os::unix::fs::{symlink, PermissionsExt};
 
         use super::*;
 
         fn safe_test_parent() -> std::path::PathBuf {
+            if let Some(explicit) = std::env::var_os("SUBSTRATE_A1_TEST_PARENT") {
+                return explicit.into();
+            }
+            #[cfg(target_os = "macos")]
+            {
+                return std::path::PathBuf::from(
+                    std::env::var_os("HOME").expect("macOS tests require HOME"),
+                )
+                .join("Library/Caches");
+            }
+            #[cfg(target_os = "linux")]
             std::env::var_os("XDG_RUNTIME_DIR")
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| {
@@ -1004,6 +1073,86 @@ mod platform {
         }
 
         #[test]
+        fn no_replace_refuses_existing_target_without_partial_publication() {
+            let (_temp, root) = root();
+            let authority = root.directory().create_directory("authority-v1").unwrap();
+            let temp = authority.create_directory("tmp").unwrap();
+            let objects = authority.create_directory("objects").unwrap();
+            let mut published = temp.create_file("first.tmp").unwrap();
+            published.write_all(b"published").unwrap();
+            published.sync().unwrap();
+            temp.rename_no_replace("first.tmp", published, &objects, "object.obj")
+                .unwrap();
+
+            let mut conflicting = temp.create_file("second.tmp").unwrap();
+            conflicting.write_all(b"conflicting").unwrap();
+            conflicting.sync().unwrap();
+            assert!(temp
+                .rename_no_replace("second.tmp", conflicting, &objects, "object.obj")
+                .is_err());
+            assert_eq!(
+                objects.open_file("object.obj").unwrap().read_all().unwrap(),
+                b"published"
+            );
+            assert_eq!(
+                temp.open_file("second.tmp").unwrap().read_all().unwrap(),
+                b"conflicting"
+            );
+        }
+
+        #[test]
+        fn child_file_and_directory_permissions_are_enforced() {
+            let (temp, root) = root();
+            let authority = root.directory().create_directory("authority-v1").unwrap();
+            let child = authority.create_directory("child").unwrap();
+            let mut file = authority.create_file("record").unwrap();
+            file.write_all(b"record").unwrap();
+            file.sync().unwrap();
+
+            fs::set_permissions(
+                temp.path().join("authority-v1/child"),
+                fs::Permissions::from_mode(0o755),
+            )
+            .unwrap();
+            assert!(authority.open_directory("child").is_err());
+            fs::set_permissions(
+                temp.path().join("authority-v1/child"),
+                fs::Permissions::from_mode(0o700),
+            )
+            .unwrap();
+            child.sync().unwrap();
+
+            fs::set_permissions(
+                temp.path().join("authority-v1/record"),
+                fs::Permissions::from_mode(0o640),
+            )
+            .unwrap();
+            assert!(authority.open_file("record").is_err());
+        }
+
+        #[test]
+        fn child_file_and_directory_special_permission_bits_are_rejected() {
+            let (temp, root) = root();
+            let authority = root.directory().create_directory("authority-v1").unwrap();
+            authority.create_directory("child").unwrap();
+            authority.create_file("record").unwrap();
+
+            fs::set_permissions(
+                temp.path().join("authority-v1/child"),
+                fs::Permissions::from_mode(0o2700),
+            )
+            .unwrap();
+            assert!(authority.open_directory("child").is_err());
+
+            fs::set_permissions(
+                temp.path().join("authority-v1/record"),
+                fs::Permissions::from_mode(0o4600),
+            )
+            .unwrap();
+            assert!(authority.open_file("record").is_err());
+        }
+
+        #[test]
         fn scanned_entry_replacement_fails_revalidation() {
             let (_temp, root) = root();
             let authority = root.directory().create_directory("authority-v1").unwrap();
@@ -1061,6 +1210,7 @@ mod platform {
             root.revalidate().unwrap();
         }
 
+        #[cfg(target_os = "linux")]
         #[test]
         fn actual_named_acl_grant_is_rejected() {
             let temp = tempfile::Builder::new()
@@ -1093,6 +1243,40 @@ mod platform {
             };
             assert_eq!(result, 0, "{}", io::Error::last_os_error());
             assert!(TrustedAuthorityRoot::open(temp.path()).is_err());
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn actual_extended_acl_is_rejected() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-acl-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let status = std::process::Command::new("/bin/chmod")
+                .args(["+a", "everyone allow write"])
+                .arg(temp.path())
+                .status()
+                .unwrap();
+            assert!(status.success());
+            assert!(TrustedAuthorityRoot::open(temp.path()).is_err());
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn protective_extended_acl_deny_is_accepted() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-acl-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let status = std::process::Command::new("/bin/chmod")
+                .args(["+a", "everyone deny delete"])
+                .arg(temp.path())
+                .status()
+                .unwrap();
+            assert!(status.success());
+            TrustedAuthorityRoot::open(temp.path()).unwrap();
         }
 
         #[test]
@@ -1143,6 +1327,38 @@ mod platform {
         }
 
         #[test]
+        fn interrupted_primitive_temp_is_non_authoritative_and_cleanup_is_durable() {
+            const CHILD_TEST: &str = "execution::agent_runtime::host_session_authority::trusted_fs::platform::tests::interrupted_primitive_temp_is_non_authoritative_and_cleanup_is_durable";
+            const TEMP_NAME: &str =
+                "object--ao_11111111111111111111111111111111--22222222222222222222222222222222.tmp";
+            if let Some(root_path) = std::env::var_os("SUBSTRATE_A1_TEMP_CHILD_ROOT") {
+                let root = TrustedAuthorityRoot::open(Path::new(&root_path)).unwrap();
+                let authority = root.directory().open_directory("authority-v1").unwrap();
+                let temp = authority.open_directory("tmp").unwrap();
+                let mut partial = temp.create_file(TEMP_NAME).unwrap();
+                partial.write_all(b"partial").unwrap();
+                std::process::exit(73);
+            }
+
+            let (root_temp, root) = root();
+            let authority = root.directory().create_directory("authority-v1").unwrap();
+            let temp = authority.create_directory("tmp").unwrap();
+            let objects = authority.create_directory("objects").unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", CHILD_TEST, "--nocapture"])
+                .env("SUBSTRATE_A1_TEMP_CHILD_ROOT", root_temp.path())
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(73));
+            assert_eq!(objects.entry_kind("partial.obj").unwrap(), None);
+            assert_eq!(temp.entries().unwrap().len(), 1);
+            temp.unlink_file(TEMP_NAME).unwrap();
+            temp.sync().unwrap();
+            assert!(temp.entries().unwrap().is_empty());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
         fn acl_parser_rejects_named_principal_grants_and_malformed_state() {
             let mut acl = 2_u32.to_le_bytes().to_vec();
             acl.extend_from_slice(&ACL_USER.to_le_bytes());
@@ -1156,6 +1372,108 @@ mod platform {
             harmless.extend_from_slice(&7_u16.to_le_bytes());
             harmless.extend_from_slice(&u32::MAX.to_le_bytes());
             assert!(!acl_grants_named_principal(&harmless));
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn macos_case_aliases_follow_reported_volume_semantics() {
+            let (temp, direct) = root();
+            let name = temp.path().file_name().unwrap().to_str().unwrap();
+            let alias_name = name
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_lowercase() {
+                        character.to_ascii_uppercase()
+                    } else {
+                        character.to_ascii_lowercase()
+                    }
+                })
+                .collect::<String>();
+            assert_ne!(name, alias_name);
+            let alias_path = temp.path().with_file_name(alias_name);
+            let DirectoryPhysicalIdentityV1::MacOs { case_sensitive, .. } =
+                &direct.identity().physical_identity
+            else {
+                panic!("macOS root must carry macOS physical identity");
+            };
+            if *case_sensitive {
+                assert!(TrustedAuthorityRoot::open(&alias_path).is_err());
+            } else {
+                let through_alias = TrustedAuthorityRoot::open(&alias_path).unwrap();
+                assert_eq!(through_alias.identity(), direct.identity());
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn macos_case_folded_publication_collisions_follow_volume_semantics() {
+            let (_temp, root) = root();
+            let DirectoryPhysicalIdentityV1::MacOs { case_sensitive, .. } =
+                &root.identity().physical_identity
+            else {
+                panic!("macOS root must carry macOS physical identity");
+            };
+            let authority = root.directory().create_directory("authority-v1").unwrap();
+            let mut first = authority.create_file("Object.obj").unwrap();
+            first.write_all(b"first").unwrap();
+            first.sync().unwrap();
+            let second = authority.create_file("object.obj");
+            if *case_sensitive {
+                let mut second = second.unwrap();
+                second.write_all(b"second").unwrap();
+                second.sync().unwrap();
+                assert_eq!(authority.entries().unwrap().len(), 2);
+            } else {
+                assert!(second.is_err());
+                assert_eq!(authority.entries().unwrap().len(), 1);
+                assert_eq!(
+                    authority
+                        .open_file("object.obj")
+                        .unwrap()
+                        .read_all()
+                        .unwrap(),
+                    b"first"
+                );
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn macos_case_folded_rename_collisions_follow_volume_semantics() {
+            let (_temp, root) = root();
+            let DirectoryPhysicalIdentityV1::MacOs { case_sensitive, .. } =
+                &root.identity().physical_identity
+            else {
+                panic!("macOS root must carry macOS physical identity");
+            };
+            let authority = root.directory().create_directory("authority-v1").unwrap();
+            let temp = authority.create_directory("tmp").unwrap();
+            let objects = authority.create_directory("objects").unwrap();
+            let mut first = temp.create_file("first.tmp").unwrap();
+            first.write_all(b"first").unwrap();
+            first.sync().unwrap();
+            temp.rename_no_replace("first.tmp", first, &objects, "Object.obj")
+                .unwrap();
+
+            let mut second = temp.create_file("second.tmp").unwrap();
+            second.write_all(b"second").unwrap();
+            second.sync().unwrap();
+            let publication = temp.rename_no_replace("second.tmp", second, &objects, "object.obj");
+            if *case_sensitive {
+                publication.unwrap();
+                assert_eq!(objects.entries().unwrap().len(), 2);
+            } else {
+                assert!(publication.is_err());
+                assert_eq!(objects.entries().unwrap().len(), 1);
+                assert_eq!(
+                    objects.open_file("object.obj").unwrap().read_all().unwrap(),
+                    b"first"
+                );
+                assert_eq!(
+                    temp.open_file("second.tmp").unwrap().read_all().unwrap(),
+                    b"second"
+                );
+            }
         }
     }
 }
