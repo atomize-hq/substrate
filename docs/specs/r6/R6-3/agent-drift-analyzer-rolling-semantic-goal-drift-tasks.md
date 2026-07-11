@@ -1,7 +1,8 @@
 # Tasks: Agent Drift Analyzer Rolling / Previous-Checkpoint Semantic Goal Drift (R6-3)
 
 Status: task ledger created on 2026-07-02 from the `R6-3` SPEC/PLAN in this directory. `R6-3` landed on
-2026-07-03 after the full analyzer + sentinel walls, with the closeout evidence recorded inline below.
+2026-07-03 after the full analyzer + sentinel walls; the analyzer-local follow-up chain is now closed
+through landed packet `R6-3.X.2D` (2026-07-08), with the closeout evidence recorded inline below.
 Sequenced after `R6-2` (the kickoff-anchored `semantic_goal_drift` scorer + `SemanticGoalDrift` class),
 which closed on 2026-07-01 and passed a final sign-off review on 2026-07-02. This ledger is the closeout
 record for the full packet.
@@ -430,7 +431,7 @@ all fixed here.
     gate that cannot pass via all-unknown reporting. `RepoRelativeEquivalentAfterCwdStrip` stays conditional:
     land it only if the scorer seam can already reach cwd/session-root truth analyzer-locally; otherwise defer
     / ask-first rather than widening scope into `context/objective.rs` or other deferred surfaces.
-  - Result (`R6-3.X.2B` → `R6-3.X.2C`, 2026-07-06): `R6-3.X.2B` landed the relation taxonomy and
+  - Result (`R6-3.X.2B` → `R6-3.X.2C` → `R6-3.X.2D`, 2026-07-08): `R6-3.X.2B` landed the relation taxonomy and
     validation-strata tooling, but it did **not** settle the final routing contract because the scorer
     still routed via relation-only `claims_drift()`. `R6-3.X.2C` then landed the missing explicit
     internal `Suppress` / `Fire` / `NoClaim` decision surface, made confidence + decisive/counter evidence
@@ -438,20 +439,18 @@ all fixed here.
     and broad-lineage residue, expanded clear doc-bundle/member coverage through the live analyzer path, and
     reordered role classification so the touched `src/...` / test / verifier path semantics beat `spec` /
     `design` substrings. At the public `semantic_goal_drift` emission boundary today, only `Fire` emits;
-    both `Suppress` and `NoClaim` remain non-fire unless exported separately later.
-    The fresh default seed-42 rerun from the current store (`110` sessions / `44` repos / `929`
-    checkpoints, `110/110` analyzed clean) is compared **directionally** against the published `R6-3.6`
-    sample because the exact prior manifest was not reusable. Final `R6-3.X.2C` numbers on that rerun
-    manifest: `3` fires, `137` current-bar eligible checkpoints, `242` target-resolved eligible
-    checkpoints, `203` adjacent target-eligible pairs, `195` same-target exact-match suppressions, `8`
-    changed-target candidates, and `7` remaining disjoint pairs. The `3` fires are one accepted
-    conservative docs-only over-fire family (root-level doc-bundle → member-doc narrowing with no stable
-    shared prefix), and the junk-filter post-pass confirms they survive stable-only filtering rather than
-    coming from garbage target extraction. That exact root-level residue family is rerun-observed closeout
-    evidence, not a separately committed witness. Validation strata remain non-degenerate (`0/137` junk-only
-    eligible; no added table collapses to `100% unknown`). Broader non-`src` role-classification collisions
-    were not separately expanded by this packet. Final routing decision: **`R6-3.X.2` is now closed through
-    `R6-3.X.2C`; keep `R6-3.X.3` deferred.**
+    both `Suppress` and `NoClaim` remain non-fire unless exported separately later. `R6-3.X.2D` then
+    committed the exact root-level README doc-bundle narrowing scorer-locally and through the live analyzer
+    acceptance path, while preserving a positive control where the same bundle gains an unrelated root doc.
+    It also pinned `build.rs` / `examples/*.rs` as `Code`, `tests/*.rs` / `benches/*.rs` as `Verify`, and
+    added edge tests for the load-bearing continuity thresholds. The fresh default seed-42 rerun from the
+    current store is compared **directionally** against earlier samples because exact prior manifests were
+    not reusable. Final `R6-3.X.2D` proof: `110/110` sessions clean across `45` repos, `884` checkpoints,
+    `146` current-bar eligible checkpoints, `245` target-resolved eligible checkpoints, `206` adjacent
+    target-eligible pairs, `199` same-target suppressions, `7` changed-target candidates, `6` remaining
+    disjoint pairs, and `0` emitted `semantic_goal_drift` fires. Final routing decision:
+    **`R6-3.X.2D` is landed and closed; keep `R6-3.X.3` deferred. Do not expand `semantic_goal_drift`
+    without new evidence; route the next planning pass to a non-`semantic_goal_drift` R6 item.**
 
 - [ ] Task R6-3.X.3: Loosen the shared drift-eligibility bar from `unknowns.is_empty()` to a
   target-resolved gate. **Batch scan done 2026-07-03; the data argues AGAINST loosening in isolation — see

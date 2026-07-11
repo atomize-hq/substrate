@@ -1,17 +1,17 @@
 # Findings: R6-3 Rolling / Semantic Goal Drift — Real-World Validation And Next-Steps Charter
 
 Status: findings record created 2026-07-03, after `R6-3` (rolling / previous-checkpoint semantic goal drift)
-landed and passed a two-round codex review. This document captures a real-world validation investigation of
-the `semantic_goal_drift` signal (both the `R6-2` kickoff-anchored and the `R6-3` rolling comparisons) and
-is written to be a **self-contained charter for a fresh session** to execute the next steps. It does not
-change any code; it records evidence, a locked decision, and a sequenced plan.
+landed and passed a two-round codex review. Updated through the landed `R6-3.X.2D` closeout on 2026-07-08.
+This document preserves the investigation chronology, but its earlier next-step language is historical;
+the current routing authority is the `R6-3.X.2D Closeout` below. Do not reopen `R6-3.X.2C` / `2D` or
+continue expanding `semantic_goal_drift` without new corpus or review evidence.
 
 Authority / cross-references:
 - `docs/specs/r6/MAP.md` — item 6 (R6-3) plus the "Open validation debt (rolling)" and "Diagnostic batch
   scan" notes, which summarize this document.
 - `docs/specs/r6/R6-3/agent-drift-analyzer-rolling-semantic-goal-drift-tasks.md` — the `R6-3.X.3`
   ("loosen the eligibility bar") deferred task now carries the full "Batch scan outcome" and the revised
-  verdict; `R6-3.X.2` is the graduated-distance debt.
+  verdict; `R6-3.X.2` is closed through the landed `R6-3.X.2D` packet.
 - Live code: `crates/agent-drift-analyzer/src/scoring/semantic_goal_drift.rs` (scorer + `eligible_current_goal`),
   `crates/agent-drift-analyzer/src/context/objective.rs` (objective decomposition / target extraction).
 - Codex consults (OpenAI Codex CLI, read-only): `019f2927` (eligibility diagnosis), `019f2964` (batch review).
@@ -299,18 +299,18 @@ directory (`…handoff-boundary.md → …threading.md`), the longstanding plan�
 spec→examples progression (`spec/task → examples/*`). None is a subtree narrowing the containment
 carve-out should have absorbed. The newly-observed absolute-vs-repo-relative residue is still in the
 conservative direction (over-fire, never drift-masking), and unlike the bare-`CrateOrPackage`
-over-fire it is plausibly closable under the remaining graduated-distance work because the bundle
-already carries `session_meta.payload.cwd`.
+over-fire was routed into the subsequent bounded graduated-distance work because the bundle already
+carries `session_meta.payload.cwd`.
 
 Delegation split on this re-run: `single_agent` = `760` cp / `130` current-bar eligible / `186`
 target-resolved eligible / `0` fired / `2` disjoint pairs; `delegated_child_visible` = `178` cp / `8`
 current-bar eligible / `77` target-resolved eligible / `0` fired / `5` disjoint pairs; no
 `delegated_parent_opaque` or `unknown` sessions surfaced in this draw. Conclusion: the shipping bar is
-still precise on real data, recall now has an explicit positive-control wall, and the next justified
-packet remains the **remaining graduated / weighted-distance work in `R6-3.X.2`**. The
-eligibility-bar revisit (`R6-3.X.3`) stays deferred behind it.
+still precise on real data and recall had an explicit positive-control wall. This result justified the
+now-completed `R6-3.X.2B` / `2C` / `2D` chain. The eligibility-bar revisit (`R6-3.X.3`) stayed deferred.
 
-**R6-3.X.2B / R6-3.X.2C Result (2026-07-06): explicit drift-decision routing + honest rerun residue.**
+**R6-3.X.2B / R6-3.X.2C / R6-3.X.2D Closeout (2026-07-08): explicit drift-decision routing,
+committed residue witnesses, and zero-fire rerun.**
 `R6-3.X.2B` landed the analyzer-local relation taxonomy and supporting batch strata, but it did **not**
 finish the routing story: the scorer still routed via relation-only `claims_drift()` even though the
 packet docs described a richer relation + confidence + evidence contract. `R6-3.X.2C` reopened that
@@ -322,51 +322,38 @@ gap and landed the missing internal decision surface locally in
 - weaker suppressive families now require `confidence >= Medium`, decisive evidence, and no material
   counter-evidence,
 - same-crate residue and broad work-item lineage no longer suppress on their own,
-- clear doc-bundle/member behavior is covered scorer-locally plus through a live acceptance fixture (the
-  exact root-level residue family below is not itself a separately committed witness yet), and
-- the touched `src/...` / test / verifier path markers now beat `spec` / `design` substrings during role
-  classification; broader non-`src` substring collisions were not separately expanded in this packet.
+- clear doc-bundle/member behavior is covered scorer-locally plus through the live analyzer path, and
+- touched code/test/verifier path markers beat `spec` / `design` substrings during role classification.
 
 At the current public `semantic_goal_drift` emission boundary, only `Fire` emits; both `Suppress` and
 `NoClaim` remain non-fire, so `NoClaim` is presently an internal abstention/audit state unless a later
-packet exports it separately. The default seed-42 corpus rerun was repeated from the **current** session
-store with `--seed 42`, so the result is again an explicit **directional** comparison against the
-published `2026-07-05` `R6-3.6` baseline, not a claim of identical session identity. Post-`R6-3.X.2C`
-rerun totals:
-- `110/110` sessions analyzed clean across `44` repos
-- `929` checkpoints with `structured_objective`
-- `242` structured-target checkpoints
-- `238` analysis-only stable-target-proxy checkpoints
-- `137` current-bar eligible checkpoints
-- `242` target-resolved eligible checkpoints
-- `819` adjacent checkpoint pairs total
-- `203` adjacent pairs with both sides target-eligible
-- `195` same-target exact-match suppressions
-- `8` changed-target candidate pairs
-- `7` remaining disjoint pairs
-- `3` emitted `semantic_goal_drift` fires (`1` rolling evidence line, `3` kickoff-anchor evidence lines)
+packet exports it separately. `R6-3.X.2D` then closed the last named conservative residue without broad
+doc-bundle suppression:
+- the exact root-level `README.md` doc-bundle narrowing is committed scorer-locally and through the live
+  analyzer acceptance path as a negative control;
+- the same bundle plus an unrelated root-level `CHANGELOG.md` addition remains a committed positive
+  control and still fires;
+- `build.rs` and root `examples/*.rs` are pinned as `Code`, while `tests/*.rs` and `benches/*.rs` are
+  pinned as `Verify`;
+- continuity thresholds have explicit one-token/two-token, doc-prefix-depth, work-item-lineage-depth,
+  and weak-evidence boundary tests.
 
-Those `3` fires are not a reopened relation-only routing bug and not a reversion to relation-only
-routing. They are one accepted conservative over-fire family created by the stricter doc-bundle rule at
-the public boundary: root-level **doc-bundle → anchored member-doc narrowing**
-(`architecture-overview.md|README.md|…` → `README.md`) where the bundle lacks a stable shared prefix.
-`R6-3.X.2C` intentionally suppresses doc-bundle movement only when the same-doc-family evidence is clear;
-it does **not** suppress ambiguous root-level bundles on relation type alone anymore. The exact root-level
-residue family is rerun-observed closeout evidence, not a directly committed acceptance witness. The rerun
-therefore remains conservative in the safe direction: over-fire, not drift masking.
+The fresh default seed-42 rerun from the current store is a directional comparison rather than a claim of
+identical session identity. Final `R6-3.X.2D` proof totals:
+- `110/110` sessions analyzed clean across `45` repos
+- `884` checkpoints
+- `146` current-bar eligible checkpoints
+- `245` target-resolved eligible checkpoints
+- `206` adjacent target-eligible pairs
+- `199` same-target suppressions
+- `7` changed-target candidate pairs
+- `6` remaining disjoint pairs
+- `0` emitted `semantic_goal_drift` fires
 
-The junk-filter post-pass confirms this is not garbage-target noise:
-- `3/3` actual fires survive the junk suppression filter
-- `0/137` current-bar eligible checkpoints rest on junk-only targets
-- `7/7` target-resolved disjoint adjacent pairs survive the stable-only junk filter
-
-Validation strata still report with explicit heuristic sources and without any added table collapsing to
-`100% unknown`. `RepoRelativeEquivalentAfterCwdStrip` stays explicitly **deferred**: the batch still
-shows absolute-vs-repo-relative residue, but this packet did not prove a scorer-local cwd/session-root
-reachability seam, so widening into `context/objective.rs` or other deferred surfaces would have broken
-packet scope. Final routing decision: **`R6-3.X.2` is now closed through `R6-3.X.2C`; `R6-3.X.3`
-remains deferred** because the remaining residue is conservative family/progression over-fire, not
-evidence that the strict eligibility bar is masking genuine pivots.
+Final routing decision: **`R6-3.X.2D` is landed and closed; `R6-3.X.3` remains deferred.** Stop
+expanding `semantic_goal_drift` unless new evidence forces a new packet. The next planning pass should use
+the current `R6` map to select a non-`semantic_goal_drift` scorer or closeout item. Sentinel, compactor,
+schema, delegation, and repo-relative cwd-strip work remain outside this closeout.
 
 Source map (deterministic design inputs, not repo authority): log-template variable abstraction —
 [Preprocessing is All You Need (arXiv 2412.05254)](https://arxiv.org/pdf/2412.05254),
@@ -375,7 +362,10 @@ schema-guided typed slots — [SGD (arXiv 1909.05855)](https://arxiv.org/pdf/190
 [FastSGT (arXiv 2008.12335)](https://arxiv.org/pdf/2008.12335) (the R5 objective-classifier taxonomy
 already cites this family).
 
-## Next-Steps Charter (for a dedicated fresh session)
+## Historical Next-Steps Charter (executed through `R6-3.X.2D`)
+
+The steps below preserve the investigation and landing chronology. They are not the current routing queue;
+the closeout above supersedes them, and `R6-3.X.3` remains deferred.
 
 ### Step 1 (primary) — Objective-extraction robustness in `context/objective.rs`
 
@@ -402,7 +392,7 @@ no genuine pivot). Full shadow-eval DONE (2026-07-04): extraction code landed as
 re-run confirmed `6 → 0` fires, `8 → 0` junk-only eligible, `12 → 5` disjoint pairs (all legitimate
 progression). See the "R6-3.5 Result" section above.**
 
-### Step 3 (conditional) — Graduated / weighted distance (`R6-3.X.2`)
+### Step 3 (completed through `R6-3.X.2D`) — Graduated / weighted distance (`R6-3.X.2`)
 
 Only if Step 2 shows narrowing/progression false positives survive extraction hardening. Replace the binary
 disjoint-set overlap with a graduated distance across both the kickoff-anchored and rolling comparisons so a
@@ -435,7 +425,8 @@ over-fires, never mask a pivot (a Rust `a::b` tail is non-numeric and left intac
 the whole string (codex re-review round 5): a whole-string strip stops at a Windows drive-letter colon
 (`C:/repo/src/lib.rs:42` has non-numeric tail `/repo/src/lib.rs:42`), so the same-file narrowing would
 still fire on Windows absolute paths; per-leaf application mirrors how the upstream `strip_line_ref` in
-`context/objective.rs` is applied. Still open under this step: the genuinely graduated/weighted
+`context/objective.rs` is applied. At the time of the containment first cut, the following items were
+still open under this step: the genuinely graduated/weighted
 metric for family-stem narrowing (`audit-trio.report.json → audit-trio.model-selection/…report.json`), doc
 progression, plan→code→plan cycles, and dotted work-item narrowing (`R6-3 → R6-3.5`, no structural
 separator); a known residual over-fire where a bare `CrateOrPackage` name is not matched as an ancestor of
@@ -450,8 +441,9 @@ metadata or an anchor-type-aware rule lands with the graduated metric; a known r
 absolute and a repo-relative spelling of the same subtree do not relate on raw segments (`docs/legacy` vs
 `/Users/…/handbook/docs/legacy/HARNESS.md`; observed in the 2026-07-05 corpus re-check — closable via
 `session_meta.payload.cwd` prefix-stripping under the graduated metric, and over-firing never masks drift);
-plus the shared-constraint-masking false negative and the anchor comparison_key asymmetry. See the `R6-3`
-TASKS ledger `R6-3.X.2` for the landed/open split.
+plus the shared-constraint-masking false negative and the anchor comparison_key asymmetry. Later
+`R6-3.X.2B` / `2C` / `2D` work closed the authorized analyzer-local seam; see the `R6-3` TASKS ledger for
+the historical progression and final closeout.
 
 ### Step 4 (conditional) — Revisit loosening the eligibility bar (`R6-3.X.3`)
 

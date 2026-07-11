@@ -1,5 +1,7 @@
 # R6-3.X.2D PLAN — Decision Semantics And Residue Witness Closeout For Semantic Goal Drift
 
+Status: CLOSED (execution and validation completed 2026-07-08).
+
 Companion to
 `agent-drift-analyzer-semantic-goal-drift-decision-semantics-and-residue-witness-closeout-spec.md`.
 This remains a narrow analyzer-local follow-up packet. Execution order:
@@ -14,7 +16,17 @@ threshold edges -> proof wall / rerun.
 - The live public boundary still treats abstention as the current non-fire `DriftScore` shape.
 - The named remaining conservative residue is the root-level doc-bundle -> member-doc narrowing family.
 - `R6-3.X.3` remains deferred.
-- This draft does not edit `MAP`, `FINDINGS`, or the `R6-3` ledger.
+- The implementation write set excluded `MAP`, `FINDINGS`, and the `R6-3` ledger; a later docs-only
+  reconciliation updated those authority docs with the landed result.
+
+## Closeout result
+
+- exact root-level README narrowing is committed as scorer-local and live-analyzer negative proof;
+- the unrelated root-doc addition remains committed positive proof;
+- non-`src` role witnesses and continuity-threshold edge tests are committed;
+- the seed-42 rerun completed with `110/110` sessions clean, `45` repos, `884` checkpoints, and `0`
+  emitted `semantic_goal_drift` fires;
+- `R6-3.X.3` remains deferred.
 
 ## Dependency graph
 

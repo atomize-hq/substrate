@@ -1,6 +1,6 @@
 # R6-3.X.2D SPEC — Decision Semantics And Residue Witness Closeout For Semantic Goal Drift
 
-Status: OPEN (created 2026-07-08 as a bounded follow-up draft after the `R6-3.X.2C` closeout).
+Status: LANDED / CLOSED (implemented and validated 2026-07-08 after the `R6-3.X.2C` closeout).
 Packet-scoped to analyzer-local semantic-goal-drift decision semantics, the exact remaining
 root-level doc-bundle residue witness, non-`src` code-path role-classification proof, and
 threshold-boundary regression coverage.
@@ -15,10 +15,9 @@ Assumptions carried into this spec:
    root-level doc-bundle -> anchored member-doc narrowing family
    (`architecture-overview.md|README.md|authentication-security.md|graphql-federation.md|module-development.md|monitoring.md`
    -> `README.md`) where the bundle lacks a stable shared prefix.
-5. This packet stays analyzer-local: scorer logic, scorer/analyzer tests, acceptance fixtures,
-   packet-local docs, and rerun proof only. This draft intentionally does **not** edit `MAP`,
-   `FINDINGS`, or the parent `R6-3` ledger because that write set is owned elsewhere in the current
-   branch.
+5. Implementation stayed analyzer-local: scorer logic, scorer/analyzer tests, acceptance fixtures,
+   packet-local docs, and rerun proof only. The later docs-only closeout reconciliation updated `MAP`,
+   `FINDINGS`, and the parent `R6-3` ledger without widening scorer behavior.
 6. `context/objective.rs`, sentinel, compactor, delegation surfaces, checkpoint export/schema, and
    `R6-3.X.3` eligibility loosening remain out of scope unless explicitly reopened.
 
@@ -35,6 +34,15 @@ Authority / cross-references:
   - `crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/**`
   - `scripts/dev/drift-batch-scan/**`
 - `AGENTS.md`
+
+Closeout result:
+- `NoClaim` remains internal abstention and public non-fire.
+- The exact root-level README doc-bundle narrowing and unrelated-root-doc addition guard are committed
+  scorer-locally and through the live analyzer acceptance path.
+- Non-`src` role witnesses and continuity-threshold edge tests are committed.
+- The fresh seed-42 rerun completed with `110/110` sessions clean across `45` repos, `884` checkpoints,
+  and `0` emitted `semantic_goal_drift` fires.
+- `R6-3.X.3` remains deferred.
 
 ## Objective
 

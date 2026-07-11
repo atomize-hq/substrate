@@ -1,7 +1,7 @@
-# R6-3.6 Semantic Goal Drift Acceptance Fixtures
+# Semantic Goal Drift Acceptance Fixtures
 
 This directory freezes the bounded semantic-goal-drift acceptance corpus for Packets `R6-2.4`, `R6-3.3`,
-`R6-3.X.2`, and `R6-3.6`.
+`R6-3.X.2`, `R6-3.6`, and `R6-3.X.2D`. The allowlisted corpus contains exactly 18 cases.
 
 Included cases:
 
@@ -11,6 +11,7 @@ Included cases:
 - `synthetic-kickoff-hyphen-collision-pivot`
 - `synthetic-kickoff-objective-vs-objective-rs-pivot`
 - `synthetic-rolling-mid-session-pivot`
+- `synthetic-rolling-root-readme-doc-bundle-unrelated-addition`
 - `synthetic-rolling-sibling-stem-pivot`
 
 ## Negative controls
@@ -24,6 +25,18 @@ Included cases:
 - `synthetic-rolling-work-item-family-progression`
 - `synthetic-rolling-plan-code-role-shift`
 - `synthetic-rolling-review-verify-role-shift`
+- `synthetic-rolling-root-readme-doc-bundle-narrowing`
+
+The two root README controls are intentionally paired:
+
+- `synthetic-rolling-root-readme-doc-bundle-narrowing` is a negative control: narrowing the exact
+  canonical root README documentation bundle to `README.md` must stay quiet.
+- `synthetic-rolling-root-readme-doc-bundle-unrelated-addition` is a positive control: adding an
+  unrelated root-level document to the same bundle must still fire.
+- Together they prevent the exact residue fix from becoming broad root-level doc-bundle suppression.
+
+The canonical bundle is intentionally narrow: `README.md`, `architecture-overview.md`,
+`authentication-security.md`, `graphql-federation.md`, `module-development.md`, and `monitoring.md`.
 
 Maintenance rules:
 

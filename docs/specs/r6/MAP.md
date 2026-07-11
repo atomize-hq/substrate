@@ -272,38 +272,28 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    and a trailing `:line`/`:line:col` reference are no-ops and are stripped before comparison, so
    `exec.rs` → `exec.rs:1537` reads as the same file, not a pivot; the line strip runs on the leaf
    segment, not the whole string, so a Windows drive colon — `C:/repo/src/lib.rs:42` — does not defeat
-   it [codex re-review round 5]). The graduated / weighted remainder of `R6-3.X.2` (family-stem narrowing, doc
-   progression, plan→code→plan cycles, dotted work-item narrowing, a residual bare-`CrateOrPackage`
-   over-fire [codex §P2, deferred], a residual case-only-respelling over-fire on case-insensitive
-   filesystems [codex round 6, deliberately declined — the flip side of the accepted §P3
-   drift-masking fix; over-firing never masks drift], a residual absolute-vs-repo-relative
-   respelling over-fire [2026-07-05 corpus re-check; closable via session cwd prefix-stripping],
-   shared-constraint masking, anchor comparison_key asymmetry) stays open; the eligibility-bar
-   revisit (`R6-3.X.3`) stays gated behind it. **R6-3.6 validation follow-on (2026-07-05):** the
+   it [codex re-review round 5]). The graduated / weighted remainder of `R6-3.X.2` was subsequently
+   closed through the bounded `R6-3.X.2B` / `2C` / `2D` chain; the eligibility-bar revisit
+   (`R6-3.X.3`) remains deferred. **R6-3.6 validation follow-on (2026-07-05):** the
    acceptance corpus became an explicit 10-case wall with **`5/5` true-positive controls firing** and
    **`5/5` legitimate non-pivot controls staying quiet**, and the fresh seed-42 corpus rerun
    (`110` sessions / `44` repos / `938` checkpoints) again showed `0` fires under the shipping bar.
-   **R6-3.X.2B / R6-3.X.2C closeout chain (2026-07-06):** `R6-3.X.2B` landed the relation taxonomy,
+   **R6-3.X.2B / R6-3.X.2C / R6-3.X.2D closeout chain (2026-07-08):** `R6-3.X.2B` landed the relation taxonomy,
    but `R6-3.X.2C` was required to replace relation-only `claims_drift()` routing with an explicit
    internal `Suppress` / `Fire` / `NoClaim` contract. At the public `semantic_goal_drift` emission
-   boundary today, only `Fire` emits while both `Suppress` and `NoClaim` stay non-fire. Live truth after
-   the default seed-42 rerun from the current
-   store: `110` sessions / `44` repos / `929` checkpoints, `137` current-bar eligible checkpoints,
-   `242` target-resolved eligible checkpoints, `203` adjacent target-eligible pairs, `195` same-target
-   exact-match suppressions, `8` changed-target candidates, `7` remaining disjoint pairs, and **`3`
-   emitted fires**. Those `3` fires are one accepted conservative docs-only over-fire family
-   (root-level doc-bundle → member-doc narrowing with no stable shared prefix), not a return to
-   relation-only routing and not junk-target noise. The exact root-level residue is rerun-observed
-   closeout evidence rather than a separately committed witness. The batch tooling continues to report
-   validation strata beyond
-   delegation with explicit heuristic sources, and no added table is all-unknown. The touched
-   role-classification proof is strongest on the `src/...` / test / verifier-style cases covered by the
-   packet; broader non-`src` substring collisions were not separately expanded here. **Routing decision
-   updated:** the graduated / weighted-distance debt `R6-3.X.2` is now closed through packet
-   `R6-3.X.2C`; keep `R6-3.X.3` deferred, and keep `RepoRelativeEquivalentAfterCwdStrip` deferred
-   unless a scorer-local cwd/session-root seam is proven without widening into `context/objective.rs`
-   or other deferred surfaces. See the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.X.2B / R6-3.X.2C`
-   result note.
+   boundary today, only `Fire` emits while both `Suppress` and `NoClaim` stay non-fire. `R6-3.X.2D`
+   committed the exact root-level README doc-bundle narrowing as a scorer-local and live-analyzer
+   negative control, kept the unrelated root-doc addition as a positive control, pinned non-`src` role
+   witnesses (`build.rs` / `examples/*.rs` as `Code`; `tests/*.rs` / `benches/*.rs` as `Verify`), and
+   added continuity-threshold edge tests. Live truth after the fresh default seed-42 rerun from the
+   current store: `110/110` sessions clean / `45` repos / `884` checkpoints, `146` current-bar eligible
+   checkpoints, `245` target-resolved eligible checkpoints, `206` adjacent target-eligible pairs, `199`
+   same-target suppressions, `7` changed-target candidates, `6` remaining disjoint pairs, and **`0`
+   emitted `semantic_goal_drift` fires**. **Routing decision updated:** `R6-3.X.2D` is landed and closed;
+   keep `R6-3.X.3` deferred and do not expand `semantic_goal_drift` without new evidence. The next R6
+   planning pass should select a non-`semantic_goal_drift` scorer or closeout item. Sentinel, compactor,
+   schema, delegation, and `RepoRelativeEquivalentAfterCwdStrip` work remain outside this closeout. See
+   the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.X.2D Closeout` result note.
 
 ## Non-Goals For This Rescope
 

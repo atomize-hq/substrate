@@ -1,6 +1,6 @@
 # R6-3.X.2D TASKS — Decision Semantics And Residue Witness Closeout For Semantic Goal Drift
 
-Status: OPEN (created 2026-07-08 as a docs-only packet draft after `R6-3.X.2C`).
+Status: LANDED / CLOSED (implementation and validation completed 2026-07-08).
 This packet owns the narrow follow-up seam around internal/public decision semantics, the named
 root-level doc-bundle residue witness, non-`src` code-path role proof, and continuity-threshold edge
 coverage. It does **not** reopen eligibility loosening, add relation families, broadly suppress doc
