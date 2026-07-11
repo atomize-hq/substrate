@@ -1,0 +1,1 @@
+{"descriptor":{"agent_id":"agent","backend_id":"codex","backend_kind":{"kind":"Codex"},"binary_path":"/usr/bin/codex","execution_scope":{"kind":"Host"},"protocol":"codex-json","schema_version":1},"schema_version":1}

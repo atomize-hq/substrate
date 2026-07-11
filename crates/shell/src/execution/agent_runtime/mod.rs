@@ -2,6 +2,7 @@ pub(crate) mod auto_attach;
 pub(crate) mod control;
 pub(crate) mod dispatch_contract;
 pub(crate) mod host_inbox;
+pub(crate) mod host_session_authority;
 pub(crate) mod mapping;
 pub(crate) mod obligation_ledger;
 pub(crate) mod orchestration_session;
