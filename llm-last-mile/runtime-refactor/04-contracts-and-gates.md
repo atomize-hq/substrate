@@ -50,6 +50,295 @@ Acceptance rules:
 4. World binding is the exact `(world_id, world_generation)` pair. Partial binding is invalid.
 5. PID, socket, heartbeat, and attached-client data do not belong in this contract.
 
+## 1A. `HostSessionTransitionIntentV1`
+
+`HostSessionTransitionIntentV1` is the durable authority request for host-session `Start`, `Attach`, and `ResumeOneTurn`. A hidden-helper launch plan is only a private transport projection of this record. Reading or deleting that plan does not consume, apply, reject, or expire the intent.
+
+```rust
+struct HostSessionTransitionIntentV1 {
+    schema_version: u32,                 // exactly 1
+    intent_id: String,                   // globally unique in the authority store
+    issuer_request_id: String,           // idempotency key for issuance
+    intent_revision: u64,                // starts at 1; monotonic under CAS
+    mode: HostSessionTransitionModeV1,
+    authority_precondition: HostSessionAuthorityPreconditionV1,
+    orchestration_session_id: String,
+    shell_trace_session_id: String,
+    caller: HostSessionTransitionCallerV1,
+    source_authoritative_participant_id: Option<String>,
+    target_authoritative_participant_id: String,
+    target_participant_lease_token_hash: String,
+    run_id: String,
+    resulting_authoritative_lineage: Vec<String>,
+    workspace_binding: WorkspaceBindingV1,
+    world_binding: Option<WorldBindingV1>,
+    descriptor_ref: AgentDescriptorRefV1,
+    descriptor_hash: String,
+    host_attach_contract: HostAttachContractV1,
+    host_attach_contract_hash: String,
+    resume_handle_ref: Option<ResumeHandleRefV1>,
+    resume_handle_hash: Option<String>,
+    transition_input_hash: Option<String>,
+    post_turn_disposition: Option<HostPostTurnDispositionV1>,
+    transport_payload_ref: HostSessionTransitionTransportPayloadRefV1,
+    transport_payload_hash: String,
+    payload_hash: String,
+    issued_at: Timestamp,
+    expires_at: Timestamp,
+    state: HostSessionTransitionIntentStateV1,
+    input_handoff: HostSessionTransitionInputHandoffV1,
+    transport_payload_state: HostSessionTransitionTransportPayloadStateV1,
+    updated_at: Timestamp,
+}
+```
+
+Modes and authority preconditions:
+
+```rust
+enum HostSessionTransitionModeV1 {
+    Start,
+    Attach,
+    ResumeOneTurn,
+}
+
+struct HostSessionTransitionCallerV1 {
+    kind: HostSessionTransitionCallerKindV1,
+    caller_participant_id: Option<String>,
+    auto_attach_obligation_id: Option<String>,
+    auto_attach_claim_owner: Option<String>,
+}
+
+enum HostSessionTransitionCallerKindV1 {
+    PublicCli,
+    Repl,
+    RouterAutoAttach,
+}
+
+enum HostSessionAuthorityPreconditionV1 {
+    ExpectedAbsent,
+    ExpectedRevision {
+        authority_revision: u64,
+        authority_record_hash: String,
+        active_authoritative_participant_id: String,
+        authoritative_lineage_hash: String,
+        lifecycle_posture: HostSessionPostureV1,
+    },
+}
+
+enum HostPostTurnDispositionV1 {
+    ReconcileToAttentionParkOrTerminal,
+}
+```
+
+Intent states:
+
+```rust
+enum HostSessionTransitionIntentStateV1 {
+    Issued,
+    Claimed {
+        claim_id: String,
+        claimant_attempt_id: String,
+        claim_revision: u64,
+        claimed_at: Timestamp,
+        claim_expires_at: Timestamp,
+    },
+    Applied {
+        claim_id: String,
+        authority_revision_before: Option<u64>,
+        authority_revision_after: u64,
+        active_authoritative_participant_id: String,
+        resulting_posture: HostSessionPostureV1,
+        authority_record_hash: String,
+        result_hash: String,
+        post_turn: HostSessionPostTurnApplicationV1,
+        applied_at: Timestamp,
+    },
+    Rejected {
+        reason: HostSessionTransitionTerminalRejectionV1,
+        rejected_at: Timestamp,
+    },
+    Expired {
+        expired_at: Timestamp,
+    },
+}
+
+enum HostSessionPostTurnApplicationV1 {
+    NotApplicable,
+    Pending {
+        expected_run_id: String,
+        expected_authority_revision: u64,
+    },
+    Applied {
+        completion_ref: String,
+        completion_hash: String,
+        authority_revision_before: u64,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        result_hash: String,
+        applied_at: Timestamp,
+    },
+}
+
+enum HostSessionTransitionInputHandoffV1 {
+    NotApplicable,
+    Pending {
+        input_hash: String,
+        run_id: String,
+    },
+    Accepted {
+        input_hash: String,
+        run_id: String,
+        acceptance_ref: String,
+        acceptance_hash: String,
+        accepted_at: Timestamp,
+    },
+    TerminalWithoutAcceptance {
+        input_hash: String,
+        run_id: String,
+        terminal_ref: String,
+        terminal_hash: String,
+        terminal_at: Timestamp,
+    },
+}
+
+enum HostSessionTransitionTerminalRejectionV1 {
+    InvalidCommittedModePrecondition,
+    AuthorityPreconditionNoLongerHolds,
+    StaleAuthorityRevision,
+    AuthorityRecordHashMismatch,
+    CommittedDescriptorUnavailableOrChanged,
+    CommittedAttachContractInvalidOrChanged,
+    CommittedResumeHandleUnavailableOrChanged,
+    CommittedTransportPayloadUnavailableOrChanged,
+}
+
+enum HostSessionTransitionAttemptRejectionV1 {
+    UnknownIntent,
+    IntentOrRequestIdentityMismatch,
+    IntentRevisionMismatch,
+    ClaimRevisionMismatch,
+    PayloadHashMismatch,
+    TransportPayloadHashMismatch,
+    SessionIdentityMismatch,
+    CallerIdentityMismatch,
+    ParticipantOrLineageMismatch,
+    WorkspaceBindingMismatch,
+    WorldBindingMismatch,
+    DescriptorProjectionMismatch,
+    AttachContractProjectionMismatch,
+    ResumeHandleProjectionMismatch,
+    TransitionInputMismatch,
+    SupersededClaim,
+    ConflictingIntent,
+}
+
+enum HostSessionTransitionTransportPayloadStateV1 {
+    Retained,
+    ReleaseEligible {
+        terminal_handoff_ref: String,
+        terminal_handoff_hash: String,
+    },
+    Released {
+        terminal_handoff_ref: String,
+        released_at: Timestamp,
+    },
+}
+```
+
+Attempt rejection and terminal intent rejection are separate outcomes:
+
+| Validation outcome | Durable effect |
+|---|---|
+| Invalid request before a valid intent is issued | Reject the request; persist no intent. |
+| Exact `intent_id`, `issuer_request_id`, and `payload_hash` presented after `Applied` | Return/join the stored transition, input-handoff, and post-turn results read-only, even if the caller retained an older intent revision; do not reapply or mutate anything. |
+| Unknown/substituted/mismatched attempt, stale intent/claim revision used for a claim/application/state mutation, superseded claim, or conflicting replay against a valid stored intent | Return and audit `HostSessionTransitionAttemptRejectionV1`; do not mutate, reject, expire, release, or otherwise strand the stored intent. |
+| The stored intent was validly issued but its committed authority precondition or referenced durable commitment no longer holds before application | CAS the stored intent to `Rejected` with `HostSessionTransitionTerminalRejectionV1`; no authority mutation is permitted. |
+| The fixed intent expiry passes before application and no authority commit exists | CAS the stored intent to `Expired`. |
+| The exact stored intent and attempt validate | Continue the `Issued`/`Claimed`/`Applied` protocol. |
+
+A substituted request using a stored `intent_id` or `issuer_request_id` with a different `payload_hash` is therefore attempt-rejected and audit-recorded without mutating or terminalizing the valid stored intent.
+
+### Immutable commitments and identity
+
+1. `intent_id` identifies exactly one logical transition. `issuer_request_id` makes issuance replay-safe: an exact retry with the same canonical payload returns the existing intent; reuse with different content fails closed.
+2. `payload_hash` covers the canonical serialization of every immutable semantic field from `mode` through `post_turn_disposition` plus `transport_payload_ref` and `transport_payload_hash`. This includes the complete authority precondition, caller, shell-trace/session/run identities, source/target/lease-token-hash and lineage commitments, bindings, descriptor ref/hash, canonical inline attach contract/hash, resume ref/hash, and `transition_input_hash`. It excludes revisions, timestamps, claims, mutable input-handoff/post-turn/transport-retention state, and terminal results.
+3. The referenced descriptor and resume handle are loaded from durable authority-owned locations and hash-verified before claim and again before application. `host_attach_contract` is the canonical inline contract, not a ref; canonical serialization must equal `host_attach_contract_hash` and the matching durable session contract where one exists. Plan-file JSON may not replace or supplement any commitment.
+4. `transport_payload_ref` identifies an access-controlled, durable, hash-verified payload in the same authority namespace. It retains the exact raw participant lease token, transition input bytes or secure local ref, and non-authoritative launch projection material required to reproduce the helper plan. The lease token and input must match their committed hashes. Credentials are prohibited; prompt/input bytes are never emitted to traces, logs, diagnostics, or rejection text.
+5. `expires_at` is fixed at issuance, is later than `issued_at`, and is bounded by the configured V1 maximum. Ambient retries, plan rewrites, helper restarts, and claim renewal do not extend it.
+6. `intent_revision` increments on every durable transition state, claim, input-handoff, post-turn, or transport-payload-state change. A stale intent or claim revision cannot mutate the record; this does not block the read-only exact-result join defined above.
+7. At most one nonterminal intent may reserve a given `(orchestration_session_id, authority_precondition)`. A different mode, target, or payload against that reservation is a conflict rather than a second candidate transition.
+8. `PublicCli` and `Repl` callers have no auto-attach fields. `RouterAutoAttach` is valid only for `Attach` and commits the already-existing obligation ID and claim owner; A1 neither decides eligibility nor changes claim/settlement semantics. When `caller_participant_id` is present, it must match the exact authoritative caller permitted by the precondition. For a new `Start`, it is absent because no durable session participant exists yet.
+9. For all three A1 modes, legacy `source_orchestration_session_id` plan data is absent. Startup prompt stream paths, helper PIDs, sockets, and plan paths are transport-only and cannot enter the authority record; existing path builders may reproject them from the retained payload without an endpoint/path redesign, and delivered content is accepted only when its committed hash matches.
+
+### Exact mode preconditions
+
+The posture domain is closed for V1:
+
+| Mode | Required source posture | Initial resulting posture |
+|---|---|---|
+| `Start` | No authority record: `ExpectedAbsent` only. | `ActiveAttached`, committed only when the validated owner-helper/REPL application is ready to own the exact target. |
+| `Attach` | Exactly one of `ParkedResumable`, `DetachedReconciled`, `AwaitingAttention`, or an explicitly persisted `StaleRecoverable`; never a posture inferred from process loss during the attempt. | `ActiveAttached`. Existing obligations remain unchanged and canonical. |
+| `ResumeOneTurn` | Exactly one of `ParkedResumable`, `DetachedReconciled`, `AwaitingAttention`, or an explicitly persisted `StaleRecoverable`, plus the exact resume handle. | `ActiveAttached` with `post_turn=Pending`. Exact accepted terminal evidence later yields `Terminal`; otherwise unresolved attention obligations yield `AwaitingAttention`, and a resumable clean result yields `ParkedResumable`. |
+
+Every unlisted source posture fails closed. In particular, a new independent `Attach`/`ResumeOneTurn` against `ActiveAttached`, `Terminal`, or `Invalid` is rejected; only an exact retry of the already-`Applied` intent may join its existing result. A1 does not create, resolve, or otherwise change obligations when selecting the deterministic post-turn posture.
+
+`Start` requires all of the following:
+
+1. `authority_precondition` is `ExpectedAbsent`. Absence means the session ID has never been allocated in the authority namespace, including retained tombstones; delete-and-recreate or a compatibility read that hides a prior record does not satisfy it.
+2. `source_authoritative_participant_id` and `resume_handle_ref`/hash are absent.
+3. The target participant, lease-token hash, run ID, and shell trace session ID are new and exact; the resulting lineage is exactly the valid initial lineage ending in that target. The caller is `PublicCli` or `Repl`, has no prior participant ID, and is bound to the unique `issuer_request_id`.
+4. The workspace binding is normalized and absolute; a world-scoped start commits the complete `(world_id, world_generation)` pair, while a host-only start commits no world binding. Partial or ambient reconstruction fails closed.
+5. The descriptor ref/hash and canonical inline attach contract/hash resolve exactly. Optional start input is bound by `transition_input_hash`; `post_turn_disposition` is absent.
+6. `input_handoff` is `Pending` with the exact input hash/run ID when start input is present and `NotApplicable` otherwise.
+
+`Attach` requires all of the following:
+
+1. `authority_precondition` is `ExpectedRevision` and exactly matches the current authority revision, canonical record hash, active authoritative participant, lineage hash, and one of the four `Attach` source postures enumerated above. PID, socket, helper, heartbeat, or attached-client observations cannot make a posture eligible.
+2. The source participant equals the current active authoritative participant and occurs at the expected lineage tip. The target participant, lease-token hash, and run ID are new and exact; the target is a distinct valid successor, and the resulting lineage is exactly the authority-approved append/replacement result. The shell trace session ID exactly preserves the session's committed trace identity.
+3. Workspace/world bindings, descriptor, and attach contract exactly match the current durable session and requested successor. A world binding must match both world ID and generation.
+4. A resume handle is present exactly when the committed attach contract requires it and is ref/hash verified. Attach has no transition input and no post-turn disposition.
+5. `input_handoff` is `NotApplicable`.
+
+`ResumeOneTurn` requires all of the following:
+
+1. The same exact `ExpectedRevision`, source/target lineage, binding, descriptor, and attach-contract checks as `Attach`, against one of the four `ResumeOneTurn` source postures enumerated above.
+2. The exact durable resume handle ref/hash is present and valid for the current source participant and session.
+3. `transition_input_hash` is present and matches the one-turn input delivered to the runtime.
+4. `input_handoff` is `Pending` with that exact input hash and run ID.
+5. `post_turn_disposition` is `ReconcileToAttentionParkOrTerminal`. Accepted completion plus the claimed intent, exact unresolved-obligation read, and current authority revision—not queue delivery, helper liveness, or timeout—determine the revision-checked post-turn transition enumerated above.
+
+### Lifecycle, retry, and fail-closed rules
+
+1. Issuance atomically writes `Issued` and the hash-verified retained transport payload before any plan is written or helper is launched. Failure to project or launch leaves a fully reprojectable durable intent until it is rejected or expires.
+2. Claim is a CAS transition from `Issued` to `Claimed` after revalidating the payload hash, expiry, authority precondition, identities, bindings, descriptor, attach contract, and resume/input commitments. Claim does not mutate session authority.
+3. An exact retry of the current claim returns the same claim. A different claimant fails while the claim lease is current. After `claim_expires_at`, a new attempt may replace the claim only by CAS against the current intent revision and only after all preconditions still validate; PID or socket liveness is not claim authority.
+4. Application commits the initial authority mutation and the `Applied` transition result atomically in one state-root transaction or an equivalent durable journal keyed by `intent_id`. A split commit without deterministic reconciliation is invalid. `Start` and `Attach` record `post_turn=NotApplicable`; `ResumeOneTurn` records `post_turn=Pending` for the exact run and resulting authority revision.
+5. The core `Applied` transition result is immutable. An exact retry with the same `intent_id`, `issuer_request_id`, and `payload_hash` returns or joins that stored result regardless of the caller's older intent revision and must not allocate another participant, append lineage again, rewrite binding, or repeat the initial authority revision. The current revision remains mandatory for every claim/application/input/post-turn/payload-state mutation.
+6. A stored valid intent whose authority precondition becomes stale before application transitions to `Rejected` with the exact reason. In the same revision, any `Pending` input becomes `TerminalWithoutAcceptance` using the canonical rejection record ref/hash. `Rejected` is terminal; retry requires a newly issued intent against current authority.
+7. An `Issued` intent may become `Expired` at `expires_at`. A `Claimed` intent may expire only after proving no authority mutation committed. Expiry atomically moves any `Pending` input to `TerminalWithoutAcceptance` using the canonical expiry record ref/hash. If an authority commit marker or exact resulting authority exists, reconciliation must complete `Applied`; it may not mark the intent expired or rejected.
+8. Stale intent/claim revisions used to request a mutation, substituted plan contents, mismatched payload/ref hashes, wrong session/caller/source/target, wrong lineage, wrong workspace/world generation, descriptor/attach/resume mismatch, superseded claim, and a conflicting replay all fail closed before authority mutation. A read-only exact `Applied` join follows rule 5 instead.
+9. Removing a helper plan, losing a helper, or observing EOF/timeout changes transport evidence only. None destroys the intent, releases the retained payload, or rolls back an already-applied authority transition.
+10. Input acceptance is a CAS transition from `input_handoff=Pending` to `Accepted` bound to the exact intent, run, input hash, and acceptance ref/hash. Exact duplicate acceptance joins the stored result. Exact terminal failure/abort before acceptance records `TerminalWithoutAcceptance`; missing, stale, reordered, or mismatched evidence cannot change the substate.
+11. If the plan is loaded and removed before claim/application/input acceptance, a retry reprojects the exact same committed material from `transport_payload_ref` through the existing plan/path builders. If the initial transition is already `Applied`, retry joins that result and may reproject only the remaining handoff; it never repeats authority application. `Accepted` or `TerminalWithoutAcceptance` input joins its durable result and is never redelivered.
+12. `transport_payload_state` remains `Retained` until an exact terminal handoff is durable. Every input-bearing mode, including optional-input `Start`, requires `input_handoff=Accepted` or `TerminalWithoutAcceptance` before release; input-free `Start`/`Attach` requires `NotApplicable`. `Start`/`Attach` additionally require the `Applied` result plus exact target/run startup-ownership acceptance or an exact terminal reconciliation. `ResumeOneTurn` additionally requires the `Applied` result plus `post_turn=Applied` or an exact terminal failure/abort. `Rejected`/`Expired` requires proof that no authority application committed. The authority first CAS-records `ReleaseEligible` with the terminal handoff ref/hash, then idempotently removes the payload and records `Released`. A missing plan file is never release evidence.
+13. For `ResumeOneTurn`, accepted completion is applied exactly once by atomically advancing `post_turn=Pending` to `post_turn=Applied` with the revision-checked park/terminal authority transition. The completion ref/hash, run ID, intent ID/hash, and expected authority revision must all match. Duplicate exact completion joins the stored post-turn result; stale, reordered, mismatched, or conflicting completion fails closed and cannot reapply it. Intent expiry after the initial application does not erase a pending input/post-turn reconciliation or release its payload.
+
+### Crash reconciliation
+
+On process restart or before retrying a nonterminal intent, `HostSessionAuthority` reconciles in this order:
+
+1. `Issued` with no authority mutation remains claimable until expiry.
+2. `Claimed` with an unchanged precondition may resume under the exact claim or be CAS-reclaimed after the claim lease expires.
+3. If the exact authority mutation and journal/application marker committed but the caller did not observe success, record or recover the identical `Applied` result and join it.
+4. At any of those points, missing plan transport is reprojected from the retained payload only after checking the revisioned `input_handoff` plus durable application/post-turn state, so restart cannot duplicate a transition or prompt.
+5. An `Applied` `ResumeOneTurn` with pending post-turn work reconciles only from exact durable completion/failure evidence for the committed run. Exact evidence applies or joins one post-turn result; missing or ambiguous evidence remains diagnosable and fails closed rather than inferring success from helper, queue, PID, socket, or plan state.
+6. If neither the old precondition nor the exact committed result can be proven, fail closed and retain diagnosable state plus its payload; never guess from helper, PID, socket, or plan presence.
+7. Reconciliation and terminal payload cleanup are idempotent across repeated crashes and cannot increment the initial or post-turn authority transition more than once for one intent.
+
+### Compatibility and migration
+
+Legacy helper plans without `intent_id` and `payload_hash` cannot drive a contract-correct A1 transition. Once a `Start`, `Attach`, or `ResumeOneTurn` producer is switched, a mixed-version consumer fails closed and requires reissuance; it does not reconstruct authority from the plan. Existing durable sessions may be compatibility-read or migrated, but every new transition still requires an exact intent. This contract changes neither helper endpoints/paths nor auto-attach policy, eligibility, claim, or settlement semantics.
+
 ## 2. `HostExecutionEpisodeV1`
 
 ```rust
@@ -554,6 +843,7 @@ A contract is not considered landed until tests prove:
 3. the real ingress/dispatch/runtime path uses it;
 4. restart/replay behavior where durable;
 5. fail-closed negative cases;
-6. at least one smoke/e2e path joins session, binding, policy, receipt, runtime event, and terminal/obligation truth;
-7. credential-requiring world UAA proof joins the envelope to a consumed one-time in-world gateway handoff without copied secret files or inherited descriptors; and
-8. no compatibility copy or `CompatibilityUnproven` evidence is used for contract promotion.
+6. every revision-bound host transition joins intent issuance, claim, authority application, and exact result on the real CLI and REPL path, including crash reconciliation and no-reapply exact retry;
+7. at least one smoke/e2e path joins session, binding, policy, receipt, runtime event, and terminal/obligation truth;
+8. credential-requiring world UAA proof joins the envelope to a consumed one-time in-world gateway handoff without copied secret files or inherited descriptors; and
+9. no compatibility copy or `CompatibilityUnproven` evidence is used for contract promotion.

@@ -57,8 +57,8 @@ flowchart TD
 
 | Boundary | Owns | Must not own |
 |---|---|---|
-| SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations | durable posture, world binding, retained continuity, successor allocation, terminal truth |
-| HostSessionAuthority | exact session/caller/lineage/binding resolution and durable posture transitions | transport loops, provider mechanics, compatibility projection |
+| SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations | durable posture, world binding, retained continuity, successor allocation, terminal truth, transition-intent issuance/claim/application |
+| HostSessionAuthority | exact session/caller/lineage/binding resolution; durable posture transitions; revision-bound host-transition-intent issuance, claim validation, replay-safe application, and reconciliation | transport loops, provider mechanics, compatibility projection |
 | StateStore | atomic persistence, migrations, schema evolution | lifecycle policy, routing policy, liveness-derived authority |
 | CompatibilityReadModel | legacy reads, torn-root diagnostics, compatibility projection/migration | new authority writes or overriding newer revisions |
 | WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries | provider-specific execution or direct policy invention |
@@ -92,6 +92,8 @@ StaleOrOrphaned
 ```
 
 A stale episode may not overwrite a newer authority revision. An unavailable channel may not block durable closeout when exact authority and closeout rules permit it.
+
+Hidden-helper plan creation, load, removal, and delivery are fast-path transport mechanics. They may carry a durable transition-intent reference and immutable commitment hash, but plan presence, successful read, or deletion never issues, claims, applies, expires, or rejects authority. Authority retains an access-controlled, hash-verified reprojection payload until exact terminal handoff, so load-then-remove plus helper failure cannot destroy the retry route. Exact retry resumes or joins recorded application/input results without repeating them; a substituted or stale plan fails closed.
 
 ### 3. Routing is exact and fail-closed
 

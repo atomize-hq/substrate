@@ -96,6 +96,7 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
 ## Authority vocabulary
 
 - **Authority:** decides durable meaning and validates state transitions.
+- **Host transition intent:** a durable, revision-bound, single-application request for `Start`, `Attach`, or `ResumeOneTurn`; helper plans and episodes transport it but never constitute its claim/application or erase its authority state.
 - **Persistence:** stores authority decisions; it does not invent them.
 - **Transport:** delivers requests/events; reachability is a signal, not durable truth.
 - **Projection:** derives a view or runtime-native artifact from canonical truth.
