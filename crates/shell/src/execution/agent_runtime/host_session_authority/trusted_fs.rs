@@ -308,6 +308,13 @@ mod platform {
             Ok(Some(unsafe { stat.assume_init() }))
         }
 
+        #[cfg_attr(
+            target_os = "linux",
+            allow(
+                clippy::unnecessary_cast,
+                reason = "Darwin dev_t and ino_t require normalization to u64"
+            )
+        )]
         pub(crate) fn revalidate_entry(
             &self,
             expected: &DirectoryEntry,
