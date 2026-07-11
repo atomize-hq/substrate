@@ -12,6 +12,8 @@ pub(crate) mod hash;
 #[allow(dead_code)]
 pub(crate) mod schema;
 #[allow(dead_code)]
+pub(crate) mod trusted_fs;
+#[allow(dead_code)]
 pub(crate) mod validation;
 
 #[cfg(test)]
