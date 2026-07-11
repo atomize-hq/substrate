@@ -90,7 +90,17 @@ directory-relative with no-follow semantics; it never reinterprets the persisted
 ambient CWD. Workspace content traversal remains governed by its existing execution/policy
 contracts; this identity rule does not narrow or expand it.
 
-Issuer, helper validation/application, retry, restart, reconciliation, and migration all use this
+`authority_store_root` is also the one normalized bootstrap home. Host bootstrap resolves that
+home once, before StateStore construction or config, policy, and inventory resolution, and passes
+the same opened `CanonicalDirectoryV1` identity to all four consumers. The value persisted in
+`WorkspaceBindingV1.authority_store_root` must equal that bootstrap-home identity byte-for-byte and
+by physical identity, and must equal `StateRootV1.bootstrap_home` before any authority record,
+intent, or object is accepted. No issuer, helper, retry, restart, reconciliation, config resolver,
+policy resolver, or inventory resolver may later reread `SUBSTRATE_HOME`, fall back to `$HOME`, or
+resolve the home relative to ambient CWD. A different home, even if valid and content-equivalent,
+is a binding mismatch.
+
+Issuer, helper validation/application, retry, restart, and reconciliation all use this
 same resolver and comparison rule. None may substitute lexical normalization, ambient CWD, a
 different case rule, or path-only equality.
 
@@ -122,7 +132,6 @@ enum AuthorityObjectKindV1 {
     InputAcceptance,
     PostTurnCompletion,
     TerminalHandoff,
-    LegacyMigrationEvidence,
 }
 
 enum AuthorityObjectCommitmentV1 {
@@ -166,7 +175,6 @@ ApplicationResult=application-result
 InputAcceptance=input-acceptance
 PostTurnCompletion=post-turn-completion
 TerminalHandoff=terminal-handoff
-LegacyMigrationEvidence=legacy-migration-evidence
 ```
 
 Publication has no-replace semantics. Exact retry may join an existing final object only after
@@ -208,6 +216,63 @@ struct AuthoritativeLineageHashInputV1 {
     participant_ids: Vec<String>,
 }
 
+enum AgentExecutionScopeV1 {
+    Host,
+    World,
+}
+
+enum RuntimeBackendKindV1 {
+    Codex,
+    ClaudeCode,
+}
+
+struct AgentDescriptorV1 {
+    schema_version: u32,
+    agent_id: String,
+    backend_id: String,
+    backend_kind: RuntimeBackendKindV1,
+    protocol: String,
+    execution_scope: AgentExecutionScopeV1,
+    binary_path: String,
+}
+
+struct HostAttachCapabilitiesV1 {
+    session_resume: bool,
+    session_fork: bool,
+    session_stop: bool,
+    status_snapshot: bool,
+    event_stream: bool,
+}
+
+enum HostAttachExecutionClientStartV1 {
+    StartNow,
+    Defer,
+}
+
+enum HostAttachModePreferenceV1 {
+    ContinuityRequired,
+    ContinuityPreferred,
+    FreshAllowed,
+}
+
+struct HostAttachLaunchKnobsV1 {
+    requested_execution_scope: AgentExecutionScopeV1,
+    host_execution_client_start: HostAttachExecutionClientStartV1,
+    attach_mode_preference: HostAttachModePreferenceV1,
+}
+
+struct HostAttachContractV1 {
+    schema_version: u32,
+    backend_id: String,
+    execution_scope: AgentExecutionScopeV1,
+    protocol: String,
+    descriptor_ref: AuthorityObjectRefV1,
+    capabilities: HostAttachCapabilitiesV1,
+    attach_launch_knobs: HostAttachLaunchKnobsV1,
+    policy_ref: AuthorityObjectRefV1,
+    continuity_resume_handle_ref: Option<AuthorityObjectRefV1>,
+}
+
 struct HostSessionTransitionPayloadHashInputV1 {
     schema_version: u32,
     intent_id: String,
@@ -234,6 +299,27 @@ struct HostSessionTransitionPayloadHashInputV1 {
     expires_at: TimestampV1,
 }
 
+struct TransitionTransportPayloadObjectV1 {
+    schema_version: u32,
+    intent_id: String,
+    mode: HostSessionTransitionModeV1,
+    orchestration_session_id: String,
+    shell_trace_session_id: String,
+    caller: HostSessionTransitionCallerV1,
+    source_authoritative_participant_id: Option<String>,
+    target_authoritative_participant_id: String,
+    target_participant_lease_token_ref: AuthorityObjectRefV1,
+    run_id: String,
+    resulting_authoritative_lineage: Vec<String>,
+    workspace_binding: WorkspaceBindingV1,
+    world_binding: Option<WorldBindingV1>,
+    descriptor_ref: AuthorityObjectRefV1,
+    host_attach_contract_ref: AuthorityObjectRefV1,
+    resume_handle_ref: Option<AuthorityObjectRefV1>,
+    transition_input_ref: Option<AuthorityObjectRefV1>,
+    post_turn_disposition: Option<HostPostTurnDispositionV1>,
+}
+
 struct AgentDescriptorHashInputV1 {
     schema_version: u32,
     descriptor: AgentDescriptorV1,
@@ -242,6 +328,31 @@ struct AgentDescriptorHashInputV1 {
 struct HostAttachContractHashInputV1 {
     schema_version: u32,
     contract: HostAttachContractV1,
+}
+
+struct ResumeHandleHashInputV1 {
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    backend_id: String,
+    protocol: String,
+    internal_uaa_session_id: String,
+}
+
+struct PolicyObjectHashInputV1 {
+    schema_version: u32,
+    policy_revision: String,
+    canonical_policy_snapshot_sha256: String,
+}
+
+struct RetainedWorkerObjectHashInputV1 {
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    world_binding: WorldBindingV1,
+    descriptor_ref: AuthorityObjectRefV1,
+    resume_handle_ref: AuthorityObjectRefV1,
+    policy_ref: AuthorityObjectRefV1,
 }
 
 enum ApplicationResultPhaseV1 {
@@ -320,28 +431,67 @@ struct TerminalHandoffHashInputV1 {
 `SHA-256(CanonicalJsonV1(named_hash_input))`. The authority-record commitment uses
 `DurableSessionAuthorityHashInputV1`; lineage uses `AuthoritativeLineageHashInputV1`; immutable
 intent payload uses `HostSessionTransitionPayloadHashInputV1`; descriptor and attach-contract
-objects use their named wrappers; both initial and post-turn application objects use
+objects use their named wrappers; resume handles, policy objects, and retained-worker reference
+objects use `ResumeHandleHashInputV1`, `PolicyObjectHashInputV1`, and
+`RetainedWorkerObjectHashInputV1`; both initial and post-turn application objects use
 `ApplicationResultHashInputV1`; acceptance, completion, and terminal-handoff objects use their
 corresponding named wrappers. `updated_at`, intent/claim/root revisions not explicitly present in a
 wrapper, mutable state, presentation-only fields, plan/socket paths, and adjacent object metadata
 are not accidentally swept into a hash. Authority-record, lineage, payload, descriptor,
-attach-contract, application, acceptance, completion, terminal-handoff, and migration-evidence
-commitments must use `CanonicalSha256`; a `StoreHmacSha256` variant in those fields fails closed.
+attach-contract, resume-handle, policy, retained-worker, application, acceptance, completion, and
+terminal-handoff commitments must use `CanonicalSha256`; a `StoreHmacSha256` variant in those
+fields fails closed.
 
-`AgentDescriptorV1` and `HostAttachContractV1` are closed typed projections, not arbitrary
-`serde_json::Value`. The attach contract contains the existing exact backend ID, host execution
-scope, protocol, resolved descriptor identity, capabilities, attach-launch knobs, validated
-already-resolved effective-policy fields, and optional continuity identity. A1 preserves those
-accepted values without rereading or reinterpreting inventory or policy; unknown projection fields
-fail closed.
+`AgentDescriptorV1` and `HostAttachContractV1` are the closed typed projections above, not
+arbitrary `serde_json::Value`. The policy object commits the exact already-resolved policy revision
+and canonical snapshot digest; A1 preserves those accepted values without rereading or
+reinterpreting inventory or policy. The resume handle binds the exact internal UAA continuity
+identity to session, participant, backend, and protocol. Unknown projection fields fail closed.
+Descriptor IDs/protocol/binary path and resume-handle identities are non-empty; the policy snapshot
+digest is exactly 64 lowercase hexadecimal characters. A HostAttachContract descriptor ref must be
+kind `AgentDescriptor`, its policy ref kind `Policy`, and its optional continuity ref kind
+`ResumeHandle`; their backend, protocol, scope, session, and participant identities must agree with
+the parent contract/intent. A retained-worker object must use kinds `AgentDescriptor`,
+`ResumeHandle`, and `Policy` for its three refs and match the same session/world identity. Any
+disagreement or cross-kind substitution fails before use.
+
+Every `AuthorityObjectKindV1` has exactly one V1 bytes and commitment rule:
+
+| Object kind | `schema_version` | Exact file bytes | Required commitment |
+|---|---:|---|---|
+| `AgentDescriptor` | 1 | `CanonicalJsonV1(AgentDescriptorHashInputV1)` | `CanonicalSha256` |
+| `RetainedWorker` | 1 | `CanonicalJsonV1(RetainedWorkerObjectHashInputV1)` | `CanonicalSha256` |
+| `ResumeHandle` | 1 | `CanonicalJsonV1(ResumeHandleHashInputV1)` | `CanonicalSha256` |
+| `Policy` | 1 | `CanonicalJsonV1(PolicyObjectHashInputV1)` | `CanonicalSha256` |
+| `HostAttachContract` | 1 | `CanonicalJsonV1(HostAttachContractHashInputV1)` | `CanonicalSha256` |
+| `TransitionTransportPayload` | 1 | `CanonicalJsonV1(TransitionTransportPayloadObjectV1)`; those canonical bytes are the HMAC `raw` member | `StoreHmacSha256` with `substrate.a1.raw-transport-payload.v1` |
+| `TransitionInput` | 1 | the exact input byte string, with no newline, JSON, or text coercion | `StoreHmacSha256` with `substrate.a1.transition-input.v1` |
+| `LeaseToken` | 1 | the exact UTF-8 lease-token bytes, with no normalization | `StoreHmacSha256` with `substrate.a1.participant-lease-token.v1` |
+| `ApplicationResult` | 1 | `CanonicalJsonV1(ApplicationResultHashInputV1)` | `CanonicalSha256` |
+| `InputAcceptance` | 1 | `CanonicalJsonV1(InputAcceptanceHashInputV1)` | `CanonicalSha256` |
+| `PostTurnCompletion` | 1 | `CanonicalJsonV1(PostTurnCompletionHashInputV1)` | `CanonicalSha256` |
+| `TerminalHandoff` | 1 | `CanonicalJsonV1(TerminalHandoffHashInputV1)` | `CanonicalSha256` |
+
+`TransitionTransportPayloadObjectV1` is the closed replay/reprojection schema; it contains typed
+refs to raw lease/input objects rather than copying their bytes. For all three sensitive kinds, the
+named HMAC input below is the exact commitment wrapper and its `raw` member is exactly the file
+bytes. Transition input is a length-preserved arbitrary byte string; lease token is a non-empty
+UTF-8 byte string without normalization; neither is parsed as JSON. Kind, schema version, typed
+path, parent-held ref, and the required commitment variant/domain are all checked before bytes are
+read or used. A ref cannot be accepted under another kind even when file bytes happen to match, and
+no adjacent index row can override the parent's kind, schema, or commitment.
 
 Golden fixtures must commit exact `CanonicalJsonV1` bytes and SHA-256 digest, plus fixed test-key
 HMAC values where sensitive refs occur. Start, Attach, and `ResumeOneTurn`-with-input fixtures use
 `HostSessionTransitionPayloadHashInputV1`; authority, lineage, attach-contract, application-result,
-and terminal-handoff fixtures use their named wrappers; the typed-ref fixture uses
-`AuthorityObjectRefV1` itself. Issuer, helper, restart/reconciliation, and release tests consume
-the same fixture files rather than regenerating expected bytes through the code under test. Test
-HMAC keys are fixture-only and can never be selected by a production store.
+terminal-handoff, descriptor, resume-handle, policy, and retained-worker fixtures use their named
+wrappers; the typed-ref fixture uses `AuthorityObjectRefV1` itself. Raw input, lease-token, and
+transport fixtures commit both exact bytes and fixed-key HMAC outputs. Each sensitive-domain
+fixture also rejects `run_present=0x00`, an empty run, and a different run from the parent intent.
+Issuer, helper,
+restart/reconciliation, and release tests consume the same fixture files rather than regenerating
+expected bytes through the code under test. Test HMAC keys are fixture-only and can never be
+selected by a production store.
 
 #### Keyed commitments for sensitive payloads
 
@@ -353,6 +503,14 @@ struct AuthorityStoreCommitmentKeyV1 {
     algorithm: AuthorityStoreCommitmentAlgorithmV1,
     created_at: TimestampV1,
     state: AuthorityStoreCommitmentKeyStateV1,
+}
+
+struct AuthorityStoreInitializationV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    bootstrap_home: CanonicalDirectoryV1,
+    initial_key_id: String,
+    created_at: TimestampV1,
 }
 
 enum AuthorityStoreCommitmentAlgorithmV1 {
@@ -369,25 +527,62 @@ enum AuthorityStoreCommitmentKeyStateV1 {
 Store initialization generates a 256-bit HMAC key from the OS CSPRNG while holding the root lock.
 `key_id` is exactly `ak_` plus 32 lowercase hexadecimal characters encoding a separate 128-bit
 OS-CSPRNG identifier.
-The key record and secret key bytes live outside `StateRootV1` at
-`authority-v1/keys/<key_id>.key`, owner-only; the root carries only
-`active_commitment_key_id`, and refs carry only `key_id`, domain, and digest. Keys and raw values
-are never logged, traced, exported, placed in helper plans, or included in diagnostics. Only local
-authority processes already authorized for the store may open the key through the trusted store
-handle.
+The lifecycle record is stored only in `StateRootV1.commitment_key_registry`; it contains no key
+bytes. Secret key bytes live outside the root at `authority-v1/keys/<key_id>.key`. Each key file is
+an immutable binary `AuthorityStoreCommitmentKeyFileV1` envelope with this exact byte encoding:
 
-New sensitive records use the root's active key. Rotation is serialized under the same lock:
-publish and fsync the new key file and keys directory first, then select it in a new root revision;
-a crash before root
-selection leaves an unused key, never a partially keyed authority record. The prior active key
-becomes `VerificationOnly` and remains readable while any reachable live, terminal, retained,
-quarantined, or tombstoned record references it. Retirement requires a complete locked scan of all
-reachable refs proving zero references; only then may key material become `Retired` and be removed.
-A missing, unreadable, wrong-store, wrong-algorithm, or mismatched active/verification key is store
-corruption and fails closed. `StateRootV1.active_commitment_key_id` is the sole active-key
-authority; key-file `state` is lifecycle metadata. If a crash leaves more than one key file marked
-`Active`, only the root-selected key may create records and the others are reconciled to
-`VerificationOnly` or unused under the lock.
+```text
+"substrate.a1.commitment-key-file.v1\0"
+ || u32be(1)
+ || len64(authority_store_id) || authority_store_id
+ || len64(key_id) || key_id
+ || 0x01
+ || len64(created_at) || created_at
+ || u32be(32) || 32 secret key bytes
+```
+
+Lengths are unsigned 64-bit big-endian; strings are exact UTF-8; `created_at` is the exact
+`TimestampV1` string; `0x01` is the sole `HmacSha256` algorithm tag; the secret-key member is exactly
+32 bytes; and the complete envelope has no trailing bytes. The file is written through
+`tmp/key--<key_id>--<nonce>.tmp`, `fsync`ed, atomically renamed with no-replace semantics, and
+followed by `fsync` of `keys/`. The opened complete envelope must be regular, owner-only, and
+no-follow. With a valid root its filename, store ID, key ID, timestamp, and algorithm must match the
+registry entry exactly. Lifecycle state exists only in the root registry: `Active` may create and
+verify commitments, `VerificationOnly` may verify only, and `Retired` may do neither. During
+`InitializationPending`, where no root/registry exists yet, it instead must match the strictly
+decoded init marker's `authority_store_id`, `initial_key_id`, and `created_at`, use algorithm tag
+`0x01`/`HmacSha256`, and is provisionally the sole `Active` key for the root that marker may create.
+No other metadata source is accepted. Keys and raw values are never logged, traced, exported,
+placed in helper plans, or included in diagnostics. Only local authority processes already
+authorized for the store may open the key through the trusted store handle.
+
+Exactly one registry entry is `Active`, and its key ID equals
+`StateRootV1.active_commitment_key_id`. New sensitive records use only that key. Rotation is one
+serialized protocol under the root lock:
+
+1. Generate a new key ID, metadata record, and 32-byte key from the OS CSPRNG.
+2. Publish and `fsync` the immutable key file and `keys/` directory.
+3. Revalidate the still-locked root and commit one new root revision that inserts the new entry as
+   `Active`, changes the former active entry to `VerificationOnly`, and changes
+   `active_commitment_key_id` to the new key.
+4. `fsync` the root parent before reporting rotation success.
+
+A crash before step 3 leaves an unregistered key-file orphan. After a complete valid root and all
+reachable refs are verified under the lock, an unregistered key ID has no commitment authority and
+is deleted with a following `fsync(keys/)`; a ref naming an unregistered key is instead corruption.
+A crash after step 3 is a committed rotation: both key files must exist, the new key is active, and
+the previous key is verification-only. There is no mutable state field in a key file and therefore
+no file/root disagreement to arbitrate.
+
+The prior key remains `VerificationOnly` while any reachable live, terminal, retained, tombstoned,
+journal, or application record references it. Retirement first performs a complete locked
+reachability scan proving zero references, then commits a root revision changing that registry
+entry to permanent `Retired`. Only after that root and parent directory are
+`fsync`ed may the key file be deleted and `keys/` be `fsync`ed. A crash with `Retired` metadata and
+the file still present resumes deletion; a retired file is never used. A missing active or
+verification-only file, or an unreadable, wrong-store, wrong-key-ID, wrong-algorithm, malformed, or
+mismatched envelope, is store corruption and fails closed. Retired registry entries are never
+deleted or reused.
 
 The required domains are exactly:
 
@@ -397,9 +592,9 @@ substrate.a1.participant-lease-token.v1
 substrate.a1.raw-transport-payload.v1
 ```
 
-For each of those domains the HMAC input is this byte sequence, where `len64` is an unsigned
-64-bit big-endian byte length, all strings are their exact UTF-8 bytes, `run_present` is one byte
-`0x00` or `0x01`, and `raw` is not JSON encoded:
+For these three intent-bound domains the HMAC input is this byte sequence, where `len64` is an
+unsigned 64-bit big-endian byte length, all strings are their exact UTF-8 bytes, and `raw` is not
+JSON encoded:
 
 ```text
 "substrate.a1.hmac-input.v1\0"
@@ -412,12 +607,12 @@ For each of those domains the HMAC input is this byte sequence, where `len64` is
 ```
 
 Transition input/prompt bytes, participant lease-token bytes, and raw transport-payload bytes use
-their respective domain and include the exact intent and applicable run ID. Delimiter
-concatenation is forbidden. The `StoreHmacSha256.digest_hex` is lowercase-hex
+their respective domain. All three V1 object kinds are run-bound: `run_present` is exactly `0x01`
+and `run_id` is the non-empty exact run ID committed by the parent intent. `0x00`, an absent/empty
+run ID, or a different run ID is invalid for every V1 domain and fails before object acceptance.
+Delimiter concatenation is forbidden. The `StoreHmacSha256.digest_hex` is lowercase-hex
 `HMAC-SHA-256(key, bytes_above)`. Sensitive bytes and these reusable commitments are authority
 store data only; failed verification reports a redacted typed error without logging either.
-Legacy migration evidence is a closed, redacted structured record and never stores a raw
-secret-bearing legacy artifact.
 
 #### `StateRootV1` and the session namespace
 
@@ -425,21 +620,29 @@ secret-bearing legacy artifact.
 struct StateRootV1 {
     schema_version: u32,
     authority_store_id: String,
+    bootstrap_home: CanonicalDirectoryV1,
     root_revision: u64,
     active_commitment_key_id: String,
+    commitment_key_registry: BTreeMap<String, AuthorityStoreCommitmentKeyV1>,
+    greenfield_namespace_certificate: GreenfieldNamespaceCertificateV1,
     session_namespace_map: BTreeMap<String, SessionNamespaceRecordV1>,
     transition_intent_map: BTreeMap<String, HostSessionTransitionIntentV1>,
     issuer_request_index: BTreeMap<String, IssuerRequestIndexEntryV1>,
     application_journal: BTreeMap<String, HostSessionTransitionApplicationJournalV1>,
-    legacy_migration_quarantine: BTreeMap<String, LegacyMigrationQuarantineV1>,
     object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
+}
+
+struct GreenfieldNamespaceCertificateV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    bootstrap_home: CanonicalDirectoryV1,
+    certified_at: TimestampV1,
 }
 
 enum SessionNamespaceRecordV1 {
     Authority(DurableSessionAuthorityV1),
     StartReservation(SessionIdReservationV1),
     StartTombstone(SessionIdTombstoneV1),
-    LegacyMigrationRejected(LegacyMigrationRejectedV1),
 }
 
 struct SessionIdReservationV1 {
@@ -465,35 +668,6 @@ struct SessionIdTombstoneV1 {
     terminal_state: StartTombstoneStateV1,
     terminal_handoff_ref: AuthorityObjectRefV1,
     tombstoned_at: TimestampV1,
-}
-
-enum LegacyMigrationRejectionReasonV1 {
-    MissingExactTraceIdentity,
-    MissingExactSessionIdentity,
-    MissingOrUnnormalizableWorkspaceIdentity,
-    InvalidAuthorityStoreIdentity,
-    MissingRequiredAttachContract,
-    PartialOrInvalidWorldBinding,
-    AmbiguousCyclicOrCrossSessionLineage,
-    UnrepresentableRequiredAuthorityField,
-}
-
-struct LegacyMigrationRejectedV1 {
-    schema_version: u32,
-    orchestration_session_id: String,
-    source_record_key: String,
-    reason: LegacyMigrationRejectionReasonV1,
-    migration_evidence_ref: AuthorityObjectRefV1,
-    rejected_at: TimestampV1,
-}
-
-struct LegacyMigrationQuarantineV1 {
-    schema_version: u32,
-    quarantine_id: String,
-    source_record_key: String,
-    reason: LegacyMigrationRejectionReasonV1,
-    migration_evidence_ref: AuthorityObjectRefV1,
-    quarantined_at: TimestampV1,
 }
 
 struct IssuerRequestIndexEntryV1 {
@@ -549,14 +723,20 @@ struct AuthorityObjectIndexEntryV1 {
 
 Map ownership and keys are exact: `session_namespace_map` is keyed by
 `orchestration_session_id`; `transition_intent_map` and `application_journal` by `intent_id`;
-`issuer_request_index` by store-global `issuer_request_id`; `legacy_migration_quarantine` by the
-internal `migration_evidence_ref.ref_id`; and `object_index` by `ref_id`. Each value repeats and
-must match its map key. Every non-released object-index entry is reachable from an exact parent
-record in the same root; an index row alone cannot grant semantic authority. Only a
+`issuer_request_index` by store-global `issuer_request_id`; `commitment_key_registry` by `key_id`;
+and `object_index` by `ref_id`. Each value repeats and must match its map key. Every non-released
+object-index entry is reachable from an exact parent record in the same root; an index row alone
+cannot grant semantic authority. Only a
 `TransitionTransportPayload` entry may be `ReleaseEligible` or `Released`; every other committed
 object kind remains immutable `Present`. A session namespace key is never deleted in V1 after
-reservation, authority creation/migration, tombstoning, or migration rejection; lifecycle changes
-replace only the value variants explicitly authorized above.
+reservation, authority creation, or tombstoning; lifecycle changes replace only the value variants
+explicitly authorized above.
+
+The greenfield certificate is not a migration barrier. Its `schema_version` is exactly 1, its store
+ID and bootstrap-home identity exactly equal the enclosing root, and its timestamp is the exact
+timestamp fixed by `AuthorityStoreInitializationV1`. It can be created only by the `FreshAbsent`
+initialization protocol below and is immutable for the life of the store. A missing, changed,
+copied, synthesized, or independently created certificate is root corruption.
 
 #### External-object write protocol and filesystem safety
 
@@ -564,24 +744,148 @@ The fixed layout below is entirely beneath the physically bound `authority_store
 
 ```text
 authority-v1/state-root-v1.json
+authority-v1/init-v1.json
 authority-v1/lock/root.lock
 authority-v1/tmp/
 authority-v1/objects/<closed-kind>/v<schema_version>/<ref_id>.obj
 authority-v1/keys/<key_id>.key
 ```
 
+Every temp filename has one closed operation-bound grammar, where `nonce` is 32 lowercase
+hexadecimal characters encoding 128 OS-CSPRNG bits:
+
+```text
+init--<authority_store_id>--<nonce>.tmp
+key--<key_id>--<nonce>.tmp
+object--<ref_id>--<nonce>.tmp
+root--r<minimal-decimal-new-root_revision>--<nonce>.tmp
+```
+
+Temps exist only in `authority-v1/tmp/`, are regular owner-only `0600` files opened no-follow with
+exclusive create, and never carry semantic authority. Before bootstrap classification and before
+any transaction/reconciliation, the root lock holder enumerates `tmp/` and applies this exact rule:
+
+1. A recognized safe temp is never promoted or treated as proof, whether empty, partial, complete,
+   or `fsync`ed. Delete it directory-relatively and `fsync(tmp/)`.
+2. If a valid committed root requires a key/object whose final file is absent, the store is corrupt;
+   a matching temp cannot repair it. If a valid final file exists, its temp is still deleted.
+3. With a valid pending init marker, deletion is followed by normal exact marker/key/root recovery.
+   With no root or marker, deletion completes before evaluating `FreshAbsent`.
+4. An unrecognized name, invalid embedded ID/revision/nonce, symlink, non-regular entry, wrong owner
+   or mode, directory-enumeration error, or deletion/`fsync` failure is `CorruptOrUnsupported`.
+
+Thus a crash before temp `fsync`, after temp `fsync`, or before/after rename has one result: an
+unrenamed temp is safely removed; a completed rename is evaluated only at its final typed location;
+and neither state can fabricate root, key, object, marker, or application success. Key retirement
+uses final-file deletion and no temp.
+
 Initialization creates/opens `authority-v1`, `lock`, `tmp`, `objects`, and `keys` relative to the
 trusted root handle with no-follow/exclusive-create checks, then serializes competing initializers
-on the exact `authority-v1/lock/root.lock` file. The initializer that observes no valid root creates
-one immutable `authority_store_id` as `as_` plus 32 lowercase hexadecimal characters encoding 128
-OS-CSPRNG bits, an active key, and a revision-1 root; a competitor re-reads and joins that root. The
-lock file contains no PID authority and is
+on the exact `authority-v1/lock/root.lock` file. The lock file contains no PID authority and is
 never broken by liveness heuristics. Linux and macOS use a whole-file exclusive `flock(LOCK_EX)`
 held on the no-follow-opened lock-file descriptor for the entire transaction; a filesystem whose
 `flock` is not cross-process and crash-safe is unsupported. Pre-lock directory creation is
 idempotent only when post-open ownership, type, and mode validation succeeds; no root/key/object
 publication occurs before the lock is held. The initializer `fsync`s every newly created directory,
-the lock file, and their affected parent directories before publishing a key or initial root.
+the lock file, and their affected parent directories before classifying or publishing anything.
+
+A1 has no legacy-authority migration mode. Under the same trusted bootstrap-home handle and root
+lock, classification safely enumerates both pre-A1 authority collections:
+`run/agent-hub/sessions/` recursively and `run/agent-hub/participants/` non-recursively. A missing
+collection is empty only on exact `ENOENT`; a present collection must be an owner-controlled,
+no-follow-opened directory whose complete enumeration succeeds. An empty validated directory is
+allowed. Any regular record, nested record/directory, symlink, hard link, device, socket, unknown
+entry, or other artifact is pre-A1 authority state. Config, policy, and inventory paths outside
+these two collections are not legacy authority artifacts and remain allowed.
+
+Traversal is component-by-component and directory-relative from the already-open trusted
+bootstrap-home descriptor; concatenated absolute paths and path re-resolution are forbidden. The
+bootstrap home and every existing `run`, `agent-hub`, collection, and recursively visited sessions
+component must be a no-follow-opened directory owned by the effective owner, with no group/world
+write bit and no ACL granting another principal write, rename, delete, or traversal authority.
+Each opened component's physical identity is captured using the platform-specific fields of
+`DirectoryPhysicalIdentityV1`. A symlink/reparse point, non-directory ancestor, owner mismatch,
+unsafe mode/ACL, cross-device rebinding, or identity-query failure is `CorruptOrUnsupported`.
+
+The classifier retains the opened component descriptors and their physical identities for the
+whole locked initialization attempt. If a suffix is absent, it retains the deepest existing safe
+parent descriptor and the exact missing components. Immediately before root-temp creation and
+again before root rename, it reopens each child directory-relative, verifies every existing
+identity/owner/mode/ACL against the retained observation, verifies every missing suffix is still
+exact `ENOENT`, and repeats the complete empty-collection enumeration. Any replacement, rename,
+new entry, identity change, or validation uncertainty aborts without certificate/root publication.
+Every later semantic transaction performs the same safe traversal and empty enumeration. A
+same-owner unmodified or mixed-version process is outside the supported concurrency model and must
+be quiesced; other filesystem principals are excluded by the required ownership/mode/ACL checks.
+
+Classification precedence is exact: any authority-layout/root/marker/key/temp validation failure or
+collection-enumeration uncertainty is `CorruptOrUnsupported`; otherwise any safely observed pre-A1
+artifact is `UnsupportedLegacyState`; otherwise exactly one of `FreshAbsent`,
+`InitializationPending`, or `ValidExisting` applies. Under that lock, bootstrap has exactly five
+classifications:
+
+1. `FreshAbsent`: after successful temp reconciliation and complete legacy-collection enumeration,
+   `state-root-v1.json` and `init-v1.json` are both proven absent; `keys/`, `objects/`, `tmp/`, and
+   both legacy authority collections contain no entries; and only the validated empty authority
+   directory skeleton and `root.lock` exist. Only this state may begin initialization and mint the
+   greenfield certificate.
+2. `InitializationPending`: after successful temp reconciliation and complete empty
+   legacy-collection enumeration, `state-root-v1.json` is proven absent and `init-v1.json` is a
+   complete, strictly decoded `CanonicalJsonV1(AuthorityStoreInitializationV1)`. No objects or
+   unrelated keys/temps exist. The one matching initial key file may be absent or complete.
+   Recovery resumes only when the marker's persisted `bootstrap_home` equals the trusted handle's
+   physical identity, then reuses the exact stored store ID, key ID, home, and timestamp; it never
+   generates replacement identities.
+3. `ValidExisting`: `state-root-v1.json` is a complete strictly decoded root whose store ID, bound
+   `bootstrap_home`, greenfield certificate, key registry/files, maps, refs, permissions, and
+   filesystem semantics all validate against the trusted handle and both legacy authority
+   collections still enumerate empty. The object tree contains only closed kind slugs, minimal
+   `v1` directories, registered immutable objects, safely empty known kind/version directories, and
+   safely named unindexed orphan object files. An orphan must be a no-follow regular owner-only
+   `0600` file at the exact typed path for a syntactically valid ref ID; it has no authority or
+   reachability meaning. Unknown, unsafe, or malformed directory/object entries are corruption. A
+   matching leftover init marker is removed only after its store ID, key ID, home, and timestamp
+   match the root, certificate, and registry.
+4. `UnsupportedLegacyState`: a complete safe enumeration finds any pre-A1 authority artifact.
+   A1 does not parse, migrate, quarantine, rank, merge, delete, or select a winner from it; it
+   creates no root/certificate and accepts no transition. The only recovery is an explicit
+   operator/developer reset outside the A1 runtime contract.
+5. `CorruptOrUnsupported`: every other state, including an unreadable or incompletely enumerable
+   legacy collection, a present invalid/unreadable root, a root
+   symlink or non-regular file, unsafe ownership/permissions, unsupported locking or fsync,
+   root-without-required-key, key/object/temp artifacts without a valid root or init marker,
+   mismatched init/key/root identities, or any malformed/partial file. This fails closed and can
+   never trigger fresh-store creation or namespace replacement.
+
+Missing/unreadable is never collapsed to absent: absence is accepted only from the no-follow,
+directory-relative lookup result that distinguishes `ENOENT` from every other error. In
+particular, decode failure, access denial, I/O failure, wrong type, symlink refusal, and unsupported
+filesystem behavior are `CorruptOrUnsupported`.
+
+A `FreshAbsent` initializer fixes the trusted handle's `CanonicalDirectoryV1` as `bootstrap_home`,
+generates one immutable `authority_store_id` as `as_` plus 32 lowercase
+hexadecimal characters encoding 128 OS-CSPRNG bits, one key ID, one 256-bit key, and one timestamp,
+then performs this exact protocol:
+
+1. Write `CanonicalJsonV1(AuthorityStoreInitializationV1)` to
+   `tmp/init--<authority_store_id>--<nonce>.tmp`, `fsync` it, rename it
+   with no-replace semantics to `init-v1.json`, and `fsync(authority-v1/)`.
+2. Publish and `fsync` the matching immutable key envelope and `keys/` as specified above.
+3. Re-enumerate both legacy authority collections under the still-held lock, then write the
+   revision-1 root with that store ID, the identical persisted bootstrap home, a
+   `GreenfieldNamespaceCertificateV1` carrying the same store ID/home/timestamp, one `Active` key
+   registry entry, and empty maps to `tmp/root--r1--<nonce>.tmp`; `fsync` it, publish with
+   no-replace semantics, and `fsync(authority-v1/)`. Any artifact or enumeration uncertainty aborts
+   without publishing the root.
+4. Delete `init-v1.json`, `fsync(authority-v1/)`, and only then report initialization success.
+
+`InitializationPending` with no key repeats step 2 using a newly generated 256-bit secret under the
+already-fixed key ID; with a complete key it validates that envelope only against the init marker
+and fixed algorithm rule above, then reuses that exact file. Whether newly published or reused,
+recovery reopens and revalidates the key file, `fsync`s the key file, and `fsync`s `keys/` before
+performing steps 3–4. A crash after root publication is a committed initialization even if the
+marker remains; a crash before root publication is never inferred from key presence alone. A
+competitor always re-reads under the lock and joins the same pending or committed initialization.
 
 Every object-creating or semantic root transaction uses this order:
 
@@ -591,20 +895,30 @@ Every object-creating or semantic root transaction uses this order:
    filesystem.
 3. Acquire the cross-process exclusive lock on `authority-v1/lock/root.lock`.
 4. Re-read and strictly decode the current `StateRootV1`.
-5. Validate `root_revision`, object state, namespace reservation, intent/application revisions,
-   and all semantic preconditions.
-6. Write each new immutable object's bytes to a CSPRNG-named owner-only temp file beneath
-   `authority-v1/tmp` on the same filesystem.
-7. `fsync` each object temp file.
-8. Atomically rename it with no-replace semantics into its final typed object location; an existing
+5. Re-enumerate both legacy authority collections as empty and validate the greenfield certificate,
+   `root_revision`, object state, namespace reservation, intent/application revisions, and all
+   semantic preconditions. A pre-A1 artifact fails closed and cannot be imported or ignored.
+6. Traverse `objects/<closed-kind-slug>/v<minimal-decimal-schema-version>` component-by-component
+   from the no-follow-opened `objects/` descriptor. Existing components must be owner-only `0700`
+   directories with the expected names. A missing closed kind or version directory is created
+   under the lock with `mkdirat`-equivalent no-follow semantics and mode `0700`; each created
+   directory and each affected parent is `fsync`ed before continuing. Unknown kind/version names,
+   unsafe existing entries, or create/validation/`fsync` uncertainty fail closed. A crash may leave
+   only safely empty known kind/version directories; `ValidExisting` accepts those as routing
+   structure without granting object authority.
+7. Write each new immutable object's bytes to
+   `authority-v1/tmp/object--<ref_id>--<nonce>.tmp` on the same filesystem.
+8. `fsync` each object temp file.
+9. Atomically rename it with no-replace semantics into its final typed object location; an existing
    location is an exact-retry candidate only after complete verification.
-9. `fsync` every affected object directory.
-10. Re-read or otherwise revalidate the still-locked root revision before publication.
-11. Write the new canonical root to an owner-only temp file beneath `authority-v1/tmp`.
-12. `fsync` the root temp file.
-13. Atomically replace `authority-v1/state-root-v1.json`.
-14. `fsync` the `authority-v1` parent directory.
-15. Release the lock only after the transaction has a verified outcome.
+10. `fsync` every affected object directory.
+11. Re-read or otherwise revalidate the still-locked root revision before publication.
+12. Write the new canonical root to
+    `authority-v1/tmp/root--r<new-root-revision>--<nonce>.tmp`.
+13. `fsync` the root temp file.
+14. Atomically replace `authority-v1/state-root-v1.json`.
+15. `fsync` the `authority-v1` parent directory.
+16. Release the lock only after the transaction has a verified outcome.
 
 On Unix every file in this layout, including root, object, temp, key, and lock files, is `0600`;
 every directory at or below `authority-v1`, including kind/version object directories, is `0700`.
@@ -624,13 +938,22 @@ Crash meaning is exact:
   meaning. A1's safe grace rule is retention: A1 authorizes no orphan deletion. A later
   schema/version may add garbage collection only with locked reconciliation plus an explicit
   time/evidence grace rule, so A1.1 does not invent one.
+- A retained orphan may be adopted only during an exact retry that presents the same complete
+  `AuthorityObjectRefV1`—ref ID, kind, schema, commitment variant/domain/key/digest—the exact parent
+  intent/run/store context required by any HMAC wrapper, and exact final file bytes that verify the
+  resulting commitment input. The locked retry then supplies the missing semantic root parent and
+  object-index entry in its normal root transaction. Without that complete exact retry, the orphan
+  remains retained and non-authoritative; its filename or bytes alone never reconstruct an intent,
+  request, authority, or parent.
 - A committed parent ref in a required-present state whose object is missing, wrong-kind,
   wrong-version, wrong-domain/key, or commitment-mismatched is store corruption. Fail closed and
   never infer success.
 - `ReleaseEligible` with the transport object present may retry deletion idempotently. Deletion is
   directory-relative and the object directory is fsynced before the root records `Released`.
 - `ReleaseEligible` with the transport object absent may become `Released` only after verifying the
-  exact committed terminal-handoff ref and commitment in both intent and object index.
+  exact committed terminal-handoff ref and commitment in both intent and object index. Verified
+  `ENOENT` is followed by `fsync` of that exact transport object directory before the root may
+  record `Released`, matching the durability barrier used after successful deletion.
 - `Released` is the sole intentional missing-object state. It requires the same exact terminal
   handoff and no remaining transport bytes; an unexpected surviving copy is securely removed
   under the lock and never regains authority meaning.
@@ -663,9 +986,6 @@ enum DurableSessionAuthorityOriginV1 {
         intent_id: String,
         issuer_request_id: String,
         payload_commitment: AuthorityObjectCommitmentV1,
-    },
-    LegacyMigration {
-        migration_evidence_ref: AuthorityObjectRefV1,
     },
 }
 
@@ -703,9 +1023,9 @@ Acceptance rules:
 
 1. Only `HostSessionAuthority` may create a newer `authority_revision` or change posture, lineage,
    binding, attach contract, refs, or authoritative participant.
-2. A Start-created authority retains the exact root-map `intent_id`, issuer request, and payload
-   commitment that owned its former reservation. A migrated authority retains an exact
-   `LegacyMigrationEvidence` ref. Origin is immutable.
+2. Every authority is Start-created and retains the exact root-map `intent_id`, issuer request, and
+   payload commitment that owned its former reservation. `StartIntent` is the only V1 origin and is
+   immutable.
 3. Every ref validates its closed kind: attach contract is `HostAttachContract`, retained workers
    are `RetainedWorker`, resume handles are `ResumeHandle`, and policy is `Policy`. Kind, schema,
    key/domain where applicable, and parent-owned commitment are checked before use.
@@ -714,16 +1034,16 @@ Acceptance rules:
 5. `Terminal` is monotonic unless a separately versioned recovery protocol explicitly creates a
    successor session; it is never reversed in-place.
 6. `HostSessionPostureV1::Invalid` is permitted only for an otherwise fully representable
-   `DurableSessionAuthorityV1` that later becomes invalid or unroutable. It is not a migration
-   placeholder and cannot supply missing identity, lineage, binding, contract, or ref fields.
+   `DurableSessionAuthorityV1` that later becomes invalid or unroutable. It cannot supply missing
+   identity, lineage, binding, contract, or ref fields.
 7. World binding is the exact complete `(world_id, world_generation)` pair. Partial binding is
    unrepresentable, not an `Invalid` authority.
 8. PID, socket, heartbeat, attached-client, helper, and plan data do not belong in this contract.
 9. `shell_trace_session_id`, `workspace_binding.authority_store_root`,
    `workspace_binding.authority_store_id`, and the initial `workspace_binding.workspace_root` are
    immutable for one authority record. Attach and `ResumeOneTurn` match their complete physical
-   identities; a different store or workspace requires an authorized migration protocol outside
-   A1.
+   identities; a different store or workspace requires a separately versioned explicit rebinding
+   protocol outside A1.
 
 ## 1A. `HostSessionTransitionIntentV1`
 
@@ -914,7 +1234,7 @@ Attempt rejection and terminal intent rejection are separate outcomes:
 
 | Validation outcome | Durable effect |
 |---|---|
-| Invalid request before a valid intent is issued | Reject the request; persist no intent, reservation, tombstone, object-index entry, or issuer-index entry. An object temp/final published before the failed root commit is only an orphan. |
+| Invalid request before a valid intent is issued | Reject the request; persist no intent, reservation, tombstone, object-index entry, or issuer-index entry. An unrenamed temp is removed by temp reconciliation; a final object published before the failed root commit is only an orphan. |
 | Exact `intent_id`, `issuer_request_id`, and `payload_commitment` presented for an existing intent | Return/join its current claim or stored transition/input/post-turn/terminal result as allowed by state, even if the caller retained an older intent revision; do not reissue or reapply. |
 | Unknown/substituted/mismatched attempt, stale intent/claim revision used for a claim/application/state mutation, superseded claim, or conflicting replay against a valid stored intent | Return and audit `HostSessionTransitionAttemptRejectionV1`; do not mutate, reject, expire, release, or otherwise strand the stored intent. |
 | The stored intent was validly issued, the root/object/key set remains valid, but its committed authority precondition no longer holds before application | Commit `Rejected` plus one exact `TerminalHandoff` ref. For Start, atomically replace its exact reservation with an intent-linked permanent tombstone; no authority mutation is permitted. |
@@ -961,22 +1281,49 @@ reservation, namespace, or release state.
    `Attach` and commits the already-existing obligation ID and claim owner; A1 neither decides
    eligibility nor changes claim/settlement semantics. A present caller participant matches the
    exact authoritative caller. A new Start has none.
-9. Legacy `source_orchestration_session_id` plan data is absent. Startup-prompt stream paths,
+9. Pre-A1 `source_orchestration_session_id` plan data is rejected. Startup-prompt stream paths,
    helper PIDs, sockets, and plan paths are transport-only and cannot enter reservation or
    authority truth. Existing builders may reproject them only from verified retained objects.
 10. `shell_trace_session_id` exactly matches the authority record for Attach/Resume and is committed
     by the Start payload and resulting authority. It cannot be recovered from ambient tracing
     state.
 
+### A1 packet ownership boundary
+
+A1.1 owns only the authority-store substrate: bootstrap classification and recovery, the normalized
+bootstrap-home binding, cross-process locking, exact object publication/verification, key lifecycle,
+greenfield namespace certification plus fail-closed pre-A1-state detection, exact authority
+resolution, and generic root/authority revision-CAS. A1.1 does not accept production
+`ExpectedAbsent`, create a `StartReservation`, issue or apply a transition intent, allocate a Start
+participant, or create a Start-origin authority.
+
+To make the same-home invariant implementable, A1.1 may add explicit-bootstrap-home parameters or
+sibling entry points only to the existing common path, effective config, effective policy/policy
+snapshot, and agent-inventory resolvers named by the A1 packet. Those entry points consume the
+already-open `CanonicalDirectoryV1`/trusted handle and preserve all existing workspace/global
+precedence, merge, parsing, and policy interpretation. A1.1 does not switch real callers. A1.3 may
+thread that same handle only through its named CLI/REPL Start/Attach/Resume adoption paths; it may
+not broaden resolver semantics or convert unrelated callers.
+
+A1.2 is the first packet allowed to perform production Start semantics. It owns greenfield
+certificate validation, `ExpectedAbsent` acceptance, Start reservation plus intent issuance,
+claim/application, and initial Start-origin authority birth as one intent protocol. A1.3 adopts
+that protocol on real CLI/REPL consumers; A1.1 primitive tests are not evidence that a production
+Start path is adopted.
+
 ### Start namespace reservation
 
 Start uses the namespace map and issuer index as one protocol:
 
-1. **Pre-issuance:** a new `ExpectedAbsent` request requires no `Authority`, `StartTombstone`,
-   `LegacyMigrationRejected`, or foreign `StartReservation` for the session ID. A previously
-   committed exact self reservation is handled only as the exact issuance retry below; it is not
-   general absence.
-2. **Issuance:** after preparing/verifying required immutable objects, one root replacement creates
+1. **Pre-issuance:** A1.2 may evaluate a new `ExpectedAbsent` request only while
+   the complete `StateRootV1` and immutable `GreenfieldNamespaceCertificateV1` verify against the
+   trusted bootstrap home and both pre-A1 authority collections re-enumerate empty. It then requires
+   no `Authority`, `StartTombstone`, or foreign `StartReservation` for the session ID. A missing or
+   unreadable individual record, absent compatibility projection, unverified/copy-created
+   certificate, pre-A1 artifact, incomplete enumeration, or root error is never absence. A
+   previously committed exact self reservation is handled only as the exact issuance retry below;
+   it is not general absence.
+2. **Issuance:** after preparing/verifying required immutable objects, one A1.2 root replacement creates
    the `Issued` intent, `issuer_request_index` entry, `object_index` entries, and
    `StartReservation` owned by the exact intent ID, issuer request ID, and payload commitment.
    External bytes published before this root have no issuance meaning.
@@ -985,8 +1332,8 @@ Start uses the namespace map and issuer index as one protocol:
    mismatch is an attempt rejection and cannot alter the stored intent/reservation/tombstone.
 4. **Claim/application:** only the reservation whose three ownership fields exactly match the
    intent satisfies that intent's `ExpectedAbsent`. A foreign reservation, `Authority`,
-   `StartTombstone`, `LegacyMigrationRejected`, missing reservation, or mismatched commitment fails
-   closed. PID, socket, helper, plan, claim-owner liveness, and process-local state are irrelevant.
+   `StartTombstone`, missing reservation, or mismatched commitment fails closed. PID, socket,
+   helper, plan, claim-owner liveness, and process-local state are irrelevant.
 5. **Applied Start:** the same root transaction that records application journal and intent
    `Applied` atomically replaces `StartReservation` with `Authority`. The authority's
    `StartIntent` origin retains the exact intent, issuer, and payload commitment.
@@ -1010,15 +1357,16 @@ The posture domain is closed for V1:
 
 Every unlisted source posture or namespace variant fails closed. In particular, a new independent
 Attach/Resume against `ActiveAttached`, `Terminal`, or `Invalid` is rejected; only an exact retry
-of the already-Applied intent may join. No `StartTombstone` or `LegacyMigrationRejectedV1` can
-satisfy any A1 transition. A1 does not create, resolve, or change obligations when selecting the
-deterministic post-turn posture.
+of the already-Applied intent may join. No `StartTombstone` can satisfy any A1 transition. A1 does
+not create, resolve, or change obligations when selecting the deterministic post-turn posture.
 
 `Start` requires all of the following:
 
-1. `authority_precondition` is `ExpectedAbsent`; new issuance observes no namespace record, and
-   later claim/application observes only the exact self reservation. Delete/recreate,
-   compatibility hiding, or any permanent namespace record does not satisfy it.
+1. `authority_precondition` is `ExpectedAbsent`; A1.2 issuance first verifies the exact greenfield
+   certificate, empty pre-A1 authority collections, and no namespace record. Later
+   claim/application observes only the exact self reservation. Delete/recreate, compatibility
+   hiding, a missing/copied certificate, an unreadable collection, any pre-A1 artifact, or any
+   permanent namespace record does not satisfy it.
 2. `source_authoritative_participant_id` and `resume_handle_ref` are absent.
 3. The target participant, HMAC-bound `LeaseToken` ref, run ID, and shell-trace ID are new and
    exact. Resulting lineage is the valid initial lineage ending in that target. Caller is
@@ -1117,101 +1465,82 @@ deterministic post-turn posture.
 
 On process restart or before retrying a nonterminal intent, `HostSessionAuthority` reconciles in this order:
 
-1. Strictly decode the last verifiable root under lock and verify store ID, active/required old
-   keys, complete namespace/intent/index/journal invariants, and every reachable ref whose storage
-   state requires bytes. A Released transport validates through its exact terminal handoff instead.
-   Root uncertainty never falls back to external object presence.
-2. `Issued` Start must own its exact reservation; Issued non-Start must retain its exact authority
-   precondition. With no application marker it remains claimable until expiry. Missing/mismatched
-   self reservation is corruption, not absence.
-3. `Claimed` with unchanged precondition may resume under the exact claim or be reclaimed after
+1. Re-run the bootstrap classifier under the lock. Resume only an exact `InitializationPending`
+   marker or a `ValidExisting` root; every invalid, partial, permission-invalid, unreadable, or
+   unsupported root state fails closed and never initializes a replacement namespace.
+2. Strictly decode the last verifiable root under lock and verify store ID and bound bootstrap home,
+   the exactly-one-active key registry invariant, every required active/verification key envelope,
+   the immutable greenfield certificate, empty pre-A1 authority collections, complete
+   namespace/intent/index/journal invariants, and
+   every reachable ref whose storage state requires bytes. A Released transport validates through
+   its exact terminal handoff instead. Root uncertainty never falls back to external object or key
+   presence.
+3. `Issued` Start must have been created by A1.2 after verifying the greenfield certificate and
+   empty pre-A1 authority collections and must own its exact reservation; Issued non-Start must
+   retain its exact authority precondition. With no application marker it remains claimable until
+   expiry. Missing/mismatched self reservation is corruption, not absence.
+4. `Claimed` with unchanged precondition may resume under the exact claim or be reclaimed after
    lease expiry. No liveness observation substitutes.
-4. Exact authority mutation plus journal/result ref commits Applied even if the caller saw failure;
+5. Exact authority mutation plus journal/result ref commits Applied even if the caller saw failure;
    reconciliation recovers/joins the identical result. For Start, Authority origin must match the
    former reservation. A visible Authority without matching application proof fails closed.
-5. Objects with no root parent are orphans and never prove issuance/application. A missing or
+6. Objects with no root parent are orphans and never prove issuance/application. A missing or
    mismatched object required by Retained/Present state is corruption. ReleaseEligible plus absent
    transport may advance only after exact terminal-handoff verification.
-6. Missing plan transport is reprojected only after revisioned input/application/post-turn checks.
+7. Missing plan transport is reprojected only after revisioned input/application/post-turn checks.
    Applied Resume with pending post-turn work accepts only the exact completion/failure ref for its
    committed run; ambiguous evidence remains pending and diagnosable.
-7. If root-directory fsync previously failed, report no inferred success. Reconcile whichever
+8. If root-directory fsync previously failed, report no inferred success. Reconcile whichever
    complete root revision and object set is verifiable, then use issuer index/application journal
    for exact retry; never choose the newest-looking orphan or temp file.
-8. If neither prior precondition nor exact committed result can be proven—or any referenced HMAC
+9. If neither prior precondition nor exact committed result can be proven—or any referenced HMAC
    key is lost—fail closed and retain diagnosable state without logging sensitive bytes or
    commitments.
-9. Reconciliation, tombstoning, and payload cleanup are idempotent across repeated crashes and
+10. Reconciliation, greenfield-certificate validation, key rotation/retirement, tombstoning, and
+   payload cleanup are idempotent across repeated crashes and
    cannot increment initial or post-turn authority more than once per intent.
 
-### Compatibility and migration
+### Greenfield-only activation and unsupported pre-A1 state
 
-Legacy helper plans without `intent_id` and `payload_commitment` cannot drive an A1 transition.
-Once a producer is switched, a mixed-version consumer fails closed and requires valid reissuance;
-it never reconstructs authority from a plan. Existing state may be compatibility-read or migrated,
-but every new transition requires an exact intent. Helper endpoints/paths and auto-attach policy,
-eligibility, claim, and settlement remain unchanged.
+A1 intentionally defines no legacy-authority migration or compatibility-adoption protocol. There
+are no deployed users or valid pre-A1 authority records to preserve. Adding conversion,
+quarantine, evidence, conflict arbitration, or dual-write semantics would create an unneeded
+permanent authority surface. The generic StateStore migration/schema-evolution and
+CompatibilityReadModel ownership in `01-target-architecture.md` remains available for other
+schemas and read-only diagnostics; it does not authorize importing pre-A1 session/participant
+records into A1 authority.
 
-Migration evidence is a non-secret closed object:
+The closed rules are:
 
-```rust
-struct LegacyMigrationEvidenceHashInputV1 {
-    schema_version: u32,
-    evidence_id: String,
-    source_store_id: Option<String>,
-    source_record_key: String,
-    exact_session_id: Option<String>,
-    source_schema_version: Option<u32>,
-    rejection_reason: Option<LegacyMigrationRejectionReasonV1>,
-    observed_field_names: Vec<String>,
-    recorded_at: TimestampV1,
-}
-```
+1. The bootstrap classifier enumerates the two exact pre-A1 authority collections defined above.
+   A complete empty result is one prerequisite for `FreshAbsent`, `InitializationPending`,
+   `ValidExisting`, and every semantic transaction.
+2. Any safely observed artifact produces `UnsupportedLegacyState`. Multiple, contradictory,
+   same-named, or differently shaped artifacts have the same single result; A1 does not parse them,
+   create evidence, select a winner, or derive a session namespace.
+3. Any unreadable, permission-invalid, symlinked, partially enumerable, or otherwise uncertain
+   collection is `CorruptOrUnsupported`. A missing or unreadable individual record and an empty
+   compatibility projection never imply namespace absence.
+4. Once the greenfield certificate exists, every pre-A1 session/participant authority-write API is
+   disabled for that store and must fail before touching either old or A1 state. Every A1 root
+   transaction independently revalidates that the old collections remain empty, so an older or
+   external writer cannot create state behind the certificate.
+5. A1.1 routes every in-repository pre-A1 session/participant writer through the same root lock
+   before activation. Such a writer may proceed only while neither `init-v1.json` nor
+   `state-root-v1.json` exists; after marker publication it rejects without touching state. The
+   initializer holds that lock from marker publication through the final empty-collection scan and
+   root publication. Concurrent unmodified/mixed-version binaries are unsupported and must be
+   quiesced; A1 never claims safety from process-liveness observation.
+6. Pre-A1 helper plans without `intent_id` and `payload_commitment` cannot drive an A1 transition.
+   Once a producer is switched, a mixed-version consumer fails closed and requires a newly issued
+   valid intent; it never reconstructs authority from a plan or compatibility view.
+7. A1 never deletes unsupported artifacts or offers a runtime reset flag. Because this is a
+   greenfield contract, recovery is an explicit operator/developer cleanup outside the running A1
+   authority protocol, followed by a new complete bootstrap classification. Diagnostics may report
+   only bounded relative path and entry-type metadata; they never read or log artifact contents.
 
-`observed_field_names` is a sorted allowlist of names/presence only. Raw values, prompts, lease
-tokens, credentials, and reusable digests are omitted. The resulting object is kind
-`LegacyMigrationEvidence` and parent-committed with canonical SHA-256. `source_record_key` is the
-exact opaque key of the legacy record inside the already-open store, never a caller-selected path.
-Under the root lock, that key plus the optional exact session ID is the migration idempotency
-identity: the same evidence commitment joins the first outcome; a different evidence commitment
-is conflicting compatibility evidence and cannot rewrite it.
+Helper endpoints/paths and auto-attach policy, eligibility, claim, and settlement remain unchanged.
 
-The A1 legacy-session migration is a one-time authority transaction with these exact rules:
-
-1. It reads one exact persisted orchestration-session record plus all same-session participant
-   records from the already-bound store root. PID, heartbeat, socket, attached-client liveness,
-   helper readiness, current CWD, and ambient config/env are ignored.
-2. The participant lineage is reconstructed only by following the persisted
-   `resumed_from_participant_id` chain from the persisted active participant. A missing link,
-   duplicate participant ID, cycle, branch ambiguity, cross-session link, or active participant
-   not at the lineage tip is unrepresentable and is rejected; it never becomes Invalid authority.
-3. A legacy artifact becomes Authority only if it has exact session and trace identities, a
-   physically canonical workspace/store binding with valid store ID, every required attach
-   contract/ref, either no world binding or a complete valid pair, unambiguous same-session
-   lineage, and every other required authority field without invention. Representable legacy
-   postures map exactly; terminal remains Terminal.
-4. Any exact-session artifact with missing exact trace identity, missing/unnormalizable workspace,
-   invalid authority-store identity, missing required attach contract, partial/invalid world
-   binding, ambiguous/cyclic/cross-session lineage, or any other unrepresentable required field
-   commits `SessionNamespaceRecordV1::LegacyMigrationRejected` plus its evidence ref in one root
-   revision. That namespace record is permanent and can satisfy no Start, Attach, or Resume.
-5. No placeholder `shell_trace_session_id`, workspace path, store root/ID, world component,
-   participant/session identity, lineage link, contract, or ref is permitted. Physical roots are
-   resolved by the same issuer/helper/restart path rule; inventory and policy are not reread.
-6. If the artifact lacks an exact session ID, no session ID is invented merely to populate the
-   namespace map. Store one `LegacyMigrationQuarantineV1` keyed by its internal
-   `migration_evidence_ref.ref_id` with reason `MissingExactSessionIdentity`. It is evidence only
-   and cannot satisfy a transition. That reason is invalid in a namespace-scoped
-   `LegacyMigrationRejectedV1`, because such a record requires an exact session ID. There is no
-   identified namespace to reserve until exact source evidence supplies one.
-7. Representable migration commits Authority revision 1 with immutable `LegacyMigration` origin.
-   Exact-session rejection permanently burns that namespace. Neither result is deleted or replaced
-   by later compatibility data.
-8. Exact repeated migration with the same source record key and evidence ref/commitment joins the
-   existing Authority, rejection, or quarantine. Lookup occurs before generating a new evidence ID
-   or `recorded_at`, so retry reuses the first evidence object. A changed/conflicting artifact
-   cannot rewrite any prior result; it is retained as additional store-level evidence or fails
-   closed.
 
 ## 2. `HostExecutionEpisodeV1`
 
