@@ -170,10 +170,12 @@ running as root resolves the intended account from its explicit supported user i
 as `SUDO_USER`; macOS/Lima guest provisioning uses the discovered Lima VM user. It resolves that
 account through the platform account database and uses the resulting UID. Root execution with no
 unambiguous intended non-root user fails as `owner-ambiguous`; it does not silently create a
-root-owned user state home. No product path chmods, chowns, removes ACLs, deletes contents,
-migrates, adopts, converts, or falls back to a shared home. Failure occurs before config/runtime
-scaffolding and before any authority marker, key, root, or legacy state mutation. Repeating
-creation against an unchanged valid root is idempotent.
+root-owned user state home. Descriptor-bound owner and exact-mode initialization is permitted only
+for the candidate created by the current attempt; a candidate joined through `AlreadyExists` is a
+pre-existing root. No product path chmods, chowns, removes ACLs from, deletes contents from,
+migrates, adopts, converts, or repairs a pre-existing root or falls back to a shared home. Failure
+occurs before config/runtime scaffolding and before any authority marker, key, root, or legacy state
+mutation. Repeating creation against an unchanged valid root is idempotent.
 
 Exact `0700` applies to the `SUBSTRATE_HOME` root. Existing stricter authority-store descendant
 contracts remain unchanged: authority directories remain owner-only `0700` and authority files
