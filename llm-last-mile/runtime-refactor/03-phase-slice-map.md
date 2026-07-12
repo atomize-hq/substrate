@@ -45,8 +45,66 @@ A1.1 is implemented through the following fixed, independently reviewable, seque
 | **A1.1a — repository-owned canonical JSON codec and hash-vector tests** | One closed `CanonicalJsonV1` encoder/decoder implements the exact A1 field, enum, integer, string, timestamp, unknown/duplicate-field, and UTF-8 rules without delegating canonical meaning to a presentation serializer. | Bounded codec modules under `agent_runtime/host_session_authority/`; normative bytes/digest fixtures, alternate-encoding rejection, duplicate/unknown-field negatives, integer boundaries, explicit-null options, and every named A1 hash wrapper required by A1.1. | Trusted filesystem, bootstrap/root/key/object persistence, transaction preflight, CAS, exact resolution, and the complete A1.1 gate. |
 | **A1.1b — private opened-directory/openat trusted-store filesystem boundary** | One private trusted-root handle binds `CanonicalDirectoryV1`; after opening it, every authority descendant operation is directory-relative and no-follow, never path-re-resolved or ambient-CWD-derived. | Bounded trusted-filesystem modules; owner/mode/ACL, physical identity, same-filesystem, symlink/reparse, component replacement, scan-to-publication replacement, atomic no-replace/root replacement, file/directory `fsync`, and unsupported-platform fail-closed proof. | Root/key/object semantic persistence, transaction preflight, CAS, exact resolution, and the complete A1.1 gate. |
 | **A1.1c — root/key/object bootstrap and deterministic crash reconciliation** | Greenfield initialization, pending recovery, immutable certificate, key lifecycle, typed object publication/verification, retained orphan exact adoption, and closed temp grammar converge deterministically across every specified crash window. | Bounded store modules using only A1.1a/A1.1b primitives; exact fresh/pending/existing/legacy/corrupt classification plus marker/key/root/object/temp crash matrices. | Centralized semantic preflight, writer exclusion, authority CAS, exact resolution, and the complete A1.1 gate. |
-| **A1.1d — centralized transaction preflight, cross-process CAS, and legacy/direct-writer exclusion** | Every authority read or mutation passes one semantic preflight; every legacy/direct writer is serialized on the same root lock before activation and fails before any state or temp mutation afterward; root and authority writes use expected-revision CAS across processes. | Bounded authority-store transaction modules plus only the minimum `state_store.rs` persistence/integration choke points; post-root legacy insertion, unknown tree/key/object state, stale/conflicting subprocess writers, zero-mutation rejection, and contention proof. | Facade integration, complete exact-resolution proof, and the complete A1.1 gate. |
+| **A1.1d — centralized transaction preflight, cross-process CAS, and legacy/direct-writer exclusion** | Every authority read or mutation passes one semantic preflight; every applicable pre-A1 session/participant read-decide-write transaction retains one opened trusted physical root, directory-relative descendants, exact identity, activation observation, and the same root lock through final file/directory `fsync`; every legacy/direct writer fails before mutation after activation; root and authority writes use expected-revision CAS across processes. | Bounded authority-store transaction modules and bounded new modules beneath `host_session_authority/` when needed for independent reviewability; only the minimum `state_store.rs` persistence/integration choke points required to route all guarded flat/canonical snapshots, leases, removals, compatibility/read-repair persistence, and parent-session mutations through directory-relative/no-follow operations. Include post-root legacy insertion, root rename/replacement/rebind with an untouched replacement tree, unknown tree/key/object state, stale/conflicting subprocess writers, zero-mutation rejection, and contention proof. No unrelated StateStore extraction or semantic redesign is authorized. | Facade integration, complete exact-resolution proof, and the complete A1.1 gate. |
 | **A1.1e — HostSessionAuthority facade integration and exact-resolution proof** | The facade is the sole A1 authority-store API, consumes the same opened bootstrap-home binding as bounded config/policy/inventory entry points, resolves exact durable identity without PID/socket/helper truth, and exposes only the A1.1 primitives needed by A1.2. | Bounded facade/integration modules, explicit-home entry points, exact session/store/workspace/world/lineage/ref resolution, stale observation rejection, cross-home/CWD negatives, and the full combined A1.1 regression wall. | Production `ExpectedAbsent`, Start reservation/intent/application, real caller adoption, `RG-AUTH-03`, and A1 completion. |
+
+### A1.1d internal review checkpoints
+
+A1.1d remains the canonical packet. The four labels below are sequential internal review checkpoints
+under A1.1d, not independent slices, not replacements for A1.1d, and not separate closeout gates.
+The A1.1d packet closes only after all four checkpoints pass together; A1.1e remains blocked until
+that closeout and all required platform proof are complete.
+
+#### A1.1d-1 — Retained opened-root transaction capability
+
+Outcome:
+
+- introduce the bounded `LegacyStateStoreTransactionV1`-equivalent capability;
+- retain the trusted root, opened descendants, exact physical identity, activation observation,
+  and root lock for the complete transaction lifetime;
+- provide only directory-relative/no-follow read, write, temp-publication, rename, removal, and
+  file/directory `fsync` operations;
+- prove there is no environment/CWD/path re-resolution or lock-lifetime gap and that identity
+  uncertainty fails closed;
+- do not adopt all production writers yet.
+
+#### A1.1d-2 — Complete guarded legacy-writer adoption
+
+Outcome:
+
+- route every in-repository StateStore transaction that reads or mutates the two pre-A1
+  session/participant authority collections through the retained transaction;
+- include every read participating in a read-decide-write operation, flat and canonical snapshots,
+  participant leases, removals, compatibility/read-repair persistence, and parent-session
+  persistence triggered by another operation when those paths mutate a guarded collection;
+- keep the read, decision, writes, renames, removals, and final `fsync`s inside one retained
+  transaction while preserving existing business semantics;
+- keep production A1 activation unavailable until adoption is complete.
+
+#### A1.1d-3 — Exact-retry and publication-candidate closure
+
+Outcome:
+
+- reservation, tombstone, transition-intent, issuer-index, application-journal, and object-index
+  state cannot be treated as authority-free;
+- exact retry joins only fully matching committed semantic state;
+- rotation and retirement fully revalidate the reconciled publication candidate immediately
+  before root publication while retaining the same trusted root and lock;
+- stale, conflicting, missing, substituted, malformed, or post-reconciliation-invalid candidates
+  fail with zero semantic mutation.
+
+#### A1.1d-4 — Cross-process replacement, crash, and regression closure
+
+Outcome:
+
+- prove a physical-root rename, replacement, or rebind cannot redirect a guarded transaction and
+  the replacement tree receives no writes, temps, removals, or publication;
+- prove crash release, first-creation contention, stale writers, post-activation rejection,
+  preactivation serialization, temp reconciliation, publication durability, and exact retry
+  converge;
+- run the combined Linux proof wall and required product smoke, preserving separate positive and
+  unsafe-ACL negative evidence;
+- keep A1.1e blocked until all required platform proof is complete.
 
 The new A1.1 module boundary is organizational only and does not change any A1 contract, semantic gate, or later-slice owner. It enforces these additional reviewability constraints: no path-based authority operation after the trusted root opens; no symlink traversal or ambient-CWD authority; exactly one repository-owned canonical codec; exactly one centralized semantic transaction preflight; no legacy/direct writer may bypass `HostSessionAuthority`; key/object/root crash reconciliation is deterministic; and no new dependency is permitted without explicit dependency review. The bounded modules must not perform A2 episode demotion, helper removal, endpoint redesign, receipt work, unrelated StateStore cleanup, or general persistence extraction.
 

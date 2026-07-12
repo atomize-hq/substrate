@@ -789,6 +789,43 @@ idempotent only when post-open ownership, type, and mode validation succeeds; no
 publication occurs before the lock is held. The initializer `fsync`s every newly created directory,
 the lock file, and their affected parent directories before classifying or publishing anything.
 
+##### `LegacyStateStoreTransactionV1` retained-root contract
+
+Every pre-A1 StateStore transaction that reads or mutates either guarded session/participant
+authority collection is admitted through one bounded `LegacyStateStoreTransactionV1`-equivalent
+capability. Admission retains all of the following as authority-bearing resources:
+
+- the opened `TrustedAuthorityRoot` handle selected from the normalized bootstrap home;
+- its exact `CanonicalDirectoryV1` physical path and platform physical identity;
+- no-follow-opened collection and descendant directory handles, or the deepest safe opened parent
+  plus exact missing suffix for a permitted create;
+- exclusive ownership of the cross-process `authority-v1/lock/root.lock` guard; and
+- the activation/classification observation made under that same root and lock.
+
+The capability exposes only directory-relative/no-follow operations rooted in those retained
+handles: bounded reads, exclusive temp creation and writes, file `fsync`, no-replace publication or
+atomic rename, removals, and affected-directory `fsync`. It does not expose descendant `PathBuf`s,
+absolute-path reconstruction, ambient-CWD lookup, or any API that rereads `SUBSTRATE_HOME`, `$HOME`,
+or another lexical bootstrap path after admission. Every read used to decide a mutation, every
+flat/canonical snapshot or lease write, every removal/rename, and every compatibility/read-repair or
+parent-session persistence step that mutates a guarded collection remains inside that one retained
+transaction.
+
+Transaction completion occurs only after the final changed file and every affected directory have
+been `fsync`ed while the root lock is still owned. The lock may be released only by consuming the
+completed transaction or by fail-closed unwind; no successful outcome is returned after early lock
+release. Rebind, rename, replacement, physical-identity mismatch or uncertainty, unsafe ACL or
+ownership, unsupported no-follow/locking/atomic-publication/`fsync` semantics, or use of a handle
+from another physical root fails closed. A lock retained on the former root never authorizes a
+write to the lexical replacement: the replacement root must receive zero reads used for mutation,
+writes, temps, renames, removals, or publication. The originally opened root may be reconciled only
+through its retained handles and exact contract; otherwise the transaction returns failure without
+fabricating success.
+
+No production authority root or initialization marker may become reachable while any applicable
+in-repository legacy writer can bypass this capability. A1 activation remains unavailable until
+complete guarded-writer adoption and its cross-process proof pass.
+
 A1 has no legacy-authority migration mode. Under the same trusted bootstrap-home handle and root
 lock, classification safely enumerates both pre-A1 authority collections:
 `run/agent-hub/sessions/` recursively and `run/agent-hub/participants/` non-recursively. A missing
@@ -919,6 +956,34 @@ Every object-creating or semantic root transaction uses this order:
 14. Atomically replace `authority-v1/state-root-v1.json`.
 15. `fsync` the `authority-v1` parent directory.
 16. Release the lock only after the transaction has a verified outcome.
+
+Exact retry occupancy is semantic, not variant-name-based. A root is not authority-free merely
+because `session_namespace_map` contains no `Authority` variant. Any `StartReservation`,
+`StartTombstone`, transition-intent entry, issuer-request-index entry, application-journal entry, or
+object-index entry is semantic authority state and participates in exact retry and conflict
+validation. A retry may join only when every applicable store/session/request/intent identity,
+payload commitment, root and authority revision, namespace record, object/index state, journal,
+and immutable application field matches the already committed result exactly. Empty or partial
+matching of one map can never authorize a join.
+
+Root publication uses a post-reconciliation publication candidate. After temp, orphan, released
+object, and key-file reconciliation, and immediately before publishing a replacement root under the
+same retained trusted root and lock, rotation, retirement, CAS, and any other root publisher must
+validate the complete candidate against:
+
+- the current locked root and exact expected `root_revision` plus any expected authority revision;
+- exact bootstrap-home and authority-store identity;
+- the complete key registry and key files, including exactly one active key and all
+  active/verification/retired constraints;
+- every reachable typed object reference, object-index entry, and required object file/state;
+- all namespace, reservation, tombstone, transition-intent, issuer-index, application-journal, and
+  object-index invariants;
+- complete safe enumeration proving both pre-A1 authority collections are empty; and
+- the unchanged trusted physical-root identity and retained descendant identities.
+
+Rotation and retirement may not rely solely on validation performed before reconciliation. A
+stale, conflicting, missing, substituted, malformed, or post-reconciliation-invalid candidate
+fails before root-temp creation/publication and without unauthorized cleanup or semantic mutation.
 
 On Unix every file in this layout, including root, object, temp, key, and lock files, is `0600`;
 every directory at or below `authority-v1`, including kind/version object directories, is `0700`.
