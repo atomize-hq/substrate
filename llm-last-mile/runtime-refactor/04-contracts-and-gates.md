@@ -129,8 +129,16 @@ an indeterminate check returns exactly this diagnostic shape before any descenda
 substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by intended uid <uid> with exact mode 0700 and no foreign ACL grants; found <reason>. Existing roots are never repaired; reset it manually and retry.
 ```
 
-The `<reason>` token is one of `missing-parent`, `wrong-type`, `symlink`, `wrong-owner`,
-`wrong-mode`, `foreign-acl`, `owner-ambiguous`, `replaced`, or `validation-unavailable`. For an
+When privileged execution cannot resolve an intended non-root account, no intended UID exists to
+render in that shape. It fails before inspecting or creating the root with this separate exact
+diagnostic:
+
+```text
+substrate: unsupported SUBSTRATE_HOME '<path>': cannot determine the intended per-user owner while running with effective uid 0; found owner-ambiguous. Set the supported explicit user input or run as the intended user; no home was created or modified.
+```
+
+The generic diagnostic's `<reason>` token is one of `missing-parent`, `wrong-type`, `symlink`,
+`wrong-owner`, `wrong-mode`, `foreign-acl`, `replaced`, or `validation-unavailable`. For an
 ordinary non-root process, the intended owner is its effective UID. An installer or provisioner
 running as root resolves the intended account from its explicit supported user input first
 (`SUBSTRATE_INSTALL_PRIMARY_USER` where applicable), then its verified invoking-user signal such
