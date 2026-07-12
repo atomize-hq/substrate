@@ -868,6 +868,18 @@ try:
             reopened_stat = os.fstat(reopened)
             if (reopened_stat.st_dev, reopened_stat.st_ino) != (opened.st_dev, opened.st_ino):
                 raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
+            if not stat.S_ISDIR(reopened_stat.st_mode):
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
+            if reopened_stat.st_uid != os.geteuid():
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
+            if stat.S_IMODE(reopened_stat.st_mode) != 0o700:
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
+            reopened_acls = set(os.listxattr(reopened))
+            if {"system.posix_acl_access", "system.posix_acl_default"} & reopened_acls:
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl")
+            named = os.stat(leaf, dir_fd=current, follow_symlinks=False)
+            if (named.st_dev, named.st_ino) != (reopened_stat.st_dev, reopened_stat.st_ino):
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
         finally:
             os.close(reopened)
         os.fsync(accepted)
