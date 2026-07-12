@@ -83,17 +83,20 @@ struct WorldBindingV1 {
 
 Both input roots must be absolute UTF-8 paths naming existing directories. Raw input containing a
 `.` or `..` component, a relative path, an empty path, a nonexistent directory, a file, an ambient
-CWD fallback, or a failed-home fallback is rejected before issuance. Bootstrap resolves every
-symlink in the root path, opens the resulting directory, derives the physical path and identity
-from that trusted handle, and persists them once. Authority-store descendant access then remains
+CWD fallback, or a failed-home fallback is rejected before issuance. Workspace-root bootstrap may
+resolve symlinks under its existing canonical-identity rules, then opens the resulting directory,
+derives the physical path and identity from that trusted handle, and persists them once.
+`authority_store_root` is stricter because it is `SUBSTRATE_HOME`: bootstrap opens every component
+from the filesystem root with no-follow semantics and rejects any symlink component or final
+symlink rather than canonicalizing through it. Authority-store descendant access then remains
 directory-relative with no-follow semantics; it never reinterprets the persisted string through
 ambient CWD. Workspace content traversal remains governed by its existing execution/policy
-contracts; this identity rule does not narrow or expand it.
+contracts; this private-home rule does not narrow or expand it.
 
 #### `PrivateSubstrateHomeV1` acceptance rules
 
 `SUBSTRATE_HOME` is one user's private configuration, policy, dependency-inventory, runtime, and
-authority root. On supported Unix hosts, a creator fixes the intended effective owner before
+authority root. On supported Unix hosts, a creator fixes the intended owner before
 creation, creates only the final physical directory with mode `0700` independent of umask, opens
 that directory no-follow, and accepts it only after post-open validation proves all of the
 following:
@@ -101,7 +104,9 @@ following:
 1. the selected absolute UTF-8 physical path is the path represented by the opened handle;
 2. the handle names a directory owned by the intended invoking/effective user;
 3. permission and special bits are exactly `0700`;
-4. no access/default ACL grants a foreign user, foreign group, or other principal any access;
+4. the ACL has only the base owner/group/other access entries represented by mode `0700`, with no
+   named user, named group, inherited, default, or other extended ACL entry, even when an ACL mask
+   would make an unexpected entry ineffective;
 5. no path component or final entry was followed through a symlink or substituted with another
    type, and the captured platform physical identity matches before acceptance; and
 6. a final no-follow reopen/revalidation observes the same physical identity, owner, type, mode,
@@ -121,14 +126,21 @@ setuid/setgid/sticky or other special bits, foreign or inherited ACL grants, cha
 an indeterminate check returns exactly this diagnostic shape before any descendant write:
 
 ```text
-substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by effective uid <uid> with exact mode 0700 and no foreign ACL grants; found <reason>. Existing roots are never repaired; reset it manually and retry.
+substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by intended uid <uid> with exact mode 0700 and no foreign ACL grants; found <reason>. Existing roots are never repaired; reset it manually and retry.
 ```
 
 The `<reason>` token is one of `missing-parent`, `wrong-type`, `symlink`, `wrong-owner`,
-`wrong-mode`, `foreign-acl`, `replaced`, or `validation-unavailable`. No product path chmods,
-chowns, removes ACLs, deletes contents, migrates, adopts, converts, or falls back to a shared home.
-Failure occurs before config/runtime scaffolding and before any authority marker, key, root, or
-legacy state mutation. Repeating creation against an unchanged valid root is idempotent.
+`wrong-mode`, `foreign-acl`, `owner-ambiguous`, `replaced`, or `validation-unavailable`. For an
+ordinary non-root process, the intended owner is its effective UID. An installer or provisioner
+running as root resolves the intended account from its explicit supported user input first
+(`SUBSTRATE_INSTALL_PRIMARY_USER` where applicable), then its verified invoking-user signal such
+as `SUDO_USER`; macOS/Lima guest provisioning uses the discovered Lima VM user. It resolves that
+account through the platform account database and uses the resulting UID. Root execution with no
+unambiguous intended non-root user fails as `owner-ambiguous`; it does not silently create a
+root-owned user state home. No product path chmods, chowns, removes ACLs, deletes contents,
+migrates, adopts, converts, or falls back to a shared home. Failure occurs before config/runtime
+scaffolding and before any authority marker, key, root, or legacy state mutation. Repeating
+creation against an unchanged valid root is idempotent.
 
 Exact `0700` applies to the `SUBSTRATE_HOME` root. Existing stricter authority-store descendant
 contracts remain unchanged: authority directories remain owner-only `0700` and authority files
