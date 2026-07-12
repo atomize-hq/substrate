@@ -7164,6 +7164,261 @@ mod tests {
             .exists());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial_test::serial]
+    fn preactivation_state_store_transaction_rejects_cross_process_root_replacement() {
+        use std::io::{BufRead as _, Read as _, Write as _};
+
+        const CHILD_TEST: &str = "execution::agent_runtime::state_store::tests::preactivation_state_store_transaction_rejects_cross_process_root_replacement";
+        const CHILD_ROOT_ENV: &str = "SUBSTRATE_A1_REPLACEMENT_CHILD_ROOT";
+        const CHILD_SENTINEL: &str = "A1_RETAINED_ROOT_TRANSACTION_ADMITTED";
+        const CHILD_COMPLETE: &str = "A1_RETAINED_ROOT_TRANSACTION_REJECTED_REBIND";
+
+        if let Some(root_path) = std::env::var_os(CHILD_ROOT_ENV) {
+            let root_path = PathBuf::from(root_path);
+            std::env::set_var("SUBSTRATE_HOME", &root_path);
+            let expected_root = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(&root_path)
+                .expect("open child expected trusted root")
+                .identity()
+                .clone();
+            let store = AgentRuntimeStateStore::new().expect("child StateStore");
+            let attempted =
+                live_orchestrator("codex", "sess_rebound_attempt", "ash_rebound_attempt");
+            let outcome = store.with_legacy_snapshot_transaction(|transaction| {
+                transaction
+                    .verify_physical_root(&expected_root)
+                    .expect("transaction begins on expected physical root");
+                println!("{CHILD_SENTINEL}");
+                std::io::stdout().flush().expect("flush admission sentinel");
+                let mut release = String::new();
+                std::io::stdin()
+                    .read_line(&mut release)
+                    .expect("wait for replacement handoff");
+                assert_eq!(release.trim(), "continue");
+
+                assert!(transaction.verify_physical_root(&expected_root).is_err());
+                assert!(AgentRuntimeStateStore::transaction_read_json::<
+                    AgentRuntimeParticipantRecord,
+                >(
+                    transaction,
+                    super::super::host_session_authority::store::LegacyStateStoreCollectionV1::Participants,
+                    &["replacement-canary.json"],
+                )
+                .is_err());
+                assert!(AgentRuntimeStateStore::transaction_write_json(
+                    transaction,
+                    super::super::host_session_authority::store::LegacyStateStoreCollectionV1::Participants,
+                    &["ash_rebound_attempt.json"],
+                    &attempted,
+                )
+                .is_err());
+                assert!(transaction
+                    .remove_file(
+                        super::super::host_session_authority::store::LegacyStateStoreCollectionV1::Participants,
+                        &["replacement-canary.json"],
+                    )
+                    .is_err());
+                Ok(())
+            });
+            assert!(outcome.is_err(), "rebound transaction fabricated success");
+            println!("{CHILD_COMPLETE}");
+            return;
+        }
+
+        fn tree_snapshot(root: &std::path::Path) -> Vec<(PathBuf, u32, Option<Vec<u8>>)> {
+            fn visit(
+                root: &std::path::Path,
+                directory: &std::path::Path,
+                snapshot: &mut Vec<(PathBuf, u32, Option<Vec<u8>>)>,
+            ) {
+                let mut entries = fs::read_dir(directory)
+                    .expect("enumerate proof tree")
+                    .map(|entry| entry.expect("read proof tree entry"))
+                    .collect::<Vec<_>>();
+                entries.sort_by_key(|entry| entry.file_name());
+                for entry in entries {
+                    let path = entry.path();
+                    let relative = path
+                        .strip_prefix(root)
+                        .expect("proof tree entry remains below root")
+                        .to_path_buf();
+                    let metadata = fs::symlink_metadata(&path).expect("stat proof tree entry");
+                    let mode = metadata.permissions().mode();
+                    if metadata.is_dir() {
+                        snapshot.push((relative, mode, None));
+                        visit(root, &path, snapshot);
+                    } else if metadata.is_file() {
+                        snapshot.push((
+                            relative,
+                            mode,
+                            Some(fs::read(&path).expect("read proof tree file")),
+                        ));
+                    } else {
+                        panic!("unexpected proof tree entry: {}", path.display());
+                    }
+                }
+            }
+
+            let mut snapshot = Vec::new();
+            visit(root, root, &mut snapshot);
+            snapshot
+        }
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let parent = tempfile::tempdir_in(safe_parent).expect("safe StateStore replacement parent");
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore replacement parent");
+        let lexical_root = parent.path().join("bootstrap");
+        let replacement_source = parent.path().join("replacement");
+        fs::create_dir(&lexical_root).expect("create original bootstrap root");
+        fs::create_dir(&replacement_source).expect("create replacement bootstrap root");
+        fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700))
+            .expect("secure original bootstrap root");
+        fs::set_permissions(&replacement_source, fs::Permissions::from_mode(0o700))
+            .expect("secure replacement bootstrap root");
+
+        for root in [&lexical_root, &replacement_source] {
+            crate::execution::agent_runtime::host_session_authority::store::legacy_writer_guard(
+                root,
+            )
+            .expect("establish legacy lock layout")
+            .finish()
+            .expect("finish legacy lock layout establishment");
+        }
+        let replacement_store = AgentRuntimeStateStore {
+            substrate_home: replacement_source.clone(),
+        };
+        let replacement_canary =
+            live_orchestrator("codex", "sess_replacement_canary", "replacement-canary");
+        replacement_store
+            .persist_participant(&replacement_canary)
+            .expect("seed replacement canary through retained transaction");
+
+        let original_identity = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(&lexical_root)
+            .expect("open original identity")
+            .identity()
+            .clone();
+        let replacement_identity = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(&replacement_source)
+            .expect("open replacement identity")
+            .identity()
+            .clone();
+        assert_ne!(
+            original_identity.physical_identity,
+            replacement_identity.physical_identity
+        );
+
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", CHILD_TEST, "--nocapture"])
+            .env(CHILD_ROOT_ENV, &lexical_root)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn retained-root replacement child");
+        let mut child_stdin = child.stdin.take().expect("child stdin");
+        let mut child_stdout = std::io::BufReader::new(child.stdout.take().expect("child stdout"));
+        let mut prefix = String::new();
+        for _ in 0..32 {
+            let mut line = String::new();
+            assert_ne!(
+                child_stdout
+                    .read_line(&mut line)
+                    .expect("read child admission output"),
+                0,
+                "child exited before transaction admission; output: {prefix}"
+            );
+            prefix.push_str(&line);
+            if line.contains(CHILD_SENTINEL) {
+                break;
+            }
+        }
+        assert!(prefix.contains(CHILD_SENTINEL), "child output: {prefix}");
+
+        let original_before = tree_snapshot(&lexical_root);
+        let replacement_before = tree_snapshot(&replacement_source);
+        let retained_root = parent.path().join("bootstrap-retained");
+        fs::rename(&lexical_root, &retained_root).expect("retain original physical root");
+        fs::rename(&replacement_source, &lexical_root).expect("install lexical replacement root");
+
+        let installed_identity = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(&lexical_root)
+            .expect("open installed replacement identity")
+            .identity()
+            .clone();
+        let retained_identity = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(&retained_root)
+            .expect("open retained original identity")
+            .identity()
+            .clone();
+        assert_eq!(
+            installed_identity.physical_identity,
+            replacement_identity.physical_identity
+        );
+        assert_eq!(
+            retained_identity.physical_identity,
+            original_identity.physical_identity
+        );
+
+        crate::execution::agent_runtime::host_session_authority::store::legacy_writer_guard(
+            &lexical_root,
+        )
+        .expect("replacement root owns an independent lock")
+        .finish()
+        .expect("finish independent replacement-root transaction");
+        assert_eq!(tree_snapshot(&lexical_root), replacement_before);
+
+        writeln!(child_stdin, "continue").expect("release replacement child");
+        drop(child_stdin);
+        let mut remainder = String::new();
+        child_stdout
+            .read_to_string(&mut remainder)
+            .expect("read replacement child completion");
+        let status = child.wait().expect("wait for replacement child");
+        assert!(status.success(), "child output: {prefix}{remainder}");
+        assert!(remainder.contains(CHILD_COMPLETE));
+        assert!(
+            remainder.contains("1 passed"),
+            "subprocess filter executed no test: {prefix}{remainder}"
+        );
+
+        assert_eq!(tree_snapshot(&retained_root), original_before);
+        assert_eq!(tree_snapshot(&lexical_root), replacement_before);
+        assert!(!retained_root
+            .join("run/agent-hub/participants/ash_rebound_attempt.json")
+            .exists());
+        assert!(!lexical_root
+            .join("run/agent-hub/participants/ash_rebound_attempt.json")
+            .exists());
+
+        let restarted_store = AgentRuntimeStateStore {
+            substrate_home: lexical_root.clone(),
+        };
+        let retry = live_orchestrator("codex", "sess_replacement_retry", "ash_replacement_retry");
+        restarted_store
+            .persist_participant(&retry)
+            .expect("fresh replacement-root retry succeeds");
+        restarted_store
+            .persist_participant(&retry)
+            .expect("exact replacement-root retry converges");
+        assert_eq!(
+            restarted_store
+                .load_participant("ash_replacement_retry")
+                .expect("load replacement-root retry")
+                .expect("replacement-root retry exists"),
+            retry
+        );
+        assert_eq!(
+            restarted_store
+                .load_participant("replacement-canary")
+                .expect("load replacement canary")
+                .expect("replacement canary remains"),
+            replacement_canary
+        );
+    }
+
     #[test]
     fn preactivation_state_store_writer_reconciles_recognized_authority_temp() {
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
