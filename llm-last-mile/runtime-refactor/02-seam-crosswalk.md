@@ -18,6 +18,19 @@ No required seam currently meets all four conditions.
 
 Supporting-primitive correction: the managed `world-service` -> `substrate-gateway` `GatewayAuthBundleV1` secure-FD carrier exists and has focused launcher/consumer integration proof. Its presence does not promote the wider config/envelope/realization seams because direct world Codex still bypasses that consumer path and uses copied seed-home auth/config. Preserve the carrier; close Codex adoption and Substrate-owned projection separately.
 
+## A1.1d-5 private-home prerequisite crosswalk
+
+`PrivateSubstrateHomeV1` is prerequisite scaffolding for the existing A1 authority work. Correct
+creation or rejection of the root is not proof that any target semantic seam owns its full
+contract, that the real production path has adopted that seam, or that its runtime gate has passed.
+
+| Applicable seam | A1.1d-5 prerequisite effect | Status after private-home proof | Boundary preserved |
+|---|---|---|---|
+| HostSessionAuthority | Authority bootstrap may begin only from one no-follow-opened, exact-owner, exact-`0700`, ACL-safe physical `SUBSTRATE_HOME`; unsafe or replaced roots fail before authority markers or roots are created. | No promotion. A1.1e facade integration and later transition-intent adoption remain unstarted. | Private-home validation selects a trusted container; it does not issue, claim, apply, or reconcile host-session transitions. |
+| StateStore | Every supported creator supplies the same private per-user root before legacy or A1 persistence can write beneath it; existing invalid roots are never repaired or adopted. | No promotion. StateStore remains persistence, and A3 separation remains pending. | No persistence schema, migration, compatibility conversion, revision rule, or semantic write policy changes. |
+| AgentConfigProjectionService | Config, policy, inventory, and future runtime projections originate from the bound private root and reach world members only through Substrate-owned projection/mediation, not direct unprivileged traversal. | No promotion. Direct world Codex projection/gateway adoption remains unresolved under `RG-CONFIG-04`. | Precedence, inventory interpretation, credential posture, and projection identity do not change in A1.1d-5. |
+| RuntimeFamilyRealizationAdapter | Provider runtimes retain current availability and receive only the already-landed runtime/config/gateway inputs; private-home creation cannot remove a runtime family or bypass the gateway carrier. | No promotion. Adapter ownership and contract-correct consumer realization remain later work. | No launch semantics, provider parsing, credential path, world request, policy snapshot, or enforcement-plan change. |
+
 ## A0 authority-leak inventory contract
 
 Slice A0 populates a repo-grounded inventory in this file before authority code moves. Do not create a separate control-pack file. Each inventoried use of helper/PID/socket/heartbeat/attached-client/owner-process/cwd/env state records:

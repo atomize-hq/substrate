@@ -50,9 +50,9 @@ A1.1 is implemented through the following fixed, independently reviewable, seque
 
 ### A1.1d internal review checkpoints
 
-A1.1d remains the canonical packet. The four labels below are sequential internal review checkpoints
+A1.1d remains the canonical packet. The five labels below are sequential internal review checkpoints
 under A1.1d, not independent slices, not replacements for A1.1d, and not separate closeout gates.
-The A1.1d packet closes only after all four checkpoints pass together; A1.1e remains blocked until
+The A1.1d packet closes only after all five checkpoints pass together; A1.1e remains blocked until
 that closeout and all required platform proof are complete.
 
 #### A1.1d-1 — Retained opened-root transaction capability
@@ -105,6 +105,31 @@ Outcome:
 - run the combined Linux proof wall and required product smoke, preserving separate positive and
   unsafe-ACL negative evidence;
 - keep A1.1e blocked until all required platform proof is complete.
+
+#### A1.1d-5 — Private `SUBSTRATE_HOME` creation and capability parity
+
+Outcome:
+
+- make every supported production creation path create `SUBSTRATE_HOME` as private per-user state
+  owned by the invoking/effective user with exact mode `0700`, independent of ambient umask;
+- reopen and validate the physical root no-follow, including owner, exact mode, ACL, type, identity,
+  and replacement checks, before config, runtime, or authority bootstrap;
+- accept an existing or custom root only when it already satisfies the identical contract, with no
+  migration, chmod, chown, ACL removal, compatibility adoption, shared-home fallback, or repair;
+- limit implementation to live-inventory-derived bounded Rust home bootstrap, production/dev
+  installer home creation, Linux provisioning, macOS/Lima provisioning, focused tests/smoke
+  fixtures, and installation/configuration/world documentation;
+- preserve policy schema/defaults/effective calculation, world requests and enforcement plans,
+  filesystem read/discovery/write and containment behavior, host visibility and isolation/sync
+  strategy, network and DNS behavior, PTY/non-PTY execution, dependency inventory/synchronization,
+  config precedence, gateway/credential handoff, current runtime availability, shims, replay,
+  traces/diagnostics, and start/reattach/stop/retained-worker/world-binding behavior byte-for-byte
+  or semantically equivalent as applicable;
+- treat shared multi-principal homes, install-root/state-root redesign, policy or world filesystem
+  changes, network changes, credential-path changes, and A1.1e as explicit non-goals; and
+- exit `RG-HOME-01` only after complete Linux creation and world-capability parity proof plus native
+  macOS proof on the exact final runtime commit. Linux-only success leaves A1.1d incomplete and
+  A1.1e blocked.
 
 The new A1.1 module boundary is organizational only and does not change any A1 contract, semantic gate, or later-slice owner. It enforces these additional reviewability constraints: no path-based authority operation after the trusted root opens; no symlink traversal or ambient-CWD authority; exactly one repository-owned canonical codec; exactly one centralized semantic transaction preflight; no legacy/direct writer may bypass `HostSessionAuthority`; key/object/root crash reconciliation is deterministic; and no new dependency is permitted without explicit dependency review. The bounded modules must not perform A2 episode demotion, helper removal, endpoint redesign, receipt work, unrelated StateStore cleanup, or general persistence extraction.
 

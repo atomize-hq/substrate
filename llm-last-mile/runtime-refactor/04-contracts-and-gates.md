@@ -90,6 +90,59 @@ directory-relative with no-follow semantics; it never reinterprets the persisted
 ambient CWD. Workspace content traversal remains governed by its existing execution/policy
 contracts; this identity rule does not narrow or expand it.
 
+#### `PrivateSubstrateHomeV1` acceptance rules
+
+`SUBSTRATE_HOME` is one user's private configuration, policy, dependency-inventory, runtime, and
+authority root. On supported Unix hosts, a creator fixes the intended effective owner before
+creation, creates only the final physical directory with mode `0700` independent of umask, opens
+that directory no-follow, and accepts it only after post-open validation proves all of the
+following:
+
+1. the selected absolute UTF-8 physical path is the path represented by the opened handle;
+2. the handle names a directory owned by the intended invoking/effective user;
+3. permission and special bits are exactly `0700`;
+4. no access/default ACL grants a foreign user, foreign group, or other principal any access;
+5. no path component or final entry was followed through a symlink or substituted with another
+   type, and the captured platform physical identity matches before acceptance; and
+6. a final no-follow reopen/revalidation observes the same physical identity, owner, type, mode,
+   and ACL as creation/opening, so replacement or validation uncertainty fails closed.
+
+Creation must use an exclusive/no-follow operation or an equivalent directory-relative sequence
+that distinguishes successful creation from `AlreadyExists`. A newly created root is never
+accepted from its requested mode alone: it is reopened and validated. The creator must `fsync` the
+new directory and its affected parent where the platform supports the A1 durable-filesystem
+contract. Ambient umask may remove bits during creation, but the creator may set the new inode to
+exact `0700` before acceptance; it may never broaden or otherwise repair a root that existed before
+the attempt.
+
+An existing root, including a custom `SUBSTRATE_HOME`, is accepted only if it already passes the
+same rules. Wrong type, symlink, owner mismatch, `0755`, `0750`, any group/world permission,
+setuid/setgid/sticky or other special bits, foreign or inherited ACL grants, changed identity, or
+an indeterminate check returns exactly this diagnostic shape before any descendant write:
+
+```text
+substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by effective uid <uid> with exact mode 0700 and no foreign ACL grants; found <reason>. Existing roots are never repaired; reset it manually and retry.
+```
+
+The `<reason>` token is one of `missing-parent`, `wrong-type`, `symlink`, `wrong-owner`,
+`wrong-mode`, `foreign-acl`, `replaced`, or `validation-unavailable`. No product path chmods,
+chowns, removes ACLs, deletes contents, migrates, adopts, converts, or falls back to a shared home.
+Failure occurs before config/runtime scaffolding and before any authority marker, key, root, or
+legacy state mutation. Repeating creation against an unchanged valid root is idempotent.
+
+Exact `0700` applies to the `SUBSTRATE_HOME` root. Existing stricter authority-store descendant
+contracts remain unchanged: authority directories remain owner-only `0700` and authority files
+remain owner-only `0600`. Multiple operating-system users directly sharing/traversing one home are
+unsupported in A1 V1. A future separate installation root does not weaken this state-root contract;
+`SUBSTRATE_ROOT` separation is not implemented here.
+
+Acceptance changes no policy or world semantics. Effective-policy snapshots, world requests,
+network routing, filesystem enforcement plans, allow/deny lists, isolation and host-visibility
+flags, and policy hashes must remain identical for identical inputs. World members receive
+config/policy/dependency/credential material through existing Substrate-owned projection or
+mediation. If an unprivileged world process requires direct home traversal, A1.1d-5 stops as a
+capability-boundary change instead of broadening permissions.
+
 `authority_store_root` is also the one normalized bootstrap home. Host bootstrap resolves that
 home once, before StateStore construction or config, policy, and inventory resolution, and passes
 the same opened `CanonicalDirectoryV1` identity to all four consumers. The value persisted in

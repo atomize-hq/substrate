@@ -174,6 +174,31 @@ Copying host credentials and a minimal Codex `config.toml` into the world is a t
 
 If secure gateway handoff is unavailable for a credential-requiring world adapter, that adapter must fail closed or run under the explicitly named, logged, non-promotable compatibility mode. V1 permits no unnamed fallback to ambient host credentials, copied auth, or host keyring discovery.
 
+### 14. `SUBSTRATE_HOME` is private per-user authority state
+
+`SUBSTRATE_HOME` contains one operating-system user's configuration, policy, dependency inventory,
+runtime, and authority state. Creating and accepting that root is part of authority bootstrap: the
+physical directory is owned by the invoking/effective user, has exact owner-only mode `0700`
+independent of ambient umask, has no foreign ACL grants, and is opened and revalidated no-follow
+before any descendant bootstrap. Existing nonconforming roots fail closed without chmod, chown,
+ACL removal, migration, adoption, deletion, or other automatic repair. Custom homes remain valid
+only when they satisfy the same contract. Multiple operating-system principals directly sharing
+one `SUBSTRATE_HOME` are unsupported in A1 V1.
+
+World members do not gain direct traversal authority over the host user's private home. They
+consume configuration, policy, dependency, and credential material through Substrate-owned
+projection and mediation boundaries. A privileged Substrate service may access the private root
+only as the currently landed service boundary requires; that access does not convert the root into
+shared state. If an unprivileged world process is found to depend on direct traversal, work stops
+for an explicit projection/broker boundary change rather than broadening permissions.
+
+Private-home enforcement does not alter effective policy or narrow world capabilities. Existing
+filesystem read/discovery/write rules, host visibility, isolation and copy/overlay strategy,
+network modes and DNS enforcement, PTY/non-PTY execution, dependency synchronization, gateway
+handoff, runtime availability, shims, replay, traces, diagnostics, and lifecycle/binding behavior
+remain governed by their existing contracts. A separate shared installation root may be designed
+later; `SUBSTRATE_ROOT`/installation-root separation is not part of A1.1d-5.
+
 ## Review question
 
 Every refactor PR must be able to answer:
