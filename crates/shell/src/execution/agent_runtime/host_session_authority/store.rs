@@ -739,11 +739,12 @@ mod platform {
         legacy: &LegacyObservation,
         root: &StateRootV1,
         nonce_bytes: [u8; 16],
-        validate_candidate: impl FnOnce() -> Result<(), BootstrapError>,
+        mut validate_candidate: impl FnMut() -> Result<(), BootstrapError>,
     ) -> Result<(), BootstrapError> {
         legacy
             .revalidate(layout.bootstrap)
             .map_err(|_| BootstrapError("revalidate legacy state before root temp"))?;
+        validate_candidate()?;
         let temp_name = TempNameV1::Root {
             root_revision: root.root_revision,
             nonce: nonce(nonce_bytes),

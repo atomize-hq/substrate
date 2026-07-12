@@ -322,7 +322,7 @@ fn key_lifecycle_revalidates_invalid_candidates_after_reconciliation() {
     let failed_rotation_temp = rotation
         .path()
         .join("authority-v1/tmp/root--r2--68686868686868686868686868686868.tmp");
-    assert!(failed_rotation_temp.exists());
+    assert!(!failed_rotation_temp.exists());
     assert_eq!(
         platform::bootstrap_test(rotation.path(), material(0x69), None).unwrap(),
         initial,
@@ -367,7 +367,7 @@ fn key_lifecycle_revalidates_invalid_candidates_after_reconciliation() {
     let failed_retirement_temp = retirement
         .path()
         .join("authority-v1/tmp/root--r3--6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a.tmp");
-    assert!(failed_retirement_temp.exists());
+    assert!(!failed_retirement_temp.exists());
     assert_eq!(
         fs::read_dir(retirement.path().join("authority-v1/keys"))
             .unwrap()
