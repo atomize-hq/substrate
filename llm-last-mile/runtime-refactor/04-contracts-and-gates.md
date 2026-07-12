@@ -102,7 +102,7 @@ that directory no-follow, and accepts it only after post-open validation proves 
 following:
 
 1. the selected absolute UTF-8 physical path is the path represented by the opened handle;
-2. the handle names a directory owned by the intended invoking/effective user;
+2. the handle names a directory owned by the intended per-user owner;
 3. permission and special bits are exactly `0700`;
 4. the ACL has only the base owner/group/other access entries represented by mode `0700`, with no
    named user, named group, inherited, default, or other extended ACL entry, even when an ACL mask

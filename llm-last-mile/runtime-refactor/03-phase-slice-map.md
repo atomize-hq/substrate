@@ -111,7 +111,7 @@ Outcome:
 Outcome:
 
 - make every supported production creation path create `SUBSTRATE_HOME` as private per-user state
-  owned by the invoking/effective user with exact mode `0700`, independent of ambient umask;
+  owned by the intended per-user owner with exact mode `0700`, independent of ambient umask;
 - reopen and validate the physical root no-follow, including owner, exact mode, ACL, type, identity,
   and replacement checks, before config, runtime, or authority bootstrap;
 - accept an existing or custom root only when it already satisfies the identical contract, with no

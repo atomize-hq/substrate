@@ -178,7 +178,7 @@ If secure gateway handoff is unavailable for a credential-requiring world adapte
 
 `SUBSTRATE_HOME` contains one operating-system user's configuration, policy, dependency inventory,
 runtime, and authority state. Creating and accepting that root is part of authority bootstrap: the
-physical directory is owned by the invoking/effective user, has exact owner-only mode `0700`
+physical directory is owned by the intended per-user owner, has exact owner-only mode `0700`
 independent of ambient umask, has no foreign ACL grants, and is opened and revalidated no-follow
 before any descendant bootstrap. Existing nonconforming roots fail closed without chmod, chown,
 ACL removal, migration, adoption, deletion, or other automatic repair. Custom homes remain valid
