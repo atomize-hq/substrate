@@ -816,18 +816,39 @@ if not normal:
     raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
 
 directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-current = os.open("/", directory_flags)
+def validate_ancestor(fd):
+    value = os.fstat(fd)
+    if not stat.S_ISDIR(value.st_mode):
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type ancestor")
+    if value.st_uid not in (0, os.geteuid()):
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner ancestor")
+    if stat.S_IMODE(value.st_mode) & 0o022:
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe ancestor mode")
+    acl_names = set(os.listxattr(fd))
+    if {"system.posix_acl_access", "system.posix_acl_default"} & acl_names:
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl ancestor")
+    return value
+
+chain = [os.open("/", directory_flags)]
+chain_names = []
+chain_identities = []
 try:
+    root_stat = validate_ancestor(chain[0])
+    chain_identities.append((root_stat.st_dev, root_stat.st_ino))
     for component in normal[:-1]:
-        observed = os.stat(component, dir_fd=current, follow_symlinks=False)
+        observed = os.stat(component, dir_fd=chain[-1], follow_symlinks=False)
         if not stat.S_ISDIR(observed.st_mode):
             raise SystemExit("unsupported guest SUBSTRATE_HOME: symlink-or-wrong-type ancestor")
-        if stat.S_IMODE(observed.st_mode) & 0o022:
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe ancestor mode")
-        next_fd = os.open(component, directory_flags, dir_fd=current)
-        os.close(current)
-        current = next_fd
+        next_fd = os.open(component, directory_flags, dir_fd=chain[-1])
+        opened = validate_ancestor(next_fd)
+        if (opened.st_dev, opened.st_ino) != (observed.st_dev, observed.st_ino):
+            os.close(next_fd)
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced ancestor")
+        chain_names.append(component)
+        chain_identities.append((opened.st_dev, opened.st_ino))
+        chain.append(next_fd)
 
+    current = chain[-1]
     leaf = normal[-1]
     parent = os.fstat(current)
     if not stat.S_ISDIR(parent.st_mode):
@@ -910,12 +931,20 @@ try:
         current_parent_acls = set(os.listxattr(current))
         if {"system.posix_acl_access", "system.posix_acl_default"} & current_parent_acls:
             raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl parent")
+        for index, component in enumerate(chain_names):
+            current_ancestor = validate_ancestor(chain[index + 1])
+            if (current_ancestor.st_dev, current_ancestor.st_ino) != chain_identities[index + 1]:
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced ancestor")
+            named_ancestor = os.stat(component, dir_fd=chain[index], follow_symlinks=False)
+            if (named_ancestor.st_dev, named_ancestor.st_ino) != chain_identities[index + 1]:
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced ancestor")
         os.fsync(accepted)
         os.fsync(current)
     finally:
         os.close(accepted)
 finally:
-    os.close(current)
+    for descriptor in reversed(chain):
+        os.close(descriptor)
 PY
 EOF
 }

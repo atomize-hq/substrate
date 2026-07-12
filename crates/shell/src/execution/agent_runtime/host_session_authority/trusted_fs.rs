@@ -135,6 +135,44 @@ mod platform {
         Existing,
     }
 
+    struct TrustedDirectoryChain {
+        directories: Vec<File>,
+        components: Vec<CString>,
+        identities: Vec<(u64, u64)>,
+    }
+
+    impl TrustedDirectoryChain {
+        fn final_directory(&self) -> &File {
+            self.directories
+                .last()
+                .expect("trusted directory chain always contains filesystem root")
+        }
+
+        fn revalidate(&self, owner_uid: libc::uid_t) -> Result<(), PrivateHomeError> {
+            for (index, directory) in self.directories.iter().enumerate() {
+                let stat = validate_private_home_ancestor(directory, owner_uid)?;
+                if (stat.st_dev as u64, stat.st_ino as u64) != self.identities[index] {
+                    return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+                }
+                if index > 0 {
+                    let named = fstatat_nofollow(
+                        self.directories[index - 1].as_raw_fd(),
+                        &self.components[index - 1],
+                    )
+                    .map_err(|_| PrivateHomeError::new(PrivateHomeReason::Replaced))?;
+                    if kind_from_mode(named.st_mode) == EntryKind::Symlink {
+                        return Err(PrivateHomeError::new(PrivateHomeReason::Symlink));
+                    }
+                    if (named.st_dev as u64, named.st_ino as u64) != self.identities[index] {
+                        return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+                    }
+                }
+            }
+            validate_private_home_parent(self.final_directory(), owner_uid)?;
+            Ok(())
+        }
+    }
+
     struct TrustedDirectoryLock<'a> {
         file: &'a File,
     }
@@ -246,9 +284,10 @@ mod platform {
             owner_uid: libc::uid_t,
         ) -> Result<Self, TrustedFsError> {
             validate_bootstrap_input(raw_path)?;
-            let (parent, name, parent_identity) = open_private_home_parent(raw_path, owner_uid)
+            let (parent_chain, name) = open_private_home_parent(raw_path, owner_uid)
                 .map_err(private_home_trusted_error)?;
-            let _lock = TrustedDirectoryLock::acquire(&parent)?;
+            let parent = parent_chain.final_directory();
+            let _lock = TrustedDirectoryLock::acquire(parent)?;
             let file = openat_file(
                 parent.as_raw_fd(),
                 &name,
@@ -259,7 +298,8 @@ mod platform {
             validate_private_home_stat(&stat, owner_uid).map_err(private_home_trusted_error)?;
             validate_private_home_acl(file.as_raw_fd()).map_err(private_home_trusted_error)?;
             let root = Self::from_opened(file, owner_uid)?;
-            revalidate_private_home_parent(&parent, owner_uid, parent_identity)
+            parent_chain
+                .revalidate(owner_uid)
                 .map_err(private_home_trusted_error)?;
             validate_named_private_home(parent.as_raw_fd(), &name, &stat, owner_uid)
                 .map_err(private_home_trusted_error)?;
@@ -445,7 +485,7 @@ mod platform {
         raw_path: &Path,
         owner_uid: libc::uid_t,
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
-        ensure_private_substrate_home_with(raw_path, owner_uid, || {})
+        ensure_private_substrate_home_with(raw_path, owner_uid, || {}, || {})
     }
 
     #[cfg_attr(
@@ -459,6 +499,7 @@ mod platform {
         raw_path: &Path,
         owner_uid: libc::uid_t,
         after_create: impl FnOnce(),
+        after_first_open: impl FnOnce(),
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
         validate_bootstrap_input(raw_path)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
@@ -471,10 +512,9 @@ mod platform {
             .ok_or_else(|| PrivateHomeError::new(PrivateHomeReason::WrongType))?;
         let name = c_string(name)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
-        let parent =
-            open_physical_directory(parent_path).map_err(private_home_parent_open_error)?;
-        let parent_identity = validate_private_home_parent(&parent, owner_uid)?;
-        let _lock = TrustedDirectoryLock::acquire(&parent)
+        let parent_chain = open_private_home_parent_chain(parent_path, owner_uid)?;
+        let parent = parent_chain.final_directory();
+        let _lock = TrustedDirectoryLock::acquire(parent)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
 
         let creation = mkdirat_exact_mode(parent.as_raw_fd(), &name)?;
@@ -494,6 +534,7 @@ mod platform {
 
         let opened_stat = fstat(opened.as_raw_fd())
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+        after_first_open();
 
         if creation == DirectoryCreation::Created {
             // A1 V1 accepts identity only from this first no-follow-opened descriptor. Legitimate
@@ -535,7 +576,7 @@ mod platform {
         validate_private_home_acl(opened.as_raw_fd())?;
         let root = TrustedAuthorityRoot::from_opened(opened, owner_uid)
             .map_err(private_home_reason_from_trusted_error)?;
-        revalidate_private_home_parent(&parent, owner_uid, parent_identity)?;
+        parent_chain.revalidate(owner_uid)?;
         validate_named_private_home(parent.as_raw_fd(), &name, &accepted_stat, owner_uid)?;
         Ok(root)
     }
@@ -1353,7 +1394,7 @@ mod platform {
     fn open_private_home_parent(
         raw_path: &Path,
         owner_uid: libc::uid_t,
-    ) -> Result<(File, CString, (u64, u64)), PrivateHomeError> {
+    ) -> Result<(TrustedDirectoryChain, CString), PrivateHomeError> {
         validate_bootstrap_input(raw_path)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
         let parent_path = raw_path
@@ -1365,10 +1406,68 @@ mod platform {
             .ok_or_else(|| PrivateHomeError::new(PrivateHomeReason::WrongType))?;
         let name = c_string(name)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
-        let parent =
-            open_physical_directory(parent_path).map_err(private_home_parent_open_error)?;
-        let identity = validate_private_home_parent(&parent, owner_uid)?;
-        Ok((parent, name, identity))
+        let parent = open_private_home_parent_chain(parent_path, owner_uid)?;
+        Ok((parent, name))
+    }
+
+    fn open_private_home_parent_chain(
+        parent_path: &Path,
+        owner_uid: libc::uid_t,
+    ) -> Result<TrustedDirectoryChain, PrivateHomeError> {
+        // SAFETY: the static slash path is valid and flags require a directory.
+        let root = owned_file(
+            unsafe {
+                libc::open(
+                    c"/".as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                )
+            },
+            "open private home path root",
+        )
+        .map_err(private_home_parent_open_error)?;
+        let root_stat = validate_private_home_ancestor(&root, owner_uid)?;
+        let mut chain = TrustedDirectoryChain {
+            directories: vec![root],
+            components: Vec::new(),
+            identities: vec![(root_stat.st_dev as u64, root_stat.st_ino as u64)],
+        };
+
+        for component_value in parent_path.components() {
+            let Component::Normal(component_value) = component_value else {
+                continue;
+            };
+            let component = c_string(component_value)
+                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+            let observed = fstatat_nofollow(chain.final_directory().as_raw_fd(), &component)
+                .map_err(private_home_parent_open_error)?;
+            match kind_from_mode(observed.st_mode) {
+                EntryKind::Directory => {}
+                EntryKind::Symlink => {
+                    return Err(PrivateHomeError::new(PrivateHomeReason::Symlink));
+                }
+                EntryKind::RegularFile | EntryKind::Other => {
+                    return Err(PrivateHomeError::new(PrivateHomeReason::WrongType));
+                }
+            }
+            let next = openat_file(
+                chain.final_directory().as_raw_fd(),
+                &component,
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                0,
+            )
+            .map_err(private_home_parent_open_error)?;
+            let opened = validate_private_home_ancestor(&next, owner_uid)?;
+            if opened.st_dev != observed.st_dev || opened.st_ino != observed.st_ino {
+                return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+            }
+            chain.components.push(component);
+            chain
+                .identities
+                .push((opened.st_dev as u64, opened.st_ino as u64));
+            chain.directories.push(next);
+        }
+        chain.revalidate(owner_uid)?;
+        Ok(chain)
     }
 
     fn private_home_parent_open_error(error: TrustedFsError) -> PrivateHomeError {
@@ -1397,7 +1496,16 @@ mod platform {
         parent: &File,
         owner_uid: libc::uid_t,
     ) -> Result<(u64, u64), PrivateHomeError> {
-        let stat = fstat(parent.as_raw_fd())
+        let stat = validate_private_home_ancestor(parent, owner_uid)?;
+        validate_private_home_acl(parent.as_raw_fd())?;
+        Ok((stat.st_dev as u64, stat.st_ino as u64))
+    }
+
+    fn validate_private_home_ancestor(
+        directory: &File,
+        owner_uid: libc::uid_t,
+    ) -> Result<libc::stat, PrivateHomeError> {
+        let stat = fstat(directory.as_raw_fd())
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
         if kind_from_mode(stat.st_mode) != EntryKind::Directory {
             return Err(PrivateHomeError::new(PrivateHomeReason::WrongType));
@@ -1410,20 +1518,9 @@ mod platform {
         if stat.st_mode & 0o022 != 0 {
             return Err(PrivateHomeError::new(PrivateHomeReason::WrongMode));
         }
-        validate_private_home_acl(parent.as_raw_fd())?;
-        Ok((stat.st_dev as u64, stat.st_ino as u64))
-    }
-
-    fn revalidate_private_home_parent(
-        parent: &File,
-        owner_uid: libc::uid_t,
-        expected_identity: (u64, u64),
-    ) -> Result<(), PrivateHomeError> {
-        let identity = validate_private_home_parent(parent, owner_uid)?;
-        if identity != expected_identity {
-            return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
-        }
-        Ok(())
+        validate_acl(directory.as_raw_fd())
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ForeignAcl))?;
+        Ok(stat)
     }
 
     fn validate_named_identity(
@@ -1882,11 +1979,16 @@ mod platform {
             fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
             let target = temp.path().join("home");
             let retained = temp.path().join("retained");
-            let outcome = ensure_private_substrate_home_with(&target, effective_uid(), || {
-                fs::rename(&target, &retained).unwrap();
-                fs::create_dir(&target).unwrap();
-                fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
-            });
+            let outcome = ensure_private_substrate_home_with(
+                &target,
+                effective_uid(),
+                || {
+                    fs::rename(&target, &retained).unwrap();
+                    fs::create_dir(&target).unwrap();
+                    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+                },
+                || {},
+            );
             let root = outcome.expect("the first opened valid candidate defines accepted identity");
             let retained_inode = fs::symlink_metadata(&retained).unwrap().ino();
             let accepted_inode = fs::symlink_metadata(&target).unwrap().ino();
@@ -1900,6 +2002,38 @@ mod platform {
                 }
             }
             root.revalidate().unwrap();
+        }
+
+        #[test]
+        fn parent_name_replacement_after_first_open_fails_closed() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-parent-replacement-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let parent = temp.path().join("parent");
+            fs::create_dir(&parent).unwrap();
+            fs::set_permissions(&parent, fs::Permissions::from_mode(0o700)).unwrap();
+            let target = parent.join("home");
+            let retained_parent = temp.path().join("retained-parent");
+            let outcome = ensure_private_substrate_home_with(
+                &target,
+                effective_uid(),
+                || {},
+                || {
+                    fs::rename(&parent, &retained_parent).unwrap();
+                    fs::create_dir(&parent).unwrap();
+                    fs::set_permissions(&parent, fs::Permissions::from_mode(0o700)).unwrap();
+                    fs::create_dir(parent.join("home")).unwrap();
+                    fs::set_permissions(parent.join("home"), fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                },
+            );
+
+            assert_eq!(outcome.unwrap_err().reason(), PrivateHomeReason::Replaced);
+            assert!(retained_parent.join("home").is_dir());
+            assert!(parent.join("home").is_dir());
+            assert!(!parent.join("home/deps").exists());
         }
 
         #[test]
