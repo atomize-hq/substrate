@@ -237,6 +237,60 @@ mod platform {
             self.open_directory_cstr(&component(name)?)
         }
 
+        pub(crate) fn open_controlled_directory(&self, name: &str) -> Result<Self, TrustedFsError> {
+            let name = component(name)?;
+            let file = openat_file(
+                self.file.as_raw_fd(),
+                &name,
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                0,
+            )?;
+            validate_open_directory(&file, self.device_id, false)?;
+            Ok(Self {
+                file,
+                device_id: self.device_id,
+            })
+        }
+
+        #[cfg_attr(
+            target_os = "linux",
+            allow(
+                clippy::unnecessary_cast,
+                reason = "Darwin dev_t and ino_t require normalization to u64"
+            )
+        )]
+        pub(crate) fn open_controlled_directory_entry(
+            &self,
+            expected: &DirectoryEntry,
+        ) -> Result<Self, TrustedFsError> {
+            if expected.kind != EntryKind::Directory {
+                return Err(TrustedFsError::new(
+                    "controlled authority entry is not a directory",
+                ));
+            }
+            let current = self
+                .stat_entry(&expected.name)?
+                .ok_or_else(|| TrustedFsError::new("controlled authority entry disappeared"))?;
+            if current.st_dev as u64 != expected.device_id
+                || current.st_ino as u64 != expected.inode
+                || kind_from_mode(current.st_mode) != EntryKind::Directory
+            {
+                return Err(TrustedFsError::new(
+                    "controlled authority directory changed after enumeration",
+                ));
+            }
+            let opened = self.open_controlled_directory(&expected.name)?;
+            let opened_stat = fstat(opened.file.as_raw_fd())?;
+            if opened_stat.st_dev as u64 != expected.device_id
+                || opened_stat.st_ino as u64 != expected.inode
+            {
+                return Err(TrustedFsError::new(
+                    "opened controlled authority directory changed identity",
+                ));
+            }
+            Ok(opened)
+        }
+
         fn open_directory_cstr(&self, name: &CStr) -> Result<Self, TrustedFsError> {
             let file = openat_file(
                 self.file.as_raw_fd(),
