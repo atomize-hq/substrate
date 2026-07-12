@@ -2,10 +2,46 @@
 
 mod support;
 
-use support::{substrate_shell_driver, temp_dir};
+use support::substrate_shell_driver;
 
+use assert_cmd::prelude::*;
 use std::fs;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
+use std::process::Command;
+use tempfile::{Builder, TempDir};
+
+fn private_temp_dir(prefix: &str) -> TempDir {
+    let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() }))
+        });
+    Builder::new()
+        .prefix(prefix)
+        .tempdir_in(safe_parent)
+        .expect("allocate private-home test root")
+}
+
+fn assert_version_with_umask(home: &Path, substrate_home: &Path, umask: &str) {
+    support::ensure_substrate_built();
+    let binary = support::binary_path();
+    Command::new("bash")
+        .args([
+            "-c",
+            "umask \"$1\"; shift; exec \"$@\"",
+            "substrate-private-home-test",
+            umask,
+        ])
+        .arg(binary)
+        .arg("--version")
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("SUBSTRATE_HOME", substrate_home)
+        .current_dir(home)
+        .assert()
+        .success();
+}
 
 fn assert_is_dir(path: &Path) {
     assert!(
@@ -25,7 +61,7 @@ fn assert_is_file(path: &Path) {
 
 #[test]
 fn test_bootstrap_scaffolds_deps_on_version() {
-    let tmp = temp_dir("substrate-wdh3-");
+    let tmp = private_temp_dir("substrate-wdh3-");
     let home = tmp.path().join("home");
     fs::create_dir_all(&home).expect("create HOME");
 
@@ -56,7 +92,7 @@ fn test_bootstrap_scaffolds_deps_on_version() {
 
 #[test]
 fn test_bootstrap_is_idempotent_and_does_not_overwrite() {
-    let tmp = temp_dir("substrate-wdh3-");
+    let tmp = private_temp_dir("substrate-wdh3-");
     let home = tmp.path().join("home");
     fs::create_dir_all(&home).expect("create HOME");
 
@@ -92,13 +128,15 @@ fn test_bootstrap_is_idempotent_and_does_not_overwrite() {
 
 #[test]
 fn test_bootstrap_wrong_type_fails_with_exit_1() {
-    let tmp = temp_dir("substrate-wdh3-");
+    let tmp = private_temp_dir("substrate-wdh3-");
     let home = tmp.path().join("home");
     fs::create_dir_all(&home).expect("create HOME");
 
     let substrate_home = home.join(".substrate");
     let deps_root = substrate_home.join("deps");
     fs::create_dir_all(&deps_root).expect("create deps root");
+    fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+        .expect("secure SUBSTRATE_HOME fixture");
     fs::write(deps_root.join("packages"), "not a directory\n").expect("seed wrong type");
 
     substrate_shell_driver()
@@ -111,4 +149,164 @@ fn test_bootstrap_wrong_type_fails_with_exit_1() {
         .code(1)
         .stderr(predicates::str::contains("deps/packages"))
         .stderr(predicates::str::contains("expected directory"));
+}
+
+#[test]
+fn test_bootstrap_creation_is_exact_0700_across_umasks() {
+    for umask in ["000", "022", "027", "077", "777"] {
+        let tmp = private_temp_dir(&format!("substrate-wdh3-umask-{umask}-"));
+        let home = tmp.path().join("home");
+        fs::create_dir(&home).expect("create HOME");
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
+        let substrate_home = home.join(".substrate");
+
+        assert_version_with_umask(&home, &substrate_home, umask);
+
+        let metadata = fs::symlink_metadata(&substrate_home).expect("stat SUBSTRATE_HOME");
+        assert_eq!(metadata.mode() & 0o7777, 0o700, "umask {umask}");
+        assert_eq!(metadata.uid(), unsafe { libc::geteuid() }, "umask {umask}");
+    }
+}
+
+#[test]
+fn test_existing_invalid_home_modes_fail_without_mutation_or_authority_state() {
+    for mode in [0o755, 0o750, 0o770, 0o777, 0o1700, 0o2700, 0o4700] {
+        let tmp = private_temp_dir(&format!("substrate-wdh3-mode-{mode:o}-"));
+        let home = tmp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        fs::create_dir(&home).expect("create HOME");
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
+        fs::create_dir(&substrate_home).expect("create existing SUBSTRATE_HOME");
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(mode))
+            .expect("set invalid mode");
+
+        substrate_shell_driver()
+            .env("HOME", &home)
+            .env("USERPROFILE", &home)
+            .env("SUBSTRATE_HOME", &substrate_home)
+            .current_dir(&home)
+            .arg("--version")
+            .assert()
+            .code(5)
+            .stderr(predicates::str::contains("wrong-mode"));
+
+        assert_eq!(
+            fs::symlink_metadata(&substrate_home).unwrap().mode() & 0o7777,
+            mode
+        );
+        assert!(!substrate_home.join("deps").exists());
+        assert!(!substrate_home.join("authority-v1").exists());
+    }
+}
+
+#[test]
+fn test_existing_symlink_home_fails_without_touching_target() {
+    let tmp = private_temp_dir("substrate-wdh3-symlink-");
+    let home = tmp.path().join("home");
+    let target = tmp.path().join("target");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir(&home).expect("create HOME");
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
+    fs::create_dir(&target).expect("create target");
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).expect("secure target");
+    std::os::unix::fs::symlink(&target, &substrate_home).expect("create home symlink");
+
+    substrate_shell_driver()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", &substrate_home)
+        .current_dir(&home)
+        .arg("--version")
+        .assert()
+        .code(5)
+        .stderr(predicates::str::contains("symlink"));
+
+    assert!(!target.join("deps").exists());
+    assert!(!target.join("authority-v1").exists());
+}
+
+#[test]
+fn test_existing_non_directory_home_fails_without_authority_state() {
+    let tmp = private_temp_dir("substrate-wdh3-file-");
+    let home = tmp.path().join("home");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir(&home).expect("create HOME");
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
+    fs::write(&substrate_home, b"not a directory\n").expect("create wrong-type home");
+
+    substrate_shell_driver()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", &substrate_home)
+        .current_dir(&home)
+        .arg("--version")
+        .assert()
+        .code(5)
+        .stderr(predicates::str::contains("wrong-type"));
+
+    assert_eq!(fs::read(&substrate_home).unwrap(), b"not a directory\n");
+    assert!(!home.join("authority-v1").exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_existing_masked_named_acl_fails_without_descendant_writes() {
+    let tmp = private_temp_dir("substrate-wdh3-acl-");
+    let home = tmp.path().join("home");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir(&home).expect("create HOME");
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
+    fs::create_dir(&substrate_home).expect("create SUBSTRATE_HOME");
+    fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+        .expect("secure SUBSTRATE_HOME");
+    let foreign_uid = unsafe { libc::geteuid() }.saturating_add(1);
+    Command::new("setfacl")
+        .args(["-m", &format!("u:{foreign_uid}:---")])
+        .arg(&substrate_home)
+        .assert()
+        .success();
+
+    substrate_shell_driver()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", &substrate_home)
+        .current_dir(&home)
+        .arg("--version")
+        .assert()
+        .code(5)
+        .stderr(predicates::str::contains("foreign-acl"));
+
+    assert!(!substrate_home.join("deps").exists());
+    assert!(!substrate_home.join("authority-v1").exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_existing_default_acl_fails_without_descendant_writes() {
+    let tmp = private_temp_dir("substrate-wdh3-default-acl-");
+    let home = tmp.path().join("home");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir(&home).expect("create HOME");
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
+    fs::create_dir(&substrate_home).expect("create SUBSTRATE_HOME");
+    fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+        .expect("secure SUBSTRATE_HOME");
+    Command::new("setfacl")
+        .args(["-d", "-m", "u::rwx,g::---,o::---"])
+        .arg(&substrate_home)
+        .assert()
+        .success();
+
+    substrate_shell_driver()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", &substrate_home)
+        .current_dir(&home)
+        .arg("--version")
+        .assert()
+        .code(5)
+        .stderr(predicates::str::contains("foreign-acl"));
+
+    assert!(!substrate_home.join("deps").exists());
+    assert!(!substrate_home.join("authority-v1").exists());
 }

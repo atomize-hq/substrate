@@ -782,6 +782,16 @@ test -x /usr/local/bin/substrate-gateway
 EOF
 }
 
+bootstrap_guest_private_home() {
+    local vm_user="$1"
+    local guest_substrate_home="$2"
+    log "Bootstrapping private guest SUBSTRATE_HOME for ${vm_user}"
+    limactl shell "${VM_NAME}" env \
+        SUBSTRATE_HOME="${guest_substrate_home}" \
+        SUBSTRATE_INSTALL_PRIMARY_USER="${vm_user}" \
+        /usr/local/bin/substrate --version >/dev/null
+}
+
 write_systemd_units() {
     local guest_substrate_home="$1"
     local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
@@ -828,7 +838,6 @@ set -euo pipefail
 legacy_unit_prefix="substrate-world"
 legacy_service="${legacy_unit_prefix}-agent.service"
 legacy_socket="${legacy_unit_prefix}-agent.socket"
-sudo install -d -m0755 "${SUBSTRATE_GUEST_HOME}"
 sudo install -d -m0750 -o root -g substrate /var/lib/substrate
 sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo install -d -m0750 -o root -g substrate /run/substrate/substrate-gateway-runtime
@@ -897,6 +906,7 @@ configure_guest() {
     verify_staged_workspace
     install_guest_binaries
     verify_guest_binaries
+    bootstrap_guest_private_home "${vm_user}" "${guest_substrate_home}"
     write_systemd_units "${guest_substrate_home}"
     enable_socket_activation "${guest_substrate_home}"
     socket_summary

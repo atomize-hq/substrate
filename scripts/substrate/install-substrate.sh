@@ -239,6 +239,28 @@ detect_primary_user() {
   printf ''
 }
 
+bootstrap_private_substrate_home() {
+  local substrate_bin="$1"
+  local primary_user="${2:-}"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '[%s][dry-run] SUBSTRATE_HOME=%s %s --version\n' \
+      "${INSTALLER_NAME}" "${PREFIX}" "${substrate_bin}" >&2
+    return 0
+  fi
+  if [[ ! -x "${substrate_bin}" ]]; then
+    fatal "Substrate bootstrap binary not found at ${substrate_bin}."
+  fi
+
+  local -a bootstrap_env=("SUBSTRATE_HOME=${PREFIX}")
+  if [[ -n "${primary_user}" && "${primary_user}" != "root" ]]; then
+    bootstrap_env+=("SUBSTRATE_INSTALL_PRIMARY_USER=${primary_user}")
+  fi
+  if ! env "${bootstrap_env[@]}" "${substrate_bin}" --version >/dev/null; then
+    fatal "Private SUBSTRATE_HOME bootstrap rejected ${PREFIX}; no existing root was repaired."
+  fi
+}
+
 user_in_group_linux() {
   local target_user="$1"
   local target_group="$2"
@@ -2505,6 +2527,10 @@ install_macos() {
 
   prepare_bundle_payload "${target_triple}" "${release_root}" "${checksums_path}"
 
+  local primary_user
+  primary_user="$(detect_primary_user)"
+  bootstrap_private_substrate_home "${release_root}/bin/substrate" "${primary_user}"
+
   local versions_dir="${PREFIX}/versions"
   local version_dir="${versions_dir}/${VERSION}"
   local bin_dir="${PREFIX}/bin"
@@ -2585,6 +2611,10 @@ install_linux() {
 
   prepare_bundle_payload "${target_triple}" "${release_root}" "${checksums_path}"
 
+  local primary_user
+  primary_user="$(detect_primary_user)"
+  bootstrap_private_substrate_home "${release_root}/bin/substrate" "${primary_user}"
+
   local versions_dir="${PREFIX}/versions"
   local version_dir="${versions_dir}/${VERSION}"
   local bin_dir="${PREFIX}/bin"
@@ -2611,8 +2641,6 @@ install_linux() {
     world_enabled=0
   fi
 
-  local primary_user
-  primary_user="$(detect_primary_user)"
   if [[ "${world_enabled}" -eq 1 ]]; then
     ensure_linux_group_membership "${primary_user}"
   fi

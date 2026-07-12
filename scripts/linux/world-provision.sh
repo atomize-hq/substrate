@@ -634,17 +634,15 @@ if [[ ${DRY_RUN} -eq 0 && ! -x "${GATEWAY_BIN_PATH}" ]]; then
     exit 1
 fi
 
+if [[ ${DRY_RUN} -eq 0 && ! -x "${SUBSTRATE_CLI_BIN_PATH}" ]]; then
+    echo "substrate binary not found at ${SUBSTRATE_CLI_BIN_PATH}. Did the build succeed?" >&2
+    exit 1
+fi
+
 if [[ ${DRY_RUN} -eq 0 && ! -f "${ACL_HELPER_SOURCE_PATH}" ]]; then
     echo "ACL bridge helper not found at ${ACL_HELPER_SOURCE_PATH}. Did the repo checkout complete?" >&2
     exit 1
 fi
-
-echo "==> Ensuring ${SUBSTRATE_GROUP} group and membership"
-ensure_substrate_group_exists
-ensure_user_in_group "${INVOKING_USER}"
-
-SERVICE_PATH="/etc/systemd/system/substrate-world-service.service"
-SOCKET_PATH="/etc/systemd/system/substrate-world-service.socket"
 
 SUBSTRATE_HOME_FOR_AGENT="${SUBSTRATE_HOME:-}"
 if [[ -z "${SUBSTRATE_HOME_FOR_AGENT}" ]]; then
@@ -658,6 +656,25 @@ if [[ -z "${INVOKING_HOME}" ]]; then
     INVOKING_HOME="$(dirname "${SUBSTRATE_HOME_FOR_AGENT}")"
 fi
 SUBSTRATE_HOME_RW_PATH="${SUBSTRATE_HOME_FOR_AGENT}"
+
+echo "==> Validating private SUBSTRATE_HOME for ${INVOKING_USER}"
+if [[ ${DRY_RUN} -eq 1 ]]; then
+    show_cmd env "SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}" \
+        "SUBSTRATE_INSTALL_PRIMARY_USER=${INVOKING_USER}" \
+        "${SUBSTRATE_CLI_BIN_PATH}" --version
+elif ! env "SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}" \
+    "SUBSTRATE_INSTALL_PRIMARY_USER=${INVOKING_USER}" \
+    "${SUBSTRATE_CLI_BIN_PATH}" --version >/dev/null; then
+    echo "Private SUBSTRATE_HOME bootstrap rejected ${SUBSTRATE_HOME_FOR_AGENT}; no existing root was repaired." >&2
+    exit 5
+fi
+
+echo "==> Ensuring ${SUBSTRATE_GROUP} group and membership"
+ensure_substrate_group_exists
+ensure_user_in_group "${INVOKING_USER}"
+
+SERVICE_PATH="/etc/systemd/system/substrate-world-service.service"
+SOCKET_PATH="/etc/systemd/system/substrate-world-service.socket"
 
 NETFILTER_ENV_LINE=""
 if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
@@ -735,7 +752,6 @@ sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
 sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${SUBSTRATE_STATE_PATH}"
 sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${WORLD_DEPS_ROOT_PATH}"
 sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${WORLD_DEPS_BIN_PATH}"
-sudo_cmd install -d -m0755 "${SUBSTRATE_HOME_RW_PATH}"
 
 echo "==> Writing systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
 install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"

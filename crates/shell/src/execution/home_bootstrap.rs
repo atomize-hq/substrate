@@ -2,7 +2,11 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
 use std::path::Path;
+#[cfg(unix)]
+use std::{ffi::CString, mem::MaybeUninit};
 
 use substrate_common::paths as substrate_paths;
 
@@ -26,6 +30,22 @@ impl HomeBootstrapError {
 
     fn denied(message: impl Into<String>) -> Self {
         Self::new(5, message)
+    }
+
+    #[cfg(unix)]
+    fn unsupported_private_home(path: &Path, uid: libc::uid_t, reason: &str) -> Self {
+        Self::denied(format!(
+            "substrate: unsupported SUBSTRATE_HOME '{}': expected a private directory owned by intended uid {uid} with exact mode 0700 and no foreign ACL grants; found {reason}. Existing roots are never repaired; reset it manually and retry.",
+            path.display()
+        ))
+    }
+
+    #[cfg(unix)]
+    fn ambiguous_private_home_owner(path: &Path) -> Self {
+        Self::denied(format!(
+            "substrate: unsupported SUBSTRATE_HOME '{}': cannot determine the intended per-user owner while running with effective uid 0; found owner-ambiguous. Set the supported explicit user input or run as the intended user; no home was created or modified.",
+            path.display()
+        ))
     }
 
     pub(crate) fn exit_code(&self) -> i32 {
@@ -128,45 +148,127 @@ pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapE
         ))
     })?;
 
-    ensure_dir(&substrate_home)?;
+    #[cfg(unix)]
+    let owner = BootstrapOwner {
+        uid: resolve_intended_owner_uid(&substrate_home)?,
+    };
+    #[cfg(not(unix))]
+    let owner = BootstrapOwner;
+    #[cfg(unix)]
+    let trusted_home =
+        crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home(
+            &substrate_home, owner.uid,
+        )
+        .map_err(|error| {
+            HomeBootstrapError::unsupported_private_home(
+                &substrate_home,
+                owner.uid,
+                error.reason().as_str(),
+            )
+        })?;
+
+    #[cfg(not(unix))]
+    ensure_dir(&substrate_home, owner)?;
 
     let deps_root = substrate_home.join("deps");
-    ensure_dir(&deps_root)?;
+    ensure_dir(&deps_root, owner)?;
 
     let packages_dir = deps_root.join("packages");
     let bundles_dir = deps_root.join("bundles");
     let scripts_dir = deps_root.join("scripts");
-    ensure_dir(&packages_dir)?;
-    ensure_dir(&bundles_dir)?;
-    ensure_dir(&scripts_dir)?;
+    ensure_dir(&packages_dir, owner)?;
+    ensure_dir(&bundles_dir, owner)?;
+    ensure_dir(&scripts_dir, owner)?;
 
-    ensure_file_if_missing(&deps_root.join("README.md"), DEPS_README_MD.as_bytes())?;
+    ensure_file_if_missing(
+        &deps_root.join("README.md"),
+        DEPS_README_MD.as_bytes(),
+        owner,
+    )?;
     ensure_file_if_missing(
         &packages_dir.join("example-manual.yaml"),
         EXAMPLE_MANUAL_YAML.as_bytes(),
+        owner,
     )?;
     ensure_file_if_missing(
         &packages_dir.join("example-script.yaml"),
         EXAMPLE_SCRIPT_YAML.as_bytes(),
+        owner,
     )?;
     ensure_file_if_missing(
         &packages_dir.join("example-apt.yaml"),
         EXAMPLE_APT_YAML.as_bytes(),
+        owner,
     )?;
     ensure_file_if_missing(
         &bundles_dir.join("example-bundle.yaml"),
         EXAMPLE_BUNDLE_YAML.as_bytes(),
+        owner,
     )?;
     ensure_file_if_missing(
         &scripts_dir.join("example-install.sh"),
         EXAMPLE_INSTALL_SH.as_bytes(),
+        owner,
     )?;
+
+    #[cfg(unix)]
+    trusted_home.revalidate().map_err(|_| {
+        HomeBootstrapError::unsupported_private_home(&substrate_home, owner.uid, "replaced")
+    })?;
 
     Ok(())
 }
 
-fn ensure_dir(path: &Path) -> Result<(), HomeBootstrapError> {
-    match fs::metadata(path) {
+#[derive(Clone, Copy)]
+struct BootstrapOwner {
+    #[cfg(unix)]
+    uid: libc::uid_t,
+}
+
+#[cfg(unix)]
+fn resolve_intended_owner_uid(path: &Path) -> Result<libc::uid_t, HomeBootstrapError> {
+    // SAFETY: geteuid has no preconditions.
+    let effective_uid = unsafe { libc::geteuid() };
+    if effective_uid != 0 {
+        return Ok(effective_uid);
+    }
+
+    let intended_user = std::env::var_os("SUBSTRATE_INSTALL_PRIMARY_USER")
+        .filter(|value| !value.is_empty() && value != "root")
+        .or_else(|| {
+            std::env::var_os("SUDO_USER").filter(|value| !value.is_empty() && value != "root")
+        })
+        .ok_or_else(|| HomeBootstrapError::ambiguous_private_home_owner(path))?;
+    let intended_user = CString::new(std::os::unix::ffi::OsStrExt::as_bytes(
+        intended_user.as_os_str(),
+    ))
+    .map_err(|_| HomeBootstrapError::ambiguous_private_home_owner(path))?;
+    let mut record = MaybeUninit::<libc::passwd>::uninit();
+    let mut result = std::ptr::null_mut();
+    let mut buffer = vec![0_u8; 16 * 1024];
+    // SAFETY: pointers reference initialized name/buffer storage and writable result slots.
+    let status = unsafe {
+        libc::getpwnam_r(
+            intended_user.as_ptr(),
+            record.as_mut_ptr(),
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut result,
+        )
+    };
+    if status != 0 || result.is_null() {
+        return Err(HomeBootstrapError::ambiguous_private_home_owner(path));
+    }
+    // SAFETY: successful getpwnam_r with non-null result initialized record.
+    let record = unsafe { record.assume_init() };
+    if record.pw_uid == 0 {
+        return Err(HomeBootstrapError::ambiguous_private_home_owner(path));
+    }
+    Ok(record.pw_uid)
+}
+
+fn ensure_dir(path: &Path, owner: BootstrapOwner) -> Result<(), HomeBootstrapError> {
+    match fs::symlink_metadata(path) {
         Ok(meta) => {
             if meta.is_dir() {
                 return Ok(());
@@ -176,14 +278,38 @@ fn ensure_dir(path: &Path) -> Result<(), HomeBootstrapError> {
                 path.display()
             )))
         }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => fs::create_dir_all(path)
-            .map_err(|err| map_io_err(err, format!("create_dir_all {}", path.display()))),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            #[cfg(unix)]
+            {
+                crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home(
+                    path, owner.uid,
+                )
+                .map(|_| ())
+                .map_err(|error| {
+                    HomeBootstrapError::unsupported_private_home(
+                        path,
+                        owner.uid,
+                        error.reason().as_str(),
+                    )
+                })
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = owner;
+                fs::create_dir_all(path)
+                    .map_err(|err| map_io_err(err, format!("create_dir_all {}", path.display())))
+            }
+        }
         Err(err) => Err(map_io_err(err, format!("metadata {}", path.display()))),
     }
 }
 
-fn ensure_file_if_missing(path: &Path, contents: &[u8]) -> Result<(), HomeBootstrapError> {
-    match fs::metadata(path) {
+fn ensure_file_if_missing(
+    path: &Path,
+    contents: &[u8],
+    owner: BootstrapOwner,
+) -> Result<(), HomeBootstrapError> {
+    match fs::symlink_metadata(path) {
         Ok(meta) => {
             if meta.is_file() {
                 return Ok(());
@@ -200,7 +326,7 @@ fn ensure_file_if_missing(path: &Path, contents: &[u8]) -> Result<(), HomeBootst
                     path.display()
                 ))
             })?;
-            ensure_dir(parent)?;
+            ensure_dir(parent, owner)?;
 
             let mut file = match fs::OpenOptions::new()
                 .create_new(true)
@@ -215,6 +341,33 @@ fn ensure_file_if_missing(path: &Path, contents: &[u8]) -> Result<(), HomeBootst
                     return Err(map_io_err(err, format!("create {}", path.display())));
                 }
             };
+
+            #[cfg(unix)]
+            {
+                // Ownership/mode convergence is limited to the file this call created with
+                // O_EXCL. Existing scaffold files are never modified.
+                // SAFETY: geteuid has no preconditions and file owns a live descriptor.
+                let effective_uid = unsafe { libc::geteuid() };
+                if effective_uid != owner.uid
+                    && (effective_uid != 0
+                        // SAFETY: the descriptor is the exclusively created file; gid -1 is kept.
+                        || unsafe { libc::fchown(file.as_raw_fd(), owner.uid, !0 as libc::gid_t) }
+                            != 0)
+                {
+                    return Err(HomeBootstrapError::unsupported_private_home(
+                        path,
+                        owner.uid,
+                        "wrong-owner",
+                    ));
+                }
+                // SAFETY: the descriptor is the exclusively created file.
+                if unsafe { libc::fchmod(file.as_raw_fd(), 0o600) } != 0 {
+                    return Err(map_io_err(
+                        io::Error::last_os_error(),
+                        format!("set private mode on {}", path.display()),
+                    ));
+                }
+            }
 
             file.write_all(contents)
                 .map_err(|err| map_io_err(err, format!("write {}", path.display())))?;

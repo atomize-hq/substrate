@@ -351,6 +351,19 @@ detect_invoking_user() {
   printf ''
 }
 
+bootstrap_private_substrate_home() {
+  local substrate_bin="$1"
+  local invoking_user
+  invoking_user="$(detect_invoking_user)"
+  local -a bootstrap_env=("SUBSTRATE_HOME=${PREFIX}")
+  if [[ -n "${invoking_user}" && "${invoking_user}" != "root" ]]; then
+    bootstrap_env+=("SUBSTRATE_INSTALL_PRIMARY_USER=${invoking_user}")
+  fi
+  if ! env "${bootstrap_env[@]}" "${substrate_bin}" --version >/dev/null; then
+    fatal "Private SUBSTRATE_HOME bootstrap rejected ${PREFIX}; no existing root was repaired."
+  fi
+}
+
 user_in_group() {
   local target_user="$1"
   local target_group="$2"
@@ -1703,6 +1716,8 @@ SUBSTRATE_BIN="${REPO_ROOT}/target/${TARGET_DIR}/substrate"
 if [[ ! -x "${SUBSTRATE_BIN}" ]]; then
   fatal "Expected substrate binary at ${SUBSTRATE_BIN}, but it was not found."
 fi
+
+bootstrap_private_substrate_home "${SUBSTRATE_BIN}"
 
 BIN_DIR="${PREFIX%/}/bin"
 SHIMS_DIR="${PREFIX%/}/shims"

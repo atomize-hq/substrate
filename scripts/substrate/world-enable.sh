@@ -118,6 +118,14 @@ if [[ ${DRY_RUN} -eq 1 && -n "${PROVISION_AGENT_RUNTIME}" ]]; then
   PATH="${doctor_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" sync_world_deps "${substrate_bin}"
 fi
 
+if [[ ${DRY_RUN} -eq 0 ]]; then
+  if [[ ! -x "${substrate_bin}" ]]; then
+    fatal "substrate binary not found at ${substrate_bin}. Did you install to ${PREFIX}?"
+  fi
+  primary_user="$(detect_primary_user)"
+  bootstrap_private_substrate_home "${substrate_bin}" "${primary_user}"
+fi
+
 case "${PLATFORM}" in
   macos)
     ensure_macos_prereqs
@@ -138,10 +146,6 @@ case "${PLATFORM}" in
 if [[ ${DRY_RUN} -eq 1 ]]; then
   log "world-enable dry run complete"
   exit 0
-fi
-
-if [[ ! -x "${substrate_bin}" ]]; then
-  fatal "substrate binary not found at ${substrate_bin}. Did you install to ${PREFIX}?"
 fi
 
 doctor_path="${PREFIX}/bin:${ORIGINAL_PATH}"
