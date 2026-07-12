@@ -39,6 +39,10 @@ mod platform {
     const FILE_MODE: libc::mode_t = 0o600;
     const ACL_USER: u16 = 0x0002;
     const ACL_GROUP: u16 = 0x0008;
+    #[cfg(target_os = "macos")]
+    const MACOS_ACL_EXTENDED_ALLOW: libc::c_int = 1;
+    #[cfg(target_os = "macos")]
+    const MACOS_ACL_EXTENDED_DENY: libc::c_int = 2;
 
     #[derive(Debug)]
     pub(crate) struct TrustedAuthorityRoot {
@@ -869,8 +873,6 @@ mod platform {
         const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
         const ACL_FIRST_ENTRY: libc::c_int = 0;
         const ACL_NEXT_ENTRY: libc::c_int = -1;
-        const ACL_EXTENDED_ALLOW: libc::c_int = 1;
-        const ACL_EXTENDED_DENY: libc::c_int = 2;
 
         unsafe extern "C" {
             fn acl_get_fd_np(fd: libc::c_int, acl_type: libc::c_int) -> Acl;
@@ -911,16 +913,7 @@ mod platform {
                 if unsafe { acl_get_tag_type(entry, &mut tag) } != 0 {
                     return Err(io_error_value("inspect trusted ACL entry"));
                 }
-                if tag == ACL_EXTENDED_ALLOW {
-                    return Err(TrustedFsError::new(
-                        "trusted entry ACL grants another principal",
-                    ));
-                }
-                if tag != ACL_EXTENDED_DENY {
-                    return Err(TrustedFsError::new(
-                        "trusted entry ACL has an unsupported tag",
-                    ));
-                }
+                validate_macos_acl_tag(tag)?;
                 entry_id = ACL_NEXT_ENTRY;
             }
         })();
@@ -930,6 +923,19 @@ mod platform {
             return Err(io_error_value("free trusted ACL"));
         }
         validation
+    }
+
+    #[cfg(target_os = "macos")]
+    fn validate_macos_acl_tag(tag: libc::c_int) -> Result<(), TrustedFsError> {
+        match tag {
+            MACOS_ACL_EXTENDED_ALLOW => Err(TrustedFsError::new(
+                "trusted entry ACL grants another principal",
+            )),
+            MACOS_ACL_EXTENDED_DENY => Ok(()),
+            _ => Err(TrustedFsError::new(
+                "trusted entry ACL has an unsupported tag",
+            )),
+        }
     }
 
     fn acl_grants_named_principal(bytes: &[u8]) -> bool {
@@ -1144,19 +1150,27 @@ mod platform {
             authority.create_directory("child").unwrap();
             authority.create_file("record").unwrap();
 
-            fs::set_permissions(
-                temp.path().join("authority-v1/child"),
-                fs::Permissions::from_mode(0o2700),
-            )
-            .unwrap();
-            assert!(authority.open_directory("child").is_err());
+            let child_path = temp.path().join("authority-v1/child");
+            for mode in [0o4700, 0o2700, 0o1700] {
+                fs::set_permissions(&child_path, fs::Permissions::from_mode(mode)).unwrap();
+                assert_eq!(
+                    fs::metadata(&child_path).unwrap().permissions().mode() & 0o7777,
+                    mode
+                );
+                assert!(authority.open_directory("child").is_err());
+                fs::set_permissions(&child_path, fs::Permissions::from_mode(0o700)).unwrap();
+            }
 
-            fs::set_permissions(
-                temp.path().join("authority-v1/record"),
-                fs::Permissions::from_mode(0o4600),
-            )
-            .unwrap();
-            assert!(authority.open_file("record").is_err());
+            let record_path = temp.path().join("authority-v1/record");
+            for mode in [0o4600, 0o2600, 0o1600] {
+                fs::set_permissions(&record_path, fs::Permissions::from_mode(mode)).unwrap();
+                assert_eq!(
+                    fs::metadata(&record_path).unwrap().permissions().mode() & 0o7777,
+                    mode
+                );
+                assert!(authority.open_file("record").is_err());
+                fs::set_permissions(&record_path, fs::Permissions::from_mode(0o600)).unwrap();
+            }
         }
 
         #[test]
@@ -1284,6 +1298,14 @@ mod platform {
                 .unwrap();
             assert!(status.success());
             TrustedAuthorityRoot::open(temp.path()).unwrap();
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn macos_acl_tag_validation_fails_closed_except_for_deny() {
+            assert!(validate_macos_acl_tag(MACOS_ACL_EXTENDED_ALLOW).is_err());
+            validate_macos_acl_tag(MACOS_ACL_EXTENDED_DENY).unwrap();
+            assert!(validate_macos_acl_tag(libc::c_int::MAX).is_err());
         }
 
         #[test]
