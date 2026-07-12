@@ -264,19 +264,37 @@ mod platform {
             Ok(child)
         }
 
-        pub(crate) fn create_directory_exclusive(
+        pub(crate) fn create_directory_entry_exclusive(
             &self,
             name: &str,
-        ) -> Result<Self, TrustedFsError> {
+        ) -> Result<(DirectoryEntry, Self), TrustedFsError> {
+            self.create_directory_entry_exclusive_with(name, || {})
+        }
+
+        fn create_directory_entry_exclusive_with(
+            &self,
+            name: &str,
+            after_open: impl FnOnce(),
+        ) -> Result<(DirectoryEntry, Self), TrustedFsError> {
+            let entry_name = name.to_owned();
             let name = component(name)?;
             // SAFETY: parent fd is open and name is a single validated component.
             if unsafe { libc::mkdirat(self.file.as_raw_fd(), name.as_ptr(), DIRECTORY_MODE) } != 0 {
                 return Err(io_error_value("exclusively create trusted directory"));
             }
             let child = self.open_directory_cstr(&name)?;
+            after_open();
+            let child_stat = fstat(child.file.as_raw_fd())?;
+            let entry = DirectoryEntry {
+                name: entry_name,
+                kind: EntryKind::Directory,
+                device_id: child_stat.st_dev as u64,
+                inode: child_stat.st_ino as u64,
+            };
+            self.revalidate_entry(&entry)?;
             self.sync()?;
             child.sync()?;
-            Ok(child)
+            Ok((entry, child))
         }
 
         pub(crate) fn open_directory(&self, name: &str) -> Result<Self, TrustedFsError> {
@@ -1182,6 +1200,24 @@ mod platform {
             file.sync().unwrap();
             assert!(temp.path().join("moved/bound").is_file());
             assert!(!temp.path().join("authority-v1/bound").exists());
+        }
+
+        #[test]
+        fn exclusive_directory_creation_rejects_name_replacement_before_identity_binding() {
+            let (temp, root) = root();
+            let original = temp.path().join("child");
+            let retained = temp.path().join("child-retained");
+            let outcome = root
+                .directory()
+                .create_directory_entry_exclusive_with("child", || {
+                    fs::rename(&original, &retained).unwrap();
+                    fs::create_dir(&original).unwrap();
+                    fs::set_permissions(&original, fs::Permissions::from_mode(0o700)).unwrap();
+                });
+
+            assert!(outcome.is_err());
+            assert!(fs::read_dir(original).unwrap().next().is_none());
+            assert!(fs::read_dir(retained).unwrap().next().is_none());
         }
 
         #[test]

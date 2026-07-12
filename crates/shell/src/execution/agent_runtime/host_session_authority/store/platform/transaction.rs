@@ -1,6 +1,6 @@
 use super::legacy::ObservedLegacyDirectory;
 use super::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 pub(crate) struct LegacyStateStoreTransactionV1 {
     root: TrustedAuthorityRoot,
@@ -17,7 +17,7 @@ struct RetainedLegacyDirectories {
 #[derive(Default)]
 struct RetainedDirectoryChildren {
     opened: BTreeMap<String, RetainedDirectory>,
-    absent: BTreeSet<String>,
+    absent: BTreeMap<String, RetainedDirectoryChildren>,
 }
 
 struct RetainedDirectory {
@@ -67,12 +67,12 @@ impl RetainedLegacyDirectories {
                         "classified legacy StateStore directory changed during admission",
                     ));
                 }
-                retained.absent.insert(missing.clone());
+                Self::retain_classified_absence(retained, missing_suffix)?;
             }
             return Ok(());
         };
 
-        if retained.absent.contains(&expected.entry.name) {
+        if retained.absent.contains_key(&expected.entry.name) {
             return Err(BootstrapError(
                 "classified legacy StateStore directory conflicts during admission",
             ));
@@ -113,6 +113,22 @@ impl RetainedLegacyDirectories {
         )
     }
 
+    fn retain_classified_absence(
+        retained: &mut RetainedDirectoryChildren,
+        missing_suffix: &[String],
+    ) -> Result<(), BootstrapError> {
+        let Some((missing, remaining)) = missing_suffix.split_first() else {
+            return Ok(());
+        };
+        if retained.opened.contains_key(missing) {
+            return Err(BootstrapError(
+                "classified legacy StateStore absence conflicts with opened route",
+            ));
+        }
+        let child = retained.absent.entry(missing.clone()).or_default();
+        Self::retain_classified_absence(child, remaining)
+    }
+
     fn revalidate(&self, root: &TrustedDirectory) -> Result<(), BootstrapError> {
         Self::revalidate_children(root, &self.children)
     }
@@ -121,7 +137,7 @@ impl RetainedLegacyDirectories {
         parent: &TrustedDirectory,
         retained: &RetainedDirectoryChildren,
     ) -> Result<(), BootstrapError> {
-        for absent in &retained.absent {
+        for absent in retained.absent.keys() {
             if parent
                 .entry_kind(absent)
                 .map_err(|_| BootstrapError("revalidate retained legacy StateStore absence"))?
@@ -175,7 +191,7 @@ impl RetainedLegacyDirectories {
             return operation(parent).map(Some);
         };
 
-        if retained.absent.contains(*component) {
+        if retained.absent.contains_key(*component) {
             if parent
                 .entry_kind(component)
                 .map_err(|_| BootstrapError("revalidate absent legacy StateStore directory"))?
@@ -188,17 +204,18 @@ impl RetainedLegacyDirectories {
             if !create_missing {
                 return Ok(None);
             }
-            let directory = parent
-                .create_directory_exclusive(component)
+            let (entry, directory) = parent
+                .create_directory_entry_exclusive(component)
                 .map_err(|_| BootstrapError("create retained legacy StateStore directory"))?;
-            let entry = Self::directory_entry(parent, component)?;
-            retained.absent.remove(*component);
+            let classified_children = retained.absent.remove(*component).ok_or(BootstrapError(
+                "classified legacy StateStore absence was not retained",
+            ))?;
             retained.opened.insert(
                 (*component).to_owned(),
                 RetainedDirectory {
                     entry,
                     directory,
-                    children: RetainedDirectoryChildren::default(),
+                    children: classified_children,
                 },
             );
         } else if !retained.opened.contains_key(*component) {
@@ -207,21 +224,27 @@ impl RetainedLegacyDirectories {
                 .map_err(|_| BootstrapError("inspect legacy StateStore directory route"))?
             {
                 None => {
-                    retained.absent.insert((*component).to_owned());
+                    retained.absent.insert(
+                        (*component).to_owned(),
+                        RetainedDirectoryChildren::default(),
+                    );
                     if !create_missing {
                         return Ok(None);
                     }
-                    let directory = parent.create_directory_exclusive(component).map_err(|_| {
-                        BootstrapError("create retained legacy StateStore directory")
-                    })?;
-                    let entry = Self::directory_entry(parent, component)?;
-                    retained.absent.remove(*component);
+                    let (entry, directory) = parent
+                        .create_directory_entry_exclusive(component)
+                        .map_err(|_| {
+                            BootstrapError("create retained legacy StateStore directory")
+                        })?;
+                    let dynamic_children = retained.absent.remove(*component).ok_or(
+                        BootstrapError("dynamic legacy StateStore absence was not retained"),
+                    )?;
                     retained.opened.insert(
                         (*component).to_owned(),
                         RetainedDirectory {
                             entry,
                             directory,
-                            children: RetainedDirectoryChildren::default(),
+                            children: dynamic_children,
                         },
                     );
                 }
@@ -333,6 +356,15 @@ impl SemanticTransaction<'_, '_> {
 }
 
 impl LegacyStateStoreTransactionV1 {
+    #[cfg(test)]
+    pub(crate) fn create_classified_run_directory_test(&mut self) -> Result<(), BootstrapError> {
+        self.retained_directories
+            .with_directory(self.root.directory(), &["run"], true, |_| Ok(()))?
+            .ok_or(BootstrapError(
+                "classified legacy StateStore run directory was not created",
+            ))
+    }
+
     pub(crate) fn read_file(
         &mut self,
         collection: LegacyStateStoreCollectionV1,

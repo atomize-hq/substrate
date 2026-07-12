@@ -2584,3 +2584,23 @@ fn legacy_transaction_admission_rejects_classified_absence_replacement() {
         .is_err()
     );
 }
+
+#[test]
+fn legacy_transaction_rejects_later_classified_missing_component_appearance() {
+    let bootstrap = root();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    transaction.create_classified_run_directory_test().unwrap();
+    let replacement = bootstrap.path().join("run/agent-hub");
+    fs::create_dir(&replacement).unwrap();
+    fs::set_permissions(&replacement, fs::Permissions::from_mode(0o700)).unwrap();
+
+    assert!(transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["must-not-write.json"],
+            b"replacement",
+            [0x19; 16],
+        )
+        .is_err());
+    assert!(fs::read_dir(replacement).unwrap().next().is_none());
+}
