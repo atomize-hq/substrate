@@ -401,6 +401,24 @@ mod platform {
             })
         }
 
+        pub(crate) fn open_file_entry(
+            &self,
+            expected: &DirectoryEntry,
+        ) -> Result<TrustedFile, TrustedFsError> {
+            if expected.kind != EntryKind::RegularFile {
+                return Err(TrustedFsError::new(
+                    "controlled authority entry is not a regular file",
+                ));
+            }
+            let opened = self.open_file(&expected.name)?;
+            if opened.device_id != expected.device_id || opened.inode != expected.inode {
+                return Err(TrustedFsError::new(
+                    "opened controlled authority file changed identity",
+                ));
+            }
+            Ok(opened)
+        }
+
         pub(crate) fn entry_kind(&self, name: &str) -> Result<Option<EntryKind>, TrustedFsError> {
             Ok(self
                 .stat_entry(name)?

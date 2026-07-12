@@ -1,3 +1,4 @@
+use super::super::LegacyStateStoreDirectoryEntryV1;
 use super::legacy::ObservedLegacyDirectory;
 use super::*;
 use std::collections::BTreeMap;
@@ -169,7 +170,10 @@ impl RetainedLegacyDirectories {
         root: &TrustedDirectory,
         components: &[&str],
         create_missing: bool,
-        operation: impl FnOnce(&TrustedDirectory) -> Result<T, BootstrapError>,
+        operation: impl FnOnce(
+            &TrustedDirectory,
+            &mut RetainedDirectoryChildren,
+        ) -> Result<T, BootstrapError>,
     ) -> Result<Option<T>, BootstrapError> {
         Self::with_child_directory(
             root,
@@ -185,10 +189,13 @@ impl RetainedLegacyDirectories {
         retained: &mut RetainedDirectoryChildren,
         components: &[&str],
         create_missing: bool,
-        operation: impl FnOnce(&TrustedDirectory) -> Result<T, BootstrapError>,
+        operation: impl FnOnce(
+            &TrustedDirectory,
+            &mut RetainedDirectoryChildren,
+        ) -> Result<T, BootstrapError>,
     ) -> Result<Option<T>, BootstrapError> {
         let Some((component, remaining)) = components.split_first() else {
-            return operation(parent).map(Some);
+            return operation(parent, retained).map(Some);
         };
 
         if retained.absent.contains_key(*component) {
@@ -314,6 +321,39 @@ impl RetainedLegacyDirectories {
                 "retained legacy StateStore directory was not safely enumerated",
             ))
     }
+
+    fn retain_enumerated_directory(
+        parent: &TrustedDirectory,
+        retained: &mut RetainedDirectoryChildren,
+        entry: &DirectoryEntry,
+    ) -> Result<(), BootstrapError> {
+        if retained.absent.contains_key(&entry.name) {
+            return Err(BootstrapError(
+                "enumerated legacy StateStore directory conflicts with retained absence",
+            ));
+        }
+        if let Some(existing) = retained.opened.get(&entry.name) {
+            return if existing.entry == *entry {
+                Ok(())
+            } else {
+                Err(BootstrapError(
+                    "enumerated legacy StateStore directory changed identity",
+                ))
+            };
+        }
+        let directory = parent
+            .open_controlled_directory_entry(entry)
+            .map_err(|_| BootstrapError("retain enumerated legacy StateStore directory"))?;
+        retained.opened.insert(
+            entry.name.clone(),
+            RetainedDirectory {
+                entry: entry.clone(),
+                directory,
+                children: RetainedDirectoryChildren::default(),
+            },
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -359,7 +399,7 @@ impl LegacyStateStoreTransactionV1 {
     #[cfg(test)]
     pub(crate) fn create_classified_run_directory_test(&mut self) -> Result<(), BootstrapError> {
         self.retained_directories
-            .with_directory(self.root.directory(), &["run"], true, |_| Ok(()))?
+            .with_directory(self.root.directory(), &["run"], true, |_, _| Ok(()))?
             .ok_or(BootstrapError(
                 "classified legacy StateStore run directory was not created",
             ))
@@ -479,6 +519,70 @@ impl LegacyStateStoreTransactionV1 {
         Ok(removed)
     }
 
+    pub(crate) fn read_directory(
+        &mut self,
+        collection: LegacyStateStoreCollectionV1,
+        descendants: &[&str],
+    ) -> Result<Vec<LegacyStateStoreDirectoryEntryV1>, BootstrapError> {
+        self.verify_retained_root()?;
+        let prefix: &[&str] = match collection {
+            LegacyStateStoreCollectionV1::Sessions => &["run", "agent-hub", "sessions"],
+            LegacyStateStoreCollectionV1::Participants => &["run", "agent-hub", "participants"],
+            LegacyStateStoreCollectionV1::Handles => &["run", "agent-hub", "handles"],
+            LegacyStateStoreCollectionV1::HostInbox => &["host_inbox"],
+        };
+        let components = prefix
+            .iter()
+            .chain(descendants.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        let entries = self
+            .retained_directories
+            .with_directory(
+                self.root.directory(),
+                &components,
+                false,
+                |directory, retained| {
+                    let scanned = directory
+                        .entries()
+                        .map_err(|_| BootstrapError("enumerate legacy StateStore directory"))?;
+                    let mut entries = Vec::with_capacity(scanned.len());
+                    for entry in scanned {
+                        let bytes = match entry.kind {
+                            EntryKind::Directory => {
+                                RetainedLegacyDirectories::retain_enumerated_directory(
+                                    directory, retained, &entry,
+                                )?;
+                                None
+                            }
+                            EntryKind::RegularFile => Some(
+                                directory
+                                    .open_file_entry(&entry)
+                                    .and_then(|file| file.read_all())
+                                    .map_err(|_| {
+                                        BootstrapError("read legacy StateStore file entry")
+                                    })?,
+                            ),
+                            EntryKind::Symlink | EntryKind::Other => {
+                                return Err(BootstrapError(
+                                    "legacy StateStore directory entry is unsafe",
+                                ))
+                            }
+                        };
+                        entries.push(LegacyStateStoreDirectoryEntryV1 {
+                            name: entry.name,
+                            is_directory: entry.kind == EntryKind::Directory,
+                            bytes,
+                        });
+                    }
+                    Ok(entries)
+                },
+            )?
+            .unwrap_or_default();
+        self.verify_retained_root()?;
+        Ok(entries)
+    }
+
     pub(crate) fn verify_physical_root(
         &self,
         expected: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
@@ -521,9 +625,11 @@ impl LegacyStateStoreTransactionV1 {
         let (target, relative_directories) = descendants
             .split_last()
             .ok_or(BootstrapError("legacy StateStore path is empty"))?;
-        let prefix = match collection {
-            LegacyStateStoreCollectionV1::Sessions => ["run", "agent-hub", "sessions"],
-            LegacyStateStoreCollectionV1::Participants => ["run", "agent-hub", "participants"],
+        let prefix: &[&str] = match collection {
+            LegacyStateStoreCollectionV1::Sessions => &["run", "agent-hub", "sessions"],
+            LegacyStateStoreCollectionV1::Participants => &["run", "agent-hub", "participants"],
+            LegacyStateStoreCollectionV1::Handles => &["run", "agent-hub", "handles"],
+            LegacyStateStoreCollectionV1::HostInbox => &["host_inbox"],
         };
         let components = prefix
             .iter()
@@ -534,7 +640,7 @@ impl LegacyStateStoreTransactionV1 {
             root.directory(),
             &components,
             create_missing,
-            |parent| operation(parent, target),
+            |parent, _| operation(parent, target),
         )
     }
 }

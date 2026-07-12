@@ -83,6 +83,15 @@ pub(crate) type LegacyWriterGuard = LegacyStateStoreTransactionV1;
 pub(crate) enum LegacyStateStoreCollectionV1 {
     Sessions,
     Participants,
+    Handles,
+    HostInbox,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct LegacyStateStoreDirectoryEntryV1 {
+    pub(crate) name: String,
+    pub(crate) is_directory: bool,
+    pub(crate) bytes: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -914,6 +923,16 @@ mod platform {
             _collection: super::LegacyStateStoreCollectionV1,
             _descendants: &[&str],
         ) -> Result<bool, BootstrapError> {
+            Err(BootstrapError(
+                "legacy StateStore transactions are unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn read_directory(
+            &mut self,
+            _collection: super::LegacyStateStoreCollectionV1,
+            _descendants: &[&str],
+        ) -> Result<Vec<super::LegacyStateStoreDirectoryEntryV1>, BootstrapError> {
             Err(BootstrapError(
                 "legacy StateStore transactions are unsupported on this platform",
             ))

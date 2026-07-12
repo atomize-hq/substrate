@@ -2604,3 +2604,50 @@ fn legacy_transaction_rejects_later_classified_missing_component_appearance() {
         .is_err());
     assert!(fs::read_dir(replacement).unwrap().next().is_none());
 }
+
+#[test]
+fn legacy_transaction_directory_read_retains_enumerated_descendant_identity() {
+    let bootstrap = root();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["session-a", "snapshot.json"],
+            b"original",
+            [0x20; 16],
+        )
+        .unwrap();
+    let entries = transaction
+        .read_directory(LegacyStateStoreCollectionV1::Sessions, &[])
+        .unwrap();
+    assert!(entries
+        .iter()
+        .any(|entry| entry.name == "session-a" && entry.is_directory));
+
+    let sessions = bootstrap.path().join("run/agent-hub/sessions");
+    let retained = sessions.join("session-a-retained");
+    fs::rename(sessions.join("session-a"), &retained).unwrap();
+    fs::create_dir(sessions.join("session-a")).unwrap();
+    fs::set_permissions(
+        sessions.join("session-a"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .unwrap();
+
+    assert!(transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["session-a", "snapshot.json"],
+            b"replacement",
+            [0x21; 16],
+        )
+        .is_err());
+    assert!(fs::read_dir(sessions.join("session-a"))
+        .unwrap()
+        .next()
+        .is_none());
+    assert_eq!(
+        fs::read(retained.join("snapshot.json")).unwrap(),
+        b"original"
+    );
+}

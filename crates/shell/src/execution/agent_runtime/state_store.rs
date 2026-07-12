@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(target_os = "linux", test))]
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
+use uuid::Uuid;
 #[cfg(any(target_os = "linux", test))]
 use world_api::SharedWorldBindingState;
 
@@ -1006,6 +1007,381 @@ impl AgentRuntimeStateStore {
         })
     }
 
+    fn with_legacy_snapshot_transaction<T>(
+        &self,
+        operation: impl FnOnce(
+            &mut super::host_session_authority::store::LegacyWriterGuard,
+        ) -> Result<T>,
+    ) -> Result<T> {
+        let process = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        let mut authority =
+            super::host_session_authority::store::legacy_writer_guard(&self.substrate_home)
+                .context("legacy authority writer preflight failed")?;
+        let outcome = operation(&mut authority);
+        let finish = authority
+            .finish()
+            .context("legacy authority writer final fsync failed");
+        drop(process);
+        match outcome {
+            Ok(value) => finish.map(|()| value),
+            Err(error) => {
+                let _ = finish;
+                Err(error)
+            }
+        }
+    }
+
+    fn transaction_read_json<T: serde::de::DeserializeOwned>(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        collection: super::host_session_authority::store::LegacyStateStoreCollectionV1,
+        descendants: &[&str],
+    ) -> Result<Option<T>> {
+        transaction
+            .read_file(collection, descendants)
+            .context("read retained legacy StateStore JSON")?
+            .map(|bytes| {
+                serde_json::from_slice(&bytes).context("parse retained legacy StateStore JSON")
+            })
+            .transpose()
+    }
+
+    fn transaction_write_json(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        collection: super::host_session_authority::store::LegacyStateStoreCollectionV1,
+        descendants: &[&str],
+        value: &impl serde::Serialize,
+    ) -> Result<()> {
+        let bytes = serde_json::to_vec_pretty(value)
+            .context("serialize retained legacy StateStore JSON")?;
+        transaction
+            .write_file(collection, descendants, &bytes, *Uuid::new_v4().as_bytes())
+            .context("publish retained legacy StateStore JSON")
+    }
+
+    fn transaction_remove_file(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        collection: super::host_session_authority::store::LegacyStateStoreCollectionV1,
+        descendants: &[&str],
+    ) -> Result<bool> {
+        transaction
+            .remove_file(collection, descendants)
+            .context("remove retained legacy StateStore file")
+    }
+
+    fn transaction_list_json<T: serde::de::DeserializeOwned>(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        collection: super::host_session_authority::store::LegacyStateStoreCollectionV1,
+        directory: &[&str],
+    ) -> Result<Vec<T>> {
+        let entries = transaction
+            .read_directory(collection, directory)
+            .context("enumerate retained legacy StateStore directory")?;
+        let mut values = Vec::new();
+        for entry in entries {
+            if entry.is_directory || !entry.name.ends_with(".json") {
+                continue;
+            }
+            let bytes = entry
+                .bytes
+                .ok_or_else(|| anyhow::anyhow!("retained StateStore file omitted bytes"))?;
+            values.push(
+                serde_json::from_slice(&bytes)
+                    .context("parse enumerated retained legacy StateStore JSON")?,
+            );
+        }
+        Ok(values)
+    }
+
+    fn list_participants_across_sources_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+    ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::{
+            Handles, Participants, Sessions,
+        };
+        let mut participants = BTreeMap::new();
+        for session_entry in transaction
+            .read_directory(Sessions, &[])
+            .context("enumerate retained canonical session roots")?
+        {
+            if !session_entry.is_directory {
+                continue;
+            }
+            for participant in Self::transaction_list_json::<AgentRuntimeParticipantRecord>(
+                transaction,
+                Sessions,
+                &[session_entry.name.as_str(), "participants"],
+            )? {
+                self.validate_participant_record(&participant)?;
+                participants.insert(participant.handle.participant_id.clone(), participant);
+            }
+        }
+        for participant in Self::transaction_list_json::<AgentRuntimeParticipantRecord>(
+            transaction,
+            Participants,
+            &[],
+        )? {
+            self.validate_participant_record(&participant)?;
+            participants
+                .entry(participant.handle.participant_id.clone())
+                .or_insert(participant);
+        }
+        for participant in
+            Self::transaction_list_json::<AgentRuntimeParticipantRecord>(transaction, Handles, &[])?
+        {
+            self.validate_participant_record(&participant)?;
+            participants
+                .entry(participant.handle.participant_id.clone())
+                .or_insert(participant);
+        }
+        let mut participants = participants.into_values().collect::<Vec<_>>();
+        participants.sort_by(|left, right| {
+            left.handle
+                .last_transition_at
+                .cmp(&right.handle.last_transition_at)
+                .then(left.handle.participant_id.cmp(&right.handle.participant_id))
+        });
+        Ok(participants)
+    }
+
+    fn load_authoritative_session_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+    ) -> Result<Option<OrchestrationSessionRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let canonical = Self::transaction_read_json::<OrchestrationSessionRecord>(
+            transaction,
+            Sessions,
+            &[orchestration_session_id, "session.json"],
+        )?;
+        if let Some(session) = canonical {
+            self.validate_session_record(&session)?;
+            return Ok(Some(session));
+        }
+        let flat_name = format!("{orchestration_session_id}.json");
+        let flat = Self::transaction_read_json::<OrchestrationSessionRecord>(
+            transaction,
+            Sessions,
+            &[flat_name.as_str()],
+        )?;
+        if let Some(session) = flat.as_ref() {
+            self.validate_session_record(session)?;
+        }
+        Ok(flat)
+    }
+
+    fn load_inbox_item_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        item_id: &str,
+    ) -> Result<Option<DurableInboxItemRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let file_name = format!("{item_id}.json");
+        let item = Self::transaction_read_json::<DurableInboxItemRecord>(
+            transaction,
+            Sessions,
+            &[orchestration_session_id, "inbox", file_name.as_str()],
+        )?;
+        if let Some(item) = item.as_ref() {
+            self.validate_inbox_item_record(item)?;
+            if item.orchestration_session_id != orchestration_session_id || item.item_id != item_id
+            {
+                anyhow::bail!("durable inbox artifact identity mismatch");
+            }
+        }
+        Ok(item)
+    }
+
+    fn load_obligation_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let file_name = format!("{obligation_id}.json");
+        let obligation = Self::transaction_read_json::<OrchestrationObligationRecord>(
+            transaction,
+            Sessions,
+            &[orchestration_session_id, "obligations", file_name.as_str()],
+        )?;
+        if let Some(obligation) = obligation.as_ref() {
+            self.validate_obligation_record(obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id
+                || obligation.obligation_id != obligation_id
+            {
+                anyhow::bail!("orchestration obligation artifact identity mismatch");
+            }
+        }
+        Ok(obligation)
+    }
+
+    fn list_obligations_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut obligations = Self::transaction_list_json::<OrchestrationObligationRecord>(
+            transaction,
+            Sessions,
+            &[orchestration_session_id, "obligations"],
+        )?;
+        for obligation in &obligations {
+            self.validate_obligation_record(obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("orchestration obligation belongs to another session");
+            }
+        }
+        obligations.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.obligation_id.cmp(&right.obligation_id))
+        });
+        Ok(obligations)
+    }
+
+    fn load_session_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+    ) -> Result<Option<AgentRuntimeSessionRecord>> {
+        let session =
+            self.load_authoritative_session_transaction(transaction, orchestration_session_id)?;
+        let participants = self
+            .list_participants_across_sources_transaction(transaction)?
+            .into_iter()
+            .filter(|participant| {
+                participant.handle.orchestration_session_id == orchestration_session_id
+            })
+            .collect::<Vec<_>>();
+        if session.is_none() && participants.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(self.build_session_record(
+            orchestration_session_id,
+            session,
+            participants,
+        )))
+    }
+
+    fn write_obligation_transaction(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        obligation: &OrchestrationObligationRecord,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let file_name = format!("{}.json", obligation.obligation_id);
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[
+                obligation.orchestration_session_id.as_str(),
+                "obligations",
+                file_name.as_str(),
+            ],
+            obligation,
+        )
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn load_exact_pending_obligation_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+        expected_kind: OrchestrationObligationKind,
+        binding: (&str, &str, &str, u64),
+    ) -> Result<OrchestrationObligationRecord> {
+        let (target_participant_id, target_backend_id, world_id, world_generation) = binding;
+        let approval = expected_kind == OrchestrationObligationKind::ApprovalRequired;
+        let obligation = self
+            .load_obligation_transaction(transaction, orchestration_session_id, obligation_id)?
+            .ok_or_else(|| {
+                if approval {
+                    anyhow::anyhow!(
+                        "approval_obligation_not_found: orchestration session {} has no approval obligation {}",
+                        orchestration_session_id,
+                        obligation_id
+                    )
+                } else {
+                    anyhow::anyhow!(
+                        "follow_up_obligation_not_found: orchestration session {} has no follow-up obligation {}",
+                        orchestration_session_id,
+                        obligation_id
+                    )
+                }
+            })?;
+        if obligation.kind != expected_kind {
+            if approval {
+                anyhow::bail!(
+                    "approval_obligation_kind_mismatch: orchestration session {} obligation {} is not approval_required",
+                    orchestration_session_id,
+                    obligation_id
+                );
+            }
+            anyhow::bail!(
+                "follow_up_obligation_kind_mismatch: orchestration session {} obligation {} is not follow_up_required",
+                orchestration_session_id,
+                obligation_id
+            );
+        }
+        if !obligation.is_pending() {
+            if approval {
+                anyhow::bail!(
+                    "approval_obligation_already_resolved: orchestration session {} approval obligation {} is already closed",
+                    orchestration_session_id,
+                    obligation_id
+                );
+            }
+            anyhow::bail!(
+                "follow_up_obligation_already_resolved: orchestration session {} follow-up obligation {} is already closed",
+                orchestration_session_id,
+                obligation_id
+            );
+        }
+        if obligation.source_participant_id.as_deref() != Some(target_participant_id) {
+            let prefix = if approval { "approval" } else { "follow_up" };
+            anyhow::bail!(
+                "{}_obligation_target_mismatch: orchestration session {} {} obligation {} does not bind retained worker {}",
+                prefix,
+                orchestration_session_id,
+                if approval { "approval" } else { "follow-up" },
+                obligation_id,
+                target_participant_id
+            );
+        }
+        if obligation.target_backend_id.as_deref() != Some(target_backend_id) {
+            let prefix = if approval { "approval" } else { "follow_up" };
+            anyhow::bail!(
+                "{}_obligation_backend_mismatch: orchestration session {} {} obligation {} does not bind backend {}",
+                prefix,
+                orchestration_session_id,
+                if approval { "approval" } else { "follow-up" },
+                obligation_id,
+                target_backend_id
+            );
+        }
+        if obligation.world_id.as_deref() != Some(world_id)
+            || obligation.world_generation != Some(world_generation)
+        {
+            let prefix = if approval { "approval" } else { "follow_up" };
+            anyhow::bail!(
+                "{}_obligation_world_binding_mismatch: orchestration session {} {} obligation {} no longer matches authoritative world binding {}/{}",
+                prefix,
+                orchestration_session_id,
+                if approval { "approval" } else { "follow-up" },
+                obligation_id,
+                world_id,
+                world_generation
+            );
+        }
+        Ok(obligation)
+    }
+
     pub(crate) fn participants_dir(&self) -> PathBuf {
         self.substrate_home
             .join("run")
@@ -1051,6 +1427,7 @@ impl AgentRuntimeStateStore {
             .join("participants")
     }
 
+    #[cfg(test)]
     fn canonical_participant_path(
         &self,
         orchestration_session_id: &str,
@@ -1060,6 +1437,7 @@ impl AgentRuntimeStateStore {
             .join(format!("{participant_id}.json"))
     }
 
+    #[cfg(test)]
     fn canonical_leases_dir(&self, orchestration_session_id: &str) -> PathBuf {
         self.canonical_session_dir(orchestration_session_id)
             .join("leases")
@@ -1140,6 +1518,7 @@ impl AgentRuntimeStateStore {
             .join(format!("{task_run_id}.json"))
     }
 
+    #[cfg(test)]
     fn canonical_lease_path(
         &self,
         orchestration_session_id: &str,
@@ -1149,16 +1528,7 @@ impl AgentRuntimeStateStore {
             .join(format!("{participant_id}.lease"))
     }
 
-    fn ensure_participants_dir(&self) -> Result<()> {
-        fs::create_dir_all(self.participants_dir())
-            .with_context(|| format!("failed to create {}", self.participants_dir().display()))
-    }
-
-    fn ensure_sessions_dir(&self) -> Result<()> {
-        fs::create_dir_all(self.sessions_dir())
-            .with_context(|| format!("failed to create {}", self.sessions_dir().display()))
-    }
-
+    #[cfg(test)]
     fn participant_path(&self, participant_id: &str) -> PathBuf {
         self.participants_dir()
             .join(format!("{participant_id}.json"))
@@ -1169,6 +1539,7 @@ impl AgentRuntimeStateStore {
             .join(format!("{orchestration_session_id}.json"))
     }
 
+    #[cfg(test)]
     fn lease_path(&self, participant_id: &str) -> PathBuf {
         self.participants_dir()
             .join(format!("{participant_id}.lease"))
@@ -1178,35 +1549,49 @@ impl AgentRuntimeStateStore {
         &self,
         participant: &AgentRuntimeParticipantRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        self.validate_participant_record(participant)?;
-        if let Some(existing) = self.load_participant(&participant.handle.participant_id)? {
-            if !should_persist_participant_snapshot(&existing, participant) {
-                return Ok(());
+        self.with_legacy_snapshot_transaction(|transaction| {
+            self.validate_participant_record(participant)?;
+            if let Some(existing) = self
+                .list_participants_across_sources_transaction(transaction)?
+                .into_iter()
+                .find(|existing| {
+                    existing.handle.participant_id == participant.handle.participant_id
+                })
+            {
+                if !should_persist_participant_snapshot(&existing, participant) {
+                    return Ok(());
+                }
             }
-        }
-        self.write_participant_snapshot(participant)
+            self.write_participant_snapshot(transaction, participant)
+        })
     }
 
     fn write_participant_snapshot(
         &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         participant: &AgentRuntimeParticipantRecord,
     ) -> Result<()> {
-        self.ensure_participants_dir()?;
-        write_atomic_json(
-            &self.participant_path(&participant.handle.participant_id),
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::{
+            Participants, Sessions,
+        };
+        let flat_name = format!("{}.json", participant.handle.participant_id);
+        Self::transaction_write_json(
+            transaction,
+            Participants,
+            &[flat_name.as_str()],
             participant,
         )?;
-        write_atomic_json(
-            &self.canonical_participant_path(
-                &participant.handle.orchestration_session_id,
-                &participant.handle.participant_id,
-            ),
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[
+                participant.handle.orchestration_session_id.as_str(),
+                "participants",
+                flat_name.as_str(),
+            ],
             participant,
         )?;
-        self.persist_lease(participant)
+        self.persist_lease(transaction, participant)
     }
 
     pub(crate) fn load_participant(
@@ -1314,27 +1699,33 @@ impl AgentRuntimeStateStore {
         &self,
         record: ActiveEphemeralWorldTaskRecord,
     ) -> Result<ActiveEphemeralWorldTaskGuard> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        record.validate()?;
-        let path = self.canonical_active_ephemeral_task_path(
-            &record.orchestration_session_id,
-            &record.task_run_id,
-        );
-        if path.exists() {
-            anyhow::bail!(
-                "duplicate_active_task_run_id: active ephemeral task {} is already registered",
-                record.task_run_id
-            );
-        }
-
-        write_atomic_json(&path, &record)?;
-
-        Ok(ActiveEphemeralWorldTaskGuard {
-            store: self.clone(),
-            orchestration_session_id: record.orchestration_session_id.clone(),
-            task_run_id: record.task_run_id.clone(),
+        self.with_legacy_snapshot_transaction(|transaction| {
+            use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+            record.validate()?;
+            let file_name = format!("{}.json", record.task_run_id);
+            let descendants = [
+                record.orchestration_session_id.as_str(),
+                "active-ephemeral-tasks",
+                file_name.as_str(),
+            ];
+            if Self::transaction_read_json::<ActiveEphemeralWorldTaskRecord>(
+                transaction,
+                Sessions,
+                &descendants,
+            )?
+            .is_some()
+            {
+                anyhow::bail!(
+                    "duplicate_active_task_run_id: active ephemeral task {} is already registered",
+                    record.task_run_id
+                );
+            }
+            Self::transaction_write_json(transaction, Sessions, &descendants, &record)?;
+            Ok(ActiveEphemeralWorldTaskGuard {
+                store: self.clone(),
+                orchestration_session_id: record.orchestration_session_id.clone(),
+                task_run_id: record.task_run_id.clone(),
+            })
         })
     }
 
@@ -1413,15 +1804,20 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         task_run_id: &str,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        let path = self.canonical_active_ephemeral_task_path(orchestration_session_id, task_run_id);
-        match fs::remove_file(&path) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err).with_context(|| format!("failed to remove {}", path.display())),
-        }
+        self.with_legacy_snapshot_transaction(|transaction| {
+            use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+            let file_name = format!("{task_run_id}.json");
+            Self::transaction_remove_file(
+                transaction,
+                Sessions,
+                &[
+                    orchestration_session_id,
+                    "active-ephemeral-tasks",
+                    file_name.as_str(),
+                ],
+            )?;
+            Ok(())
+        })
     }
 
     pub(crate) fn invalidate_stale_world_members_for_session(
@@ -1429,43 +1825,36 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         active_generation: u64,
     ) -> Result<Vec<String>> {
-        let mut invalidated_participant_ids = Vec::new();
-        let mut invalidated_participants = Vec::new();
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let mut invalidated_participant_ids = Vec::new();
+            let mut invalidated_participants = Vec::new();
+            for mut participant in self.list_participants_across_sources_transaction(transaction)? {
+                if participant.handle.orchestration_session_id != orchestration_session_id
+                    || participant.handle.role != MEMBER_ROLE
+                    || participant.handle.execution.scope != AgentExecutionScope::World
+                    || !participant.is_authoritative_live()
+                {
+                    continue;
+                }
 
-        for mut participant in self.list_participants_across_sources()? {
-            if participant.handle.orchestration_session_id != orchestration_session_id
-                || participant.handle.role != MEMBER_ROLE
-                || participant.handle.execution.scope != AgentExecutionScope::World
-                || !participant.is_authoritative_live()
-            {
-                continue;
+                let Some(world_generation) = participant.handle.world_generation else {
+                    continue;
+                };
+                if world_generation >= active_generation {
+                    continue;
+                }
+
+                if participant.invalidate_for_world_generation_rollover() {
+                    invalidated_participant_ids.push(participant.handle.participant_id.clone());
+                    invalidated_participants.push(participant);
+                }
             }
-
-            let Some(world_generation) = participant.handle.world_generation else {
-                continue;
-            };
-            if world_generation >= active_generation {
-                continue;
+            for participant in &invalidated_participants {
+                self.validate_participant_record(participant)?;
+                self.write_participant_snapshot(transaction, participant)?;
             }
-
-            if participant.invalidate_for_world_generation_rollover() {
-                invalidated_participant_ids.push(participant.handle.participant_id.clone());
-                invalidated_participants.push(participant);
-            }
-        }
-        if invalidated_participants.is_empty() {
-            return Ok(invalidated_participant_ids);
-        }
-
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        for participant in &invalidated_participants {
-            self.validate_participant_record(participant)?;
-            self.write_participant_snapshot(participant)?;
-        }
-
-        Ok(invalidated_participant_ids)
+            Ok(invalidated_participant_ids)
+        })
     }
 
     pub(crate) fn load_session(
@@ -2030,24 +2419,32 @@ impl AgentRuntimeStateStore {
         closeout: &PreparedInternalApprovalResponseObligationCloseout,
         resolution_note: Option<String>,
     ) -> Result<OrchestrationObligationRecord> {
-        let mut obligation = self.load_exact_pending_approval_obligation_for_continue_target(
-            &closeout.orchestration_session_id,
-            &closeout.target_participant_id,
-            &closeout.target_backend_id,
-            &closeout.world_id,
-            closeout.world_generation,
-            &closeout.approval_obligation_id,
-        )?;
-        let disposition = match closeout.decision {
-            ApprovalResponseDecisionV1::Approve => ApprovalObligationCloseoutDisposition::Resolve,
-            ApprovalResponseDecisionV1::Deny => ApprovalObligationCloseoutDisposition::Dismiss,
-        };
-        let resolved_at = Utc::now();
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let mut obligation = self.load_exact_pending_obligation_transaction(
+                transaction,
+                &closeout.orchestration_session_id,
+                &closeout.approval_obligation_id,
+                OrchestrationObligationKind::ApprovalRequired,
+                (
+                    &closeout.target_participant_id,
+                    &closeout.target_backend_id,
+                    &closeout.world_id,
+                    closeout.world_generation,
+                ),
+            )?;
+            let disposition = match closeout.decision {
+                ApprovalResponseDecisionV1::Approve => {
+                    ApprovalObligationCloseoutDisposition::Resolve
+                }
+                ApprovalResponseDecisionV1::Deny => ApprovalObligationCloseoutDisposition::Dismiss,
+            };
+            let resolved_at = Utc::now();
 
-        obligation.mark_approval_response_closed(disposition, resolution_note, resolved_at);
-        self.persist_obligation(&obligation)?;
+            obligation.mark_approval_response_closed(disposition, resolution_note, resolved_at);
+            self.persist_obligation_unlocked(transaction, &obligation)?;
 
-        Ok(obligation)
+            Ok(obligation)
+        })
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -2100,20 +2497,26 @@ impl AgentRuntimeStateStore {
         closeout: &PreparedInternalClarificationResponseObligationCloseout,
         resolution_note: Option<String>,
     ) -> Result<OrchestrationObligationRecord> {
-        let mut obligation = self.load_exact_pending_follow_up_obligation_for_continue_target(
-            &closeout.orchestration_session_id,
-            &closeout.target_participant_id,
-            &closeout.target_backend_id,
-            &closeout.world_id,
-            closeout.world_generation,
-            &closeout.follow_up_obligation_id,
-        )?;
-        let resolved_at = Utc::now();
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let mut obligation = self.load_exact_pending_obligation_transaction(
+                transaction,
+                &closeout.orchestration_session_id,
+                &closeout.follow_up_obligation_id,
+                OrchestrationObligationKind::FollowUpRequired,
+                (
+                    &closeout.target_participant_id,
+                    &closeout.target_backend_id,
+                    &closeout.world_id,
+                    closeout.world_generation,
+                ),
+            )?;
+            let resolved_at = Utc::now();
 
-        obligation.mark_clarification_response_closed(resolution_note, resolved_at);
-        self.persist_obligation(&obligation)?;
+            obligation.mark_clarification_response_closed(resolution_note, resolved_at);
+            self.persist_obligation_unlocked(transaction, &obligation)?;
 
-        Ok(obligation)
+            Ok(obligation)
+        })
     }
 
     #[cfg(target_os = "linux")]
@@ -2958,34 +3361,43 @@ impl AgentRuntimeStateStore {
         &self,
         session: &OrchestrationSessionRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        self.validate_session_record(session)?;
-        let existing = self.load_authoritative_session(&session.orchestration_session_id)?;
-        if let Some(existing_session) = existing.as_ref() {
-            if !should_persist_orchestration_session_snapshot(existing_session, session) {
-                return Ok(());
+        self.with_legacy_snapshot_transaction(|transaction| {
+            self.validate_session_record(session)?;
+            let existing = self.load_authoritative_session_transaction(
+                transaction,
+                &session.orchestration_session_id,
+            )?;
+            if let Some(existing_session) = existing.as_ref() {
+                if !should_persist_orchestration_session_snapshot(existing_session, session) {
+                    return Ok(());
+                }
             }
-        }
-        let should_log_parked_write =
-            stop_order_probe_should_log_parked_write(existing.as_ref(), session);
-        self.persist_parent_session_snapshot(session)?;
-        if should_log_parked_write {
-            stop_order_probe_log_parked_write(existing.as_ref(), session);
-        }
-        Ok(())
+            let should_log_parked_write =
+                stop_order_probe_should_log_parked_write(existing.as_ref(), session);
+            self.persist_parent_session_snapshot(transaction, session)?;
+            if should_log_parked_write {
+                stop_order_probe_log_parked_write(existing.as_ref(), session);
+            }
+            Ok(())
+        })
     }
 
     #[allow(dead_code)]
     pub(crate) fn persist_inbox_item(&self, item: &DurableInboxItemRecord) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        self.validate_inbox_item_record(item)?;
+        self.with_legacy_snapshot_transaction(|transaction| {
+            self.persist_inbox_item_unlocked(transaction, item)
+        })
+    }
 
+    fn persist_inbox_item_unlocked(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        item: &DurableInboxItemRecord,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        self.validate_inbox_item_record(item)?;
         let mut session = self
-            .load_authoritative_session(&item.orchestration_session_id)?
+            .load_authoritative_session_transaction(transaction, &item.orchestration_session_id)?
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "missing authoritative parent session {} for durable inbox item {}",
@@ -2993,7 +3405,11 @@ impl AgentRuntimeStateStore {
                     item.item_id
                 )
             })?;
-        let existing = self.load_inbox_item(&item.orchestration_session_id, &item.item_id)?;
+        let existing = self.load_inbox_item_transaction(
+            transaction,
+            &item.orchestration_session_id,
+            &item.item_id,
+        )?;
         let next_pending_count = updated_pending_inbox_count(
             session.pending_inbox_count,
             existing
@@ -3003,14 +3419,24 @@ impl AgentRuntimeStateStore {
         )?;
         apply_pending_inbox_count(&mut session, next_pending_count);
 
-        let item_path =
-            self.canonical_inbox_item_path(&item.orchestration_session_id, &item.item_id);
-        write_atomic_json(&item_path, item)?;
-        if let Err(err) = self.persist_parent_session_snapshot(&session) {
-            rollback_inbox_item_write(&item_path, existing.as_ref())?;
+        let file_name = format!("{}.json", item.item_id);
+        let descendants = [
+            item.orchestration_session_id.as_str(),
+            "inbox",
+            file_name.as_str(),
+        ];
+        Self::transaction_write_json(transaction, Sessions, &descendants, item)?;
+        if let Err(err) = self.persist_parent_session_snapshot(transaction, &session) {
+            match existing.as_ref() {
+                Some(previous) => {
+                    Self::transaction_write_json(transaction, Sessions, &descendants, previous)?
+                }
+                None => {
+                    Self::transaction_remove_file(transaction, Sessions, &descendants)?;
+                }
+            }
             return Err(err);
         }
-
         Ok(())
     }
 
@@ -3019,19 +3445,23 @@ impl AgentRuntimeStateStore {
         &self,
         obligation: &OrchestrationObligationRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        self.persist_obligation_unlocked(obligation)
+        self.with_legacy_snapshot_transaction(|transaction| {
+            self.persist_obligation_unlocked(transaction, obligation)
+        })
     }
 
     fn persist_obligation_unlocked(
         &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         obligation: &OrchestrationObligationRecord,
     ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
         self.validate_obligation_record(obligation)?;
         let mut session = self
-            .load_authoritative_session(&obligation.orchestration_session_id)?
+            .load_authoritative_session_transaction(
+                transaction,
+                &obligation.orchestration_session_id,
+            )?
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "missing authoritative parent session {} for orchestration obligation {}",
@@ -3039,15 +3469,18 @@ impl AgentRuntimeStateStore {
                     obligation.obligation_id
                 )
             })?;
-        let existing = self.load_obligation(
+        let existing = self.load_obligation_transaction(
+            transaction,
             &obligation.orchestration_session_id,
             &obligation.obligation_id,
         )?;
-        let existing_compat_item = self.load_inbox_item(
+        let existing_compat_item = self.load_inbox_item_transaction(
+            transaction,
             &obligation.orchestration_session_id,
             &obligation.obligation_id,
         )?;
-        let mut obligations = self.list_obligations(&obligation.orchestration_session_id)?;
+        let mut obligations =
+            self.list_obligations_transaction(transaction, &obligation.orchestration_session_id)?;
         obligations.retain(|current| current.obligation_id != obligation.obligation_id);
         obligations.push(obligation.clone());
 
@@ -3059,22 +3492,45 @@ impl AgentRuntimeStateStore {
             self.validate_inbox_item_record(item)?;
         }
 
-        let obligation_path = self.canonical_obligation_path(
-            &obligation.orchestration_session_id,
-            &obligation.obligation_id,
-        );
-        let compatibility_item_path = self.canonical_inbox_item_path(
-            &obligation.orchestration_session_id,
-            &obligation.obligation_id,
-        );
-        write_atomic_json(&obligation_path, obligation)?;
+        let file_name = format!("{}.json", obligation.obligation_id);
+        let obligation_descendants = [
+            obligation.orchestration_session_id.as_str(),
+            "obligations",
+            file_name.as_str(),
+        ];
+        let inbox_descendants = [
+            obligation.orchestration_session_id.as_str(),
+            "inbox",
+            file_name.as_str(),
+        ];
+        Self::transaction_write_json(transaction, Sessions, &obligation_descendants, obligation)?;
         if let Some(item) = projected_compat_item.as_ref() {
-            write_atomic_json(&compatibility_item_path, item)?;
+            Self::transaction_write_json(transaction, Sessions, &inbox_descendants, item)?;
         }
-        if let Err(err) = self.persist_parent_session_snapshot(&session) {
-            rollback_obligation_write(&obligation_path, existing.as_ref())?;
+        if let Err(err) = self.persist_parent_session_snapshot(transaction, &session) {
+            match existing.as_ref() {
+                Some(previous) => Self::transaction_write_json(
+                    transaction,
+                    Sessions,
+                    &obligation_descendants,
+                    previous,
+                )?,
+                None => {
+                    Self::transaction_remove_file(transaction, Sessions, &obligation_descendants)?;
+                }
+            }
             if projected_compat_item.is_some() {
-                rollback_inbox_item_write(&compatibility_item_path, existing_compat_item.as_ref())?;
+                match existing_compat_item.as_ref() {
+                    Some(previous) => Self::transaction_write_json(
+                        transaction,
+                        Sessions,
+                        &inbox_descendants,
+                        previous,
+                    )?,
+                    None => {
+                        Self::transaction_remove_file(transaction, Sessions, &inbox_descendants)?;
+                    }
+                }
             }
             return Err(err);
         }
@@ -3095,23 +3551,54 @@ impl AgentRuntimeStateStore {
         write_atomic_json(&self.host_inbox_record_path(&record.record_id)?, record)
     }
 
-    fn mark_host_inbox_record_failed_closed_unlocked(
+    fn host_inbox_record_file_name(record_id: &str) -> Result<String> {
+        HostInboxRecord::validate_record_id(record_id)?;
+        Ok(format!("{record_id}.json"))
+    }
+
+    fn load_host_inbox_record_transaction(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        record_id: &str,
+        artifact_label: &str,
+    ) -> Result<Option<HostInboxRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::HostInbox;
+        let file_name = Self::host_inbox_record_file_name(record_id)?;
+        transaction
+            .read_file(HostInbox, &[file_name.as_str()])
+            .context("read retained host inbox record")?
+            .map(|bytes| {
+                serde_json::from_slice(&bytes)
+                    .with_context(|| format!("failed to parse {artifact_label}"))
+            })
+            .transpose()
+    }
+
+    fn persist_host_inbox_record_transaction(
         &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        record: &HostInboxRecord,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::HostInbox;
+        self.validate_host_inbox_record(record)?;
+        let file_name = Self::host_inbox_record_file_name(&record.record_id)?;
+        Self::transaction_write_json(transaction, HostInbox, &[file_name.as_str()], record)
+    }
+
+    fn mark_host_inbox_record_failed_closed_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         record: &mut HostInboxRecord,
         reason: impl Into<String>,
         failed_closed_at: chrono::DateTime<Utc>,
     ) -> Result<HostInboxRecord> {
         record.mark_failed_closed(reason, failed_closed_at);
-        self.persist_host_inbox_record_unlocked(record)?;
+        self.persist_host_inbox_record_transaction(transaction, record)?;
         Ok(record.clone())
     }
 
-    fn load_host_inbox_record_artifact(&self, path: &Path) -> Result<Option<HostInboxRecord>> {
-        read_regular_json_if_exists::<HostInboxRecord>(path)
-    }
-
-    fn synthesize_failed_closed_host_inbox_record(
+    fn synthesize_failed_closed_host_inbox_record_transaction(
         &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         record_id: &str,
         reason: impl Into<String>,
         failed_closed_at: chrono::DateTime<Utc>,
@@ -3129,8 +3616,12 @@ impl AgentRuntimeStateStore {
         record.created_at = failed_closed_at;
         record.ingress_received_at = failed_closed_at;
         record.mark_failed_closed(reason, failed_closed_at);
-        self.persist_host_inbox_record_unlocked(&record)?;
+        self.persist_host_inbox_record_transaction(transaction, &record)?;
         Ok(record)
+    }
+
+    fn load_host_inbox_record_artifact(&self, path: &Path) -> Result<Option<HostInboxRecord>> {
+        read_regular_json_if_exists::<HostInboxRecord>(path)
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -3227,18 +3718,18 @@ impl AgentRuntimeStateStore {
     fn validate_host_inbox_record_artifact_identity(
         record: &HostInboxRecord,
         expected_record_id: &str,
-        path: &Path,
+        artifact_label: &str,
     ) -> Result<()> {
         if record.record_id.is_empty() {
             anyhow::bail!(
                 "host inbox artifact {} is missing required record_id",
-                path.display()
+                artifact_label
             );
         }
         if record.record_id != expected_record_id {
             anyhow::bail!(
                 "host inbox artifact {} stored mismatched record_id {}",
-                path.display(),
+                artifact_label,
                 record.record_id
             );
         }
@@ -3252,22 +3743,29 @@ impl AgentRuntimeStateStore {
         record_id: &str,
         local_host_id: &str,
     ) -> Result<HostInboxRecord> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let artifact_label = self
+            .host_inbox_dir()
+            .join(format!("{record_id}.json"))
+            .display()
+            .to_string();
+        self.with_legacy_snapshot_transaction(|transaction| {
         if local_host_id.trim().is_empty() {
             anyhow::bail!("host inbox materialization requires non-empty local_host_id");
         }
 
-        let path = self.host_inbox_record_path(record_id)?;
-        let Some(mut record) = (match self.load_host_inbox_record_artifact(&path) {
+        let Some(mut record) = (match Self::load_host_inbox_record_transaction(
+            transaction,
+            record_id,
+            &artifact_label,
+        ) {
             Ok(record) => record,
             Err(err)
                 if err
                     .chain()
                     .any(|cause| cause.downcast_ref::<serde_json::Error>().is_some()) =>
             {
-                return self.synthesize_failed_closed_host_inbox_record(
+                return self.synthesize_failed_closed_host_inbox_record_transaction(
+                    transaction,
                     record_id,
                     format!("malformed_host_inbox_artifact: {err}"),
                     Utc::now(),
@@ -3278,10 +3776,11 @@ impl AgentRuntimeStateStore {
             anyhow::bail!("host_inbox_record_not_found: no host inbox record {record_id}");
         };
         if let Err(err) =
-            Self::validate_host_inbox_record_artifact_identity(&record, record_id, &path)
+            Self::validate_host_inbox_record_artifact_identity(&record, record_id, &artifact_label)
         {
             record.record_id = record_id.to_string();
-            return self.mark_host_inbox_record_failed_closed_unlocked(
+            return self.mark_host_inbox_record_failed_closed_transaction(
+                transaction,
                 &mut record,
                 err.to_string(),
                 Utc::now(),
@@ -3291,7 +3790,8 @@ impl AgentRuntimeStateStore {
         match record.materialization_state {
             HostInboxMaterializationState::Materialized => {
                 if let Err(err) = self.validate_host_inbox_record(&record) {
-                    return self.mark_host_inbox_record_failed_closed_unlocked(
+                    return self.mark_host_inbox_record_failed_closed_transaction(
+                        transaction,
                         &mut record,
                         err.to_string(),
                         Utc::now(),
@@ -3300,7 +3800,8 @@ impl AgentRuntimeStateStore {
                 record.ensure_targets_local_host(local_host_id)?;
                 let record_id = record.record_id.clone();
                 let Some(obligation_id) = record.materialized_obligation_id.as_deref() else {
-                    return self.mark_host_inbox_record_failed_closed_unlocked(
+                    return self.mark_host_inbox_record_failed_closed_transaction(
+                        transaction,
                         &mut record,
                         format!(
                             "materialized_host_inbox_record_missing_obligation: host inbox record {} is missing obligation linkage",
@@ -3311,9 +3812,14 @@ impl AgentRuntimeStateStore {
                 };
                 let obligation_id = obligation_id.to_string();
                 let Some(obligation) =
-                    self.load_obligation(&record.orchestration_session_id, &obligation_id)?
+                    self.load_obligation_transaction(
+                        transaction,
+                        &record.orchestration_session_id,
+                        &obligation_id,
+                    )?
                 else {
-                    return self.mark_host_inbox_record_failed_closed_unlocked(
+                    return self.mark_host_inbox_record_failed_closed_transaction(
+                        transaction,
                         &mut record,
                         format!(
                             "materialized_host_inbox_record_missing_obligation: host inbox record {} references missing obligation {}",
@@ -3323,7 +3829,8 @@ impl AgentRuntimeStateStore {
                     );
                 };
                 if !record.matches_materialized_obligation(&obligation) {
-                    return self.mark_host_inbox_record_failed_closed_unlocked(
+                    return self.mark_host_inbox_record_failed_closed_transaction(
+                        transaction,
                         &mut record,
                         format!(
                             "materialized_host_inbox_record_mismatch: host inbox record {} no longer matches obligation {}",
@@ -3336,7 +3843,8 @@ impl AgentRuntimeStateStore {
             }
             HostInboxMaterializationState::FailedClosed => {
                 if let Err(err) = self.validate_host_inbox_record(&record) {
-                    return self.mark_host_inbox_record_failed_closed_unlocked(
+                    return self.mark_host_inbox_record_failed_closed_transaction(
+                        transaction,
                         &mut record,
                         err.to_string(),
                         Utc::now(),
@@ -3353,12 +3861,15 @@ impl AgentRuntimeStateStore {
         {
             let failed_closed_at = Utc::now();
             record.mark_failed_closed(err.to_string(), failed_closed_at);
-            self.persist_host_inbox_record_unlocked(&record)?;
+            self.persist_host_inbox_record_transaction(transaction, &record)?;
             return Ok(record);
         }
 
         if self
-            .load_authoritative_session(&record.orchestration_session_id)?
+            .load_authoritative_session_transaction(
+                transaction,
+                &record.orchestration_session_id,
+            )?
             .is_none()
         {
             return Ok(record);
@@ -3366,8 +3877,11 @@ impl AgentRuntimeStateStore {
 
         let obligation_id = record.local_obligation_id();
         let materialized_at = Utc::now();
-        let obligation = match self
-            .load_obligation(&record.orchestration_session_id, &obligation_id)?
+        let obligation = match self.load_obligation_transaction(
+            transaction,
+            &record.orchestration_session_id,
+            &obligation_id,
+        )?
         {
             Some(existing) => {
                 if !record.matches_materialized_obligation(&existing) {
@@ -3378,22 +3892,23 @@ impl AgentRuntimeStateStore {
                         ),
                         materialized_at,
                     );
-                    self.persist_host_inbox_record_unlocked(&record)?;
+                    self.persist_host_inbox_record_transaction(transaction, &record)?;
                     return Ok(record);
                 }
                 existing
             }
             None => {
                 let obligation = record.materialize_as_local_obligation(materialized_at)?;
-                self.persist_obligation_unlocked(&obligation)?;
+                self.persist_obligation_unlocked(transaction, &obligation)?;
                 obligation
             }
         };
 
         record.mark_materialized(obligation.obligation_id.clone(), materialized_at);
-        self.persist_host_inbox_record_unlocked(&record)?;
+        self.persist_host_inbox_record_transaction(transaction, &record)?;
 
         Ok(record)
+        })
     }
 
     #[allow(dead_code)]
@@ -3518,7 +4033,11 @@ impl AgentRuntimeStateStore {
         let Some(record) = self.load_host_inbox_record_artifact(&path)? else {
             return Ok(None);
         };
-        Self::validate_host_inbox_record_artifact_identity(&record, record_id, &path)?;
+        Self::validate_host_inbox_record_artifact_identity(
+            &record,
+            record_id,
+            &path.display().to_string(),
+        )?;
 
         Ok(Some(record))
     }
@@ -3546,7 +4065,7 @@ impl AgentRuntimeStateStore {
             Self::validate_host_inbox_record_artifact_identity(
                 &record,
                 &expected_record_id,
-                &path,
+                &path.display().to_string(),
             )?;
             self.validate_host_inbox_record(&record)
                 .with_context(|| format!("invalid host inbox record in {}", path.display()))?;
@@ -3733,48 +4252,48 @@ impl AgentRuntimeStateStore {
         if router_identity.trim().is_empty() {
             anyhow::bail!("router-owned auto-attach claims must include a router_identity");
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        let Some(record) = self.load_session(orchestration_session_id)? else {
-            return Ok(SessionAutoAttachClaim::NoCandidate {
-                reason: "missing_session",
-            });
-        };
-        let readiness =
-            classify_router_auto_attach_session_readiness(&record, orchestration_session_id);
-        if let RouterAutoAttachSessionReadiness::NoCandidate { reason } = readiness {
-            return Ok(SessionAutoAttachClaim::NoCandidate { reason });
-        }
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let Some(record) =
+                self.load_session_transaction(transaction, orchestration_session_id)?
+            else {
+                return Ok(SessionAutoAttachClaim::NoCandidate {
+                    reason: "missing_session",
+                });
+            };
+            let readiness =
+                classify_router_auto_attach_session_readiness(&record, orchestration_session_id);
+            if let RouterAutoAttachSessionReadiness::NoCandidate { reason } = readiness {
+                return Ok(SessionAutoAttachClaim::NoCandidate { reason });
+            }
 
-        let obligations = self.list_obligations(orchestration_session_id)?;
-        if let Some(obligation_id) = claimed_obligation_id(&obligations)? {
-            return Ok(SessionAutoAttachClaim::AlreadyClaimed {
-                obligation_id: obligation_id.to_string(),
-            });
-        }
-        let matching_obligations = obligations
-            .into_iter()
-            .filter(|obligation| matcher(obligation))
-            .collect::<Vec<_>>();
-        let Some(candidate) = select_attach_candidate(&matching_obligations) else {
-            return Ok(SessionAutoAttachClaim::NoCandidate {
-                reason: no_candidate_reason,
-            });
-        };
+            let obligations =
+                self.list_obligations_transaction(transaction, orchestration_session_id)?;
+            if let Some(obligation_id) = claimed_obligation_id(&obligations)? {
+                return Ok(SessionAutoAttachClaim::AlreadyClaimed {
+                    obligation_id: obligation_id.to_string(),
+                });
+            }
+            let matching_obligations = obligations
+                .into_iter()
+                .filter(|obligation| matcher(obligation))
+                .collect::<Vec<_>>();
+            let Some(candidate) = select_attach_candidate(&matching_obligations) else {
+                return Ok(SessionAutoAttachClaim::NoCandidate {
+                    reason: no_candidate_reason,
+                });
+            };
 
-        let mut claimed = candidate.clone();
-        claimed.mark_attach_claimed(router_identity, Utc::now());
-        self.validate_obligation_record(&claimed)?;
-        let path = self
-            .canonical_obligation_path(&claimed.orchestration_session_id, &claimed.obligation_id);
-        write_atomic_json(&path, &claimed)?;
+            let mut claimed = candidate.clone();
+            claimed.mark_attach_claimed(router_identity, Utc::now());
+            self.validate_obligation_record(&claimed)?;
+            Self::write_obligation_transaction(transaction, &claimed)?;
 
-        Ok(SessionAutoAttachClaim::Claimed {
-            obligation_id: claimed.obligation_id,
-            attach_claim_owner: claimed
-                .attach_claim_owner
-                .expect("mark_attach_claimed must set attach_claim_owner"),
+            Ok(SessionAutoAttachClaim::Claimed {
+                obligation_id: claimed.obligation_id,
+                attach_claim_owner: claimed
+                    .attach_claim_owner
+                    .expect("mark_attach_claimed must set attach_claim_owner"),
+            })
         })
     }
 
@@ -3788,59 +4307,57 @@ impl AgentRuntimeStateStore {
                 "session attach restoration must include an explanation-ready completion reason"
             );
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        let Some(record) = self.load_session(orchestration_session_id)? else {
-            return Ok(SessionAutoAttachSettleResult::default());
-        };
-        if record.session.posture != OrchestrationSessionPosture::ActiveAttached {
-            return Ok(SessionAutoAttachSettleResult::default());
-        }
-
-        let obligations = self.list_obligations(orchestration_session_id)?;
-        let _ = claimed_obligation_id(&obligations)?;
-
-        let mut result = SessionAutoAttachSettleResult::default();
-        let settled_at = Utc::now();
-        for mut obligation in obligations {
-            if !obligation.is_pending() {
-                continue;
-            }
-
-            let changed = match obligation.attach_state {
-                OrchestrationObligationAttachState::Claimed => {
-                    obligation.mark_attach_satisfied(completion_reason, settled_at);
-                    result
-                        .satisfied_obligation_ids
-                        .push(obligation.obligation_id.clone());
-                    true
-                }
-                OrchestrationObligationAttachState::Eligible => {
-                    obligation.mark_attach_superseded(completion_reason, settled_at);
-                    result
-                        .superseded_obligation_ids
-                        .push(obligation.obligation_id.clone());
-                    true
-                }
-                OrchestrationObligationAttachState::NotEligible
-                | OrchestrationObligationAttachState::Satisfied
-                | OrchestrationObligationAttachState::FailedClosed
-                | OrchestrationObligationAttachState::Superseded => false,
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let Some(record) =
+                self.load_session_transaction(transaction, orchestration_session_id)?
+            else {
+                return Ok(SessionAutoAttachSettleResult::default());
             };
-            if !changed {
-                continue;
+            if record.session.posture != OrchestrationSessionPosture::ActiveAttached {
+                return Ok(SessionAutoAttachSettleResult::default());
             }
 
-            self.validate_obligation_record(&obligation)?;
-            let path = self.canonical_obligation_path(
-                &obligation.orchestration_session_id,
-                &obligation.obligation_id,
-            );
-            write_atomic_json(&path, &obligation)?;
-        }
+            let obligations =
+                self.list_obligations_transaction(transaction, orchestration_session_id)?;
+            let _ = claimed_obligation_id(&obligations)?;
 
-        Ok(result)
+            let mut result = SessionAutoAttachSettleResult::default();
+            let settled_at = Utc::now();
+            for mut obligation in obligations {
+                if !obligation.is_pending() {
+                    continue;
+                }
+
+                let changed = match obligation.attach_state {
+                    OrchestrationObligationAttachState::Claimed => {
+                        obligation.mark_attach_satisfied(completion_reason, settled_at);
+                        result
+                            .satisfied_obligation_ids
+                            .push(obligation.obligation_id.clone());
+                        true
+                    }
+                    OrchestrationObligationAttachState::Eligible => {
+                        obligation.mark_attach_superseded(completion_reason, settled_at);
+                        result
+                            .superseded_obligation_ids
+                            .push(obligation.obligation_id.clone());
+                        true
+                    }
+                    OrchestrationObligationAttachState::NotEligible
+                    | OrchestrationObligationAttachState::Satisfied
+                    | OrchestrationObligationAttachState::FailedClosed
+                    | OrchestrationObligationAttachState::Superseded => false,
+                };
+                if !changed {
+                    continue;
+                }
+
+                self.validate_obligation_record(&obligation)?;
+                Self::write_obligation_transaction(transaction, &obligation)?;
+            }
+
+            Ok(result)
+        })
     }
 
     pub(crate) fn release_session_auto_attach_claim(
@@ -3855,29 +4372,27 @@ impl AgentRuntimeStateStore {
         if attach_claim_owner.trim().is_empty() {
             anyhow::bail!("releasing a session auto-attach claim requires attach_claim_owner");
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let Some(mut obligation) = self.load_obligation_transaction(
+                transaction,
+                orchestration_session_id,
+                obligation_id,
+            )?
+            else {
+                return Ok(false);
+            };
+            if !obligation.is_pending()
+                || obligation.attach_state != OrchestrationObligationAttachState::Claimed
+                || obligation.attach_claim_owner.as_deref() != Some(attach_claim_owner)
+            {
+                return Ok(false);
+            }
 
-        let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)?
-        else {
-            return Ok(false);
-        };
-        if !obligation.is_pending()
-            || obligation.attach_state != OrchestrationObligationAttachState::Claimed
-            || obligation.attach_claim_owner.as_deref() != Some(attach_claim_owner)
-        {
-            return Ok(false);
-        }
-
-        obligation.release_attach_claim(Utc::now());
-        self.validate_obligation_record(&obligation)?;
-        let path = self.canonical_obligation_path(
-            &obligation.orchestration_session_id,
-            &obligation.obligation_id,
-        );
-        write_atomic_json(&path, &obligation)?;
-        Ok(true)
+            obligation.release_attach_claim(Utc::now());
+            self.validate_obligation_record(&obligation)?;
+            Self::write_obligation_transaction(transaction, &obligation)?;
+            Ok(true)
+        })
     }
 
     pub(crate) fn settle_exact_session_auto_attach_obligation_failed_closed(
@@ -3896,36 +4411,34 @@ impl AgentRuntimeStateStore {
                 "exact session auto-attach fail-closed settlement must include an explanation-ready completion reason"
             );
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let Some(mut obligation) = self.load_obligation_transaction(
+                transaction,
+                orchestration_session_id,
+                obligation_id,
+            )?
+            else {
+                return Ok(SessionAutoAttachSettleResult::default());
+            };
+            if !obligation.is_pending()
+                || !matches!(
+                    obligation.attach_state,
+                    OrchestrationObligationAttachState::Eligible
+                        | OrchestrationObligationAttachState::Claimed
+                )
+            {
+                return Ok(SessionAutoAttachSettleResult::default());
+            }
 
-        let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)?
-        else {
-            return Ok(SessionAutoAttachSettleResult::default());
-        };
-        if !obligation.is_pending()
-            || !matches!(
-                obligation.attach_state,
-                OrchestrationObligationAttachState::Eligible
-                    | OrchestrationObligationAttachState::Claimed
-            )
-        {
-            return Ok(SessionAutoAttachSettleResult::default());
-        }
+            let settled_at = Utc::now();
+            obligation.mark_attach_failed_closed(completion_reason, settled_at);
+            self.validate_obligation_record(&obligation)?;
+            Self::write_obligation_transaction(transaction, &obligation)?;
 
-        let settled_at = Utc::now();
-        obligation.mark_attach_failed_closed(completion_reason, settled_at);
-        self.validate_obligation_record(&obligation)?;
-        let path = self.canonical_obligation_path(
-            &obligation.orchestration_session_id,
-            &obligation.obligation_id,
-        );
-        write_atomic_json(&path, &obligation)?;
-
-        Ok(SessionAutoAttachSettleResult {
-            failed_closed_obligation_ids: vec![obligation.obligation_id],
-            ..SessionAutoAttachSettleResult::default()
+            Ok(SessionAutoAttachSettleResult {
+                failed_closed_obligation_ids: vec![obligation.obligation_id],
+                ..SessionAutoAttachSettleResult::default()
+            })
         })
     }
 
@@ -3939,47 +4452,42 @@ impl AgentRuntimeStateStore {
                 "session auto-attach fail-closed settlement must include an explanation-ready completion reason"
             );
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let obligations =
+                self.list_obligations_transaction(transaction, orchestration_session_id)?;
+            let _ = claimed_obligation_id(&obligations)?;
 
-        let obligations = self.list_obligations(orchestration_session_id)?;
-        let _ = claimed_obligation_id(&obligations)?;
-
-        let mut result = SessionAutoAttachSettleResult::default();
-        let settled_at = Utc::now();
-        for mut obligation in obligations {
-            if !obligation.is_pending() {
-                continue;
-            }
-
-            let changed = match obligation.attach_state {
-                OrchestrationObligationAttachState::Claimed
-                | OrchestrationObligationAttachState::Eligible => {
-                    obligation.mark_attach_failed_closed(completion_reason, settled_at);
-                    result
-                        .failed_closed_obligation_ids
-                        .push(obligation.obligation_id.clone());
-                    true
+            let mut result = SessionAutoAttachSettleResult::default();
+            let settled_at = Utc::now();
+            for mut obligation in obligations {
+                if !obligation.is_pending() {
+                    continue;
                 }
-                OrchestrationObligationAttachState::NotEligible
-                | OrchestrationObligationAttachState::Satisfied
-                | OrchestrationObligationAttachState::FailedClosed
-                | OrchestrationObligationAttachState::Superseded => false,
-            };
-            if !changed {
-                continue;
+
+                let changed = match obligation.attach_state {
+                    OrchestrationObligationAttachState::Claimed
+                    | OrchestrationObligationAttachState::Eligible => {
+                        obligation.mark_attach_failed_closed(completion_reason, settled_at);
+                        result
+                            .failed_closed_obligation_ids
+                            .push(obligation.obligation_id.clone());
+                        true
+                    }
+                    OrchestrationObligationAttachState::NotEligible
+                    | OrchestrationObligationAttachState::Satisfied
+                    | OrchestrationObligationAttachState::FailedClosed
+                    | OrchestrationObligationAttachState::Superseded => false,
+                };
+                if !changed {
+                    continue;
+                }
+
+                self.validate_obligation_record(&obligation)?;
+                Self::write_obligation_transaction(transaction, &obligation)?;
             }
 
-            self.validate_obligation_record(&obligation)?;
-            let path = self.canonical_obligation_path(
-                &obligation.orchestration_session_id,
-                &obligation.obligation_id,
-            );
-            write_atomic_json(&path, &obligation)?;
-        }
-
-        Ok(result)
+            Ok(result)
+        })
     }
 
     pub(crate) fn set_orchestration_session_world_binding(
@@ -3988,11 +4496,10 @@ impl AgentRuntimeStateStore {
         world_id: impl Into<String>,
         world_generation: u64,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        session.set_world_binding(world_id, world_generation);
-        self.persist_parent_session_snapshot(session)
+        self.with_legacy_snapshot_transaction(|transaction| {
+            session.set_world_binding(world_id, world_generation);
+            self.persist_parent_session_snapshot(transaction, session)
+        })
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -4204,14 +4711,20 @@ impl AgentRuntimeStateStore {
         &self,
         session: &mut OrchestrationSessionRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
-        session.clear_world_binding();
-        self.persist_parent_session_snapshot(session)
+        self.with_legacy_snapshot_transaction(|transaction| {
+            session.clear_world_binding();
+            self.persist_parent_session_snapshot(transaction, session)
+        })
     }
 
-    fn persist_lease(&self, participant: &AgentRuntimeParticipantRecord) -> Result<()> {
+    fn persist_lease(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        participant: &AgentRuntimeParticipantRecord,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::{
+            Participants, Sessions,
+        };
         let payload = serde_json::json!({
             "participant_id": participant.handle.participant_id,
             "session_handle_id": participant.handle.session_handle_id,
@@ -4222,28 +4735,33 @@ impl AgentRuntimeStateStore {
             "last_heartbeat_at": participant.internal.last_heartbeat_at,
             "terminal_observed_at": participant.internal.terminal_observed_at,
         });
-        write_atomic_json(
-            &self.lease_path(&participant.handle.participant_id),
-            &payload,
-        )?;
-        write_atomic_json(
-            &self.canonical_lease_path(
-                &participant.handle.orchestration_session_id,
-                &participant.handle.participant_id,
-            ),
+        let lease_name = format!("{}.lease", participant.handle.participant_id);
+        Self::transaction_write_json(transaction, Participants, &[lease_name.as_str()], &payload)?;
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[
+                participant.handle.orchestration_session_id.as_str(),
+                "leases",
+                lease_name.as_str(),
+            ],
             &payload,
         )
     }
 
-    fn persist_parent_session_snapshot(&self, session: &OrchestrationSessionRecord) -> Result<()> {
+    fn persist_parent_session_snapshot(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        session: &OrchestrationSessionRecord,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
         self.validate_session_record(session)?;
-        self.ensure_sessions_dir()?;
-        write_atomic_json(
-            &self.orchestration_session_path(&session.orchestration_session_id),
-            session,
-        )?;
-        write_atomic_json(
-            &self.canonical_session_path(&session.orchestration_session_id),
+        let flat_name = format!("{}.json", session.orchestration_session_id);
+        Self::transaction_write_json(transaction, Sessions, &[flat_name.as_str()], session)?;
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[session.orchestration_session_id.as_str(), "session.json"],
             session,
         )
     }
@@ -4728,19 +5246,20 @@ impl AgentRuntimeStateStore {
         if state.is_pending() {
             anyhow::bail!("durable inbox resolution requires a terminal inbox state");
         }
-
-        let mut item = self
-            .load_inbox_item(orchestration_session_id, item_id)?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "durable inbox item {} not found in session {}",
-                    item_id,
-                    orchestration_session_id
-                )
-            })?;
-        item.transition_state(state);
-        self.persist_inbox_item(&item)?;
-        Ok(item)
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let mut item = self
+                .load_inbox_item_transaction(transaction, orchestration_session_id, item_id)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "durable inbox item {} not found in session {}",
+                        item_id,
+                        orchestration_session_id
+                    )
+                })?;
+            item.transition_state(state);
+            self.persist_inbox_item_unlocked(transaction, &item)?;
+            Ok(item)
+        })
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -5006,37 +5525,6 @@ fn compatibility_inbox_item_from_obligation(
         item.resolved_at = obligation.resolved_at.or(Some(obligation.updated_at));
     }
     Some(item)
-}
-
-fn rollback_inbox_item_write(
-    item_path: &Path,
-    previous: Option<&DurableInboxItemRecord>,
-) -> Result<()> {
-    match previous {
-        Some(previous) => write_atomic_json(item_path, previous),
-        None => match fs::remove_file(item_path) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(err) => {
-                Err(err).with_context(|| format!("failed to roll back {}", item_path.display()))
-            }
-        },
-    }
-}
-
-fn rollback_obligation_write(
-    obligation_path: &Path,
-    previous: Option<&OrchestrationObligationRecord>,
-) -> Result<()> {
-    match previous {
-        Some(previous) => write_atomic_json(obligation_path, previous),
-        None => match fs::remove_file(obligation_path) {
-            Ok(()) => Ok(()),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(err) => Err(err)
-                .with_context(|| format!("failed to roll back {}", obligation_path.display())),
-        },
-    }
 }
 
 fn participant_snapshot_freshness(participant: &AgentRuntimeParticipantRecord) -> DateTime<Utc> {
@@ -5855,9 +6343,6 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::{Arc, Barrier};
 
-    use serde_json::{json, Value};
-    use tempfile::TempDir;
-
     use super::*;
     use crate::execution::agent_runtime::{
         host_inbox::HostInboxMaterializationState,
@@ -5868,6 +6353,7 @@ mod tests {
         OrchestrationObligationRecord, OrchestrationObligationReviewState,
         OrchestrationObligationState,
     };
+    use serde_json::{json, Value};
 
     fn descriptor(agent_id: &str, scope: AgentExecutionScope) -> RuntimeSelectionDescriptor {
         RuntimeSelectionDescriptor {
@@ -6165,7 +6651,15 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
-        let temp = TempDir::new().expect("tempdir");
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
         std::env::set_var("SUBSTRATE_HOME", temp.path());
         std::env::set_var(
             SHARED_WORLD_METADATA_ROOT_TEST_ENV,
@@ -6387,6 +6881,288 @@ mod tests {
             assert_eq!(loaded, participant);
             assert!(store.participant_path("ash_roundtrip").exists());
         });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn legacy_session_and_participant_writers_refuse_after_authority_activation() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
+        let store = AgentRuntimeStateStore {
+            substrate_home: temp.path().to_path_buf(),
+        };
+        {
+            let authority_root =
+                crate::execution::agent_runtime::host_session_authority::store::bootstrap(
+                    &store.substrate_home,
+                )
+                .expect("activate authority store");
+            let root_path = store.substrate_home.join("authority-v1/state-root-v1.json");
+            let root_bytes = fs::read(&root_path).expect("read activated root");
+            let recognized_temp = store
+                .substrate_home
+                .join("authority-v1/tmp/root--r2--22222222222222222222222222222222.tmp");
+            let recognized_temp_bytes = b"post-activation recognized temp";
+            fs::write(&recognized_temp, recognized_temp_bytes)
+                .expect("write post-activation recognized temp");
+            fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600))
+                .expect("secure post-activation recognized temp");
+            let participant =
+                live_orchestrator("codex", "sess_writer_exclusion", "ash_writer_exclusion");
+            let session = active_parent(&participant);
+            let active_task = ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_writer_exclusion".into(),
+                task_run_id: "task_writer_exclusion".into(),
+                caller_participant_id: "ash_writer_exclusion".into(),
+                target_backend_id: "cli:codex_world".into(),
+                world_id: "world-writer-exclusion".into(),
+                world_generation: 1,
+            };
+            let inbox_item = DurableInboxItemRecord::new(
+                "sess_writer_exclusion",
+                "item_writer_exclusion",
+                DurableInboxItemKind::ApprovalRequired,
+                None,
+            );
+            let obligation = pending_obligation(
+                "sess_writer_exclusion",
+                "obligation_writer_exclusion",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            let host_inbox = pending_host_inbox_record(
+                "sess_writer_exclusion",
+                "host_writer_exclusion",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            let host_inbox_path = store
+                .host_inbox_record_path(&host_inbox.record_id)
+                .expect("host inbox path");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox directory");
+            write_atomic_json(&host_inbox_path, &host_inbox).expect("seed host inbox record");
+            let host_inbox_bytes = fs::read(&host_inbox_path).expect("read host inbox record");
+
+            assert!(store.persist_participant(&participant).is_err());
+            assert!(store.persist_orchestration_session(&session).is_err());
+            assert!(store
+                .register_active_ephemeral_world_task(active_task)
+                .is_err());
+            assert!(store
+                .remove_active_ephemeral_world_task(
+                    "sess_writer_exclusion",
+                    "task_writer_exclusion",
+                )
+                .is_err());
+            assert!(store.persist_inbox_item(&inbox_item).is_err());
+            assert!(store.persist_obligation(&obligation).is_err());
+            assert!(store
+                .claim_session_auto_attach("sess_writer_exclusion", "router-writer-exclusion")
+                .is_err());
+            assert!(store
+                .settle_session_auto_attach_after_attach_restored(
+                    "sess_writer_exclusion",
+                    "writer exclusion",
+                )
+                .is_err());
+            assert!(store
+                .release_session_auto_attach_claim(
+                    "sess_writer_exclusion",
+                    "obligation_writer_exclusion",
+                    "router-writer-exclusion",
+                )
+                .is_err());
+            assert!(store
+                .settle_exact_session_auto_attach_obligation_failed_closed(
+                    "sess_writer_exclusion",
+                    "obligation_writer_exclusion",
+                    "writer exclusion",
+                )
+                .is_err());
+            assert!(store
+                .settle_session_auto_attach_failed_closed(
+                    "sess_writer_exclusion",
+                    "writer exclusion",
+                )
+                .is_err());
+            let mut binding_session = session.clone();
+            assert!(store
+                .set_orchestration_session_world_binding(
+                    &mut binding_session,
+                    "world-writer-exclusion",
+                    1,
+                )
+                .is_err());
+            assert_eq!(binding_session, session);
+            assert!(store
+                .clear_orchestration_session_world_binding(&mut binding_session)
+                .is_err());
+            assert_eq!(binding_session, session);
+            assert!(store
+                .materialize_host_inbox_record_for_local_host(&host_inbox.record_id, "host-local",)
+                .is_err());
+            assert_eq!(
+                fs::read(&root_path).expect("reread activated root"),
+                root_bytes
+            );
+            assert_eq!(authority_root.root_revision, 1);
+            assert!(!store.participants_dir().exists());
+            assert!(!store.sessions_dir().exists());
+            assert_eq!(
+                fs::read(&host_inbox_path).expect("reread host inbox record"),
+                host_inbox_bytes
+            );
+            assert_eq!(
+                fs::read(&recognized_temp).expect("reread post-activation recognized temp"),
+                recognized_temp_bytes
+            );
+
+            let mut stale_member = live_member(
+                "codex_world",
+                "sess_writer_exclusion",
+                "ash_stale_writer_exclusion",
+                "ash_writer_exclusion",
+            );
+            stale_member.handle.world_generation = Some(1);
+            fs::create_dir_all(store.participants_dir()).expect("seed participants directory");
+            write_atomic_json(
+                &store.participant_path(&stale_member.handle.participant_id),
+                &stale_member,
+            )
+            .expect("seed post-root stale member");
+            let stale_bytes = fs::read(store.participant_path(&stale_member.handle.participant_id))
+                .expect("read seeded stale member");
+            assert!(store
+                .invalidate_stale_world_members_for_session("sess_writer_exclusion", 2)
+                .is_err());
+            assert_eq!(
+                fs::read(store.participant_path(&stale_member.handle.participant_id))
+                    .expect("reread seeded stale member"),
+                stale_bytes
+            );
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn preactivation_state_store_writer_uses_shared_cross_process_root_lock() {
+        use std::io::{BufRead as _, Read as _};
+
+        const CHILD_TEST: &str = "execution::agent_runtime::state_store::tests::preactivation_state_store_writer_uses_shared_cross_process_root_lock";
+        const CHILD_SENTINEL: &str = "A1_LEGACY_WRITER_CHILD_EXECUTED";
+        if let Some(root_path) = std::env::var_os("SUBSTRATE_A1_LEGACY_WRITER_CHILD_ROOT") {
+            std::env::set_var("SUBSTRATE_HOME", &root_path);
+            let store = AgentRuntimeStateStore::new().expect("child state store");
+            println!("{CHILD_SENTINEL}");
+            std::io::stdout().flush().expect("flush child sentinel");
+            let participant = live_orchestrator(
+                "codex",
+                "sess_cross_process_writer",
+                "ash_cross_process_writer",
+            );
+            store
+                .persist_participant(&participant)
+                .expect("child persist participant");
+            println!("writer-complete");
+            return;
+        }
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
+        let authority_guard =
+            crate::execution::agent_runtime::host_session_authority::store::legacy_writer_guard(
+                temp.path(),
+            )
+            .expect("hold shared legacy-writer lock");
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", CHILD_TEST, "--nocapture"])
+            .env("SUBSTRATE_A1_LEGACY_WRITER_CHILD_ROOT", temp.path())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn legacy writer child");
+        let mut stdout = std::io::BufReader::new(child.stdout.take().expect("child stdout"));
+        let mut prefix = String::new();
+        for _ in 0..32 {
+            let mut line = String::new();
+            assert_ne!(
+                stdout.read_line(&mut line).expect("read child output"),
+                0,
+                "child exited before sentinel; output: {prefix}"
+            );
+            prefix.push_str(&line);
+            if line.contains(CHILD_SENTINEL) {
+                break;
+            }
+        }
+        assert!(prefix.contains(CHILD_SENTINEL), "child output: {prefix}");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(child.try_wait().expect("poll blocked child").is_none());
+        assert!(!temp
+            .path()
+            .join("run/agent-hub/participants/ash_cross_process_writer.json")
+            .exists());
+
+        drop(authority_guard);
+        let mut remainder = String::new();
+        stdout
+            .read_to_string(&mut remainder)
+            .expect("read child completion");
+        let status = child.wait().expect("wait for legacy writer child");
+        assert!(status.success());
+        assert!(remainder.contains("writer-complete"));
+        assert!(temp
+            .path()
+            .join("run/agent-hub/participants/ash_cross_process_writer.json")
+            .exists());
+    }
+
+    #[test]
+    fn preactivation_state_store_writer_reconciles_recognized_authority_temp() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
+        let store = AgentRuntimeStateStore {
+            substrate_home: temp.path().to_path_buf(),
+        };
+        drop(
+            crate::execution::agent_runtime::host_session_authority::store::legacy_writer_guard(
+                temp.path(),
+            )
+            .expect("establish preactivation authority lock layout"),
+        );
+        let recognized_temp = temp
+            .path()
+            .join("authority-v1/tmp/root--r2--11111111111111111111111111111111.tmp");
+        fs::write(&recognized_temp, b"interrupted non-authoritative root temp")
+            .expect("write recognized temp");
+        fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600))
+            .expect("secure recognized temp");
+
+        let participant = live_orchestrator("codex", "sess_reconciled_temp", "ash_reconciled_temp");
+        store
+            .persist_participant(&participant)
+            .expect("preactivation writer should reconcile recognized temp");
+
+        assert!(!recognized_temp.exists());
+        assert!(store.participant_path("ash_reconciled_temp").is_file());
     }
 
     #[test]
