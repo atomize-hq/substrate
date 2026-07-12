@@ -4496,10 +4496,16 @@ impl AgentRuntimeStateStore {
         world_id: impl Into<String>,
         world_generation: u64,
     ) -> Result<()> {
-        self.with_legacy_snapshot_transaction(|transaction| {
-            session.set_world_binding(world_id, world_generation);
-            self.persist_parent_session_snapshot(transaction, session)
-        })
+        let world_id = world_id.into();
+        let updated = self.with_legacy_snapshot_transaction(|transaction| {
+            let mut current = self.current_world_binding_session(transaction, session)?;
+            current.set_world_binding(&world_id, world_generation);
+            self.validate_session_record(&current)?;
+            self.persist_parent_session_snapshot(transaction, &current)?;
+            Ok(current)
+        })?;
+        *session = updated;
+        Ok(())
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -4711,10 +4717,40 @@ impl AgentRuntimeStateStore {
         &self,
         session: &mut OrchestrationSessionRecord,
     ) -> Result<()> {
-        self.with_legacy_snapshot_transaction(|transaction| {
-            session.clear_world_binding();
-            self.persist_parent_session_snapshot(transaction, session)
-        })
+        let updated = self.with_legacy_snapshot_transaction(|transaction| {
+            let mut current = self.current_world_binding_session(transaction, session)?;
+            current.clear_world_binding();
+            self.validate_session_record(&current)?;
+            self.persist_parent_session_snapshot(transaction, &current)?;
+            Ok(current)
+        })?;
+        *session = updated;
+        Ok(())
+    }
+
+    fn current_world_binding_session(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        supplied: &OrchestrationSessionRecord,
+    ) -> Result<OrchestrationSessionRecord> {
+        let Some(current) = self.load_authoritative_session_transaction(
+            transaction,
+            &supplied.orchestration_session_id,
+        )?
+        else {
+            return Ok(supplied.clone());
+        };
+
+        let mut expected = current.clone();
+        expected.world_id.clone_from(&supplied.world_id);
+        expected.world_generation = supplied.world_generation;
+        if expected != *supplied {
+            anyhow::bail!(
+                "stale_world_binding_session_snapshot: orchestration session {} changed before world-binding persistence",
+                supplied.orchestration_session_id
+            );
+        }
+        Ok(current)
     }
 
     fn persist_lease(
@@ -10461,6 +10497,85 @@ mod tests {
                 .expect("orchestration session exists");
             assert_eq!(loaded.state, OrchestrationSessionState::Invalidated);
             assert!(loaded.closed_at.is_some());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn set_world_binding_rejects_stale_parent_after_terminal_snapshot() {
+        with_store(|store| {
+            let participant =
+                live_orchestrator("codex", "sess_stale_set_binding", "ash_stale_set_binding");
+            let active = active_parent(&participant);
+            store
+                .persist_orchestration_session(&active)
+                .expect("persist active parent");
+
+            let mut stale = active.clone();
+            let stale_before = stale.clone();
+            let mut invalidated = active.clone();
+            invalidated.transition_state(OrchestrationSessionState::Invalidated);
+            invalidated.mark_terminal("attached control exited");
+            store
+                .persist_orchestration_session(&invalidated)
+                .expect("persist invalidated parent");
+
+            let err = store
+                .set_orchestration_session_world_binding(&mut stale, "world-stale", 9)
+                .expect_err("stale binding set must fail closed");
+            assert!(err
+                .to_string()
+                .contains("stale_world_binding_session_snapshot"));
+            assert_eq!(stale, stale_before, "failed set must not mutate the caller");
+
+            let loaded = store
+                .load_orchestration_session("sess_stale_set_binding")
+                .expect("load parent")
+                .expect("parent exists");
+            assert_eq!(loaded, invalidated, "terminal parent must remain untouched");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn clear_world_binding_rejects_stale_parent_after_terminal_snapshot() {
+        with_store(|store| {
+            let participant = live_orchestrator(
+                "codex",
+                "sess_stale_clear_binding",
+                "ash_stale_clear_binding",
+            );
+            let mut active = active_parent(&participant);
+            active.set_world_binding("world-current", 4);
+            store
+                .persist_orchestration_session(&active)
+                .expect("persist bound active parent");
+
+            let mut stale = active.clone();
+            let stale_before = stale.clone();
+            let mut invalidated = active.clone();
+            invalidated.transition_state(OrchestrationSessionState::Invalidated);
+            invalidated.mark_terminal("attached control exited");
+            store
+                .persist_orchestration_session(&invalidated)
+                .expect("persist invalidated parent");
+
+            let err = store
+                .clear_orchestration_session_world_binding(&mut stale)
+                .expect_err("stale binding clear must fail closed");
+            assert!(err
+                .to_string()
+                .contains("stale_world_binding_session_snapshot"));
+            assert_eq!(
+                stale, stale_before,
+                "failed clear must not mutate the caller"
+            );
+
+            let loaded = store
+                .load_orchestration_session("sess_stale_clear_binding")
+                .expect("load parent")
+                .expect("parent exists");
+            assert_eq!(loaded, invalidated, "terminal parent must remain untouched");
         });
     }
 
