@@ -4,7 +4,7 @@ use std::fs;
 use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -991,6 +991,11 @@ pub(crate) struct AgentRuntimeStateStore {
     substrate_home: PathBuf,
 }
 
+struct LegacySnapshotWriteGuard {
+    _process: MutexGuard<'static, ()>,
+    _authority: super::host_session_authority::store::LegacyWriterGuard,
+}
+
 #[derive(Clone, Debug)]
 struct ResolvedPublicSessionAuthority {
     session: OrchestrationSessionRecord,
@@ -1003,6 +1008,19 @@ impl AgentRuntimeStateStore {
     pub(crate) fn new() -> Result<Self> {
         Ok(Self {
             substrate_home: substrate_paths::substrate_home()?,
+        })
+    }
+
+    fn legacy_snapshot_write_guard(&self) -> Result<LegacySnapshotWriteGuard> {
+        let process = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        let authority =
+            super::host_session_authority::store::legacy_writer_guard(&self.substrate_home)
+                .context("legacy authority writer preflight failed")?;
+        Ok(LegacySnapshotWriteGuard {
+            _process: process,
+            _authority: authority,
         })
     }
 
@@ -1178,9 +1196,7 @@ impl AgentRuntimeStateStore {
         &self,
         participant: &AgentRuntimeParticipantRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         self.validate_participant_record(participant)?;
         if let Some(existing) = self.load_participant(&participant.handle.participant_id)? {
             if !should_persist_participant_snapshot(&existing, participant) {
@@ -1314,9 +1330,7 @@ impl AgentRuntimeStateStore {
         &self,
         record: ActiveEphemeralWorldTaskRecord,
     ) -> Result<ActiveEphemeralWorldTaskGuard> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         record.validate()?;
         let path = self.canonical_active_ephemeral_task_path(
             &record.orchestration_session_id,
@@ -1413,9 +1427,7 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         task_run_id: &str,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         let path = self.canonical_active_ephemeral_task_path(orchestration_session_id, task_run_id);
         match fs::remove_file(&path) {
             Ok(()) => Ok(()),
@@ -1457,9 +1469,7 @@ impl AgentRuntimeStateStore {
             return Ok(invalidated_participant_ids);
         }
 
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         for participant in &invalidated_participants {
             self.validate_participant_record(participant)?;
             self.write_participant_snapshot(participant)?;
@@ -2958,9 +2968,7 @@ impl AgentRuntimeStateStore {
         &self,
         session: &OrchestrationSessionRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         self.validate_session_record(session)?;
         let existing = self.load_authoritative_session(&session.orchestration_session_id)?;
         if let Some(existing_session) = existing.as_ref() {
@@ -2979,9 +2987,7 @@ impl AgentRuntimeStateStore {
 
     #[allow(dead_code)]
     pub(crate) fn persist_inbox_item(&self, item: &DurableInboxItemRecord) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         self.validate_inbox_item_record(item)?;
 
         let mut session = self
@@ -3019,9 +3025,7 @@ impl AgentRuntimeStateStore {
         &self,
         obligation: &OrchestrationObligationRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         self.persist_obligation_unlocked(obligation)
     }
 
@@ -3252,9 +3256,7 @@ impl AgentRuntimeStateStore {
         record_id: &str,
         local_host_id: &str,
     ) -> Result<HostInboxRecord> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         if local_host_id.trim().is_empty() {
             anyhow::bail!("host inbox materialization requires non-empty local_host_id");
         }
@@ -3733,9 +3735,7 @@ impl AgentRuntimeStateStore {
         if router_identity.trim().is_empty() {
             anyhow::bail!("router-owned auto-attach claims must include a router_identity");
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         let Some(record) = self.load_session(orchestration_session_id)? else {
             return Ok(SessionAutoAttachClaim::NoCandidate {
                 reason: "missing_session",
@@ -3788,9 +3788,7 @@ impl AgentRuntimeStateStore {
                 "session attach restoration must include an explanation-ready completion reason"
             );
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         let Some(record) = self.load_session(orchestration_session_id)? else {
             return Ok(SessionAutoAttachSettleResult::default());
         };
@@ -3855,9 +3853,7 @@ impl AgentRuntimeStateStore {
         if attach_claim_owner.trim().is_empty() {
             anyhow::bail!("releasing a session auto-attach claim requires attach_claim_owner");
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
 
         let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)?
         else {
@@ -3896,9 +3892,7 @@ impl AgentRuntimeStateStore {
                 "exact session auto-attach fail-closed settlement must include an explanation-ready completion reason"
             );
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
 
         let Some(mut obligation) = self.load_obligation(orchestration_session_id, obligation_id)?
         else {
@@ -3939,9 +3933,7 @@ impl AgentRuntimeStateStore {
                 "session auto-attach fail-closed settlement must include an explanation-ready completion reason"
             );
         }
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
 
         let obligations = self.list_obligations(orchestration_session_id)?;
         let _ = claimed_obligation_id(&obligations)?;
@@ -3988,9 +3980,7 @@ impl AgentRuntimeStateStore {
         world_id: impl Into<String>,
         world_generation: u64,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         session.set_world_binding(world_id, world_generation);
         self.persist_parent_session_snapshot(session)
     }
@@ -4204,9 +4194,7 @@ impl AgentRuntimeStateStore {
         &self,
         session: &mut OrchestrationSessionRecord,
     ) -> Result<()> {
-        let _write_guard = snapshot_write_lock()
-            .lock()
-            .expect("snapshot write mutex poisoned");
+        let _write_guard = self.legacy_snapshot_write_guard()?;
         session.clear_world_binding();
         self.persist_parent_session_snapshot(session)
     }
@@ -5855,9 +5843,6 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::{Arc, Barrier};
 
-    use serde_json::{json, Value};
-    use tempfile::TempDir;
-
     use super::*;
     use crate::execution::agent_runtime::{
         host_inbox::HostInboxMaterializationState,
@@ -5868,6 +5853,7 @@ mod tests {
         OrchestrationObligationRecord, OrchestrationObligationReviewState,
         OrchestrationObligationState,
     };
+    use serde_json::{json, Value};
 
     fn descriptor(agent_id: &str, scope: AgentExecutionScope) -> RuntimeSelectionDescriptor {
         RuntimeSelectionDescriptor {
@@ -6165,7 +6151,15 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
-        let temp = TempDir::new().expect("tempdir");
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
         std::env::set_var("SUBSTRATE_HOME", temp.path());
         std::env::set_var(
             SHARED_WORLD_METADATA_ROOT_TEST_ENV,
@@ -6387,6 +6381,288 @@ mod tests {
             assert_eq!(loaded, participant);
             assert!(store.participant_path("ash_roundtrip").exists());
         });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn legacy_session_and_participant_writers_refuse_after_authority_activation() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
+        let store = AgentRuntimeStateStore {
+            substrate_home: temp.path().to_path_buf(),
+        };
+        {
+            let authority_root =
+                crate::execution::agent_runtime::host_session_authority::store::bootstrap(
+                    &store.substrate_home,
+                )
+                .expect("activate authority store");
+            let root_path = store.substrate_home.join("authority-v1/state-root-v1.json");
+            let root_bytes = fs::read(&root_path).expect("read activated root");
+            let recognized_temp = store
+                .substrate_home
+                .join("authority-v1/tmp/root--r2--22222222222222222222222222222222.tmp");
+            let recognized_temp_bytes = b"post-activation recognized temp";
+            fs::write(&recognized_temp, recognized_temp_bytes)
+                .expect("write post-activation recognized temp");
+            fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600))
+                .expect("secure post-activation recognized temp");
+            let participant =
+                live_orchestrator("codex", "sess_writer_exclusion", "ash_writer_exclusion");
+            let session = active_parent(&participant);
+            let active_task = ActiveEphemeralWorldTaskRecord {
+                orchestration_session_id: "sess_writer_exclusion".into(),
+                task_run_id: "task_writer_exclusion".into(),
+                caller_participant_id: "ash_writer_exclusion".into(),
+                target_backend_id: "cli:codex_world".into(),
+                world_id: "world-writer-exclusion".into(),
+                world_generation: 1,
+            };
+            let inbox_item = DurableInboxItemRecord::new(
+                "sess_writer_exclusion",
+                "item_writer_exclusion",
+                DurableInboxItemKind::ApprovalRequired,
+                None,
+            );
+            let obligation = pending_obligation(
+                "sess_writer_exclusion",
+                "obligation_writer_exclusion",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            let host_inbox = pending_host_inbox_record(
+                "sess_writer_exclusion",
+                "host_writer_exclusion",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            let host_inbox_path = store
+                .host_inbox_record_path(&host_inbox.record_id)
+                .expect("host inbox path");
+            fs::create_dir_all(store.host_inbox_dir()).expect("create host inbox directory");
+            write_atomic_json(&host_inbox_path, &host_inbox).expect("seed host inbox record");
+            let host_inbox_bytes = fs::read(&host_inbox_path).expect("read host inbox record");
+
+            assert!(store.persist_participant(&participant).is_err());
+            assert!(store.persist_orchestration_session(&session).is_err());
+            assert!(store
+                .register_active_ephemeral_world_task(active_task)
+                .is_err());
+            assert!(store
+                .remove_active_ephemeral_world_task(
+                    "sess_writer_exclusion",
+                    "task_writer_exclusion",
+                )
+                .is_err());
+            assert!(store.persist_inbox_item(&inbox_item).is_err());
+            assert!(store.persist_obligation(&obligation).is_err());
+            assert!(store
+                .claim_session_auto_attach("sess_writer_exclusion", "router-writer-exclusion")
+                .is_err());
+            assert!(store
+                .settle_session_auto_attach_after_attach_restored(
+                    "sess_writer_exclusion",
+                    "writer exclusion",
+                )
+                .is_err());
+            assert!(store
+                .release_session_auto_attach_claim(
+                    "sess_writer_exclusion",
+                    "obligation_writer_exclusion",
+                    "router-writer-exclusion",
+                )
+                .is_err());
+            assert!(store
+                .settle_exact_session_auto_attach_obligation_failed_closed(
+                    "sess_writer_exclusion",
+                    "obligation_writer_exclusion",
+                    "writer exclusion",
+                )
+                .is_err());
+            assert!(store
+                .settle_session_auto_attach_failed_closed(
+                    "sess_writer_exclusion",
+                    "writer exclusion",
+                )
+                .is_err());
+            let mut binding_session = session.clone();
+            assert!(store
+                .set_orchestration_session_world_binding(
+                    &mut binding_session,
+                    "world-writer-exclusion",
+                    1,
+                )
+                .is_err());
+            assert_eq!(binding_session, session);
+            assert!(store
+                .clear_orchestration_session_world_binding(&mut binding_session)
+                .is_err());
+            assert_eq!(binding_session, session);
+            assert!(store
+                .materialize_host_inbox_record_for_local_host(&host_inbox.record_id, "host-local",)
+                .is_err());
+            assert_eq!(
+                fs::read(&root_path).expect("reread activated root"),
+                root_bytes
+            );
+            assert_eq!(authority_root.root_revision, 1);
+            assert!(!store.participants_dir().exists());
+            assert!(!store.sessions_dir().exists());
+            assert_eq!(
+                fs::read(&host_inbox_path).expect("reread host inbox record"),
+                host_inbox_bytes
+            );
+            assert_eq!(
+                fs::read(&recognized_temp).expect("reread post-activation recognized temp"),
+                recognized_temp_bytes
+            );
+
+            let mut stale_member = live_member(
+                "codex_world",
+                "sess_writer_exclusion",
+                "ash_stale_writer_exclusion",
+                "ash_writer_exclusion",
+            );
+            stale_member.handle.world_generation = Some(1);
+            fs::create_dir_all(store.participants_dir()).expect("seed participants directory");
+            write_atomic_json(
+                &store.participant_path(&stale_member.handle.participant_id),
+                &stale_member,
+            )
+            .expect("seed post-root stale member");
+            let stale_bytes = fs::read(store.participant_path(&stale_member.handle.participant_id))
+                .expect("read seeded stale member");
+            assert!(store
+                .invalidate_stale_world_members_for_session("sess_writer_exclusion", 2)
+                .is_err());
+            assert_eq!(
+                fs::read(store.participant_path(&stale_member.handle.participant_id))
+                    .expect("reread seeded stale member"),
+                stale_bytes
+            );
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn preactivation_state_store_writer_uses_shared_cross_process_root_lock() {
+        use std::io::{BufRead as _, Read as _};
+
+        const CHILD_TEST: &str = "execution::agent_runtime::state_store::tests::preactivation_state_store_writer_uses_shared_cross_process_root_lock";
+        const CHILD_SENTINEL: &str = "A1_LEGACY_WRITER_CHILD_EXECUTED";
+        if let Some(root_path) = std::env::var_os("SUBSTRATE_A1_LEGACY_WRITER_CHILD_ROOT") {
+            std::env::set_var("SUBSTRATE_HOME", &root_path);
+            let store = AgentRuntimeStateStore::new().expect("child state store");
+            println!("{CHILD_SENTINEL}");
+            std::io::stdout().flush().expect("flush child sentinel");
+            let participant = live_orchestrator(
+                "codex",
+                "sess_cross_process_writer",
+                "ash_cross_process_writer",
+            );
+            store
+                .persist_participant(&participant)
+                .expect("child persist participant");
+            println!("writer-complete");
+            return;
+        }
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
+        let authority_guard =
+            crate::execution::agent_runtime::host_session_authority::store::legacy_writer_guard(
+                temp.path(),
+            )
+            .expect("hold shared legacy-writer lock");
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", CHILD_TEST, "--nocapture"])
+            .env("SUBSTRATE_A1_LEGACY_WRITER_CHILD_ROOT", temp.path())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn legacy writer child");
+        let mut stdout = std::io::BufReader::new(child.stdout.take().expect("child stdout"));
+        let mut prefix = String::new();
+        for _ in 0..32 {
+            let mut line = String::new();
+            assert_ne!(
+                stdout.read_line(&mut line).expect("read child output"),
+                0,
+                "child exited before sentinel; output: {prefix}"
+            );
+            prefix.push_str(&line);
+            if line.contains(CHILD_SENTINEL) {
+                break;
+            }
+        }
+        assert!(prefix.contains(CHILD_SENTINEL), "child output: {prefix}");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(child.try_wait().expect("poll blocked child").is_none());
+        assert!(!temp
+            .path()
+            .join("run/agent-hub/participants/ash_cross_process_writer.json")
+            .exists());
+
+        drop(authority_guard);
+        let mut remainder = String::new();
+        stdout
+            .read_to_string(&mut remainder)
+            .expect("read child completion");
+        let status = child.wait().expect("wait for legacy writer child");
+        assert!(status.success());
+        assert!(remainder.contains("writer-complete"));
+        assert!(temp
+            .path()
+            .join("run/agent-hub/participants/ash_cross_process_writer.json")
+            .exists());
+    }
+
+    #[test]
+    fn preactivation_state_store_writer_reconciles_recognized_authority_temp() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore test root");
+        let store = AgentRuntimeStateStore {
+            substrate_home: temp.path().to_path_buf(),
+        };
+        drop(
+            crate::execution::agent_runtime::host_session_authority::store::legacy_writer_guard(
+                temp.path(),
+            )
+            .expect("establish preactivation authority lock layout"),
+        );
+        let recognized_temp = temp
+            .path()
+            .join("authority-v1/tmp/root--r2--11111111111111111111111111111111.tmp");
+        fs::write(&recognized_temp, b"interrupted non-authoritative root temp")
+            .expect("write recognized temp");
+        fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600))
+            .expect("secure recognized temp");
+
+        let participant = live_orchestrator("codex", "sess_reconciled_temp", "ash_reconciled_temp");
+        store
+            .persist_participant(&participant)
+            .expect("preactivation writer should reconcile recognized temp");
+
+        assert!(!recognized_temp.exists());
+        assert!(store.participant_path("ash_reconciled_temp").is_file());
     }
 
     #[test]

@@ -8,23 +8,20 @@ pub(super) fn publish_or_join_orphan(
     context: Option<&ObjectVerificationContextV1>,
     nonce_bytes: [u8; 16],
 ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
-    if root.object_index.contains_key(&reference.ref_id) {
-        return Err(BootstrapError("typed object is already authoritative"));
-    }
-    let kind_directory = layout
-        .objects
-        .create_directory(kind_slug(reference.object_kind))
-        .map_err(|_| BootstrapError("open typed object kind directory"))?;
-    let version_directory = kind_directory
-        .create_directory(&format!("v{}", reference.schema_version))
-        .map_err(|_| BootstrapError("open typed object version directory"))?;
+    validate_orphan_candidate(layout, root, reference, bytes, context)?;
+    let existing = existing_orphan_bytes(layout, reference)?;
+    let kind_name = kind_slug(reference.object_kind);
+    let version_name = format!("v{}", reference.schema_version);
     let final_name = format!("{}.obj", reference.ref_id);
-    match version_directory
-        .entry_kind(&final_name)
-        .map_err(|_| BootstrapError("inspect typed object location"))?
-    {
+    match existing {
         None => {
-            verify_object_bytes(layout, root, reference, bytes, context, false)?;
+            let kind_directory = layout
+                .objects
+                .create_directory(kind_name)
+                .map_err(|_| BootstrapError("create typed object kind directory"))?;
+            let version_directory = kind_directory
+                .create_directory(&version_name)
+                .map_err(|_| BootstrapError("create typed object version directory"))?;
             let temp_name = TempNameV1::Object {
                 ref_id: reference.ref_id.clone(),
                 nonce: nonce(nonce_bytes),
@@ -53,20 +50,79 @@ pub(super) fn publish_or_join_orphan(
             verify_object_bytes(layout, root, reference, &published, context, false)?;
             Ok(ObjectPublicationOutcomeV1::PublishedOrphan)
         }
-        Some(EntryKind::RegularFile) => {
-            let existing = version_directory
-                .open_file(&final_name)
-                .map_err(|_| BootstrapError("open existing typed object"))?
-                .read_all()
-                .map_err(|_| BootstrapError("read existing typed object"))?;
+        Some(_) => Ok(ObjectPublicationOutcomeV1::JoinedExactOrphan),
+    }
+}
+
+pub(super) fn validate_orphan_candidate(
+    layout: &StoreLayout<'_>,
+    root: &StateRootV1,
+    reference: &AuthorityObjectRefV1,
+    bytes: &[u8],
+    context: Option<&ObjectVerificationContextV1>,
+) -> Result<(), BootstrapError> {
+    if root.object_index.contains_key(&reference.ref_id) {
+        return Err(BootstrapError("typed object is already authoritative"));
+    }
+    match existing_orphan_bytes(layout, reference)? {
+        None => verify_object_bytes(layout, root, reference, bytes, context, false),
+        Some(existing) => {
             if existing != bytes {
                 return Err(BootstrapError("existing typed object bytes differ"));
             }
-            verify_object_bytes(layout, root, reference, &existing, context, true)?;
-            Ok(ObjectPublicationOutcomeV1::JoinedExactOrphan)
+            verify_object_bytes(layout, root, reference, &existing, context, true)
         }
-        Some(_) => Err(BootstrapError("typed object location is unsafe")),
     }
+}
+
+fn existing_orphan_bytes(
+    layout: &StoreLayout<'_>,
+    reference: &AuthorityObjectRefV1,
+) -> Result<Option<Vec<u8>>, BootstrapError> {
+    let kind_name = kind_slug(reference.object_kind);
+    let version_name = format!("v{}", reference.schema_version);
+    let final_name = format!("{}.obj", reference.ref_id);
+    let existing = match layout
+        .objects
+        .entry_kind(kind_name)
+        .map_err(|_| BootstrapError("inspect typed object kind directory"))?
+    {
+        None => None,
+        Some(EntryKind::Directory) => {
+            let kind_directory = layout
+                .objects
+                .open_directory(kind_name)
+                .map_err(|_| BootstrapError("open typed object kind directory"))?;
+            match kind_directory
+                .entry_kind(&version_name)
+                .map_err(|_| BootstrapError("inspect typed object version directory"))?
+            {
+                None => None,
+                Some(EntryKind::Directory) => {
+                    let version_directory = kind_directory
+                        .open_directory(&version_name)
+                        .map_err(|_| BootstrapError("open typed object version directory"))?;
+                    match version_directory
+                        .entry_kind(&final_name)
+                        .map_err(|_| BootstrapError("inspect typed object location"))?
+                    {
+                        None => None,
+                        Some(EntryKind::RegularFile) => Some(
+                            version_directory
+                                .open_file(&final_name)
+                                .map_err(|_| BootstrapError("open existing typed object"))?
+                                .read_all()
+                                .map_err(|_| BootstrapError("read existing typed object"))?,
+                        ),
+                        Some(_) => return Err(BootstrapError("typed object location is unsafe")),
+                    }
+                }
+                Some(_) => return Err(BootstrapError("typed object version route is unsafe")),
+            }
+        }
+        Some(_) => return Err(BootstrapError("typed object kind route is unsafe")),
+    };
+    Ok(existing)
 }
 
 pub(super) fn verify_object_bytes(

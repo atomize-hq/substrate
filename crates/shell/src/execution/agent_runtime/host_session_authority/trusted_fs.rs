@@ -1,21 +1,39 @@
 use std::fmt;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs::File;
+use std::io;
 
 use super::schema::CanonicalDirectoryV1;
 
 #[derive(Debug)]
-pub(crate) struct TrustedFsError(String);
+pub(crate) struct TrustedFsError {
+    message: String,
+    kind: Option<io::ErrorKind>,
+}
 
 impl TrustedFsError {
     fn new(message: impl Into<String>) -> Self {
-        Self(message.into())
+        Self {
+            message: message.into(),
+            kind: None,
+        }
+    }
+
+    fn from_io(operation: &str, error: io::Error) -> Self {
+        Self {
+            message: format!("{operation}: {error}"),
+            kind: Some(error.kind()),
+        }
+    }
+
+    pub(crate) fn is_already_exists(&self) -> bool {
+        self.kind == Some(io::ErrorKind::AlreadyExists)
     }
 }
 
 impl fmt::Display for TrustedFsError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
+        formatter.write_str(&self.message)
     }
 }
 
@@ -67,6 +85,10 @@ mod platform {
         file: Option<&'a TrustedFile>,
     }
 
+    pub(crate) struct TrustedOwnedFileLock {
+        file: Option<File>,
+    }
+
     impl TrustedFileLock<'_> {
         pub(crate) fn release(mut self) -> Result<(), TrustedFsError> {
             let file = self
@@ -86,6 +108,15 @@ mod platform {
             if let Some(file) = self.file.take() {
                 // SAFETY: descriptor remains live; fd close also releases after any failure.
                 unsafe { libc::flock(file.file.as_raw_fd(), libc::LOCK_UN) };
+            }
+        }
+    }
+
+    impl Drop for TrustedOwnedFileLock {
+        fn drop(&mut self) {
+            if let Some(file) = self.file.take() {
+                // SAFETY: descriptor is live and owns this flock through dup(2).
+                unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
             }
         }
     }
@@ -583,6 +614,18 @@ mod platform {
             })
         }
 
+        pub(crate) fn lock_exclusive_owned(&self) -> Result<TrustedOwnedFileLock, TrustedFsError> {
+            let owned = self
+                .file
+                .try_clone()
+                .map_err(io_error("duplicate trusted lock descriptor"))?;
+            // SAFETY: both descriptors reference the same live open-file description.
+            if unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+                return Err(io_error_value("acquire owned trusted file lock"));
+            }
+            Ok(TrustedOwnedFileLock { file: Some(owned) })
+        }
+
         pub(crate) fn try_lock_exclusive(
             &self,
         ) -> Result<Option<TrustedFileLock<'_>>, TrustedFsError> {
@@ -1021,11 +1064,11 @@ mod platform {
     }
 
     fn io_error(operation: &'static str) -> impl FnOnce(io::Error) -> TrustedFsError {
-        move |error| TrustedFsError::new(format!("{operation}: {error}"))
+        move |error| TrustedFsError::from_io(operation, error)
     }
 
     fn io_error_value(operation: &str) -> TrustedFsError {
-        TrustedFsError::new(format!("{operation}: {}", io::Error::last_os_error()))
+        TrustedFsError::from_io(operation, io::Error::last_os_error())
     }
 
     #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
@@ -1033,6 +1076,20 @@ mod platform {
         use std::os::unix::fs::{symlink, PermissionsExt};
 
         use super::*;
+
+        #[test]
+        fn trusted_fs_errors_distinguish_create_races_from_other_failures() {
+            assert!(TrustedFsError::from_io(
+                "create",
+                io::Error::from(io::ErrorKind::AlreadyExists),
+            )
+            .is_already_exists());
+            assert!(!TrustedFsError::from_io(
+                "create",
+                io::Error::from(io::ErrorKind::PermissionDenied),
+            )
+            .is_already_exists());
+        }
 
         fn safe_test_parent() -> std::path::PathBuf {
             if let Some(explicit) = std::env::var_os("SUBSTRATE_A1_TEST_PARENT") {

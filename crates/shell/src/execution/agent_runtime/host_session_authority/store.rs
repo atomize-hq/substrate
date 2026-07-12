@@ -21,24 +21,71 @@ pub(crate) fn bootstrap(path: &Path) -> Result<StateRootV1, BootstrapError> {
     platform::bootstrap(path)
 }
 
-pub(crate) fn rotate_commitment_key(path: &Path) -> Result<StateRootV1, BootstrapError> {
-    platform::rotate_commitment_key(path)
+pub(crate) fn rotate_commitment_key(
+    path: &Path,
+    expected_root_revision: u64,
+) -> Result<StateRootV1, BootstrapError> {
+    platform::rotate_commitment_key(path, expected_root_revision)
 }
 
 pub(crate) fn retire_commitment_key(
     path: &Path,
     key_id: &str,
+    expected_root_revision: u64,
 ) -> Result<StateRootV1, BootstrapError> {
-    platform::retire_commitment_key(path, key_id)
+    platform::retire_commitment_key(path, key_id, expected_root_revision)
 }
 
 pub(crate) fn prepare_typed_object(
     path: &Path,
+    expected_root_revision: u64,
     reference: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
     bytes: &[u8],
     context: Option<&ObjectVerificationContextV1>,
 ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
-    platform::prepare_typed_object(path, reference, bytes, context)
+    platform::prepare_typed_object(path, expected_root_revision, reference, bytes, context)
+}
+
+pub(crate) fn read_root(path: &Path) -> Result<StateRootV1, BootstrapError> {
+    platform::read_root(path)
+}
+
+pub(crate) fn compare_and_swap_root(
+    path: &Path,
+    expected: &ExpectedRevisionsV1,
+    proposed: &StateRootV1,
+) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+    platform::compare_and_swap_root(path, expected, proposed)
+}
+
+pub(crate) fn legacy_writer_guard(path: &Path) -> Result<LegacyWriterGuard, BootstrapError> {
+    platform::legacy_writer_guard(path)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) struct LegacyWriterGuard {
+    _lock: super::trusted_fs::TrustedOwnedFileLock,
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub(crate) struct LegacyWriterGuard;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExpectedAuthorityRevisionV1 {
+    pub(crate) orchestration_session_id: String,
+    pub(crate) authority_revision: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExpectedRevisionsV1 {
+    pub(crate) root_revision: u64,
+    pub(crate) authority: Option<ExpectedAuthorityRevisionV1>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum TransactionCommitOutcomeV1 {
+    Committed(StateRootV1),
+    JoinedExact(StateRootV1),
 }
 
 #[derive(Clone)]
@@ -108,9 +155,9 @@ mod platform {
     #[cfg(test)]
     use super::LegacyMutationV1;
     use super::{
-        BootstrapClassificationV1, BootstrapError, InitializationCrashPointV1,
+        BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, InitializationCrashPointV1,
         InitializationMaterialV1, KeyLifecycleCrashPointV1, ObjectPublicationOutcomeV1,
-        ObjectVerificationContextV1,
+        ObjectVerificationContextV1, TransactionCommitOutcomeV1,
     };
     use crate::execution::agent_runtime::host_session_authority::canonical_json;
     use crate::execution::agent_runtime::host_session_authority::hash::{
@@ -137,6 +184,7 @@ mod platform {
     };
     use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
         DirectoryEntry, EntryKind, TrustedAuthorityRoot, TrustedDirectory, TrustedFile,
+        TrustedOwnedFileLock,
     };
     use crate::execution::agent_runtime::host_session_authority::validation::CanonicalHashInputV1;
 
@@ -151,60 +199,120 @@ mod platform {
     #[path = "layout.rs"]
     mod layout;
     #[cfg(test)]
-    use layout::validate_resume_identity;
-    use layout::StoreLayout;
+    use layout::{create_or_join_lock, validate_resume_identity};
+    use layout::{LockedClassification, StoreLayout, StoreLayoutLockScope};
     #[path = "key_lifecycle.rs"]
     mod key_lifecycle;
     use key_lifecycle::{retire_commitment_key_with, rotate_commitment_key_with};
     #[path = "object_persistence.rs"]
     mod object_persistence;
     use object_persistence::publish_or_join_orphan;
+    use object_persistence::validate_orphan_candidate;
     use object_persistence::verify_object_bytes;
     #[path = "reachability.rs"]
     mod reachability;
     use reachability::{add_expected_ref, collect_reachable_objects};
+    #[path = "transaction.rs"]
+    mod transaction;
+    use transaction::{
+        compare_and_swap_root_with, with_existing_semantic_preflight, with_semantic_preflight,
+        SemanticPreflightMode,
+    };
 
     pub(super) fn classify(path: &std::path::Path) -> BootstrapClassificationV1 {
         classify_checked(path).unwrap_or(BootstrapClassificationV1::CorruptOrUnsupported)
     }
 
     pub(super) fn bootstrap(path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
-        let root = TrustedAuthorityRoot::open(path)
-            .map_err(|_| BootstrapError("open trusted authority root"))?;
-        root.revalidate()
-            .map_err(|_| BootstrapError("revalidate trusted authority root"))?;
-        let layout = StoreLayout::open(root.directory())
-            .map_err(|_| BootstrapError("open authority store layout"))?;
-        let _lock = layout
-            .root_lock
-            .lock_exclusive()
-            .map_err(|_| BootstrapError("lock authority store root"))?;
-        let material = system_material()?;
-        bootstrap_locked(&layout, root.identity(), material, None)
+        with_semantic_preflight(
+            path,
+            SemanticPreflightMode::AuthorityOperation,
+            |layout, bootstrap_home, observed, _lock| {
+                let material = match observed.classification {
+                    BootstrapClassificationV1::FreshAbsent
+                    | BootstrapClassificationV1::InitializationPending => Some(system_material()?),
+                    BootstrapClassificationV1::ValidExisting
+                    | BootstrapClassificationV1::UnsupportedLegacyState
+                    | BootstrapClassificationV1::CorruptOrUnsupported => None,
+                };
+                bootstrap_locked(layout, bootstrap_home, observed, material, None)
+            },
+        )
     }
 
     pub(super) fn rotate_commitment_key(
         path: &std::path::Path,
+        expected_root_revision: u64,
     ) -> Result<StateRootV1, BootstrapError> {
-        rotate_commitment_key_with(path, None, None)
+        rotate_commitment_key_with(path, expected_root_revision, None, None)
     }
 
     pub(super) fn retire_commitment_key(
         path: &std::path::Path,
         retiring_key_id: &str,
+        expected_root_revision: u64,
     ) -> Result<StateRootV1, BootstrapError> {
         let material = system_material()?;
-        retire_commitment_key_with(path, retiring_key_id, material.root_nonce, None)
+        retire_commitment_key_with(
+            path,
+            retiring_key_id,
+            expected_root_revision,
+            material.root_nonce,
+            None,
+        )
     }
 
     pub(super) fn prepare_typed_object(
         path: &std::path::Path,
+        expected_root_revision: u64,
         reference: &AuthorityObjectRefV1,
         bytes: &[u8],
         context: Option<&ObjectVerificationContextV1>,
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
         let material = system_material()?;
-        prepare_typed_object_with(path, reference, bytes, context, material.key_nonce)
+        prepare_typed_object_with(
+            path,
+            expected_root_revision,
+            reference,
+            bytes,
+            context,
+            material.key_nonce,
+        )
+    }
+
+    pub(super) fn read_root(path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
+        with_existing_semantic_preflight(path, |transaction| Ok(transaction.root.clone()))
+    }
+
+    pub(super) fn compare_and_swap_root(
+        path: &std::path::Path,
+        expected: &ExpectedRevisionsV1,
+        proposed: &StateRootV1,
+    ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+        compare_and_swap_root_with(path, expected, proposed, system_material()?.root_nonce)
+    }
+
+    pub(super) fn legacy_writer_guard(
+        path: &std::path::Path,
+    ) -> Result<super::LegacyWriterGuard, BootstrapError> {
+        with_semantic_preflight(
+            path,
+            SemanticPreflightMode::LegacyWriter,
+            |layout, _, observed, lock| {
+                if observed.authority_classification != BootstrapClassificationV1::FreshAbsent
+                    || !layout
+                        .tmp
+                        .entries()
+                        .map_err(|_| BootstrapError("enumerate authority temps for legacy writer"))?
+                        .is_empty()
+                {
+                    return Err(BootstrapError(
+                        "legacy authority writer is disabled after A1 activation",
+                    ));
+                }
+                Ok(super::LegacyWriterGuard { _lock: lock })
+            },
+        )
     }
 
     #[cfg(test)]
@@ -213,7 +321,8 @@ mod platform {
         material: InitializationMaterialV1,
         stop: Option<KeyLifecycleCrashPointV1>,
     ) -> Result<StateRootV1, BootstrapError> {
-        rotate_commitment_key_with(path, Some(material), stop)
+        let expected_root_revision = read_root(path)?.root_revision;
+        rotate_commitment_key_with(path, expected_root_revision, Some(material), stop)
     }
 
     #[cfg(test)]
@@ -223,7 +332,8 @@ mod platform {
         root_nonce: [u8; 16],
         stop: Option<KeyLifecycleCrashPointV1>,
     ) -> Result<StateRootV1, BootstrapError> {
-        retire_commitment_key_with(path, key_id, root_nonce, stop)
+        let expected_root_revision = read_root(path)?.root_revision;
+        retire_commitment_key_with(path, key_id, expected_root_revision, root_nonce, stop)
     }
 
     #[cfg(test)]
@@ -239,6 +349,14 @@ mod platform {
     }
 
     #[cfg(test)]
+    pub(super) fn validate_exact_retry_expectation_test(
+        expected: &ExpectedRevisionsV1,
+        proposed: &StateRootV1,
+    ) -> Result<(), BootstrapError> {
+        transaction::validate_exact_retry_expectation_test(expected, proposed)
+    }
+
+    #[cfg(test)]
     pub(super) fn publish_object_test(
         path: &std::path::Path,
         reference: &AuthorityObjectRefV1,
@@ -246,31 +364,44 @@ mod platform {
         context: Option<&ObjectVerificationContextV1>,
         nonce_bytes: [u8; 16],
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
-        prepare_typed_object_with(path, reference, bytes, context, nonce_bytes)
+        let expected_root_revision = read_root(path)?.root_revision;
+        prepare_typed_object_with(
+            path,
+            expected_root_revision,
+            reference,
+            bytes,
+            context,
+            nonce_bytes,
+        )
     }
 
     fn prepare_typed_object_with(
         path: &std::path::Path,
+        expected_root_revision: u64,
         reference: &AuthorityObjectRefV1,
         bytes: &[u8],
         context: Option<&ObjectVerificationContextV1>,
         nonce_bytes: [u8; 16],
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
-        let root_handle = TrustedAuthorityRoot::open(path)
-            .map_err(|_| BootstrapError("open trusted authority root"))?;
-        root_handle
-            .revalidate()
-            .map_err(|_| BootstrapError("revalidate trusted authority root"))?;
-        let layout = StoreLayout::open(root_handle.directory())
-            .map_err(|_| BootstrapError("open authority store layout"))?;
-        let _lock = layout
-            .root_lock
-            .lock_exclusive()
-            .map_err(|_| BootstrapError("lock authority store root"))?;
-        let (root, _) = layout
-            .prepare_existing(root_handle.identity())
-            .map_err(|_| BootstrapError("prepare authority store for object publication"))?;
-        publish_or_join_orphan(&layout, &root, reference, bytes, context, nonce_bytes)
+        with_existing_semantic_preflight(path, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            validate_orphan_candidate(
+                transaction.layout,
+                &transaction.root,
+                reference,
+                bytes,
+                context,
+            )?;
+            transaction.reconcile()?;
+            publish_or_join_orphan(
+                transaction.layout,
+                &transaction.root,
+                reference,
+                bytes,
+                context,
+                nonce_bytes,
+            )
+        })
     }
 
     #[cfg(test)]
@@ -280,36 +411,39 @@ mod platform {
         bytes: &[u8],
         context: Option<&ObjectVerificationContextV1>,
     ) -> Result<(), BootstrapError> {
-        let root_handle = TrustedAuthorityRoot::open(path)
-            .map_err(|_| BootstrapError("open trusted authority root"))?;
-        let layout = StoreLayout::open(root_handle.directory())
-            .map_err(|_| BootstrapError("open authority store layout"))?;
-        let _lock = layout
-            .root_lock
-            .lock_exclusive()
-            .map_err(|_| BootstrapError("lock authority store root"))?;
-        let (root, _) = layout
-            .prepare_existing(root_handle.identity())
-            .map_err(|_| BootstrapError("prepare authority store for orphan verification"))?;
-        if root.object_index.contains_key(&reference.ref_id) {
-            return Err(BootstrapError("object is already authoritative"));
-        }
-        let kind_directory = layout
-            .objects
-            .open_directory(kind_slug(reference.object_kind))
-            .map_err(|_| BootstrapError("open orphan kind directory"))?;
-        let version_directory = kind_directory
-            .open_directory(&format!("v{}", reference.schema_version))
-            .map_err(|_| BootstrapError("open orphan version directory"))?;
-        let existing = version_directory
-            .open_file(&format!("{}.obj", reference.ref_id))
-            .map_err(|_| BootstrapError("open retained orphan"))?
-            .read_all()
-            .map_err(|_| BootstrapError("read retained orphan"))?;
-        if existing != bytes {
-            return Err(BootstrapError("retained orphan bytes differ from retry"));
-        }
-        verify_object_bytes(&layout, &root, reference, &existing, context, true)
+        with_existing_semantic_preflight(path, |transaction| {
+            if transaction
+                .root
+                .object_index
+                .contains_key(&reference.ref_id)
+            {
+                return Err(BootstrapError("object is already authoritative"));
+            }
+            let kind_directory = transaction
+                .layout
+                .objects
+                .open_directory(kind_slug(reference.object_kind))
+                .map_err(|_| BootstrapError("open orphan kind directory"))?;
+            let version_directory = kind_directory
+                .open_directory(&format!("v{}", reference.schema_version))
+                .map_err(|_| BootstrapError("open orphan version directory"))?;
+            let existing = version_directory
+                .open_file(&format!("{}.obj", reference.ref_id))
+                .map_err(|_| BootstrapError("open retained orphan"))?
+                .read_all()
+                .map_err(|_| BootstrapError("read retained orphan"))?;
+            if existing != bytes {
+                return Err(BootstrapError("retained orphan bytes differ from retry"));
+            }
+            verify_object_bytes(
+                transaction.layout,
+                &transaction.root,
+                reference,
+                &existing,
+                context,
+                true,
+            )
+        })
     }
 
     #[cfg(test)]
@@ -318,17 +452,13 @@ mod platform {
         material: InitializationMaterialV1,
         stop: Option<InitializationCrashPointV1>,
     ) -> Result<StateRootV1, BootstrapError> {
-        let root = TrustedAuthorityRoot::open(path)
-            .map_err(|_| BootstrapError("open trusted authority root"))?;
-        root.revalidate()
-            .map_err(|_| BootstrapError("revalidate trusted authority root"))?;
-        let layout = StoreLayout::open(root.directory())
-            .map_err(|_| BootstrapError("open authority store layout"))?;
-        let _lock = layout
-            .root_lock
-            .lock_exclusive()
-            .map_err(|_| BootstrapError("lock authority store root"))?;
-        bootstrap_locked(&layout, root.identity(), material, stop)
+        with_semantic_preflight(
+            path,
+            SemanticPreflightMode::AuthorityOperation,
+            |layout, bootstrap_home, observed, _lock| {
+                bootstrap_locked(layout, bootstrap_home, observed, Some(material), stop)
+            },
+        )
     }
 
     fn system_material() -> Result<InitializationMaterialV1, BootstrapError> {
@@ -364,29 +494,36 @@ mod platform {
     fn bootstrap_locked(
         layout: &StoreLayout<'_>,
         bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
-        material: InitializationMaterialV1,
+        observed: LockedClassification,
+        material: Option<InitializationMaterialV1>,
         stop: Option<InitializationCrashPointV1>,
     ) -> Result<StateRootV1, BootstrapError> {
-        let classified = layout
-            .classify_locked_observed(bootstrap_home)
-            .map_err(|_| BootstrapError("classify authority store"))?;
-        match classified.classification {
+        match observed.classification {
             BootstrapClassificationV1::FreshAbsent => {
-                initialize_fresh(layout, bootstrap_home, &classified.legacy, material, stop)
+                let material = material.ok_or(BootstrapError(
+                    "fresh initialization material was not generated under lock",
+                ))?;
+                layout
+                    .reconcile_temps()
+                    .map_err(|_| BootstrapError("reconcile validated bootstrap temps"))?;
+                initialize_fresh(layout, bootstrap_home, &observed.legacy, material, stop)
             }
             BootstrapClassificationV1::InitializationPending => {
-                recover_pending(layout, bootstrap_home, &classified.legacy, material, stop)
+                let material = material.ok_or(BootstrapError(
+                    "pending recovery material was not generated under lock",
+                ))?;
+                layout
+                    .reconcile_temps()
+                    .map_err(|_| BootstrapError("reconcile validated bootstrap temps"))?;
+                recover_pending(layout, bootstrap_home, &observed.legacy, material, stop)
             }
             BootstrapClassificationV1::ValidExisting => {
-                let root = layout
-                    .read_existing(bootstrap_home)
-                    .map_err(|_| BootstrapError("read existing authority store"))?;
+                let root = observed
+                    .root
+                    .ok_or(BootstrapError("semantic preflight omitted existing root"))?;
                 layout
-                    .reconcile_key_files(&root)
-                    .map_err(|_| BootstrapError("reconcile commitment key files"))?;
-                layout
-                    .remove_matching_marker(&root)
-                    .map_err(|_| BootstrapError("remove committed initialization marker"))?;
+                    .reconcile_after_preflight(&root)
+                    .map_err(|_| BootstrapError("reconcile valid existing authority store"))?;
                 Ok(root)
             }
             BootstrapClassificationV1::UnsupportedLegacyState => {
@@ -622,16 +759,58 @@ mod platform {
             .map_err(|error| error.0)
     }
 
-    fn classify_checked(path: &std::path::Path) -> Result<BootstrapClassificationV1, StoreError> {
-        let root = TrustedAuthorityRoot::open(path).map_err(|_| StoreError("open trusted root"))?;
-        root.revalidate()
-            .map_err(|_| StoreError("revalidate trusted root"))?;
-        let layout = StoreLayout::open(root.directory())?;
-        let _lock = layout
-            .root_lock
-            .lock_exclusive()
-            .map_err(|_| StoreError("lock authority root"))?;
-        layout.classify_locked(root.identity())
+    #[cfg(test)]
+    pub(super) fn first_lock_creation_join_test(
+        path: &std::path::Path,
+    ) -> Result<(), &'static str> {
+        let root = TrustedAuthorityRoot::open(path).map_err(|_| "open trusted root")?;
+        let authority = root
+            .directory()
+            .create_directory(AUTHORITY_DIRECTORY)
+            .map_err(|_| "create authority directory")?;
+        let lock = authority
+            .create_directory("lock")
+            .map_err(|_| "create lock directory")?;
+        let first = lock
+            .create_file(ROOT_LOCK_FILE)
+            .map_err(|_| "create first lock file")?;
+        first.sync().map_err(|_| "sync first lock file")?;
+        lock.sync().map_err(|_| "sync first lock directory")?;
+
+        let joined = create_or_join_lock(&lock).map_err(|_| "join first lock creation")?;
+        drop(
+            joined
+                .lock_exclusive_owned()
+                .map_err(|_| "lock joined file")?,
+        );
+        Ok(())
+    }
+
+    fn classify_checked(
+        path: &std::path::Path,
+    ) -> Result<BootstrapClassificationV1, BootstrapError> {
+        with_semantic_preflight(
+            path,
+            SemanticPreflightMode::AuthorityOperation,
+            |layout, bootstrap_home, observed, _lock| {
+                if observed.classification == BootstrapClassificationV1::UnsupportedLegacyState {
+                    return Ok(observed.classification);
+                }
+                if let Some(root) = observed.root.as_ref() {
+                    layout
+                        .reconcile_after_preflight(root)
+                        .map_err(|_| BootstrapError("reconcile valid existing classification"))?;
+                } else {
+                    layout
+                        .reconcile_temps()
+                        .map_err(|_| BootstrapError("reconcile validated classification temps"))?;
+                }
+                layout
+                    .semantic_preflight(bootstrap_home)
+                    .map(|revalidated| revalidated.classification)
+                    .map_err(|_| BootstrapError("revalidate classified authority store"))
+            },
+        )
     }
 
     fn kind_from_slug(slug: &str) -> Option<AuthorityObjectKindV1> {
@@ -702,6 +881,7 @@ mod platform {
 
     pub(super) fn rotate_commitment_key(
         _path: &std::path::Path,
+        _expected_root_revision: u64,
     ) -> Result<StateRootV1, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
@@ -711,6 +891,7 @@ mod platform {
     pub(super) fn retire_commitment_key(
         _path: &std::path::Path,
         _key_id: &str,
+        _expected_root_revision: u64,
     ) -> Result<StateRootV1, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
@@ -719,10 +900,35 @@ mod platform {
 
     pub(super) fn prepare_typed_object(
         _path: &std::path::Path,
+        _expected_root_revision: u64,
         _reference: &AuthorityObjectRefV1,
         _bytes: &[u8],
         _context: Option<&ObjectVerificationContextV1>,
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn read_root(_path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn compare_and_swap_root(
+        _path: &std::path::Path,
+        _expected: &super::ExpectedRevisionsV1,
+        _proposed: &StateRootV1,
+    ) -> Result<super::TransactionCommitOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn legacy_writer_guard(
+        _path: &std::path::Path,
+    ) -> Result<super::LegacyWriterGuard, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
         ))

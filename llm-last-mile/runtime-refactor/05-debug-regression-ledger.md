@@ -114,6 +114,54 @@ Remote member client-build/stream-open and post-accept ownership-persistence fai
 
 Existing host-target tests exercise the current untargeted/same-host/wrong-host behavior, but hostname absence/change/collision across restart is unproven and remains a C2/C3 gap. The common-path unit proves only the ordinary absolute `SUBSTRATE_HOME` result; no test creates conflicting state/config/policy/agent inventory under two homes or global/workspace precedence and crosses create/control, supplies a relative home across CWD changes, exercises empty/unset with missing `dirs::home_dir()`, forces CWD lookup failure/`.` fallback, or changes CWD between contract resolution, workspace persistence, and existing-session launch. Normalized store/workspace/config/policy/inventory identity and cross-home/cross-CWD fail-closed behavior therefore remain explicit A1/A3/E2/E3 proof gaps. The `SUBSTRATE_OVERRIDE_*` effective-config family also lacks changed/invalid/empty/removed create-control-restart proof. Anchor projection lacks invalid/empty mode/path, Project/FollowCwd/Custom, explicit project override, fallback, and CWD-change coverage. The concurrent inbox materialization test exercises threads within one process only; no proof runs two independent StateStore writers against one snapshot and demonstrates that conflicting lifecycle, binding, claim, inbox, or obligation updates cannot overwrite each other, so cross-process atomicity and revision safety remain explicit A1/A3 gaps. `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` and `SUBSTRATE_WORLD_EXEC_FORCE_DIRECT` have no production-ingress negative matrix or live transport/isolation smoke here; A0 records their actual roles without treating that missing B/D/E proof as success. `cargo fmt --all -- --check` and `git diff --check` passed. No external live-world doctor/smoke/e2e, full workspace test, or clippy was run because A0 changes no runtime behavior; those gates remain unavailable, and no focused unit/integration result is promoted to whole-seam proof. Remaining gaps are the unchanged A1/A2/A3 ownership moves and later retained-runtime/config/receipt work named by the inventory.
 
+## A1.1d scoped regression evidence
+
+A1.1d starts from `b32da3b82ed78d9406588628aa608c69acb0b14d` and closes only the
+centralized-preflight, generic-CAS, and in-repository legacy/direct-writer-exclusion clauses of the
+A1.1 persistence primitive. It does not resolve a whole ledger row.
+
+Permanent focused gates added or strengthened are:
+
+- every bounded authority classifier, bootstrap, root read/mutation, key lifecycle, and typed
+  object entry point enters `with_semantic_preflight`, opens only the trusted authority/lock/temp
+  scope, and holds the opened trusted-root identity plus the one owned
+  `authority-v1/lock/root.lock` before opening the strict objects/keys layout;
+- root CAS accepts one exact expected revision and rejects stale/conflicting subprocess writers;
+  authority-changing CAS additionally validates the exact session and authority revision;
+- current-root crash reconciliation runs before strict candidate validation, so a proposed root
+  cannot adopt a key orphan that reconciliation removes or record transport bytes `Released` before
+  the exact deletion/absence durability barrier;
+- exact root-only retry joins only byte-exact authority-free committed state, while any
+  authority-bearing exact join fails closed until later operation-journal provenance exists;
+- preactivation session/participant collection writers block on that same kernel lock, and marker
+  or root activation rejects the complete guarded writer matrix before A1 temp, legacy state, or
+  compatibility mutation;
+- post-root legacy insertion, unknown tree/key/object/root/temp entries, missing/substituted
+  reachable state, unsafe ownership/mode/ACL/symlink/replacement, and invalid candidates fail
+  closed without transaction publication or repair;
+- recognized safe temps remain non-authoritative and are deleted/fsynced before authority
+  classification or transaction, exactly as the canonical crash protocol requires; activated
+  legacy writers check marker/root first and preserve the temp set on refusal;
+- real subprocess children prove one CAS winner, one stale loser, lock exclusion, holder-process
+  death release, re-read/revalidation on retry, actual preactivation StateStore writing, and the
+  deterministic `EEXIST` lock-creation join path. Zero-test child filters are not accepted.
+
+On Linux, `cargo test -p shell --lib
+execution::agent_runtime::host_session_authority -- --nocapture` passed 65 tests and `cargo test -p
+shell --lib execution::agent_runtime::state_store::tests -- --nocapture` passed 181 tests, with zero
+failed or ignored. `cargo fmt --all -- --check`, `cargo check -p shell`, `cargo clippy -p shell
+--all-targets -- -D warnings`, and `git diff --check` passed. A public world-scoped start regression
+was attempted but its fixture/root was rejected for an ACL granting another principal before the
+A1.1d path completed, including under a temporary safe-root diagnostic workaround that was removed
+byte-for-byte. That gate is environment/fixture-blocked, not passed. No macOS/Windows runtime proof
+or kernel fault injection is claimed.
+
+`RG-AUTH-03` therefore remains unresolved for intent issuance/application and production adoption;
+`RG-AUTH-01` and `RG-AUTH-02` remain unresolved outside these bounded persistence clauses.
+`RG-BASE-01` was not freshly proven by the blocked smoke. A1.1e exact resolution/facade integration,
+explicit-home adoption, production Start/Attach/Resume, CLI/REPL/auto-attach routing, A1.2+, and A1
+completion have not started.
+
 ## Resolved baselines that all tracks preserve
 
 | Gate ID | Baseline | Required proof |
