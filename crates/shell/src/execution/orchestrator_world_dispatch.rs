@@ -5221,7 +5221,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     use substrate_common::agent_events::AgentEventKind;
     #[cfg(target_os = "linux")]
-    use tempfile::{tempdir, TempDir};
+    use tempfile::TempDir;
     #[cfg(target_os = "linux")]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -5246,20 +5246,36 @@ mod tests {
     struct EnvVarGuard {
         key: &'static str,
         previous: Option<String>,
+        _world_env_guard: parking_lot::ReentrantMutexGuard<'static, ()>,
+    }
+
+    #[cfg(target_os = "linux")]
+    fn tempdir() -> std::io::Result<TempDir> {
+        Ok(crate::execution::private_test_tempdir())
     }
 
     #[cfg(target_os = "linux")]
     impl EnvVarGuard {
         fn set(key: &'static str, value: &str) -> Self {
+            let world_env_guard = world_env_guard();
             let previous = std::env::var(key).ok();
             std::env::set_var(key, value);
-            Self { key, previous }
+            Self {
+                key,
+                previous,
+                _world_env_guard: world_env_guard,
+            }
         }
 
         fn set_path(key: &'static str, value: &Path) -> Self {
+            let world_env_guard = world_env_guard();
             let previous = std::env::var(key).ok();
             std::env::set_var(key, value);
-            Self { key, previous }
+            Self {
+                key,
+                previous,
+                _world_env_guard: world_env_guard,
+            }
         }
     }
 
@@ -15751,6 +15767,7 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_surfaces_detached_revalidation_contract_error_after_refused_transport(
     ) {
+        let _world_env_guard = world_env_guard();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -15838,6 +15855,7 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_surfaces_sanctioned_refresh_contract_error_after_owner_unreachable(
     ) {
+        let _world_env_guard = world_env_guard();
         let substrate_home = tempdir().expect("substrate home tempdir");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
@@ -19087,6 +19105,8 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     async fn wait_for_fork_child_durable_publication_allows_late_child_visibility_without_extending_stop_transport_budget(
     ) {
+        let substrate_home = tempdir().expect("private SUBSTRATE_HOME tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         let child_id = "ash_delayed_child";
         let store_for_publication = store.clone();
@@ -19129,6 +19149,8 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     async fn wait_for_fork_child_durable_publication_keeps_stop_transport_timeout_short_once_child_is_visible(
     ) {
+        let substrate_home = tempdir().expect("private SUBSTRATE_HOME tempdir");
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         let child_id = "ash_visible_child";
         let mut child = sample_member_participant();

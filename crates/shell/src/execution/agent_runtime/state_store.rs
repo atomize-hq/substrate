@@ -6702,6 +6702,7 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let _world_env_guard = crate::execution::world_env_guard();
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {

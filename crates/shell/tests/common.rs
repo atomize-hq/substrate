@@ -39,12 +39,27 @@ pub fn shared_tmpdir() -> &'static Path {
     })
 }
 
-/// Allocate a temporary directory with a descriptive prefix under `/tmp` so
-/// integration fixtures never become nested descendants of the repo workspace.
+/// Allocate a temporary directory under a short, user-owned runtime root.
+/// Private-home integration fixtures must not inherit `/tmp`'s other-principal
+/// writability, and short roots keep Unix-domain socket paths below platform limits.
 pub fn temp_dir(prefix: &str) -> TempDir {
+    #[cfg(target_os = "linux")]
+    let parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            // SAFETY: geteuid has no preconditions and does not mutate process state.
+            PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() }))
+        });
+    #[cfg(target_os = "macos")]
+    let parent = PathBuf::from(std::env::var_os("HOME").expect("macOS tests require HOME"))
+        .join("Library/Caches");
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let parent = PathBuf::from("/tmp");
+
+    fs::create_dir_all(&parent).expect("failed to create private integration test root");
     Builder::new()
         .prefix(prefix)
-        .tempdir_in("/tmp")
+        .tempdir_in(parent)
         .expect("failed to allocate integration test temp dir")
 }
 

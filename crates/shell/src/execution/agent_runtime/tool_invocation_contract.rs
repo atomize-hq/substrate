@@ -1303,8 +1303,6 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::PathBuf;
 
-    use tempfile::TempDir;
-
     use super::{
         host_tool_contract, host_tool_contracts_v1, normalize_cancel_world_work_outcome_v1,
         normalize_continue_world_worker_outcome_v1, normalize_inspect_world_worker_outcome_v1,
@@ -2853,7 +2851,7 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
-        let temp = TempDir::new().expect("tempdir");
+        let temp = crate::execution::private_test_tempdir();
         std::env::set_var("SUBSTRATE_HOME", temp.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);

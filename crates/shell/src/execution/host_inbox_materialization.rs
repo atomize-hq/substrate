@@ -177,10 +177,9 @@ mod tests {
     use serial_test::serial;
     use std::fs;
     use std::path::PathBuf;
-    use tempfile::tempdir;
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
-        let temp = tempdir().expect("tempdir");
+        let temp = crate::execution::private_test_tempdir();
         std::env::set_var("SUBSTRATE_HOME", temp.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);

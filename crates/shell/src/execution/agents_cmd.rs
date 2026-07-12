@@ -4231,7 +4231,18 @@ mod tests {
     use serial_test::serial;
     use std::fs;
     use std::path::PathBuf;
-    use tempfile::TempDir;
+
+    struct TempDir(tempfile::TempDir);
+
+    impl TempDir {
+        fn new() -> std::io::Result<Self> {
+            Ok(Self(crate::execution::private_test_tempdir()))
+        }
+
+        fn path(&self) -> &Path {
+            self.0.path()
+        }
+    }
 
     const SHARED_WORLD_METADATA_ROOT_TEST_ENV: &str = "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT";
 

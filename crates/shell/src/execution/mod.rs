@@ -78,3 +78,37 @@ pub(crate) fn world_env_guard() -> ReentrantMutexGuard<'static, ()> {
         .get_or_init(|| ReentrantMutex::new(()))
         .lock()
 }
+
+#[cfg(test)]
+pub(crate) fn private_test_tempdir() -> tempfile::TempDir {
+    #[cfg(target_os = "linux")]
+    let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            // SAFETY: geteuid has no preconditions and does not mutate process state.
+            std::path::PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() }))
+        });
+    #[cfg(target_os = "macos")]
+    let safe_parent =
+        std::path::PathBuf::from(std::env::var_os("HOME").expect("macOS tests require HOME"))
+            .join("Library/Caches");
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        std::fs::create_dir_all(&safe_parent).expect("create private test temp parent");
+        let temp = tempfile::Builder::new()
+            .prefix("st-")
+            .tempdir_in(safe_parent)
+            .expect("allocate private test tempdir");
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("secure private test tempdir");
+        temp
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    tempfile::Builder::new()
+        .prefix("st-")
+        .tempdir()
+        .expect("allocate test tempdir")
+}

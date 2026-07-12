@@ -10944,7 +10944,17 @@ mod tests {
     use std::fs;
     use substrate_common::agent_events::AgentEventKind;
     #[cfg(unix)]
-    use tempfile::TempDir;
+    struct TempDir(tempfile::TempDir);
+
+    impl TempDir {
+        fn new() -> std::io::Result<Self> {
+            Ok(Self(crate::execution::private_test_tempdir()))
+        }
+
+        fn path(&self) -> &Path {
+            self.0.path()
+        }
+    }
 
     #[cfg(unix)]
     fn reedline_terminal_loss_error() -> anyhow::Error {

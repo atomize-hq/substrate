@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use substrate_broker::Policy;
 use support::{
     binary_path, ensure_substrate_built, persist_runtime_alert_for_substrate_home,
-    substrate_shell_driver,
+    substrate_shell_driver, temp_dir,
 };
 #[cfg(target_os = "linux")]
 use support::{
@@ -77,15 +77,18 @@ impl AgentControlFixture {
     }
 
     fn new_with_fake_codex(script_writer: fn(&Path) -> PathBuf) -> Self {
-        let temp = tempfile::Builder::new()
-            .prefix("sac-")
-            .tempdir_in("/tmp")
-            .expect("allocate short temp dir");
+        let temp = temp_dir("sac-");
         let home = temp.path().join("h");
         let substrate_home = temp.path().join("s");
         let workspace_root = temp.path().join("w");
         fs::create_dir_all(&home).expect("create HOME");
         fs::create_dir_all(&substrate_home).expect("create SUBSTRATE_HOME");
+        let mut substrate_home_permissions = fs::metadata(&substrate_home)
+            .expect("SUBSTRATE_HOME metadata")
+            .permissions();
+        substrate_home_permissions.set_mode(0o700);
+        fs::set_permissions(&substrate_home, substrate_home_permissions)
+            .expect("set exact SUBSTRATE_HOME permissions");
         fs::create_dir_all(substrate_home.join("shims")).expect("create shims dir");
         fs::create_dir_all(&workspace_root).expect("create workspace root");
         fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
