@@ -1753,40 +1753,6 @@ Rules:
 3. Episode exit does not delete session, worker, binding, receipt, or obligation truth.
 4. Private transport success may accelerate delivery; it does not define durable success.
 
-### A1.1d-6 bounded heartbeat-observation write contract
-
-A1.1d-6 closes the current A1 baseline regression without implementing the general A2 episode
-model. A heartbeat write identifies one exact session, participant, and episode/source identity and
-is an observation-only StateStore operation. It resolves current durable session and participant
-truth inside the transaction and may monotonically advance only the explicitly owned heartbeat
-timestamp/observation fields. It never persists a caller-supplied whole-session snapshot.
-
-The operation preserves the latest durable world binding, posture, lineage, authority revision,
-session lifecycle state, attach contract, and participant identity byte-for-byte or field-for-field
-as applicable. A stale observation cannot overwrite any of them. An exact repeated observation is
-idempotent, an older timestamp cannot move liveness backward, and PID/helper liveness cannot create,
-repair, rebind, or otherwise confer durable authority.
-
-The result is typed as exactly one of:
-
-```text
-JoinedCurrentTruth
-SafelyRetriedAgainstExactLatestTruth
-RejectedStaleOrInvalid
-PersistenceFailed
-```
-
-Any retry is bounded and starts from exact latest durable truth rather than resubmitting the same
-stale snapshot. Rejection of one observation does not silently disable later valid heartbeat
-progress. Persistent failure is surfaced through bounded, non-flooding diagnostics that contain no
-secret material. Existing stale-session and stale-world-binding protections remain fail closed.
-
-The allowed code area is limited to heartbeat persistence regions in `repl/async_repl.rs`, focused
-StateStore heartbeat/observation persistence APIs, directly required types/re-exports, and focused
-unit, subprocess, and public-control integration tests. A broad REPL lifecycle rewrite, general
-heartbeat protocol redesign, last-writer-wins authority, timeout inflation, unbounded retry, policy
-or world-enforcement change, and A2 implementation are out of scope.
-
 ## 3. `ActiveEphemeralTaskReceiptV1`
 
 ```rust

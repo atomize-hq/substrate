@@ -50,9 +50,9 @@ A1.1 is implemented through the following fixed, independently reviewable, seque
 
 ### A1.1d internal review checkpoints
 
-A1.1d remains the canonical packet. The six labels below are sequential internal review checkpoints
+A1.1d remains the canonical packet. The five labels below are sequential internal review checkpoints
 under A1.1d, not independent slices, not replacements for A1.1d, and not separate closeout gates.
-The A1.1d packet closes only after all six checkpoints pass together; A1.1e remains blocked until
+The A1.1d packet closes only after all five checkpoints pass together; A1.1e remains blocked until
 that closeout and all required platform proof are complete.
 
 #### A1.1d-1 — Retained opened-root transaction capability
@@ -137,27 +137,6 @@ Outcome:
 - exit `RG-HOME-01` only after complete Linux creation and world-capability parity proof plus native
   macOS proof on the exact final runtime commit. Linux-only success leaves A1.1d incomplete and
   A1.1e blocked.
-
-#### A1.1d-6 — Heartbeat observation write isolation and stale-authority reconciliation
-
-Outcome:
-
-- treat a heartbeat as an episode/liveness observation for one exact session, participant, and
-  episode/source identity, never as durable session authority or a reason to create, repair, or
-  rebind authority;
-- replace heartbeat persistence of caller-supplied whole-session snapshots with a focused
-  StateStore observation operation that resolves current durable truth and monotonically advances
-  only operation-owned heartbeat fields while preserving world binding, posture, lineage,
-  authority revision, lifecycle state, and participant identity;
-- return a typed joined-current, safely-retried, stale/invalid-rejected, or persistence-failed
-  outcome, with bounded retry/CAS behavior and bounded diagnostics for persistent failure;
-- prove deterministically that a competing newer authority or world-binding write remains exact,
-  a stale heartbeat cannot regress it, later valid heartbeats continue to advance, and public
-  start/turn/stop readiness remains green; and
-- limit implementation to heartbeat persistence regions in `repl/async_repl.rs`, focused
-  StateStore observation APIs and directly required types/re-exports, plus focused tests. Do not
-  weaken stale-session/world-binding checks, redesign the general heartbeat protocol, rewrite REPL
-  lifecycle, perform A2's general `HostExecutionEpisode` demotion, or change policy/world behavior.
 
 The new A1.1 module boundary is organizational only and does not change any A1 contract, semantic gate, or later-slice owner. It enforces these additional reviewability constraints: no path-based authority operation after the trusted root opens; no symlink traversal or ambient-CWD authority; exactly one repository-owned canonical codec; exactly one centralized semantic transaction preflight; no legacy/direct writer may bypass `HostSessionAuthority`; key/object/root crash reconciliation is deterministic; and no new dependency is permitted without explicit dependency review. The bounded modules must not perform A2 episode demotion, helper removal, endpoint redesign, receipt work, unrelated StateStore cleanup, or general persistence extraction.
 
