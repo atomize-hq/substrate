@@ -787,9 +787,97 @@ bootstrap_guest_private_home() {
     local guest_substrate_home="$2"
     log "Bootstrapping private guest SUBSTRATE_HOME for ${vm_user}"
     limactl shell "${VM_NAME}" env \
-        SUBSTRATE_HOME="${guest_substrate_home}" \
-        SUBSTRATE_INSTALL_PRIMARY_USER="${vm_user}" \
+        SUBSTRATE_GUEST_HOME="${guest_substrate_home}" \
+        SUBSTRATE_GUEST_USER="${vm_user}" \
+        bash -s <<'EOF'
+set -euo pipefail
+if [[ -x /usr/local/bin/substrate ]]; then
+    SUBSTRATE_HOME="${SUBSTRATE_GUEST_HOME}" \
+        SUBSTRATE_INSTALL_PRIMARY_USER="${SUBSTRATE_GUEST_USER}" \
         /usr/local/bin/substrate --version >/dev/null
+    exit 0
+fi
+
+# The guest CLI is an optional diagnostic artifact in the currently landed Lima
+# architecture. Preserve that supported path with a process-isolated, no-follow
+# provisioner that implements the same greenfield private-root acceptance rules.
+python3 - "${SUBSTRATE_GUEST_HOME}" <<'PY'
+import os
+import stat
+import sys
+
+raw = sys.argv[1]
+parts = raw.split("/")
+if not raw.startswith("/") or any(part in (".", "..") for part in parts):
+    raise SystemExit("unsupported guest SUBSTRATE_HOME: invalid physical path")
+normal = [part for part in parts if part]
+if not normal:
+    raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
+
+directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+current = os.open("/", directory_flags)
+try:
+    for component in normal[:-1]:
+        observed = os.stat(component, dir_fd=current, follow_symlinks=False)
+        if not stat.S_ISDIR(observed.st_mode):
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: symlink-or-wrong-type ancestor")
+        if stat.S_IMODE(observed.st_mode) & 0o022:
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe ancestor mode")
+        next_fd = os.open(component, directory_flags, dir_fd=current)
+        os.close(current)
+        current = next_fd
+
+    leaf = normal[-1]
+    created = False
+    previous_umask = os.umask(0)
+    try:
+        try:
+            os.mkdir(leaf, 0o700, dir_fd=current)
+            created = True
+        except FileExistsError:
+            pass
+    finally:
+        os.umask(previous_umask)
+
+    observed = os.stat(leaf, dir_fd=current, follow_symlinks=False)
+    if stat.S_ISLNK(observed.st_mode):
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: symlink")
+    if not stat.S_ISDIR(observed.st_mode):
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
+    if observed.st_uid != os.geteuid():
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
+    if stat.S_IMODE(observed.st_mode) != 0o700:
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
+    accepted = os.open(leaf, directory_flags, dir_fd=current)
+    try:
+        opened = os.fstat(accepted)
+        if (opened.st_dev, opened.st_ino) != (observed.st_dev, observed.st_ino):
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
+        if created:
+            os.fchmod(accepted, 0o700)
+            opened = os.fstat(accepted)
+        if opened.st_uid != os.geteuid():
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
+        if stat.S_IMODE(opened.st_mode) != 0o700:
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
+        acl_names = set(os.listxattr(accepted))
+        if {"system.posix_acl_access", "system.posix_acl_default"} & acl_names:
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl")
+        reopened = os.open(leaf, directory_flags, dir_fd=current)
+        try:
+            reopened_stat = os.fstat(reopened)
+            if (reopened_stat.st_dev, reopened_stat.st_ino) != (opened.st_dev, opened.st_ino):
+                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
+        finally:
+            os.close(reopened)
+        os.fsync(accepted)
+        os.fsync(current)
+    finally:
+        os.close(accepted)
+finally:
+    os.close(current)
+PY
+EOF
 }
 
 write_systemd_units() {

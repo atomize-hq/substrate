@@ -1,9 +1,8 @@
 use std::fmt;
+#[cfg(not(unix))]
 use std::fs;
-use std::io;
-use std::io::Write;
-#[cfg(unix)]
-use std::os::fd::AsRawFd;
+#[cfg(not(unix))]
+use std::io::{self, Write};
 use std::path::Path;
 #[cfg(unix)]
 use std::{ffi::CString, mem::MaybeUninit};
@@ -170,53 +169,108 @@ pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapE
     #[cfg(not(unix))]
     ensure_dir(&substrate_home, owner)?;
 
-    let deps_root = substrate_home.join("deps");
-    ensure_dir(&deps_root, owner)?;
-
-    let packages_dir = deps_root.join("packages");
-    let bundles_dir = deps_root.join("bundles");
-    let scripts_dir = deps_root.join("scripts");
-    ensure_dir(&packages_dir, owner)?;
-    ensure_dir(&bundles_dir, owner)?;
-    ensure_dir(&scripts_dir, owner)?;
-
-    ensure_file_if_missing(
-        &deps_root.join("README.md"),
-        DEPS_README_MD.as_bytes(),
-        owner,
-    )?;
-    ensure_file_if_missing(
-        &packages_dir.join("example-manual.yaml"),
-        EXAMPLE_MANUAL_YAML.as_bytes(),
-        owner,
-    )?;
-    ensure_file_if_missing(
-        &packages_dir.join("example-script.yaml"),
-        EXAMPLE_SCRIPT_YAML.as_bytes(),
-        owner,
-    )?;
-    ensure_file_if_missing(
-        &packages_dir.join("example-apt.yaml"),
-        EXAMPLE_APT_YAML.as_bytes(),
-        owner,
-    )?;
-    ensure_file_if_missing(
-        &bundles_dir.join("example-bundle.yaml"),
-        EXAMPLE_BUNDLE_YAML.as_bytes(),
-        owner,
-    )?;
-    ensure_file_if_missing(
-        &scripts_dir.join("example-install.sh"),
-        EXAMPLE_INSTALL_SH.as_bytes(),
-        owner,
-    )?;
-
     #[cfg(unix)]
-    trusted_home.revalidate().map_err(|_| {
-        HomeBootstrapError::unsupported_private_home(&substrate_home, owner.uid, "replaced")
-    })?;
+    {
+        let deps = trusted_home
+            .ensure_scaffold_directory("deps")
+            .map_err(|error| map_trusted_scaffold_error("deps", "directory", error))?;
+        let packages = deps
+            .ensure_directory("packages")
+            .map_err(|error| map_trusted_scaffold_error("deps/packages", "directory", error))?;
+        let bundles = deps
+            .ensure_directory("bundles")
+            .map_err(|error| map_trusted_scaffold_error("deps/bundles", "directory", error))?;
+        let scripts = deps
+            .ensure_directory("scripts")
+            .map_err(|error| map_trusted_scaffold_error("deps/scripts", "directory", error))?;
+
+        deps.ensure_file_if_missing("README.md", DEPS_README_MD.as_bytes())
+            .map_err(|error| map_trusted_scaffold_error("deps/README.md", "file", error))?;
+        packages
+            .ensure_file_if_missing("example-manual.yaml", EXAMPLE_MANUAL_YAML.as_bytes())
+            .map_err(|error| {
+                map_trusted_scaffold_error("deps/packages/example-manual.yaml", "file", error)
+            })?;
+        packages
+            .ensure_file_if_missing("example-script.yaml", EXAMPLE_SCRIPT_YAML.as_bytes())
+            .map_err(|error| {
+                map_trusted_scaffold_error("deps/packages/example-script.yaml", "file", error)
+            })?;
+        packages
+            .ensure_file_if_missing("example-apt.yaml", EXAMPLE_APT_YAML.as_bytes())
+            .map_err(|error| {
+                map_trusted_scaffold_error("deps/packages/example-apt.yaml", "file", error)
+            })?;
+        bundles
+            .ensure_file_if_missing("example-bundle.yaml", EXAMPLE_BUNDLE_YAML.as_bytes())
+            .map_err(|error| {
+                map_trusted_scaffold_error("deps/bundles/example-bundle.yaml", "file", error)
+            })?;
+        scripts
+            .ensure_file_if_missing("example-install.sh", EXAMPLE_INSTALL_SH.as_bytes())
+            .map_err(|error| {
+                map_trusted_scaffold_error("deps/scripts/example-install.sh", "file", error)
+            })?;
+
+        trusted_home.revalidate().map_err(|_| {
+            HomeBootstrapError::unsupported_private_home(&substrate_home, owner.uid, "replaced")
+        })?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        let deps_root = substrate_home.join("deps");
+        ensure_dir(&deps_root, owner)?;
+        let packages_dir = deps_root.join("packages");
+        let bundles_dir = deps_root.join("bundles");
+        let scripts_dir = deps_root.join("scripts");
+        ensure_dir(&packages_dir, owner)?;
+        ensure_dir(&bundles_dir, owner)?;
+        ensure_dir(&scripts_dir, owner)?;
+        ensure_file_if_missing(
+            &deps_root.join("README.md"),
+            DEPS_README_MD.as_bytes(),
+            owner,
+        )?;
+        ensure_file_if_missing(
+            &packages_dir.join("example-manual.yaml"),
+            EXAMPLE_MANUAL_YAML.as_bytes(),
+            owner,
+        )?;
+        ensure_file_if_missing(
+            &packages_dir.join("example-script.yaml"),
+            EXAMPLE_SCRIPT_YAML.as_bytes(),
+            owner,
+        )?;
+        ensure_file_if_missing(
+            &packages_dir.join("example-apt.yaml"),
+            EXAMPLE_APT_YAML.as_bytes(),
+            owner,
+        )?;
+        ensure_file_if_missing(
+            &bundles_dir.join("example-bundle.yaml"),
+            EXAMPLE_BUNDLE_YAML.as_bytes(),
+            owner,
+        )?;
+        ensure_file_if_missing(
+            &scripts_dir.join("example-install.sh"),
+            EXAMPLE_INSTALL_SH.as_bytes(),
+            owner,
+        )?;
+    }
 
     Ok(())
+}
+
+#[cfg(unix)]
+fn map_trusted_scaffold_error(
+    relative_path: &str,
+    expected_kind: &str,
+    error: crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedFsError,
+) -> HomeBootstrapError {
+    HomeBootstrapError::io(format!(
+        "substrate: failed to scaffold {relative_path}: expected {expected_kind}; accepted private SUBSTRATE_HOME handle validation failed: {error}"
+    ))
 }
 
 #[derive(Clone, Copy)]
@@ -267,6 +321,7 @@ fn resolve_intended_owner_uid(path: &Path) -> Result<libc::uid_t, HomeBootstrapE
     Ok(record.pw_uid)
 }
 
+#[cfg(not(unix))]
 fn ensure_dir(path: &Path, owner: BootstrapOwner) -> Result<(), HomeBootstrapError> {
     match fs::symlink_metadata(path) {
         Ok(meta) => {
@@ -304,6 +359,7 @@ fn ensure_dir(path: &Path, owner: BootstrapOwner) -> Result<(), HomeBootstrapErr
     }
 }
 
+#[cfg(not(unix))]
 fn ensure_file_if_missing(
     path: &Path,
     contents: &[u8],
@@ -377,6 +433,7 @@ fn ensure_file_if_missing(
     }
 }
 
+#[cfg(not(unix))]
 fn ensure_file_exists_as_file(path: &Path) -> Result<(), HomeBootstrapError> {
     match fs::metadata(path) {
         Ok(meta) if meta.is_file() => Ok(()),
@@ -388,6 +445,7 @@ fn ensure_file_exists_as_file(path: &Path) -> Result<(), HomeBootstrapError> {
     }
 }
 
+#[cfg(not(unix))]
 fn map_io_err(err: io::Error, context: String) -> HomeBootstrapError {
     if is_denied_io(&err) {
         return HomeBootstrapError::denied(format!(
@@ -399,6 +457,7 @@ fn map_io_err(err: io::Error, context: String) -> HomeBootstrapError {
     ))
 }
 
+#[cfg(not(unix))]
 fn is_denied_io(err: &io::Error) -> bool {
     if err.kind() == io::ErrorKind::PermissionDenied {
         return true;

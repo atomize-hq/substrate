@@ -123,6 +123,18 @@ mod platform {
         inode: u64,
     }
 
+    pub(crate) struct TrustedScaffoldDirectory {
+        file: File,
+        device_id: u64,
+        owner_uid: libc::uid_t,
+    }
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum DirectoryCreation {
+        Created { device_id: u64, inode: u64 },
+        Existing,
+    }
+
     pub(crate) struct TrustedFileLock<'a> {
         file: Option<&'a TrustedFile>,
     }
@@ -298,11 +310,124 @@ mod platform {
         pub(crate) fn directory(&self) -> &TrustedDirectory {
             &self.directory
         }
+
+        pub(crate) fn ensure_scaffold_directory(
+            &self,
+            name: &str,
+        ) -> Result<TrustedScaffoldDirectory, TrustedFsError> {
+            let root = TrustedScaffoldDirectory {
+                file: self
+                    .directory
+                    .file
+                    .try_clone()
+                    .map_err(io_error("duplicate private home handle"))?,
+                device_id: self.directory.device_id,
+                owner_uid: self.owner_uid,
+            };
+            root.ensure_directory(name)
+        }
+    }
+
+    impl TrustedScaffoldDirectory {
+        pub(crate) fn ensure_directory(&self, name: &str) -> Result<Self, TrustedFsError> {
+            let name = component(name)?;
+            let creation = mkdirat_exact_mode(self.file.as_raw_fd(), &name)
+                .map_err(private_home_trusted_error)?;
+            let file = openat_file(
+                self.file.as_raw_fd(),
+                &name,
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                0,
+            )?;
+            let before = fstat(file.as_raw_fd())?;
+            if let DirectoryCreation::Created { device_id, inode } = creation {
+                if before.st_dev as u64 != device_id || before.st_ino as u64 != inode {
+                    return Err(TrustedFsError::new(
+                        "private scaffold directory replaced during creation",
+                    ));
+                }
+                converge_created_owner(file.as_raw_fd(), self.owner_uid)?;
+                // SAFETY: file is the identity-bound directory created by this call.
+                if unsafe { libc::fchmod(file.as_raw_fd(), DIRECTORY_MODE) } != 0 {
+                    return Err(io_error_value("set private scaffold directory mode"));
+                }
+            }
+            validate_scaffold_directory(&file, self.device_id, self.owner_uid, creation)?;
+            file.sync_all()
+                .map_err(io_error("sync private scaffold directory"))?;
+            self.file
+                .sync_all()
+                .map_err(io_error("sync private scaffold parent"))?;
+            Ok(Self {
+                file,
+                device_id: self.device_id,
+                owner_uid: self.owner_uid,
+            })
+        }
+
+        pub(crate) fn ensure_file_if_missing(
+            &self,
+            name: &str,
+            contents: &[u8],
+        ) -> Result<(), TrustedFsError> {
+            use std::io::Write as _;
+
+            let name = component(name)?;
+            let mut created = match openat_file(
+                self.file.as_raw_fd(),
+                &name,
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                FILE_MODE,
+            ) {
+                Ok(file) => file,
+                Err(error) if error.is_already_exists() => {
+                    let existing = openat_file(
+                        self.file.as_raw_fd(),
+                        &name,
+                        libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                        0,
+                    )?;
+                    validate_scaffold_file(&existing, self.device_id, self.owner_uid, false)?;
+                    return Ok(());
+                }
+                Err(error) => return Err(error),
+            };
+            converge_created_owner(created.as_raw_fd(), self.owner_uid)?;
+            // SAFETY: created is the O_EXCL file returned by this call.
+            if unsafe { libc::fchmod(created.as_raw_fd(), FILE_MODE) } != 0 {
+                return Err(io_error_value("set private scaffold file mode"));
+            }
+            validate_scaffold_file(&created, self.device_id, self.owner_uid, true)?;
+            created
+                .write_all(contents)
+                .map_err(io_error("write private scaffold file"))?;
+            created
+                .sync_all()
+                .map_err(io_error("sync private scaffold file"))?;
+            self.file
+                .sync_all()
+                .map_err(io_error("sync private scaffold parent"))
+        }
     }
 
     pub(crate) fn ensure_private_substrate_home(
         raw_path: &Path,
         owner_uid: libc::uid_t,
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        ensure_private_substrate_home_with(raw_path, owner_uid, || {})
+    }
+
+    #[cfg_attr(
+        target_os = "linux",
+        allow(
+            clippy::unnecessary_cast,
+            reason = "Darwin dev_t and ino_t require normalization to u64"
+        )
+    )]
+    fn ensure_private_substrate_home_with(
+        raw_path: &Path,
+        owner_uid: libc::uid_t,
+        after_create: impl FnOnce(),
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
         validate_bootstrap_input(raw_path)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
@@ -325,9 +450,9 @@ mod platform {
             }
         })?;
 
-        let mut created = false;
-        if mkdirat_exact_mode(parent.as_raw_fd(), &name)? {
-            created = true;
+        let creation = mkdirat_exact_mode(parent.as_raw_fd(), &name)?;
+        if matches!(creation, DirectoryCreation::Created { .. }) {
+            after_create();
         }
 
         let opened = openat_file(
@@ -336,20 +461,35 @@ mod platform {
             libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
             0,
         )
-        .map_err(|error| {
+        .map_err(|_| {
             let reason = match fstatat_nofollow(parent.as_raw_fd(), &name) {
-                Ok(stat) if kind_from_mode(stat.st_mode) == EntryKind::Symlink => {
-                    PrivateHomeReason::Symlink
+                Ok(stat)
+                    if matches!(
+                        creation,
+                        DirectoryCreation::Created { device_id, inode }
+                            if stat.st_dev as u64 != device_id || stat.st_ino as u64 != inode
+                    ) =>
+                {
+                    PrivateHomeReason::Replaced
                 }
-                Ok(_) => PrivateHomeReason::WrongType,
-                Err(_) if created => PrivateHomeReason::Replaced,
+                Ok(stat) => private_home_reason_from_stat(&stat, owner_uid),
+                Err(_) if matches!(creation, DirectoryCreation::Created { .. }) => {
+                    PrivateHomeReason::Replaced
+                }
                 Err(_) => PrivateHomeReason::ValidationUnavailable,
             };
-            let _ = error;
             PrivateHomeError::new(reason)
         })?;
 
-        if created {
+        let opened_stat = fstat(opened.as_raw_fd())
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+        if let DirectoryCreation::Created { device_id, inode } = creation {
+            if opened_stat.st_dev as u64 != device_id || opened_stat.st_ino as u64 != inode {
+                return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+            }
+        }
+
+        if matches!(creation, DirectoryCreation::Created { .. }) {
             // Ownership and mode convergence are permitted only for the inode this call created.
             let effective = effective_uid();
             if effective != owner_uid {
@@ -395,27 +535,76 @@ mod platform {
         Ok(root)
     }
 
-    fn mkdirat_exact_mode(parent: RawFd, name: &CStr) -> Result<bool, PrivateHomeError> {
+    #[cfg_attr(
+        target_os = "linux",
+        allow(
+            clippy::unnecessary_cast,
+            reason = "Darwin dev_t and ino_t require normalization to u64"
+        )
+    )]
+    fn mkdirat_exact_mode(
+        parent: RawFd,
+        name: &CStr,
+    ) -> Result<DirectoryCreation, PrivateHomeError> {
+        let mut identity_pipe = [-1; 2];
+        // SAFETY: identity_pipe points to writable storage for two descriptors.
+        if unsafe { libc::pipe(identity_pipe.as_mut_ptr()) } != 0 {
+            return Err(PrivateHomeError::new(
+                PrivateHomeReason::ValidationUnavailable,
+            ));
+        }
         // `umask` is process-global. Perform the umask-independent creation in a short-lived
         // child so concurrent threads in the parent can never observe a broadened mask. The
         // child calls only async-signal-safe functions between `fork` and `_exit`.
         // SAFETY: fork has no pointer preconditions; the child immediately performs syscalls.
         let child = unsafe { libc::fork() };
         if child < 0 {
+            // SAFETY: both descriptors were returned by pipe and remain owned here.
+            unsafe {
+                libc::close(identity_pipe[0]);
+                libc::close(identity_pipe[1]);
+            }
             return Err(PrivateHomeError::new(
                 PrivateHomeReason::ValidationUnavailable,
             ));
         }
         if child == 0 {
-            // SAFETY: umask/mkdirat/_exit are async-signal-safe and parent/name remain valid.
+            // SAFETY: close/umask/mkdirat/fstatat/write/_exit are async-signal-safe and all
+            // pointers reference child-owned stack storage or inherited immutable input.
             unsafe {
+                libc::close(identity_pipe[0]);
                 libc::umask(0);
-                if libc::mkdirat(parent, name.as_ptr(), DIRECTORY_MODE) == 0 {
-                    libc::_exit(0);
+                if libc::mkdirat(parent, name.as_ptr(), DIRECTORY_MODE) != 0 {
+                    libc::_exit(1);
                 }
-                libc::_exit(1);
+                let mut stat: libc::stat = std::mem::zeroed();
+                if libc::fstatat(parent, name.as_ptr(), &mut stat, libc::AT_SYMLINK_NOFOLLOW) != 0 {
+                    libc::_exit(2);
+                }
+                let identity = [stat.st_dev as u64, stat.st_ino as u64];
+                let bytes = std::slice::from_raw_parts(
+                    identity.as_ptr().cast::<u8>(),
+                    std::mem::size_of_val(&identity),
+                );
+                let mut written = 0;
+                while written < bytes.len() {
+                    let count = libc::write(
+                        identity_pipe[1],
+                        bytes[written..].as_ptr().cast(),
+                        bytes.len() - written,
+                    );
+                    if count <= 0 {
+                        libc::_exit(2);
+                    }
+                    written += count as usize;
+                }
+                libc::close(identity_pipe[1]);
+                libc::_exit(0);
             }
         }
+
+        // SAFETY: parent owns both descriptors after fork and never writes to this pipe.
+        unsafe { libc::close(identity_pipe[1]) };
 
         let mut status = 0;
         loop {
@@ -424,22 +613,67 @@ mod platform {
                 break;
             }
             if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+                // SAFETY: the read descriptor remains owned by the parent.
+                unsafe { libc::close(identity_pipe[0]) };
                 return Err(PrivateHomeError::new(
                     PrivateHomeReason::ValidationUnavailable,
                 ));
             }
         }
         if !libc::WIFEXITED(status) {
+            // SAFETY: the read descriptor remains owned by the parent.
+            unsafe { libc::close(identity_pipe[0]) };
             return Err(PrivateHomeError::new(
                 PrivateHomeReason::ValidationUnavailable,
             ));
         }
         match libc::WEXITSTATUS(status) {
-            0 => Ok(true),
-            1 if fstatat_nofollow(parent, name).is_ok() => Ok(false),
-            _ => Err(PrivateHomeError::new(
-                PrivateHomeReason::ValidationUnavailable,
-            )),
+            0 => {
+                let mut identity = [0_u64; 2];
+                let bytes = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        identity.as_mut_ptr().cast::<u8>(),
+                        std::mem::size_of_val(&identity),
+                    )
+                };
+                let mut read = 0;
+                while read < bytes.len() {
+                    // SAFETY: the descriptor is readable and the remaining buffer is writable.
+                    let count = unsafe {
+                        libc::read(
+                            identity_pipe[0],
+                            bytes[read..].as_mut_ptr().cast(),
+                            bytes.len() - read,
+                        )
+                    };
+                    if count <= 0 {
+                        // SAFETY: the read descriptor remains owned by the parent.
+                        unsafe { libc::close(identity_pipe[0]) };
+                        return Err(PrivateHomeError::new(
+                            PrivateHomeReason::ValidationUnavailable,
+                        ));
+                    }
+                    read += count as usize;
+                }
+                // SAFETY: the read descriptor remains owned by the parent.
+                unsafe { libc::close(identity_pipe[0]) };
+                Ok(DirectoryCreation::Created {
+                    device_id: identity[0],
+                    inode: identity[1],
+                })
+            }
+            1 if fstatat_nofollow(parent, name).is_ok() => {
+                // SAFETY: the read descriptor remains owned by the parent.
+                unsafe { libc::close(identity_pipe[0]) };
+                Ok(DirectoryCreation::Existing)
+            }
+            _ => {
+                // SAFETY: the read descriptor remains owned by the parent.
+                unsafe { libc::close(identity_pipe[0]) };
+                Err(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ))
+            }
         }
     }
 
@@ -1207,6 +1441,85 @@ mod platform {
         Ok(())
     }
 
+    fn converge_created_owner(fd: RawFd, owner_uid: libc::uid_t) -> Result<(), TrustedFsError> {
+        let effective = effective_uid();
+        if effective == owner_uid {
+            return Ok(());
+        }
+        if effective != 0 {
+            return Err(TrustedFsError::new(
+                "created private entry has the wrong owner",
+            ));
+        }
+        // SAFETY: fd is an identity-bound entry created by this call; gid -1 is preserved.
+        if unsafe { libc::fchown(fd, owner_uid, !0 as libc::gid_t) } != 0 {
+            return Err(io_error_value("set created private entry owner"));
+        }
+        Ok(())
+    }
+
+    fn validate_scaffold_directory(
+        file: &File,
+        expected_device: u64,
+        owner_uid: libc::uid_t,
+        creation: DirectoryCreation,
+    ) -> Result<(), TrustedFsError> {
+        let stat = fstat(file.as_raw_fd())?;
+        let mode_valid = match creation {
+            DirectoryCreation::Created { .. } => stat.st_mode & 0o7777 == DIRECTORY_MODE,
+            DirectoryCreation::Existing => stat.st_mode & 0o7022 == 0,
+        };
+        if kind_from_mode(stat.st_mode) != EntryKind::Directory
+            || stat.st_uid != owner_uid
+            || stat.st_dev as u64 != expected_device
+            || !mode_valid
+        {
+            return Err(TrustedFsError::new(
+                "private scaffold directory type/owner/mode/device mismatch",
+            ));
+        }
+        validate_private_home_acl(file.as_raw_fd()).map_err(private_home_trusted_error)
+    }
+
+    fn validate_scaffold_file(
+        file: &File,
+        expected_device: u64,
+        owner_uid: libc::uid_t,
+        exact_mode: bool,
+    ) -> Result<(), TrustedFsError> {
+        let stat = fstat(file.as_raw_fd())?;
+        let mode_valid = if exact_mode {
+            stat.st_mode & 0o7777 == FILE_MODE
+        } else {
+            stat.st_mode & 0o7022 == 0
+        };
+        if kind_from_mode(stat.st_mode) != EntryKind::RegularFile
+            || stat.st_uid != owner_uid
+            || stat.st_dev as u64 != expected_device
+            || !mode_valid
+        {
+            return Err(TrustedFsError::new(
+                "private scaffold file type/owner/mode/device mismatch",
+            ));
+        }
+        validate_acl(file.as_raw_fd())
+    }
+
+    fn private_home_reason_from_stat(
+        stat: &libc::stat,
+        owner_uid: libc::uid_t,
+    ) -> PrivateHomeReason {
+        match kind_from_mode(stat.st_mode) {
+            EntryKind::Symlink => PrivateHomeReason::Symlink,
+            EntryKind::Directory if stat.st_uid != owner_uid => PrivateHomeReason::WrongOwner,
+            EntryKind::Directory if stat.st_mode & 0o7777 != DIRECTORY_MODE => {
+                PrivateHomeReason::WrongMode
+            }
+            EntryKind::Directory => PrivateHomeReason::ValidationUnavailable,
+            EntryKind::RegularFile | EntryKind::Other => PrivateHomeReason::WrongType,
+        }
+    }
+
     fn validate_private_home_acl(fd: RawFd) -> Result<(), PrivateHomeError> {
         #[cfg(target_os = "linux")]
         {
@@ -1510,6 +1823,68 @@ mod platform {
             let foreign_uid = effective_uid().saturating_add(1);
             let error = TrustedAuthorityRoot::open_for_owner(temp.path(), foreign_uid).unwrap_err();
             assert!(error.to_string().contains("wrong-owner"));
+        }
+
+        #[test]
+        fn newly_created_root_replacement_fails_before_acceptance() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-create-replacement-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let target = temp.path().join("home");
+            let retained = temp.path().join("retained");
+            let outcome = ensure_private_substrate_home_with(&target, effective_uid(), || {
+                fs::rename(&target, &retained).unwrap();
+                fs::create_dir(&target).unwrap();
+                fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+            });
+            assert_eq!(outcome.unwrap_err().reason(), PrivateHomeReason::Replaced);
+            assert!(retained.is_dir());
+            assert!(target.is_dir());
+        }
+
+        #[test]
+        fn failed_open_metadata_classifies_owner_and_mode_exactly() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-reason-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            let file = File::open(temp.path()).unwrap();
+            let mut stat = fstat(file.as_raw_fd()).unwrap();
+            stat.st_uid = effective_uid().saturating_add(1);
+            assert_eq!(
+                private_home_reason_from_stat(&stat, effective_uid()),
+                PrivateHomeReason::WrongOwner
+            );
+            stat.st_uid = effective_uid();
+            stat.st_mode &= libc::S_IFMT;
+            assert_eq!(
+                private_home_reason_from_stat(&stat, effective_uid()),
+                PrivateHomeReason::WrongMode
+            );
+        }
+
+        #[test]
+        fn scaffold_writes_remain_bound_to_the_accepted_root_handle() {
+            let (temp, root) = root();
+            let original = temp.path().to_path_buf();
+            let moved = original.with_extension("scaffold-moved");
+            let _ = fs::remove_dir_all(&moved);
+            fs::rename(&original, &moved).unwrap();
+            fs::create_dir(&original).unwrap();
+            fs::set_permissions(&original, fs::Permissions::from_mode(0o700)).unwrap();
+
+            let deps = root.ensure_scaffold_directory("deps").unwrap();
+            deps.ensure_file_if_missing("README.md", b"bound\n")
+                .unwrap();
+            assert_eq!(fs::read(moved.join("deps/README.md")).unwrap(), b"bound\n");
+            assert!(!original.join("deps").exists());
+            assert!(root.revalidate().is_err());
+
+            fs::remove_dir(&original).unwrap();
+            fs::rename(&moved, &original).unwrap();
+            root.revalidate().unwrap();
         }
 
         #[test]

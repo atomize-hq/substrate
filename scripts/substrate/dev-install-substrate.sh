@@ -353,13 +353,9 @@ detect_invoking_user() {
 
 bootstrap_private_substrate_home() {
   local substrate_bin="$1"
-  local invoking_user
-  invoking_user="$(detect_invoking_user)"
-  local -a bootstrap_env=("SUBSTRATE_HOME=${PREFIX}")
-  if [[ -n "${invoking_user}" && "${invoking_user}" != "root" ]]; then
-    bootstrap_env+=("SUBSTRATE_INSTALL_PRIMARY_USER=${invoking_user}")
-  fi
-  if ! env "${bootstrap_env[@]}" "${substrate_bin}" --version >/dev/null; then
+  # Preserve the product's explicit-input -> SUDO_USER -> owner-ambiguous precedence.
+  # Non-root execution binds directly to euid and ignores ambient user-name variables.
+  if ! env "SUBSTRATE_HOME=${PREFIX}" "${substrate_bin}" --version >/dev/null; then
     fatal "Private SUBSTRATE_HOME bootstrap rejected ${PREFIX}; no existing root was repaired."
   fi
 }

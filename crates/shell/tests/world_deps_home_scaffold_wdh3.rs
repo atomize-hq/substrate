@@ -170,7 +170,7 @@ fn test_bootstrap_creation_is_exact_0700_across_umasks() {
 
 #[test]
 fn test_existing_invalid_home_modes_fail_without_mutation_or_authority_state() {
-    for mode in [0o755, 0o750, 0o770, 0o777, 0o1700, 0o2700, 0o4700] {
+    for mode in [0o000, 0o755, 0o750, 0o770, 0o777, 0o1700, 0o2700, 0o4700] {
         let tmp = private_temp_dir(&format!("substrate-wdh3-mode-{mode:o}-"));
         let home = tmp.path().join("home");
         let substrate_home = home.join(".substrate");
