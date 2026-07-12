@@ -259,6 +259,52 @@ fn test_lima_fallback_rejects_unsafe_parent_without_creation() {
     assert!(!target.exists());
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_lima_fallback_accepts_non_grant_parent_acl() {
+    let program = lima_private_home_fallback();
+    let tmp = private_temp_dir("substrate-lima-parent-acl-");
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    let foreign_uid = unsafe { libc::geteuid() }.saturating_add(1);
+    Command::new("setfacl")
+        .args(["-m", &format!("u:{foreign_uid}:---")])
+        .arg(tmp.path())
+        .assert()
+        .success();
+    let target = tmp.path().join("home");
+
+    let output = run_lima_private_home_fallback(&program, &target);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::symlink_metadata(&target).unwrap().mode() & 0o7777,
+        0o700
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_lima_fallback_rejects_parent_acl_grant() {
+    let program = lima_private_home_fallback();
+    let tmp = private_temp_dir("substrate-lima-parent-acl-grant-");
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    let foreign_uid = unsafe { libc::geteuid() }.saturating_add(1);
+    Command::new("setfacl")
+        .args(["-m", &format!("u:{foreign_uid}:--x")])
+        .arg(tmp.path())
+        .assert()
+        .success();
+    let target = tmp.path().join("home");
+
+    let output = run_lima_private_home_fallback(&program, &target);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("foreign-acl"));
+    assert!(!target.exists());
+}
+
 #[test]
 fn test_existing_invalid_home_modes_fail_without_mutation_or_authority_state() {
     for mode in [0o000, 0o755, 0o750, 0o770, 0o777, 0o1700, 0o2700, 0o4700] {

@@ -803,8 +803,10 @@ fi
 # provisioner that implements the same greenfield private-root acceptance rules.
 python3 - "${SUBSTRATE_GUEST_HOME}" <<'PY'
 import fcntl
+import errno
 import os
 import stat
+import struct
 import sys
 
 raw = sys.argv[1]
@@ -816,6 +818,56 @@ if not normal:
     raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
 
 directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+def acl_grants_named_principal(fd, name):
+    try:
+        value = os.getxattr(fd, name)
+    except OSError as error:
+        if error.errno in (errno.ENODATA, getattr(errno, "ENOATTR", errno.ENODATA)):
+            return False
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: ACL validation-unavailable")
+    if len(value) < 4 or struct.unpack_from("<I", value)[0] != 2 or (len(value) - 4) % 8:
+        return True
+    mask = None
+    user_object = False
+    group_object = False
+    other = False
+    named = []
+    for offset in range(4, len(value), 8):
+        tag, permissions, identifier = struct.unpack_from("<HHI", value, offset)
+        if permissions & ~0o7:
+            return True
+        if tag in (0x0002, 0x0008):
+            if identifier == 0xffffffff or any(
+                    seen_tag == tag and seen_id == identifier
+                    for seen_tag, seen_id, _permissions in named):
+                return True
+            named.append((tag, identifier, permissions))
+        elif tag == 0x0010:
+            if identifier != 0xffffffff or mask is not None:
+                return True
+            mask = permissions
+        elif tag == 0x0001:
+            if identifier != 0xffffffff or user_object:
+                return True
+            user_object = True
+        elif tag == 0x0004:
+            if identifier != 0xffffffff or group_object:
+                return True
+            group_object = True
+        elif tag == 0x0020:
+            if identifier != 0xffffffff or other:
+                return True
+            other = True
+        else:
+            return True
+    if not user_object or not group_object or not other:
+        return True
+    if not named:
+        return False
+    if mask is None:
+        return True
+    return any(permissions & mask for _tag, _identifier, permissions in named)
+
 def validate_ancestor(fd):
     value = os.fstat(fd)
     if not stat.S_ISDIR(value.st_mode):
@@ -824,8 +876,8 @@ def validate_ancestor(fd):
         raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner ancestor")
     if stat.S_IMODE(value.st_mode) & 0o022:
         raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe ancestor mode")
-    acl_names = set(os.listxattr(fd))
-    if {"system.posix_acl_access", "system.posix_acl_default"} & acl_names:
+    if acl_grants_named_principal(fd, "system.posix_acl_access") or \
+            acl_grants_named_principal(fd, "system.posix_acl_default"):
         raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl ancestor")
     return value
 
@@ -857,10 +909,6 @@ try:
         raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner parent")
     if stat.S_IMODE(parent.st_mode) & 0o022:
         raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe parent mode")
-    parent_acls = set(os.listxattr(current))
-    if {"system.posix_acl_access", "system.posix_acl_default"} & parent_acls:
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl parent")
-
     # Cooperative Substrate creators serialize candidate initialization. Malicious root or
     # same-UID replacement before first open is outside the A1 V1 threat model.
     fcntl.flock(current, fcntl.LOCK_EX)
@@ -921,16 +969,9 @@ try:
                 raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
         finally:
             os.close(reopened)
-        current_parent = os.fstat(current)
+        current_parent = validate_ancestor(current)
         if (current_parent.st_dev, current_parent.st_ino) != (parent.st_dev, parent.st_ino):
             raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced parent")
-        if current_parent.st_uid not in (0, os.geteuid()):
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner parent")
-        if stat.S_IMODE(current_parent.st_mode) & 0o022:
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe parent mode")
-        current_parent_acls = set(os.listxattr(current))
-        if {"system.posix_acl_access", "system.posix_acl_default"} & current_parent_acls:
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl parent")
         for index, component in enumerate(chain_names):
             current_ancestor = validate_ancestor(chain[index + 1])
             if (current_ancestor.st_dev, current_ancestor.st_ino) != chain_identities[index + 1]:

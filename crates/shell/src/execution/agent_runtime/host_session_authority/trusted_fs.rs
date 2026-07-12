@@ -98,6 +98,8 @@ mod platform {
     const FILE_MODE: libc::mode_t = 0o600;
     const ACL_USER: u16 = 0x0002;
     const ACL_GROUP: u16 = 0x0008;
+    #[cfg(target_os = "linux")]
+    const ACL_MASK: u16 = 0x0010;
     #[cfg(target_os = "macos")]
     const MACOS_ACL_EXTENDED_ALLOW: libc::c_int = 1;
     #[cfg(target_os = "macos")]
@@ -1497,7 +1499,7 @@ mod platform {
         owner_uid: libc::uid_t,
     ) -> Result<(u64, u64), PrivateHomeError> {
         let stat = validate_private_home_ancestor(parent, owner_uid)?;
-        validate_private_home_acl(parent.as_raw_fd())?;
+        validate_private_home_parent_acl(parent.as_raw_fd())?;
         Ok((stat.st_dev as u64, stat.st_ino as u64))
     }
 
@@ -1518,8 +1520,7 @@ mod platform {
         if stat.st_mode & 0o022 != 0 {
             return Err(PrivateHomeError::new(PrivateHomeReason::WrongMode));
         }
-        validate_acl(directory.as_raw_fd())
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ForeignAcl))?;
+        validate_private_home_parent_acl(directory.as_raw_fd())?;
         Ok(stat)
     }
 
@@ -1674,6 +1675,42 @@ mod platform {
         }
         #[cfg(target_os = "macos")]
         validate_macos_acl(fd, true)
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ForeignAcl))?;
+        Ok(())
+    }
+
+    fn validate_private_home_parent_acl(fd: RawFd) -> Result<(), PrivateHomeError> {
+        #[cfg(target_os = "linux")]
+        {
+            for name in [c"system.posix_acl_access", c"system.posix_acl_default"] {
+                // SAFETY: fd is live; null buffer with zero length queries the xattr size.
+                let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
+                if size < 0 {
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::ENODATA) {
+                        continue;
+                    }
+                    return Err(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    ));
+                }
+                let mut bytes = vec![0_u8; size as usize];
+                // SAFETY: buffer is allocated to the queried size.
+                if unsafe {
+                    libc::fgetxattr(fd, name.as_ptr(), bytes.as_mut_ptr().cast(), bytes.len())
+                } < 0
+                {
+                    return Err(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    ));
+                }
+                if parent_acl_grants_named_principal(&bytes) {
+                    return Err(PrivateHomeError::new(PrivateHomeReason::ForeignAcl));
+                }
+            }
+        }
+        #[cfg(target_os = "macos")]
+        validate_macos_acl(fd, false)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ForeignAcl))?;
         Ok(())
     }
@@ -1835,6 +1872,74 @@ mod platform {
                     matches!(tag, ACL_USER | ACL_GROUP)
                 })
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn parent_acl_grants_named_principal(bytes: &[u8]) -> bool {
+        let Some(entries) = bytes.get(4..) else {
+            return true;
+        };
+        if bytes.get(..4) != Some(2_u32.to_le_bytes().as_slice()) || entries.len() % 8 != 0 {
+            return true;
+        }
+        let mut mask = None;
+        let mut user_object = false;
+        let mut group_object = false;
+        let mut other = false;
+        let mut named_entries = Vec::new();
+        for entry in entries.chunks_exact(8) {
+            let tag = u16::from_le_bytes([entry[0], entry[1]]);
+            let permissions = u16::from_le_bytes([entry[2], entry[3]]);
+            let identifier = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
+            if permissions & !0o7 != 0 {
+                return true;
+            }
+            match tag {
+                ACL_USER | ACL_GROUP => {
+                    if identifier == u32::MAX
+                        || named_entries.iter().any(|(seen_tag, seen_id, _)| {
+                            *seen_tag == tag && *seen_id == identifier
+                        })
+                    {
+                        return true;
+                    }
+                    named_entries.push((tag, identifier, permissions));
+                }
+                ACL_MASK => {
+                    if identifier != u32::MAX || mask.replace(permissions).is_some() {
+                        return true;
+                    }
+                }
+                0x0001 => {
+                    if identifier != u32::MAX || std::mem::replace(&mut user_object, true) {
+                        return true;
+                    }
+                }
+                0x0004 => {
+                    if identifier != u32::MAX || std::mem::replace(&mut group_object, true) {
+                        return true;
+                    }
+                }
+                0x0020 => {
+                    if identifier != u32::MAX || std::mem::replace(&mut other, true) {
+                        return true;
+                    }
+                }
+                _ => return true,
+            }
+        }
+        if !user_object || !group_object || !other {
+            return true;
+        }
+        if named_entries.is_empty() {
+            return false;
+        }
+        let Some(mask) = mask else {
+            return true;
+        };
+        named_entries
+            .into_iter()
+            .any(|(_, _, permissions)| permissions & mask != 0)
     }
 
     #[cfg(target_os = "linux")]
@@ -2071,7 +2176,7 @@ mod platform {
 
         #[cfg(target_os = "linux")]
         #[test]
-        fn private_home_rejects_foreign_parent_acl() {
+        fn private_home_accepts_non_grant_parent_acl() {
             let temp = tempfile::Builder::new()
                 .prefix("substrate-a1-parent-acl-")
                 .tempdir_in(safe_test_parent())
@@ -2105,11 +2210,81 @@ mod platform {
                 "{}",
                 io::Error::last_os_error()
             );
+            assert!(!parent_acl_grants_named_principal(&acl));
+            validate_private_home_parent_acl(directory.as_raw_fd()).unwrap();
+            let target = temp.path().join("home");
+
+            let root = ensure_private_substrate_home(&target, effective_uid()).unwrap();
+            root.revalidate().unwrap();
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn private_home_rejects_foreign_parent_acl_grant() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-parent-acl-grant-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let directory = File::open(temp.path()).unwrap();
+            let mut acl = 2_u32.to_le_bytes().to_vec();
+            for (tag, permissions, id) in [
+                (0x0001_u16, 7_u16, u32::MAX),
+                (ACL_USER, 1_u16, effective_uid().saturating_add(1)),
+                (0x0004_u16, 0_u16, u32::MAX),
+                (0x0010_u16, 1_u16, u32::MAX),
+                (0x0020_u16, 0_u16, u32::MAX),
+            ] {
+                acl.extend_from_slice(&tag.to_le_bytes());
+                acl.extend_from_slice(&permissions.to_le_bytes());
+                acl.extend_from_slice(&id.to_le_bytes());
+            }
+            // SAFETY: directory is live and acl points to an initialized buffer.
+            assert_eq!(
+                unsafe {
+                    libc::fsetxattr(
+                        directory.as_raw_fd(),
+                        c"system.posix_acl_access".as_ptr(),
+                        acl.as_ptr().cast(),
+                        acl.len(),
+                        0,
+                    )
+                },
+                0,
+                "{}",
+                io::Error::last_os_error()
+            );
             let target = temp.path().join("home");
 
             let error = ensure_private_substrate_home(&target, effective_uid()).unwrap_err();
             assert_eq!(error.reason(), PrivateHomeReason::ForeignAcl);
             assert!(!target.exists());
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        fn private_home_accepts_deny_only_parent_acl() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-parent-deny-acl-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let status = std::process::Command::new("/bin/chmod")
+                .args(["+a", "everyone deny delete"])
+                .arg(temp.path())
+                .status()
+                .unwrap();
+            assert!(status.success());
+            let target = temp.path().join("home");
+
+            let result = ensure_private_substrate_home(&target, effective_uid());
+            let cleanup = std::process::Command::new("/bin/chmod")
+                .arg("-N")
+                .arg(temp.path())
+                .status()
+                .unwrap();
+            assert!(cleanup.success());
+            result.unwrap().revalidate().unwrap();
         }
 
         #[test]
