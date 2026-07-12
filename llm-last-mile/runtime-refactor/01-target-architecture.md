@@ -185,6 +185,25 @@ ACL removal, migration, adoption, deletion, or other automatic repair. Custom ho
 only when they satisfy the same contract. Multiple operating-system principals directly sharing
 one `SUBSTRATE_HOME` are unsupported in A1 V1.
 
+Directory creation and identity acceptance are distinct. `mkdirat` success establishes only a
+candidate name under an already-opened trusted parent; portable Linux/macOS APIs do not atomically
+create a directory and return its inode-bound handle. The accepted `PrivateSubstrateHomeV1`
+physical identity begins at the first successful no-follow directory open followed by
+descriptor-based owner, type, exact-mode, ACL, filesystem, and physical-identity validation. The
+parent remains descriptor-bound across candidate creation and opening and must already have the
+expected type and owner, no write authority for another principal, and no disallowed ACL grant.
+Legitimate concurrent Substrate creators converge when one creates and another observes
+`AlreadyExists`: each no-follow opens and validates the candidate, and only its exact accepted
+descriptor identity may proceed.
+
+After that first accepted open, all descendant access remains descriptor-relative and the child
+name is rejoined to the accepted descriptor identity at required publication or acceptance
+boundaries. Rename, replacement, owner/mode/ACL drift, or validation uncertainty fails closed.
+Preventing malicious root or malicious code already executing under the same UID from substituting
+the child before the first descriptor acquisition is outside the A1 V1 threat model. A1.1d-5
+therefore requires neither an impossible atomic create-and-bind claim nor a privileged creation
+broker; adding such a broker is a separately approved architecture change.
+
 World members do not gain direct traversal authority over the host user's private home. They
 consume configuration, policy, dependency, and credential material through Substrate-owned
 projection and mediation boundaries. A privileged Substrate service may access the private root

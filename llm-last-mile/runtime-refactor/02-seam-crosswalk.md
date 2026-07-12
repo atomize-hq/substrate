@@ -31,6 +31,16 @@ contract, that the real production path has adopted that seam, or that its runti
 | AgentConfigProjectionService | Config, policy, inventory, and future runtime projections originate from the bound private root and reach world members only through Substrate-owned projection/mediation, not direct unprivileged traversal. | No promotion. Direct world Codex projection/gateway adoption remains unresolved under `RG-CONFIG-04`. | Precedence, inventory interpretation, credential posture, and projection identity do not change in A1.1d-5. |
 | RuntimeFamilyRealizationAdapter | Provider runtimes retain current availability and receive only the already-landed runtime/config/gateway inputs; private-home creation cannot remove a runtime family or bypass the gateway carrier. | No promotion. Adapter ownership and contract-correct consumer realization remain later work. | No launch semantics, provider parsing, credential path, world request, policy snapshot, or enforcement-plan change. |
 
+For this prerequisite, `mkdirat` success creates only a candidate name. The accepted child identity
+begins at the first no-follow directory open and descriptor validation beneath a descriptor-bound,
+already-validated trusted parent. Legitimate same-UID Substrate creators converge through create
+versus `AlreadyExists`, then independently open and validate the same candidate. All operations
+after acceptance remain descriptor-relative, with path-to-descriptor identity revalidation at
+required publication boundaries. A different principal is excluded by the trusted parent's owner,
+mode, and ACL posture; malicious root or malicious same-UID substitution before the first child
+descriptor is acquired is outside the A1 V1 threat model. This correction adds no privileged
+broker, changes no StateStore or HostSessionAuthority semantics, and promotes no seam.
+
 ## A0 authority-leak inventory contract
 
 Slice A0 populates a repo-grounded inventory in this file before authority code moves. Do not create a separate control-pack file. Each inventoried use of helper/PID/socket/heartbeat/attached-client/owner-process/cwd/env state records:

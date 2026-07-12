@@ -112,8 +112,13 @@ Outcome:
 
 - make every supported production creation path create `SUBSTRATE_HOME` as private per-user state
   owned by the intended per-user owner with exact mode `0700`, independent of ambient umask;
-- reopen and validate the physical root no-follow, including owner, exact mode, ACL, type, identity,
-  and replacement checks, before config, runtime, or authority bootstrap;
+- retain an already-validated trusted-parent descriptor, create only a candidate child name or join
+  `AlreadyExists`, then define the accepted physical root identity at the first successful no-follow
+  child open and descriptor validation of owner, exact mode, ACL, type, filesystem, and identity;
+- support legitimate concurrent same-UID Substrate creators through create-versus-`AlreadyExists`
+  convergence, while keeping every post-acceptance operation descriptor-relative and revalidating
+  path-to-descriptor identity at required publication boundaries so later replacement or drift
+  fails closed;
 - accept an existing or custom root only when it already satisfies the identical contract, with no
   migration, chmod, chown, ACL removal, compatibility adoption, shared-home fallback, or repair;
 - limit implementation to live-inventory-derived bounded Rust home bootstrap, production/dev
@@ -126,7 +131,9 @@ Outcome:
   traces/diagnostics, and start/reattach/stop/retained-worker/world-binding behavior byte-for-byte
   or semantically equivalent as applicable;
 - treat shared multi-principal homes, install-root/state-root redesign, policy or world filesystem
-  changes, network changes, credential-path changes, and A1.1e as explicit non-goals; and
+  changes, network changes, credential-path changes, a privileged creation broker, defense against
+  malicious root or malicious same-UID substitution before first child-descriptor acquisition, and
+  A1.1e as explicit non-goals; do not claim portable atomic create-and-bind behavior; and
 - exit `RG-HOME-01` only after complete Linux creation and world-capability parity proof plus native
   macOS proof on the exact final runtime commit. Linux-only success leaves A1.1d incomplete and
   A1.1e blocked.

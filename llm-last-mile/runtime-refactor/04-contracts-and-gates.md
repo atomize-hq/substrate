@@ -96,10 +96,17 @@ contracts; this private-home rule does not narrow or expand it.
 #### `PrivateSubstrateHomeV1` acceptance rules
 
 `SUBSTRATE_HOME` is one user's private configuration, policy, dependency-inventory, runtime, and
-authority root. On supported Unix hosts, a creator fixes the intended owner before
-creation, creates only the final physical directory with mode `0700` independent of umask, opens
-that directory no-follow, and accepts it only after post-open validation proves all of the
-following:
+authority root. On supported Unix hosts, the creator first opens and retains the intended physical
+parent and validates from that descriptor that it has the expected type and owner, is not writable
+by another principal, has no disallowed ACL grant, and retains the expected physical identity. The
+creator then invokes `mkdirat` relative to that trusted parent or joins `AlreadyExists`. Successful
+`mkdirat` establishes only a candidate name; it does not establish the accepted child identity.
+Portable Linux/macOS APIs do not atomically create a directory and return an inode-bound directory
+handle.
+
+The accepted `PrivateSubstrateHomeV1` physical identity begins at the first successful no-follow
+directory open of the candidate relative to that same parent descriptor. Descriptor-based
+validation then proves all of the following before any descendant bootstrap:
 
 1. the selected absolute UTF-8 physical path is the path represented by the opened handle;
 2. the handle names a directory owned by the intended per-user owner;
@@ -108,17 +115,35 @@ following:
    named user, named group, inherited, default, or other extended ACL entry, even when an ACL mask
    would make an unexpected entry ineffective;
 5. no path component or final entry was followed through a symlink or substituted with another
-   type, and the captured platform physical identity matches before acceptance; and
-6. a final no-follow reopen/revalidation observes the same physical identity, owner, type, mode,
-   and ACL as creation/opening, so replacement or validation uncertainty fails closed.
+   type, and the accepted platform physical identity is sourced only from the opened descriptor;
+   and
+6. the candidate resides on the expected filesystem where the trusted-filesystem contract requires
+   that constraint.
 
-Creation must use an exclusive/no-follow operation or an equivalent directory-relative sequence
-that distinguishes successful creation from `AlreadyExists`. A newly created root is never
-accepted from its requested mode alone: it is reopened and validated. The creator must `fsync` the
-new directory and its affected parent where the platform supports the A1 durable-filesystem
-contract. Ambient umask may remove bits during creation, but the creator may set the new inode to
-exact `0700` before acceptance; it may never broaden or otherwise repair a root that existed before
-the attempt.
+Creation uses a directory-relative sequence that distinguishes successful creation from
+`AlreadyExists`. Legitimate concurrent Substrate creators are supported: one may create while
+another observes `AlreadyExists`; each then no-follow opens and exactly validates the candidate,
+and only the identity captured from its accepted descriptor proceeds. A newly created root is
+never accepted from its requested mode alone. The creator must `fsync` the new directory and its
+affected parent where the platform supports the A1 durable-filesystem contract. Ambient umask may
+remove bits during creation, but the creator may set the newly opened candidate to exact `0700`
+before acceptance; it may never broaden or otherwise repair a root that existed before the
+attempt.
+
+After the first accepted open, every access remains descriptor-relative. At required publication
+and acceptance boundaries, a no-follow lookup beneath the retained parent must still join the
+child name to that accepted descriptor identity and descriptor validation must still prove type,
+owner, exact mode, ACL, and required filesystem posture. Rename, replacement, owner/mode/ACL drift,
+or validation uncertainty fails closed. No path-based descendant operation is permitted after
+binding.
+
+The trusted-parent owner, mode, and ACL rules prevent a different-principal attacker from replacing
+the child. A1 V1 does not establish a boundary against malicious root or malicious code already
+executing under the same UID, so substitution by either before the first child descriptor is
+acquired is outside the threat model. A1.1d-5 makes no atomic create-and-bind claim and requires no
+privileged creation broker, protected staging root, or root-owned publication protocol. Such a
+broker is an explicit non-goal unless a later separately approved architecture expands the threat
+model.
 
 An existing root, including a custom `SUBSTRATE_HOME`, is accepted only if it already passes the
 same rules. Wrong type, symlink, owner mismatch, `0755`, `0750`, any group/world permission,
