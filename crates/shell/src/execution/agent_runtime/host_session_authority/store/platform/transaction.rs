@@ -1,3 +1,4 @@
+use super::legacy::ObservedLegacyDirectory;
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -26,12 +27,124 @@ struct RetainedDirectory {
 }
 
 impl RetainedLegacyDirectories {
-    fn observe(
-        &mut self,
+    fn from_observation(
         root: &TrustedDirectory,
-        components: &[&str],
+        observation: &LegacyObservation,
+    ) -> Result<Self, BootstrapError> {
+        let mut retained = Self::default();
+        Self::retain_observed_collection(
+            root,
+            &mut retained.children,
+            &observation.sessions.components,
+            &observation.sessions.missing_suffix,
+        )?;
+        Self::retain_observed_collection(
+            root,
+            &mut retained.children,
+            &observation.participants.components,
+            &observation.participants.missing_suffix,
+        )?;
+        Ok(retained)
+    }
+
+    fn retain_observed_collection(
+        parent: &TrustedDirectory,
+        retained: &mut RetainedDirectoryChildren,
+        observed: &[ObservedLegacyDirectory],
+        missing_suffix: &[String],
     ) -> Result<(), BootstrapError> {
-        self.with_directory(root, components, false, |_| Ok(()))?;
+        let Some((expected, remaining)) = observed.split_first() else {
+            if let Some(missing) = missing_suffix.first() {
+                if retained.opened.contains_key(missing)
+                    || parent
+                        .entry_kind(missing)
+                        .map_err(|_| {
+                            BootstrapError("revalidate classified legacy StateStore absence")
+                        })?
+                        .is_some()
+                {
+                    return Err(BootstrapError(
+                        "classified legacy StateStore directory changed during admission",
+                    ));
+                }
+                retained.absent.insert(missing.clone());
+            }
+            return Ok(());
+        };
+
+        if retained.absent.contains(&expected.entry.name) {
+            return Err(BootstrapError(
+                "classified legacy StateStore directory conflicts during admission",
+            ));
+        }
+        if let Some(existing) = retained.opened.get(&expected.entry.name) {
+            if existing.entry != expected.entry {
+                return Err(BootstrapError(
+                    "classified legacy StateStore directory identity is inconsistent",
+                ));
+            }
+        } else {
+            parent
+                .revalidate_entry(&expected.entry)
+                .map_err(|_| BootstrapError("revalidate classified legacy StateStore route"))?;
+            let directory = parent
+                .open_controlled_directory_entry(&expected.entry)
+                .map_err(|_| BootstrapError("retain classified legacy StateStore route"))?;
+            retained.opened.insert(
+                expected.entry.name.clone(),
+                RetainedDirectory {
+                    entry: expected.entry.clone(),
+                    directory,
+                    children: RetainedDirectoryChildren::default(),
+                },
+            );
+        }
+        let child = retained
+            .opened
+            .get_mut(&expected.entry.name)
+            .ok_or(BootstrapError(
+                "classified legacy StateStore route was not retained",
+            ))?;
+        Self::retain_observed_collection(
+            &child.directory,
+            &mut child.children,
+            remaining,
+            missing_suffix,
+        )
+    }
+
+    fn revalidate(&self, root: &TrustedDirectory) -> Result<(), BootstrapError> {
+        Self::revalidate_children(root, &self.children)
+    }
+
+    fn revalidate_children(
+        parent: &TrustedDirectory,
+        retained: &RetainedDirectoryChildren,
+    ) -> Result<(), BootstrapError> {
+        for absent in &retained.absent {
+            if parent
+                .entry_kind(absent)
+                .map_err(|_| BootstrapError("revalidate retained legacy StateStore absence"))?
+                .is_some()
+            {
+                return Err(BootstrapError(
+                    "retained legacy StateStore directory appeared",
+                ));
+            }
+        }
+        for child in retained.opened.values() {
+            parent
+                .revalidate_entry(&child.entry)
+                .and_then(|()| {
+                    parent
+                        .open_controlled_directory_entry(&child.entry)
+                        .map(drop)
+                })
+                .map_err(|_| {
+                    BootstrapError("retained legacy StateStore directory changed identity")
+                })?;
+            Self::revalidate_children(&child.directory, &child.children)?;
+        }
         Ok(())
     }
 
@@ -145,13 +258,24 @@ impl RetainedLegacyDirectories {
                     .map(drop)
             })
             .map_err(|_| BootstrapError("retained legacy StateStore directory changed identity"))?;
-        Self::with_child_directory(
+        let result = Self::with_child_directory(
             &child.directory,
             &mut child.children,
             remaining,
             create_missing,
             operation,
-        )
+        )?;
+        parent
+            .revalidate_entry(&child.entry)
+            .and_then(|()| {
+                parent
+                    .open_controlled_directory_entry(&child.entry)
+                    .map(drop)
+            })
+            .map_err(|_| {
+                BootstrapError("retained legacy StateStore directory changed during operation")
+            })?;
+        Ok(result)
     }
 
     fn directory_entry(
@@ -167,6 +291,14 @@ impl RetainedLegacyDirectories {
                 "retained legacy StateStore directory was not safely enumerated",
             ))
     }
+}
+
+#[cfg(test)]
+pub(super) fn retain_classified_legacy_directories_test(
+    root: &TrustedDirectory,
+    observation: &LegacyObservation,
+) -> Result<(), BootstrapError> {
+    RetainedLegacyDirectories::from_observation(root, observation).map(drop)
 }
 
 pub(super) struct SemanticTransaction<'layout, 'root> {
@@ -329,10 +461,14 @@ impl LegacyStateStoreTransactionV1 {
 
     pub(crate) fn finish(self) -> Result<(), BootstrapError> {
         self.verify_retained_root()?;
+        self.retained_directories
+            .revalidate(self.root.directory())?;
         self.root
             .directory()
             .sync()
             .map_err(|_| BootstrapError("sync retained legacy StateStore root"))?;
+        self.retained_directories
+            .revalidate(self.root.directory())?;
         self.verify_retained_root()
     }
 
@@ -452,10 +588,8 @@ pub(super) fn begin_legacy_state_store_transaction(
                     "legacy authority writer is disabled after A1 activation",
                 ));
             }
-            let mut retained_directories = RetainedLegacyDirectories::default();
-            retained_directories.observe(layout.bootstrap, &["run", "agent-hub", "sessions"])?;
-            retained_directories
-                .observe(layout.bootstrap, &["run", "agent-hub", "participants"])?;
+            let retained_directories =
+                RetainedLegacyDirectories::from_observation(layout.bootstrap, &observed.legacy)?;
             Ok((observed.legacy, retained_directories, lock))
         },
     )?;

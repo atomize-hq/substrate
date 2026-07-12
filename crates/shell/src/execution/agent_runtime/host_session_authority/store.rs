@@ -68,6 +68,14 @@ pub(crate) fn begin_legacy_state_store_transaction(
     platform::begin_legacy_state_store_transaction(path)
 }
 
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+fn legacy_transaction_admission_handoff_test(
+    path: &Path,
+    after_classification: impl FnOnce(),
+) -> Result<(), BootstrapError> {
+    platform::legacy_transaction_admission_handoff_test(path, after_classification)
+}
+
 pub(crate) use platform::LegacyStateStoreTransactionV1;
 pub(crate) type LegacyWriterGuard = LegacyStateStoreTransactionV1;
 
@@ -221,6 +229,8 @@ mod platform {
     use reachability::{add_expected_ref, collect_reachable_objects};
     #[path = "transaction.rs"]
     mod transaction;
+    #[cfg(test)]
+    use transaction::retain_classified_legacy_directories_test;
     pub(crate) use transaction::LegacyStateStoreTransactionV1;
     use transaction::{
         begin_legacy_state_store_transaction as begin_legacy_transaction,
@@ -305,6 +315,19 @@ mod platform {
         path: &std::path::Path,
     ) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
         begin_legacy_transaction(path)
+    }
+
+    #[cfg(test)]
+    pub(super) fn legacy_transaction_admission_handoff_test(
+        path: &std::path::Path,
+        after_classification: impl FnOnce(),
+    ) -> Result<(), BootstrapError> {
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open test legacy StateStore root"))?;
+        let observation = LegacyObservation::capture(root.directory())
+            .map_err(|_| BootstrapError("capture test legacy StateStore observation"))?;
+        after_classification();
+        retain_classified_legacy_directories_test(root.directory(), &observation)
     }
 
     #[cfg(test)]

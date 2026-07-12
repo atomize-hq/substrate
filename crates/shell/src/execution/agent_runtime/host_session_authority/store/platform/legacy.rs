@@ -1,8 +1,8 @@
 use super::{DirectoryEntry, EntryKind, StoreError, TrustedDirectory};
 
 pub(super) struct LegacyObservation {
-    sessions: LegacyCollectionObservation,
-    participants: LegacyCollectionObservation,
+    pub(super) sessions: LegacyCollectionObservation,
+    pub(super) participants: LegacyCollectionObservation,
     pub(super) has_artifact: bool,
 }
 
@@ -31,16 +31,16 @@ impl LegacyObservation {
     }
 }
 
-struct LegacyCollectionObservation {
-    components: Vec<ObservedLegacyDirectory>,
-    missing_suffix: Vec<String>,
+pub(super) struct LegacyCollectionObservation {
+    pub(super) components: Vec<ObservedLegacyDirectory>,
+    pub(super) missing_suffix: Vec<String>,
     recursive: bool,
     has_artifact: bool,
 }
 
-struct ObservedLegacyDirectory {
-    entry: DirectoryEntry,
-    directory: TrustedDirectory,
+pub(super) struct ObservedLegacyDirectory {
+    pub(super) entry: DirectoryEntry,
+    pub(super) directory: TrustedDirectory,
 }
 
 impl LegacyCollectionObservation {

@@ -2534,3 +2534,53 @@ fn legacy_transaction_rejects_descendant_replacement_between_read_and_write() {
         b"original"
     );
 }
+
+#[test]
+fn legacy_transaction_finish_rejects_descendant_replacement_after_write() {
+    let bootstrap = root();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["session-a", "snapshot.json"],
+            b"original",
+            [0x18; 16],
+        )
+        .unwrap();
+
+    let sessions = bootstrap.path().join("run/agent-hub/sessions");
+    let retained = sessions.join("session-a-retained");
+    fs::rename(sessions.join("session-a"), &retained).unwrap();
+    fs::create_dir(sessions.join("session-a")).unwrap();
+    fs::set_permissions(
+        sessions.join("session-a"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .unwrap();
+
+    assert!(transaction.finish().is_err());
+    assert!(fs::read_dir(sessions.join("session-a"))
+        .unwrap()
+        .next()
+        .is_none());
+    assert_eq!(
+        fs::read(retained.join("snapshot.json")).unwrap(),
+        b"original"
+    );
+}
+
+#[test]
+fn legacy_transaction_admission_rejects_classified_absence_replacement() {
+    let bootstrap = root();
+    assert!(
+        legacy_transaction_admission_handoff_test(bootstrap.path(), || {
+            fs::create_dir(bootstrap.path().join("run")).unwrap();
+            fs::set_permissions(
+                bootstrap.path().join("run"),
+                fs::Permissions::from_mode(0o700),
+            )
+            .unwrap();
+        })
+        .is_err()
+    );
+}
