@@ -431,7 +431,7 @@ impl<'a> StoreLayout<'a> {
             .map_err(|_| BootstrapError("sync commitment key directory"))
     }
 
-    fn read_existing_without_reconciliation(
+    pub(super) fn read_existing_without_reconciliation(
         &self,
         bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
     ) -> Result<StateRootV1, StoreError> {

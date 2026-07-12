@@ -366,6 +366,7 @@ pub(super) fn retain_classified_legacy_directories_test(
 
 pub(super) struct SemanticTransaction<'layout, 'root> {
     pub(super) layout: &'layout StoreLayout<'root>,
+    pub(super) trusted_root: &'root TrustedAuthorityRoot,
     pub(super) root: StateRootV1,
     pub(super) legacy: LegacyObservation,
 }
@@ -392,6 +393,106 @@ impl SemanticTransaction<'_, '_> {
         self.layout
             .reconcile_after_preflight(&self.root)
             .map_err(|_| BootstrapError("reconcile authority store after semantic preflight"))
+    }
+
+    pub(super) fn validate_publication_candidate(
+        &self,
+        expected_root_revision: u64,
+        candidate: &StateRootV1,
+    ) -> Result<(), BootstrapError> {
+        self.trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root before candidate validation"))?;
+        self.require_expected_root(expected_root_revision)?;
+        let current = self
+            .layout
+            .read_existing_without_reconciliation(&self.root.bootstrap_home)
+            .map_err(|_| BootstrapError("reread locked root before candidate validation"))?;
+        if current != self.root {
+            return Err(BootstrapError(
+                "locked authority root changed before candidate validation",
+            ));
+        }
+        let next_revision = expected_root_revision
+            .checked_add(1)
+            .ok_or(BootstrapError("expected root revision overflow"))?;
+        if candidate.root_revision != next_revision
+            || candidate.authority_store_id != current.authority_store_id
+            || candidate.bootstrap_home != current.bootstrap_home
+            || candidate.greenfield_namespace_certificate
+                != current.greenfield_namespace_certificate
+        {
+            return Err(BootstrapError(
+                "publication candidate identity or revision is invalid",
+            ));
+        }
+        self.layout
+            .validate_root_candidate(candidate)
+            .map_err(|_| BootstrapError("validate reconciled publication candidate"))?;
+        self.legacy
+            .revalidate(self.layout.bootstrap)
+            .map_err(|_| BootstrapError("revalidate legacy state for publication candidate"))?;
+        self.trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root after candidate validation"))?;
+        let current = self
+            .layout
+            .read_existing_without_reconciliation(&self.root.bootstrap_home)
+            .map_err(|_| BootstrapError("reread locked root after candidate validation"))?;
+        if current != self.root {
+            return Err(BootstrapError(
+                "locked authority root changed during candidate validation",
+            ));
+        }
+        self.layout
+            .validate_root_candidate(candidate)
+            .map_err(|_| BootstrapError("revalidate reconciled publication candidate"))
+    }
+
+    fn validate_exact_committed_candidate(
+        &self,
+        expected_root_revision: u64,
+        candidate: &StateRootV1,
+    ) -> Result<(), BootstrapError> {
+        self.trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root for exact retry"))?;
+        let next_revision = expected_root_revision
+            .checked_add(1)
+            .ok_or(BootstrapError("expected root revision overflow"))?;
+        if candidate.root_revision != next_revision || self.root != *candidate {
+            return Err(BootstrapError("exact retry candidate is not current root"));
+        }
+        let current = self
+            .layout
+            .read_existing_without_reconciliation(&self.root.bootstrap_home)
+            .map_err(|_| BootstrapError("reread locked root for exact retry"))?;
+        if current != self.root {
+            return Err(BootstrapError(
+                "locked authority root changed during exact retry",
+            ));
+        }
+        self.layout
+            .validate_root_candidate(candidate)
+            .map_err(|_| BootstrapError("validate exact committed authority root"))?;
+        self.legacy
+            .revalidate(self.layout.bootstrap)
+            .map_err(|_| BootstrapError("revalidate legacy state for exact retry"))?;
+        self.trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root after exact retry"))?;
+        let current = self
+            .layout
+            .read_existing_without_reconciliation(&self.root.bootstrap_home)
+            .map_err(|_| BootstrapError("reread locked root after exact retry"))?;
+        if current != self.root {
+            return Err(BootstrapError(
+                "locked authority root changed after exact retry",
+            ));
+        }
+        self.layout
+            .validate_root_candidate(candidate)
+            .map_err(|_| BootstrapError("revalidate exact committed authority root"))
     }
 }
 
@@ -745,8 +846,10 @@ pub(super) fn with_existing_semantic_preflight<T>(
     path: &std::path::Path,
     operation: impl FnOnce(&SemanticTransaction<'_, '_>) -> Result<T, BootstrapError>,
 ) -> Result<T, BootstrapError> {
-    with_semantic_preflight(
-        path,
+    let root_handle = TrustedAuthorityRoot::open(path)
+        .map_err(|_| BootstrapError("open trusted authority root"))?;
+    with_opened_semantic_preflight(
+        &root_handle,
         SemanticPreflightMode::AuthorityOperation,
         |layout, _, observed, _lock| {
             if observed.classification != BootstrapClassificationV1::ValidExisting {
@@ -759,6 +862,7 @@ pub(super) fn with_existing_semantic_preflight<T>(
                 .ok_or(BootstrapError("semantic preflight omitted existing root"))?;
             operation(&SemanticTransaction {
                 layout,
+                trusted_root: &root_handle,
                 root,
                 legacy: observed.legacy,
             })
@@ -778,10 +882,7 @@ pub(super) fn compare_and_swap_root_with(
         if transaction.root == *proposed {
             validate_exact_retry_expectation(expected, proposed)?;
             transaction.reconcile()?;
-            transaction
-                .layout
-                .validate_root_candidate(proposed)
-                .map_err(|_| BootstrapError("validate exact committed authority root"))?;
+            transaction.validate_exact_committed_candidate(expected.root_revision, proposed)?;
             return Ok(TransactionCommitOutcomeV1::JoinedExact(proposed.clone()));
         }
         if transaction.root.root_revision != expected.root_revision {
@@ -790,23 +891,13 @@ pub(super) fn compare_and_swap_root_with(
         validate_current_authority_expectation(&transaction.root, expected)?;
         validate_authority_changes(&transaction.root, proposed, expected)?;
         transaction.reconcile()?;
-        transaction
-            .layout
-            .validate_root_candidate(proposed)
-            .map_err(|_| BootstrapError("validate proposed authority root"))?;
-        transaction
-            .legacy
-            .revalidate(transaction.layout.bootstrap)
-            .map_err(|_| BootstrapError("revalidate legacy state before root CAS"))?;
-        transaction
-            .layout
-            .validate_root_candidate(proposed)
-            .map_err(|_| BootstrapError("revalidate proposed authority root"))?;
         publish_replacement_root(
             transaction.layout,
+            transaction.trusted_root,
             &transaction.legacy,
             proposed,
             nonce_bytes,
+            || transaction.validate_publication_candidate(expected.root_revision, proposed),
         )?;
         Ok(TransactionCommitOutcomeV1::Committed(proposed.clone()))
     })
@@ -831,17 +922,15 @@ fn validate_exact_retry_expectation(
     expected: &ExpectedRevisionsV1,
     proposed: &StateRootV1,
 ) -> Result<(), BootstrapError> {
-    let authorities = proposed
-        .session_namespace_map
-        .iter()
-        .filter_map(|(session_id, record)| match record {
-            SessionNamespaceRecordV1::Authority(authority) => Some((session_id, authority)),
-            SessionNamespaceRecordV1::StartReservation(_)
-            | SessionNamespaceRecordV1::StartTombstone(_) => None,
-        })
-        .collect::<Vec<_>>();
     match expected.authority.as_ref() {
-        None if authorities.is_empty() => Ok(()),
+        None if proposed.session_namespace_map.is_empty()
+            && proposed.transition_intent_map.is_empty()
+            && proposed.issuer_request_index.is_empty()
+            && proposed.application_journal.is_empty()
+            && proposed.object_index.is_empty() =>
+        {
+            Ok(())
+        }
         _ => Err(BootstrapError(
             "exact retry authority provenance is ambiguous",
         )),

@@ -24,6 +24,9 @@ pub(super) fn rotate_commitment_key_with(
             secret_key: material.secret_key,
         };
         transaction.reconcile()?;
+        if stop == Some(KeyLifecycleCrashPointV1::Reconciled) {
+            return Err(BootstrapError("injected key rotation interruption"));
+        }
         transaction
             .layout
             .publish_key_envelope(&envelope, material.key_nonce)?;
@@ -51,13 +54,13 @@ pub(super) fn rotate_commitment_key_with(
             .root_revision
             .checked_add(1)
             .ok_or(BootstrapError("root revision overflow"))?;
-        root.validate()
-            .map_err(|_| BootstrapError("validate rotated key root"))?;
         publish_replacement_root(
             transaction.layout,
+            transaction.trusted_root,
             &transaction.legacy,
             &root,
             material.root_nonce,
+            || transaction.validate_publication_candidate(expected_root_revision, &root),
         )?;
         Ok(root)
     })
@@ -99,10 +102,18 @@ pub(super) fn retire_commitment_key_with(
             .root_revision
             .checked_add(1)
             .ok_or(BootstrapError("root revision overflow"))?;
-        root.validate()
-            .map_err(|_| BootstrapError("validate retired key root"))?;
         transaction.reconcile()?;
-        publish_replacement_root(transaction.layout, &transaction.legacy, &root, root_nonce)?;
+        if stop == Some(KeyLifecycleCrashPointV1::Reconciled) {
+            return Err(BootstrapError("injected key retirement interruption"));
+        }
+        publish_replacement_root(
+            transaction.layout,
+            transaction.trusted_root,
+            &transaction.legacy,
+            &root,
+            root_nonce,
+            || transaction.validate_publication_candidate(expected_root_revision, &root),
+        )?;
         if stop == Some(KeyLifecycleCrashPointV1::RootPublished) {
             return Err(BootstrapError("injected key retirement interruption"));
         }

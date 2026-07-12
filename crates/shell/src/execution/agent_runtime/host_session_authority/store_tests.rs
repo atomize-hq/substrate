@@ -236,10 +236,18 @@ fn key_rotation_and_retirement_reconcile_each_committed_boundary() {
     assert!(platform::rotate_commitment_key_test(
         root.path(),
         material(0x52),
+        Some(KeyLifecycleCrashPointV1::Reconciled),
+    )
+    .is_err());
+    assert_eq!(read_root(root.path()).unwrap(), initial);
+
+    assert!(platform::rotate_commitment_key_test(
+        root.path(),
+        material(0x53),
         Some(KeyLifecycleCrashPointV1::KeyPublished),
     )
     .is_err());
-    let recovered = platform::bootstrap_test(root.path(), material(0x53), None).unwrap();
+    let recovered = platform::bootstrap_test(root.path(), material(0x54), None).unwrap();
     assert_eq!(recovered, initial);
     assert_eq!(
         fs::read_dir(root.path().join("authority-v1/keys"))
@@ -248,7 +256,7 @@ fn key_rotation_and_retirement_reconcile_each_committed_boundary() {
         1
     );
 
-    let rotated = platform::rotate_commitment_key_test(root.path(), material(0x54), None).unwrap();
+    let rotated = platform::rotate_commitment_key_test(root.path(), material(0x55), None).unwrap();
     assert_ne!(rotated.active_commitment_key_id, initial_key);
     assert_eq!(
         rotated.commitment_key_registry[&initial_key].state,
@@ -259,7 +267,16 @@ fn key_rotation_and_retirement_reconcile_each_committed_boundary() {
     assert!(platform::retire_commitment_key_test(
         root.path(),
         &initial_key,
-        [0x55; 16],
+        [0x56; 16],
+        Some(KeyLifecycleCrashPointV1::Reconciled),
+    )
+    .is_err());
+    assert_eq!(read_root(root.path()).unwrap(), rotated);
+
+    assert!(platform::retire_commitment_key_test(
+        root.path(),
+        &initial_key,
+        [0x57; 16],
         Some(KeyLifecycleCrashPointV1::RootPublished),
     )
     .is_err());
@@ -267,7 +284,7 @@ fn key_rotation_and_retirement_reconcile_each_committed_boundary() {
         .path()
         .join(format!("authority-v1/keys/{initial_key}.key"))
         .exists());
-    let retired = platform::bootstrap_test(root.path(), material(0x56), None).unwrap();
+    let retired = platform::bootstrap_test(root.path(), material(0x58), None).unwrap();
     assert_eq!(
         retired.commitment_key_registry[&initial_key].state,
         AuthorityStoreCommitmentKeyStateV1::Retired
@@ -277,6 +294,93 @@ fn key_rotation_and_retirement_reconcile_each_committed_boundary() {
         .join(format!("authority-v1/keys/{initial_key}.key"))
         .exists());
     assert_eq!(retired.root_revision, rotated.root_revision + 1);
+}
+
+#[test]
+fn key_lifecycle_revalidates_invalid_candidates_after_reconciliation() {
+    let rotation = root();
+    let initial = platform::bootstrap_test(rotation.path(), material(0x59), None).unwrap();
+    let root_path = rotation.path().join("authority-v1/state-root-v1.json");
+    let root_bytes = fs::read(&root_path).unwrap();
+    let temp = rotation.path().join(
+        "authority-v1/tmp/key--ak_61616161616161616161616161616161--62626262626262626262626262626262.tmp",
+    );
+    fs::write(&temp, b"partial").unwrap();
+    fs::set_permissions(&temp, fs::Permissions::from_mode(0o600)).unwrap();
+    let mut invalid_rotation = initial.clone();
+    invalid_rotation.root_revision += 1;
+    invalid_rotation.active_commitment_key_id = "ak_63636363636363636363636363636363".into();
+    assert!(platform::publish_key_lifecycle_candidate_test(
+        rotation.path(),
+        initial.root_revision,
+        &invalid_rotation,
+        [0x68; 16],
+    )
+    .is_err());
+    assert!(!temp.exists(), "recognized temp must reconcile first");
+    assert_eq!(fs::read(&root_path).unwrap(), root_bytes);
+    let failed_rotation_temp = rotation
+        .path()
+        .join("authority-v1/tmp/root--r2--68686868686868686868686868686868.tmp");
+    assert!(failed_rotation_temp.exists());
+    assert_eq!(
+        platform::bootstrap_test(rotation.path(), material(0x69), None).unwrap(),
+        initial,
+    );
+    assert!(!failed_rotation_temp.exists());
+
+    let retirement = root();
+    let first = platform::bootstrap_test(retirement.path(), material(0x64), None).unwrap();
+    let rotated =
+        platform::rotate_commitment_key_test(retirement.path(), material(0x65), None).unwrap();
+    let root_path = retirement.path().join("authority-v1/state-root-v1.json");
+    let root_bytes = fs::read(&root_path).unwrap();
+    let keys_before = fs::read_dir(retirement.path().join("authority-v1/keys"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    let temp = retirement.path().join(
+        "authority-v1/tmp/key--ak_66666666666666666666666666666666--67676767676767676767676767676767.tmp",
+    );
+    fs::write(&temp, b"partial").unwrap();
+    fs::set_permissions(&temp, fs::Permissions::from_mode(0o600)).unwrap();
+    let mut invalid_retirement = rotated.clone();
+    invalid_retirement.root_revision += 1;
+    invalid_retirement
+        .commitment_key_registry
+        .get_mut(&first.active_commitment_key_id)
+        .unwrap()
+        .state = AuthorityStoreCommitmentKeyStateV1::Retired;
+    let active_key = invalid_retirement.active_commitment_key_id.clone();
+    invalid_retirement
+        .commitment_key_registry
+        .remove(&active_key);
+    assert!(platform::publish_key_lifecycle_candidate_test(
+        retirement.path(),
+        rotated.root_revision,
+        &invalid_retirement,
+        [0x6a; 16],
+    )
+    .is_err());
+    assert!(!temp.exists(), "recognized temp must reconcile first");
+    assert_eq!(fs::read(&root_path).unwrap(), root_bytes);
+    let failed_retirement_temp = retirement
+        .path()
+        .join("authority-v1/tmp/root--r3--6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a.tmp");
+    assert!(failed_retirement_temp.exists());
+    assert_eq!(
+        fs::read_dir(retirement.path().join("authority-v1/keys"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>(),
+        keys_before,
+        "invalid candidate validation must not remove commitment keys",
+    );
+    assert_eq!(
+        platform::bootstrap_test(retirement.path(), material(0x6b), None).unwrap(),
+        rotated,
+    );
+    assert!(!failed_retirement_temp.exists());
 }
 
 #[test]
@@ -1551,6 +1655,76 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         classify(root.path()),
         BootstrapClassificationV1::ValidExisting
     );
+
+    let authority_free_expectation = ExpectedRevisionsV1 {
+        root_revision: candidate.root_revision,
+        authority: None,
+    };
+    let mut reservation_only = candidate.clone();
+    reservation_only.transition_intent_map.clear();
+    reservation_only.issuer_request_index.clear();
+    reservation_only.application_journal.clear();
+    reservation_only.object_index.clear();
+    assert!(platform::validate_exact_retry_expectation_test(
+        &authority_free_expectation,
+        &reservation_only,
+    )
+    .is_err());
+
+    let mut tombstone_only = released.clone();
+    tombstone_only.transition_intent_map.clear();
+    tombstone_only.issuer_request_index.clear();
+    tombstone_only.application_journal.clear();
+    tombstone_only.object_index.clear();
+    assert!(platform::validate_exact_retry_expectation_test(
+        &authority_free_expectation,
+        &tombstone_only,
+    )
+    .is_err());
+
+    let mut intent_only = candidate.clone();
+    intent_only.session_namespace_map.clear();
+    intent_only.issuer_request_index.clear();
+    intent_only.application_journal.clear();
+    intent_only.object_index.clear();
+    assert!(platform::validate_exact_retry_expectation_test(
+        &authority_free_expectation,
+        &intent_only,
+    )
+    .is_err());
+
+    let mut issuer_only = candidate.clone();
+    issuer_only.session_namespace_map.clear();
+    issuer_only.transition_intent_map.clear();
+    issuer_only.application_journal.clear();
+    issuer_only.object_index.clear();
+    assert!(platform::validate_exact_retry_expectation_test(
+        &authority_free_expectation,
+        &issuer_only,
+    )
+    .is_err());
+
+    let mut journal_only = applied.clone();
+    journal_only.session_namespace_map.clear();
+    journal_only.transition_intent_map.clear();
+    journal_only.issuer_request_index.clear();
+    journal_only.object_index.clear();
+    assert!(platform::validate_exact_retry_expectation_test(
+        &authority_free_expectation,
+        &journal_only,
+    )
+    .is_err());
+
+    let mut object_only = candidate.clone();
+    object_only.session_namespace_map.clear();
+    object_only.transition_intent_map.clear();
+    object_only.issuer_request_index.clear();
+    object_only.application_journal.clear();
+    assert!(platform::validate_exact_retry_expectation_test(
+        &authority_free_expectation,
+        &object_only,
+    )
+    .is_err());
 
     fs::write(&transport_path, &valid_transport_bytes).unwrap();
     fs::set_permissions(&transport_path, fs::Permissions::from_mode(0o600)).unwrap();

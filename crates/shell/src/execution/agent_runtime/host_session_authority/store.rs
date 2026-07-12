@@ -132,6 +132,7 @@ enum InitializationCrashPointV1 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum KeyLifecycleCrashPointV1 {
+    Reconciled,
     KeyPublished,
     RootPublished,
 }
@@ -378,6 +379,26 @@ mod platform {
         proposed: &StateRootV1,
     ) -> Result<(), BootstrapError> {
         transaction::validate_exact_retry_expectation_test(expected, proposed)
+    }
+
+    #[cfg(test)]
+    pub(super) fn publish_key_lifecycle_candidate_test(
+        path: &std::path::Path,
+        expected_root_revision: u64,
+        candidate: &StateRootV1,
+        nonce_bytes: [u8; 16],
+    ) -> Result<(), BootstrapError> {
+        with_existing_semantic_preflight(path, |transaction| {
+            transaction.reconcile()?;
+            publish_replacement_root(
+                transaction.layout,
+                transaction.trusted_root,
+                &transaction.legacy,
+                candidate,
+                nonce_bytes,
+                || transaction.validate_publication_candidate(expected_root_revision, candidate),
+            )
+        })
     }
 
     #[cfg(test)]
@@ -714,9 +735,11 @@ mod platform {
 
     fn publish_replacement_root(
         layout: &StoreLayout<'_>,
+        trusted_root: &TrustedAuthorityRoot,
         legacy: &LegacyObservation,
         root: &StateRootV1,
         nonce_bytes: [u8; 16],
+        validate_candidate: impl FnOnce() -> Result<(), BootstrapError>,
     ) -> Result<(), BootstrapError> {
         legacy
             .revalidate(layout.bootstrap)
@@ -739,6 +762,10 @@ mod platform {
         legacy
             .revalidate(layout.bootstrap)
             .map_err(|_| BootstrapError("revalidate legacy state before root replacement"))?;
+        validate_candidate()?;
+        trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root before root replacement"))?;
         layout
             .tmp
             .rename_replace(&temp_name, temp, &layout.authority, ROOT_FILE)
