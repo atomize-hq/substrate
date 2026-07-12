@@ -802,6 +802,7 @@ fi
 # architecture. Preserve that supported path with a process-isolated, no-follow
 # provisioner that implements the same greenfield private-root acceptance rules.
 python3 - "${SUBSTRATE_GUEST_HOME}" <<'PY'
+import fcntl
 import os
 import stat
 import sys
@@ -828,6 +829,20 @@ try:
         current = next_fd
 
     leaf = normal[-1]
+    parent = os.fstat(current)
+    if not stat.S_ISDIR(parent.st_mode):
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type parent")
+    if parent.st_uid not in (0, os.geteuid()):
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner parent")
+    if stat.S_IMODE(parent.st_mode) & 0o022:
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe parent mode")
+    parent_acls = set(os.listxattr(current))
+    if {"system.posix_acl_access", "system.posix_acl_default"} & parent_acls:
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl parent")
+
+    # Cooperative Substrate creators serialize candidate initialization. Malicious root or
+    # same-UID replacement before first open is outside the A1 V1 threat model.
+    fcntl.flock(current, fcntl.LOCK_EX)
     created = False
     previous_umask = os.umask(0)
     try:
@@ -839,20 +854,23 @@ try:
     finally:
         os.umask(previous_umask)
 
-    observed = os.stat(leaf, dir_fd=current, follow_symlinks=False)
-    if stat.S_ISLNK(observed.st_mode):
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: symlink")
-    if not stat.S_ISDIR(observed.st_mode):
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
-    if observed.st_uid != os.geteuid():
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
-    if stat.S_IMODE(observed.st_mode) != 0o700:
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
-    accepted = os.open(leaf, directory_flags, dir_fd=current)
     try:
+        accepted = os.open(leaf, directory_flags, dir_fd=current)
+    except OSError:
+        observed = os.stat(leaf, dir_fd=current, follow_symlinks=False)
+        if stat.S_ISLNK(observed.st_mode):
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: symlink")
+        if not stat.S_ISDIR(observed.st_mode):
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
+        if observed.st_uid != os.geteuid():
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
+        if stat.S_IMODE(observed.st_mode) != 0o700:
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
+        raise SystemExit("unsupported guest SUBSTRATE_HOME: validation-unavailable")
+    try:
+        # This first no-follow open is the only source of accepted child identity. mkdir above
+        # established a candidate name only; it returned no inode-bound handle.
         opened = os.fstat(accepted)
-        if (opened.st_dev, opened.st_ino) != (observed.st_dev, observed.st_ino):
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
         if created:
             os.fchmod(accepted, 0o700)
             opened = os.fstat(accepted)
@@ -882,6 +900,16 @@ try:
                 raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
         finally:
             os.close(reopened)
+        current_parent = os.fstat(current)
+        if (current_parent.st_dev, current_parent.st_ino) != (parent.st_dev, parent.st_ino):
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced parent")
+        if current_parent.st_uid not in (0, os.geteuid()):
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner parent")
+        if stat.S_IMODE(current_parent.st_mode) & 0o022:
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe parent mode")
+        current_parent_acls = set(os.listxattr(current))
+        if {"system.posix_acl_access", "system.posix_acl_default"} & current_parent_acls:
+            raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl parent")
         os.fsync(accepted)
         os.fsync(current)
     finally:

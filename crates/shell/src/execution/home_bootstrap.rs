@@ -287,12 +287,11 @@ fn resolve_intended_owner_uid(path: &Path) -> Result<libc::uid_t, HomeBootstrapE
         return Ok(effective_uid);
     }
 
-    let intended_user = std::env::var_os("SUBSTRATE_INSTALL_PRIMARY_USER")
-        .filter(|value| !value.is_empty() && value != "root")
-        .or_else(|| {
-            std::env::var_os("SUDO_USER").filter(|value| !value.is_empty() && value != "root")
-        })
-        .ok_or_else(|| HomeBootstrapError::ambiguous_private_home_owner(path))?;
+    let intended_user = select_intended_owner_name(
+        std::env::var_os("SUBSTRATE_INSTALL_PRIMARY_USER"),
+        std::env::var_os("SUDO_USER"),
+    )
+    .ok_or_else(|| HomeBootstrapError::ambiguous_private_home_owner(path))?;
     let intended_user = CString::new(std::os::unix::ffi::OsStrExt::as_bytes(
         intended_user.as_os_str(),
     ))
@@ -319,6 +318,16 @@ fn resolve_intended_owner_uid(path: &Path) -> Result<libc::uid_t, HomeBootstrapE
         return Err(HomeBootstrapError::ambiguous_private_home_owner(path));
     }
     Ok(record.pw_uid)
+}
+
+#[cfg(unix)]
+fn select_intended_owner_name(
+    explicit: Option<std::ffi::OsString>,
+    sudo_user: Option<std::ffi::OsString>,
+) -> Option<std::ffi::OsString> {
+    explicit
+        .filter(|value| !value.is_empty() && value != "root")
+        .or_else(|| sudo_user.filter(|value| !value.is_empty() && value != "root"))
 }
 
 #[cfg(not(unix))]
@@ -469,4 +478,37 @@ fn is_denied_io(err: &io::Error) -> bool {
         }
     }
     false
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::select_intended_owner_name;
+    use std::ffi::OsString;
+
+    #[test]
+    fn explicit_install_owner_precedes_sudo_user() {
+        assert_eq!(
+            select_intended_owner_name(
+                Some(OsString::from("explicit")),
+                Some(OsString::from("sudo"))
+            ),
+            Some(OsString::from("explicit"))
+        );
+    }
+
+    #[test]
+    fn sudo_user_is_the_privileged_owner_fallback() {
+        assert_eq!(
+            select_intended_owner_name(Some(OsString::from("root")), Some(OsString::from("sudo"))),
+            Some(OsString::from("sudo"))
+        );
+    }
+
+    #[test]
+    fn privileged_owner_selection_fails_when_both_signals_are_ambiguous() {
+        assert_eq!(
+            select_intended_owner_name(Some(OsString::new()), Some(OsString::from("root"))),
+            None
+        );
+    }
 }

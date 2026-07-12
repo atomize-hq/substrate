@@ -6,9 +6,13 @@ use support::substrate_shell_driver;
 
 use assert_cmd::prelude::*;
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::io::Write as _;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
+#[cfg(target_os = "linux")]
+use std::process::{Output, Stdio};
 use tempfile::{Builder, TempDir};
 
 fn private_temp_dir(prefix: &str) -> TempDir {
@@ -57,6 +61,41 @@ fn assert_is_file(path: &Path) {
         "expected file at {}, but it was missing or not a file",
         path.display()
     );
+}
+
+#[cfg(target_os = "linux")]
+fn lima_private_home_fallback() -> String {
+    let script = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/mac/lima-warm.sh"),
+    )
+    .expect("read Lima provisioner");
+    let marker = "python3 - \"${SUBSTRATE_GUEST_HOME}\" <<'PY'\n";
+    let (_, after_marker) = script
+        .split_once(marker)
+        .expect("find embedded Lima private-home provisioner");
+    let (program, _) = after_marker
+        .split_once("\nPY\nEOF")
+        .expect("find end of embedded Lima private-home provisioner");
+    program.to_string()
+}
+
+#[cfg(target_os = "linux")]
+fn run_lima_private_home_fallback(program: &str, target: &Path) -> Output {
+    let mut child = Command::new("python3")
+        .arg("-")
+        .arg(target)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("start embedded Lima private-home provisioner");
+    child
+        .stdin
+        .take()
+        .expect("open provisioner stdin")
+        .write_all(program.as_bytes())
+        .expect("write provisioner program");
+    child.wait_with_output().expect("wait for provisioner")
 }
 
 #[test]
@@ -166,6 +205,58 @@ fn test_bootstrap_creation_is_exact_0700_across_umasks() {
         assert_eq!(metadata.mode() & 0o7777, 0o700, "umask {umask}");
         assert_eq!(metadata.uid(), unsafe { libc::geteuid() }, "umask {umask}");
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_lima_fallback_creation_and_idempotence() {
+    let program = lima_private_home_fallback();
+    let tmp = private_temp_dir("substrate-lima-home-");
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    let target = tmp.path().join("home");
+
+    assert!(run_lima_private_home_fallback(&program, &target)
+        .status
+        .success());
+    assert!(run_lima_private_home_fallback(&program, &target)
+        .status
+        .success());
+    let metadata = fs::symlink_metadata(&target).unwrap();
+    assert_eq!(metadata.mode() & 0o7777, 0o700);
+    assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_lima_fallback_rejects_invalid_existing_home_without_mutation() {
+    let program = lima_private_home_fallback();
+    let tmp = private_temp_dir("substrate-lima-invalid-");
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    let target = tmp.path().join("home");
+    fs::create_dir(&target).unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let output = run_lima_private_home_fallback(&program, &target);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("wrong-mode"));
+    assert_eq!(
+        fs::symlink_metadata(&target).unwrap().mode() & 0o7777,
+        0o755
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_lima_fallback_rejects_unsafe_parent_without_creation() {
+    let program = lima_private_home_fallback();
+    let tmp = private_temp_dir("substrate-lima-parent-");
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o770)).unwrap();
+    let target = tmp.path().join("home");
+
+    let output = run_lima_private_home_fallback(&program, &target);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unsafe"));
+    assert!(!target.exists());
 }
 
 #[test]
