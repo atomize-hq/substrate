@@ -2324,7 +2324,7 @@ fn legacy_transaction_ignores_environment_and_cwd_after_admission() {
     let unrelated = root();
     let original_cwd = std::env::current_dir().unwrap();
     let original_home = std::env::var_os("SUBSTRATE_HOME");
-    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
 
     std::env::set_var("SUBSTRATE_HOME", unrelated.path());
     std::env::set_current_dir(unrelated.path()).unwrap();
@@ -2361,7 +2361,7 @@ fn legacy_transaction_rejects_lexical_root_replacement_without_touching_replacem
     let lexical_root = parent.path().join("bootstrap");
     fs::create_dir(&lexical_root).unwrap();
     fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700)).unwrap();
-    let transaction = begin_legacy_state_store_transaction(&lexical_root).unwrap();
+    let mut transaction = begin_legacy_state_store_transaction(&lexical_root).unwrap();
     let retained_root = parent.path().join("bootstrap-retained");
     fs::rename(&lexical_root, &retained_root).unwrap();
     fs::create_dir(&lexical_root).unwrap();
@@ -2388,7 +2388,7 @@ fn legacy_transaction_rejects_symlink_descendant_traversal() {
 
     let bootstrap = root();
     let external = root();
-    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
     let run = bootstrap.path().join("run");
     fs::create_dir(&run).unwrap();
     fs::set_permissions(&run, fs::Permissions::from_mode(0o700)).unwrap();
@@ -2421,7 +2421,7 @@ fn legacy_transaction_rejects_wrong_physical_root_identity() {
 #[test]
 fn legacy_transaction_holds_root_lock_until_final_sync_completion() {
     let bootstrap = root();
-    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
     let contender_root = TrustedAuthorityRoot::open(bootstrap.path()).unwrap();
     let contender_authority = contender_root
         .directory()
@@ -2448,7 +2448,7 @@ fn legacy_transaction_holds_root_lock_until_final_sync_completion() {
 #[test]
 fn legacy_transaction_reads_and_removes_only_directory_relative_files() {
     let bootstrap = root();
-    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
     transaction
         .write_file(
             LegacyStateStoreCollectionV1::Sessions,
@@ -2483,4 +2483,54 @@ fn legacy_transaction_reads_and_removes_only_directory_relative_files() {
         None
     );
     transaction.finish().unwrap();
+}
+
+#[test]
+fn legacy_transaction_rejects_descendant_replacement_between_read_and_write() {
+    let bootstrap = root();
+    let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["session-a", "snapshot.json"],
+            b"original",
+            [0x16; 16],
+        )
+        .unwrap();
+    assert_eq!(
+        transaction
+            .read_file(
+                LegacyStateStoreCollectionV1::Sessions,
+                &["session-a", "snapshot.json"],
+            )
+            .unwrap(),
+        Some(b"original".to_vec())
+    );
+
+    let sessions = bootstrap.path().join("run/agent-hub/sessions");
+    let retained = sessions.join("session-a-retained");
+    fs::rename(sessions.join("session-a"), &retained).unwrap();
+    fs::create_dir(sessions.join("session-a")).unwrap();
+    fs::set_permissions(
+        sessions.join("session-a"),
+        fs::Permissions::from_mode(0o700),
+    )
+    .unwrap();
+
+    assert!(transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["session-a", "snapshot.json"],
+            b"replacement",
+            [0x17; 16],
+        )
+        .is_err());
+    assert!(fs::read_dir(sessions.join("session-a"))
+        .unwrap()
+        .next()
+        .is_none());
+    assert_eq!(
+        fs::read(retained.join("snapshot.json")).unwrap(),
+        b"original"
+    );
 }

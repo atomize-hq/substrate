@@ -1,9 +1,172 @@
 use super::*;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) struct LegacyStateStoreTransactionV1 {
     root: TrustedAuthorityRoot,
     _legacy_observation: LegacyObservation,
+    retained_directories: RetainedLegacyDirectories,
     _lock: TrustedOwnedFileLock,
+}
+
+#[derive(Default)]
+struct RetainedLegacyDirectories {
+    children: RetainedDirectoryChildren,
+}
+
+#[derive(Default)]
+struct RetainedDirectoryChildren {
+    opened: BTreeMap<String, RetainedDirectory>,
+    absent: BTreeSet<String>,
+}
+
+struct RetainedDirectory {
+    entry: DirectoryEntry,
+    directory: TrustedDirectory,
+    children: RetainedDirectoryChildren,
+}
+
+impl RetainedLegacyDirectories {
+    fn observe(
+        &mut self,
+        root: &TrustedDirectory,
+        components: &[&str],
+    ) -> Result<(), BootstrapError> {
+        self.with_directory(root, components, false, |_| Ok(()))?;
+        Ok(())
+    }
+
+    fn with_directory<T>(
+        &mut self,
+        root: &TrustedDirectory,
+        components: &[&str],
+        create_missing: bool,
+        operation: impl FnOnce(&TrustedDirectory) -> Result<T, BootstrapError>,
+    ) -> Result<Option<T>, BootstrapError> {
+        Self::with_child_directory(
+            root,
+            &mut self.children,
+            components,
+            create_missing,
+            operation,
+        )
+    }
+
+    fn with_child_directory<T>(
+        parent: &TrustedDirectory,
+        retained: &mut RetainedDirectoryChildren,
+        components: &[&str],
+        create_missing: bool,
+        operation: impl FnOnce(&TrustedDirectory) -> Result<T, BootstrapError>,
+    ) -> Result<Option<T>, BootstrapError> {
+        let Some((component, remaining)) = components.split_first() else {
+            return operation(parent).map(Some);
+        };
+
+        if retained.absent.contains(*component) {
+            if parent
+                .entry_kind(component)
+                .map_err(|_| BootstrapError("revalidate absent legacy StateStore directory"))?
+                .is_some()
+            {
+                return Err(BootstrapError(
+                    "legacy StateStore directory appeared after transaction admission",
+                ));
+            }
+            if !create_missing {
+                return Ok(None);
+            }
+            let directory = parent
+                .create_directory_exclusive(component)
+                .map_err(|_| BootstrapError("create retained legacy StateStore directory"))?;
+            let entry = Self::directory_entry(parent, component)?;
+            retained.absent.remove(*component);
+            retained.opened.insert(
+                (*component).to_owned(),
+                RetainedDirectory {
+                    entry,
+                    directory,
+                    children: RetainedDirectoryChildren::default(),
+                },
+            );
+        } else if !retained.opened.contains_key(*component) {
+            match parent
+                .entry_kind(component)
+                .map_err(|_| BootstrapError("inspect legacy StateStore directory route"))?
+            {
+                None => {
+                    retained.absent.insert((*component).to_owned());
+                    if !create_missing {
+                        return Ok(None);
+                    }
+                    let directory = parent.create_directory_exclusive(component).map_err(|_| {
+                        BootstrapError("create retained legacy StateStore directory")
+                    })?;
+                    let entry = Self::directory_entry(parent, component)?;
+                    retained.absent.remove(*component);
+                    retained.opened.insert(
+                        (*component).to_owned(),
+                        RetainedDirectory {
+                            entry,
+                            directory,
+                            children: RetainedDirectoryChildren::default(),
+                        },
+                    );
+                }
+                Some(EntryKind::Directory) => {
+                    let entry = Self::directory_entry(parent, component)?;
+                    let directory = parent
+                        .open_controlled_directory_entry(&entry)
+                        .map_err(|_| BootstrapError("open retained legacy StateStore directory"))?;
+                    retained.opened.insert(
+                        (*component).to_owned(),
+                        RetainedDirectory {
+                            entry,
+                            directory,
+                            children: RetainedDirectoryChildren::default(),
+                        },
+                    );
+                }
+                Some(_) => {
+                    return Err(BootstrapError(
+                        "legacy StateStore directory route is unsafe",
+                    ))
+                }
+            }
+        }
+
+        let child = retained.opened.get_mut(*component).ok_or(BootstrapError(
+            "retained legacy StateStore directory is unavailable",
+        ))?;
+        parent
+            .revalidate_entry(&child.entry)
+            .and_then(|()| {
+                parent
+                    .open_controlled_directory_entry(&child.entry)
+                    .map(drop)
+            })
+            .map_err(|_| BootstrapError("retained legacy StateStore directory changed identity"))?;
+        Self::with_child_directory(
+            &child.directory,
+            &mut child.children,
+            remaining,
+            create_missing,
+            operation,
+        )
+    }
+
+    fn directory_entry(
+        parent: &TrustedDirectory,
+        name: &str,
+    ) -> Result<DirectoryEntry, BootstrapError> {
+        parent
+            .entries()
+            .map_err(|_| BootstrapError("enumerate retained legacy StateStore directory"))?
+            .into_iter()
+            .find(|entry| entry.name == name && entry.kind == EntryKind::Directory)
+            .ok_or(BootstrapError(
+                "retained legacy StateStore directory was not safely enumerated",
+            ))
+    }
 }
 
 pub(super) struct SemanticTransaction<'layout, 'root> {
@@ -39,105 +202,115 @@ impl SemanticTransaction<'_, '_> {
 
 impl LegacyStateStoreTransactionV1 {
     pub(crate) fn read_file(
-        &self,
+        &mut self,
         collection: LegacyStateStoreCollectionV1,
         descendants: &[&str],
     ) -> Result<Option<Vec<u8>>, BootstrapError> {
         self.verify_retained_root()?;
-        let bytes = self
-            .with_parent(
-                collection,
-                descendants,
-                false,
-                |parent, target| match parent
-                    .entry_kind(target)
-                    .map_err(|_| BootstrapError("inspect legacy StateStore file"))?
-                {
-                    None => Ok(None),
-                    Some(EntryKind::RegularFile) => parent
-                        .open_file(target)
-                        .and_then(|file| file.read_all())
-                        .map(Some)
-                        .map_err(|_| BootstrapError("read legacy StateStore file")),
-                    Some(_) => Err(BootstrapError("legacy StateStore file is unsafe")),
-                },
-            )?
-            .flatten();
+        let bytes = Self::with_parent(
+            &self.root,
+            &mut self.retained_directories,
+            collection,
+            descendants,
+            false,
+            |parent, target| match parent
+                .entry_kind(target)
+                .map_err(|_| BootstrapError("inspect legacy StateStore file"))?
+            {
+                None => Ok(None),
+                Some(EntryKind::RegularFile) => parent
+                    .open_file(target)
+                    .and_then(|file| file.read_all())
+                    .map(Some)
+                    .map_err(|_| BootstrapError("read legacy StateStore file")),
+                Some(_) => Err(BootstrapError("legacy StateStore file is unsafe")),
+            },
+        )?
+        .flatten();
         self.verify_retained_root()?;
         Ok(bytes)
     }
 
     pub(crate) fn write_file(
-        &self,
+        &mut self,
         collection: LegacyStateStoreCollectionV1,
         descendants: &[&str],
         bytes: &[u8],
         nonce_bytes: [u8; 16],
     ) -> Result<(), BootstrapError> {
         self.verify_retained_root()?;
-        self.with_parent(collection, descendants, true, |parent, target| {
-            match parent
-                .entry_kind(target)
-                .map_err(|_| BootstrapError("inspect legacy StateStore publication target"))?
-            {
-                None | Some(EntryKind::RegularFile) => {}
-                Some(_) => {
-                    return Err(BootstrapError(
-                        "legacy StateStore publication target is unsafe",
-                    ))
+        let root = &self.root;
+        Self::with_parent(
+            root,
+            &mut self.retained_directories,
+            collection,
+            descendants,
+            true,
+            |parent, target| {
+                match parent
+                    .entry_kind(target)
+                    .map_err(|_| BootstrapError("inspect legacy StateStore publication target"))?
+                {
+                    None | Some(EntryKind::RegularFile) => {}
+                    Some(_) => {
+                        return Err(BootstrapError(
+                            "legacy StateStore publication target is unsafe",
+                        ))
+                    }
                 }
-            }
-            let temp_name = format!("legacy--{}.tmp", nonce(nonce_bytes));
-            let mut temp = parent
-                .create_file(&temp_name)
-                .map_err(|_| BootstrapError("create legacy StateStore temp"))?;
-            if temp.write_all(bytes).and_then(|()| temp.sync()).is_err() {
-                let _ = parent.unlink_file(&temp_name);
-                return Err(BootstrapError("write legacy StateStore temp"));
-            }
-            if self.verify_retained_root().is_err() {
-                let _ = parent.unlink_file(&temp_name);
-                return Err(BootstrapError(
-                    "trusted authority root changed before legacy publication",
-                ));
-            }
-            if parent
-                .rename_replace(&temp_name, temp, parent, target)
-                .is_err()
-            {
-                let _ = parent.unlink_file(&temp_name);
-                return Err(BootstrapError("publish legacy StateStore file"));
-            }
-            Ok(())
-        })?
+                let temp_name = format!("legacy--{}.tmp", nonce(nonce_bytes));
+                let mut temp = parent
+                    .create_file(&temp_name)
+                    .map_err(|_| BootstrapError("create legacy StateStore temp"))?;
+                if temp.write_all(bytes).and_then(|()| temp.sync()).is_err() {
+                    let _ = parent.unlink_file(&temp_name);
+                    return Err(BootstrapError("write legacy StateStore temp"));
+                }
+                if root.revalidate().is_err() {
+                    let _ = parent.unlink_file(&temp_name);
+                    return Err(BootstrapError(
+                        "trusted authority root changed before legacy publication",
+                    ));
+                }
+                if parent
+                    .rename_replace(&temp_name, temp, parent, target)
+                    .is_err()
+                {
+                    let _ = parent.unlink_file(&temp_name);
+                    return Err(BootstrapError("publish legacy StateStore file"));
+                }
+                Ok(())
+            },
+        )?
         .ok_or(BootstrapError("legacy StateStore parent was not opened"))?;
         self.verify_retained_root()
     }
 
     pub(crate) fn remove_file(
-        &self,
+        &mut self,
         collection: LegacyStateStoreCollectionV1,
         descendants: &[&str],
     ) -> Result<bool, BootstrapError> {
         self.verify_retained_root()?;
-        let removed = self
-            .with_parent(
-                collection,
-                descendants,
-                false,
-                |parent, target| match parent
-                    .entry_kind(target)
-                    .map_err(|_| BootstrapError("inspect legacy StateStore removal target"))?
-                {
-                    None => Ok(false),
-                    Some(EntryKind::RegularFile) => parent
-                        .unlink_file(target)
-                        .map(|()| true)
-                        .map_err(|_| BootstrapError("remove legacy StateStore file")),
-                    Some(_) => Err(BootstrapError("legacy StateStore removal target is unsafe")),
-                },
-            )?
-            .unwrap_or(false);
+        let removed = Self::with_parent(
+            &self.root,
+            &mut self.retained_directories,
+            collection,
+            descendants,
+            false,
+            |parent, target| match parent
+                .entry_kind(target)
+                .map_err(|_| BootstrapError("inspect legacy StateStore removal target"))?
+            {
+                None => Ok(false),
+                Some(EntryKind::RegularFile) => parent
+                    .unlink_file(target)
+                    .map(|()| true)
+                    .map_err(|_| BootstrapError("remove legacy StateStore file")),
+                Some(_) => Err(BootstrapError("legacy StateStore removal target is unsafe")),
+            },
+        )?
+        .unwrap_or(false);
         self.verify_retained_root()?;
         Ok(removed)
     }
@@ -170,7 +343,8 @@ impl LegacyStateStoreTransactionV1 {
     }
 
     fn with_parent<T>(
-        &self,
+        root: &TrustedAuthorityRoot,
+        retained_directories: &mut RetainedLegacyDirectories,
         collection: LegacyStateStoreCollectionV1,
         descendants: &[&str],
         create_missing: bool,
@@ -183,32 +357,17 @@ impl LegacyStateStoreTransactionV1 {
             LegacyStateStoreCollectionV1::Sessions => ["run", "agent-hub", "sessions"],
             LegacyStateStoreCollectionV1::Participants => ["run", "agent-hub", "participants"],
         };
-        let mut opened = Vec::with_capacity(prefix.len() + relative_directories.len());
-        for component in prefix.iter().chain(relative_directories.iter()) {
-            let parent = opened.last().unwrap_or_else(|| self.root.directory());
-            let next = match parent
-                .entry_kind(component)
-                .map_err(|_| BootstrapError("inspect legacy StateStore directory route"))?
-            {
-                None if !create_missing => return Ok(None),
-                None => parent
-                    .create_directory(component)
-                    .map_err(|_| BootstrapError("create legacy StateStore directory route"))?,
-                Some(EntryKind::Directory) => parent
-                    .open_controlled_directory(component)
-                    .map_err(|_| BootstrapError("open legacy StateStore directory route"))?,
-                Some(_) => {
-                    return Err(BootstrapError(
-                        "legacy StateStore directory route is unsafe",
-                    ))
-                }
-            };
-            opened.push(next);
-        }
-        let parent = opened
-            .last()
-            .ok_or(BootstrapError("legacy StateStore parent route is empty"))?;
-        operation(parent, target).map(Some)
+        let components = prefix
+            .iter()
+            .chain(relative_directories.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        retained_directories.with_directory(
+            root.directory(),
+            &components,
+            create_missing,
+            |parent| operation(parent, target),
+        )
     }
 }
 
@@ -278,7 +437,7 @@ pub(super) fn begin_legacy_state_store_transaction(
 ) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
     let root = TrustedAuthorityRoot::open(path)
         .map_err(|_| BootstrapError("open retained legacy StateStore root"))?;
-    let (legacy_observation, lock) = with_opened_semantic_preflight(
+    let (legacy_observation, retained_directories, lock) = with_opened_semantic_preflight(
         &root,
         SemanticPreflightMode::LegacyWriter,
         |layout, _, observed, lock| {
@@ -293,7 +452,11 @@ pub(super) fn begin_legacy_state_store_transaction(
                     "legacy authority writer is disabled after A1 activation",
                 ));
             }
-            Ok((observed.legacy, lock))
+            let mut retained_directories = RetainedLegacyDirectories::default();
+            retained_directories.observe(layout.bootstrap, &["run", "agent-hub", "sessions"])?;
+            retained_directories
+                .observe(layout.bootstrap, &["run", "agent-hub", "participants"])?;
+            Ok((observed.legacy, retained_directories, lock))
         },
     )?;
     root.revalidate()
@@ -301,6 +464,7 @@ pub(super) fn begin_legacy_state_store_transaction(
     Ok(LegacyStateStoreTransactionV1 {
         root,
         _legacy_observation: legacy_observation,
+        retained_directories,
         _lock: lock,
     })
 }

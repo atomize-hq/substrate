@@ -264,6 +264,21 @@ mod platform {
             Ok(child)
         }
 
+        pub(crate) fn create_directory_exclusive(
+            &self,
+            name: &str,
+        ) -> Result<Self, TrustedFsError> {
+            let name = component(name)?;
+            // SAFETY: parent fd is open and name is a single validated component.
+            if unsafe { libc::mkdirat(self.file.as_raw_fd(), name.as_ptr(), DIRECTORY_MODE) } != 0 {
+                return Err(io_error_value("exclusively create trusted directory"));
+            }
+            let child = self.open_directory_cstr(&name)?;
+            self.sync()?;
+            child.sync()?;
+            Ok(child)
+        }
+
         pub(crate) fn open_directory(&self, name: &str) -> Result<Self, TrustedFsError> {
             self.open_directory_cstr(&component(name)?)
         }
