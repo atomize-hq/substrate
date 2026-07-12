@@ -4741,9 +4741,24 @@ impl AgentRuntimeStateStore {
             return Ok(supplied.clone());
         };
 
+        let binding_changed = current.world_id != supplied.world_id
+            || current.world_generation != supplied.world_generation;
         let mut expected = current.clone();
         expected.world_id.clone_from(&supplied.world_id);
         expected.world_generation = supplied.world_generation;
+        if binding_changed {
+            expected.last_active_at = supplied.last_active_at;
+        }
+        if let (Some(expected_contract), Some(supplied_contract)) = (
+            expected.host_attach_contract.as_mut(),
+            supplied.host_attach_contract.as_ref(),
+        ) {
+            if expected_contract.continuity_uaa_session_id.is_some()
+                && supplied_contract.continuity_uaa_session_id.is_none()
+            {
+                expected_contract.continuity_uaa_session_id = None;
+            }
+        }
         if expected != *supplied {
             anyhow::bail!(
                 "stale_world_binding_session_snapshot: orchestration session {} changed before world-binding persistence",
@@ -10831,6 +10846,136 @@ mod tests {
                 .expect("load parent")
                 .expect("parent exists");
             assert_eq!(loaded, invalidated, "terminal parent must remain untouched");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_binding_accepts_durable_continuity_enrichment_without_losing_it() {
+        with_store(|store| {
+            let participant = live_orchestrator(
+                "codex",
+                "sess_continuity_enrichment",
+                "ash_continuity_enrichment",
+            );
+            let mut supplied = active_parent(&participant);
+            supplied
+                .host_attach_contract
+                .as_mut()
+                .expect("supplied attach contract")
+                .continuity_uaa_session_id = None;
+            let mut durable = supplied.clone();
+            durable
+                .host_attach_contract
+                .as_mut()
+                .expect("durable attach contract")
+                .continuity_uaa_session_id = Some("thread-durable".to_string());
+            store
+                .persist_orchestration_session(&durable)
+                .expect("persist continuity-enriched parent");
+
+            store
+                .set_orchestration_session_world_binding(&mut supplied, "world-current", 7)
+                .expect("durable-only continuity enrichment is not a stale writer");
+
+            assert_eq!(supplied.world_id.as_deref(), Some("world-current"));
+            assert_eq!(supplied.world_generation, Some(7));
+            assert_eq!(
+                supplied
+                    .host_attach_contract
+                    .as_ref()
+                    .and_then(|contract| contract.continuity_uaa_session_id.as_deref()),
+                Some("thread-durable")
+            );
+            assert_eq!(
+                store
+                    .load_orchestration_session("sess_continuity_enrichment")
+                    .expect("load continuity-enriched parent")
+                    .expect("continuity-enriched parent exists"),
+                supplied
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_binding_repair_accepts_timestamp_from_the_prior_binding_only() {
+        with_store(|store| {
+            let participant =
+                live_orchestrator("codex", "sess_binding_repair", "ash_binding_repair");
+            let mut supplied = active_parent(&participant);
+            supplied.set_world_binding("world-old", 2);
+            store
+                .persist_orchestration_session(&supplied)
+                .expect("persist old binding");
+
+            let mut externally_repaired = supplied.clone();
+            store
+                .set_orchestration_session_world_binding(
+                    &mut externally_repaired,
+                    "world-current",
+                    3,
+                )
+                .expect("persist external binding repair");
+
+            store
+                .set_orchestration_session_world_binding(&mut supplied, "world-current", 3)
+                .expect("join the binding-only durable repair");
+
+            assert_eq!(supplied.world_id.as_deref(), Some("world-current"));
+            assert_eq!(supplied.world_generation, Some(3));
+            assert_eq!(
+                store
+                    .load_orchestration_session("sess_binding_repair")
+                    .expect("load binding repair")
+                    .expect("binding repair exists"),
+                supplied
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_binding_rejects_other_stale_attach_contract_changes() {
+        with_store(|store| {
+            let participant = live_orchestrator(
+                "codex",
+                "sess_stale_attach_contract",
+                "ash_stale_attach_contract",
+            );
+            let mut current = active_parent(&participant);
+            current
+                .host_attach_contract
+                .as_mut()
+                .expect("current attach contract")
+                .continuity_uaa_session_id = Some("thread-current".to_string());
+            store
+                .persist_orchestration_session(&current)
+                .expect("persist current attach contract");
+
+            let mut stale = current.clone();
+            let stale_contract = stale
+                .host_attach_contract
+                .as_mut()
+                .expect("stale attach contract");
+            stale_contract.continuity_uaa_session_id = None;
+            stale_contract.capabilities.session_resume = false;
+            let stale_before = stale.clone();
+
+            let err = store
+                .set_orchestration_session_world_binding(&mut stale, "world-stale", 8)
+                .expect_err("other stale attach-contract changes must fail closed");
+            assert!(err
+                .to_string()
+                .contains("stale_world_binding_session_snapshot"));
+            assert_eq!(stale, stale_before, "failed set must not mutate caller");
+            assert_eq!(
+                store
+                    .load_orchestration_session("sess_stale_attach_contract")
+                    .expect("load current attach contract")
+                    .expect("current attach contract exists"),
+                current
+            );
         });
     }
 
