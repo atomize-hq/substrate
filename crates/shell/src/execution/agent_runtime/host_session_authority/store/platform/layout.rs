@@ -10,7 +10,43 @@ pub(super) struct StoreLayout<'a> {
     pub(super) root_lock: TrustedFile,
 }
 
-impl<'a> StoreLayout<'a> {
+fn reconcile_temp_directory(tmp: &TrustedDirectory) -> Result<(), StoreError> {
+    validate_temp_directory(tmp)?;
+    for entry in tmp
+        .entries()
+        .map_err(|_| StoreError("enumerate authority temps"))?
+    {
+        tmp.unlink_file(&entry.name)
+            .map_err(|_| StoreError("remove authority temp"))?;
+    }
+    Ok(())
+}
+
+fn validate_temp_directory(tmp: &TrustedDirectory) -> Result<(), StoreError> {
+    for entry in tmp
+        .entries()
+        .map_err(|_| StoreError("enumerate authority temps"))?
+    {
+        if entry.kind != EntryKind::RegularFile
+            || TempNameV1::parse(&entry.name).is_err()
+            || tmp.revalidate_entry(&entry).is_err()
+        {
+            return Err(StoreError("authority temp state is invalid"));
+        }
+    }
+    Ok(())
+}
+
+pub(super) struct StoreLayoutLockScope<'a> {
+    pub(super) bootstrap: &'a TrustedDirectory,
+    pub(super) authority: TrustedDirectory,
+    pub(super) lock: TrustedDirectory,
+    pub(super) tmp: TrustedDirectory,
+    pub(super) root_lock: TrustedFile,
+    strict: bool,
+}
+
+impl<'a> StoreLayoutLockScope<'a> {
     pub(super) fn open(root: &'a TrustedDirectory) -> Result<Self, StoreError> {
         let authority = match root
             .entry_kind(AUTHORITY_DIRECTORY)
@@ -45,35 +81,75 @@ impl<'a> StoreLayout<'a> {
         };
         let lock = open_component("lock", "open authority lock directory")?;
         let tmp = open_component("tmp", "open authority temp directory")?;
-        let objects = open_component("objects", "open authority objects directory")?;
-        let keys = open_component("keys", "open authority keys directory")?;
         let root_lock = create_or_open_lock(&lock, strict)?;
         Ok(Self {
             bootstrap: root,
             authority,
             lock,
             tmp,
-            objects,
-            keys,
             root_lock,
+            strict,
         })
     }
 
-    pub(super) fn classify_locked(
-        &self,
-        bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
-    ) -> Result<BootstrapClassificationV1, StoreError> {
+    pub(super) fn authority_activated(&self) -> Result<bool, StoreError> {
         Ok(self
-            .classify_locked_observed(bootstrap_home)?
-            .classification)
+            .authority
+            .entry_kind(ROOT_FILE)
+            .map_err(|_| StoreError("inspect authority root activation"))?
+            .is_some()
+            || self
+                .authority
+                .entry_kind(INIT_FILE)
+                .map_err(|_| StoreError("inspect authority marker activation"))?
+                .is_some())
     }
 
-    pub(super) fn classify_locked_observed(
+    pub(super) fn validate_temps(&self) -> Result<(), StoreError> {
+        validate_temp_directory(&self.tmp)
+    }
+
+    pub(super) fn reconcile_temps(&self) -> Result<(), StoreError> {
+        reconcile_temp_directory(&self.tmp)
+    }
+
+    pub(super) fn finish(self) -> Result<StoreLayout<'a>, StoreError> {
+        let open_component = |name: &str, error| {
+            if self.strict {
+                self.authority
+                    .open_directory(name)
+                    .map_err(|_| StoreError(error))
+            } else {
+                self.authority
+                    .create_directory(name)
+                    .map_err(|_| StoreError(error))
+            }
+        };
+        let objects = open_component("objects", "open authority objects directory")?;
+        let keys = open_component("keys", "open authority keys directory")?;
+        Ok(StoreLayout {
+            bootstrap: self.bootstrap,
+            authority: self.authority,
+            lock: self.lock,
+            tmp: self.tmp,
+            objects,
+            keys,
+            root_lock: self.root_lock,
+        })
+    }
+}
+
+impl<'a> StoreLayout<'a> {
+    pub(super) fn open(root: &'a TrustedDirectory) -> Result<Self, StoreError> {
+        StoreLayoutLockScope::open(root)?.finish()
+    }
+
+    pub(super) fn semantic_preflight(
         &self,
         bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
     ) -> Result<LockedClassification, StoreError> {
         self.validate_closed_layout()?;
-        self.reconcile_temps()?;
+        self.validate_temps()?;
         let legacy = LegacyObservation::capture(self.bootstrap)?;
         let root_kind = self
             .authority
@@ -84,45 +160,40 @@ impl<'a> StoreLayout<'a> {
             .entry_kind(INIT_FILE)
             .map_err(|_| StoreError("inspect initialization marker"))?;
 
-        let classification = match (root_kind, init_kind) {
+        let (authority_classification, root) = match (root_kind, init_kind) {
             (None, None) if self.keys_empty()? && self.objects_empty()? => {
-                BootstrapClassificationV1::FreshAbsent
+                (BootstrapClassificationV1::FreshAbsent, None)
             }
             (None, Some(EntryKind::RegularFile)) if self.objects_empty()? => {
                 self.validate_pending(bootstrap_home)?;
-                BootstrapClassificationV1::InitializationPending
+                (BootstrapClassificationV1::InitializationPending, None)
             }
             (Some(EntryKind::RegularFile), None | Some(EntryKind::RegularFile)) => {
-                let root = self.read_existing(bootstrap_home)?;
+                let root = self.read_existing_without_reconciliation(bootstrap_home)?;
                 self.validate_matching_marker_if_present(&root)?;
-                BootstrapClassificationV1::ValidExisting
+                (BootstrapClassificationV1::ValidExisting, Some(root))
             }
             _ => return Err(StoreError("authority root and marker state is invalid")),
         };
         let classification = if legacy.has_artifact {
             BootstrapClassificationV1::UnsupportedLegacyState
         } else {
-            classification
+            authority_classification
         };
         Ok(LockedClassification {
             classification,
+            authority_classification,
             legacy,
+            root,
         })
     }
 
-    pub(super) fn prepare_existing(
-        &self,
-        bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
-    ) -> Result<(StateRootV1, LegacyObservation), StoreError> {
-        self.validate_closed_layout()?;
+    pub(super) fn reconcile_after_preflight(&self, root: &StateRootV1) -> Result<(), StoreError> {
         self.reconcile_temps()?;
-        let legacy = LegacyObservation::capture(self.bootstrap)?;
-        legacy.revalidate(self.bootstrap)?;
-        let root = self.read_existing(bootstrap_home)?;
-        self.validate_matching_marker_if_present(&root)?;
-        self.remove_matching_marker(&root)?;
-        self.reconcile_key_files(&root)?;
-        Ok((root, legacy))
+        self.remove_matching_marker(root)?;
+        self.reconcile_key_files(root)?;
+        self.reconcile_released_objects(root)?;
+        self.validate_existing_objects(root, false)
     }
 
     pub(super) fn validate_closed_layout(&self) -> Result<(), StoreError> {
@@ -159,22 +230,11 @@ impl<'a> StoreLayout<'a> {
     }
 
     pub(super) fn reconcile_temps(&self) -> Result<(), StoreError> {
-        for entry in self
-            .tmp
-            .entries()
-            .map_err(|_| StoreError("enumerate authority temps"))?
-        {
-            if entry.kind != EntryKind::RegularFile
-                || TempNameV1::parse(&entry.name).is_err()
-                || self.tmp.revalidate_entry(&entry).is_err()
-            {
-                return Err(StoreError("authority temp state is invalid"));
-            }
-            self.tmp
-                .unlink_file(&entry.name)
-                .map_err(|_| StoreError("remove authority temp"))?;
-        }
-        Ok(())
+        reconcile_temp_directory(&self.tmp)
+    }
+
+    pub(super) fn validate_temps(&self) -> Result<(), StoreError> {
+        validate_temp_directory(&self.tmp)
     }
 
     pub(super) fn validate_pending(
@@ -371,7 +431,7 @@ impl<'a> StoreLayout<'a> {
             .map_err(|_| BootstrapError("sync commitment key directory"))
     }
 
-    pub(super) fn read_existing(
+    fn read_existing_without_reconciliation(
         &self,
         bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
     ) -> Result<StateRootV1, StoreError> {
@@ -391,9 +451,15 @@ impl<'a> StoreLayout<'a> {
         self.validate_existing_keys(&root)?;
         self.validate_existing_objects(&root, true)?;
         self.validate_reachable_objects(&root)?;
-        self.reconcile_released_objects(&root)?;
-        self.validate_existing_objects(&root, false)?;
         Ok(root)
+    }
+
+    pub(super) fn validate_root_candidate(&self, root: &StateRootV1) -> Result<(), StoreError> {
+        root.validate()
+            .map_err(|_| StoreError("validate proposed state root"))?;
+        self.validate_existing_keys(root)?;
+        self.validate_existing_objects(root, false)?;
+        self.validate_reachable_objects(root)
     }
 
     pub(super) fn validate_existing_keys(&self, root: &StateRootV1) -> Result<(), StoreError> {
@@ -583,7 +649,7 @@ impl<'a> StoreLayout<'a> {
         Ok(())
     }
 
-    fn reconcile_released_objects(&self, root: &StateRootV1) -> Result<(), StoreError> {
+    pub(super) fn reconcile_released_objects(&self, root: &StateRootV1) -> Result<(), StoreError> {
         for (ref_id, index) in &root.object_index {
             if !matches!(
                 index.storage_state,
@@ -1097,19 +1163,7 @@ fn create_or_open_lock(
         .map_err(|_| StoreError("inspect authority lock file"))?
     {
         None if strict => Err(StoreError("authority lock file is missing")),
-        None => match directory.create_file(ROOT_LOCK_FILE) {
-            Ok(file) => {
-                file.sync()
-                    .map_err(|_| StoreError("sync authority lock file"))?;
-                directory
-                    .sync()
-                    .map_err(|_| StoreError("sync authority lock directory"))?;
-                Ok(file)
-            }
-            Err(_) => directory
-                .open_file(ROOT_LOCK_FILE)
-                .map_err(|_| StoreError("join authority lock creation")),
-        },
+        None => create_or_join_lock(directory),
         Some(EntryKind::RegularFile) => directory
             .open_file(ROOT_LOCK_FILE)
             .map_err(|_| StoreError("open authority lock file")),
@@ -1117,7 +1171,34 @@ fn create_or_open_lock(
     }
 }
 
+pub(super) fn create_or_join_lock(directory: &TrustedDirectory) -> Result<TrustedFile, StoreError> {
+    match directory.create_file(ROOT_LOCK_FILE) {
+        Ok(file) => {
+            file.sync()
+                .map_err(|_| StoreError("sync authority lock file"))?;
+            directory
+                .sync()
+                .map_err(|_| StoreError("sync authority lock directory"))?;
+            Ok(file)
+        }
+        Err(error) if error.is_already_exists() => {
+            let file = directory
+                .open_file(ROOT_LOCK_FILE)
+                .map_err(|_| StoreError("join authority lock creation"))?;
+            file.sync()
+                .map_err(|_| StoreError("sync joined authority lock file"))?;
+            directory
+                .sync()
+                .map_err(|_| StoreError("sync joined authority lock directory"))?;
+            Ok(file)
+        }
+        Err(_) => Err(StoreError("create authority lock file")),
+    }
+}
+
 pub(super) struct LockedClassification {
     pub(super) classification: BootstrapClassificationV1,
+    pub(super) authority_classification: BootstrapClassificationV1,
     pub(super) legacy: LegacyObservation,
+    pub(super) root: Option<StateRootV1>,
 }

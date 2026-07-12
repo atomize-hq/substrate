@@ -2,6 +2,12 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
 use super::*;
+use crate::execution::agent_runtime::host_session_authority::canonical_json;
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    AuthorityStoreCommitmentAlgorithmV1, AuthorityStoreCommitmentKeyStateV1,
+    AuthorityStoreCommitmentKeyV1,
+};
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
 
 fn safe_test_parent() -> std::path::PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR")
@@ -274,6 +280,91 @@ fn key_rotation_and_retirement_reconcile_each_committed_boundary() {
 }
 
 #[test]
+fn root_cas_reconciles_unregistered_key_before_candidate_validation() {
+    let root = root();
+    let initial = platform::bootstrap_test(root.path(), material(0x51), None).unwrap();
+    let interrupted = material(0x52);
+    assert!(platform::rotate_commitment_key_test(
+        root.path(),
+        interrupted.clone(),
+        Some(KeyLifecycleCrashPointV1::KeyPublished),
+    )
+    .is_err());
+
+    let new_key_id = "ak_53535353535353535353535353535353";
+    let new_key_path = root
+        .path()
+        .join("authority-v1/keys")
+        .join(format!("{new_key_id}.key"));
+    assert!(new_key_path.exists());
+    let root_path = root.path().join("authority-v1/state-root-v1.json");
+    let original_root = fs::read(&root_path).unwrap();
+
+    let mut proposed = initial.clone();
+    proposed.root_revision += 1;
+    proposed
+        .commitment_key_registry
+        .get_mut(&initial.active_commitment_key_id)
+        .unwrap()
+        .state = AuthorityStoreCommitmentKeyStateV1::VerificationOnly;
+    proposed.commitment_key_registry.insert(
+        new_key_id.into(),
+        AuthorityStoreCommitmentKeyV1 {
+            schema_version: 1,
+            authority_store_id: initial.authority_store_id.clone(),
+            key_id: new_key_id.into(),
+            algorithm: AuthorityStoreCommitmentAlgorithmV1::HmacSha256,
+            created_at: interrupted.created_at,
+            state: AuthorityStoreCommitmentKeyStateV1::Active,
+        },
+    );
+    proposed.active_commitment_key_id = new_key_id.into();
+    proposed.validate().unwrap();
+
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: initial.root_revision,
+            authority: None,
+        },
+        &proposed,
+    )
+    .is_err());
+    assert_eq!(fs::read(root_path).unwrap(), original_root);
+    assert!(!new_key_path.exists());
+    assert_eq!(
+        classify(root.path()),
+        BootstrapClassificationV1::ValidExisting
+    );
+}
+
+#[test]
+fn stale_key_rotation_rejects_before_key_root_or_temp_mutation() {
+    let root = root();
+    let current = platform::bootstrap_test(root.path(), material(0x57), None).unwrap();
+    let root_path = root.path().join("authority-v1/state-root-v1.json");
+    let root_bytes = fs::read(&root_path).unwrap();
+    let key_names = fs::read_dir(root.path().join("authority-v1/keys"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+
+    assert!(rotate_commitment_key(root.path(), current.root_revision + 1).is_err());
+    assert_eq!(fs::read(root_path).unwrap(), root_bytes);
+    assert_eq!(
+        fs::read_dir(root.path().join("authority-v1/keys"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>(),
+        key_names
+    );
+    assert!(fs::read_dir(root.path().join("authority-v1/tmp"))
+        .unwrap()
+        .next()
+        .is_none());
+}
+
+#[test]
 fn verification_only_keys_join_existing_orphans_but_cannot_publish_new_objects() {
     use crate::execution::agent_runtime::host_session_authority::hash::{
         store_hmac_sha256, SensitiveDomainV1,
@@ -461,7 +552,7 @@ fn existing_store_rejects_missing_keys_and_invalid_object_routes() {
 #[test]
 fn typed_orphan_publication_joins_only_an_exact_retry() {
     let root = root();
-    platform::bootstrap_test(root.path(), material(0x61), None).unwrap();
+    let current = platform::bootstrap_test(root.path(), material(0x61), None).unwrap();
     let value =
         crate::execution::agent_runtime::host_session_authority::schema::PolicyObjectHashInputV1 {
             schema_version: 1,
@@ -481,6 +572,19 @@ fn typed_orphan_publication_joins_only_an_exact_retry() {
             schema_version: 1,
             commitment: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex: digest },
         };
+    assert!(prepare_typed_object(
+        root.path(),
+        current.root_revision + 1,
+        &reference,
+        &bytes,
+        None,
+    )
+    .is_err());
+    assert!(!root.path().join("authority-v1/objects/policy").exists());
+    assert!(fs::read_dir(root.path().join("authority-v1/tmp"))
+        .unwrap()
+        .next()
+        .is_none());
     assert_eq!(
         platform::publish_object_test(root.path(), &reference, &bytes, None, [0x71; 16],).unwrap(),
         ObjectPublicationOutcomeV1::PublishedOrphan
@@ -1117,6 +1221,147 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         classify(root.path()),
         BootstrapClassificationV1::ValidExisting
     );
+    let applied_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: applied.root_revision - 1,
+            authority: Some(ExpectedAuthorityRevisionV1 {
+                orchestration_session_id: session_id.into(),
+                authority_revision: 0,
+            }),
+        },
+        &applied,
+    )
+    .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        applied_bytes
+    );
+
+    let mut authority_update = applied.clone();
+    authority_update.root_revision += 1;
+    let SessionNamespaceRecordV1::Authority(authority) = authority_update
+        .session_namespace_map
+        .get_mut(session_id)
+        .unwrap()
+    else {
+        panic!("expected authority")
+    };
+    authority.authority_revision += 1;
+    let authority_expectation = ExpectedRevisionsV1 {
+        root_revision: applied.root_revision,
+        authority: Some(ExpectedAuthorityRevisionV1 {
+            orchestration_session_id: session_id.into(),
+            authority_revision: 1,
+        }),
+    };
+    assert_eq!(
+        compare_and_swap_root(root.path(), &authority_expectation, &authority_update).unwrap(),
+        TransactionCommitOutcomeV1::Committed(authority_update.clone())
+    );
+    assert!(compare_and_swap_root(root.path(), &authority_expectation, &authority_update).is_err());
+    let committed_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    let stale_authority_expectation = ExpectedRevisionsV1 {
+        root_revision: applied.root_revision,
+        authority: Some(ExpectedAuthorityRevisionV1 {
+            orchestration_session_id: session_id.into(),
+            authority_revision: 0,
+        }),
+    };
+    assert!(
+        compare_and_swap_root(root.path(), &stale_authority_expectation, &authority_update,)
+            .is_err()
+    );
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: applied.root_revision,
+            authority: None,
+        },
+        &authority_update,
+    )
+    .is_err());
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: applied.root_revision,
+            authority: Some(ExpectedAuthorityRevisionV1 {
+                orchestration_session_id: "other-session".into(),
+                authority_revision: 1,
+            }),
+        },
+        &authority_update,
+    )
+    .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        committed_bytes
+    );
+    assert!(fs::read_dir(root.path().join("authority-v1/tmp"))
+        .unwrap()
+        .next()
+        .is_none());
+    let mut unrelated_root_commit = authority_update.clone();
+    unrelated_root_commit.root_revision += 1;
+    assert_eq!(
+        compare_and_swap_root(
+            root.path(),
+            &ExpectedRevisionsV1 {
+                root_revision: authority_update.root_revision,
+                authority: None,
+            },
+            &unrelated_root_commit,
+        )
+        .unwrap(),
+        TransactionCommitOutcomeV1::Committed(unrelated_root_commit.clone())
+    );
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: authority_update.root_revision,
+            authority: Some(ExpectedAuthorityRevisionV1 {
+                orchestration_session_id: session_id.into(),
+                authority_revision: 1,
+            }),
+        },
+        &unrelated_root_commit,
+    )
+    .is_err());
+    let mut multiple_authorities = authority_update.clone();
+    multiple_authorities.root_revision += 1;
+    let mut second_authority = match multiple_authorities
+        .session_namespace_map
+        .get(session_id)
+        .unwrap()
+        .clone()
+    {
+        SessionNamespaceRecordV1::Authority(authority) => authority,
+        _ => panic!("expected authority"),
+    };
+    second_authority.orchestration_session_id = "session-2".into();
+    second_authority.shell_trace_session_id = "trace-2".into();
+    multiple_authorities.session_namespace_map.insert(
+        "session-2".into(),
+        SessionNamespaceRecordV1::Authority(second_authority),
+    );
+    assert!(platform::validate_exact_retry_expectation_test(
+        &ExpectedRevisionsV1 {
+            root_revision: authority_update.root_revision,
+            authority: Some(ExpectedAuthorityRevisionV1 {
+                orchestration_session_id: session_id.into(),
+                authority_revision: 1,
+            }),
+        },
+        &multiple_authorities,
+    )
+    .is_err());
+    fs::write(
+        root.path().join("authority-v1/state-root-v1.json"),
+        crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(&applied)
+            .unwrap(),
+    )
+    .unwrap();
 
     let mut wrong_resume: ResumeHandleHashInputV1 =
         crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
@@ -1270,15 +1515,32 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         released_at,
     };
     released.validate().unwrap();
+    let current_root_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    let transport_path = root.path().join(
+        "authority-v1/objects/transition-transport-payload/v1/ao_66666666666666666666666666666666.obj",
+    );
+    assert!(transport_path.exists());
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: candidate.root_revision,
+            authority: None,
+        },
+        &released,
+    )
+    .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        current_root_bytes
+    );
+    assert!(transport_path.exists());
+
     fs::write(
         root.path().join("authority-v1/state-root-v1.json"),
         crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(&released)
             .unwrap(),
     )
     .unwrap();
-    let transport_path = root.path().join(
-        "authority-v1/objects/transition-transport-payload/v1/ao_66666666666666666666666666666666.obj",
-    );
     assert!(transport_path.exists());
     assert_eq!(
         classify(root.path()),
@@ -1577,4 +1839,648 @@ fn classifier_rejects_unknown_layout_and_mismatched_pending_artifacts() {
         classify(mismatched_marker.path()),
         BootstrapClassificationV1::CorruptOrUnsupported
     );
+}
+
+#[test]
+fn first_lock_creation_race_joins_only_the_existing_durable_lock() {
+    let root = root();
+    platform::first_lock_creation_join_test(root.path()).unwrap();
+}
+
+#[test]
+fn root_cas_commits_once_and_exact_retry_joins_without_mutation() {
+    let root = root();
+    let current = platform::bootstrap_test(root.path(), material(0xa1), None).unwrap();
+    let initial_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: 0,
+            authority: None,
+        },
+        &current,
+    )
+    .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        initial_bytes
+    );
+    let mut proposed = current.clone();
+    proposed.root_revision += 1;
+
+    let expectation = ExpectedRevisionsV1 {
+        root_revision: current.root_revision,
+        authority: None,
+    };
+    assert_eq!(
+        compare_and_swap_root(root.path(), &expectation, &proposed).unwrap(),
+        TransactionCommitOutcomeV1::Committed(proposed.clone())
+    );
+    let committed_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+
+    assert_eq!(
+        compare_and_swap_root(root.path(), &expectation, &proposed).unwrap(),
+        TransactionCommitOutcomeV1::JoinedExact(proposed.clone())
+    );
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        committed_bytes
+    );
+    assert!(fs::read_dir(root.path().join("authority-v1/tmp"))
+        .unwrap()
+        .next()
+        .is_none());
+    assert_eq!(read_root(root.path()).unwrap(), proposed);
+}
+
+#[test]
+fn stale_and_conflicting_root_cas_reject_with_zero_mutation() {
+    let root = root();
+    let current = platform::bootstrap_test(root.path(), material(0xa2), None).unwrap();
+    let mut committed = current.clone();
+    committed.root_revision += 1;
+    compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: current.root_revision,
+            authority: None,
+        },
+        &committed,
+    )
+    .unwrap();
+
+    let before = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    let mut conflicting = committed.clone();
+    conflicting.root_revision = committed.root_revision + 1;
+    conflicting.active_commitment_key_id = "ak_ffffffffffffffffffffffffffffffff".into();
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: current.root_revision,
+            authority: None,
+        },
+        &conflicting,
+    )
+    .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        before
+    );
+    assert!(fs::read_dir(root.path().join("authority-v1/tmp"))
+        .unwrap()
+        .next()
+        .is_none());
+}
+
+#[test]
+fn initialization_marker_disables_legacy_writer_before_compatibility_mutation() {
+    let root = root();
+    assert!(platform::bootstrap_test(
+        root.path(),
+        material(0xa3),
+        Some(InitializationCrashPointV1::Marker),
+    )
+    .is_err());
+    let marker = fs::read(root.path().join("authority-v1/init-v1.json")).unwrap();
+
+    assert!(legacy_writer_guard(root.path()).is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/init-v1.json")).unwrap(),
+        marker
+    );
+    assert!(!root.path().join("run/agent-hub/sessions").exists());
+    assert!(!root.path().join("run/agent-hub/participants").exists());
+    assert!(fs::read_dir(root.path().join("authority-v1/tmp"))
+        .unwrap()
+        .next()
+        .is_none());
+}
+
+#[test]
+fn conflicting_subprocess_cas_has_one_winner_and_exact_restart_join() {
+    const CHILD_TEST: &str = "execution::agent_runtime::host_session_authority::store::tests::conflicting_subprocess_cas_has_one_winner_and_exact_restart_join";
+    const CHILD_SENTINEL: &str = "A1_CAS_CHILD_EXECUTED";
+    if let Some(root_path) = std::env::var_os("SUBSTRATE_A1_CAS_CHILD_ROOT") {
+        println!("{CHILD_SENTINEL}");
+        let expected = std::env::var("SUBSTRATE_A1_CAS_EXPECTED")
+            .unwrap()
+            .parse::<u64>()
+            .unwrap();
+        let proposed: StateRootV1 = canonical_json::from_slice(
+            std::env::var("SUBSTRATE_A1_CAS_PROPOSED")
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
+        let outcome = compare_and_swap_root(
+            std::path::Path::new(&root_path),
+            &ExpectedRevisionsV1 {
+                root_revision: expected,
+                authority: None,
+            },
+            &proposed,
+        );
+        match outcome {
+            Ok(TransactionCommitOutcomeV1::Committed(_)) => println!("committed"),
+            Ok(TransactionCommitOutcomeV1::JoinedExact(_)) => println!("joined"),
+            Err(_) => println!("rejected"),
+        }
+        return;
+    }
+
+    let root = root();
+    let initial = platform::bootstrap_test(root.path(), material(0xb1), None).unwrap();
+    let rotated = platform::rotate_commitment_key_test(root.path(), material(0xb2), None).unwrap();
+    let former_key = initial.active_commitment_key_id;
+    let current_key = rotated.active_commitment_key_id.clone();
+    let mut first = rotated.clone();
+    first.root_revision += 1;
+    let mut second = first.clone();
+    second.active_commitment_key_id = former_key.clone();
+    second
+        .commitment_key_registry
+        .get_mut(&former_key)
+        .unwrap()
+        .state = AuthorityStoreCommitmentKeyStateV1::Active;
+    second
+        .commitment_key_registry
+        .get_mut(&current_key)
+        .unwrap()
+        .state = AuthorityStoreCommitmentKeyStateV1::VerificationOnly;
+    first.validate().unwrap();
+    second.validate().unwrap();
+
+    let spawn = |candidate: &StateRootV1| {
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", CHILD_TEST, "--nocapture"])
+            .env("SUBSTRATE_A1_CAS_CHILD_ROOT", root.path())
+            .env(
+                "SUBSTRATE_A1_CAS_EXPECTED",
+                rotated.root_revision.to_string(),
+            )
+            .env(
+                "SUBSTRATE_A1_CAS_PROPOSED",
+                String::from_utf8(canonical_json::to_vec(candidate).unwrap()).unwrap(),
+            )
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let first_child = spawn(&first);
+    let second_child = spawn(&second);
+    let first_output = first_child.wait_with_output().unwrap();
+    let second_output = second_child.wait_with_output().unwrap();
+    assert!(first_output.status.success());
+    assert!(second_output.status.success());
+    let first_stdout = String::from_utf8(first_output.stdout).unwrap();
+    let second_stdout = String::from_utf8(second_output.stdout).unwrap();
+    assert!(first_stdout.contains(CHILD_SENTINEL));
+    assert!(second_stdout.contains(CHILD_SENTINEL));
+    assert_eq!(
+        usize::from(first_stdout.contains("committed"))
+            + usize::from(second_stdout.contains("committed")),
+        1
+    );
+    assert_eq!(
+        usize::from(first_stdout.contains("rejected"))
+            + usize::from(second_stdout.contains("rejected")),
+        1
+    );
+
+    let winner = if first_stdout.contains("committed") {
+        &first
+    } else {
+        &second
+    };
+    let restart_output = spawn(winner).wait_with_output().unwrap();
+    assert!(restart_output.status.success());
+    let restart_stdout = String::from_utf8(restart_output.stdout).unwrap();
+    assert!(restart_stdout.contains(CHILD_SENTINEL));
+    assert!(restart_stdout.contains("joined"));
+    assert_eq!(read_root(root.path()).unwrap(), *winner);
+}
+
+#[test]
+fn legacy_owned_lock_is_released_when_holder_process_exits() {
+    use std::io::{BufRead as _, Write as _};
+
+    const CHILD_TEST: &str = "execution::agent_runtime::host_session_authority::store::tests::legacy_owned_lock_is_released_when_holder_process_exits";
+    const CHILD_SENTINEL: &str = "A1_OWNED_LOCK_CHILD_HOLDING";
+    if let Some(root_path) = std::env::var_os("SUBSTRATE_A1_OWNED_LOCK_CHILD_ROOT") {
+        let _guard = legacy_writer_guard(std::path::Path::new(&root_path)).unwrap();
+        println!("{CHILD_SENTINEL}");
+        std::io::stdout().flush().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        return;
+    }
+
+    let root = root();
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", CHILD_TEST, "--nocapture"])
+        .env("SUBSTRATE_A1_OWNED_LOCK_CHILD_ROOT", root.path())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+    let mut output = String::new();
+    for _ in 0..32 {
+        let mut line = String::new();
+        assert_ne!(stdout.read_line(&mut line).unwrap(), 0, "{output}");
+        output.push_str(&line);
+        if line.contains(CHILD_SENTINEL) {
+            break;
+        }
+    }
+    assert!(output.contains(CHILD_SENTINEL), "child output: {output}");
+    child.kill().unwrap();
+    assert!(!child.wait().unwrap().success());
+
+    drop(legacy_writer_guard(root.path()).unwrap());
+}
+
+#[test]
+fn post_root_legacy_insertion_blocks_cas_without_mutating_root() {
+    let root = root();
+    let current = platform::bootstrap_test(root.path(), material(0xb3), None).unwrap();
+    let root_path = root.path().join("authority-v1/state-root-v1.json");
+    let root_bytes = fs::read(&root_path).unwrap();
+    let sessions = root.path().join("run/agent-hub/sessions");
+    fs::create_dir_all(&sessions).unwrap();
+    for directory in [
+        root.path().join("run"),
+        root.path().join("run/agent-hub"),
+        sessions.clone(),
+    ] {
+        fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    fs::write(sessions.join("inserted.json"), b"legacy").unwrap();
+    fs::set_permissions(
+        sessions.join("inserted.json"),
+        fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    let mut proposed = current.clone();
+    proposed.root_revision += 1;
+
+    assert!(compare_and_swap_root(
+        root.path(),
+        &ExpectedRevisionsV1 {
+            root_revision: current.root_revision,
+            authority: None,
+        },
+        &proposed,
+    )
+    .is_err());
+    assert_eq!(fs::read(root_path).unwrap(), root_bytes);
+    assert!(sessions.join("inserted.json").exists());
+}
+
+#[test]
+fn semantic_preflight_rejects_unknown_tree_key_object_root_and_temp_without_cleanup() {
+    for case in ["tree", "key", "object", "root", "temp"] {
+        let root = root();
+        let current = platform::bootstrap_test(root.path(), material(0xc1), None).unwrap();
+        let mut proposed = current.clone();
+        proposed.root_revision += 1;
+        let root_path = root.path().join("authority-v1/state-root-v1.json");
+        let original_root = fs::read(&root_path).unwrap();
+        let artifact = match case {
+            "tree" => {
+                let path = root.path().join("authority-v1/unknown");
+                fs::write(&path, b"unknown").unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+                path
+            }
+            "key" => {
+                let path = root.path().join("authority-v1/keys/not-a-key.key");
+                fs::write(&path, b"unknown").unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+                path
+            }
+            "object" => {
+                let path = root.path().join("authority-v1/objects/unknown-kind");
+                fs::create_dir(&path).unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+                path
+            }
+            "root" => {
+                let mut malformed = original_root.clone();
+                let insert = malformed.len() - 1;
+                malformed.splice(insert..insert, b",\"unknown\":true".iter().copied());
+                fs::write(&root_path, &malformed).unwrap();
+                root_path.clone()
+            }
+            "temp" => {
+                let path = root.path().join("authority-v1/tmp/not-a-temp");
+                fs::write(&path, b"unknown").unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+                path
+            }
+            _ => unreachable!(),
+        };
+        let bytes_before = fs::read(&root_path).unwrap();
+
+        assert!(read_root(root.path()).is_err(), "case {case}");
+        assert_eq!(
+            classify(root.path()),
+            BootstrapClassificationV1::CorruptOrUnsupported,
+            "case {case}"
+        );
+        assert!(bootstrap(root.path()).is_err(), "case {case}");
+        assert!(
+            rotate_commitment_key(root.path(), current.root_revision).is_err(),
+            "case {case}"
+        );
+        assert!(
+            compare_and_swap_root(
+                root.path(),
+                &ExpectedRevisionsV1 {
+                    root_revision: current.root_revision,
+                    authority: None,
+                },
+                &proposed,
+            )
+            .is_err(),
+            "case {case}"
+        );
+        assert_eq!(fs::read(&root_path).unwrap(), bytes_before, "case {case}");
+        assert!(artifact.exists(), "case {case}");
+    }
+}
+
+#[test]
+fn authority_preflight_reconciles_recognized_temp_before_reporting_corruption() {
+    for case in ["tree", "key", "object", "root"] {
+        let root = root();
+        platform::bootstrap_test(root.path(), material(0xd1), None).unwrap();
+        let root_path = root.path().join("authority-v1/state-root-v1.json");
+        let artifact = match case {
+            "tree" => {
+                let path = root.path().join("authority-v1/unknown");
+                fs::write(&path, b"unknown").unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+                path
+            }
+            "key" => {
+                let path = root.path().join("authority-v1/keys/not-a-key.key");
+                fs::write(&path, b"unknown").unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+                path
+            }
+            "object" => {
+                let path = root.path().join("authority-v1/objects/unknown-kind");
+                fs::create_dir(&path).unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+                path
+            }
+            "root" => {
+                let mut malformed = fs::read(&root_path).unwrap();
+                let insert = malformed.len() - 1;
+                malformed.splice(insert..insert, b",\"unknown\":true".iter().copied());
+                fs::write(&root_path, &malformed).unwrap();
+                root_path.clone()
+            }
+            _ => unreachable!(),
+        };
+        let artifact_bytes = artifact.is_file().then(|| fs::read(&artifact).unwrap());
+        let recognized_temp = root
+            .path()
+            .join("authority-v1/tmp/root--r2--33333333333333333333333333333333.tmp");
+        fs::write(&recognized_temp, b"recognized interrupted temp").unwrap();
+        fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600)).unwrap();
+
+        assert_eq!(
+            classify(root.path()),
+            BootstrapClassificationV1::CorruptOrUnsupported,
+            "case {case}"
+        );
+        assert!(!recognized_temp.exists(), "case {case}");
+        assert!(artifact.exists(), "case {case}");
+        if let Some(bytes) = artifact_bytes {
+            assert_eq!(fs::read(artifact).unwrap(), bytes, "case {case}");
+        }
+    }
+}
+
+#[test]
+fn authority_preflight_reconciles_temp_before_missing_or_unsafe_strict_components() {
+    use std::os::unix::fs::symlink;
+
+    for case in [
+        "missing-objects",
+        "missing-keys",
+        "unsafe-objects",
+        "unsafe-keys",
+    ] {
+        let root = root();
+        platform::bootstrap_test(root.path(), material(0xd2), None).unwrap();
+        let component_name = if case.ends_with("objects") {
+            "objects"
+        } else {
+            "keys"
+        };
+        let component = root.path().join("authority-v1").join(component_name);
+        if case.starts_with("missing") {
+            fs::remove_dir_all(&component).unwrap();
+        } else {
+            let retained = root
+                .path()
+                .join("authority-v1")
+                .join(format!("{component_name}-retained"));
+            fs::rename(&component, &retained).unwrap();
+            symlink(&retained, &component).unwrap();
+        }
+        let recognized_temp = root
+            .path()
+            .join("authority-v1/tmp/root--r2--44444444444444444444444444444444.tmp");
+        fs::write(&recognized_temp, b"recognized interrupted temp").unwrap();
+        fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600)).unwrap();
+
+        assert_eq!(
+            classify(root.path()),
+            BootstrapClassificationV1::CorruptOrUnsupported,
+            "case {case}"
+        );
+        assert!(!recognized_temp.exists(), "case {case}");
+        if case.starts_with("missing") {
+            assert!(!component.exists(), "case {case} repaired the component");
+        } else {
+            assert!(
+                fs::symlink_metadata(&component)
+                    .unwrap()
+                    .file_type()
+                    .is_symlink(),
+                "case {case} replaced the unsafe component"
+            );
+        }
+        assert!(read_root(root.path()).is_err(), "case {case}");
+    }
+}
+
+#[test]
+#[serial_test::serial]
+fn legacy_transaction_ignores_environment_and_cwd_after_admission() {
+    let bootstrap = root();
+    let unrelated = root();
+    let original_cwd = std::env::current_dir().unwrap();
+    let original_home = std::env::var_os("SUBSTRATE_HOME");
+    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+
+    std::env::set_var("SUBSTRATE_HOME", unrelated.path());
+    std::env::set_current_dir(unrelated.path()).unwrap();
+    let outcome = transaction.write_file(
+        LegacyStateStoreCollectionV1::Participants,
+        &["retained-root.json"],
+        br#"{"root":"retained"}"#,
+        [0x11; 16],
+    );
+    std::env::set_current_dir(original_cwd).unwrap();
+    if let Some(value) = original_home {
+        std::env::set_var("SUBSTRATE_HOME", value);
+    } else {
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    outcome.unwrap();
+    transaction.finish().unwrap();
+    assert_eq!(
+        fs::read(
+            bootstrap
+                .path()
+                .join("run/agent-hub/participants/retained-root.json"),
+        )
+        .unwrap(),
+        br#"{"root":"retained"}"#
+    );
+    assert!(!unrelated.path().join("run").exists());
+}
+
+#[test]
+fn legacy_transaction_rejects_lexical_root_replacement_without_touching_replacement() {
+    let parent = root();
+    let lexical_root = parent.path().join("bootstrap");
+    fs::create_dir(&lexical_root).unwrap();
+    fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700)).unwrap();
+    let transaction = begin_legacy_state_store_transaction(&lexical_root).unwrap();
+    let retained_root = parent.path().join("bootstrap-retained");
+    fs::rename(&lexical_root, &retained_root).unwrap();
+    fs::create_dir(&lexical_root).unwrap();
+    fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700)).unwrap();
+
+    assert!(transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["replacement.json"],
+            b"replacement must remain untouched",
+            [0x12; 16],
+        )
+        .is_err());
+    assert!(transaction.finish().is_err());
+    assert!(fs::read_dir(&lexical_root).unwrap().next().is_none());
+    assert!(!retained_root
+        .join("run/agent-hub/sessions/replacement.json")
+        .exists());
+}
+
+#[test]
+fn legacy_transaction_rejects_symlink_descendant_traversal() {
+    use std::os::unix::fs::symlink;
+
+    let bootstrap = root();
+    let external = root();
+    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    let run = bootstrap.path().join("run");
+    fs::create_dir(&run).unwrap();
+    fs::set_permissions(&run, fs::Permissions::from_mode(0o700)).unwrap();
+    symlink(external.path(), run.join("agent-hub")).unwrap();
+
+    assert!(transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["symlink.json"],
+            b"must not escape",
+            [0x13; 16],
+        )
+        .is_err());
+    assert!(fs::read_dir(external.path()).unwrap().next().is_none());
+}
+
+#[test]
+fn legacy_transaction_rejects_wrong_physical_root_identity() {
+    let bootstrap = root();
+    let other = root();
+    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    let other_root = TrustedAuthorityRoot::open(other.path()).unwrap();
+
+    assert!(transaction
+        .verify_physical_root(other_root.identity())
+        .is_err());
+    transaction.finish().unwrap();
+}
+
+#[test]
+fn legacy_transaction_holds_root_lock_until_final_sync_completion() {
+    let bootstrap = root();
+    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    let contender_root = TrustedAuthorityRoot::open(bootstrap.path()).unwrap();
+    let contender_authority = contender_root
+        .directory()
+        .open_directory("authority-v1")
+        .unwrap();
+    let contender_lock_directory = contender_authority.open_directory("lock").unwrap();
+    let contender_lock = contender_lock_directory.open_file("root.lock").unwrap();
+
+    assert!(contender_lock.try_lock_exclusive().unwrap().is_none());
+    transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Participants,
+            &["lock-lifetime.json"],
+            b"durable",
+            [0x14; 16],
+        )
+        .unwrap();
+    assert!(contender_lock.try_lock_exclusive().unwrap().is_none());
+
+    transaction.finish().unwrap();
+    drop(contender_lock.try_lock_exclusive().unwrap().unwrap());
+}
+
+#[test]
+fn legacy_transaction_reads_and_removes_only_directory_relative_files() {
+    let bootstrap = root();
+    let transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
+    transaction
+        .write_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["session-a", "snapshot.json"],
+            b"snapshot",
+            [0x15; 16],
+        )
+        .unwrap();
+
+    assert_eq!(
+        transaction
+            .read_file(
+                LegacyStateStoreCollectionV1::Sessions,
+                &["session-a", "snapshot.json"],
+            )
+            .unwrap(),
+        Some(b"snapshot".to_vec())
+    );
+    assert!(transaction
+        .remove_file(
+            LegacyStateStoreCollectionV1::Sessions,
+            &["session-a", "snapshot.json"],
+        )
+        .unwrap());
+    assert_eq!(
+        transaction
+            .read_file(
+                LegacyStateStoreCollectionV1::Sessions,
+                &["session-a", "snapshot.json"],
+            )
+            .unwrap(),
+        None
+    );
+    transaction.finish().unwrap();
 }
