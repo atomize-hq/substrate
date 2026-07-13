@@ -584,6 +584,43 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn explicit_bootstrap_descriptors_reject_symlinks_and_non_files() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                    .join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).unwrap();
+        let parent = tempfile::tempdir_in(safe_parent).unwrap();
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let home = parent.path().join("home");
+        fs::create_dir(&home).unwrap();
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let external_config = parent.path().join("external-config.yaml");
+        write_private(&external_config, b"world:\n  enabled: true\n");
+        std::os::unix::fs::symlink(&external_config, home.join("config.yaml")).unwrap();
+        fs::create_dir(home.join("policy.yaml")).unwrap();
+        fs::set_permissions(home.join("policy.yaml"), fs::Permissions::from_mode(0o700)).unwrap();
+        fs::create_dir(home.join("agents")).unwrap();
+        fs::set_permissions(home.join("agents"), fs::Permissions::from_mode(0o700)).unwrap();
+        let external_agent = parent.path().join("external-agent.yaml");
+        write_private(
+            &external_agent,
+            b"version: 1\nid: escaped\nconfig:\n  kind: cli\n",
+        );
+        std::os::unix::fs::symlink(&external_agent, home.join("agents/escaped.yaml")).unwrap();
+
+        let authority = HostSessionAuthority::open(&home).unwrap();
+        let bootstrap_home = authority.bootstrap_home();
+        assert!(bootstrap_home.read_config_yaml().is_err());
+        assert!(bootstrap_home.read_policy_yaml().is_err());
+        assert!(bootstrap_home.read_agent_inventory_yaml().is_err());
+    }
+
     #[test]
     fn explicit_config_preserves_conditional_policy_parsing() {
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")

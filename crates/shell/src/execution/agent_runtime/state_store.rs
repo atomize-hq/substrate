@@ -1295,6 +1295,41 @@ impl AgentRuntimeStateStore {
         )))
     }
 
+    fn list_sessions_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+    ) -> Result<Vec<AgentRuntimeSessionRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut session_ids = BTreeSet::new();
+        for entry in transaction
+            .read_directory(Sessions, &[])
+            .context("enumerate retained session roots")?
+        {
+            if entry.is_directory {
+                session_ids.insert(entry.name);
+            } else if let Some(session_id) = entry.name.strip_suffix(".json") {
+                session_ids.insert(session_id.to_string());
+            }
+        }
+        for participant in self.list_participants_across_sources_transaction(transaction)? {
+            session_ids.insert(participant.handle.orchestration_session_id.clone());
+        }
+
+        let mut sessions = Vec::new();
+        for session_id in session_ids {
+            if let Some(record) = self.load_session_transaction(transaction, &session_id)? {
+                sessions.push(record);
+            }
+        }
+        sessions.sort_by(|left, right| {
+            left.last_updated_at().cmp(&right.last_updated_at()).then(
+                left.orchestration_session_id()
+                    .cmp(right.orchestration_session_id()),
+            )
+        });
+        Ok(sessions)
+    }
+
     fn write_obligation_transaction(
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         obligation: &OrchestrationObligationRecord,
@@ -1660,6 +1695,11 @@ impl AgentRuntimeStateStore {
     pub(crate) fn list_participants_across_sources(
         &self,
     ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.list_participants_across_sources_transaction(transaction)
+            });
+        }
         let mut participants = BTreeMap::new();
 
         for (participant, source) in self.read_canonical_participants()? {
@@ -1887,6 +1927,11 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Option<AgentRuntimeSessionRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.load_session_transaction(transaction, orchestration_session_id)
+            });
+        }
         let session = self.load_authoritative_session(orchestration_session_id)?;
         let participants = self
             .list_participants_across_sources()?
@@ -1907,6 +1952,11 @@ impl AgentRuntimeStateStore {
     }
 
     pub(crate) fn list_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.list_sessions_transaction(transaction)
+            });
+        }
         let mut session_ids = BTreeSet::new();
 
         for session_id in self.canonical_session_root_ids()? {
@@ -7145,19 +7195,72 @@ mod tests {
             .expect("open authority facade");
         let store = AgentRuntimeStateStore::for_bootstrap_home(&authority.bootstrap_home())
             .expect("bind StateStore");
+        let participant = live_orchestrator("codex", "sess_bound_home", "ash_bound_home");
+        let session = active_parent(&participant);
+        store
+            .persist_participant(&participant)
+            .expect("persist participant through accepted home");
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist session through accepted home");
+        assert_eq!(
+            store
+                .load_participant(&participant.handle.participant_id)
+                .expect("load participant through accepted home"),
+            Some(participant.clone())
+        );
+        assert_eq!(
+            store
+                .load_session(&session.orchestration_session_id)
+                .expect("load session through accepted home")
+                .expect("accepted session")
+                .session,
+            session
+        );
 
         let retained = parent.path().join("retained");
         fs::rename(&home, &retained).expect("retain accepted home");
         fs::create_dir(&home).expect("create replacement home");
         fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
             .expect("secure replacement home");
+        fs::create_dir_all(store.participants_dir()).expect("seed replacement participants");
+        fs::create_dir_all(store.sessions_dir()).expect("seed replacement sessions");
+        write_atomic_json(
+            &store.participant_path(&participant.handle.participant_id),
+            &participant,
+        )
+        .expect("seed replacement participant");
+        write_atomic_json(
+            &store.orchestration_session_path(&session.orchestration_session_id),
+            &session,
+        )
+        .expect("seed replacement session");
+        let replacement_participant_bytes =
+            fs::read(store.participant_path(&participant.handle.participant_id))
+                .expect("read replacement participant");
+        let replacement_session_bytes =
+            fs::read(store.orchestration_session_path(&session.orchestration_session_id))
+                .expect("read replacement session");
         let replacement_before = fs::read_dir(&home).unwrap().count();
 
-        let participant = live_orchestrator("codex", "sess_bound_home", "ash_bound_home");
+        assert!(store
+            .load_participant(&participant.handle.participant_id)
+            .is_err());
+        assert!(store
+            .load_session(&session.orchestration_session_id)
+            .is_err());
+        assert!(store.list_sessions().is_err());
         assert!(store.persist_participant(&participant).is_err());
         assert_eq!(fs::read_dir(&home).unwrap().count(), replacement_before);
         assert!(!home.join("authority-v1").exists());
-        assert!(!home.join("run").exists());
+        assert_eq!(
+            fs::read(store.participant_path(&participant.handle.participant_id)).unwrap(),
+            replacement_participant_bytes
+        );
+        assert_eq!(
+            fs::read(store.orchestration_session_path(&session.orchestration_session_id)).unwrap(),
+            replacement_session_bytes
+        );
     }
 
     #[test]
