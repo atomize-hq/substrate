@@ -1800,6 +1800,32 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         task_run_id: &str,
     ) -> Result<Option<ActiveEphemeralWorldTaskRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+                let file_name = format!("{task_run_id}.json");
+                let record = Self::transaction_read_json::<ActiveEphemeralWorldTaskRecord>(
+                    transaction,
+                    Sessions,
+                    &[
+                        orchestration_session_id,
+                        "active-ephemeral-tasks",
+                        file_name.as_str(),
+                    ],
+                )?;
+                if let Some(record) = record.as_ref() {
+                    record.validate()?;
+                    if record.orchestration_session_id != orchestration_session_id
+                        || record.task_run_id != task_run_id
+                    {
+                        anyhow::bail!(
+                            "active_task_registry_mismatch: retained task identity mismatch"
+                        );
+                    }
+                }
+                Ok(record)
+            });
+        }
         let path = self.canonical_active_ephemeral_task_path(orchestration_session_id, task_run_id);
         let Some(record) = read_json_if_exists::<ActiveEphemeralWorldTaskRecord>(&path)? else {
             return Ok(None);
@@ -1830,6 +1856,24 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Vec<ActiveEphemeralWorldTaskRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+                let mut records = Self::transaction_list_json::<ActiveEphemeralWorldTaskRecord>(
+                    transaction,
+                    Sessions,
+                    &[orchestration_session_id, "active-ephemeral-tasks"],
+                )?;
+                for record in &records {
+                    record.validate()?;
+                    if record.orchestration_session_id != orchestration_session_id {
+                        anyhow::bail!("active_task_registry_mismatch: retained task belongs to another session");
+                    }
+                }
+                records.sort_by(|left, right| left.task_run_id.cmp(&right.task_run_id));
+                Ok(records)
+            });
+        }
         let dir = self.canonical_active_ephemeral_tasks_dir(orchestration_session_id);
         if !dir.exists() {
             return Ok(Vec::new());
@@ -3616,6 +3660,11 @@ impl AgentRuntimeStateStore {
 
     #[allow(dead_code)]
     pub(crate) fn persist_host_inbox_record(&self, record: &HostInboxRecord) -> Result<()> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.persist_host_inbox_record_transaction(transaction, record)
+            });
+        }
         let _write_guard = snapshot_write_lock()
             .lock()
             .expect("snapshot write mutex poisoned");
@@ -3749,11 +3798,47 @@ impl AgentRuntimeStateStore {
         path: &Path,
     ) -> Result<HostInboxRecord> {
         let record_id = Self::invalid_host_inbox_artifact_record_id(path);
-        let failure_path = self.invalid_host_inbox_artifact_record_path(&record_id)?;
         let reason = match Self::host_inbox_record_id_from_path(path) {
             Ok(_) => format!("invalid_host_inbox_artifact_path: {}", path.display()),
             Err(err) => format!("invalid_host_inbox_artifact_path: {err:#}"),
         };
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::HostInbox;
+                let file_name = Self::host_inbox_record_file_name(&record_id)?;
+                let descendants = [".invalid_artifacts", file_name.as_str()];
+                let existing = Self::transaction_read_json::<HostInboxRecord>(
+                    transaction,
+                    HostInbox,
+                    &descendants,
+                )?;
+                if let Some(existing) = existing {
+                    self.validate_host_inbox_record(&existing)?;
+                    if existing.materialization_state == HostInboxMaterializationState::FailedClosed
+                        && existing.failed_closed_reason.as_deref() == Some(reason.as_str())
+                    {
+                        return Ok(existing);
+                    }
+                }
+                let mut record = HostInboxRecord::new(
+                    String::new(),
+                    record_id.clone(),
+                    OrchestrationObligationKind::RuntimeAlert,
+                    "malformed host inbox artifact",
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                );
+                record.severity = OrchestrationObligationSeverity::Error;
+                record.created_at = Utc::now();
+                record.ingress_received_at = record.created_at;
+                record.mark_failed_closed(reason.clone(), record.created_at);
+                self.validate_host_inbox_record(&record)?;
+                Self::transaction_write_json(transaction, HostInbox, &descendants, &record)?;
+                Ok(record)
+            });
+        }
+        let failure_path = self.invalid_host_inbox_artifact_record_path(&record_id)?;
 
         let Some(existing) = read_regular_json_if_exists::<HostInboxRecord>(&failure_path)? else {
             return self.synthesize_failed_closed_invalid_host_inbox_artifact_record(
@@ -3782,6 +3867,21 @@ impl AgentRuntimeStateStore {
         source_path: &Path,
     ) -> Result<Option<HostInboxRecord>> {
         let record_id = Self::invalid_host_inbox_artifact_record_id(source_path);
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::HostInbox;
+                let file_name = Self::host_inbox_record_file_name(&record_id)?;
+                let record = Self::transaction_read_json::<HostInboxRecord>(
+                    transaction,
+                    HostInbox,
+                    &[".invalid_artifacts", file_name.as_str()],
+                )?;
+                if let Some(record) = record.as_ref() {
+                    self.validate_host_inbox_record(record)?;
+                }
+                Ok(record)
+            });
+        }
         let path = self.invalid_host_inbox_artifact_record_path(&record_id)?;
         let Some(record) = read_regular_json_if_exists::<HostInboxRecord>(&path)? else {
             return Ok(None);
@@ -4019,6 +4119,11 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         item_id: &str,
     ) -> Result<Option<DurableInboxItemRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.load_inbox_item_transaction(transaction, orchestration_session_id, item_id)
+            });
+        }
         let path = self.canonical_inbox_item_path(orchestration_session_id, item_id);
         let Some(item) = read_regular_json_if_exists::<DurableInboxItemRecord>(&path)? else {
             return Ok(None);
@@ -4049,6 +4154,28 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Vec<DurableInboxItemRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+                let mut items = Self::transaction_list_json::<DurableInboxItemRecord>(
+                    transaction,
+                    Sessions,
+                    &[orchestration_session_id, "inbox"],
+                )?;
+                for item in &items {
+                    self.validate_inbox_item_record(item)?;
+                    if item.orchestration_session_id != orchestration_session_id {
+                        anyhow::bail!("durable inbox item belongs to another session");
+                    }
+                }
+                items.sort_by(|left, right| {
+                    left.created_at
+                        .cmp(&right.created_at)
+                        .then(left.item_id.cmp(&right.item_id))
+                });
+                Ok(items)
+            });
+        }
         let inbox_dir = self.canonical_inbox_dir(orchestration_session_id);
         let Some(entries) = safe_read_dir(&inbox_dir)? else {
             return Ok(Vec::new());
@@ -4091,6 +4218,18 @@ impl AgentRuntimeStateStore {
         &self,
         record_id: &str,
     ) -> Result<Option<HostInboxRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                let label = format!("retained host inbox record {record_id}");
+                let record =
+                    Self::load_host_inbox_record_transaction(transaction, record_id, &label)?;
+                if let Some(record) = record.as_ref() {
+                    Self::validate_host_inbox_record_artifact_identity(record, record_id, &label)?;
+                    self.validate_host_inbox_record(record)?;
+                }
+                Ok(record)
+            });
+        }
         let path = self.host_inbox_record_path(record_id)?;
         let Some(record) = self.load_host_inbox_record_unvalidated(record_id)? else {
             return Ok(None);
@@ -4120,6 +4259,43 @@ impl AgentRuntimeStateStore {
 
     #[allow(dead_code)]
     pub(crate) fn list_host_inbox_records(&self) -> Result<Vec<HostInboxRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::HostInbox;
+                let entries = transaction
+                    .read_directory(HostInbox, &[])
+                    .context("enumerate retained host inbox")?;
+                let mut records = Vec::new();
+                for entry in entries {
+                    if entry.is_directory || !entry.name.ends_with(".json") {
+                        continue;
+                    }
+                    let expected_record_id = entry
+                        .name
+                        .strip_suffix(".json")
+                        .ok_or_else(|| anyhow::anyhow!("invalid retained host inbox name"))?;
+                    HostInboxRecord::validate_record_id(expected_record_id)?;
+                    let bytes = entry
+                        .bytes
+                        .ok_or_else(|| anyhow::anyhow!("retained host inbox file omitted bytes"))?;
+                    let record: HostInboxRecord = serde_json::from_slice(&bytes)
+                        .context("parse retained host inbox record")?;
+                    Self::validate_host_inbox_record_artifact_identity(
+                        &record,
+                        expected_record_id,
+                        &entry.name,
+                    )?;
+                    self.validate_host_inbox_record(&record)?;
+                    records.push(record);
+                }
+                records.sort_by(|left, right| {
+                    left.created_at
+                        .cmp(&right.created_at)
+                        .then(left.record_id.cmp(&right.record_id))
+                });
+                Ok(records)
+            });
+        }
         let host_inbox_dir = self.host_inbox_dir();
         let Some(entries) = safe_read_dir(&host_inbox_dir)? else {
             return Ok(Vec::new());
@@ -4158,6 +4334,22 @@ impl AgentRuntimeStateStore {
 
     #[cfg(any(target_os = "linux", test))]
     pub(crate) fn list_host_inbox_record_ids(&self) -> Result<Vec<String>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::HostInbox;
+                let mut record_ids = transaction
+                    .read_directory(HostInbox, &[])
+                    .context("enumerate retained host inbox ids")?
+                    .into_iter()
+                    .filter(|entry| !entry.is_directory)
+                    .filter_map(|entry| entry.name.strip_suffix(".json").map(str::to_string))
+                    .filter(|record_id| HostInboxRecord::validate_record_id(record_id).is_ok())
+                    .collect::<Vec<_>>();
+                record_ids.sort();
+                record_ids.dedup();
+                Ok(record_ids)
+            });
+        }
         let host_inbox_dir = self.host_inbox_dir();
         let Some(entries) = safe_read_dir(&host_inbox_dir)? else {
             return Ok(Vec::new());
@@ -4184,6 +4376,26 @@ impl AgentRuntimeStateStore {
 
     #[cfg(any(target_os = "linux", test))]
     pub(crate) fn list_invalid_host_inbox_artifact_paths(&self) -> Result<Vec<PathBuf>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::HostInbox;
+                let mut paths = transaction
+                    .read_directory(HostInbox, &[])
+                    .context("enumerate retained invalid host inbox artifacts")?
+                    .into_iter()
+                    .filter(|entry| !entry.is_directory && entry.name.ends_with(".json"))
+                    .filter(|entry| {
+                        entry.name.strip_suffix(".json").is_none_or(|record_id| {
+                            HostInboxRecord::validate_record_id(record_id).is_err()
+                        })
+                    })
+                    .map(|entry| self.host_inbox_dir().join(entry.name))
+                    .collect::<Vec<_>>();
+                paths.sort();
+                paths.dedup();
+                Ok(paths)
+            });
+        }
         let host_inbox_dir = self.host_inbox_dir();
         let Some(entries) = safe_read_dir(&host_inbox_dir)? else {
             return Ok(Vec::new());
@@ -4213,6 +4425,15 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
         obligation_id: &str,
     ) -> Result<Option<OrchestrationObligationRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.load_obligation_transaction(
+                    transaction,
+                    orchestration_session_id,
+                    obligation_id,
+                )
+            });
+        }
         let path = self.canonical_obligation_path(orchestration_session_id, obligation_id);
         let Some(obligation) = read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
         else {
@@ -4244,6 +4465,11 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Vec<OrchestrationObligationRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.list_obligations_transaction(transaction, orchestration_session_id)
+            });
+        }
         let obligations_dir = self.canonical_obligations_dir(orchestration_session_id);
         let Some(entries) = safe_read_dir(&obligations_dir)? else {
             return Ok(Vec::new());
@@ -4953,11 +5179,42 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Option<OrchestrationSessionRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.load_authoritative_session_transaction(transaction, orchestration_session_id)
+            });
+        }
         self.load_authoritative_session(orchestration_session_id)
     }
 
     #[allow(dead_code)]
     pub(crate) fn list_orchestration_sessions(&self) -> Result<Vec<OrchestrationSessionRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+                let mut session_ids = BTreeSet::new();
+                for entry in transaction
+                    .read_directory(Sessions, &[])
+                    .context("enumerate retained orchestration sessions")?
+                {
+                    if entry.is_directory {
+                        session_ids.insert(entry.name);
+                    } else if let Some(session_id) = entry.name.strip_suffix(".json") {
+                        session_ids.insert(session_id.to_string());
+                    }
+                }
+                let mut sessions = Vec::new();
+                for session_id in session_ids {
+                    if let Some(session) =
+                        self.load_authoritative_session_transaction(transaction, &session_id)?
+                    {
+                        sessions.push(session);
+                    }
+                }
+                sessions.sort_by_key(|session| session.last_active_at);
+                Ok(sessions)
+            });
+        }
         let mut sessions = Vec::new();
         let mut session_ids = BTreeSet::new();
         for session_id in self.canonical_session_root_ids()? {
@@ -7217,6 +7474,66 @@ mod tests {
                 .session,
             session
         );
+        assert_eq!(
+            store
+                .load_active_ephemeral_world_task(&session.orchestration_session_id, "task_bound",)
+                .expect("read accepted active-task collection"),
+            None
+        );
+        assert!(store
+            .list_active_ephemeral_world_tasks(&session.orchestration_session_id)
+            .expect("list accepted active-task collection")
+            .is_empty());
+        assert_eq!(
+            store
+                .load_inbox_item(&session.orchestration_session_id, "item_bound")
+                .expect("read accepted inbox collection"),
+            None
+        );
+        assert!(store
+            .list_inbox_items(&session.orchestration_session_id)
+            .expect("list accepted inbox collection")
+            .is_empty());
+        assert_eq!(
+            store
+                .load_host_inbox_record("host_bound")
+                .expect("read accepted host inbox collection"),
+            None
+        );
+        assert!(store
+            .list_host_inbox_records()
+            .expect("list accepted host inbox collection")
+            .is_empty());
+        assert!(store
+            .list_host_inbox_record_ids()
+            .expect("list accepted host inbox ids")
+            .is_empty());
+        assert!(store
+            .list_invalid_host_inbox_artifact_paths()
+            .expect("list accepted invalid host inbox paths")
+            .is_empty());
+        assert_eq!(
+            store
+                .load_obligation(&session.orchestration_session_id, "obligation_bound")
+                .expect("read accepted obligation collection"),
+            None
+        );
+        assert!(store
+            .list_obligations(&session.orchestration_session_id)
+            .expect("list accepted obligation collection")
+            .is_empty());
+        assert_eq!(
+            store
+                .load_orchestration_session(&session.orchestration_session_id)
+                .expect("load accepted orchestration session"),
+            Some(session.clone())
+        );
+        assert_eq!(
+            store
+                .list_orchestration_sessions()
+                .expect("list accepted orchestration sessions"),
+            vec![session.clone()]
+        );
 
         let retained = parent.path().join("retained");
         fs::rename(&home, &retained).expect("retain accepted home");
@@ -7250,6 +7567,32 @@ mod tests {
             .load_session(&session.orchestration_session_id)
             .is_err());
         assert!(store.list_sessions().is_err());
+        assert!(store
+            .load_active_ephemeral_world_task(&session.orchestration_session_id, "task_bound")
+            .is_err());
+        assert!(store
+            .list_active_ephemeral_world_tasks(&session.orchestration_session_id)
+            .is_err());
+        assert!(store
+            .load_inbox_item(&session.orchestration_session_id, "item_bound")
+            .is_err());
+        assert!(store
+            .list_inbox_items(&session.orchestration_session_id)
+            .is_err());
+        assert!(store.load_host_inbox_record("host_bound").is_err());
+        assert!(store.list_host_inbox_records().is_err());
+        assert!(store.list_host_inbox_record_ids().is_err());
+        assert!(store.list_invalid_host_inbox_artifact_paths().is_err());
+        assert!(store
+            .load_obligation(&session.orchestration_session_id, "obligation_bound")
+            .is_err());
+        assert!(store
+            .list_obligations(&session.orchestration_session_id)
+            .is_err());
+        assert!(store
+            .load_orchestration_session(&session.orchestration_session_id)
+            .is_err());
+        assert!(store.list_orchestration_sessions().is_err());
         assert!(store.persist_participant(&participant).is_err());
         assert_eq!(fs::read_dir(&home).unwrap().count(), replacement_before);
         assert!(!home.join("authority-v1").exists());
