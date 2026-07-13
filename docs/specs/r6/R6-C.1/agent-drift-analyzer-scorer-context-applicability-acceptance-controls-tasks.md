@@ -3,7 +3,8 @@
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
 specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, reviewed
 `dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` / both `CTX-R6-11`
-truth-grounding focused controls plus the `CTX-R6-12` truth-path-action control are complete;
+truth-grounding focused controls plus the `CTX-R6-12` truth-path-action and `CTX-R6-13`
+archetype-equivalence controls are complete;
 `CTX-R6-04` and `CTX-R6-12` are preserved reds requiring `R6-GAP-DET-OPAQUE-PARENT` and
 `R6-GAP-TGG-TRUTH-PATH-ACTION`, respectively. All remaining controls, replay, conditional-gap,
 production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
@@ -93,9 +94,9 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.2.6`, the `CTX-R6-13` truth-grounding
-    archetype-equivalence control.
-    Do not start another row, replay, a gap packet, or a production change first.
+  - Sole next authorized action: execute `R6-C.1.2.7`, the reviewed `truth_grounding_gap` family
+    checkpoint. Do not start a `wrong_plan_branch` row, replay, a gap packet, or a production change
+    first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
@@ -234,7 +235,7 @@ before that reconciled transition is committed and fresh-review-clean.
     witness requires `R6-GAP-TGG-TRUTH-PATH-ACTION`; no production code changed in
     `R6-C.1-CONTROLS`.
 
-- [ ] **R6-C.1.2.6 — Add, commit, and review archetype equivalence (`CTX-R6-13`).**
+- [x] **R6-C.1.2.6 — Add, commit, and review archetype equivalence (`CTX-R6-13`).**
   - Test: `truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes`.
   - Acceptance: equivalent pre-read actions in planning/research and implementation both yield
     `80 / High / Active`, flagged.
@@ -242,6 +243,13 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-TGG-ARCHETYPE-INVARIANCE` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 9
+    filtered out`. Planning/research and autonomous-implementation task frames each declared the same
+    truth path and performed equivalent write-like `apply_patch` actions against their respective framed
+    targets before any truth read; both produced exactly `80 / High / Active`, flagged. Their evidence
+    reasons were equivalent and retained both the `truth artifact hint:` authority and ungrounded
+    `command family: apply_patch` action. No
+    `R6-GAP-TGG-ARCHETYPE-INVARIANCE` route is required, and no production code changed.
 
 - [ ] **R6-C.1.2.7 — Run the reviewed `truth_grounding_gap` family checkpoint.**
   - Prerequisite: all six row commits above are independently review-clean.

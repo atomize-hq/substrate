@@ -384,6 +384,105 @@ fn truth_grounding_gap_flags_truth_path_action_before_read() {
 }
 
 #[test]
+fn truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes() {
+    let truth_path = "docs/specs/agent-drift-analyzer-v0.4-spec.md";
+    let analyze = |task: &str, target: &str, archetype: &str| {
+        let rows = vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                &format!("{task} using {truth_path} before changing behavior."),
+            ),
+            tool_row(
+                1,
+                &format!(
+                    "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {target}\n*** End Patch\nPATCH"
+                ),
+            ),
+        ];
+        let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+        let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+            input_dir: fixture.input_dir.clone(),
+            output_dir: fixture.output_dir.clone(),
+        })
+        .unwrap_or_else(|error| panic!("analyze {archetype} truth-grounding bundle: {error}"));
+        read_checkpoints(&result.checkpoints_path)
+            .pop()
+            .unwrap_or_else(|| panic!("{archetype} checkpoint"))
+    };
+
+    let planning = analyze(
+        "Research the scorer context and record the result",
+        "docs/research/truth-grounding-notes.md",
+        "planning/research",
+    );
+    let implementation = analyze(
+        "Implement the scorer context change",
+        "crates/agent-drift-analyzer/src/lib.rs",
+        "implementation",
+    );
+
+    assert_eq!(planning.task_frame.truth_artifacts, vec![truth_path]);
+    assert_eq!(
+        implementation.task_frame.truth_artifacts,
+        planning.task_frame.truth_artifacts,
+    );
+    assert_eq!(
+        planning
+            .session_archetype
+            .as_ref()
+            .expect("planning/research archetype")
+            .label,
+        agent_drift_analyzer::SessionArchetypeLabel::Planning,
+    );
+    assert_eq!(
+        implementation
+            .session_archetype
+            .as_ref()
+            .expect("implementation archetype")
+            .label,
+        agent_drift_analyzer::SessionArchetypeLabel::AutonomousImplementation,
+    );
+
+    let planning_score = planning
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("planning/research truth grounding gap score");
+    let implementation_score = implementation
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("implementation truth grounding gap score");
+    for score in [planning_score, implementation_score] {
+        assert_eq!(
+            (
+                score.raw_score,
+                score.confidence,
+                score.state,
+                score.flagged,
+            ),
+            (80, Confidence::High, DriftState::Active, true),
+        );
+    }
+
+    let planning_reasons = planning_score
+        .evidence
+        .iter()
+        .map(|evidence| evidence.reason.as_str())
+        .collect::<Vec<_>>();
+    let implementation_reasons = implementation_score
+        .evidence
+        .iter()
+        .map(|evidence| evidence.reason.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(planning_reasons, implementation_reasons);
+    assert!(planning_reasons
+        .contains(&"truth artifact hint: docs/specs/agent-drift-analyzer-v0.4-spec.md"));
+    assert!(planning_reasons.contains(&"command family: apply_patch"));
+}
+
+#[test]
 fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_active() {
     let rows = vec![
         row(
