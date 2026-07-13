@@ -47,9 +47,11 @@ for child work.
 
 ## Dependency Graph
 
-The entire graph is blocked on the R6 closure gate: applicability audit complete, every material
-scorer classified, broad acceptance proven or narrowed honestly, named controls resolved, and the
-R6 finding plus authority stack updated to `CLOSED`.
+The entire graph is blocked on the R6 closure gate: applicability audit complete; every material
+scoring surface assigned exactly one terminal disposition (**Cutover complete**,
+**Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with
+justification**), with no ordinary “still open” state; broad acceptance proven or narrowed honestly;
+named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`.
 
 ```text
 R7-0 docs + sanitized evidence matrix

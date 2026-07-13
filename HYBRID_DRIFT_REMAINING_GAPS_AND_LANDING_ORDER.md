@@ -18,15 +18,19 @@ design, and the per-packet sets. The scoped R6 packets have landed, but R6 is **
 AUDIT REQUIRED** until the named acceptance controls close. The Ground Truth Sources list below is
 historical context, not an exhaustive index of current authority.
 
-> **Status note (2026-07-04):** `R5`/`R5.5`/`R5.75` structured-objective work has advanced well beyond the
-> older root sequence, through `R6` scorer cutover and into `R6` real-world validation. The current blocker
-> before any further `semantic_goal_drift` promotion is objective **target hygiene** (`R6-3.5`): a 110-session
-> batch showed the signal's live fires were false positives caused by junk target extraction. Landing order is
-> locked — `R6-3.5` extraction hardening → `R6-3.X.2` graduated distance → `R6-3.X.3` eligibility-bar revisit.
-> **Do not loosen `semantic_goal_drift` eligibility until the `R6-3` validation gate is re-run.** Full
-> delegated-session (subagent) semantics remain deferred to `R7`; `R6-3.5` only adds a bounded opaque-parent
-> guardrail so parent-only traces do not over-claim. See `docs/specs/r6/R6-3.5/` and
-> `docs/specs/r6/FINDINGS-r6-3-real-world-drift-validation.md`.
+> **Historical status note (2026-07-04; superseded):** `R5`/`R5.5`/`R5.75`
+> structured-objective work had advanced well beyond the older root sequence, through `R6` scorer
+> cutover and into `R6` real-world validation. The blocker at that time before any further
+> `semantic_goal_drift` promotion was objective **target hygiene** (`R6-3.5`): a 110-session batch
+> showed the signal's live fires were false positives caused by junk target extraction. The
+> then-current landing order was `R6-3.5` extraction hardening → `R6-3.X.2` graduated distance →
+> `R6-3.X.3` eligibility-bar revisit, and the then-current rule kept eligibility locked until the
+> `R6-3` validation gate was re-run. Full delegated-session (subagent) semantics remained deferred
+> to `R7`; `R6-3.5` added only a bounded opaque-parent guardrail so parent-only traces did not
+> over-claim. See `docs/specs/r6/R6-3.5/` and
+> `docs/specs/r6/FINDINGS-r6-3-real-world-drift-validation.md`. This note is preserved as packet
+> history; it does not override the current closure correction below, and it does not reopen the
+> now-closed `semantic_goal_drift` family without a new failing witness.
 
 > **Closure correction (2026-07-12):** scoped R6 packet landing is not authority that the broad R6
 > scorer-context charter is closed. The live status is **PARTIAL / CLOSURE AUDIT REQUIRED** per
@@ -735,10 +739,12 @@ layer has passed the landed `R5.5` baseline and the narrower `R5.75` follow-on g
 - long autonomous turns are evaluated differently from multi-turn conversational sessions
 - flagged sessions become materially more honest on known replay artifacts
 
-**Current proof posture:** the first and third claims are proven only at the bounded scopes recorded
-in `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. The long-autonomous versus
-multi-turn-conversational claim has construction-level proof but lacks a scorer-level behavioral A/B.
-R6 remains partial until `R6-C.1` supplies that proof or narrows the wording honestly.
+**Current proof posture:** the first claim has focused and bounded advancing-frontier proof. The
+third is only partially / bounded proven: the frozen dead-end corpus preserves postures as
+invariance and is not comparative evidence of integrated scorer improvement. The long-autonomous
+versus multi-turn-conversational claim has construction-level proof but lacks a scorer-level
+behavioral A/B. R6 remains partial until `R6-C.1` supplies the missing controls and integrated replay
+proof or narrows the wording honestly.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -826,8 +832,10 @@ The next honest work target is:
 - complete only the narrow `R6-C.1` acceptance-first controls named by the closure finding; do not
   inject every context layer into every scorer and do not reopen `semantic_goal_drift` without new
   failing evidence
-- close R6 only after every material scorer is complete, intentionally exempt, or still open in a
-  named bounded packet and the broad acceptance wording is proven or narrowed honestly
+- close R6 only after every material scoring surface has exactly one terminal disposition —
+  **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
+  outside R6 with justification** — and the broad acceptance wording is proven or narrowed
+  honestly; an ordinary “still open” state cannot pass closure
 - preserve full delegated-session support as design-ready R7 draft work, blocked on an R6 `CLOSED`
   decision; do not begin R7 implementation or make it absorb ordinary single-session scorer gaps
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets

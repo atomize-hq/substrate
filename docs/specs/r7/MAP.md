@@ -25,10 +25,12 @@ R6 is therefore **PARTIAL / CLOSURE AUDIT REQUIRED**, not closed for sequencing.
 authority is `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. Commit `99efda8f9` is
 preserved as draft planning history, not authority that R6 is closed or R7 is implementation-ready.
 
-R7 can be promoted only after the R6 applicability audit is complete; every material scorer is
-classified as complete, intentionally exempt, or still open; the broad R6 acceptance claims have
-behavioral proof or have been narrowed honestly; the named R6 closure controls are resolved; and the
-R6 finding plus root/R6/R7 authority stack all say `CLOSED`.
+R7 can be promoted only after the R6 applicability audit is complete; every material scoring
+surface has exactly one terminal disposition — **Cutover complete**, **Fit-for-purpose exception**,
+**Merged/deprecated**, or **Explicitly deferred outside R6 with justification**; the broad R6
+acceptance claims have behavioral proof or have been narrowed honestly; the named R6 closure
+controls are resolved; and the R6 finding plus root/R6/R7 authority stack all say `CLOSED`.
+Ordinary “still open” is not a promotion-eligible disposition.
 
 ## Live Linkage Evidence
 

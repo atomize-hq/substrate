@@ -7,9 +7,11 @@ Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
 
 All unchecked items are inactive until
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` reaches `CLOSED`. The exact gate is:
-the applicability audit is complete; every material scorer is complete, intentionally exempt, or
-still open; broad R6 acceptance claims are behaviorally proven or narrowed honestly; named closure
-controls are resolved; and the root/R6/R7 authority stack agrees.
+the applicability audit is complete; every material scoring surface is assigned exactly one of
+**Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
+outside R6 with justification**; ordinary “still open” is not eligible;
+broad R6 acceptance claims are behaviorally proven or narrowed honestly; named closure controls are
+resolved; and the root/R6/R7 authority stack agrees.
 
 ## R7-0: Docs Lock And Evidence Matrix
 

@@ -26,7 +26,9 @@ Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
 This document is design-ready draft work, not implementation authority. Promote it only when:
 
 1. the R6 scorer-by-context applicability audit is complete;
-2. every material scorer is classified as complete, intentionally exempt, or still open;
+2. every material scoring surface has exactly one terminal disposition: **Cutover complete**,
+   **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with
+   justification**; ordinary “still open” does not qualify;
 3. the broad R6 acceptance claims have behavioral proof or have been narrowed honestly;
 4. the named R6 closure controls are resolved and the R6 finding is `CLOSED`; and
 5. root landing-order authority, the R6 MAP, root SPEC/tasks, and all R7 statuses agree.

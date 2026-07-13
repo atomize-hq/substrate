@@ -58,11 +58,17 @@ kickoff/plan/docs`. You cannot honestly score drift *away from the goal* if the 
 heuristic-patched string. That dimension is the sharpest reason the `SO` foundation and `R6` must be
 reconciled rather than run past each other.
 
-## Preliminary Investigation Findings (This Pass)
+## Historical Preliminary Investigation Findings (Superseded)
 
-A focused read of the live scorer surface (`crates/agent-drift-analyzer/src/scoring/`) — enough to
-de-risk and frame `Decision Gate 0`, not an exhaustive audit. The planning session should finish it
-(see Task 1) before locking the decision.
+> **Historical / superseded status:** this section records the 2026-06-27 pre-cutover investigation
+> that framed Decision Gate 0. It is preserved for provenance, not as current scorer inventory or
+> closure posture. In particular, its three-scorer dispatcher description predates
+> `semantic_goal_drift`. Current behavior and proof authority live in the closure finding linked at
+> the top of this map.
+
+A focused read of the then-live scorer surface (`crates/agent-drift-analyzer/src/scoring/`) — enough
+to de-risk and frame `Decision Gate 0`, not an exhaustive audit. The original planning session was
+expected to finish it (see Task 1) before locking the decision.
 
 - `score_session` (`scoring/mod.rs`) runs three rule-based scorers over `CheckpointAnalysis`:
   `wrong_plan_branch`, `truth_grounding_gap`, `dead_end_thrash`.
@@ -306,14 +312,20 @@ fact does **not** prove the broader scorer-context charter closed:
 
 - `dead_end_thrash` consumes analyzer-owned `SessionProgress` and has focused proof for advancing
   frontier suppression, no-frontier stall, typed failure evidence, recovery, and bounded replay
-  posture. Scorer-level proof is still missing for regression, opaque delegated-parent activity,
-  and the long-autonomous versus many-short-conversational acceptance sentence.
+  posture. The frozen four-case corpus proves posture invariance, not comparative integrated
+  improvement, so broad replay honesty remains partially / bounded proven. Scorer-level proof is
+  still missing for regression, opaque delegated-parent activity, and the long-autonomous versus
+  many-short-conversational acceptance sentence.
 - `semantic_goal_drift` is context-aware in the way appropriate to its responsibility: structured
   current/kickoff/previous goals, stable targets, sanctioned replans, delegation visibility, and
   checkpoint history. It is **cutover complete**; typed outcomes, archetype, and progress are not
   semantically required, and it must not be reopened absent new failing evidence.
 - `truth_grounding_gap` and `wrong_plan_branch` have reasonable fit-for-purpose input boundaries,
-  but their context-exception claims lack the small behavioral controls required for closure.
+  but their context-exception claims lack the behavioral controls required for closure. Truth
+  grounding still needs truth-path-touching action-before-read and actionful-planning/research
+  controls; wrong-branch scoring still needs an empty-authority path-bearing action control.
+- `scoring/mod.rs` has an explicit deterministic order in source. That exact order is source-proven,
+  not behavior-tested, and needs a focused assertion only if it remains a closure contract.
 - `R6-3.X.3` and conditional `R6-4` remain separately evidence-gated; this audit does not
   manufacture their triggers.
 
@@ -322,7 +334,10 @@ matrix, proof inventory, acceptance-claim audit, and R7 promotion gate live in
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. The only authorized next R6 work is the
 narrow acceptance-first `R6-C.1` packet named there. R7 design documents remain preserved as
 **DRAFT / BLOCKED ON R6 CLOSURE DECISION**; no R7 implementation begins until the finding is updated
-to `CLOSED` and the authority stack agrees.
+to `CLOSED`, every material scoring surface has one of the four terminal dispositions (**Cutover
+complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6
+with justification**), and the authority stack agrees. An ordinary “still open” state cannot pass
+the R6 closure gate.
 
 ## Non-Goals For This Rescope
 

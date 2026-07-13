@@ -17,8 +17,10 @@ Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 4. Add acceptance controls before production behavior changes.
 5. If a control fails, split only that scorer/failure into a bounded R6 implementation packet.
 6. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence.
-7. Update the finding to `CLOSED` only when every scorer is complete, intentionally exempt, or
-   resolved and every broad acceptance claim is proven or narrowed honestly.
+7. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
+   disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
+   **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
+   proven or narrowed honestly. Ordinary “still open” is not a closure disposition.
 8. Only then promote the preserved R7 drafts to implementation-ready.
 
 ## Execution Rules
@@ -26,8 +28,12 @@ Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 - Do not begin R7 implementation.
 - Do not reopen `semantic_goal_drift` without a new failing witness.
 - Do not add a common mega-context argument to every scorer.
-- Treat `dead_end_thrash` regression/delegation/turn-shape, truth-grounding applicability, and
-  wrong-branch replan/delegation controls as acceptance questions first.
+- Treat `dead_end_thrash` regression/delegation/turn-shape; truth-grounding applicability,
+  truth-path-touching action-before-read, and actionful-planning/research; and wrong-branch
+  replan/delegation plus empty-authority path-bearing action controls as acceptance questions first.
+- Treat the frozen dead-end corpus as posture invariance rather than comparative replay
+  improvement. Keep broad replay honesty partially / bounded proven until integrated replay closes
+  the claim or the wording is narrowed.
 - Keep R7 reciprocal direct linkage, separate trajectories, direct-child-first support, and no-new-
   drift-class-by-default as draft design decisions, not current implementation authority.
 - Run GitNexus impact analysis before any later symbol edit and `npx gitnexus detect-changes -r
