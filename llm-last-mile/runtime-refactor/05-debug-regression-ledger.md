@@ -195,8 +195,8 @@ remediations `80b0f9e0`, `839f78b4`, `182dd4af`, `1e356654`, and `cd676614`. The
 source path/bytes and enters the same private canonical core as the ambient API; shell code does not
 parse, layer, validate, finalize, or explain a parallel policy. The accepted bootstrap home also
 owns descriptor-backed config/policy/inventory reads and a distinct bound StateStore capability;
-inventory provenance uses the accepted physical path and bound StateStore callers cannot obtain
-lexical descendant paths.
+inventory provenance uses the accepted physical path and the bound StateStore capability exposes
+no descendant-path API.
 
 Recorded proof is broker differential `4/4`, broker `75/75`, config `20/20`, inventory `16/16`,
 policy `13/13`, policy snapshot `9/9`, HostSessionAuthority `95/95`, StateStore `188/188`, and the
@@ -209,9 +209,28 @@ check, and scoped GitNexus change detection passed; GitNexus classifies the comp
 policy range as critical breadth (`118` changed symbols, `67` affected processes), consistent with
 the focused proof wall and without authorizing sibling work.
 
+Exact focused command mapping:
+
+- broker differential: `cargo test -p substrate-broker --lib a11e_explicit_global_source`;
+- broker full: `cargo test -p substrate-broker --lib`;
+- config/inventory/policy/snapshot: `cargo test -p shell --lib execution::config_model::tests`,
+  `execution::agent_inventory::tests`, `execution::policy_model::tests`, and
+  `execution::policy_snapshot::tests` respectively;
+- authority/StateStore: `cargo test -p shell --lib execution::agent_runtime::host_session_authority`
+  and `cargo test -p shell --lib execution::agent_runtime::state_store::tests`;
+- explicit-home group: `cargo test -p shell --lib explicit_`;
+- static wall: `cargo fmt --all -- --check`, `cargo check -p substrate-broker -p shell`,
+  `cargo clippy -p substrate-broker -p shell --lib -- -D warnings`, and `git diff --check`.
+
 The broad shell library wall remains non-green at `843 passed / 171 failed`; the sorted 171-test
 failure set is exactly unchanged from the accepted `842/171` deferred legacy-writer/lifecycle
-baseline. No unit/component result is promoted to integrated product proof. A1.1d integrated Linux
+baseline at `49876412`, both from `cargo test -p shell --lib -- --nocapture`. Task evidence captured
+the baseline log as `/tmp/substrate-a11e-shell-lib.log` with SHA-256
+`ca3da7f69e4b53e8009900927c96abf20152127b2dab14e37b90caa3cb7416ad` and the final log as
+`/tmp/substrate-a1-1e-shell-lib-combined-final.log` with SHA-256
+`d9abaedc11fc8960a7fa53ac4c5d8cba74d842fe7fe8612b533e0ea56a47c6d7`; sorted failure-name lists
+were compared with `diff -u` and produced no output. These task-local paths are evidence provenance,
+not durable product artifacts. No unit/component result is promoted to integrated product proof. A1.1d integrated Linux
 closeout remains open, native macOS closeout remains pending, `RG-AUTH-03`, `RG-HOME-01`,
 `RG-POLICY-03`, and `RG-BASE-01` remain open, and no seam is promoted. Real CLI/helper/REPL
 adoption, Start reservation, transition-intent issuance/claim/application, parked-successor repair,

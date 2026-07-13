@@ -26,7 +26,7 @@ contract, that the real production path has adopted that seam, or that its runti
 
 | Applicable seam | A1.1d-5 prerequisite effect | Status after private-home proof | Boundary preserved |
 |---|---|---|---|
-| HostSessionAuthority | Authority bootstrap may begin only from one no-follow-opened, exact-owner, exact-`0700`, ACL-safe physical `SUBSTRATE_HOME`; unsafe or replaced roots fail before authority markers or roots are created. | No promotion. A1.1e facade integration and later transition-intent adoption remain unstarted. | Private-home validation selects a trusted container; it does not issue, claim, apply, or reconcile host-session transitions. |
+| HostSessionAuthority | Authority bootstrap may begin only from one no-follow-opened, exact-owner, exact-`0700`, ACL-safe physical `SUBSTRATE_HOME`; unsafe or replaced roots fail before authority markers or roots are created. | At the A1.1d-5 checkpoint: no promotion; A1.1e facade integration and later transition-intent adoption were unstarted. Current A1.1e status is recorded below. | Private-home validation selects a trusted container; it does not issue, claim, apply, or reconcile host-session transitions. |
 | StateStore | Every supported creator supplies the same private per-user root before legacy or A1 persistence can write beneath it; existing invalid roots are never repaired or adopted. | No promotion. StateStore remains persistence, and A3 separation remains pending. | No persistence schema, migration, compatibility conversion, revision rule, or semantic write policy changes. |
 | AgentConfigProjectionService | Config, policy, inventory, and future runtime projections originate from the bound private root and reach world members only through Substrate-owned projection/mediation, not direct unprivileged traversal. | No promotion. Direct world Codex projection/gateway adoption remains unresolved under `RG-CONFIG-04`. | Precedence, inventory interpretation, credential posture, and projection identity do not change in A1.1d-5. |
 | RuntimeFamilyRealizationAdapter | Provider runtimes retain current availability and receive only the already-landed runtime/config/gateway inputs; private-home creation cannot remove a runtime family or bypass the gateway carrier. | No promotion. Adapter ownership and contract-correct consumer realization remain later work. | No launch semantics, provider parsing, credential path, world request, policy snapshot, or enforcement-plan change. |
@@ -140,7 +140,8 @@ differential `4/4`, broker `75/75`, config `20/20`, inventory `16/16`, policy `1
 snapshot `9/9`, HostSessionAuthority `95/95`, StateStore `188/188`, and explicit-home `19/19`;
 format, check, Clippy-with-warnings-denied, and diff checks pass. The broad shell wall is honestly
 `843 passed / 171 failed`; its exact 171-test failure set is unchanged from the accepted deferred
-A1.1d lifecycle baseline. This closes A1.1e only: real CLI/helper/REPL adoption, transition intents,
+A1.1d lifecycle baseline. Exact command/filter and output-hash provenance is recorded in
+`05-debug-regression-ledger.md`. This closes A1.1e only: real CLI/helper/REPL adoption, transition intents,
 dispatch narrowing/enforcement, A1.1d integrated Linux and native-macOS closeout, and
 `RG-BASE-01` remain open. No row below is promoted and A1.2 has not begun.
 

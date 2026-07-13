@@ -169,9 +169,11 @@ The `RG-AUTH-01` and `RG-AUTH-02` references in A1 are scoped gates, not whole-l
   closeout is open and cross-platform closeout is pending.
 - The public lifecycle failure is owned by A1.2/A1.3, not an A1.1d heartbeat or successor-work
   subpacket. No A1.1d-6 exists or is implied.
-- A1.1e is implementation-ready after this documentation correction and has not begun.
-- A1.2 remains blocked on A1.1e and owns durable transition-protocol closure. A1.3 remains blocked
-  on A1.2 and owns real CLI/helper/REPL adoption plus `RG-BASE-01` closure.
+- A1.1e is focused-proof and review clean through `cd676614`; this does not close A1.1d or any
+  integrated product gate.
+- A1.2 has not begun and is dependency-ready only for its canonical durable transition-protocol
+  scope. A1.3 remains blocked on A1.2 and owns real CLI/helper/REPL adoption plus `RG-BASE-01`
+  closure.
 - A1.4 is not ready. A1 remains incomplete and non-landable until the deferred lifecycle gate, the
   complete Linux wall, required native macOS proof, A1.4, and all final A1 gates pass.
 
