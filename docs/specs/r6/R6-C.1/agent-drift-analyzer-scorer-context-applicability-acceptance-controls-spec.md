@@ -20,7 +20,9 @@ Close the named scorer-context **acceptance-proof** gaps without manufacturing c
 Add deterministic behavior controls first for `dead_end_thrash`, `truth_grounding_gap`, and
 `wrong_plan_branch`; preserve every honest failure as a red witness; and route each failing seam to one
 bounded `R6-GAP-*` packet before any production change. `R6-C.1-CONTROLS` succeeds when every listed
-control has a recorded pass or preserved fail result. It does not close R6.
+synthetic control has a deterministic recorded pass or preserved fail result. Its transition commit
+then ends `R6-C.1-CONTROLS` and activates the first named red `R6-GAP-*` phase, or `R6-REPLAY` when
+none is red. It does not close R6.
 
 ## Locked Decisions
 
@@ -50,6 +52,18 @@ control has a recorded pass or preserved fail result. It does not close R6.
    load-bearing.
 6. **Integrated replay stays in `R6-REPLAY`.** The real-rollout-derived advancing repeated-failure and
    true-stall controls below are specified now but are not implemented or closed by `R6-C.1-CONTROLS`.
+   Trusted fixture selection owns their exact raw score, confidence, and historical state. The advancing
+   contract is unflagged/non-`Active`; it may be `HistoricalOnly` or `Recovered` only as prior score
+   history determines. The true-stall contract is flagged/`Active`. A candidate that does not satisfy the
+   annotated row shape is rejected or replaced as a fixture mismatch, not routed to a production gap.
+7. **Frozen-corpus preservation is executable but replay-owned (`CTX-R6-06`).** `R6-REPLAY` must run
+   existing test
+   `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture` and preserve three
+   `Cleared / 0 / unflagged` cases plus one `Recovered / 20 / unflagged` sticky case. This remains
+   posture invariance, not comparative integrated improvement.
+8. **Phase transitions are exclusive.** No `R6-GAP-*` phase runs while `R6-C.1-CONTROLS` remains
+   active. Every red matrix row gets a distinct named gap phase. Gap phases transition sequentially in
+   matrix/family order; the final review-clean gap transitions to `R6-REPLAY`.
 
 ## Acceptance Control Matrix
 
@@ -59,9 +73,9 @@ conditional: create it only after the named control is committed as a failing wi
 
 | Ledger | Exact test function | Preconditions / input seam | Expected result / adjudication | Fixture | Focused command | Conditional gap route |
 |---|---|---|---|---|---|---|
-| `CTX-R6-03` | `dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity` | `tests/dead_end_thrash.rs`; repeated active failure history plus `SessionProgress::TroubleshootingFrontier` with regression/no direct-advance signals. | `30 / Medium / Active`, flagged; evidence names stall/regression. Regression must not be suppressed as churn. | None | `cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity -- --exact --nocapture` | `R6-GAP-DET-REGRESSION` |
-| `CTX-R6-04` | `dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity` | Opaque delegated-parent / `ParentVisibleOrchestration`; no attributable child command observations or repeated loops. | `0 / Low / Cleared`, unflagged, empty evidence. | None | `cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity -- --exact --nocapture` | `R6-GAP-DET-OPAQUE-PARENT` |
-| `CTX-R6-05` | `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes` | Long-autonomous and many-short-conversational sessions produce equal repeated-failure history and equal direct frontier advancement. | Both `20 / Medium / HistoricalOnly`, unflagged. Adjudication: turn shape is fully consumed upstream; only unequal `SessionProgress` may change the score. | None | `cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_scores_equal_progress_equally_across_turn_shapes -- --exact --nocapture` | `R6-GAP-DET-TURN-EQUIVALENCE` |
+| `CTX-R6-03` | `dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity` | `tests/dead_end_thrash.rs`; failure-only repeated history touches the current interval (`active_repeated_failure=true`), with no repeated-verification history and `active_repeated_verification=false`; `SessionProgress::TroubleshootingFrontier` has regression/non-advancing evidence and no direct-advance signal. | `30 / Medium / Active`, flagged; evidence names stall/regression. Those upstream bits make the exact triple deterministic: regression must not be suppressed as churn. | None | `cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity -- --exact --nocapture` | `R6-GAP-DET-REGRESSION` |
+| `CTX-R6-04` | `dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity` | Opaque delegated-parent / `ParentVisibleOrchestration`; no attributable child command observations, no repeated-failure or repeated-verification history, and both active repetition bits false. | `0 / Low / Cleared`, unflagged, empty evidence. The empty history/observation seam fixes confidence and avoids historical state resolution. | None | `cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity -- --exact --nocapture` | `R6-GAP-DET-OPAQUE-PARENT` |
+| `CTX-R6-05` | `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes` | Long-autonomous and many-short-conversational sessions supply identical failure-only repeated history, `active_repeated_failure=true`, no repeated-verification history/activity, and identical direct frontier-advance signals; neither session has a prior `Active` `dead_end_thrash` score. | Both `20 / Medium / HistoricalOnly`, unflagged. Failure-only history fixes confidence; no prior active score fixes `HistoricalOnly` rather than `Recovered`. Adjudication: turn shape is fully consumed upstream; only unequal `SessionProgress` may change the score. | None | `cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_scores_equal_progress_equally_across_turn_shapes -- --exact --nocapture` | `R6-GAP-DET-TURN-EQUIVALENCE` |
 | `CTX-R6-09` | `truth_grounding_gap_keeps_no_action_planning_clear` | Declared truth path; planning/research prose; no write-like or verification-like command. | `0 / Medium / Cleared`, unflagged; authority evidence is allowed, no action-gap evidence. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_keeps_no_action_planning_clear -- --exact --nocapture` | `R6-GAP-TGG-NO-ACTION` |
 | `CTX-R6-10` | `truth_grounding_gap_flags_successful_verification_without_truth_reads` | Declared truth path; typed successful verification outside that path; no earlier truth read. | `80 / High / Active`, flagged. Typed success must not fabricate grounding. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_successful_verification_without_truth_reads -- --exact --nocapture` | `R6-GAP-TGG-SUCCESS-WITHOUT-READ` |
 | `CTX-R6-11` | `truth_grounding_gap_is_event_order_invariant_across_turn_shapes` | Same declared truth and same ungrounded action order, represented once as one long autonomous turn and once as many short turns. | Both `80 / High / Active`, flagged, with equivalent evidence semantics. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_is_event_order_invariant_across_turn_shapes -- --exact --nocapture` | `R6-GAP-TGG-TURN-INVARIANCE` |
@@ -72,8 +86,9 @@ conditional: create it only after the named control is committed as a failing wi
 | `CTX-R6-14` | `wrong_plan_branch_accepts_write_under_sanctioned_replan_scope` | A sanctioned path pivot updates current truth/working-set authority before a write under the new path. | `0 / Medium / Cleared`, unflagged, empty evidence. | None | `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_accepts_write_under_sanctioned_replan_scope -- --exact --nocapture` | `R6-GAP-WPB-REPLAN-SCOPE` |
 | `CTX-R6-14` | `wrong_plan_branch_keeps_opaque_parent_orchestration_clear_without_child_action` | Non-empty parent authority plus opaque parent orchestration; no attributable child path-bearing write/verification. | `0 / Medium / Cleared`, unflagged, empty evidence. | None | `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_keeps_opaque_parent_orchestration_clear_without_child_action -- --exact --nocapture` | `R6-GAP-WPB-OPAQUE-PARENT` |
 | `CTX-R6-15` | `wrong_plan_branch_makes_no_claim_for_path_action_without_authority` | Empty truth-artifact and non-observed working-set authority; one path-bearing write/verification. | `0 / Low / Cleared`, unflagged, empty evidence. Likely intentional red witness at current source. | None | `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_makes_no_claim_for_path_action_without_authority -- --exact --nocapture` | `R6-GAP-WPB-EMPTY-AUTHORITY` |
-| `CTX-R6-01` | `acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged` | Full analyzer path over an annotated real-rollout-derived session with repeated failures and a directly advancing troubleshooting frontier. | `20 / Medium / HistoricalOnly`, unflagged; fixture annotation must identify the advancement witness. | **Required in `R6-REPLAY`;** exact trusted session ID selected there. | `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged -- --exact --nocapture` | `R6-REPLAY`; if red there, `R6-GAP-DET-REPLAY-ADVANCING` |
-| `CTX-R6-02` | `acceptance_fixtures_integrated_true_stall_stays_active` | Full analyzer path over an annotated real-rollout-derived session with repeated failure and no frontier movement. | `30 / Medium / Active`, flagged; fixture annotation must identify the true-stall witness. | **Required in `R6-REPLAY`;** exact trusted session ID selected there. | `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture` | `R6-REPLAY`; if red there, `R6-GAP-DET-REPLAY-STALL` |
+| `CTX-R6-01` | `acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged` | Full analyzer path over an annotated real-rollout-derived session with repeated failures and a directly advancing troubleshooting frontier. Trusted selection must prove those inputs before scoring is judged. | Contract-level expectation: unflagged and non-`Active`, with advancement evidence. Exact raw score/confidence/state wait for trusted selection; `HistoricalOnly` is allowed with no prior active score and `Recovered` only with prior `Active` history. | **Required in `R6-REPLAY`;** exact trusted session ID selected there. | `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged -- --exact --nocapture` | `R6-REPLAY`; reject/replace fixture-shape mismatches without opening a gap. Only a behavioral red after trusted input validation may route to `R6-GAP-DET-REPLAY-ADVANCING`. |
+| `CTX-R6-02` | `acceptance_fixtures_integrated_true_stall_stays_active` | Full analyzer path over an annotated real-rollout-derived session with repeated failure and no frontier movement. Trusted selection must prove those inputs before scoring is judged. | Contract-level expectation: flagged/`Active`, with true-stall evidence. Exact raw score/confidence wait for trusted selection because failure-only versus verification-plus-failure history legitimately changes both. | **Required in `R6-REPLAY`;** exact trusted session ID selected there. | `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture` | `R6-REPLAY`; reject/replace fixture-shape mismatches without opening a gap. Only a behavioral red after trusted input validation may route to `R6-GAP-DET-REPLAY-STALL`. |
+| `CTX-R6-06` | `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture` | Existing full-analyzer frozen corpus: three named cleared controls plus the sticky success-tail witness. | Preserve exactly three `Cleared / 0 / unflagged` final scores and one `Recovered / 20 / unflagged` final score. Invariance only. | Existing frozen four-case corpus; no fixture edit in `R6-C.1-CONTROLS`. | `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture` | `R6-REPLAY`; preservation failure is replay-owned and must not be reclassified as a new controls-phase row. |
 
 ## Files And Commands
 
@@ -97,12 +112,12 @@ cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
 cargo test -p agent-drift-analyzer truth_grounding_gap -- --nocapture
 cargo test -p agent-drift-analyzer wrong_plan_branch -- --nocapture
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
-git diff --check
 ```
 
-Run only the active scorer command while iterating. Run the full list after all three scorer-control
-commits or preserved witnesses exist. Replay commands run only in `R6-REPLAY` after trusted fixtures are
-selected.
+Run only the active row command while iterating. Each matrix row is its own atomic test-only
+commit/fresh-review boundary; do not batch a scorer family. Run the owning family command only after all
+of that family's row commits are independently review-clean. Replay commands, including the existing
+`CTX-R6-06` preservation command, run only in `R6-REPLAY`.
 
 ## Testing And Gap Strategy
 
@@ -110,13 +125,26 @@ selected.
   result before touching production.
 - A passing control is fit-for-purpose evidence; do not refactor production merely because a different
   implementation seems cleaner.
-- A failing control is committed as a witness. Create one scorer/failure-seam packet named in the row;
-  never batch independent failures. The gap packet owns impact analysis, the smallest production fix,
-  focused proof, family non-regression, atomic commit, and fresh review.
+- A failing control is committed as a witness in that row's own atomic commit. Every matrix row, green or
+  red, receives a fresh built-in `default` review before the next row begins. Family checkpoints may
+  aggregate only after every row commit in that family is review-clean.
+- `R6-C.1-CONTROLS` ends as soon as every synthetic row has a deterministic preserved result. Its
+  transition commit activates the first named red `R6-GAP-*` phase in matrix/family order, or
+  `R6-REPLAY` when no row is red. Never run a gap while `R6-C.1-CONTROLS` is active.
+- Each red row owns one distinct gap phase. A review-clean gap transitions to the next named red gap; the
+  final review-clean gap transitions to `R6-REPLAY`. Gap phases never batch independent failures and do
+  not reactivate `R6-C.1-CONTROLS`.
 - Run `npx gitnexus impact <symbol> -r 97a0-substrate --direction upstream --depth 3` before any later
   indexed-symbol edit. Warn/stop on HIGH or CRITICAL impact.
-- Run `npx gitnexus detect-changes -r 97a0-substrate`, inspect staged scope, and run `git diff --check`
-  before every commit.
+- Before every commit, run the exact staged gate below. `<intended-files-only>` must exclude unrelated
+  dirt, and the final command is a complete staged-diff inspection:
+
+```bash
+git add -- <intended-files-only>
+npx gitnexus detect-changes --scope staged -r 97a0-substrate
+git diff --cached --check
+git diff --cached
+```
 
 ## Full R6 Ledger Coverage
 
@@ -124,7 +152,7 @@ selected.
 |---|---|
 | `CTX-R6-01`, `CTX-R6-02` | Exact integrated controls specified above; execution remains `R6-REPLAY`. |
 | `CTX-R6-03` through `CTX-R6-05` | Open `dead_end_thrash` controls in `R6-C.1-CONTROLS`. |
-| `CTX-R6-06` | Frozen four-case posture remains invariance only; preservation stays `R6-REPLAY`. |
+| `CTX-R6-06` | Existing exact frozen-corpus preservation control is specified above; execution stays `R6-REPLAY` and must preserve three cleared plus one recovered posture. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no reopen here. |
 | `CTX-R6-09` through `CTX-R6-13` | Open `truth_grounding_gap` controls in `R6-C.1-CONTROLS`. |
 | `CTX-R6-14`, `CTX-R6-15` | Open `wrong_plan_branch` controls in `R6-C.1-CONTROLS`. |
@@ -134,26 +162,32 @@ selected.
 
 ## Boundaries
 
-**Always:** preserve failing witnesses; keep one scorer/failure seam per gap packet; use repo-relative
-links; update TASKS and `CTX-R6-*` ledger rows only with actual results; dispatch a fresh built-in
-`default` reviewer at every plan boundary.
+**Always:** preserve failing witnesses; make one atomic commit and fresh review per matrix row; keep one
+scorer/failure seam per gap phase; use repo-relative links; update TASKS and `CTX-R6-*` ledger rows only
+with actual results; dispatch a fresh built-in `default` reviewer at every row, gap, and transition
+boundary; stage only intended files and validate the staged diff before commit.
 
 **Escalate:** only for an unresolved authority/product choice, HIGH/CRITICAL GitNexus impact,
 unisolatable unrelated work, unavailable trusted replay evidence, or a scope change. Use the structured
 `DECISION REQUIRED` / `ACTION REQUIRED` forms in the operator prompt library.
 
 **Never:** edit tests/code/fixtures during `R6-C.1-SPEC`; change production before a red witness; batch
-independent gap fixes; absorb a baseline defect into R7; reopen `semantic_goal_drift` without a new
-behavior-level failure; execute replay closeout; claim R6 closure; start R7 or R8.
+matrix-row witness commits or independent gap fixes; run a gap while `R6-C.1-CONTROLS` is active; route a
+fixture-shape mismatch to a production gap; absorb a baseline defect into R7; reopen
+`semantic_goal_drift` without a new behavior-level failure; execute replay closeout; claim R6 closure;
+start R7 or R8.
 
 ## Success Criteria
 
 1. This SPEC, its PLAN, and TASKS are committed and independently review-clean.
 2. Every `CTX-R6-03` through `CTX-R6-05` and `CTX-R6-09` through `CTX-R6-15` control has an exact test,
    input seam, expected disposition, fixture decision, focused command, and one conditional gap route.
-3. `CTX-R6-01`/`02` integrated replay ownership and `CTX-R6-16` no-order-test adjudication are explicit.
-4. The next phase may activate only as `R6-C.1-CONTROLS`; no control is marked complete by this docs
-   phase.
+3. `CTX-R6-01`/`02` defer fixture-dependent precision, `CTX-R6-06` names the executable frozen-corpus
+   preservation control, and all three remain owned by `R6-REPLAY`.
+4. `CTX-R6-16` remains a no-order-test adjudication.
+5. The next phase may activate only as `R6-C.1-CONTROLS`; no control is marked complete by this docs
+   phase. Later transitions follow `CONTROLS -> first red gap -> ... -> final red gap -> R6-REPLAY`, or
+   `CONTROLS -> R6-REPLAY` when all synthetic rows are green.
 
 ## Non-Goals
 
