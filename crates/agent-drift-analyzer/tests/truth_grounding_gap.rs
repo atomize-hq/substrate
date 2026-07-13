@@ -386,19 +386,15 @@ fn truth_grounding_gap_flags_truth_path_action_before_read() {
 #[test]
 fn truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes() {
     let truth_path = "docs/specs/agent-drift-analyzer-v0.4-spec.md";
-    let analyze = |task: &str, target: &str, archetype: &str| {
+    let action = "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: scratch/archetype-equivalence-control.toml\n*** End Patch\nPATCH";
+    let analyze = |task: &str, archetype: &str| {
         let rows = vec![
             row(
                 0,
                 CompactionKind::UserMessage,
                 &format!("{task} using {truth_path} before changing behavior."),
             ),
-            tool_row(
-                1,
-                &format!(
-                    "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {target}\n*** End Patch\nPATCH"
-                ),
-            ),
+            tool_row(1, action),
         ];
         let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
         let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
@@ -412,15 +408,10 @@ fn truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes() {
     };
 
     let planning = analyze(
-        "Research the scorer context and record the result",
-        "docs/research/truth-grounding-notes.md",
+        "Use code-review-and-quality to review the scorer context and record the findings",
         "planning/research",
     );
-    let implementation = analyze(
-        "Implement the scorer context change",
-        "crates/agent-drift-analyzer/src/lib.rs",
-        "implementation",
-    );
+    let implementation = analyze("Implement the scorer context change", "implementation");
 
     assert_eq!(planning.task_frame.truth_artifacts, vec![truth_path]);
     assert_eq!(

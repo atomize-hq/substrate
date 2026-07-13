@@ -244,11 +244,11 @@ before that reconciled transition is committed and fresh-review-clean.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
   - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 9
-    filtered out`. Planning/research and autonomous-implementation task frames each declared the same
-    truth path and performed equivalent write-like `apply_patch` actions against their respective framed
-    targets before any truth read; both produced exactly `80 / High / Active`, flagged. Their evidence
-    reasons were equivalent and retained both the `truth artifact hint:` authority and ungrounded
-    `command family: apply_patch` action. No
+    filtered out`. Task prose alone produced Planning and AutonomousImplementation frames that each
+    declared the same truth path and performed one byte-identical write-like `apply_patch` command
+    against the same target before any truth read; both produced exactly `80 / High / Active`, flagged.
+    Their evidence reasons were equivalent and retained both the `truth artifact hint:` authority and
+    ungrounded `command family: apply_patch` action. No
     `R6-GAP-TGG-ARCHETYPE-INVARIANCE` route is required, and no production code changed.
 
 - [ ] **R6-C.1.2.7 — Run the reviewed `truth_grounding_gap` family checkpoint.**
