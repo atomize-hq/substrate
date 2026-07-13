@@ -1,8 +1,8 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. Only the
-specification-lock task is complete. Every control, replay, conditional-gap, production-fix, phase-close,
-and closure task remains open until exact live proof is recorded.
+Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
+specification-lock task and `CTX-R6-03` control are complete. All remaining controls, replay,
+conditional-gap, production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
 
