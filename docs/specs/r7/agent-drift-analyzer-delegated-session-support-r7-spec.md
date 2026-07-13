@@ -3,13 +3,12 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: PLANNED / NOT IMPLEMENTED
+Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
 
 ## Assumptions I'm Making
 
-1. R6 is closed enough to advance: `dead_end_thrash` already consumes analyzer-owned progress,
-   semantic-goal-drift work is closed absent new evidence, `R6-3.X.3` is deferred, and conditional
-   `R6-4` remains evidence-gated.
+1. The scoped R6 packets are landed, but R6 is **PARTIAL / CLOSURE AUDIT REQUIRED**. R7 does not
+   advance until `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` reaches `CLOSED`.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -21,6 +20,19 @@ Status: PLANNED / NOT IMPLEMENTED
    consume typed bundle/checkpoint contracts and do not add their own raw collaboration parser.
 6. R8 still owns broad sentinel interpretation consolidation. R7 may add only compatibility and
    compact presentation required to carry the new analyzer semantics end to end.
+
+## Implementation Promotion Gate
+
+This document is design-ready draft work, not implementation authority. Promote it only when:
+
+1. the R6 scorer-by-context applicability audit is complete;
+2. every material scorer is classified as complete, intentionally exempt, or still open;
+3. the broad R6 acceptance claims have behavioral proof or have been narrowed honestly;
+4. the named R6 closure controls are resolved and the R6 finding is `CLOSED`; and
+5. root landing-order authority, the R6 MAP, root SPEC/tasks, and all R7 statuses agree.
+
+R7 must extend a stable ordinary single-session baseline; it must not absorb unresolved baseline
+scorer semantics.
 
 ## Objective
 

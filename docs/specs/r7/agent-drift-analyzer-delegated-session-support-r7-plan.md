@@ -3,7 +3,11 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Status: PLANNED / NOT IMPLEMENTED
+Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
+
+This implementation plan is inactive. Preserve it as design-ready draft work until
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` reaches `CLOSED`; do not execute any
+phase before that gate.
 
 ## Overview
 
@@ -37,10 +41,15 @@ for child work.
    requires later acceptance evidence.
 8. **R7-compatible sentinel only.** Multi-session cursor and presentation support may change, but
    broad replay/live interpretation refactoring remains R8.
-9. **R6 defer boundaries stand.** Do not reopen `R6-3.X.3`, conditional `R6-4`, or closed
-   semantic-goal-drift packets without new evidence.
+9. **R6 closure boundary stands.** Do not reopen `R6-3.X.3`, conditional `R6-4`, or closed
+   semantic-goal-drift packets without new evidence, and do not make R7 absorb the ordinary
+   single-session acceptance gaps named by the R6 closure finding.
 
 ## Dependency Graph
+
+The entire graph is blocked on the R6 closure gate: applicability audit complete, every material
+scorer classified, broad acceptance proven or narrowed honestly, named controls resolved, and the
+R6 finding plus authority stack updated to `CLOSED`.
 
 ```text
 R7-0 docs + sanitized evidence matrix
@@ -69,7 +78,8 @@ R7-6 minimal sentinel replay/live compatibility
 ### R7-0.1 Freeze the family contract
 
 - Land `MAP`, `SPEC`, `PLAN`, and `TASKS` before implementation.
-- Record the R6 handoff and the rule that `dead_end_thrash` is already cut over.
+- Record that the `dead_end_thrash` progress-aware core is landed while the broad R6 closure audit
+  remains partial.
 - Freeze direct-only reciprocal linkage and parent/child progress separation.
 
 Verification checkpoint:

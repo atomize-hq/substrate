@@ -11,11 +11,12 @@ records:
 - which gap is actually blocking honest analyzer and sentinel behavior now
 - the order the remaining work should land in
 
-This file is the repo-root landing-order narrative for the hybrid-drift stack. It is current through the
-landed `R5.75` family. Authority for the active `R6` seam now lives under `docs/specs/r6/` (`MAP.md` +
-`DESIGN-r6-scorer-cutover-and-objective-consumption.md` + the per-packet sets); this file defers to those
-for `R6` scope and decisions. The Ground Truth Sources list below is historical context, not an
-exhaustive index of current authority.
+This file is the repo-root landing-order narrative for the hybrid-drift stack. Authority for the
+current R6 closure decision lives in
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, then `docs/specs/r6/MAP.md`, the R6
+design, and the per-packet sets. The scoped R6 packets have landed, but R6 is **PARTIAL / CLOSURE
+AUDIT REQUIRED** until the named acceptance controls close. The Ground Truth Sources list below is
+historical context, not an exhaustive index of current authority.
 
 > **Status note (2026-07-04):** `R5`/`R5.5`/`R5.75` structured-objective work has advanced well beyond the
 > older root sequence, through `R6` scorer cutover and into `R6` real-world validation. The current blocker
@@ -26,6 +27,11 @@ exhaustive index of current authority.
 > delegated-session (subagent) semantics remain deferred to `R7`; `R6-3.5` only adds a bounded opaque-parent
 > guardrail so parent-only traces do not over-claim. See `docs/specs/r6/R6-3.5/` and
 > `docs/specs/r6/FINDINGS-r6-3-real-world-drift-validation.md`.
+
+> **Closure correction (2026-07-12):** scoped R6 packet landing is not authority that the broad R6
+> scorer-context charter is closed. The live status is **PARTIAL / CLOSURE AUDIT REQUIRED** per
+> `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. R7 documents are design-ready drafts
+> but blocked from implementation until that finding reaches `CLOSED`.
 
 ## Ground Truth Sources
 
@@ -39,6 +45,7 @@ exhaustive index of current authority.
 - `docs/specs/r5/agent-drift-analyzer-session-progress-r5_5-tasks.md`
 - `docs/specs/r5/R5_75/` (the landed `R5.75` pre-`R6` hardening family, incl. `phase-1/SO/`)
 - `docs/specs/r6/MAP.md`
+- `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`
 - `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md`
 - `docs/specs/r6/R6-1/` and `docs/specs/r6/R6-2/` (the committed `R6` packet sets)
 - `.codex/handoffs/2026-06-04-180058-drift-sentinel-rollout-review.md`
@@ -728,6 +735,11 @@ layer has passed the landed `R5.5` baseline and the narrower `R5.75` follow-on g
 - long autonomous turns are evaluated differently from multi-turn conversational sessions
 - flagged sessions become materially more honest on known replay artifacts
 
+**Current proof posture:** the first and third claims are proven only at the bounded scopes recorded
+in `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. The long-autonomous versus
+multi-turn-conversational claim has construction-level proof but lacks a scorer-level behavioral A/B.
+R6 remains partial until `R6-C.1` supplies that proof or narrows the wording honestly.
+
 ## Packet R7: Full Delegated-Session Support
 
 ### Objective
@@ -798,12 +810,11 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, and `R5.75` are now landed on this worktree, so `R6` is the
-active seam. `R6` has been rescoped against the structured-objective work that landed inside
-`R5.75`; its map, the resolved `Decision Gate 0`, and the packet decomposition live under
-`docs/specs/r6/`.
+`R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, and `R5.75` are landed. The scoped R6 packet history is also
+landed, but the broad R6 scorer-context charter is **PARTIAL / CLOSURE AUDIT REQUIRED**. The next
+authority is `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`.
 
-The next honest implementation target is:
+The next honest work target is:
 
 - keep `R3` closed as the completed turn-context packet family
 - keep `R3.5` closed as the completed replay/live trigger-headline canonicalization packet
@@ -812,13 +823,16 @@ The next honest implementation target is:
 - keep `R5` closed as the landed archetype-aware progress packet family
 - keep `R5.5` closed as the landed first hardening pass
 - keep `R5.75` closed as the landed pre-`R6` hardening/validation family
-- open `R6` per the rescope under `docs/specs/r6/` (`MAP.md` +
-  `DESIGN-r6-scorer-cutover-and-objective-consumption.md`)
-- keep full delegated-session support as `R7` behind `R6`
+- complete only the narrow `R6-C.1` acceptance-first controls named by the closure finding; do not
+  inject every context layer into every scorer and do not reopen `semantic_goal_drift` without new
+  failing evidence
+- close R6 only after every material scorer is complete, intentionally exempt, or still open in a
+  named bounded packet and the broad acceptance wording is proven or narrowed honestly
+- preserve full delegated-session support as design-ready R7 draft work, blocked on an R6 `CLOSED`
+  decision; do not begin R7 implementation or make it absorb ordinary single-session scorer gaps
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
-That is the current top-of-stack action after the landed `R3.5`, `R3.75`, `R4`, `R5`, and `R5.5`
-packets.
+Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.
 
 ## Research-Informed Design Directions
 

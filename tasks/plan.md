@@ -1,28 +1,34 @@
-# Active Plan: R7 Bounded Delegated-Session Support
+# Active Plan: R6 Scorer-Context Cutover Closure
 
 Canonical authority:
-`docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`
 
-Status: PLANNED / NOT IMPLEMENTED
+Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
 ## Dependency Order
 
-1. `R7-0`: docs lock and sanitized linkage fixtures.
-2. `R7-1`: compactor reciprocal link extraction and explicit direct-child closure.
-3. `R7-2`: analyzer link graph and checkpoint v0.8 public delegation contract.
-4. `R7-3`: separate parent-visible and child-visible progress trajectories.
-5. `R7-4`: trajectory-local scorer guardrails, with no new drift class by default.
-6. `R7-5`: delegated acceptance matrix and real-session validation.
-7. `R7-6`: minimal replay/live sentinel compatibility; R8 remains separate.
+1. Preserve the 2026-07-12 closure audit and authority correction as the current truth.
+2. Plan `R6-C.1 — Scorer Context Applicability Acceptance Controls` from the exact missing controls
+   in the finding.
+3. Add acceptance controls before production behavior changes.
+4. If a control fails, split only that scorer/failure into a bounded R6 implementation packet.
+5. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence.
+6. Update the finding to `CLOSED` only when every scorer is complete, intentionally exempt, or
+   resolved and every broad acceptance claim is proven or narrowed honestly.
+7. Only then promote the preserved R7 drafts to implementation-ready.
 
 ## Execution Rules
 
-- Follow the canonical task ledger one bounded task at a time.
-- Run GitNexus upstream impact analysis before editing every implementation symbol.
-- Run the task-local verification wall before advancing.
-- Keep parent and child checkpoints separate; never flatten or copy child progress into the parent.
-- Run `npx gitnexus detect-changes -r 97a0-substrate` before every commit.
+- Do not begin R7 implementation.
+- Do not reopen `semantic_goal_drift` without a new failing witness.
+- Do not add a common mega-context argument to every scorer.
+- Treat `dead_end_thrash` regression/delegation/turn-shape, truth-grounding applicability, and
+  wrong-branch replan/delegation controls as acceptance questions first.
+- Keep R7 reciprocal direct linkage, separate trajectories, direct-child-first support, and no-new-
+  drift-class-by-default as draft design decisions, not current implementation authority.
+- Run GitNexus impact analysis before any later symbol edit and `npx gitnexus detect-changes -r
+  97a0-substrate` before every commit.
 - Preserve unrelated worktree changes.
 
-Read the canonical plan for architecture decisions, packet checkpoints, risks, parallelization, and
-the final verification wall.
+No production code changes are authorized by this plan until a failing `R6-C.1` control proves a
+bounded gap.

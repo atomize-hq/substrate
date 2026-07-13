@@ -1,28 +1,34 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
-Status: planning scaffold created on 2026-07-12 after live repo reconciliation showed that the
-ordinary R6 scorer cutover is already complete enough to stop. This map is the authority for the R7
-family boundary and packet order. It does not claim that R7 implementation has started.
+Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**. This planning scaffold was created on
+2026-07-12 and is preserved as useful design work. It is not implementation authority and no R7
+implementation has started.
 
 ## R6 Handoff
 
 The attached planning direction correctly identified delegated-session opacity as the next major
-architectural gap, but its proposed `dead_end_thrash` packet is stale against this branch:
+architectural gap. Its proposed new `dead_end_thrash` cutover would duplicate the landed R6-1 core,
+but the broader R6 closure charter remains partial:
 
 - `R6-1` already cut `dead_end_thrash` over to analyzer-owned `SessionProgress`, including
   troubleshooting-frontier advancement suppression and non-advancing stall evidence.
 - `R6-2`, `R6-3`, and the `R6-3.X.2B` / `2C` / `2D` chain landed the semantic-goal-drift consumer,
   rolling comparison, target hygiene, weighted relation routing, and explicit decision semantics.
 - `R6-3.X.3` remains deferred. No new semantic-goal-drift work starts without new failing evidence.
-- `truth_grounding_gap` and `wrong_plan_branch` remain intentionally unchanged because the R6
-  design only authorized revisiting them if typed context exposed an obvious, evidence-backed
-  improvement. The current reconciliation found no such required cutover.
+- `truth_grounding_gap` and `wrong_plan_branch` retain their current behavior while the narrow
+  scorer-applicability acceptance controls determine whether they are fit-for-purpose exceptions or
+  have bounded gaps.
 - conditional `R6-4` progress-reset migration remains deferred because the required reset-error
   evidence did not appear.
 
-R6 is therefore closed enough for the roadmap to advance to R7. This is not a claim that every
-possible scorer enhancement is exhausted; it is a scope decision that unfounded retuning must not
-delay the already-defined delegated-session phase.
+R6 is therefore **PARTIAL / CLOSURE AUDIT REQUIRED**, not closed for sequencing. The closure
+authority is `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. Commit `99efda8f9` is
+preserved as draft planning history, not authority that R6 is closed or R7 is implementation-ready.
+
+R7 can be promoted only after the R6 applicability audit is complete; every material scorer is
+classified as complete, intentionally exempt, or still open; the broad R6 acceptance claims have
+behavioral proof or have been narrowed honestly; the named R6 closure controls are resolved; and the
+R6 finding plus root/R6/R7 authority stack all say `CLOSED`.
 
 ## Live Linkage Evidence
 
@@ -54,6 +60,8 @@ When child evidence is missing or a link is not verified, the supported result i
 semantics. Ordinary parent-visible orchestration may still be described as parent activity.
 
 ## Packet Order
+
+The packet order below is design-ready but **inactive** until the promotion gate above is satisfied.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

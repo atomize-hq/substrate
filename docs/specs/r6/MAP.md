@@ -1,6 +1,10 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: scaffold created on 2026-06-27 after `R5.75` closed. This is a **rescope** of the original
+Status: **PARTIAL / CLOSURE AUDIT REQUIRED** as of 2026-07-12. The scoped packet history below is
+landed, but the broad scorer-context charter is not closed for sequencing. Closure authority is
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`; its narrow remaining packet is
+`R6-C.1 — Scorer Context Applicability Acceptance Controls`. This map began as a scaffold created on
+2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
 order (`HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`) before the structured-objective (`SO`)
 work under `docs/specs/r5/R5_75/phase-1/SO/` expanded into a full objective architecture. That work
@@ -295,28 +299,30 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    schema, delegation, and `RepoRelativeEquivalentAfterCwdStrip` work remain outside this closeout. See
    the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.X.2D Closeout` result note.
 
-## R6 Closeout Reconciliation (2026-07-12)
+## R6 Closure Reconciliation (2026-07-12)
 
-The next-step recommendation that prompted this reconciliation proposed a new context-aware
-`dead_end_thrash` cutover. Live repo truth shows that work is already landed as `R6-1`:
-`score_session` builds analyzer-owned `SessionProgress`, and `score_dead_end_thrash` consumes it to
-distinguish troubleshooting-frontier advancement from non-advancing stalls. Re-planning that packet
-would duplicate closed work.
+The scoped `R6-1`, `R6-2`, `R6-3`, and `R6-3.X.2B` / `2C` / `2D` packets are landed. That packet-level
+fact does **not** prove the broader scorer-context charter closed:
 
-The remaining R6 choices are also already bounded:
+- `dead_end_thrash` consumes analyzer-owned `SessionProgress` and has focused proof for advancing
+  frontier suppression, no-frontier stall, typed failure evidence, recovery, and bounded replay
+  posture. Scorer-level proof is still missing for regression, opaque delegated-parent activity,
+  and the long-autonomous versus many-short-conversational acceptance sentence.
+- `semantic_goal_drift` is context-aware in the way appropriate to its responsibility: structured
+  current/kickoff/previous goals, stable targets, sanctioned replans, delegation visibility, and
+  checkpoint history. It is **cutover complete**; typed outcomes, archetype, and progress are not
+  semantically required, and it must not be reopened absent new failing evidence.
+- `truth_grounding_gap` and `wrong_plan_branch` have reasonable fit-for-purpose input boundaries,
+  but their context-exception claims lack the small behavioral controls required for closure.
+- `R6-3.X.3` and conditional `R6-4` remain separately evidence-gated; this audit does not
+  manufacture their triggers.
 
-- `R6-2` / `R6-3` and the `R6-3.X.2B` / `2C` / `2D` chain are closed enough to stop expanding
-  `semantic_goal_drift` without new evidence;
-- `R6-3.X.3` eligibility loosening remains deferred;
-- conditional `R6-4` reset migration remains deferred because its required reset-error evidence did
-  not appear;
-- `truth_grounding_gap` and `wrong_plan_branch` remain unchanged because the R6 design authorized
-  revisiting them only if typed context exposed an obvious evidence-backed improvement, and this
-  reconciliation found no required cutover.
-
-R6 is therefore **closed for roadmap sequencing**. This does not declare every conceivable scorer
-enhancement complete; it declares that unsupported R6 expansion must not delay the already-defined
-R7 delegated-session phase. The active successor authority is `docs/specs/r7/MAP.md`.
+R6 is therefore **PARTIAL / CLOSURE AUDIT REQUIRED**, not closed for sequencing. The authoritative
+matrix, proof inventory, acceptance-claim audit, and R7 promotion gate live in
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. The only authorized next R6 work is the
+narrow acceptance-first `R6-C.1` packet named there. R7 design documents remain preserved as
+**DRAFT / BLOCKED ON R6 CLOSURE DECISION**; no R7 implementation begins until the finding is updated
+to `CLOSED` and the authority stack agrees.
 
 ## Non-Goals For This Rescope
 

@@ -3,16 +3,23 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: PLANNED / NOT IMPLEMENTED
+Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
+
+All unchecked items are inactive until
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` reaches `CLOSED`. The exact gate is:
+the applicability audit is complete; every material scorer is complete, intentionally exempt, or
+still open; broad R6 acceptance claims are behaviorally proven or narrowed honestly; named closure
+controls are resolved; and the root/R6/R7 authority stack agrees.
 
 ## R7-0: Docs Lock And Evidence Matrix
 
-- [x] **R7-0.1: Land the R6 handoff and R7 spec/plan/tasks family.**
-  - Acceptance: R6 docs state `dead_end_thrash` already landed; the R7 map, spec, plan, and tasks
-    define reciprocal direct linkage, separate trajectories, and R8 boundaries.
+- [x] **R7-0.1: Preserve the R7 spec/plan/tasks family as draft design work.**
+  - Acceptance: R6 docs state the `dead_end_thrash` core landed but broad R6 closure remains partial;
+    the R7 map, spec, plan, and tasks define reciprocal direct linkage, separate trajectories, and
+    R8 boundaries without claiming implementation readiness.
   - Verify: `rg -n "R6-1|reciprocal|separate trajector|R8" docs/specs/r6/MAP.md docs/specs/r7`
   - Files: `docs/specs/r6/MAP.md`, `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
-  - Dependencies: none
+  - Dependencies: R6 closure finding for any implementation use
   - Scope: medium, docs only
 
 - [ ] **R7-0.2: Add sanitized raw-link fixture matrix.**
