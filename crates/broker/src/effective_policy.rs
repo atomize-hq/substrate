@@ -747,7 +747,41 @@ pub fn resolve_effective_policy_with_explain(
 ) -> Result<(Policy, Option<PolicyExplainV1>)> {
     let global_path = substrate_paths::policy_file()?;
     let (global_patch, _global_exists) = read_policy_patch_or_empty(&global_path)?;
+    resolve_effective_policy_with_explain_from_global_patch(cwd, global_path, global_patch, explain)
+}
 
+pub fn resolve_effective_policy_with_explain_from_global_source(
+    cwd: &Path,
+    global_path: &Path,
+    global_bytes: Option<&[u8]>,
+    explain: bool,
+) -> Result<(Policy, Option<PolicyExplainV1>)> {
+    let global_patch = match global_bytes {
+        Some(bytes) => {
+            let raw = std::str::from_utf8(bytes).map_err(|_| {
+                anyhow!(
+                    "failed to read {}: stream did not contain valid UTF-8",
+                    global_path.display()
+                )
+            })?;
+            parse_policy_patch_yaml(global_path, raw)?
+        }
+        None => PolicyPatch::default(),
+    };
+    resolve_effective_policy_with_explain_from_global_patch(
+        cwd,
+        global_path.to_path_buf(),
+        global_patch,
+        explain,
+    )
+}
+
+fn resolve_effective_policy_with_explain_from_global_patch(
+    cwd: &Path,
+    global_path: PathBuf,
+    global_patch: PolicyPatch,
+    explain: bool,
+) -> Result<(Policy, Option<PolicyExplainV1>)> {
     let workspace_root = find_workspace_root(cwd);
     let workspace_layer = if let Some(root) = &workspace_root {
         let path = root

@@ -812,6 +812,26 @@ pub(super) fn begin_legacy_state_store_transaction(
 ) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
     let root = TrustedAuthorityRoot::open(path)
         .map_err(|_| BootstrapError("open retained legacy StateStore root"))?;
+    begin_opened_legacy_state_store_transaction(root)
+}
+
+pub(super) fn begin_legacy_state_store_transaction_for_identity(
+    path: &std::path::Path,
+    expected: &CanonicalDirectoryV1,
+) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
+    let root = TrustedAuthorityRoot::open(path)
+        .map_err(|_| BootstrapError("open retained legacy StateStore root"))?;
+    if root.identity() != expected {
+        return Err(BootstrapError(
+            "legacy StateStore root differs from bootstrap-home identity",
+        ));
+    }
+    begin_opened_legacy_state_store_transaction(root)
+}
+
+fn begin_opened_legacy_state_store_transaction(
+    root: TrustedAuthorityRoot,
+) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
     let (legacy_observation, retained_directories, lock) = with_opened_semantic_preflight(
         &root,
         SemanticPreflightMode::LegacyWriter,

@@ -958,6 +958,8 @@ mod c0_policy_patch_only_broker_effective_resolution {
     use crate::{validate_dotted_id, validate_snake_case_id};
     use serial_test::serial;
     use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::sync::MutexGuard;
@@ -1058,7 +1060,12 @@ mod c0_policy_patch_only_broker_effective_resolution {
     }
 
     fn temp_dir(prefix: &str) -> TempDir {
-        let base = std::env::temp_dir().join("substrate-tests-tmp");
+        let base = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            })
+            .join("substrate-tests-tmp");
         std::fs::create_dir_all(&base).expect("failed to create shared TMPDIR");
         Builder::new()
             .prefix(prefix)
@@ -1080,6 +1087,9 @@ mod c0_policy_patch_only_broker_effective_resolution {
             std::fs::create_dir_all(&home).expect("create HOME fixture");
             let substrate_home = temp.path().join("substrate-home");
             std::fs::create_dir_all(&substrate_home).expect("create SUBSTRATE_HOME fixture");
+            #[cfg(unix)]
+            std::fs::set_permissions(&substrate_home, std::fs::Permissions::from_mode(0o700))
+                .expect("secure SUBSTRATE_HOME fixture");
             let workspace_root = temp.path().join("workspace");
             std::fs::create_dir_all(&workspace_root).expect("create workspace root");
 
@@ -2081,5 +2091,181 @@ metadata:
             cli_show_json_sanitized, broker_json_sanitized,
             "effective policy must match across broker and CLI"
         );
+    }
+
+    fn resolve_explicit(
+        cwd: &Path,
+        global_path: &Path,
+        global_bytes: Option<&[u8]>,
+        explain: bool,
+    ) -> anyhow::Result<(crate::Policy, Option<crate::PolicyExplainV1>)> {
+        crate::effective_policy::resolve_effective_policy_with_explain_from_global_source(
+            cwd,
+            global_path,
+            global_bytes,
+            explain,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn a11e_explicit_global_source_matches_ambient_policy_and_explain_matrix() {
+        for (name, global, workspace) in [
+            ("defaults", None, None),
+            ("global", Some("id: global\n"), None),
+            (
+                "workspace",
+                None,
+                Some("id: workspace\nmetadata:\n  layer: workspace\n"),
+            ),
+            (
+                "both",
+                Some("id: global\ncmd_allowed: [global]\n"),
+                Some("id: workspace\nmetadata:\n  layer: workspace\n"),
+            ),
+            (
+                "workspace-replacement",
+                Some("cmd_allowed: [global-a, global-b]\nnet_allowed: [example.com]\n"),
+                Some("cmd_allowed: []\nnet_allowed: [workspace.example]\n"),
+            ),
+        ] {
+            let fixture = Fixture::new();
+            fixture.write_workspace_marker();
+            if let Some(global) = global {
+                fixture.write_global_policy(global);
+            }
+            if let Some(workspace) = workspace {
+                fixture.write_workspace_policy(workspace);
+            }
+            let cwd = fixture.child_dir();
+            let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
+            let global_bytes = std::fs::read(fixture.global_policy_path()).ok();
+
+            for explain in [false, true] {
+                let ambient =
+                    crate::effective_policy::resolve_effective_policy_with_explain(&cwd, explain)
+                        .unwrap_or_else(|error| panic!("ambient {name}: {error}"));
+                let explicit = resolve_explicit(
+                    &cwd,
+                    &fixture.global_policy_path(),
+                    global_bytes.as_deref(),
+                    explain,
+                )
+                .unwrap_or_else(|error| panic!("explicit {name}: {error}"));
+                assert_eq!(
+                    serde_json::to_value(&explicit.0).unwrap(),
+                    serde_json::to_value(&ambient.0).unwrap(),
+                    "policy parity case {name}, explain={explain}"
+                );
+                assert_eq!(
+                    explicit.1, ambient.1,
+                    "explain parity case {name}, explain={explain}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn a11e_explicit_global_source_matches_parse_and_finalization_errors() {
+        for (name, global, workspace) in [
+            ("malformed-global", "world_fs: [", None),
+            ("malformed-workspace", "id: global\n", Some("world_fs: [")),
+            (
+                "finalization",
+                "world_fs:\n  host_visible: true\n  read:\n    allow_list: ['.']\n",
+                None,
+            ),
+        ] {
+            let fixture = Fixture::new();
+            fixture.write_workspace_marker();
+            fixture.write_global_policy(global);
+            if let Some(workspace) = workspace {
+                fixture.write_workspace_policy(workspace);
+            }
+            let cwd = fixture.child_dir();
+            let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
+            let bytes = std::fs::read(fixture.global_policy_path()).unwrap();
+            let ambient =
+                crate::effective_policy::resolve_effective_policy_with_explain(&cwd, true)
+                    .unwrap_err()
+                    .to_string();
+            let explicit =
+                resolve_explicit(&cwd, &fixture.global_policy_path(), Some(&bytes), true)
+                    .unwrap_err()
+                    .to_string();
+            assert_eq!(explicit, ambient, "error parity case {name}");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn a11e_explicit_global_source_ignores_conflicting_ambient_home() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        fixture.write_global_policy("id: explicit\nmetadata:\n  home: explicit\n");
+        let ambient_home = fixture._temp.path().join("ambient-substrate-home");
+        std::fs::create_dir_all(&ambient_home).unwrap();
+        std::fs::write(
+            ambient_home.join("policy.yaml"),
+            "id: ambient\nmetadata:\n  home: ambient\n",
+        )
+        .unwrap();
+        let cwd = fixture.child_dir();
+        let bytes = std::fs::read(fixture.global_policy_path()).unwrap();
+        let _env = EnvVarGuard::set("SUBSTRATE_HOME", &ambient_home);
+
+        let explicit =
+            resolve_explicit(&cwd, &fixture.global_policy_path(), Some(&bytes), true).unwrap();
+        assert_eq!(explicit.0.id, "explicit");
+        assert_eq!(
+            explicit.0.metadata.get("home").map(String::as_str),
+            Some("explicit")
+        );
+        let explain_json = serde_json::to_value(explicit.1.unwrap()).unwrap();
+        assert!(explain_json
+            .to_string()
+            .contains(&fixture.global_policy_path().display().to_string()));
+        assert!(!explain_json
+            .to_string()
+            .contains(&ambient_home.display().to_string()));
+
+        let other_cwd = fixture._temp.path().join("other-cwd");
+        std::fs::create_dir(&other_cwd).unwrap();
+        let after_cwd_change = resolve_explicit(
+            &other_cwd,
+            &fixture.global_policy_path(),
+            Some(&bytes),
+            false,
+        )
+        .unwrap();
+        assert_eq!(after_cwd_change.0.id, "explicit");
+        assert_eq!(
+            after_cwd_change.0.metadata.get("home").map(String::as_str),
+            Some("explicit")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn a11e_explicit_global_source_matches_invalid_utf8_error() {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.global_policy_path(), [0xff, 0xfe]).unwrap();
+        let _env = EnvVarGuard::set("SUBSTRATE_HOME", &fixture.substrate_home);
+        let ambient = crate::effective_policy::resolve_effective_policy_with_explain(
+            &fixture.workspace_root,
+            false,
+        )
+        .unwrap_err()
+        .to_string();
+        let explicit = resolve_explicit(
+            &fixture.workspace_root,
+            &fixture.global_policy_path(),
+            Some(&[0xff, 0xfe]),
+            false,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(explicit, ambient);
     }
 }

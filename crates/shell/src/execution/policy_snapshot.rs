@@ -153,6 +153,26 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
     })
 }
 
+#[allow(
+    dead_code,
+    reason = "A1.1e establishes the explicit-home entry point before A1.3 adopts it"
+)]
+pub(crate) fn resolve_policy_snapshot_for_bootstrap_home(
+    cwd: &Path,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<ResolvedPolicySnapshot> {
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        cwd,
+        bootstrap_home,
+    )?;
+    let snapshot = snapshot_from_policy(&policy)?;
+    let snapshot_hash = compute_snapshot_hash(&snapshot)?;
+    Ok(ResolvedPolicySnapshot {
+        snapshot,
+        snapshot_hash,
+    })
+}
+
 pub(crate) fn resolve_world_network_policy_for_cwd(
     cwd: &Path,
 ) -> Result<ResolvedWorldNetworkPolicy> {
@@ -472,6 +492,34 @@ fn compute_snapshot_hash(snapshot: &PolicySnapshotV3) -> Result<String> {
 mod tests {
     use super::*;
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn explicit_snapshot_fixture(
+        policy: &[u8],
+    ) -> (
+        tempfile::TempDir,
+        crate::execution::agent_runtime::HostSessionAuthority,
+    ) {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                    .join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).unwrap();
+        let parent = tempfile::tempdir_in(safe_parent).unwrap();
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let home = parent.path().join("home");
+        fs::create_dir(&home).unwrap();
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::write(home.join("policy.yaml"), policy).unwrap();
+        fs::set_permissions(home.join("policy.yaml"), fs::Permissions::from_mode(0o600)).unwrap();
+        let authority = crate::execution::agent_runtime::HostSessionAuthority::open(&home).unwrap();
+        (parent, authority)
+    }
+
     fn snapshot_with_net_allowed(net_allowed: &[&str]) -> PolicySnapshotV3 {
         PolicySnapshotV3 {
             schema_version: 3,
@@ -608,5 +656,44 @@ mod tests {
                 .contains("wildcard forms other than '*' are not supported"),
             "unexpected error: {err}"
         );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn explicit_snapshot_matches_canonical_broker_policy_projection() {
+        let (parent, authority) = explicit_snapshot_fixture(b"id: explicit-snapshot\n");
+        let bootstrap_home = authority.bootstrap_home();
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            parent.path(),
+            &bootstrap_home,
+        )
+        .unwrap();
+        let resolved =
+            resolve_policy_snapshot_for_bootstrap_home(parent.path(), &bootstrap_home).unwrap();
+        let expected = snapshot_from_policy(&policy).unwrap();
+        assert_eq!(
+            serde_json::to_value(&resolved.snapshot).unwrap(),
+            serde_json::to_value(&expected).unwrap()
+        );
+        assert_eq!(
+            resolved.snapshot_hash,
+            compute_snapshot_hash(&expected).unwrap()
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn explicit_snapshot_contains_canonical_finalized_world_fs_defaults() {
+        let (parent, authority) = explicit_snapshot_fixture(
+            b"world_fs:\n  host_visible: false\n  write:\n    enabled: false\n  fail_closed:\n    routing: true\n",
+        );
+        let resolved =
+            resolve_policy_snapshot_for_bootstrap_home(parent.path(), &authority.bootstrap_home())
+                .unwrap();
+        assert!(!resolved.snapshot.world_fs.host_visible);
+        assert!(resolved.snapshot.world_fs.fail_closed.routing);
+        assert!(resolved.snapshot.world_fs.discover.is_some());
+        assert!(resolved.snapshot.world_fs.read.is_some());
+        assert!(!resolved.snapshot.world_fs.write.enabled);
     }
 }

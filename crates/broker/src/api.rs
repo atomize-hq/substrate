@@ -64,6 +64,23 @@ pub fn resolve_effective_policy_with_explain(
     crate::effective_policy::resolve_effective_policy_with_explain(cwd, explain)
 }
 
+/// Resolves effective policy through the canonical broker pipeline while using a caller-supplied
+/// global policy source. `None` means the explicit source was absent; workspace discovery and all
+/// parsing, precedence, explanation, validation, and finalization remain broker-owned.
+pub fn resolve_effective_policy_with_explain_from_global_source(
+    cwd: &Path,
+    global_path: &Path,
+    global_bytes: Option<&[u8]>,
+    explain: bool,
+) -> Result<(Policy, Option<crate::PolicyExplainV1>)> {
+    crate::effective_policy::resolve_effective_policy_with_explain_from_global_source(
+        cwd,
+        global_path,
+        global_bytes,
+        explain,
+    )
+}
+
 pub fn set_observe_only(observe: bool) {
     match global_broker() {
         Ok(broker) => broker.set_observe_only(observe),

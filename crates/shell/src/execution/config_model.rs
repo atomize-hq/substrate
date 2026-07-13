@@ -1178,6 +1178,79 @@ pub(crate) fn resolve_effective_config_with_explain(
     Ok(resolved)
 }
 
+#[allow(
+    dead_code,
+    reason = "A1.1e establishes the explicit-home entry point before A1.3 adopts it"
+)]
+pub(crate) fn resolve_effective_config_for_bootstrap_home(
+    cwd: &Path,
+    cli: &CliConfigOverrides,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<SubstrateConfig> {
+    let global_path = PathBuf::from(
+        &bootstrap_home
+            .identity()
+            .map_err(|error| user_error(error.to_string()))?
+            .physical_path,
+    )
+    .join("config.yaml");
+    let global_patch = match bootstrap_home
+        .read_config_yaml()
+        .map_err(|error| user_error(error.to_string()))?
+    {
+        Some(bytes) => {
+            let raw = std::str::from_utf8(&bytes)
+                .map_err(|_| user_error(format!("invalid UTF-8 in {}", global_path.display())))?;
+            parse_config_patch_yaml(&global_path, raw)?
+        }
+        None => SubstrateConfigPatch::default(),
+    };
+    let workspace_layer = load_workspace_config_patch(cwd)?;
+    let workspace_ref = workspace_layer
+        .as_ref()
+        .map(|(patch, path)| (patch, path.as_path()));
+    let resolved = resolve_effective_from_layers(
+        &global_patch,
+        &global_path,
+        workspace_ref,
+        &parse_env_overrides()?,
+        cli,
+        false,
+        true,
+    )?
+    .0;
+    if resolved.llm.gateway.mode == LlmGatewayMode::HostOnly {
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            cwd,
+            bootstrap_home,
+        )?;
+        validate_config_against_policy(&resolved, &policy)?;
+    }
+    Ok(resolved)
+}
+
+#[allow(
+    dead_code,
+    reason = "used by the A1.1e explicit-home entry point before A1.3 adoption"
+)]
+fn load_workspace_config_patch(cwd: &Path) -> Result<Option<ConfigPatchLayer>> {
+    let Some(root) = workspace::find_workspace_root(cwd) else {
+        return Ok(None);
+    };
+    let legacy = workspace::workspace_legacy_settings_path(&root);
+    let path = workspace::workspace_marker_path(&root);
+    if legacy.exists() {
+        return Err(user_error(format!(
+            "substrate: unsupported legacy workspace config detected:\n  - {}\nConfig is now read from:\n  - {}\nNext steps:\n  - Delete the legacy file and use `substrate config workspace set ...`\n",
+            legacy.display(),
+            path.display()
+        )));
+    }
+    let raw =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    Ok(Some((parse_config_patch_yaml(&path, &raw)?, path)))
+}
+
 fn load_config_patch_layers_cached(cwd: &Path) -> Result<LoadedConfigPatchLayers> {
     let global_path = global_config_path()?;
     let workspace_root = workspace::find_workspace_root(cwd);
@@ -2274,6 +2347,16 @@ fn validate_config_against_effective_policy(cwd: &Path, cfg: &SubstrateConfig) -
     }
     let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
         .map_err(|err| user_error(err.to_string()))?;
+    validate_config_against_policy(cfg, &policy)
+}
+
+fn validate_config_against_policy(
+    cfg: &SubstrateConfig,
+    policy: &substrate_broker::Policy,
+) -> Result<()> {
+    if cfg.llm.gateway.mode != LlmGatewayMode::HostOnly {
+        return Ok(());
+    }
     if policy.llm_fail_closed_routing {
         return Err(user_error(
             "llm.gateway.mode=host_only requires effective policy llm.fail_closed.routing=false",

@@ -14,6 +14,8 @@ use super::store::{
     ObjectVerificationContextV1, TransactionCommitOutcomeV1,
 };
 use super::store_schema::{DurableSessionAuthorityV1, SessionNamespaceRecordV1, StateRootV1};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use super::trusted_fs::EntryKind;
 use super::trusted_fs::TrustedAuthorityRoot;
 
 #[derive(Debug)]
@@ -93,6 +95,106 @@ impl OpenedBootstrapHomeV1<'_> {
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
+            Err(unsupported_platform())
+        }
+    }
+
+    pub(crate) fn read_config_yaml(&self) -> Result<Option<Vec<u8>>, AuthorityFacadeError> {
+        self.read_optional_file("config.yaml")
+    }
+
+    pub(crate) fn read_policy_yaml(&self) -> Result<Option<Vec<u8>>, AuthorityFacadeError> {
+        self.read_optional_file("policy.yaml")
+    }
+
+    pub(crate) fn read_agent_inventory_yaml(
+        &self,
+    ) -> Result<Vec<(String, Vec<u8>)>, AuthorityFacadeError> {
+        self.read_agent_inventory_yaml_after_revalidation(|| {})
+    }
+
+    fn read_agent_inventory_yaml_after_revalidation(
+        &self,
+        after_revalidation: impl FnOnce(),
+    ) -> Result<Vec<(String, Vec<u8>)>, AuthorityFacadeError> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.revalidate()?;
+            after_revalidation();
+            let root = self.root.directory();
+            let Some(kind) = root.entry_kind("agents").map_err(trusted_fs_error)? else {
+                self.revalidate()?;
+                return Ok(Vec::new());
+            };
+            if kind != EntryKind::Directory {
+                return Err(AuthorityFacadeError(
+                    "bootstrap-home agents entry is not a directory".into(),
+                ));
+            }
+            let directory = root.open_directory("agents").map_err(trusted_fs_error)?;
+            let mut files = Vec::new();
+            for entry in directory.entries().map_err(trusted_fs_error)? {
+                if !entry.name.ends_with(".yaml") {
+                    continue;
+                }
+                if entry.kind != EntryKind::RegularFile {
+                    return Err(AuthorityFacadeError(
+                        "bootstrap-home YAML inventory entry is not a regular file".into(),
+                    ));
+                }
+                let bytes = directory
+                    .open_file_entry(&entry)
+                    .and_then(|file| file.read_all())
+                    .map_err(trusted_fs_error)?;
+                directory
+                    .revalidate_entry(&entry)
+                    .map_err(trusted_fs_error)?;
+                files.push((entry.name, bytes));
+            }
+            files.sort_by(|left, right| left.0.cmp(&right.0));
+            self.revalidate()?;
+            Ok(files)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = after_revalidation;
+            Err(unsupported_platform())
+        }
+    }
+
+    fn read_optional_file(&self, name: &str) -> Result<Option<Vec<u8>>, AuthorityFacadeError> {
+        self.read_optional_file_after_revalidation(name, || {})
+    }
+
+    fn read_optional_file_after_revalidation(
+        &self,
+        name: &str,
+        after_revalidation: impl FnOnce(),
+    ) -> Result<Option<Vec<u8>>, AuthorityFacadeError> {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            self.revalidate()?;
+            after_revalidation();
+            let root = self.root.directory();
+            let Some(kind) = root.entry_kind(name).map_err(trusted_fs_error)? else {
+                self.revalidate()?;
+                return Ok(None);
+            };
+            if kind != EntryKind::RegularFile {
+                return Err(AuthorityFacadeError(
+                    "bootstrap-home configuration entry is not a regular file".into(),
+                ));
+            }
+            let bytes = root
+                .open_file(name)
+                .and_then(|file| file.read_all())
+                .map_err(trusted_fs_error)?;
+            self.revalidate()?;
+            Ok(Some(bytes))
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = (name, after_revalidation);
             Err(unsupported_platform())
         }
     }
@@ -240,6 +342,11 @@ fn store_error(error: store::BootstrapError) -> AuthorityFacadeError {
     AuthorityFacadeError(error.to_string())
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn trusted_fs_error(error: super::trusted_fs::TrustedFsError) -> AuthorityFacadeError {
+    AuthorityFacadeError(error.to_string())
+}
+
 fn unsupported_platform() -> AuthorityFacadeError {
     AuthorityFacadeError("A1 host-session authority is unsupported on this platform".into())
 }
@@ -358,6 +465,11 @@ mod tests {
         ensure_private_substrate_home, TrustedAuthorityRoot,
     };
 
+    fn write_private(path: &std::path::Path, bytes: &[u8]) {
+        fs::write(path, bytes).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
     #[test]
     fn opened_facade_rejects_lexical_home_replacement_without_touching_replacement() {
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
@@ -416,5 +528,219 @@ mod tests {
             replacement.identity().physical_path,
             home.display().to_string()
         );
+    }
+
+    #[test]
+    fn absent_bootstrap_entries_revalidate_identity_before_success() {
+        for entry in ["config", "policy", "agents"] {
+            let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| {
+                    std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                        .join(".cache")
+                });
+            fs::create_dir_all(&safe_parent).unwrap();
+            let parent = tempfile::tempdir_in(safe_parent).unwrap();
+            fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let home = parent.path().join("home");
+            fs::create_dir(&home).unwrap();
+            fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+            let authority = HostSessionAuthority::open(&home).unwrap();
+            let bootstrap_home = authority.bootstrap_home();
+            match entry {
+                "config" => assert_eq!(bootstrap_home.read_config_yaml().unwrap(), None),
+                "policy" => assert_eq!(bootstrap_home.read_policy_yaml().unwrap(), None),
+                "agents" => assert!(bootstrap_home
+                    .read_agent_inventory_yaml()
+                    .unwrap()
+                    .is_empty()),
+                _ => unreachable!(),
+            }
+            let retained = parent.path().join("retained");
+            let replacement = || {
+                fs::rename(&home, &retained).unwrap();
+                fs::create_dir(&home).unwrap();
+                fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+            };
+
+            let result = match entry {
+                "config" => bootstrap_home
+                    .read_optional_file_after_revalidation("config.yaml", replacement)
+                    .map(|_| ()),
+                "policy" => bootstrap_home
+                    .read_optional_file_after_revalidation("policy.yaml", replacement)
+                    .map(|_| ()),
+                "agents" => bootstrap_home
+                    .read_agent_inventory_yaml_after_revalidation(replacement)
+                    .map(|_| ()),
+                _ => unreachable!(),
+            };
+            assert!(
+                result.is_err(),
+                "absent {entry} must close with revalidation"
+            );
+            assert!(fs::read_dir(&home).unwrap().next().is_none());
+            assert!(fs::read_dir(&retained).unwrap().next().is_none());
+        }
+    }
+
+    #[test]
+    fn explicit_config_preserves_conditional_policy_parsing() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                    .join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).unwrap();
+        let parent = tempfile::tempdir_in(safe_parent).unwrap();
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let home = parent.path().join("home");
+        fs::create_dir(&home).unwrap();
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
+        write_private(&home.join("config.yaml"), b"{}\n");
+        write_private(&home.join("policy.yaml"), b"world_fs: [\n");
+        let authority = HostSessionAuthority::open(&home).unwrap();
+        let bootstrap_home = authority.bootstrap_home();
+
+        crate::execution::config_model::resolve_effective_config_for_bootstrap_home(
+            parent.path(),
+            &crate::execution::config_model::CliConfigOverrides::default(),
+            &bootstrap_home,
+        )
+        .expect("in_world config must not parse malformed policy");
+
+        write_private(
+            &home.join("config.yaml"),
+            b"llm:\n  gateway:\n    mode: host_only\n",
+        );
+        assert!(
+            crate::execution::config_model::resolve_effective_config_for_bootstrap_home(
+                parent.path(),
+                &crate::execution::config_model::CliConfigOverrides::default(),
+                &bootstrap_home,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn explicit_bootstrap_home_drives_config_policy_snapshot_inventory_and_state_store() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                    .join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).unwrap();
+        let parent = tempfile::tempdir_in(safe_parent).unwrap();
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let accepted_home = parent.path().join("accepted");
+        let ambient_home = parent.path().join("ambient");
+        for home in [&accepted_home, &ambient_home] {
+            fs::create_dir(home).unwrap();
+            fs::set_permissions(home, fs::Permissions::from_mode(0o700)).unwrap();
+            fs::create_dir(home.join("agents")).unwrap();
+            fs::set_permissions(home.join("agents"), fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        write_private(
+            &accepted_home.join("config.yaml"),
+            b"world:\n  enabled: false\n",
+        );
+        write_private(
+            &ambient_home.join("config.yaml"),
+            b"world:\n  enabled: true\n",
+        );
+        write_private(&accepted_home.join("policy.yaml"), b"id: policy-a\n");
+        write_private(&ambient_home.join("policy.yaml"), b"id: policy-b\n");
+        write_private(
+            &accepted_home.join("agents/accepted.yaml"),
+            br#"version: 1
+id: accepted
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: host
+  cli:
+    binary: accepted
+  capabilities:
+    llm: true
+"#,
+        );
+        write_private(
+            &ambient_home.join("agents/ambient.yaml"),
+            br#"version: 1
+id: ambient
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: host
+  cli:
+    binary: ambient
+  capabilities:
+    llm: true
+"#,
+        );
+
+        let authority = HostSessionAuthority::open(&accepted_home).unwrap();
+        let bootstrap_home = authority.bootstrap_home();
+        let config = crate::execution::config_model::resolve_effective_config_for_bootstrap_home(
+            &ambient_home,
+            &crate::execution::config_model::CliConfigOverrides::default(),
+            &bootstrap_home,
+        )
+        .unwrap();
+        assert!(!config.world.enabled);
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            &ambient_home,
+            &bootstrap_home,
+        )
+        .unwrap();
+        assert_eq!(policy.id, "policy-a");
+        let snapshot =
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+                &ambient_home,
+                &bootstrap_home,
+            )
+            .unwrap();
+        assert!(!snapshot.snapshot_hash.is_empty());
+        let inventory =
+            crate::execution::agent_inventory::load_effective_agent_inventory_for_bootstrap_home(
+                &ambient_home,
+                &policy,
+                &bootstrap_home,
+            )
+            .unwrap();
+        assert!(inventory.contains_key("accepted"));
+        assert!(!inventory.contains_key("ambient"));
+        let state_store =
+            crate::execution::agent_runtime::AgentRuntimeStateStore::for_bootstrap_home(
+                &bootstrap_home,
+            )
+            .unwrap();
+        assert!(state_store.participants_dir().starts_with(&accepted_home));
+        assert!(!state_store.participants_dir().starts_with(&ambient_home));
+
+        let retained = parent.path().join("retained");
+        fs::rename(&accepted_home, &retained).unwrap();
+        fs::create_dir(&accepted_home).unwrap();
+        fs::set_permissions(&accepted_home, fs::Permissions::from_mode(0o700)).unwrap();
+        write_private(
+            &accepted_home.join("config.yaml"),
+            b"world:\n  enabled: true\n",
+        );
+        assert!(
+            crate::execution::config_model::resolve_effective_config_for_bootstrap_home(
+                &ambient_home,
+                &crate::execution::config_model::CliConfigOverrides::default(),
+                &bootstrap_home,
+            )
+            .is_err()
+        );
+        assert!(!accepted_home.join("agents").exists());
     }
 }

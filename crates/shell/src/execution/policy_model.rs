@@ -1106,6 +1106,34 @@ pub(crate) fn resolve_effective_policy_with_explain(
     */
 }
 
+#[allow(
+    dead_code,
+    reason = "A1.1e establishes the explicit-home entry point before A1.3 adopts it"
+)]
+pub(crate) fn resolve_effective_policy_for_bootstrap_home(
+    cwd: &Path,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<Policy> {
+    let global_path = PathBuf::from(
+        &bootstrap_home
+            .identity()
+            .map_err(|error| config_model::user_error(error.to_string()))?
+            .physical_path,
+    )
+    .join("policy.yaml");
+    let global_bytes = bootstrap_home
+        .read_policy_yaml()
+        .map_err(|error| config_model::user_error(error.to_string()))?;
+    substrate_broker::resolve_effective_policy_with_explain_from_global_source(
+        cwd,
+        &global_path,
+        global_bytes.as_deref(),
+        false,
+    )
+    .map(|(policy, _)| policy)
+    .map_err(|error| config_model::user_error(error.to_string()))
+}
+
 fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {
     map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }

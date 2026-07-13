@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::Path;
 
-use super::schema::TimestampV1;
+use super::schema::{CanonicalDirectoryV1, TimestampV1};
 use super::store_schema::StateRootV1;
 use super::trusted_fs::TrustedAuthorityRoot;
 
@@ -107,6 +107,13 @@ pub(super) fn compare_and_swap_opened_root_exact_current(
 
 pub(crate) fn legacy_writer_guard(path: &Path) -> Result<LegacyWriterGuard, BootstrapError> {
     begin_legacy_state_store_transaction(path)
+}
+
+pub(crate) fn legacy_writer_guard_for_identity(
+    path: &Path,
+    expected: &CanonicalDirectoryV1,
+) -> Result<LegacyWriterGuard, BootstrapError> {
+    platform::begin_legacy_state_store_transaction_for_identity(path, expected)
 }
 
 pub(crate) fn begin_legacy_state_store_transaction(
@@ -237,10 +244,10 @@ mod platform {
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AgentDescriptorHashInputV1, ApplicationResultHashInputV1, AuthorityObjectCommitmentV1,
-        AuthorityObjectKindV1, AuthorityObjectRefV1, HostAttachContractHashInputV1,
-        InputAcceptanceHashInputV1, PolicyObjectHashInputV1, PostTurnCompletionHashInputV1,
-        ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1, TerminalHandoffHashInputV1,
-        TerminalHandoffStateV1,
+        AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
+        HostAttachContractHashInputV1, InputAcceptanceHashInputV1, PolicyObjectHashInputV1,
+        PostTurnCompletionHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
+        TerminalHandoffHashInputV1, TerminalHandoffStateV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_format::{
         key_id, nonce, store_id, validate_key_id, validate_ref_id,
@@ -293,6 +300,7 @@ mod platform {
     pub(crate) use transaction::LegacyStateStoreTransactionV1;
     use transaction::{
         begin_legacy_state_store_transaction as begin_legacy_transaction,
+        begin_legacy_state_store_transaction_for_identity as begin_legacy_transaction_for_identity,
         compare_and_swap_opened_root_with, compare_and_swap_opened_root_with_exact_current,
         compare_and_swap_root_with, with_existing_semantic_preflight,
         with_opened_existing_semantic_preflight, with_opened_semantic_preflight,
@@ -428,6 +436,13 @@ mod platform {
         path: &std::path::Path,
     ) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
         begin_legacy_transaction(path)
+    }
+
+    pub(super) fn begin_legacy_state_store_transaction_for_identity(
+        path: &std::path::Path,
+        expected: &CanonicalDirectoryV1,
+    ) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
+        begin_legacy_transaction_for_identity(path, expected)
     }
 
     #[cfg(test)]
@@ -1049,7 +1064,9 @@ mod platform {
         BootstrapClassificationV1, BootstrapError, ObjectPublicationOutcomeV1,
         ObjectVerificationContextV1,
     };
-    use crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1;
+    use crate::execution::agent_runtime::host_session_authority::schema::{
+        AuthorityObjectRefV1, CanonicalDirectoryV1,
+    };
     use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV1;
 
     pub(crate) struct LegacyStateStoreTransactionV1;
@@ -1225,6 +1242,15 @@ mod platform {
 
     pub(super) fn begin_legacy_state_store_transaction(
         _path: &std::path::Path,
+    ) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn begin_legacy_state_store_transaction_for_identity(
+        _path: &std::path::Path,
+        _expected: &CanonicalDirectoryV1,
     ) -> Result<LegacyStateStoreTransactionV1, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
