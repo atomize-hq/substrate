@@ -1,13 +1,14 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-DET-OPAQUE-PARENT ACTIVE** on 2026-07-13. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
 `R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
-`R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. Only the narrow `R6-C.1.4.2` transition remains in
-`R6-C.1-CONTROLS`; replay, conditional-gap, production-fix, phase-close, and closure work remains
-open until exact live proof is recorded.
+`R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. The first route alone is active, the later two remain
+blocked in matrix order, and `R6-REPLAY` remains blocked. The sole next authorized action is atomic
+creation and fresh review of the three canonical `R6-GAP-DET-OPAQUE-PARENT` packet docs; those files
+do not yet exist. No production, gap-proof, replay, phase-close, or R7/R8 work is authorized first.
 
 ## Required Staged Commit Gate
 
@@ -94,8 +95,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.4.2`, the narrow controls-to-first-gap transition.
-    Do not start replay, a gap packet, or a production change first.
+  - Historical next action after the docs-lock result: execute `R6-C.1.4.2`, the narrow
+    controls-to-first-gap transition. That transition is now represented by the checked task below.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
@@ -353,7 +354,7 @@ before that reconciled transition is committed and fresh-review-clean.
     passed`), and export-bundle match (`1 passed`) coverage. No new witness was found and no
     production code changed.
 
-- [ ] **R6-C.1.4.2 — End `R6-C.1-CONTROLS` and activate exactly one next phase.**
+- [x] **R6-C.1.4.2 — End `R6-C.1-CONTROLS` and activate exactly one next phase.**
   - Acceptance: order red routes by matrix/family order. The narrow transition commit marks
     `R6-C.1-CONTROLS` complete and activates the first named red `R6-GAP-*`; if no row is red, it activates
     `R6-REPLAY`. When red routes exist, the same transition instantiates the `Named R6 Gap Status
@@ -369,6 +370,14 @@ before that reconciled transition is committed and fresh-review-clean.
     gate; fresh independent review of the transition commit.
   - Boundary: never leave `R6-C.1-CONTROLS` and any `R6-GAP-*` simultaneously active. Do not execute a
     gap before the transition is committed and review-clean.
+  - Result (2026-07-13): the deterministic controls wall at `5618f7864` reconciled all thirteen
+    synthetic controls as `10 PASS / 3 preserved RED`, with no production change. In matrix order,
+    witness `87409b39a` routes `CTX-R6-04` to active `R6-GAP-DET-OPAQUE-PARENT`; witness
+    `e67d8b214` routes `CTX-R6-12` to blocked `R6-GAP-TGG-TRUTH-PATH-ACTION`; and witness
+    `59f098b35` routes `CTX-R6-15` to blocked `R6-GAP-WPB-EMPTY-AUTHORITY`. This transition update
+    records those statuses and the required non-link `TO CREATE` paths without claiming an unknown
+    transition commit or review verdict. The sole next authorized action is atomic creation and fresh
+    review of the active gap's three canonical docs; do not execute the gap first.
 
 - [x] **R6-C.1.4.3 — Preserve dispatcher adjudication (`CTX-R6-16`).**
   - Acceptance: exact order remains deterministic source/infrastructure proof only. Add no focused order

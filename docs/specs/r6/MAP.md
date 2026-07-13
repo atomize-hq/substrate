@@ -329,15 +329,29 @@ fact does **not** prove the broader scorer-context charter closed:
 - `R6-3.X.3` and conditional `R6-4` remain separately evidence-gated; this audit does not
   manufacture their triggers.
 
-R6 is therefore **PARTIAL / CLOSURE AUDIT REQUIRED**, not closed for sequencing. The authoritative
-matrix, proof inventory, acceptance-claim audit, and R7 promotion gate live in
-`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. The only authorized next R6 work is the
-narrow acceptance-first `R6-C.1` packet named there. R7 design documents remain preserved as
+As of the 2026-07-12 audit, R6 was therefore **PARTIAL / CLOSURE AUDIT REQUIRED**, not closed for
+sequencing, and the next authorized work was the acceptance-first `R6-C.1` packet. That statement is
+historical; the current disposition is recorded below. R7 design documents remain preserved as
 **DRAFT / BLOCKED ON R6 CLOSURE DECISION**; no R7 implementation begins until the finding is updated
 to `CLOSED`, every material scoring surface has one of the four terminal dispositions (**Cutover
 complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6
 with justification**), and the authority stack agrees. An ordinary “still open” state cannot pass
 the R6 closure gate.
+
+## R6-C.1 Control Disposition Update (2026-07-13)
+
+`R6-C.1-CONTROLS` is **COMPLETE** against the `5618f7864` controls-wall receipt. The thirteen
+synthetic controls resolved as `10 PASS / 3 preserved RED`, checkpoints passed, and no production
+code changed. In matrix order the preserved routes are:
+
+1. `R6-GAP-DET-OPAQUE-PARENT` for `CTX-R6-04`, witness `87409b39a` — **ACTIVE**, packet-docs gate only;
+2. `R6-GAP-TGG-TRUTH-PATH-ACTION` for `CTX-R6-12`, witness `e67d8b214` — **BLOCKED**; and
+3. `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15`, witness `59f098b35` — **BLOCKED**.
+
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED** and `R6-REPLAY` remains blocked. The sole next
+authorized action is atomic creation and fresh review of the active gap's three canonical packet
+docs recorded as non-link `TO CREATE` paths in the named-gap subledger. Those files do not yet exist;
+do not execute the gap or begin a production/no-code proof path first.
 
 ## Non-Goals For This Rescope
 

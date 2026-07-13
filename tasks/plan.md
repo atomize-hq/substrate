@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-C.1-CONTROLS` (ACTIVE; active packet: none)**
+Current phase: **`R6-GAP-DET-OPAQUE-PARENT` (ACTIVE; active packet: none; packet-docs gate only)**
 
 ## Dependency Order
 
@@ -17,15 +17,19 @@ Current phase: **`R6-C.1-CONTROLS` (ACTIVE; active packet: none)**
    findings across the canonical finding and root/R6/R7 authority and received fresh review clean.
 3. **COMPLETE at `ea19b39a7`:** the `R6-C.1 — Scorer Context Applicability Acceptance Controls`
    SPEC/PLAN/TASKS landed and received final fresh `REVIEW CLEAN`.
-4. **ACTIVE:** add the packet's acceptance controls row-atomically before production behavior changes;
-   the sole next action is the first `dead_end_thrash` row.
-5. If a control fails, split only that scorer/failure into a bounded R6 implementation packet.
-6. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence.
-7. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
+4. **COMPLETE at `5618f7864`:** the thirteen synthetic acceptance controls resolved as
+   `10 PASS / 3 preserved RED`, with no production change.
+5. **ACTIVE:** atomically create and freshly review only the three canonical
+   `R6-GAP-DET-OPAQUE-PARENT` packet docs recorded as `TO CREATE` in the named-gap subledger.
+6. Resolve the three preserved red routes sequentially in matrix order; do not batch gaps or begin
+   production/no-code proof before the active route's docs gate is review-clean.
+7. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence after all named
+   gaps are complete.
+8. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
    proven or narrowed honestly. Ordinary “still open” is not a closure disposition.
-8. Only then promote the preserved R7 drafts to implementation-ready.
+9. Only then promote the preserved R7 drafts to implementation-ready.
 
 ## Execution Rules
 
@@ -46,6 +50,6 @@ Current phase: **`R6-C.1-CONTROLS` (ACTIVE; active packet: none)**
   `git diff --cached --check`, and inspect the complete `git diff --cached` before committing.
 - Preserve unrelated worktree changes.
 
-No production code changes are authorized by this plan while `R6-C.1-CONTROLS` remains active. A
-failing control must be preserved first and may be addressed only after the later phase transition
-activates its bounded gap.
+No production code change, witness rerun, or no-code proof receipt is authorized until the active
+`R6-GAP-DET-OPAQUE-PARENT` packet-docs gate is committed and fresh-review-clean. The later named gaps
+and `R6-REPLAY` remain blocked.

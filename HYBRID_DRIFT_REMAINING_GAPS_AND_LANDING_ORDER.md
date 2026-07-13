@@ -93,21 +93,24 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The next open gap is no longer archetype identification or first-cut progress export. `R5.5`
-landed the first hardening pass; the active pre-`R6` gap is the narrower `R5.75` follow-on family
-that reconciles post-validation remaining issues before scorer cutover opens.
+The next open gap is no longer archetype identification, first-cut progress export, `R5.75`, or the
+R6 acceptance-control matrix. `R6-C.1-CONTROLS` completed at the `5618f7864` wall as
+`10 PASS / 3 preserved RED`, with no production change. The sole active route is now
+`R6-GAP-DET-OPAQUE-PARENT` at its packet-docs gate; `R6-GAP-TGG-TRUTH-PATH-ACTION`,
+`R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` remain blocked in that order.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
 The remaining gap is no longer “sentinel posture logic is missing,” “generic `ToolOutput`
-pollutes failure evidence,” or “checkpoint-local session archetype is absent.” The current honest
-next step is:
+pollutes failure evidence,” “checkpoint-local session archetype is absent,” or “run the first R6
+control.” The current honest sequence is:
 
-1. keep `R5` landed as the first-cut progress layer
-2. keep `R5.5` landed as the first hardening pass
-3. close the adopted post-validation follow-on family (`R5.75`)
-4. retune scorers to consume the hardened progress layer (`R6`)
-5. extend delegated-session semantics beyond the current downgrade boundary (`R7`)
+1. keep `R5`, `R5.5`, and `R5.75` landed
+2. keep `R6-C.1-CONTROLS` complete with its actual `10 PASS / 3 preserved RED` disposition
+3. create and freshly review the active `R6-GAP-DET-OPAQUE-PARENT` packet docs before any gap execution
+4. resolve the three named R6 gaps sequentially in matrix order
+5. run bounded R6 replay/closeout only after all named gaps complete
+6. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -739,12 +742,16 @@ layer has passed the landed `R5.5` baseline and the narrower `R5.75` follow-on g
 - long autonomous turns are evaluated differently from multi-turn conversational sessions
 - flagged sessions become materially more honest on known replay artifacts
 
-**Current proof posture:** the first claim has focused and bounded advancing-frontier proof. The
-third is only partially / bounded proven: the frozen dead-end corpus preserves postures as
-invariance and is not comparative evidence of integrated scorer improvement. The long-autonomous
-versus multi-turn-conversational claim has construction-level proof but lacks a scorer-level
-behavioral A/B. R6 remains partial until `R6-C.1` supplies the missing controls and integrated replay
-proof or narrows the wording honestly.
+**Current proof posture:** `R6-C.1-CONTROLS` completed at `5618f7864`: thirteen planned synthetic
+controls resolved as `10 PASS / 3 preserved RED`, checkpoints passed, and no production changed.
+The passing equal-progress turn-shape control narrows the second claim honestly: turn structure
+informs archetype/progress construction but does not independently change `dead_end_thrash` when
+the relevant derived progress is equal. The three preserved reds route, in order, to active
+`R6-GAP-DET-OPAQUE-PARENT` (`CTX-R6-04`, `87409b39a`), blocked
+`R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`, `e67d8b214`), and blocked
+`R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`). The frozen dead-end corpus still proves
+invariance rather than comparative integrated improvement. R6 remains partial; `R6-REPLAY` remains
+blocked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -829,9 +836,13 @@ The next honest work target is:
 - keep `R5` closed as the landed archetype-aware progress packet family
 - keep `R5.5` closed as the landed first hardening pass
 - keep `R5.75` closed as the landed pre-`R6` hardening/validation family
-- complete only the narrow `R6-C.1` acceptance-first controls named by the closure finding; do not
-  inject every context layer into every scorer and do not reopen `semantic_goal_drift` without new
-  failing evidence
+- keep `R6-C.1-CONTROLS` complete at `5618f7864` with `10 PASS / 3 preserved RED`; do not reopen
+  `semantic_goal_drift` without new failing evidence
+- **sole next authorized action:** atomically create and freshly review the three canonical
+  `R6-GAP-DET-OPAQUE-PARENT` packet docs recorded as non-link `TO CREATE` paths in the named-gap
+  subledger; those files do not yet exist, and no production/no-code proof begins first
+- keep `R6-GAP-TGG-TRUTH-PATH-ACTION`, `R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` blocked until
+  their ordered predecessor gates complete
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed

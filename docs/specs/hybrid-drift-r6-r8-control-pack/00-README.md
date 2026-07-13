@@ -4,13 +4,16 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-C.1-CONTROLS — Row-atomic scorer context applicability acceptance controls`
+**Current work phase:** `R6-GAP-DET-OPAQUE-PARENT — packet-docs gate only`
 
-**Last repo-truth verification:** `ea19b39a7`
+**Last repo-truth verification:** `5618f7864`
 
-The `R6-C.1` packet docs landed through `ea19b39a7` and received a final fresh `REVIEW CLEAN`.
-Acceptance controls only are now authorized; no production change, replay work, gap packet, R6 closeout,
-or R7/R8 work is authorized by this transition.
+The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
+preserved RED`, with no production change. The named routes are, in matrix order,
+`R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
+`R6-GAP-WPB-EMPTY-AUTHORITY`. Only the first is active; its sole authorized work is atomic creation
+and fresh review of its three canonical packet docs. The later gaps and `R6-REPLAY` remain blocked,
+and no production, replay, R6 closeout, or R7/R8 work is authorized first.
 
 ## Purpose
 

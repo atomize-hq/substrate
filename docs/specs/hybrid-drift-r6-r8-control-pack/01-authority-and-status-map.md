@@ -1,9 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** `ea19b39a7`
+**Verified against:** `5618f7864`
 
-**Current phase:** `R6-C.1-CONTROLS` (**ACTIVE**; active packet authority:
-`docs/specs/r6/R6-C.1/`)
+**Current phase:** `R6-GAP-DET-OPAQUE-PARENT` (**ACTIVE**; active packet: none; packet-docs gate only)
 
 ## How To Resolve Truth
 
@@ -24,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Add the first row-atomic acceptance control from the landed `docs/specs/r6/R6-C.1/` packet docs; make no production change first. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Atomically create and freshly review the three canonical `R6-GAP-DET-OPAQUE-PARENT` packet docs recorded as `TO CREATE` in the named-gap subledger; make no production change first. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
@@ -35,9 +34,10 @@ Read in this order for active R6 work:
 1. `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`
 2. `docs/specs/r6/MAP.md`
 3. `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md`
-4. the active packet authority in `docs/specs/r6/R6-C.1/`: its SPEC, PLAN, then TASKS
-5. root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md`
-6. the R6 section of `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
+4. the completed `R6-C.1` packet authority in `docs/specs/r6/R6-C.1/`: its SPEC, PLAN, then TASKS
+5. the `Named R6 Gap Status Subledger` in `05-proof-decision-regression-ledger.md`
+6. root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md`
+7. the R6 section of `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
 
 Landed packet documents are historical authority for their bounded decisions. They do not by
 themselves prove the broader R6 charter closed.
@@ -46,10 +46,10 @@ themselves prove the broader R6 charter closed.
 
 | Surface | Interim audit posture | R6 terminal requirement |
 |---|---|---|
-| `dead_end_thrash` | Acceptance-proof gap | TBD: **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with justification**. |
+| `dead_end_thrash` | Preserved `CTX-R6-04` red; `R6-GAP-DET-OPAQUE-PARENT` active at its docs-only gate | TBD: **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with justification**. |
 | `semantic_goal_drift` | Cutover complete by design | **Cutover complete**. Revisit only if a new failing behavioral witness appears. |
-| `truth_grounding_gap` | Acceptance-proof gap | TBD: one of the four exact terminal categories after the expanded `R6-C.1` controls. |
-| `wrong_plan_branch` | Acceptance-proof gap | TBD: one of the four exact terminal categories after the expanded `R6-C.1` controls. |
+| `truth_grounding_gap` | Preserved `CTX-R6-12` red; `R6-GAP-TGG-TRUTH-PATH-ACTION` blocked on the active gap | TBD: one of the four exact terminal categories after its named gap is resolved. |
+| `wrong_plan_branch` | Preserved `CTX-R6-15` red; `R6-GAP-WPB-EMPTY-AUTHORITY` blocked on the grounding gap | TBD: one of the four exact terminal categories after its named gap is resolved. |
 | `scoring/mod.rs` | Dispatcher infrastructure | **Fit-for-purpose exception** as routing infrastructure; not a fifth scorer. |
 
 ## R6-C.0A Remediation Result

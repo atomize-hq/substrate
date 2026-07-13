@@ -1,16 +1,21 @@
 # Findings: R6 Scorer-Context Cutover Closure
 
-**Date:** 2026-07-12
+**Date:** 2026-07-12; control disposition updated 2026-07-13
 
 **Status:** PARTIAL / CLOSURE AUDIT REQUIRED
 
-**Scope:** read-only scorer applicability and behavioral-proof audit; no scorer behavior changed
+**Scope:** scorer applicability, behavioral-proof audit, and control disposition; no production scorer behavior changed
 
 ## Decision
 
-The scoped R6 packets are landed, but that is not enough to close the broader R6 charter. R6 is
-**PARTIAL** until the narrow acceptance packet named below resolves three proof gaps. R7 remains
-useful, design-ready draft work, but it is **not implementation-ready**.
+The scoped R6 packets and `R6-C.1-CONTROLS` are landed, but that is not enough to close the broader
+R6 charter. The thirteen synthetic controls resolved as `10 PASS / 3 preserved RED` at the
+`5618f7864` controls wall, with no production change. In matrix order, those reds route to
+`R6-GAP-DET-OPAQUE-PARENT` (`CTX-R6-04`, witness `87409b39a`),
+`R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`, witness `e67d8b214`), and
+`R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, witness `59f098b35`). R6 remains **PARTIAL**; only the
+first named gap is active, at its packet-docs gate, while the later gaps and `R6-REPLAY` remain
+blocked. R7 remains useful, design-ready draft work, but it is **not implementation-ready**.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
 context, archetype, and progress. A scorer is complete when its chosen inputs match the behavior it
@@ -30,10 +35,10 @@ owns and behavior-level tests prove that match. Transitive availability alone is
 
 | Scorer | Intended behavior | Current direct inputs | Current indirect inputs | Typed outcomes | Turn context | Archetype | Progress | Structured objective | Working-set / truth evidence | Delegation visibility | Behavioral proof | Remaining gap | Disposition |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `dead_end_thrash` | Distinguish active repeated failure/verification with no frontier movement from expected churn that advances or cleanly recovers. | Repetition history, recovery-active bits, `SessionProgress`, command observations for confidence. | Typed attempts and outcomes feed progress; turn context feeds archetype; archetype selects progress dimension; objective changes can bound comparable history. | **Indirect, relevant.** Failure/verification classification and frontier signals depend on it. | **Indirect, relevant.** | **Indirect, relevant.** | **Direct, required.** | **Boundary only.** | **Not applicable.** | **Indirect, relevant but under-proven.** Delegation can select `ParentVisibleOrchestration`, but the scorer has no delegated-parent control. | Fourteen focused tests cover advancement, stall, recovery/history, explicit errors, non-zero exits, neutral outputs, and replay-shaped cleanup. Frozen real-rollout derivatives preserve three cleared postures plus one recovered sticky tail as invariance evidence; they do not prove comparative integrated improvement. | No scorer-level witness for regressing progress, opaque delegated-parent activity, or a long-autonomous versus many-short-conversational A/B. Integrated replay proof also remains bounded and incomplete. | **Acceptance-proof gap** |
+| `dead_end_thrash` | Distinguish active repeated failure/verification with no frontier movement from expected churn that advances or cleanly recovers. | Repetition history, recovery-active bits, `SessionProgress`, command observations for confidence. | Typed attempts and outcomes feed progress; turn context feeds archetype; archetype selects progress dimension; objective changes can bound comparable history. | **Indirect, relevant.** Failure/verification classification and frontier signals depend on it. | **Indirect, relevant.** | **Indirect, relevant.** | **Direct, required.** | **Boundary only.** | **Not applicable.** | **Indirect, relevant.** The exact opaque-parent control reached `ParentVisibleOrchestration` and preserved a confidence-only red. | The R6-C.1 regression and equal-progress turn-shape controls passed. `dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity` preserved the sole family red: actual `0 / Medium / Cleared` versus required `0 / Low / Cleared`. Frozen real-rollout derivatives remain invariance evidence only. | `R6-GAP-DET-OPAQUE-PARENT` is active at its packet-docs gate; integrated replay proof remains bounded and incomplete. | **Preserved red / active named gap** |
 | `semantic_goal_drift` | Detect an unsanctioned target pivot relative to kickoff or prior checkpoint while suppressing legitimate narrowing, role shifts, replans, and unsupported delegated-parent claims. | Current structured objective, kickoff anchor, previous structured objective/checkpoint, stable target anchors, sanctioned-replan bit, delegation topology/visibility. | Structured extraction and checkpoint history supply the compared goals. | **Not applicable.** Outcome success does not establish target continuity. | **Not applicable.** | **Not applicable.** | **Not applicable.** | **Direct, required.** | **Not applicable.** | **Direct, required for the bounded opaque-parent guard.** | 56 focused scorer/state tests cover sanctioned replans, opaque/partial delegation, and internal `Fire` / `Suppress` / `NoClaim` routing. Separately, the bounded corpus-shape test proves fixture integrity only. The live analyzer-path acceptance test exercises only its 18 allowlisted pivot, narrowing, progression, and role-shift fixtures; it does not prove replan, delegation, or internal routing. The R6-3.X.2D corpus closeout recorded 110/110 sessions analyzable with 0 emitted fires after remediation. | No new failing witness. Progress or archetype would not make target-continuity reasoning more honest. | **Cutover complete** |
-| `truth_grounding_gap` | Detect write/verification action taken without first reading declared truth artifacts; preserve and recover history honestly. | Task-frame truth paths, interval command observations and event order, previous truth-gap score. | Working-set/task-frame extraction supplies the truth paths. | **Not applicable by design:** success/failure does not prove that required truth was read. | **Not applicable by design:** ordering is event-based, not turn-count based. | **Decision pending:** pure research/planning without action should stay clear, while actionful planning/research may carry a grounding obligation; the A/B is unproven. | **Not applicable:** later progress cannot retroactively establish prior grounding. | **Indirect boundary/source only.** | **Direct, required.** | **Proof gap:** ordinary parent orchestration should remain quiet, but there is no explicit control. | Four tests prove ungrounded verification fires, grounded work stays clear, recovery, and historical-only downgrade. | Missing explicit controls for planning/research with no action, successful-but-ungrounded verification, long-turn invariance, opaque parent orchestration, a truth-path-touching action before a read, and actionful planning/research. | **Acceptance-proof gap** |
-| `wrong_plan_branch` | Detect write/verification paths outside the task frame's expected truth/working-set scope and clear after a return in scope. | Truth-artifact paths, working-set paths, interval command paths and write/verification classification. | Objective/working-set extraction supplies expected paths; checkpoint boundaries isolate the current interval. | **Not applicable:** command outcome does not change path scope. | **Not applicable:** path scope is event-local. | **Not applicable:** exploration is already ignored unless it writes or verifies. | **Not applicable:** healthy progress cannot excuse mutation outside the authorized branch. | **Potentially relevant through sanctioned continuity, not directly consumed.** | **Direct, required.** | **Proof gap:** parent/child ownership is not exercised. | Two tests prove out-of-scope mutation fires and later in-scope work clears. | Missing controls for read-only exploration, sanctioned replan/path pivot, delegated-parent orchestration, and a path-bearing action when authority paths are empty. The empty-authority case must decide and prove no-claim versus an intentionally accepted low-confidence claim. | **Acceptance-proof gap** |
+| `truth_grounding_gap` | Detect write/verification action taken without first reading declared truth artifacts; preserve and recover history honestly. | Task-frame truth paths, interval command observations and event order, previous truth-gap score. | Working-set/task-frame extraction supplies the truth paths. | **Not applicable by design:** success/failure does not prove that required truth was read. | **Not applicable by design:** ordering is event-based, not turn-count based. | **Fit-for-purpose for archetype:** equivalent actions scored equally across planning and implementation frames. | **Not applicable:** later progress cannot retroactively establish prior grounding. | **Indirect boundary/source only.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | No-action planning, successful ungrounded verification, turn-shape invariance, opaque parent no-action, and actionful archetype-equivalence controls passed. `truth_grounding_gap_flags_truth_path_action_before_read` preserved the sole family red: actual `0 / Medium / Cleared` versus required `80 / High / Active`. | `R6-GAP-TGG-TRUTH-PATH-ACTION` is blocked behind the active dead-end gap. | **Preserved red / blocked named gap** |
+| `wrong_plan_branch` | Detect write/verification paths outside the task frame's expected truth/working-set scope and clear after a return in scope. | Truth-artifact paths, working-set paths, interval command paths and write/verification classification. | Objective/working-set extraction supplies expected paths; checkpoint boundaries isolate the current interval. | **Not applicable:** command outcome does not change path scope. | **Not applicable:** path scope is event-local. | **Not applicable:** exploration is already ignored unless it writes or verifies. | **Not applicable:** healthy progress cannot excuse mutation outside the authorized branch. | **Relevant through sanctioned continuity; the sanctioned-replan control passed.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Read-only exploration, sanctioned replan/path pivot, and opaque-parent controls passed. `wrong_plan_branch_makes_no_claim_for_path_action_without_authority` preserved the sole family red: actual `60 / Low / Active` versus required `0 / Low / Cleared`. | `R6-GAP-WPB-EMPTY-AUTHORITY` is blocked behind the grounding gap. | **Preserved red / blocked named gap** |
 | `scoring/mod.rs` | Deterministically build shared scorer inputs, invoke all material scorers, and order results. It is dispatcher infrastructure, not a fifth scorer. | `CheckpointAnalysis`, previous truth score, kickoff anchor. | Builds `SessionProgress` once and supplies it only to `dead_end_thrash`. | Applicable only through scorer-specific routing. | Same. | Same. | Same. | Same. | Same. | Same. | Source inspection proves the explicit four-class `sort_by_key` order. The full analyzer suite proves the score records travel through the live path, but no focused behavioral assertion proves their exact order. | Exact ordering is source-proven, not behavior-tested. Add a focused assertion only if exact order is retained as a closure contract; do not force a common mega-context argument into every scorer. | **Fit-for-purpose exception** |
 
 No scorer is currently a justified merge/deprecation candidate. `truth_grounding_gap` asks whether
@@ -48,11 +53,11 @@ expected path scope. Those are separate failure modes.
 |---|---|---|
 | Advancing troubleshooting frontier tolerates expected repeated failures. | `dead_end_thrash_suppresses_repeated_activity_when_the_frontier_advances`; upstream `checkpoints_mark_troubleshooting_frontier_advancement_from_compile_to_test_failure`; real-rollout-derived progress case `019e899c-453f-71f2-a99d-155848c7b081`. | **Proven** for the troubleshooting-frontier path. |
 | Stalled progress increases thrash concern. | `dead_end_thrash_names_stalls_when_repeated_activity_has_no_frontier_movement`; `checkpoints_mark_repeated_same_troubleshooting_signature_as_stalled`. | **Proven** for no-frontier-movement stall. |
-| Regressing progress increases/retains concern. | `checkpoints_mark_troubleshooting_regression_when_frontier_falls_back` proves progress construction only. | **Acceptance-proof gap:** no scorer-level regression witness. |
+| Regressing progress increases/retains concern. | `dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity`; upstream `checkpoints_mark_troubleshooting_regression_when_frontier_falls_back`. | **Proven:** the scorer control passed at `30 / Medium / Active`, flagged. |
 | Clean recovery or verification clears/downgrades honestly. | `dead_end_thrash_clears_after_one_clean_in_scope_verification_interval`; `dead_end_thrash_downgrades_to_historical_only_after_the_recovery_transition`; `dead_end_thrash_clears_replay_shaped_memsrc_verifier_tail`. | **Proven.** |
 | Typed outcomes distinguish failure from neutral/success evidence. | `dead_end_thrash_treats_explicit_error_rows_as_repeated_failure_evidence`; `dead_end_thrash_treats_non_zero_exit_code_tool_output_as_failure_evidence`; `dead_end_thrash_ignores_repeated_neutral_tool_output_evidence`; `dead_end_thrash_keeps_repeated_successful_verification_as_historical_context`. | **Proven.** |
-| Opaque delegated-parent activity does not become child thrash. | Upstream delegation/progress controls include `checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_parent_work` and `progress_acceptance_r5_75_witnesses_preserve_r6_1_1_frontier_boundary`. | **Acceptance-proof gap:** neither asserts the `DeadEndThrash` score. This is ordinary baseline proof, not an R7 child-link implementation. |
-| One long autonomous turn differs from many short conversational turns where relevant. | `checkpoints_recognize_multiple_checkpoints_in_one_long_autonomous_turn`, `checkpoints_mark_tool_free_short_turns_as_conversational`, and `checkpoints_compute_turn_activity_mix_and_execution_modes`. | **Partially proven:** context/archetype construction is proven; no scorer-level A/B demonstrates a material scoring difference. |
+| Opaque delegated-parent activity does not become child thrash. | `dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity`; upstream delegation/progress controls include `checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_parent_work`. | **Preserved red:** classification is clear/unflagged with empty evidence, but confidence is `Medium` rather than required `Low`; active route `R6-GAP-DET-OPAQUE-PARENT`. |
+| Turn-shape relevance is consumed upstream without changing equal-progress scorer output. | `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes`; upstream turn/archetype construction controls. | **Proven focused:** locked long-autonomous and many-short-conversational cases both scored `20 / Medium / HistoricalOnly`, unflagged. The broad acceptance sentence must not claim a scorer-level difference. |
 | Frozen replay postures remain invariant. | `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture`, the three named cleared controls, and `acceptance_fixtures_representative_sticky_success_tail_stays_recovered`. | **Invariance only for the bounded frozen corpus:** three cleared final states and one recovered sticky-success tail remain pinned. This is not a before/after comparator and does not prove integrated scorer improvement. |
 
 ### `semantic_goal_drift`
@@ -78,57 +83,53 @@ No new evidence justifies reopening the recently closed semantic-goal-drift fami
 
 ### `truth_grounding_gap`
 
-The current design treats grounding as a provenance obligation, not a result-quality claim. A clean
-verification can still be ungrounded; a failed verification can still be properly grounded. Turn
-length, archetype, and later progress do not alter whether declared truth was read before action.
-That is the correct fit-for-purpose direction, but closure still needs controls for no-action
-planning/research, successful-but-ungrounded verification, long-turn invariance, opaque parent
-orchestration, truth-path-touching action before a read, and the actionful-planning/research A/B.
-The last two controls must decide whether those actions implicitly ground, create a grounding
-obligation, or expose a bounded scorer gap; current behavior alone is not closure authority.
+The controls confirm the fit-for-purpose direction for no-action planning/research,
+successful-but-ungrounded verification, turn-shape invariance, opaque parent orchestration without
+attributable child action, and equivalent action across planning/implementation archetypes. The
+remaining behavior gap is narrower: a first write-like action touching the declared truth path before
+any read currently clears at `0 / Medium / Cleared` instead of the locked `80 / High / Active` claim.
+That preserved `CTX-R6-12` witness owns `R6-GAP-TGG-TRUTH-PATH-ACTION`, blocked until the preceding
+dead-end gap completes.
 
 ### `wrong_plan_branch`
 
-The current design treats branch correctness as path authorization. Typed outcomes and progress do
-not legalize an out-of-scope write. Read-only exploration should stay quiet because the scorer only
-considers write/verification observations. The unresolved questions are whether a sanctioned replan
-updates the expected path set early and reliably enough and what a path-bearing action means when
-the authority path set is empty. The empty-authority control must distinguish no-claim behavior from
-an intentionally accepted low-confidence claim rather than accepting either outcome silently.
+The controls confirm that read-only exploration stays quiet, sanctioned replans update the expected
+scope for the bounded write case, and opaque parent orchestration without attributable child action
+stays clear. The remaining behavior gap is the empty-authority path-bearing action: current behavior
+claims `60 / Low / Active` with action evidence instead of the locked `0 / Low / Cleared` no-claim.
+That preserved `CTX-R6-15` witness owns `R6-GAP-WPB-EMPTY-AUTHORITY`, blocked until the grounding gap
+completes.
 
 ## Broad R6 Acceptance-Claim Audit
 
 | Root acceptance claim | Owning scorer/module | Focused proof | Replay/bounded evidence | Status and honest wording |
 |---|---|---|---|---|
 | Troubleshooting tolerates expected failures while the frontier advances. | `dead_end_thrash` over `SessionProgress`. | Advancement suppression plus upstream frontier tests named above. | Annotated real-rollout troubleshooting fixture `019e899c-...` supplies upstream progress evidence; the frozen dead-end corpus protects final posture. Neither is an integrated advancing repeated-failure scorer replay. | **Proven focused / bounded; integrated replay remains open.** `CTX-R6-01` still requires an integrated real-rollout-derived advancing repeated-failure score to remain unflagged or historical. |
-| Long autonomous turns are evaluated differently from multi-turn conversational sessions. | Turn context + archetype + progress; materially relevant downstream scorer expected to be `dead_end_thrash`. | Construction tests prove long-turn checkpointing and conversational/autonomous classification. | No bounded scorer A/B fixture. | **Partially proven.** Narrow to “turn structure informs archetype/progress construction” unless the closure packet adds a scorer-level witness showing a material difference. |
+| Long autonomous turns are evaluated differently from multi-turn conversational sessions. | Turn context + archetype + progress; `dead_end_thrash` consumes the derived progress rather than raw turn shape. | Construction tests prove the turn/archetype distinction; `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes` proves equal derived progress produces equal scorer output. | No bounded replay A/B requires a different scorer disposition. | **Narrowed honestly:** turn structure informs archetype/progress construction; it does not independently change `dead_end_thrash` when the relevant derived progress is equal. |
 | Flagged sessions are materially more honest on known replay artifacts. | Primarily `dead_end_thrash`; semantic drift has its separate corpus. | Per-case frozen posture assertions; no before/after integrated comparator. | Four real-rollout-derived dead-end cases preserve three cleared and one recovered posture; the separate semantic closeout corpus recorded 110 sessions with no post-remediation fires. | **Partially / bounded proven.** The frozen dead-end corpus proves invariance, not comparative integrated improvement. Retain partial wording until integrated advancing and true-stall replay witnesses close the claim or the charter is narrowed. |
 
-## Required Narrow Closure Packet
+## R6-C.1 Control Disposition (2026-07-13)
 
-Open **`R6-C.1 — Scorer Context Applicability Acceptance Controls`**. It is acceptance-first and must
-not add context inputs unless a control fails.
+`R6-C.1-CONTROLS` is **COMPLETE**. All thirteen synthetic controls were committed and freshly
+reviewed row-by-row; the wall receipt `5618f7864` records `10 PASS / 3 preserved RED`, no new red,
+passing checkpoints, and no production change. `semantic_goal_drift` remains excluded absent new
+failing evidence.
 
-Required controls:
+The three distinct routes must execute sequentially in matrix order:
 
-1. `dead_end_thrash`: scorer-level regression witness; opaque delegated-parent witness; and one
-   long-autonomous versus many-short-conversational A/B, or an explicit finding that the distinction
-   is fully consumed upstream and does not change this scorer.
-2. `truth_grounding_gap`: planning/research no-action control; successful-but-ungrounded verification
-   control; long-turn invariance control; opaque parent-orchestration control; truth-path-touching
-   action-before-read control; and an actionful-planning/research A/B with an explicit expected
-   disposition.
-3. `wrong_plan_branch`: read-only exploration control; sanctioned replan/path-pivot control; opaque
-   parent-orchestration control; and a path-bearing action with empty authority paths whose expected
-   result explicitly chooses no-claim or an intentionally accepted low-confidence claim.
-4. If every control passes, close as fit-for-purpose without production changes. If any fails, split
-   only that failure into a bounded implementation packet with a failing witness and controls.
+1. **ACTIVE, packet-docs gate only:** `R6-GAP-DET-OPAQUE-PARENT` for `CTX-R6-04` at witness
+   `87409b39a`.
+2. **BLOCKED:** `R6-GAP-TGG-TRUTH-PATH-ACTION` for `CTX-R6-12` at witness `e67d8b214`.
+3. **BLOCKED:** `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15` at witness `59f098b35`.
 
-`semantic_goal_drift` is excluded from this packet absent new failing evidence.
+The sole next authorized action is atomic creation and fresh review of the three canonical active-gap
+packet docs recorded as non-link `TO CREATE` paths in the named-gap subledger. Do not claim those files
+exist, execute the gap, or begin production/no-code proof first. `R6-REPLAY` remains blocked.
 
 ## Verification Run For This Audit
 
-All requested commands passed on 2026-07-12:
+The original audit commands below passed on 2026-07-12. This is historical baseline evidence, not the
+current control disposition:
 
 ```text
 cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture       PASS (14 focused integration tests; related filtered/unit tests also ran)
@@ -139,12 +140,28 @@ cargo test -p agent-drift-analyzer checkpoints -- --nocapture          PASS (131
 cargo test -p agent-drift-analyzer -- --nocapture                      PASS (all analyzer test binaries; 0 failures)
 ```
 
-Passing tests establish the behavior they assert. They do not fill the named acceptance gaps.
+Those passing tests establish the behavior they assert. They did not fill the acceptance gaps that
+the later controls made explicit.
+
+The later `R6-C.1` wall at `5618f7864` produced the current disposition:
+
+```text
+thirteen planned synthetic controls                                     10 PASS / 3 preserved RED
+cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture       expected CTX-R6-04 RED only
+cargo test -p agent-drift-analyzer truth_grounding_gap -- --nocapture   expected CTX-R6-12 RED only
+cargo test -p agent-drift-analyzer wrong_plan_branch -- --nocapture     expected CTX-R6-15 RED only
+cargo test -p agent-drift-analyzer checkpoints -- --nocapture           PASS
+```
+
+The exact preserved witnesses are committed at `87409b39a`, `e67d8b214`, and `59f098b35`,
+respectively. The expected red exits are preserved proof, not a green family wall, and no production
+code changed.
 
 ## Final R6 Status And R7 Promotion Gate
 
-**R6 status: PARTIAL with named packet `R6-C.1`.** The landed R6 packet history remains intact;
-commit `99efda8f9` is not closure authority.
+**R6 status: PARTIAL with `R6-GAP-DET-OPAQUE-PARENT` active at its packet-docs gate.** The landed R6
+packet history and completed `R6-C.1-CONTROLS` remain intact; commit `99efda8f9` is not closure
+authority. The later named gaps and `R6-REPLAY` remain blocked.
 
 R7 may be promoted from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready only when:
 
@@ -153,8 +170,8 @@ R7 may be promoted from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementa
    **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with
    justification**; an ordinary “still open” state is not a closure disposition;
 3. the broad R6 acceptance claims have behavioral proof or are narrowed honestly;
-4. `R6-C.1` is green, any failing controls have been resolved in bounded R6 packets, and this
-   finding is updated to **CLOSED**; and
+4. `R6-C.1-CONTROLS` is complete, all three preserved reds have been resolved in their distinct
+   bounded named gaps, replay closeout is complete, and this finding is updated to **CLOSED**; and
 5. root landing-order authority, R6 MAP, root SPEC/tasks, and R7 status all agree.
 
 Until then, R7 must not absorb unresolved ordinary single-session scorer semantics.

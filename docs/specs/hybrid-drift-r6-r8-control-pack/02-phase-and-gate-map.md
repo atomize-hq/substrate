@@ -17,8 +17,8 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `PACK-0` | COMPLETE | This context pack | R6/R7 authority correction `6362edf4e` landed | Pack cross-doc checks passed and root active docs link to it. |
 | `R6-C.0A` | COMPLETE | Pass 1 authority remediation | Fresh review findings recorded in `01` and `05` | Canonical finding/root/R6/R7 gates and proof wording agree at `d3dcda785`; fresh review is clean. |
 | `R6-C.1-SPEC` | COMPLETE | R6-C.1 SPEC/PLAN/TASKS | `R6-C.0A` complete | Expanded control matrix, expected decisions, files, commands, and stop rules landed and received fresh `REVIEW CLEAN` at `ea19b39a7`. |
-| `R6-C.1-CONTROLS` | ACTIVE | Acceptance controls only | SATISFIED — R6-C.1 docs landed and received fresh `REVIEW CLEAN` at `ea19b39a7` | Every control has a deterministic result and failing controls are preserved. |
-| `R6-GAP-*` | CONDITIONAL | One bounded scorer-specific fix packet per proven gap | A control fails because behavior is dishonest | Failing witness passes, controls remain green, review is clean. |
+| `R6-C.1-CONTROLS` | COMPLETE | Acceptance controls only | SATISFIED — R6-C.1 docs landed and received fresh `REVIEW CLEAN` at `ea19b39a7` | SATISFIED — all thirteen controls have deterministic results (`10 PASS / 3 preserved RED`) and the controls wall is recorded at `5618f7864`. |
+| [`R6-GAP-*`](05-proof-decision-regression-ledger.md#named-r6-gap-status-subledger) | ACTIVE | One bounded scorer-specific gap phase per proven red | SATISFIED — the named-gap subledger contains exactly one concrete active route and two ordered blocked successors | Each named witness passes or receives a review-clean no-code receipt, controls remain green, and every named transition is review-clean. |
 | `R6-REPLAY` | BLOCKED | Bounded real-rollout/replay closeout | Controls and conditional fixes complete | Integrated advancing and true-stall witnesses plus frozen invariance evidence are documented. |
 | `R6-CLOSE` | BLOCKED | R6 `CLOSED` authority reconciliation | Replay closeout green; no ordinary gap open | Every scorer has a terminal disposition and all root/R6/R7 status docs agree. |
 | `R7-PROMOTE` | BLOCKED | Promote preserved R7 drafts to implementation-ready | R6 finding says `CLOSED` | R7 MAP/SPEC/PLAN/TASKS and root mirrors agree; implementation has not yet started. |
@@ -26,9 +26,12 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
-`PACK-0`, `R6-C.0A`, and `R6-C.1-SPEC` are complete. `R6-C.1-CONTROLS` is now the sole active phase,
-and it authorizes only the row-atomic acceptance controls in the landed packet docs. No production
-implementation, replay, gap, R6 closeout, or R7/R8 work is authorized yet.
+`PACK-0`, `R6-C.0A`, `R6-C.1-SPEC`, and `R6-C.1-CONTROLS` are complete. The generic `R6-GAP-*`
+row is aggregate `ACTIVE` because the named-gap subledger contains exactly one concrete active phase:
+`R6-GAP-DET-OPAQUE-PARENT`. `R6-GAP-TGG-TRUTH-PATH-ACTION` and
+`R6-GAP-WPB-EMPTY-AUTHORITY` remain `BLOCKED`, and `R6-REPLAY` remains `BLOCKED`. The active route
+authorizes only atomic creation and fresh review of its three canonical packet docs; those files do
+not yet exist. No production, witness rerun, replay, R6 closeout, or R7/R8 work is authorized first.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 
