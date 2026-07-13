@@ -94,7 +94,7 @@ before that reconciled transition is committed and fresh-review-clean.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
-- [ ] **R6-C.1.1.1 — Add, commit, and review the regression row (`CTX-R6-03`).**
+- [x] **R6-C.1.1.1 — Add, commit, and review the regression row (`CTX-R6-03`).**
   - Test: `dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity`.
   - Input lock: failure-only repeated history touches the current interval;
     `active_repeated_failure=true`; no repeated-verification history;
@@ -105,6 +105,11 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-DET-REGRESSION` for later activation.
   - Commit/review: only this test plus result-only TASKS/ledger wording; required staged commit gate; fresh
     built-in `default` review until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 14
+    filtered out`. The locked failure-only/current-repetition seam produced exactly
+    `30 / Medium / Active`, flagged. Its `TroubleshootingFrontier` was `Regressing`, carried
+    `PreviouslyCleanScopeBroken`, carried no direct frontier-advance signal, and named both the frontier
+    fallback and the current repeated-failure evidence. No `R6-GAP-DET-REGRESSION` route is required.
 
 - [ ] **R6-C.1.1.2 — Add, commit, and review the opaque-parent row (`CTX-R6-04`).**
   - Test: `dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity`.

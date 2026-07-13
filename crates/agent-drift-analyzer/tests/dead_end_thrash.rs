@@ -2,7 +2,9 @@
 
 mod support;
 
-use agent_drift_analyzer::{AnalyzeRequest, DriftState};
+use agent_drift_analyzer::{
+    AnalyzeRequest, Confidence, DriftState, ProgressDimension, ProgressSignalCode, ProgressStatus,
+};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -666,6 +668,122 @@ fn dead_end_thrash_keeps_historical_verification_loops_out_of_active_failure_sco
         .evidence
         .iter()
         .any(|item| item.reason.starts_with("repeated verification command:")));
+}
+
+#[test]
+fn dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity() {
+    let mut rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Troubleshoot the failing checkpoint verifier without changing scope.",
+        ),
+        tool_row(
+            1,
+            "cargo test --color never -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            2,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+        ),
+        row(3, CompactionKind::Error, "world failed"),
+        row(
+            4,
+            CompactionKind::UserMessage,
+            "/goal Re-run the same troubleshooting verifier after a focused fix edit.",
+        ),
+        tool_row(
+            5,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\n*** End Patch\nPATCH",
+        ),
+        tool_row(
+            6,
+            "cargo test --color always -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            7,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+        row(8, CompactionKind::Error, "world failed"),
+        row(
+            9,
+            CompactionKind::UserMessage,
+            "/goal Re-run the same troubleshooting verifier after the regression.",
+        ),
+        tool_row(
+            10,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\n*** End Patch\nPATCH",
+        ),
+        tool_row(
+            11,
+            "cargo test --color auto -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            12,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+        ),
+        row(13, CompactionKind::Error, "world failed"),
+    ];
+    rows[3].text_hash_hex = "hash-regressing-frontier-failure".to_string();
+    rows[8].text_hash_hex = "hash-regressing-frontier-failure".to_string();
+    rows[13].text_hash_hex = "hash-regressing-frontier-failure".to_string();
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze regressing-frontier dead-end-thrash bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints.last().expect("regressing checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("regressing session progress");
+    let thrash = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert_eq!(checkpoints.len(), 3);
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::Regressing);
+    assert!(progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::PreviouslyCleanScopeBroken));
+    assert!(progress.signals.iter().all(|signal| {
+        !matches!(
+            signal.code,
+            ProgressSignalCode::FailureFrontierAdvanced
+                | ProgressSignalCode::FailureCountReduced
+                | ProgressSignalCode::VerificationClean
+        )
+    }));
+    assert_eq!(thrash.raw_score, 30);
+    assert_eq!(thrash.confidence, Confidence::Medium);
+    assert_eq!(thrash.state, DriftState::Active);
+    assert!(thrash.flagged);
+    assert!(thrash.evidence.iter().any(|item| {
+        item.reason
+            .starts_with("stall without frontier movement evidence:")
+            && item.reason.contains("fell back")
+    }));
+    assert!(thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason == "repeated failure evidence" && item.row.event_index == 13));
+    assert!(thrash
+        .evidence
+        .iter()
+        .all(|item| !item.reason.contains("repeated verification")));
 }
 
 #[test]
