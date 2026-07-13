@@ -205,17 +205,25 @@ update these exact active-phase mirrors together:
 | `docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md` | `Current work phase` and `Last repo-truth verification`. |
 | `docs/specs/hybrid-drift-r6-r8-control-pack/01-authority-and-status-map.md` | `Verified against`, `Current phase`, and the R6 `Current Status` row's `Status` and `Next allowed action`. |
 | `docs/specs/hybrid-drift-r6-r8-control-pack/02-phase-and-gate-map.md` | The `Master Sequence` status cells for the completed and newly active concrete phases, plus entry/exit-gate wording when proof changes. Its generic `R6-GAP-*` row links to the named-gap subledger and reports only aggregate `CONDITIONAL` before route instantiation, `ACTIVE` while any named gap is active, or `COMPLETE` when no gap is required or every named gap is complete. It never carries individual gap statuses. Exactly one concrete phase is `ACTIVE`. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/04-reusable-phase-runner.md` | At `SPEC -> CONTROLS`, reconcile `VERIFICATION AND COMMIT` to stage only intended files, run `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, then run `git diff --cached --check` and inspect the complete `git diff --cached` before commit. Remove the unscoped `detect-changes` and working-tree `git diff --check` commit-gate prescriptions. |
 | `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` | `Ledger status`; `Verified against`; changed `CTX-R6-*` cells; and `Update Record`. At `CONTROLS -> first GAP`, create/update the `Named R6 Gap Status Subledger` with one ordered row per red route and columns `Phase ID`, `Preserved witness/control`, `Owning packet docs`, `Status`, `Predecessor`, `Successor`, and `Evidence/commit`. Record canonical docs paths as non-link `TO CREATE` strings until they land. Every gap transition atomically updates these rows with the other mirrors. Do not rewrite unaffected row evidence. |
 | `docs/specs/hybrid-drift-r6-r8-control-pack/06-operator-prompt-library.md` | `Current First Invocation`: its current-phase sentence plus `PHASE_ID` and `ACTIVE_PACKET`. |
-| Root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md` | `Status`, `Current phase`, completed/current task wording, and sole next-authorized action/check box. |
+| Root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md` | `Status`, `Current phase`, completed/current task wording, and sole next-authorized action/check box. At `SPEC -> CONTROLS`, replace the root `tasks/plan.md` GitNexus execution rule with the same staged-only sequence: stage intended files, run `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, then `git diff --cached --check` and complete `git diff --cached` inspection. |
 | Canonical R6 finding/MAP and landing order | Update `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, `docs/specs/r6/MAP.md`, and `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md` only when actual control or gap evidence changes their proof, status, or next-action wording. |
+
+At `SPEC -> CONTROLS`, inspect only the other active-phase mirrors already named in this manifest for
+commit-gate wording. If any still prescribes unscoped `detect-changes`, working-tree `git diff --check`,
+or an unstaged diff as the commit gate, reconcile it to the same staged-only sequence in the transition
+commit. Do not expand this requirement into cleanup of inactive or historical docs.
 
 The three transition-specific result locks are:
 
 1. **`R6-C.1-SPEC -> R6-C.1-CONTROLS`:** this packet's SPEC and PLAN receive the exact
    `APPROVED / LANDED — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE` status; TASKS checks the
    docs-lock task, records its review-clean commit, and reports `R6-C.1-CONTROLS` as the sole active
-   phase. No control row is promoted without actual test output.
+   phase. The same transition commit must reconcile the reusable runner and root `tasks/plan.md` staged
+   commit-gate authority above, plus any other stale active mirror found by the bounded manifest check.
+   No control row is promoted without actual test output.
 2. **`R6-C.1-CONTROLS -> first R6-GAP-* or R6-REPLAY`:** every synthetic row has a committed PASS or
    preserved red result; controls become complete; the three R6-C.1 packet headers use the prescribed
    phase-aware values; all named-gap subledger rows are instantiated; the first red route in
@@ -228,8 +236,8 @@ The three transition-specific result locks are:
 
 Do not churn unchanged semantic authority, but do not leave any active-phase mirror stale: every mirror
 listed above must agree on the one active phase, completed predecessor, verification commit, and next
-action. No next-phase work may start until the reconciled transition commit itself receives fresh
-independent `REVIEW CLEAN`.
+action. `R6-C.1-CONTROLS` cannot activate and no control work may start until the fully reconciled
+transition is committed and a fresh independent reviewer says `REVIEW CLEAN`.
 
 ## Full R6 Ledger Coverage
 

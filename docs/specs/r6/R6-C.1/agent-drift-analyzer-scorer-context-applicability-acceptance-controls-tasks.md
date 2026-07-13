@@ -34,14 +34,22 @@ Every `SPEC -> CONTROLS`, `CONTROLS -> first GAP or REPLAY`, and
 | Control pack `00-README.md` | `Current work phase`; `Last repo-truth verification`. |
 | Control pack `01-authority-and-status-map.md` | `Verified against`; `Current phase`; R6 `Current Status` row `Status` and `Next allowed action`. |
 | Control pack `02-phase-and-gate-map.md` | Concrete predecessor/successor statuses and changed gates; exactly one concrete phase `ACTIVE`. Its generic `R6-GAP-*` row links to the named-gap subledger and carries only aggregate `CONDITIONAL` before route instantiation, `ACTIVE` while one named gap is active, or `COMPLETE` when no gap is required/all are complete. It never stores individual gap status. |
+| Control pack `04-reusable-phase-runner.md` | At `SPEC -> CONTROLS`, reconcile `VERIFICATION AND COMMIT` to stage only intended files, run `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, then run `git diff --cached --check` and inspect the complete `git diff --cached` before commit. Remove the unscoped `detect-changes` and working-tree `git diff --check` commit-gate prescriptions. |
 | Control pack `05-proof-decision-regression-ledger.md` | `Ledger status`; `Verified against`; actually changed `CTX-R6-*` cells; `Update Record`; and a `Named R6 Gap Status Subledger`. At controls transition instantiate one ordered row per red route with columns `Phase ID`, `Preserved witness/control`, `Owning packet docs`, `Status`, `Predecessor`, `Successor`, `Evidence/commit`; use non-link `TO CREATE` paths until packet docs land. Every gap transition updates the subledger atomically. Do not churn unaffected row evidence. |
 | Control pack `06-operator-prompt-library.md` | `Current First Invocation` sentence, `PHASE_ID`, `ACTIVE_PACKET`. |
-| Root `SPEC.md`, `tasks/plan.md`, `tasks/todo.md` | `Status`; `Current phase`; completed/current task wording; sole next-authorized action/check box. |
+| Root `SPEC.md`, `tasks/plan.md`, `tasks/todo.md` | `Status`; `Current phase`; completed/current task wording; sole next-authorized action/check box. At `SPEC -> CONTROLS`, replace the root `tasks/plan.md` GitNexus execution rule with the same staged-only sequence: stage intended files, run `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, then `git diff --cached --check` and complete `git diff --cached` inspection. |
 | Conditional canonical status/proof | Update `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, `docs/specs/r6/MAP.md`, and `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md` only when actual control/gap evidence changes their proof, status, or next-action wording. |
+
+At `SPEC -> CONTROLS`, inspect only the other active-phase mirrors already named in this manifest for
+commit-gate wording. If any still prescribes unscoped `detect-changes`, working-tree `git diff --check`,
+or an unstaged diff as the commit gate, reconcile it to the same staged-only sequence in the transition
+commit. Do not broaden this bounded check into inactive or historical documentation cleanup.
 
 Transition result locks: `SPEC -> CONTROLS` updates the R6-C.1 SPEC/PLAN headers to the prescribed
 `APPROVED / LANDED` value, checks TASKS docs-lock completion, and records its review-clean commit without
-inventing control results; `CONTROLS -> GAP/REPLAY` updates all three R6-C.1 status surfaces, records
+inventing control results; the same transition commit reconciles the reusable runner, root
+`tasks/plan.md`, and any other stale active mirror found by the bounded manifest check to the staged-only
+commit gate. `CONTROLS -> GAP/REPLAY` updates all three R6-C.1 status surfaces, records
 every row result, creates every named-gap subledger entry, activates the first red route with later routes
 `BLOCKED`, or activates replay; `GAP -> GAP/REPLAY` requires the active gap's review-clean packet docs
 plus committed, fresh-review-clean fix or no-code receipt before atomically marking it `COMPLETE` and the
@@ -49,7 +57,8 @@ next route `ACTIVE`, or activating replay. A newly active gap authorizes only it
 unchanged semantic authority, but every active-phase
 mirror above must agree on the active phase, completed predecessor, verification commit, and next action.
 No successor work starts until the reconciled transition commit passes the staged gate and a fresh
-independent review says `REVIEW CLEAN`.
+independent review says `REVIEW CLEAN`. `R6-C.1-CONTROLS` cannot activate and no control work may start
+before that reconciled transition is committed and fresh-review-clean.
 
 ## R6-C.1.0 — Specification Lock
 
