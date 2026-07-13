@@ -532,36 +532,102 @@ pub(crate) fn load_effective_agent_inventory(
             }
             validated_files.push((path, file));
         }
+        merge_inventory_root(
+            &mut effective,
+            inventory_path_origin(cwd, &root) == AgentInventoryBaselineOrigin::WorkspaceInventory,
+            root_shadowed_agent_ids,
+            validated_files,
+        );
+    }
 
-        if inventory_path_origin(cwd, &root) == AgentInventoryBaselineOrigin::WorkspaceInventory {
-            // Packet 1.5 keeps workspace-local version-2 compatibility rows from leaving
-            // stale global split-entry truth live. A workspace v2 override replaces the
-            // whole pre-cutover logical-agent view, so it must suppress both legacy
-            // compatibility ids (`logical` and `logical_world`) regardless of which
-            // single placement the bridge materialized.
-            for shadowed_agent_id in &root_shadowed_agent_ids {
-                effective.remove(shadowed_agent_id);
-            }
+    Ok(effective)
+}
+
+#[allow(
+    dead_code,
+    reason = "A1.1e establishes the explicit-home entry point before A1.3 adopts it"
+)]
+pub(crate) fn load_effective_agent_inventory_for_bootstrap_home(
+    cwd: &Path,
+    base_policy: &Policy,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<BTreeMap<String, AgentInventoryEntryV1>> {
+    let mut effective = BTreeMap::new();
+    let mut global_files = Vec::new();
+    let mut global_shadowed = BTreeSet::new();
+    for (name, bytes) in bootstrap_home
+        .read_agent_inventory_yaml()
+        .map_err(|error| config_model::user_error(error.to_string()))?
+    {
+        let path = PathBuf::from("$SUBSTRATE_HOME/agents").join(name);
+        let raw = std::str::from_utf8(&bytes).map_err(|_| {
+            config_model::user_error(format!("invalid UTF-8 in {}", path.display()))
+        })?;
+        let file = parse_and_validate_agent_file_raw(&path, raw, base_policy)?;
+        if let ParsedAgentInventoryFile::V2(parsed) = &file {
+            global_shadowed.extend(legacy_shadowed_agent_ids_from_v2(parsed));
         }
+        global_files.push((path, file));
+    }
+    merge_inventory_root(&mut effective, false, global_shadowed, global_files);
 
-        for (path, file) in validated_files {
-            match file {
-                ParsedAgentInventoryFile::V1(file) => {
-                    if root_shadowed_agent_ids.contains(&file.id) {
-                        continue;
-                    }
-                    effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
+    if let Some(workspace_root) = workspace::find_workspace_root(cwd) {
+        let root = workspace_root
+            .join(workspace::SUBSTRATE_DIR_NAME)
+            .join("agents");
+        if root.exists() {
+            if !root.is_dir() {
+                return Err(config_model::user_error(format!(
+                    "invalid agent inventory directory {}: expected a directory",
+                    root.display()
+                )));
+            }
+            let mut workspace_files = Vec::new();
+            let mut workspace_shadowed = BTreeSet::new();
+            for path in collect_agent_files_in_root(&root)? {
+                let file = parse_and_validate_agent_file(&path, base_policy)?;
+                if let ParsedAgentInventoryFile::V2(parsed) = &file {
+                    workspace_shadowed.extend(legacy_shadowed_agent_ids_from_v2(parsed));
                 }
-                ParsedAgentInventoryFile::V2(file) => {
-                    for entry in materialize_effective_inventory_entries_from_v2(&path, &file) {
-                        effective.insert(entry.file.id.clone(), entry);
-                    }
+                workspace_files.push((path, file));
+            }
+            merge_inventory_root(&mut effective, true, workspace_shadowed, workspace_files);
+        }
+    }
+    Ok(effective)
+}
+
+fn merge_inventory_root(
+    effective: &mut BTreeMap<String, AgentInventoryEntryV1>,
+    workspace: bool,
+    root_shadowed_agent_ids: BTreeSet<String>,
+    validated_files: Vec<(PathBuf, ParsedAgentInventoryFile)>,
+) {
+    if workspace {
+        // Packet 1.5 keeps workspace-local version-2 compatibility rows from leaving
+        // stale global split-entry truth live. A workspace v2 override replaces the
+        // whole pre-cutover logical-agent view, so it must suppress both legacy
+        // compatibility ids (`logical` and `logical_world`) regardless of which
+        // single placement the bridge materialized.
+        for shadowed_agent_id in &root_shadowed_agent_ids {
+            effective.remove(shadowed_agent_id);
+        }
+    }
+    for (path, file) in validated_files {
+        match file {
+            ParsedAgentInventoryFile::V1(file) => {
+                if root_shadowed_agent_ids.contains(&file.id) {
+                    continue;
+                }
+                effective.insert(file.id.clone(), AgentInventoryEntryV1 { path, file });
+            }
+            ParsedAgentInventoryFile::V2(file) => {
+                for entry in materialize_effective_inventory_entries_from_v2(&path, &file) {
+                    effective.insert(entry.file.id.clone(), entry);
                 }
             }
         }
     }
-
-    Ok(effective)
 }
 
 fn materialize_effective_inventory_entries_from_v2(
@@ -681,9 +747,17 @@ fn parse_and_validate_agent_file(
     let raw = fs::read_to_string(path).map_err(|err| {
         config_model::user_error(format!("failed to read {}: {err}", path.display()))
     })?;
-    match detect_agent_inventory_version(path, &raw)? {
+    parse_and_validate_agent_file_raw(path, &raw, base_policy)
+}
+
+fn parse_and_validate_agent_file_raw(
+    path: &Path,
+    raw: &str,
+    base_policy: &Policy,
+) -> Result<ParsedAgentInventoryFile> {
+    match detect_agent_inventory_version(path, raw)? {
         1 => {
-            let parsed: AgentFileV1 = serde_yaml::from_str(&raw).map_err(|err| {
+            let parsed: AgentFileV1 = serde_yaml::from_str(raw).map_err(|err| {
                 config_model::user_error(format!(
                     "invalid YAML in {}: {}",
                     path.display(),
@@ -695,7 +769,7 @@ fn parse_and_validate_agent_file(
             Ok(ParsedAgentInventoryFile::V1(parsed))
         }
         2 => {
-            let parsed: AgentFileV2 = serde_yaml::from_str(&raw).map_err(|err| {
+            let parsed: AgentFileV2 = serde_yaml::from_str(raw).map_err(|err| {
                 config_model::user_error(format!(
                     "invalid YAML in {}: {}",
                     path.display(),

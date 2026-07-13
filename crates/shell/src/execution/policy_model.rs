@@ -1106,6 +1106,44 @@ pub(crate) fn resolve_effective_policy_with_explain(
     */
 }
 
+#[allow(
+    dead_code,
+    reason = "A1.1e establishes the explicit-home entry point before A1.3 adopts it"
+)]
+pub(crate) fn resolve_effective_policy_for_bootstrap_home(
+    cwd: &Path,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<Policy> {
+    let global_path = PathBuf::from("$SUBSTRATE_HOME/policy.yaml");
+    let global_patch = match bootstrap_home
+        .read_policy_yaml()
+        .map_err(|error| config_model::user_error(error.to_string()))?
+    {
+        Some(bytes) => {
+            let raw = std::str::from_utf8(&bytes).map_err(|_| {
+                config_model::user_error("invalid UTF-8 in $SUBSTRATE_HOME/policy.yaml")
+            })?;
+            parse_policy_patch_yaml(&global_path, raw)?
+        }
+        None => PolicyPatch::default(),
+    };
+    let mut effective = apply_policy_patch(&Policy::default(), &global_patch);
+    if let Some(root) = workspace::find_workspace_root(cwd) {
+        let path = workspace_policy_path(&root);
+        match fs::read_to_string(&path) {
+            Ok(raw) => {
+                effective = apply_policy_patch(&effective, &parse_policy_patch_yaml(&path, &raw)?);
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(anyhow!("failed to read {}: {error}", path.display()));
+            }
+        }
+    }
+    validate_policy(&effective)?;
+    Ok(effective)
+}
+
 fn btree_to_hashmap(map: &BTreeMap<String, String>) -> HashMap<String, String> {
     map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }

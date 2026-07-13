@@ -12,6 +12,11 @@ pub(crate) mod state_store;
 pub(crate) mod tool_invocation_contract;
 pub(crate) mod validator;
 
+#[allow(unused_imports)]
+pub(crate) use host_session_authority::{
+    AuthorityObservationV1, HostSessionAuthority, OpenedBootstrapHomeV1, ResolvedSessionAuthorityV1,
+};
+
 pub(crate) use auto_attach::MANUAL_REATTACH_ATTACH_RESTORED_REASON;
 #[allow(unused_imports)]
 pub(crate) use control::{

@@ -990,6 +990,7 @@ impl Drop for ActiveEphemeralWorldTaskGuard {
 #[derive(Clone, Debug)]
 pub(crate) struct AgentRuntimeStateStore {
     substrate_home: PathBuf,
+    bootstrap_home: Option<super::host_session_authority::schema::CanonicalDirectoryV1>,
 }
 
 #[derive(Clone, Debug)]
@@ -1004,6 +1005,24 @@ impl AgentRuntimeStateStore {
     pub(crate) fn new() -> Result<Self> {
         Ok(Self {
             substrate_home: substrate_paths::substrate_home()?,
+            bootstrap_home: None,
+        })
+    }
+
+    #[allow(
+        dead_code,
+        reason = "A1.1e establishes exact home binding before A1.3 adopts it"
+    )]
+    pub(crate) fn for_bootstrap_home(
+        bootstrap_home: &super::OpenedBootstrapHomeV1<'_>,
+    ) -> Result<Self> {
+        let identity = bootstrap_home
+            .identity()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?
+            .clone();
+        Ok(Self {
+            substrate_home: PathBuf::from(&identity.physical_path),
+            bootstrap_home: Some(identity),
         })
     }
 
@@ -1016,9 +1035,16 @@ impl AgentRuntimeStateStore {
         let process = snapshot_write_lock()
             .lock()
             .expect("snapshot write mutex poisoned");
-        let mut authority =
-            super::host_session_authority::store::legacy_writer_guard(&self.substrate_home)
-                .context("legacy authority writer preflight failed")?;
+        let mut authority = match &self.bootstrap_home {
+            Some(expected) => {
+                super::host_session_authority::store::legacy_writer_guard_for_identity(
+                    &self.substrate_home,
+                    expected,
+                )
+            }
+            None => super::host_session_authority::store::legacy_writer_guard(&self.substrate_home),
+        }
+        .context("legacy authority writer preflight failed")?;
         let outcome = operation(&mut authority);
         let finish = authority
             .finish()
@@ -6948,6 +6974,7 @@ mod tests {
             .expect("secure StateStore test root");
         let store = AgentRuntimeStateStore {
             substrate_home: temp.path().to_path_buf(),
+            bootstrap_home: None,
         };
         {
             let authority_root =
@@ -7097,6 +7124,40 @@ mod tests {
                 stale_bytes
             );
         }
+    }
+
+    #[test]
+    fn explicit_bootstrap_home_state_store_rejects_root_replacement_without_mutation() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe StateStore parent");
+        let parent = tempfile::tempdir_in(safe_parent).expect("create safe StateStore tempdir");
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure StateStore parent");
+        let home = parent.path().join("home");
+        fs::create_dir(&home).expect("create accepted bootstrap home");
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
+            .expect("secure accepted bootstrap home");
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(&home)
+            .expect("open authority facade");
+        let store = AgentRuntimeStateStore::for_bootstrap_home(&authority.bootstrap_home())
+            .expect("bind StateStore");
+
+        let retained = parent.path().join("retained");
+        fs::rename(&home, &retained).expect("retain accepted home");
+        fs::create_dir(&home).expect("create replacement home");
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
+            .expect("secure replacement home");
+        let replacement_before = fs::read_dir(&home).unwrap().count();
+
+        let participant = live_orchestrator("codex", "sess_bound_home", "ash_bound_home");
+        assert!(store.persist_participant(&participant).is_err());
+        assert_eq!(fs::read_dir(&home).unwrap().count(), replacement_before);
+        assert!(!home.join("authority-v1").exists());
+        assert!(!home.join("run").exists());
     }
 
     #[test]
@@ -7308,6 +7369,7 @@ mod tests {
         }
         let replacement_store = AgentRuntimeStateStore {
             substrate_home: replacement_source.clone(),
+            bootstrap_home: None,
         };
         let replacement_canary =
             live_orchestrator("codex", "sess_replacement_canary", "replacement-canary");
@@ -7410,6 +7472,7 @@ mod tests {
 
         let restarted_store = AgentRuntimeStateStore {
             substrate_home: lexical_root.clone(),
+            bootstrap_home: None,
         };
         let retry = live_orchestrator("codex", "sess_replacement_retry", "ash_replacement_retry");
         restarted_store
@@ -7447,6 +7510,7 @@ mod tests {
             .expect("secure StateStore test root");
         let store = AgentRuntimeStateStore {
             substrate_home: temp.path().to_path_buf(),
+            bootstrap_home: None,
         };
         drop(
             crate::execution::agent_runtime::host_session_authority::store::legacy_writer_guard(

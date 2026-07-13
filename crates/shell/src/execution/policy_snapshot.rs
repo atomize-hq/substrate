@@ -153,6 +153,26 @@ pub(crate) fn resolve_policy_snapshot_for_cwd(cwd: &Path) -> Result<ResolvedPoli
     })
 }
 
+#[allow(
+    dead_code,
+    reason = "A1.1e establishes the explicit-home entry point before A1.3 adopts it"
+)]
+pub(crate) fn resolve_policy_snapshot_for_bootstrap_home(
+    cwd: &Path,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<ResolvedPolicySnapshot> {
+    let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+        cwd,
+        bootstrap_home,
+    )?;
+    let snapshot = snapshot_from_policy(&policy)?;
+    let snapshot_hash = compute_snapshot_hash(&snapshot)?;
+    Ok(ResolvedPolicySnapshot {
+        snapshot,
+        snapshot_hash,
+    })
+}
+
 pub(crate) fn resolve_world_network_policy_for_cwd(
     cwd: &Path,
 ) -> Result<ResolvedWorldNetworkPolicy> {
