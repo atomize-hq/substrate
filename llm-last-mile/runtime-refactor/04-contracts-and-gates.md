@@ -200,6 +200,26 @@ policy resolver, or inventory resolver may later reread `SUBSTRATE_HOME`, fall b
 resolve the home relative to ambient CWD. A different home, even if valid and content-equivalent,
 is a binding mismatch.
 
+For effective-policy resolution, host bootstrap derives the global policy source from that accepted
+home without rereading ambient environment state. The shell passes an explicit broker-appropriate
+source input, not a shell authority type, to one bounded broker entry point. The broker remains the
+sole owner and applies the same canonical defaults, global patch parsing, workspace discovery and
+patch parsing, patch precedence, explanation provenance, validation, and finalization used by its
+ambient API. The explicit-source and ambient APIs must return semantically identical finalized
+policy, source paths/layers, explanation output, derived legacy and V3 filesystem fields,
+network/backend/dispatch values, and validation errors for semantically identical inputs.
+
+Conflicting ambient and explicit homes must prove that only the accepted explicit source affects the
+explicit result; global environment mutation may not simulate this API. Malformed or unsafe global
+or workspace input fails consistently with the ambient canonical path. Config validation preserves
+its existing conditional policy-parsing behavior and must not read or require policy when the
+canonical ambient path would not. A missing descriptor entry never bypasses exact store, workspace,
+session, reference, policy, or snapshot identity validation. Shell projection may record or validate
+the canonical broker result, but it may not duplicate policy parsing, layering, explanation,
+validation, or finalization. This A1.1e rule does not authorize dispatch-scoped narrowing, worker-cap
+composition, immutable active-work acceptance, policy schema/precedence/default changes, or policy
+enforcement changes.
+
 Issuer, helper validation/application, retry, restart, and reconciliation all use this
 same resolver and comparison rule. None may substitute lexical normalization, ambient CWD, a
 different case rule, or path-only equality.

@@ -164,6 +164,25 @@ boundary; all later operations remain descriptor-relative and later replacement 
 Neither malicious root nor malicious same-UID substitution before the first open is in scope, and
 no portable atomic create-and-bind or privileged-broker claim is part of `RG-HOME-01`.
 
+## A1.1e explicit-home policy proof requirement
+
+A1.1e must route accepted-home policy input through the canonical broker resolver; shell-local
+parsing, layering, validation, finalization, or explanation is a blocking authority error. Focused
+differential proof must show that ambient and explicit APIs converge for identical defaults,
+global-only, workspace-only, global-plus-workspace, replacement/merge, and explain/no-explain
+inputs, including unchanged source-layer classification, provenance paths, derived legacy and V3
+world-filesystem fields, network/backend/dispatch values, validation errors, and finalization.
+Conflicting explicit home A and ambient home B plus CWD changes after acceptance must show that the
+explicit result reads neither ambient home nor a newly selected home. Missing global policy,
+malformed global/workspace policy, unsafe input, and finalization failure must fail consistently.
+
+The same wall must prove that config retains its existing conditional policy-parsing behavior and
+that absent descriptor entries still perform complete expected store/workspace/session/reference
+and policy/snapshot identity validation. No global environment mutation may stand in for explicit
+resolution. Passing these focused gates does not close `RG-AUTH-03`, `RG-HOME-01`, `RG-POLICY-03`,
+or `RG-BASE-01`; dispatch narrowing, immutable active-work policy, A1.1d integrated Linux closeout,
+and A1.1d cross-platform proof remain open, and A1.2 remains unstarted.
+
 ## Baseline behaviors that all tracks preserve
 
 These rows define permanent behavior contracts, not current pass claims. Any row explicitly marked
