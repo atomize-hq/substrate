@@ -122,8 +122,9 @@ A1.1d-1 through A1.1d-4 are Linux implementation/review clean and preserved thro
 review clean through `faabed16`. A1.1d remains incomplete because the positive `RG-BASE-01` product
 wall exposes a preexisting owner-transition handoff defect. A1.1d integrated Linux closeout remains
 open and cross-platform closeout remains pending. The exact cross-packet hold makes A1.1e
-implementation-ready without declaring A1.1d complete; A1.1e has not begun. No packet closeout or
-cross-document seam promotion is claimed.
+implementation-ready without declaring A1.1d complete; A1.1e is now focused-proof and review clean
+through `cd676614`. This does not close A1.1d, its integrated/cross-platform proof, or any
+cross-document seam.
 
 The rejected A1.1d-6 heartbeat hypothesis is recorded as `PreexistingExposedByA1d`. With the same
 hermetic lifecycle fixture, pre-A1.1d `c800436d` and pre-rejection `f73e8a81` pass three of three
@@ -182,6 +183,41 @@ and policy/snapshot identity validation. No global environment mutation may stan
 resolution. Passing these focused gates does not close `RG-AUTH-03`, `RG-HOME-01`, `RG-POLICY-03`,
 or `RG-BASE-01`; dispatch narrowing, immutable active-work policy, A1.1d integrated Linux closeout,
 and A1.1d cross-platform proof remain open, and A1.2 remains unstarted.
+
+### A1.1e recorded result
+
+The docs-only allowlist correction is `69db6b29`. P1 is `8826270a` plus test remediation
+`d2aac84f`; it adds the exact `HostSessionAuthority` resolution facade, exact root/authority
+revision and commitment observations, full-store exact-current validation, and stale-observation
+rejection without adding production `ExpectedAbsent` or transition issuance. P2 is `49876412` plus
+remediations `80b0f9e0`, `839f78b4`, `182dd4af`, `1e356654`, and `cd676614`. The broker API
+`resolve_effective_policy_with_explain_from_global_source` accepts explicit broker-appropriate
+source path/bytes and enters the same private canonical core as the ambient API; shell code does not
+parse, layer, validate, finalize, or explain a parallel policy. The accepted bootstrap home also
+owns descriptor-backed config/policy/inventory reads and a distinct bound StateStore capability;
+inventory provenance uses the accepted physical path and bound StateStore callers cannot obtain
+lexical descendant paths.
+
+Recorded proof is broker differential `4/4`, broker `75/75`, config `20/20`, inventory `16/16`,
+policy `13/13`, policy snapshot `9/9`, HostSessionAuthority `95/95`, StateStore `188/188`, and the
+explicit-home group `19/19`. These cover defaults/global/workspace precedence and replacement,
+explain provenance, malformed and finalization errors, conflicting ambient/explicit homes,
+post-acceptance CWD input, conditional config policy parsing, absent and unsafe descriptors, exact
+physical inventory provenance, stale observation, exact current-root identity, and bound
+StateStore replacement rejection. Format, broker/shell check, Clippy with warnings denied, diff
+check, and scoped GitNexus change detection passed; GitNexus classifies the complete authority and
+policy range as critical breadth (`118` changed symbols, `67` affected processes), consistent with
+the focused proof wall and without authorizing sibling work.
+
+The broad shell library wall remains non-green at `843 passed / 171 failed`; the sorted 171-test
+failure set is exactly unchanged from the accepted `842/171` deferred legacy-writer/lifecycle
+baseline. No unit/component result is promoted to integrated product proof. A1.1d integrated Linux
+closeout remains open, native macOS closeout remains pending, `RG-AUTH-03`, `RG-HOME-01`,
+`RG-POLICY-03`, and `RG-BASE-01` remain open, and no seam is promoted. Real CLI/helper/REPL
+adoption, Start reservation, transition-intent issuance/claim/application, parked-successor repair,
+dispatch narrowing/enforcement, auto-attach adoption, and all A1.2 work were deliberately excluded.
+A1.2 has not begun; it is dependency-ready only for its canonical transition-protocol scope after
+this A1.1e closeout, while A1 as a whole remains incomplete and non-landable.
 
 ## Baseline behaviors that all tracks preserve
 
