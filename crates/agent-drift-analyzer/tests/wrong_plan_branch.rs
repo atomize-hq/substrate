@@ -65,6 +65,67 @@ fn wrong_plan_branch_ignores_read_only_out_of_scope_exploration() {
 }
 
 #[test]
+fn wrong_plan_branch_accepts_write_under_sanctioned_replan_scope() {
+    let mut replan = row(
+        2,
+        CompactionKind::UserMessage,
+        "Replan: update crates/agent-drift-analyzer/tests/wrong_plan_branch.rs using docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md.",
+    );
+    replan.user_message_role = Some(UserMessageRole::Steer);
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md.",
+        ),
+        tool_row(
+            1,
+            "sed -n '1,120p' docs/specs/agent-drift-analyzer-v0.4-spec.md",
+        ),
+        replan,
+        tool_row(
+            3,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/tests/wrong_plan_branch.rs\n*** End Patch\nPATCH",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze sanctioned replan bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints.last().expect("sanctioned replan checkpoint");
+    assert!(checkpoint
+        .task_frame
+        .truth_artifacts
+        .iter()
+        .any(|path| path == "crates/agent-drift-analyzer/tests/wrong_plan_branch.rs"));
+    assert!(checkpoint
+        .task_frame
+        .working_set_paths
+        .iter()
+        .any(|path| path == "crates/agent-drift-analyzer/tests/wrong_plan_branch.rs"));
+    let score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::WrongPlanBranch)
+        .expect("wrong plan branch score");
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false),
+    );
+    assert!(score.evidence.is_empty());
+}
+
+#[test]
 fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
     let rows = vec![
         row(
