@@ -745,15 +745,22 @@ config:
             )
             .unwrap();
         assert!(!snapshot.snapshot_hash.is_empty());
+        let post_acceptance_cwd = parent.path().join("post-acceptance-cwd");
+        fs::create_dir(&post_acceptance_cwd).unwrap();
+        fs::set_permissions(&post_acceptance_cwd, fs::Permissions::from_mode(0o700)).unwrap();
         let inventory =
             crate::execution::agent_inventory::load_effective_agent_inventory_for_bootstrap_home(
-                &ambient_home,
+                &post_acceptance_cwd,
                 &policy,
                 &bootstrap_home,
             )
             .unwrap();
         assert!(inventory.contains_key("accepted"));
         assert!(!inventory.contains_key("ambient"));
+        assert_eq!(
+            inventory.get("accepted").unwrap().path,
+            accepted_home.join("agents/accepted.yaml")
+        );
         let state_store =
             crate::execution::agent_runtime::AgentRuntimeStateStore::for_bootstrap_home(
                 &bootstrap_home,

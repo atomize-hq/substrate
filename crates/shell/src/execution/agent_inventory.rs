@@ -555,11 +555,18 @@ pub(crate) fn load_effective_agent_inventory_for_bootstrap_home(
     let mut effective = BTreeMap::new();
     let mut global_files = Vec::new();
     let mut global_shadowed = BTreeSet::new();
+    let global_agents_root = PathBuf::from(
+        &bootstrap_home
+            .identity()
+            .map_err(|error| config_model::user_error(error.to_string()))?
+            .physical_path,
+    )
+    .join("agents");
     for (name, bytes) in bootstrap_home
         .read_agent_inventory_yaml()
         .map_err(|error| config_model::user_error(error.to_string()))?
     {
-        let path = PathBuf::from("$SUBSTRATE_HOME/agents").join(name);
+        let path = global_agents_root.join(name);
         let raw = std::str::from_utf8(&bytes).map_err(|_| {
             config_model::user_error(format!("invalid UTF-8 in {}", path.display()))
         })?;
