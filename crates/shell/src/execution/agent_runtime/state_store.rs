@@ -1683,6 +1683,27 @@ impl AgentRuntimeStateStore {
     pub(crate) fn list_invalidated_participants(
         &self,
     ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                use super::host_session_authority::store::LegacyStateStoreCollectionV1::Participants;
+                let participants = Self::transaction_list_json::<AgentRuntimeParticipantRecord>(
+                    transaction,
+                    Participants,
+                    &[],
+                )?;
+                participants
+                    .into_iter()
+                    .filter(|participant| {
+                        participant.handle.state
+                            == super::session::AgentRuntimeSessionState::Invalidated
+                    })
+                    .map(|participant| {
+                        self.validate_participant_record(&participant)?;
+                        Ok(participant)
+                    })
+                    .collect()
+            });
+        }
         Ok(self
             .read_participant_dir(&self.participants_dir())?
             .into_iter()
@@ -7512,6 +7533,10 @@ mod tests {
             .list_invalid_host_inbox_artifact_paths()
             .expect("list accepted invalid host inbox paths")
             .is_empty());
+        assert!(store
+            .list_invalidated_participants()
+            .expect("list accepted invalidated participants")
+            .is_empty());
         assert_eq!(
             store
                 .load_obligation(&session.orchestration_session_id, "obligation_bound")
@@ -7583,6 +7608,7 @@ mod tests {
         assert!(store.list_host_inbox_records().is_err());
         assert!(store.list_host_inbox_record_ids().is_err());
         assert!(store.list_invalid_host_inbox_artifact_paths().is_err());
+        assert!(store.list_invalidated_participants().is_err());
         assert!(store
             .load_obligation(&session.orchestration_session_id, "obligation_bound")
             .is_err());
