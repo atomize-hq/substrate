@@ -3,19 +3,23 @@
 Canonical authority:
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`
 
+Execution context router:
+`docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md`
+
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
 ## Dependency Order
 
-1. Preserve the 2026-07-12 closure audit and authority correction as the current truth.
-2. Plan `R6-C.1 — Scorer Context Applicability Acceptance Controls` from the exact missing controls
-   in the finding.
-3. Add acceptance controls before production behavior changes.
-4. If a control fails, split only that scorer/failure into a bounded R6 implementation packet.
-5. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence.
-6. Update the finding to `CLOSED` only when every scorer is complete, intentionally exempt, or
+1. Preserve the 2026-07-12 authority correction and context-pack baseline.
+2. Complete docs-only `R6-C.0A`: remediate every fresh closure-matrix review finding across the
+   canonical finding and root/R6/R7 authority.
+3. Plan `R6-C.1 — Scorer Context Applicability Acceptance Controls` from the corrected inventory.
+4. Add acceptance controls before production behavior changes.
+5. If a control fails, split only that scorer/failure into a bounded R6 implementation packet.
+6. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence.
+7. Update the finding to `CLOSED` only when every scorer is complete, intentionally exempt, or
    resolved and every broad acceptance claim is proven or narrowed honestly.
-7. Only then promote the preserved R7 drafts to implementation-ready.
+8. Only then promote the preserved R7 drafts to implementation-ready.
 
 ## Execution Rules
 

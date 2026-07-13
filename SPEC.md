@@ -3,6 +3,9 @@
 Canonical authority:
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`
 
+Execution context router:
+`docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md`
+
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
@@ -25,10 +28,12 @@ Hard decisions:
 - R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
   single-session scorer semantics.
 
-The only authorized next packet is `R6-C.1 — Scorer Context Applicability Acceptance Controls`, as
-defined by the canonical finding. If its controls pass, close the relevant exceptions without
-production changes. If a control fails, create only the bounded scorer-specific R6 gap packet that
-the failing witness proves necessary.
+The only authorized current action is docs-only `R6-C.0A` remediation of the fresh closure-matrix
+review: correct replay-proof wording, expand the missing control inventory, enforce terminal close
+categories, correct proof citations, and label superseded pre-cutover status prose. After that lands,
+the next packet is `R6-C.1 — Scorer Context Applicability Acceptance Controls`. If its controls pass,
+close the relevant exceptions without production changes. If a control fails, create only the
+bounded scorer-specific R6 gap packet that the failing witness proves necessary.
 
 R7 promotion requires the applicability audit to be complete, every material scorer classified,
 broad R6 acceptance claims behaviorally proven or narrowed honestly, the R6 finding updated to
