@@ -2507,6 +2507,180 @@ creates the immutable run/cap commitments and the final active receipt reference
 acceptance record. A conflicting retry cannot create another record for the same runtime work
 identity. B2.1 creates its separate claim and journal only through this record.
 
+### B1 frozen proposal, persistence, and revision semantics
+
+`WorldWorkReceiptRegistry` allocates `proposed_acceptance_record_id` as
+`wwa_<lowercase UUIDv7>`. Allocation is a durable proposal reservation, not an acceptance record.
+The reservation is stored before transport submission and survives caller drop and host restart so
+an exact retry reuses the same proposal. B1 does not expire or garbage-collect reservations; a
+later lifecycle packet may add an explicit terminal cleanup rule. Accepted-work inspection never
+returns a reservation. Allocation occurs inside the registry transaction and checks the candidate
+against every proposal and accepted record in every session document in the bound authority store;
+a generated collision is regenerated to a distinct UUIDv7 or fails closed before publication.
+
+The proposal fingerprint is the exact tuple of:
+
+- authority store ID and observed authority revision;
+- orchestration session, caller participant/backend, target backend, world ID/generation;
+- request ID, optional retained message ID, and optional unchanged host-transition correlation;
+- the complete validated dispatch request, including idempotency key, action, mode, exact typed
+  payload, and every optional identity field;
+- work family, plus the final typed transport-request commitment and every generated or resolved
+  transport identity that must be reused, including the ephemeral task member participant or the
+  retained active run/message/target; and
+- current policy ref, canonical `PolicySnapshotV3` hash, and policy revision captured before
+  submission.
+
+The durable internal proposal and registry schemas are:
+
+```rust
+enum ProposedWorldWorkIdentityV1 {
+    EphemeralTask,
+    RetainedTurn {
+        active_run_id: String,
+        message_id: String,
+        target_participant_id: String,
+    },
+}
+
+enum WorldWorkSubmissionIdentityV1 {
+    EphemeralTask {
+        validated_dispatch_request: ValidatedWorldDispatchRequestV1,
+        member_dispatch_request: MemberDispatchRequestV1,
+        canonical_execute_request_sha256: String,
+    },
+    RetainedTurn {
+        validated_dispatch_request: ValidatedWorldDispatchRequestV1,
+        canonical_member_turn_submit_request_sha256: String,
+    },
+}
+
+struct WorldWorkAcceptanceProposalV1 {
+    schema_version: u32,          // exactly 1
+    acceptance_context: WorldWorkAcceptanceContextV1,
+    authority_store_id: String,
+    authority_revision_observed: u64,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    proposed_work: ProposedWorldWorkIdentityV1,
+    submission_identity: WorldWorkSubmissionIdentityV1,
+    current_policy_snapshot_ref: PolicySnapshotRefV1,
+    current_policy_snapshot_hash: String,
+    current_policy_revision: String,
+    created_at: Timestamp,
+}
+
+struct WorldWorkReceiptRegistryStateV1 {
+    schema_version: u32,          // exactly 1
+    proposals_by_request_id: BTreeMap<String, WorldWorkAcceptanceProposalV1>,
+    records_by_acceptance_record_id: BTreeMap<String, WorldWorkAcceptanceRecordV1>,
+}
+```
+
+Each transport-request digest is lowercase SHA-256 over canonical JSON of a B1-local tagged input
+containing `domain = "substrate.b1.world-work-submission.v1"`, the exact
+`ValidatedWorldDispatchRequestV1`, and the complete final typed `ExecuteRequest` or
+`MemberTurnSubmitRequestV1` including its acceptance context. Canonical JSON recursively sorts
+object keys and preserves array order. This registry-local equality commitment is not a
+HostSessionAuthority commitment or hash domain, does not authenticate transition meaning, and is
+never logged as observability evidence. The raw task environment does not need a second durable
+copy in the proposal: the caller reconstructs the complete typed request, and exact retry proceeds
+only when its canonical digest matches.
+
+`PolicySnapshotRefV1` is not a new B1 policy-reference model. It is the existing exact
+HostSessionAuthority `AuthorityObjectRefV1` current-policy reference, required to have object kind
+`Policy`, retained unchanged under the B1-facing field name.
+
+Within one authority store, the durable proposal key is
+`(orchestration_session_id, request_id)`. An exact fingerprint match with an unaccepted proposal
+returns that stored proposal for transport submission. If the proposal already has its immutable
+accepted record, the exact retry returns that record without resubmitting transport or launching
+duplicate runtime work. Any mismatch, including a different proposed ID, message, active run,
+target, world, policy, or correlation, fails before transport submission or mutation. The current
+production paths always supply `host_transition_correlation = None`. A retained proposal allocates one
+`wwm_<lowercase UUIDv7>` message ID and reuses it on exact retry. The current V1 retained
+`active_run_id` is the exact `MemberTurnSubmitRequestV1.run_id`; request and active-run fields remain
+separately validated even when an existing caller supplies equal strings.
+
+For an ephemeral task, the registry allocates the `awm_<lowercase UUIDv7>` member participant and
+builds the complete `MemberDispatchRequestV1` and final `ExecuteRequest` before publishing the
+proposal. An unaccepted exact retry reuses that stored member-dispatch request, including the same
+participant, resolved runtime, prompt, world, run, backend, and lineage fields, reconstructs the
+final ExecuteRequest, and requires the same submission digest before transport. For a retained
+turn, the final `MemberTurnSubmitRequestV1` is built with the stored proposal/message/context before
+publication and its exact digest is required on retry. A changed idempotency key, action, mode,
+typed payload or rendered prompt, task member participant, runtime descriptor, command, CWD,
+environment, network/filesystem request, retained target, or any other typed submission field is a
+conflict before transport; B1 never silently allocates replacement transport identity for the same
+proposal.
+
+StateStore persists one versioned registry document per orchestration session at exactly
+`run/agent-hub/sessions/<orchestration_session_id>/world-work-receipt-registry-v1.json` beneath the
+already bound authority-store root. The document contains proposal reservations keyed by request ID
+and immutable acceptance records keyed by acceptance-record ID. Every mutation enters the retained
+StateStore transaction, loads and validates the complete registry document, checks acceptance-ID
+uniqueness across all session registry documents in that authority store, checks the exact scoped
+work-identity secondary key, and publishes one replacement document atomically. No separate index
+file, process-local registry, or multi-file update may participate in acceptance truth.
+
+The logical accepted-record primary key is
+`(authority_store_id, acceptance_record_id)`. The exact work-identity uniqueness key is
+`(authority_store_id, orchestration_session_id, AcceptedWorldWorkIdentityV1)`, including the enum
+discriminant so task and retained identities cannot alias. An acceptance-record ID may name only
+one complete record in the authority store, and one scoped runtime work identity may name only one
+acceptance-record ID. Inspection by acceptance-record ID scans the exact bound store and succeeds
+only for one record; zero or multiple matches fail closed. Inspection by work identity additionally
+requires the exact orchestration-session scope. Proposal-only, missing, ambiguous, cross-store, or
+stale-session lookups are not accepted work.
+
+`record_revision` is created at exactly `1`. The B1 acceptance record is immutable: exact retry
+returns the stored bytes and revision without rewriting timestamps or incrementing the revision;
+conflict performs no write. Thus the only B1 revision transition is absence to revision 1.
+Supervisor claims, journals, terminal state, and final active receipts use their own later revision
+domains and cannot mutate this acceptance anchor.
+
+The one-file creation transaction validates the proposal and every primary/secondary uniqueness
+constraint before adding the record. Concurrent exact creations converge to the same stored record;
+concurrent conflicting creations serialize to one winner and one fail-closed result. `accepted_at`
+and `runtime_acceptance.observed_at` are fixed by the winning first acknowledgement and are ignored
+only when deciding whether a later otherwise byte-identical acknowledgement is an exact retry; the
+stored timestamps are always returned unchanged.
+
+The live B1 acknowledgement choice is frozen to the first B0 `Start` frame for both current work
+families; `SubmissionAccepted` and `RegisteredFrame` remain reserved enum values and are not B1
+production sources:
+
+- `run_world_task`: world-service has successfully created the member runtime control before
+  emitting `Start`. The non-empty Start `span_id` is the exact `task_run_id`,
+  `runtime_submission_id`, and accepted task identity. The unchanged typed request must satisfy
+  `acceptance_context.request_id == MemberDispatchRequestV1.run_id == proposal.request_id`; any
+  substituted request context fails before persistence.
+- `continue_world_worker`: world-service has validated the exact retained target, reserved the turn
+  slot, successfully created runtime run control, registered the submitted turn, and retained the
+  unchanged request acceptance context before emitting `Start`. The Start `span_id` is the runtime
+  submission ID; `active_run_id` is the request's exact `run_id`, and message ID/retained target come
+  only from that retained typed context and typed request.
+
+For either family, Start must be frame sequence 1 on the response stream holding the same typed
+context. The record copies `stream_id` and `frame_sequence` from that frame and the proposed ID from
+the retained context. Task Start sets only `task_run_id`; retained Start sets only
+`active_run_id`, `message_id`, and `retained_participant_id`. A repeated Start, non-Start frame,
+Error, EOF, stream exhaustion, terminal frame, local request write, or process-spawn observation
+cannot create acceptance. Any mismatch in proposal, store/session/caller/backend/target/world,
+policy, work identity, retained message/target, stream, or frame identity fails before persistence.
+
+The policy ref and revision come from the exact pre-submission HostSessionAuthority observation.
+The snapshot hash is exactly the existing `ResolvedPolicySnapshot.snapshot_hash`: lowercase
+SHA-256 over the serialized canonical `PolicySnapshotV3` actually put on the task request or
+resolved for the retained submission before the request is sent. B1 does not define or recompute a
+second hash. It carries those three values unchanged through acknowledgement and never re-resolves
+policy afterward. These fields describe current submission policy only; they are not the E2
+immutable retained-worker cap or final receipt commitment.
+
 ## 3. `ActiveEphemeralTaskReceiptV1`
 
 ```rust
@@ -2700,8 +2874,9 @@ Rules:
 2. Fork inherits the source cap by default and may narrow further; it cannot broaden.
 3. Clean turn exit may park the worker. It must not delete retained identity or resume continuity.
 4. World generation mismatch makes the worker unroutable/invalidated; it does not silently rebind.
-5. `active_turn_ref` is a lifecycle reference updated atomically with B1 accepted-record creation
-   and supervisor closeout; RetainedWorkerRuntime does not own accepted-turn identity.
+5. `active_turn_ref` is a later RetainedWorkerRuntime lifecycle reference to the immutable B1
+   accepted record. B1 does not create, update, or close it; the later retained-lifecycle packet
+   owns that separate atomic lifecycle transition without mutating accepted-turn identity.
 
 ## 7. `DispatchPolicyNarrowingPatchV1`
 
