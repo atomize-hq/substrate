@@ -766,8 +766,14 @@ config:
                 &bootstrap_home,
             )
             .unwrap();
-        assert!(state_store.participants_dir().starts_with(&accepted_home));
-        assert!(!state_store.participants_dir().starts_with(&ambient_home));
+        assert_eq!(
+            state_store.bootstrap_home_identity(),
+            bootstrap_home.identity().unwrap()
+        );
+        assert_eq!(
+            state_store.bootstrap_home_identity().physical_path,
+            accepted_home.display().to_string()
+        );
 
         let retained = parent.path().join("retained");
         fs::rename(&accepted_home, &retained).unwrap();

@@ -994,6 +994,138 @@ pub(crate) struct AgentRuntimeStateStore {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct BoundAgentRuntimeStateStore {
+    store: AgentRuntimeStateStore,
+}
+
+#[allow(dead_code)]
+impl BoundAgentRuntimeStateStore {
+    pub(crate) fn bootstrap_home_identity(
+        &self,
+    ) -> &super::host_session_authority::schema::CanonicalDirectoryV1 {
+        self.store
+            .bootstrap_home
+            .as_ref()
+            .expect("bound StateStore always has a bootstrap-home identity")
+    }
+
+    pub(crate) fn persist_participant(
+        &self,
+        participant: &AgentRuntimeParticipantRecord,
+    ) -> Result<()> {
+        self.store.persist_participant(participant)
+    }
+
+    pub(crate) fn persist_orchestration_session(
+        &self,
+        session: &OrchestrationSessionRecord,
+    ) -> Result<()> {
+        self.store.persist_orchestration_session(session)
+    }
+
+    pub(crate) fn load_participant(
+        &self,
+        participant_id: &str,
+    ) -> Result<Option<AgentRuntimeParticipantRecord>> {
+        self.store.load_participant(participant_id)
+    }
+
+    pub(crate) fn list_invalidated_participants(
+        &self,
+    ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        self.store.list_invalidated_participants()
+    }
+
+    pub(crate) fn load_session(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<AgentRuntimeSessionRecord>> {
+        self.store.load_session(orchestration_session_id)
+    }
+
+    pub(crate) fn list_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
+        self.store.list_sessions()
+    }
+
+    pub(crate) fn load_active_ephemeral_world_task(
+        &self,
+        orchestration_session_id: &str,
+        task_run_id: &str,
+    ) -> Result<Option<ActiveEphemeralWorldTaskRecord>> {
+        self.store
+            .load_active_ephemeral_world_task(orchestration_session_id, task_run_id)
+    }
+
+    pub(crate) fn list_active_ephemeral_world_tasks(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<ActiveEphemeralWorldTaskRecord>> {
+        self.store
+            .list_active_ephemeral_world_tasks(orchestration_session_id)
+    }
+
+    pub(crate) fn load_inbox_item(
+        &self,
+        orchestration_session_id: &str,
+        item_id: &str,
+    ) -> Result<Option<DurableInboxItemRecord>> {
+        self.store
+            .load_inbox_item(orchestration_session_id, item_id)
+    }
+
+    pub(crate) fn list_inbox_items(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<DurableInboxItemRecord>> {
+        self.store.list_inbox_items(orchestration_session_id)
+    }
+
+    pub(crate) fn load_host_inbox_record(
+        &self,
+        record_id: &str,
+    ) -> Result<Option<HostInboxRecord>> {
+        self.store.load_host_inbox_record(record_id)
+    }
+
+    pub(crate) fn list_host_inbox_records(&self) -> Result<Vec<HostInboxRecord>> {
+        self.store.list_host_inbox_records()
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn list_host_inbox_record_ids(&self) -> Result<Vec<String>> {
+        self.store.list_host_inbox_record_ids()
+    }
+
+    pub(crate) fn load_obligation(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        self.store
+            .load_obligation(orchestration_session_id, obligation_id)
+    }
+
+    pub(crate) fn list_obligations(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        self.store.list_obligations(orchestration_session_id)
+    }
+
+    pub(crate) fn load_orchestration_session(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<OrchestrationSessionRecord>> {
+        self.store
+            .load_orchestration_session(orchestration_session_id)
+    }
+
+    pub(crate) fn list_orchestration_sessions(&self) -> Result<Vec<OrchestrationSessionRecord>> {
+        self.store.list_orchestration_sessions()
+    }
+}
+
+#[derive(Clone, Debug)]
 struct ResolvedPublicSessionAuthority {
     session: OrchestrationSessionRecord,
     participant: AgentRuntimeParticipantRecord,
@@ -1015,14 +1147,16 @@ impl AgentRuntimeStateStore {
     )]
     pub(crate) fn for_bootstrap_home(
         bootstrap_home: &super::OpenedBootstrapHomeV1<'_>,
-    ) -> Result<Self> {
+    ) -> Result<BoundAgentRuntimeStateStore> {
         let identity = bootstrap_home
             .identity()
             .map_err(|error| anyhow::anyhow!(error.to_string()))?
             .clone();
-        Ok(Self {
-            substrate_home: PathBuf::from(&identity.physical_path),
-            bootstrap_home: Some(identity),
+        Ok(BoundAgentRuntimeStateStore {
+            store: Self {
+                substrate_home: PathBuf::from(&identity.physical_path),
+                bootstrap_home: Some(identity),
+            },
         })
     }
 
@@ -7530,10 +7664,6 @@ mod tests {
             .expect("list accepted host inbox ids")
             .is_empty());
         assert!(store
-            .list_invalid_host_inbox_artifact_paths()
-            .expect("list accepted invalid host inbox paths")
-            .is_empty());
-        assert!(store
             .list_invalidated_participants()
             .expect("list accepted invalidated participants")
             .is_empty());
@@ -7565,24 +7695,21 @@ mod tests {
         fs::create_dir(&home).expect("create replacement home");
         fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
             .expect("secure replacement home");
-        fs::create_dir_all(store.participants_dir()).expect("seed replacement participants");
-        fs::create_dir_all(store.sessions_dir()).expect("seed replacement sessions");
-        write_atomic_json(
-            &store.participant_path(&participant.handle.participant_id),
-            &participant,
-        )
-        .expect("seed replacement participant");
-        write_atomic_json(
-            &store.orchestration_session_path(&session.orchestration_session_id),
-            &session,
-        )
-        .expect("seed replacement session");
+        let replacement_participants_dir = home.join("run/agent-hub/participants");
+        let replacement_sessions_dir = home.join("run/agent-hub/sessions");
+        let replacement_participant_path = replacement_participants_dir
+            .join(format!("{}.json", participant.handle.participant_id));
+        let replacement_session_path =
+            replacement_sessions_dir.join(format!("{}.json", session.orchestration_session_id));
+        fs::create_dir_all(&replacement_participants_dir).expect("seed replacement participants");
+        fs::create_dir_all(&replacement_sessions_dir).expect("seed replacement sessions");
+        write_atomic_json(&replacement_participant_path, &participant)
+            .expect("seed replacement participant");
+        write_atomic_json(&replacement_session_path, &session).expect("seed replacement session");
         let replacement_participant_bytes =
-            fs::read(store.participant_path(&participant.handle.participant_id))
-                .expect("read replacement participant");
+            fs::read(&replacement_participant_path).expect("read replacement participant");
         let replacement_session_bytes =
-            fs::read(store.orchestration_session_path(&session.orchestration_session_id))
-                .expect("read replacement session");
+            fs::read(&replacement_session_path).expect("read replacement session");
         let replacement_before = fs::read_dir(&home).unwrap().count();
 
         assert!(store
@@ -7607,7 +7734,6 @@ mod tests {
         assert!(store.load_host_inbox_record("host_bound").is_err());
         assert!(store.list_host_inbox_records().is_err());
         assert!(store.list_host_inbox_record_ids().is_err());
-        assert!(store.list_invalid_host_inbox_artifact_paths().is_err());
         assert!(store.list_invalidated_participants().is_err());
         assert!(store
             .load_obligation(&session.orchestration_session_id, "obligation_bound")
@@ -7623,11 +7749,11 @@ mod tests {
         assert_eq!(fs::read_dir(&home).unwrap().count(), replacement_before);
         assert!(!home.join("authority-v1").exists());
         assert_eq!(
-            fs::read(store.participant_path(&participant.handle.participant_id)).unwrap(),
+            fs::read(&replacement_participant_path).unwrap(),
             replacement_participant_bytes
         );
         assert_eq!(
-            fs::read(store.orchestration_session_path(&session.orchestration_session_id)).unwrap(),
+            fs::read(&replacement_session_path).unwrap(),
             replacement_session_bytes
         );
     }
