@@ -91,10 +91,11 @@ surface presentation-first. Do not redesign scheduling/adjudication unless separ
 
 VERIFICATION AND COMMIT
 1. Run packet-local tests, then the applicable family wall.
-2. Run `git diff --check`.
-3. Run `npx gitnexus detect-changes -r 97a0-substrate` before commit.
-4. Inspect staged diff and exclude unrelated changes.
-5. Commit atomically with a descriptive Conventional Commit message.
+2. Stage only the intended files with `git add -- <intended-files-only>`; leave unrelated dirt unstaged.
+3. Run `npx gitnexus detect-changes --scope staged -r 97a0-substrate`.
+4. Run `git diff --cached --check`.
+5. Inspect the complete staged diff with `git diff --cached`.
+6. Commit atomically with a descriptive Conventional Commit message.
 
 FRESH REVIEW WALL
 After the commit, dispatch a fresh built-in `default` subagent. The reviewer must read the selected

@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-C.1-SPEC` (ACTIVE, docs only; active packet: none)**
+Current phase: **`R6-C.1-CONTROLS` (ACTIVE; active packet: none)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -37,13 +37,13 @@ Hard decisions:
 - R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
   single-session scorer semantics.
 
-`R6-C.0A` is complete at `d3dcda785`: its seven authority defects were corrected and the remediation
-received fresh `REVIEW CLEAN`. The sole authorized current action is docs-only `R6-C.1-SPEC`: write
-and review the bounded SPEC/PLAN/TASKS for `R6-C.1 — Scorer Context Applicability Acceptance
-Controls`. Acceptance tests, production changes, replay closeout, R6 closure, and all R7/R8 work
-remain blocked. If the later controls pass, close the relevant exceptions without production
-changes. If a control fails, create only the bounded scorer-specific R6 gap packet that the failing
-witness proves necessary.
+`R6-C.0A` is complete at `d3dcda785`. The bounded `R6-C.1` SPEC/PLAN/TASKS landed through
+`ea19b39a7` and received final fresh `REVIEW CLEAN`, so `R6-C.1-SPEC` is complete. The sole authorized
+current action is the first row-atomic `R6-C.1-CONTROLS` acceptance control from those packet docs,
+before any production change. Replay closeout, gap execution, R6 closure, and all R7/R8 work remain
+blocked. If the controls pass, close the relevant exceptions without production changes. If a control
+fails, preserve its red witness; the later controls transition may activate only the bounded
+scorer-specific R6 gap route that the witness proves necessary.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

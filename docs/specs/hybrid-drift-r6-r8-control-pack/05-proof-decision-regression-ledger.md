@@ -1,8 +1,8 @@
 # Proof, Decision, And Regression Ledger
 
-**Ledger status:** ACTIVE — `R6-C.1-SPEC`
+**Ledger status:** ACTIVE — `R6-C.1-CONTROLS`
 
-**Verified against:** `d3dcda785d02b1cb98c27e4b701435fb3cebbf6c`
+**Verified against:** `ea19b39a7`
 
 ## Status Values
 
@@ -22,18 +22,18 @@
 | `CTX-R6-02` | `dead_end_thrash` true stall | PROVEN focused / OPEN integrated replay | Synthetic no-frontier-movement scorer control | Annotated real-rollout-derived true-stall positive score. | `R6-REPLAY` |
 | `CTX-R6-03` | `dead_end_thrash` regression | OPEN | Upstream progress regression only | Scorer-level regression disposition. | `R6-C.1` |
 | `CTX-R6-04` | Opaque delegated parent does not become child thrash | OPEN | Delegation/progress construction controls only | Scorer-level parent-visible/opaque control. | `R6-C.1` |
-| `CTX-R6-05` | Long autonomous vs many short conversational turns | DECISION | Turn/archetype construction tests | Material scorer A/B or proven upstream equivalence plus narrowed charter wording. | `R6-C.1` |
+| `CTX-R6-05` | Long autonomous vs many short conversational turns | OPEN control / decision locked | The landed [R6-C.1 packet SPEC](../r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md) locks equal scorer inputs and equal upstream progress to equal results across turn shapes; no behavioral result is recorded yet. | Execute the packet's exact equal-progress control; only unequal upstream `SessionProgress` may justify a difference. | `R6-C.1-CONTROLS` |
 | `CTX-R6-06` | Frozen four-case dead-end corpus | INVARIANCE / OPEN replay preservation | Three cleared final postures and one recovered sticky tail; canonical wording now limits the claim to posture invariance | Preserve through replay; do not call it comparative integrated improvement. | `R6-REPLAY` |
 | `CTX-R6-07` | `semantic_goal_drift` context applicability | PROVEN | Focused scorer/state tests prove replan, delegation, and internal routing; the separate live analyzer-path acceptance test proves only its 18 allowlisted fixtures | Preserve the cutover-complete disposition; no reopen absent a new failing witness. | `R6-CLOSE` |
 | `CTX-R6-08` | Semantic acceptance fixture integrity | PROVEN integrity, not behavior | The bounded corpus-shape test proves fixture integrity; the separate live analyzer-path test proves its bounded live-path behavior | Preserve the integrity-versus-live-path distinction; do not promote fixture integrity into scorer behavior proof. | `R6-CLOSE` |
 | `CTX-R6-09` | `truth_grounding_gap` no-action planning | OPEN | No exact control | No triggering action stays clear. | `R6-C.1` |
 | `CTX-R6-10` | Successful but ungrounded verification | OPEN | Ungrounded verification exists without explicit typed-success contrast | Outcome must not fabricate prior grounding. | `R6-C.1` |
 | `CTX-R6-11` | Truth grounding long-turn/delegation invariance | OPEN | No exact scorer controls | Long-turn and opaque-parent controls. | `R6-C.1` |
-| `CTX-R6-12` | Truth-path-touching action before read | DECISION | Current branch skips both grounded-read and ungrounded-action buckets | Decide and prove whether action implicitly grounds or is a gap; narrow responsibility wording if intentional. | `R6-C.1` |
-| `CTX-R6-13` | Actionful planning/research grounding obligation | DECISION | No archetype A/B | Prove action-bound archetype invariance or justify different expectation. | `R6-C.1` |
+| `CTX-R6-12` | Truth-path-touching action before read | OPEN control / decision locked | The landed [R6-C.1 packet SPEC](../r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md) locks the expected result at `80 / High / Active`, flagged, for truth-path action before any read; no behavioral result is recorded yet. | Execute the packet's exact action-before-read control and preserve PASS or red without changing production in CONTROLS. | `R6-C.1-CONTROLS` |
+| `CTX-R6-13` | Actionful planning/research grounding obligation | OPEN control / decision locked | The landed [R6-C.1 packet SPEC](../r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md) locks equal grounding obligation for equivalent planning/research and implementation actions; no behavioral result is recorded yet. | Execute the packet's exact archetype-equivalence control. | `R6-C.1-CONTROLS` |
 | `CTX-R6-14` | `wrong_plan_branch` read-only/replan/delegation | OPEN | Two explicit scope/recovery tests only | Three focused controls. | `R6-C.1` |
-| `CTX-R6-15` | Wrong-branch path-bearing action with empty authority | DECISION | Current scorer can emit a low-confidence raw-60 flag | Decide no-claim vs intentionally accepted low-confidence claim and prove it. | `R6-C.1` |
-| `CTX-R6-16` | `scoring/mod.rs` exact order | PROVEN source / not behavior-tested | Deterministic source sort proves exact order; the full analyzer suite proves live-path carriage, not exact ordering | Do not claim behavioral order proof; add a focused test only if `R6-C.1-SPEC` retains exact order as a closure contract. | `R6-C.1-SPEC`, `R6-CLOSE` |
+| `CTX-R6-15` | Wrong-branch path-bearing action with empty authority | OPEN control / decision locked | The landed [R6-C.1 packet SPEC](../r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md) locks no claim: `0 / Low / Cleared`, unflagged, with empty evidence; no behavioral result is recorded yet. | Execute the packet's exact empty-authority control and preserve PASS or red without changing production in CONTROLS. | `R6-C.1-CONTROLS` |
+| `CTX-R6-16` | `scoring/mod.rs` exact order | PROVEN source / not retained as behavioral closure contract | Deterministic source sort proves exact order; the landed [R6-C.1 packet SPEC](../r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md) explicitly declines to retain exact dispatcher order as a behavioral closure contract. | Add no focused ordering control unless later behavior evidence makes order load-bearing; do not claim behavioral order proof. | `R6-CLOSE` |
 | `CTX-R6-17` | R6 terminal disposition gate | OPEN for `R6-CLOSE` | The four terminal categories are now enforced across root/R6/R7 authority; ordinary “still open” is forbidden at closure | Complete the terminal table and reconcile the authority stack during `R6-CLOSE`; do not close it during planning. | `R6-CLOSE` |
 | `CTX-R6-18` | Historical pre-cutover status prose | PROVEN | The R6 MAP preliminary investigation and root 2026-07-04 status note are explicitly labeled historical/superseded | Preserve the labels; historical status must not override live posture. | `R6-C.0A` (complete) |
 
@@ -84,5 +84,6 @@ Complete this table during `R6-CLOSE`. Interim values are not closure values.
 
 | Date | Commit verified | Change |
 |---|---|---|
+| 2026-07-13 | `ea19b39a7` | Completed `R6-C.1-SPEC` after the artifact series `253e634fe`, `d3430eff3`, `58535df60`, `12f042f6b`, and `ea19b39a7` landed the packet docs and received final fresh `REVIEW CLEAN`; activated controls without claiming behavioral proof or creating a named gap subledger. |
 | 2026-07-13 | `d3dcda785` | Marked `R6-C.0A` complete after `959cc50cc` plus the final proof-attribution correction received fresh review clean; preserved the still-open R6 close/replay obligations. |
 | 2026-07-13 | `12934a77d` | Bootstrapped the ledger from live repo truth and the fresh R6 closure-matrix review. |

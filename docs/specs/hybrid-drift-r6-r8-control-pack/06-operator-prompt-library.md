@@ -303,11 +303,11 @@ result, current phase status, and the next eligible interaction.
 
 ## Current First Invocation
 
-The phase map identifies `R6-C.1-SPEC` as the sole active phase. Its default invocation is Prompt 1
+The phase map identifies `R6-C.1-CONTROLS` as the sole active phase. Its default invocation is Prompt 1
 with:
 
 ```text
-PHASE_ID: R6-C.1-SPEC
+PHASE_ID: R6-C.1-CONTROLS
 ACTIVE_PACKET: none
 ```
 

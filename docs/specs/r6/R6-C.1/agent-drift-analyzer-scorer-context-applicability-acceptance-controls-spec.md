@@ -1,8 +1,7 @@
 # R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **DRAFT / DOCS ONLY** on 2026-07-13. This SPEC/PLAN/TASKS family is the deliverable for
-`R6-C.1-SPEC`; it authorizes no test, fixture, or production-code edit until the docs lock is committed
-and independently review-clean. All controls remain open in the TASKS ledger.
+Status: **APPROVED / LANDED — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13.
+All controls remain open in the TASKS ledger.
 
 Authority order: the corrected
 [`R6` closure finding](../FINDINGS-r6-scorer-context-cutover-closure.md) owns the scorer applicability

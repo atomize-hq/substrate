@@ -1,7 +1,7 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **DRAFT / DOCS ONLY** on 2026-07-13. This plan is ordered and test-first. It does not
-authorize control implementation until the `R6-C.1-SPEC` docs lock is committed and review-clean.
+Status: **APPROVED / LANDED — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13.
+This plan is ordered and test-first.
 
 ## Plan Decisions
 

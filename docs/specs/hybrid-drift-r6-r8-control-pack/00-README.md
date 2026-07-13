@@ -4,9 +4,13 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-C.1-SPEC — Scorer Context Applicability Acceptance Controls docs`
+**Current work phase:** `R6-C.1-CONTROLS — Row-atomic scorer context applicability acceptance controls`
 
-**Last repo-truth verification:** `d3dcda785d02b1cb98c27e4b701435fb3cebbf6c`
+**Last repo-truth verification:** `ea19b39a7`
+
+The `R6-C.1` packet docs landed through `ea19b39a7` and received a final fresh `REVIEW CLEAN`.
+Acceptance controls only are now authorized; no production change, replay work, gap packet, R6 closeout,
+or R7/R8 work is authorized by this transition.
 
 ## Purpose
 

@@ -1,8 +1,9 @@
 # Authority And Status Map
 
-**Verified against:** `d3dcda785d02b1cb98c27e4b701435fb3cebbf6c`
+**Verified against:** `ea19b39a7`
 
-**Current phase:** `R6-C.1-SPEC` (**ACTIVE**, docs only; active packet: none)
+**Current phase:** `R6-C.1-CONTROLS` (**ACTIVE**; active packet authority:
+`docs/specs/r6/R6-C.1/`)
 
 ## How To Resolve Truth
 
@@ -23,7 +24,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Write and review the docs-only `R6-C.1` SPEC/PLAN/TASKS. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Add the first row-atomic acceptance control from the landed `docs/specs/r6/R6-C.1/` packet docs; make no production change first. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
@@ -34,7 +35,7 @@ Read in this order for active R6 work:
 1. `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`
 2. `docs/specs/r6/MAP.md`
 3. `docs/specs/r6/DESIGN-r6-scorer-cutover-and-objective-consumption.md`
-4. the active packet's SPEC/PLAN/TASKS
+4. the active packet authority in `docs/specs/r6/R6-C.1/`: its SPEC, PLAN, then TASKS
 5. root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md`
 6. the R6 section of `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
 

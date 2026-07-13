@@ -1,7 +1,8 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **OPEN / DOCS ONLY** on 2026-07-13. No control, test, fixture, production fix, replay, phase
-transition, or closure task is complete. Check boxes change only after exact live proof is recorded.
+Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. Only the
+specification-lock task is complete. Every control, replay, conditional-gap, production-fix, phase-close,
+and closure task remains open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
 
@@ -62,7 +63,7 @@ before that reconciled transition is committed and fresh-review-clean.
 
 ## R6-C.1.0 — Specification Lock
 
-- [ ] **R6-C.1.0.1 — Commit and independently review this SPEC/PLAN/TASKS family.**
+- [x] **R6-C.1.0.1 — Commit and independently review this SPEC/PLAN/TASKS family.**
   - Acceptance: all required controls have exact names, inputs, expected dispositions, fixture choices,
     focused commands, and conditional routes; `CTX-R6-01` through `CTX-R6-16` ownership is honest;
     docs-focused checks and fresh review are clean.
@@ -77,6 +78,19 @@ before that reconciled transition is committed and fresh-review-clean.
     reviewer until clean. The separate transition update may then mark `R6-C.1-SPEC` complete and activate
     `R6-C.1-CONTROLS`; it must apply the Required Phase-Transition Authority Manifest, receive its own
     fresh `REVIEW CLEAN` before control work starts, and must not mark controls complete.
+
+  - Result (2026-07-13): the artifact commit series `253e634fe`, `d3430eff3`, `58535df60`,
+    `12f042f6b`, and `ea19b39a7` landed the three packet docs and their review fixes. The final fresh
+    independent review of `ea19b39a7` returned `REVIEW CLEAN`. Docs coverage and cross-link checks were
+    `PASS`. Targeted scorer/checkpoint checks were `PASS` for
+    `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`,
+    `cargo test -p agent-drift-analyzer truth_grounding_gap -- --nocapture`,
+    `cargo test -p agent-drift-analyzer wrong_plan_branch -- --nocapture`, and
+    `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
+    `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
+    changed in that artifact series.
+  - Sole next action: execute `R6-C.1.1.1`, the first row-atomic `R6-C.1-CONTROLS` acceptance control.
+    Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
