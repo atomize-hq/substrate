@@ -64,6 +64,11 @@ none is red. It does not close R6.
 8. **Phase transitions are exclusive.** No `R6-GAP-*` phase runs while `R6-C.1-CONTROLS` remains
    active. Every red matrix row gets a distinct named gap phase. Gap phases transition sequentially in
    matrix/family order; the final review-clean gap transitions to `R6-REPLAY`.
+9. **A later gap may close with proof instead of production churn.** If an earlier sequential gap commit
+   also turns a later gap's exact preserved witness green, the later gap still activates in order and owns
+   a no-code proof receipt. Rerun its exact row and family controls, cite the earlier causal commit, commit
+   and freshly review the result/ledger reconciliation, and only then perform the normal transition. Do
+   not edit production unnecessarily, or silently delete, merge, or relabel the named gap or witness.
 
 ## Acceptance Control Matrix
 
@@ -134,6 +139,14 @@ of that family's row commits are independently review-clean. Replay commands, in
 - Each red row owns one distinct gap phase. A review-clean gap transitions to the next named red gap; the
   final review-clean gap transitions to `R6-REPLAY`. Gap phases never batch independent failures and do
   not reactivate `R6-C.1-CONTROLS`.
+- When an earlier gap fix also makes a later sequential gap's exact preserved witness green, activate the
+  later gap normally but make no production edit. Rerun that exact row test and the owning scorer-family
+  controls, record the earlier causal commit in the gap TASKS/receipt and changed ledger row, stage only
+  those result/ledger docs, run the staged commit gate, commit the no-code proof receipt/status
+  reconciliation, and obtain fresh independent review. Preserve the named gap and original witness; do
+  not silently delete or merge either. The receipt commit leaves that gap active and activates no
+  successor. Only after the receipt is review-clean may the separate normal transition commit activate
+  the next gap or `R6-REPLAY`.
 - Run `npx gitnexus impact <symbol> -r 97a0-substrate --direction upstream --depth 3` before any later
   indexed-symbol edit. Warn/stop on HIGH or CRITICAL impact.
 - Before every commit, run the exact staged gate below. `<intended-files-only>` must exclude unrelated
@@ -145,6 +158,40 @@ npx gitnexus detect-changes --scope staged -r 97a0-substrate
 git diff --cached --check
 git diff --cached
 ```
+
+## Phase-Transition Authority Manifest
+
+Every `SPEC -> CONTROLS`, `CONTROLS -> first GAP or REPLAY`, and
+`GAP -> next GAP or REPLAY` transition is one reconciled authority update. The transition commit must
+update these exact active-phase mirrors together:
+
+| Authority surface | Exact fields / wording that move together |
+|---|---|
+| Packet tasks and results | The active packet's TASKS status/check box, exact row or phase result wording, proof receipt, completed phase, and next authorized phase/action. For a gap, this includes its named preserved witness and route; a no-code receipt records the earlier causal commit. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md` | `Current work phase` and `Last repo-truth verification`. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/01-authority-and-status-map.md` | `Verified against`, `Current phase`, and the R6 `Current Status` row's `Status` and `Next allowed action`. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/02-phase-and-gate-map.md` | The `Master Sequence` status cells for the completed and newly active phases, plus their entry/exit-gate wording when the recorded proof changes a gate. Exactly one phase is `ACTIVE`. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` | `Ledger status`, `Verified against`, the status/evidence/remaining-proof/owner cells of only the `CTX-R6-*` rows whose actual evidence changed, and the `Update Record` verified commit. Do not rewrite unaffected row evidence. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/06-operator-prompt-library.md` | `Current First Invocation`: its current-phase sentence plus `PHASE_ID` and `ACTIVE_PACKET`. |
+| Root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md` | `Status`, `Current phase`, completed/current task wording, and sole next-authorized action/check box. |
+| Canonical R6 finding/MAP and landing order | Update `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, `docs/specs/r6/MAP.md`, and `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md` only when actual control or gap evidence changes their proof, status, or next-action wording. |
+
+The three transition-specific result locks are:
+
+1. **`R6-C.1-SPEC -> R6-C.1-CONTROLS`:** packet TASKS records the docs lock and fresh review clean;
+   `R6-C.1-SPEC` becomes complete and `R6-C.1-CONTROLS` becomes the sole active phase. No control row is
+   promoted without actual test output.
+2. **`R6-C.1-CONTROLS -> first R6-GAP-* or R6-REPLAY`:** every synthetic row has a committed PASS or
+   preserved red result; controls become complete; the first red route in matrix/family order becomes
+   active, or `R6-REPLAY` becomes active when no row is red.
+3. **Active `R6-GAP-* -> next R6-GAP-* or R6-REPLAY`:** the named gap has a committed, fresh-review-clean
+   fix or no-code proof receipt; that gap becomes complete and exactly the next red route, or final
+   `R6-REPLAY`, becomes active.
+
+Do not churn unchanged semantic authority, but do not leave any active-phase mirror stale: every mirror
+listed above must agree on the one active phase, completed predecessor, verification commit, and next
+action. No next-phase work may start until the reconciled transition commit itself receives fresh
+independent `REVIEW CLEAN`.
 
 ## Full R6 Ledger Coverage
 

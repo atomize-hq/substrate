@@ -36,6 +36,10 @@ authorize control implementation until the `R6-C.1-SPEC` docs lock is committed 
 11. Before every commit, stage only intended files and lock GitNexus and review to that staged diff:
     `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, then
     `git diff --cached --check`, then complete staged-diff inspection.
+12. A later sequential gap whose exact preserved witness was already made green by an earlier gap commit
+    closes through a no-code proof receipt, not compensating production churn. It still activates in
+    matrix/family order, cites the earlier causal commit, reruns the exact row and family controls, commits
+    and freshly reviews result/ledger reconciliation, and then uses the normal separate transition.
 
 ## Dependency Graph
 
@@ -54,7 +58,7 @@ R6-C.1-SPEC docs lock + fresh review
        -> transition commit ends CONTROLS
             -> no red rows: activate R6-REPLAY
             -> red rows: activate first named R6-GAP-* phase
-                 -> fix + fresh review
+                 -> fix or no-code proof receipt + fresh review
                  -> transition to next named R6-GAP-* phase
                  -> ...
                  -> final review-clean gap transitions to R6-REPLAY
@@ -77,6 +81,36 @@ The final command is a complete staged-diff inspection, not a working-tree appro
 stays unstaged. Do not substitute unscoped `detect-changes`, `git diff --check`, or an unstaged diff for a
 commit gate.
 
+## Phase-Transition Authority Manifest
+
+Use this exact manifest for `SPEC -> CONTROLS`, `CONTROLS -> first GAP or REPLAY`, and
+`GAP -> next GAP or REPLAY`. Each transition commit reconciles all active-phase mirrors together:
+
+| Surface | Required transition fields |
+|---|---|
+| Active packet TASKS/results | Status/check box, exact row or phase result, proof receipt, completed phase, and next authorized phase/action; retain every named red witness/route and cite the earlier causal commit for a no-code gap receipt. |
+| Control pack `00-README.md` | `Current work phase`; `Last repo-truth verification`. |
+| Control pack `01-authority-and-status-map.md` | `Verified against`; `Current phase`; R6 `Current Status` row `Status` and `Next allowed action`. |
+| Control pack `02-phase-and-gate-map.md` | `Master Sequence` status cells for predecessor and successor, plus entry/exit gates only when proof changes them; exactly one `ACTIVE`. |
+| Control pack `05-proof-decision-regression-ledger.md` | `Ledger status`; `Verified against`; status/evidence/remaining-proof/owner cells for only actually changed `CTX-R6-*` rows; `Update Record` verified commit. Never churn unchanged row evidence. |
+| Control pack `06-operator-prompt-library.md` | `Current First Invocation` sentence, `PHASE_ID`, and `ACTIVE_PACKET`. |
+| Root `SPEC.md`, `tasks/plan.md`, `tasks/todo.md` | `Status`; `Current phase`; completed/current task wording; sole next-authorized action/check box. |
+| Canonical R6 proof/status docs, conditional | Change `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, `docs/specs/r6/MAP.md`, and `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md` only if actual control/gap evidence changes their proof, status, or next-action wording. |
+
+Transition result locks:
+
+- **SPEC -> CONTROLS:** record docs-lock completion and fresh review clean; mark `R6-C.1-SPEC`
+  complete and only `R6-C.1-CONTROLS` active. Do not invent a control result.
+- **CONTROLS -> GAP/REPLAY:** record every deterministic row result; mark controls complete; activate only
+  the first red route in matrix/family order, or `R6-REPLAY` when every row is green.
+- **GAP -> GAP/REPLAY:** require the active gap's committed, fresh-review-clean fix or no-code receipt;
+  close it and activate only the next red route or, after the final gap, `R6-REPLAY`.
+
+Do not churn unchanged semantic authority. Nevertheless, every active-phase mirror in this manifest must
+agree on the active phase, completed predecessor, verification commit, and next action. No successor work
+starts until the reconciled transition commit passes the staged commit gate and a fresh independent review
+says `REVIEW CLEAN`.
+
 ## Ordered Execution
 
 ### R6-C.1.0 — Docs Lock
@@ -86,7 +120,9 @@ commit gate.
   inventory.
 - Run the staged commit gate above and dispatch a fresh built-in `default` reviewer.
 - Fix docs findings in a new docs-only commit and repeat with a fresh reviewer until clean.
-- Transition authority may activate `R6-C.1-CONTROLS` only after that review-clean docs commit.
+- Transition authority may activate `R6-C.1-CONTROLS` only after that review-clean docs commit. The
+  separate transition must apply the full authority manifest and receive its own fresh `REVIEW CLEAN`
+  before the first control row starts.
 
 **Atomic boundary:** one docs commit; no root/control-pack status edit is part of the authoring batch.
 
@@ -199,8 +235,11 @@ For the one named gap that is active:
 
 1. Use only its preserved witness, owning scorer, directly relevant upstream context, and one regression
    pattern. Exclude R7 and unrelated scorers.
-2. Before editing, run only the active scorer command below plus a separate exact-symbol impact command
-   for every directly relevant upstream function the gap proposes to edit:
+2. Before proposing any edit, rerun the gap's exact preserved row test and its owning scorer-family
+   controls. If the row is already green because an earlier sequential gap commit changed the shared
+   seam, take the no-code closure path below. Otherwise run only the active scorer impact command below
+   plus a separate exact-symbol impact command for every directly relevant upstream function the gap
+   proposes to edit:
 
 ```bash
 npx gitnexus impact score_dead_end_thrash -r 97a0-substrate --direction upstream --depth 3
@@ -216,6 +255,15 @@ npx gitnexus impact score_wrong_plan_branch -r 97a0-substrate --direction upstre
    reviewer. Fix findings in a new gap-scoped commit and repeat fresh review until clean.
 7. In a separate staged and reviewed transition commit, close this gap and activate the next named red gap.
    When this is the final gap, activate `R6-REPLAY`.
+
+**No-code closure path:** the gap remains a distinct active phase and its preserved witness remains in
+history. Rerun the exact row test and owning family controls; record their actual output and the earlier
+causal commit in the active gap TASKS/proof receipt and only the corresponding changed ledger evidence;
+stage only those result/ledger docs; run the staged commit gate; commit the no-code proof receipt/status
+reconciliation; and obtain fresh built-in `default` review until clean. Do not touch production merely to
+give the later gap its own code diff, and do not silently delete, merge, or relabel the gap or witness.
+The receipt commit leaves that gap active and activates no successor. Only then run the normal separate
+transition commit and review.
 
 **No batching and no overlap:** one scorer/failure seam is one active phase. `R6-C.1-CONTROLS` is already
 complete and is never active alongside a gap.
@@ -246,9 +294,9 @@ replaced in replay selection; they do not create a production gap.
 | Docs lock | These three docs; phase transition separately marks `R6-C.1-SPEC` complete and `R6-C.1-CONTROLS` active. No control result changes. |
 | Matrix-row commit | Only the one test row, its TASKS result, and its `CTX-R6-*` result wording justified by exact output. Fresh review before the next row. |
 | Family checkpoint | Aggregate only review-clean row results; no batched witness commit or production edit. |
-| Controls transition | Mark `R6-C.1-CONTROLS` complete; activate first named red gap, or `R6-REPLAY` if none is red. |
-| Active gap | Owning gap docs/code/control row and actual proof receipts only. No other gap and no terminal scorer disposition. |
-| Gap transition | Close only the review-clean active gap; activate the next named gap or, after the final gap, `R6-REPLAY`. |
+| Controls transition | Apply the full transition manifest; mark `R6-C.1-CONTROLS` complete; activate first named red gap, or `R6-REPLAY` if none is red. |
+| Active gap | Owning gap docs/code/control row and actual proof receipts only. If an earlier fix already made its witness green, use the no-code receipt path and cite that causal commit. No other gap and no terminal scorer disposition. |
+| Gap transition | After a fresh-review-clean fix or no-code receipt, apply the full transition manifest; close only the active gap; activate the next named gap or, after the final gap, `R6-REPLAY`. |
 | Replay / close | `CTX-R6-01`/`02`/`06` remain `R6-REPLAY`; terminal scorer disposition remains `R6-CLOSE`. |
 
 ## Full R6 Ledger Coverage
