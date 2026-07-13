@@ -856,6 +856,81 @@ fn dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activit
 }
 
 #[test]
+fn dead_end_thrash_retains_medium_confidence_for_partial_parent_visible_activity() {
+    let mut spawn = row(
+        1,
+        CompactionKind::ToolCall,
+        "{\"goal\":\"fix packet R5-4\"}",
+    );
+    spawn.dedupe_identity = Some(
+        "{\"call_id\":\"call-spawn\",\"name\":\"spawn_agent\",\"type\":\"function_call\"}"
+            .to_string(),
+    );
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Coordinate delegated findings without claiming child execution progress.",
+        ),
+        spawn,
+        tool_row(
+            2,
+            "printf 'child rollout ' && sed -n '1,40p' /Users/spensermcconnell/.codex/sessions/2026/06/08/rollout-2026-06-08T12-00-00-019ea111-1111-7111-8111-111111111111.jsonl",
+        ),
+        tool_row(
+            3,
+            "cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            4,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze partial parent-visible dead-end-thrash bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints
+        .last()
+        .expect("partial parent-visible checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("partial parent-visible session progress");
+    let thrash = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(progress.status, ProgressStatus::Mixed);
+    assert_eq!(progress.confidence, Confidence::Medium);
+    assert!(progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited));
+    assert_eq!(
+        (
+            thrash.raw_score,
+            thrash.confidence,
+            thrash.state,
+            thrash.flagged,
+            thrash.evidence.len(),
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false, 0),
+    );
+}
+
+#[test]
 fn dead_end_thrash_scores_equal_progress_equally_across_turn_shapes() {
     let mut rows = vec![
         row(
