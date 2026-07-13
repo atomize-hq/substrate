@@ -1,16 +1,13 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
-specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, reviewed
-`dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` / both `CTX-R6-11`
-truth-grounding focused controls plus the `CTX-R6-12` truth-path-action and `CTX-R6-13`
-archetype-equivalence controls, reviewed `truth_grounding_gap` family checkpoint, and all three
-`CTX-R6-14` read-only-exploration, sanctioned-replan-scope, and opaque-parent controls plus the
-`CTX-R6-15` empty-authority control and reviewed `wrong_plan_branch` family checkpoint are complete;
-`CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15` are preserved reds requiring
+specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
+controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
+preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
 `R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
-`R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. All remaining controls, replay, conditional-gap,
-production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
+`R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. Only the narrow `R6-C.1.4.2` transition remains in
+`R6-C.1-CONTROLS`; replay, conditional-gap, production-fix, phase-close, and closure work remains
+open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
 
@@ -97,8 +94,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.4.1`, the controls wall. Do not start replay, a gap
-    packet, or a production change first.
+  - Sole next authorized action: execute `R6-C.1.4.2`, the narrow controls-to-first-gap transition.
+    Do not start replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
@@ -337,7 +334,7 @@ before that reconciled transition is committed and fresh-review-clean.
 
 ## R6-C.1.4 — Controls Wall And Transition
 
-- [ ] **R6-C.1.4.1 — Run the controls wall and preserve every deterministic result.**
+- [x] **R6-C.1.4.1 — Run the controls wall and preserve every deterministic result.**
   - Prerequisite: all thirteen synthetic matrix-row commits are independently review-clean.
   - Verify:
     - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`
@@ -346,6 +343,15 @@ before that reconciled transition is committed and fresh-review-clean.
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
   - Acceptance: every synthetic control is PASS or a committed red witness; no result is inferred from
     source or construction proof.
+  - Result (2026-07-13): `COMPLETE — EXPECTED PRESERVED REDS ONLY`. The exact `dead_end_thrash`
+    command exited `101`; the acceptance fixture reported `1 passed`, and the family test binary
+    reported `16 passed; 1 failed`, with only the already-preserved `CTX-R6-04` red. The exact
+    `truth_grounding_gap` command exited `101` with `9 passed; 1 failed`, with only the
+    already-preserved `CTX-R6-12` red. The exact `wrong_plan_branch` command exited `101` with
+    `5 passed; 1 failed`, with only the already-preserved `CTX-R6-15` red. The exact `checkpoints`
+    command exited `0`; all matching tests passed across unit (`35 passed`), integration (`131
+    passed`), and export-bundle match (`1 passed`) coverage. No new witness was found and no
+    production code changed.
 
 - [ ] **R6-C.1.4.2 — End `R6-C.1-CONTROLS` and activate exactly one next phase.**
   - Acceptance: order red routes by matrix/family order. The narrow transition commit marks
@@ -364,9 +370,14 @@ before that reconciled transition is committed and fresh-review-clean.
   - Boundary: never leave `R6-C.1-CONTROLS` and any `R6-GAP-*` simultaneously active. Do not execute a
     gap before the transition is committed and review-clean.
 
-- [ ] **R6-C.1.4.3 — Preserve dispatcher adjudication (`CTX-R6-16`).**
+- [x] **R6-C.1.4.3 — Preserve dispatcher adjudication (`CTX-R6-16`).**
   - Acceptance: exact order remains deterministic source/infrastructure proof only. Add no focused order
     test unless later behavior evidence makes order load-bearing. Do not call the family wall order proof.
+  - Result (2026-07-13): `COMPLETE — SOURCE-ONLY ADJUDICATION PRESERVED`. The explicit dispatcher
+    sort in `crates/agent-drift-analyzer/src/scoring/mod.rs` still deterministically orders
+    `WrongPlanBranch`, `TruthGroundingGap`, `DeadEndThrash`, then `SemanticGoalDrift`. This remains
+    source/infrastructure proof only; no focused dispatcher-order test was added, and the family wall is
+    not treated as order proof.
 
 ## R6-C.1.5+ — Conditional Gap Phases
 
