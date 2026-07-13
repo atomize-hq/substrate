@@ -1,10 +1,10 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
-specification-lock task and `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls are complete;
-`CTX-R6-04` is a preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay,
-conditional-gap, production-fix, phase-close, and closure tasks remain open until exact live proof is
-recorded.
+specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, and reviewed
+`dead_end_thrash` family checkpoint are complete; `CTX-R6-04` is a preserved red requiring
+`R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay, conditional-gap, production-fix,
+phase-close, and closure tasks remain open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
 
@@ -91,8 +91,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.1.4`, the reviewed `dead_end_thrash` family
-    checkpoint. Do not start another row, replay, a gap packet, or a production change first.
+  - Sole next authorized action: execute `R6-C.1.2.1`, the `CTX-R6-09` no-action-planning control.
+    Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
@@ -146,11 +146,17 @@ before that reconciled transition is committed and fresh-review-clean.
     `20 / Medium / HistoricalOnly` scores, unflagged, with no repeated-verification evidence. No
     `R6-GAP-DET-TURN-EQUIVALENCE` route is required.
 
-- [ ] **R6-C.1.1.4 — Run the reviewed `dead_end_thrash` family checkpoint.**
+- [x] **R6-C.1.1.4 — Run the reviewed `dead_end_thrash` family checkpoint.**
   - Prerequisite: all three row commits above are independently review-clean.
   - Verify: `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`.
   - Acceptance: aggregate only reviewed row results; do not batch witnesses, edit production, or replace
     any row's commit/review boundary.
+  - Result (2026-07-13): `COMPLETE — DETERMINISTIC REVIEWED-FAMILY AGGREGATION`. The exact command
+    exited `101`. Its aggregate output included the acceptance fixture with `1 passed` and the
+    `dead_end_thrash` test binary with `16 passed; 1 failed`. The sole failure was the already-preserved
+    `CTX-R6-04` confidence mismatch: actual `0 / Medium / Cleared`, unflagged, with empty evidence,
+    versus expected `0 / Low / Cleared`. `CTX-R6-03` and `CTX-R6-05` passed. No new witness was found,
+    no production code changed, and `R6-C.1-CONTROLS` remains active.
 
 ## R6-C.1.2 — `truth_grounding_gap` Rows
 
