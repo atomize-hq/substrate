@@ -2515,8 +2515,9 @@ The reservation is stored before transport submission and survives caller drop a
 an exact retry reuses the same proposal. B1 does not expire or garbage-collect reservations; a
 later lifecycle packet may add an explicit terminal cleanup rule. Accepted-work inspection never
 returns a reservation. Allocation occurs inside the registry transaction and checks the candidate
-against every proposal and accepted record in every session document in the bound authority store;
-a generated collision is regenerated to a distinct UUIDv7 or fails closed before publication.
+against every proposal and accepted record across all session states in the single store-wide
+registry document; a generated collision is regenerated to a distinct UUIDv7 or fails closed before
+publication.
 
 The proposal fingerprint is the exact tuple of:
 
@@ -2574,10 +2575,15 @@ struct WorldWorkAcceptanceProposalV1 {
     created_at: Timestamp,
 }
 
-struct WorldWorkReceiptRegistryStateV1 {
+struct WorldWorkReceiptRegistrySessionStateV1 {
     schema_version: u32,          // exactly 1
     proposals_by_request_id: BTreeMap<String, WorldWorkAcceptanceProposalV1>,
     records_by_acceptance_record_id: BTreeMap<String, WorldWorkAcceptanceRecordV1>,
+}
+
+struct WorldWorkReceiptRegistryStateV1 {
+    schema_version: u32,          // exactly 1
+    sessions_by_id: BTreeMap<String, WorldWorkReceiptRegistrySessionStateV1>,
 }
 ```
 
@@ -2618,14 +2624,66 @@ environment, network/filesystem request, retained target, or any other typed sub
 conflict before transport; B1 never silently allocates replacement transport identity for the same
 proposal.
 
-StateStore persists one versioned registry document per orchestration session at exactly
-`run/agent-hub/sessions/<orchestration_session_id>/world-work-receipt-registry-v1.json` beneath the
-already bound authority-store root. The document contains proposal reservations keyed by request ID
-and immutable acceptance records keyed by acceptance-record ID. Every mutation enters the retained
-StateStore transaction, loads and validates the complete registry document, checks acceptance-ID
-uniqueness across all session registry documents in that authority store, checks the exact scoped
-work-identity secondary key, and publishes one replacement document atomically. No separate index
-file, process-local registry, or multi-file update may participate in acceptance truth.
+`WorldWorkReceiptRegistry` persists one store-wide versioned document at exactly
+`run/agent-hub/world-work-receipt-registry-v1.json` beneath the already bound activated authority
+store. This fixed path is deliberately outside the legacy `sessions` and `participants` collections:
+placing a receipt below either collection would correctly make the next HostSessionAuthority
+preflight reject the root as unsupported pre-A1 authority state. The document contains one
+session-keyed state for each orchestration session; each session state contains proposal
+reservations keyed by request ID and immutable acceptance records keyed by acceptance-record ID.
+The outer session key must exactly equal every contained proposal/record session ID. Every mutation
+loads and validates the complete store-wide document, checks acceptance-ID and retained-message
+uniqueness across every session, checks the exact scoped work-identity secondary key, and publishes
+one replacement document atomically. No separate index file, per-session file, process-local
+registry, multi-file update, dual write, fallback write, or side table may participate in acceptance
+truth.
+
+Receipt semantics stay above the physical store. `WorldWorkReceiptRegistry` alone parses and
+validates `WorldWorkReceiptRegistryStateV1`, allocates identities, decides exact retry versus
+conflict, performs inspection, and supplies canonical JSON bytes. It uses the existing canonical
+JSON rules and B1-local submission hashes unchanged; the physical layer treats registry bytes as
+opaque and does not add a HostSessionAuthority commitment/hash domain or interpret a receipt.
+Malformed canonical bytes, unknown fields/variants, invalid session keys, duplicate identities, or
+semantic inconsistency fail before publication.
+
+The HostSessionAuthority store exposes one additive physical capability, conceptually
+`WorldWorkReceiptRegistryStorageV1`, bound to the exact `CanonicalDirectoryV1` physical root and
+`authority_store_id` observed during exact resolution. Its public operation surface is restricted to
+read the fixed registry document, atomically replace that document, and finish/revalidate the
+transaction; it has no caller-selected collection/path, removal, authority-root CAS, typed-object,
+key, intent, journal, or session-authority operation. `AgentRuntimeStateStore` and
+`BoundAgentRuntimeStateStore` do not gain a generic post-activation writer. Root replacement/rebind,
+wrong store identity, non-`ValidExisting` activation posture, unsafe/malformed receipt path state, or
+an otherwise invalid retained capability fails before receipt mutation and leaves the observed tree
+untouched. A later valid HostSessionAuthority root revision does not itself stale this store-bound
+capability: the transaction re-reads the current root under lock and requires the same physical root
+and store ID. B1 never changes `StateRootV1`, `root_revision`, or `authority_revision`; proposal and
+record fields retain the exact authority revision observed before submission. The only B1 accepted
+record transition remains absence to immutable `record_revision = 1`; no additional physical or
+registry revision counter is introduced.
+
+Lock ordering is fixed. A receipt transaction opens and revalidates the trusted root against the
+capability, acquires the existing cross-process `authority-v1/lock/root.lock` first, validates and
+reconciles canonical authority-store temps, completes `ValidExisting` semantic preflight, verifies
+the locked root's store ID, then opens/reconciles the fixed receipt file and runs the registry
+operation. It never takes the process-local StateStore snapshot mutex and never nests another
+authority transaction. The same root lock is held through registry validation, temp-file sync,
+same-directory atomic replacement, directory/root sync, final root/file revalidation, and release.
+
+Receipt crash reconciliation is namespace-specific and also runs under that root lock. Publication
+writes canonical bytes to a same-directory temp named only
+`world-work-receipt-registry-v1--<32 lowercase hex>.tmp`, syncs it, revalidates the retained root,
+atomically replaces `world-work-receipt-registry-v1.json`, syncs the containing directories, reopens
+and byte-validates the final file, and only then releases the lock. On entry, an entry using the
+receipt-temp prefix but not the exact grammar, a non-regular exact-name entry, or a no-follow or
+retained-identity revalidation failure is unsafe and fails closed without cleanup. Every safely
+opened regular file with the exact receipt-temp grammar is non-authoritative interrupted publication
+state and is removed without parsing or validating its bytes before the final registry document is
+read; unrelated `run/agent-hub` entries remain untouched. A crash therefore leaves either the old
+complete file or the new complete file plus at most an exact-name non-authoritative temp. The next
+exact semantic retry reloads the survivor and either joins the committed proposal/record or reapplies
+the missing mutation; it never infers acceptance from a temp. The existing legacy writer remains
+rejected after initialization or activation and is neither called nor weakened by this capability.
 
 The logical accepted-record primary key is
 `(authority_store_id, acceptance_record_id)`. The exact work-identity uniqueness key is

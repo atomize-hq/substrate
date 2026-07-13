@@ -190,6 +190,26 @@ not dependency-ready.
 | WorldCommandExecutionBroker | existing world-service execution, guard, overlay/full-isolation/Landlock/network primitives; no UAA per-operation broker; Codex gateway currently enables external-sandbox bypass | `MissingSeam` | no | no | no | Interpose on every world-UAA shell/edit/write/MCP/tool/process/network side effect; execute under the envelope's `PolicySnapshotV3`; disable or reject unbrokerable channels. | WorldRuntimeAdapterExecutionEnvelope; EffectivePolicyResolver; RuntimeFamilyRealizationAdapter; world-service enforcement |
 | RuntimeFamilyRealizationAdapter | `crates/gateway/src/adapter_runtime.rs`; UAA/client construction in shell and world-service; provider-specific session/output handling; managed gateway already accepts one-time FD auth independently of the direct member path | `UsefulFootholdButWrongBoundary` | no | not applicable | no | Keep only provider mechanics; consume Substrate-owned envelope/config/policy/receipt plus the existing in-world gateway endpoint/session inputs. Point Codex/provider traffic at that gateway; never receive raw host credentials or read the secure handoff FD. Remove lifecycle, binding, sandbox-authority, and credential-authority decisions from family adapters; copied credentials remain named/logged compatibility only. | WorldRuntimeAdapterExecutionEnvelope; AgentConfigProjectionService; WorldCommandExecutionBroker; RetainedWorkerRuntime |
 
+### B1 activated-store ownership correction
+
+The `WorldWorkReceiptRegistry`, `HostSessionAuthority`, and `StateStore` rows remain distinct during
+B1. `WorldWorkReceiptRegistry` is the sole semantic owner of proposal and acceptance schemas,
+validation, exact-retry joins, conflict rejection, and exact inspection. The HostSessionAuthority
+store supplies only a receipt-namespace-scoped physical transaction over the retained trusted root:
+exact root/store binding, the existing cross-process lock, activated-store preflight, no-follow
+handles, crash-safe publication, and interrupted-publication reconciliation. StateStore may carry or
+construct the receipt owner at the production integration boundary, but neither
+`AgentRuntimeStateStore` nor `BoundAgentRuntimeStateStore` is a generic activated-store receipt
+writer.
+
+The physical capability is usable only for the fixed B1 receipt-registry namespace and cannot read
+or mutate `StateRootV1`, session-authority records, transition intents, application journals, keys,
+or typed authority objects. Legacy session/participant writers remain rejected after authority
+activation; B1 does not whitelist receipt files inside those legacy collections. No dual write,
+fallback write, side table, fresh-root compatibility mode, or physical-store interpretation of
+receipt bytes is allowed. Physical serialization does not transfer semantic authority to
+HostSessionAuthority, change either authority revision domain, promote any seam, or begin B2.1.
+
 ## Classification consequences
 
 - `UsefulFootholdButWrongBoundary` means preserve reusable code only after its authority placement is corrected.
