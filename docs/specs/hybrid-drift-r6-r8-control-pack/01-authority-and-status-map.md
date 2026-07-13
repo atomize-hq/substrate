@@ -1,6 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** `12934a77d7e670300fa620660a88277f39ba3d90`
+**Verified against:** `d3dcda785d02b1cb98c27e4b701435fb3cebbf6c`
+
+**Current phase:** `R6-C.1-SPEC` (**ACTIVE**, docs only; active packet: none)
 
 ## How To Resolve Truth
 
@@ -21,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Correct the Pass 1 findings, then spec `R6-C.1`. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Write and review the docs-only `R6-C.1` SPEC/PLAN/TASKS. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
@@ -49,10 +51,11 @@ themselves prove the broader R6 charter closed.
 | `wrong_plan_branch` | Acceptance-proof gap | TBD: one of the four exact terminal categories after the expanded `R6-C.1` controls. |
 | `scoring/mod.rs` | Dispatcher infrastructure | **Fit-for-purpose exception** as routing infrastructure; not a fifth scorer. |
 
-## Known Authority Defects To Correct First
+## R6-C.0A Remediation Result
 
-The 2026-07-13 fresh Pass 1 review found these live documentation defects. They are inputs to
-`R6-C.0A`, not decisions silently made by this pack:
+`R6-C.0A` is **COMPLETE**. The remediation commits `959cc50cc` and `d3dcda785` corrected the seven
+2026-07-13 fresh Pass 1 documentation defects below, culminating in fresh `REVIEW CLEAN` at
+`d3dcda785`:
 
 1. frozen replay fixtures prove posture invariance, not comparative integrated scorer improvement;
 2. `truth_grounding_gap` needs controls for truth-touching action-before-read and actionful
@@ -64,7 +67,8 @@ The 2026-07-13 fresh Pass 1 review found these live documentation defects. They 
 7. the R6 MAP preliminary investigation and root 2026-07-04 status note need explicit
    historical/superseded labels.
 
-Until those defects are corrected in canonical docs, this pack remains `ACTIVE / BOOTSTRAP`.
+These corrected statements remain constraints for `R6-C.1-SPEC`; their correction does not close
+R6, complete the terminal scorer-disposition table, or unblock R7.
 
 ## R7 Authority
 

@@ -8,14 +8,18 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
+Current phase: **`R6-C.1-SPEC` (ACTIVE, docs only; active packet: none)**
+
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
 - [x] Map existing behavioral tests and bounded replay evidence to the broad R6 claims.
 - [x] Record `semantic_goal_drift` as cutover complete by design absent new failing evidence.
 - [x] Preserve the R7 MAP/SPEC/PLAN/TASKS as design-ready drafts.
 - [x] Bootstrap the R6-R8 execution context pack without making it semantic authority.
-- [ ] Complete `R6-C.0A`: remediate the fresh closure-matrix findings in canonical authority.
-- [ ] Write the bounded `R6-C.1 — Scorer Context Applicability Acceptance Controls` packet.
+- [x] Complete `R6-C.0A`: remediate all seven fresh closure-matrix findings in canonical authority
+  at `d3dcda785` with fresh review clean.
+- [ ] Write and review the bounded `R6-C.1 — Scorer Context Applicability Acceptance Controls`
+  SPEC/PLAN/TASKS. This is the sole authorized docs-only action.
 - [ ] Add the exact `dead_end_thrash`, `truth_grounding_gap`, and `wrong_plan_branch` controls named
   in the closure finding.
 - [ ] If and only if a control fails, open and land the smallest scorer-specific R6 implementation

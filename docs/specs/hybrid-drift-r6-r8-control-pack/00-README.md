@@ -1,18 +1,18 @@
 # Hybrid Drift R6-R8 Control Pack
 
-**Pack version:** 0.2
+**Pack version:** 0.3
 
-**Pack status:** ACTIVE / BOOTSTRAP
+**Pack status:** ACTIVE
 
-**Current work phase:** `R6-C.0A — Closure-audit authority remediation`
+**Current work phase:** `R6-C.1-SPEC — Scorer Context Applicability Acceptance Controls docs`
 
-**Last repo-truth verification:** `72f9078cf5ce2f24527f700c3121c1a89147e53c`
+**Last repo-truth verification:** `d3dcda785d02b1cb98c27e4b701435fb3cebbf6c`
 
 ## Purpose
 
 This pack gives fresh sessions a bounded route through the remaining hybrid-drift sequence:
 
-1. correct the R6 closure-audit findings;
+1. preserve the completed R6 closure-audit authority remediation;
 2. specify and land `R6-C.1` acceptance controls;
 3. fix only behavior that a failing control proves dishonest;
 4. complete bounded real-rollout/replay closeout;

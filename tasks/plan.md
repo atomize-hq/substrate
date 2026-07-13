@@ -8,12 +8,15 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
+Current phase: **`R6-C.1-SPEC` (ACTIVE, docs only; active packet: none)**
+
 ## Dependency Order
 
 1. Preserve the 2026-07-12 authority correction and context-pack baseline.
-2. Complete docs-only `R6-C.0A`: remediate every fresh closure-matrix review finding across the
-   canonical finding and root/R6/R7 authority.
-3. Plan `R6-C.1 — Scorer Context Applicability Acceptance Controls` from the corrected inventory.
+2. **COMPLETE at `d3dcda785`:** docs-only `R6-C.0A` remediated all seven fresh closure-matrix review
+   findings across the canonical finding and root/R6/R7 authority and received fresh review clean.
+3. **ACTIVE, docs only:** write and review the `R6-C.1 — Scorer Context Applicability Acceptance
+   Controls` SPEC/PLAN/TASKS from the corrected inventory.
 4. Add acceptance controls before production behavior changes.
 5. If a control fails, split only that scorer/failure into a bounded R6 implementation packet.
 6. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence.

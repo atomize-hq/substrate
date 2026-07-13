@@ -8,6 +8,8 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
+Current phase: **`R6-C.1-SPEC` (ACTIVE, docs only; active packet: none)**
+
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
 gaps without mechanically injecting typed outcomes, turn context, archetype, or progress into
@@ -35,12 +37,13 @@ Hard decisions:
 - R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
   single-session scorer semantics.
 
-The only authorized current action is docs-only `R6-C.0A` remediation of the fresh closure-matrix
-review: correct replay-proof wording, expand the missing control inventory, enforce terminal close
-categories, correct proof citations, and label superseded pre-cutover status prose. After that lands,
-the next packet is `R6-C.1 — Scorer Context Applicability Acceptance Controls`. If its controls pass,
-close the relevant exceptions without production changes. If a control fails, create only the
-bounded scorer-specific R6 gap packet that the failing witness proves necessary.
+`R6-C.0A` is complete at `d3dcda785`: its seven authority defects were corrected and the remediation
+received fresh `REVIEW CLEAN`. The sole authorized current action is docs-only `R6-C.1-SPEC`: write
+and review the bounded SPEC/PLAN/TASKS for `R6-C.1 — Scorer Context Applicability Acceptance
+Controls`. Acceptance tests, production changes, replay closeout, R6 closure, and all R7/R8 work
+remain blocked. If the later controls pass, close the relevant exceptions without production
+changes. If a control fails, create only the bounded scorer-specific R6 gap packet that the failing
+witness proves necessary.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

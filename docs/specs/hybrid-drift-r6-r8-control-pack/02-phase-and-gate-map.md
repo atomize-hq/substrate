@@ -15,8 +15,8 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | Phase | Status | Deliverable | Entry gate | Exit gate |
 |---|---|---|---|---|
 | `PACK-0` | COMPLETE | This context pack | R6/R7 authority correction `6362edf4e` landed | Pack cross-doc checks passed and root active docs link to it. |
-| `R6-C.0A` | ACTIVE | Pass 1 authority remediation | Fresh review findings recorded in `01` and `05` | Canonical finding/root/R6/R7 gates and proof wording agree. |
-| `R6-C.1-SPEC` | BLOCKED | R6-C.1 SPEC/PLAN/TASKS | `R6-C.0A` complete | Expanded control matrix, expected decisions, files, commands, and stop rules review-clean. |
+| `R6-C.0A` | COMPLETE | Pass 1 authority remediation | Fresh review findings recorded in `01` and `05` | Canonical finding/root/R6/R7 gates and proof wording agree at `d3dcda785`; fresh review is clean. |
+| `R6-C.1-SPEC` | ACTIVE | R6-C.1 SPEC/PLAN/TASKS | `R6-C.0A` complete | Expanded control matrix, expected decisions, files, commands, and stop rules review-clean. |
 | `R6-C.1-CONTROLS` | BLOCKED | Acceptance controls only | R6-C.1 docs landed | Every control has a deterministic result and failing controls are preserved. |
 | `R6-GAP-*` | CONDITIONAL | One bounded scorer-specific fix packet per proven gap | A control fails because behavior is dishonest | Failing witness passes, controls remain green, review is clean. |
 | `R6-REPLAY` | BLOCKED | Bounded real-rollout/replay closeout | Controls and conditional fixes complete | Integrated advancing and true-stall witnesses plus frozen invariance evidence are documented. |
@@ -26,10 +26,13 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
-`PACK-0` and `R6-C.0A` are sequential docs-only bootstrap work. The pack does not authorize their
-semantic corrections; the fresh review evidence does.
+`PACK-0` and `R6-C.0A` are completed sequential docs-only bootstrap work. `R6-C.1-SPEC` is now the
+sole active docs-only phase. No acceptance test or production implementation is authorized yet.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
+
+**Result:** **COMPLETE** at `d3dcda785` after the seven authority defects were corrected and the
+remediation received fresh `REVIEW CLEAN`.
 
 ### Required changes
 
