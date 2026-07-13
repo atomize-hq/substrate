@@ -10,13 +10,13 @@ use super::schema::{
     CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
 };
 use super::store::{
-    self, BootstrapClassificationV1, ExpectedRevisionsV1, ObjectPublicationOutcomeV1,
-    ObjectVerificationContextV1, TransactionCommitOutcomeV1,
+    self, BootstrapClassificationV1, ExpectedRevisionsV1, GeneratedObjectV1,
+    ObjectPublicationOutcomeV1, ObjectVerificationContextV1, TransactionCommitOutcomeV1,
 };
 use super::store_schema::{DurableSessionAuthorityV1, SessionNamespaceRecordV1, StateRootV1};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use super::trusted_fs::EntryKind;
-use super::trusted_fs::TrustedAuthorityRoot;
+use super::trusted_fs::{TrustedAuthorityRoot, TrustedWorkspaceRoot};
 
 #[derive(Debug)]
 pub(crate) struct HostSessionAuthority {
@@ -255,6 +255,82 @@ impl HostSessionAuthority {
             context,
         )
         .map_err(store_error)
+    }
+
+    pub(super) fn prepare_generated_object(
+        &self,
+        expected_root_revision: u64,
+        object_kind: super::schema::AuthorityObjectKindV1,
+        bytes: &[u8],
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<GeneratedObjectV1, AuthorityFacadeError> {
+        store::prepare_generated_object_opened(
+            &self.root,
+            expected_root_revision,
+            object_kind,
+            bytes,
+            context,
+        )
+        .map_err(store_error)
+    }
+
+    pub(super) fn read_typed_object(
+        &self,
+        expected_root_revision: u64,
+        reference: &AuthorityObjectRefV1,
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, AuthorityFacadeError> {
+        store::read_typed_object_opened(&self.root, expected_root_revision, reference, context)
+            .map_err(store_error)
+    }
+
+    pub(super) fn allocate_sensitive_object_ref(
+        &self,
+        expected_root_revision: u64,
+        object_kind: super::schema::AuthorityObjectKindV1,
+        bytes: &[u8],
+        context: &ObjectVerificationContextV1,
+    ) -> Result<AuthorityObjectRefV1, AuthorityFacadeError> {
+        store::allocate_sensitive_object_ref_opened(
+            &self.root,
+            expected_root_revision,
+            object_kind,
+            bytes,
+            context,
+        )
+        .map_err(store_error)
+    }
+
+    pub(super) fn commit_transition_root(
+        &self,
+        current: &StateRootV1,
+        expected: &ExpectedRevisionsV1,
+        proposed: &StateRootV1,
+        start_birth: Option<&store::ExpectedStartAuthorityBirthV1>,
+        workspace: &TrustedWorkspaceRoot,
+    ) -> Result<TransactionCommitOutcomeV1, AuthorityFacadeError> {
+        store::compare_and_swap_opened_root_exact_current_guarded(
+            &self.root,
+            current,
+            expected,
+            proposed,
+            start_birth,
+            || {
+                workspace
+                    .revalidate()
+                    .map_err(|_| store::BootstrapError::transition_guard())
+            },
+        )
+        .map_err(store_error)
+    }
+
+    pub(super) fn delete_release_eligible_transport(
+        &self,
+        current: &StateRootV1,
+        intent_id: &str,
+    ) -> Result<(), AuthorityFacadeError> {
+        store::delete_release_eligible_transport_opened(&self.root, current, intent_id)
+            .map_err(store_error)
     }
 
     pub(crate) fn compare_and_swap_root(

@@ -85,10 +85,12 @@ impl PrivateHomeError {
 mod platform {
     use std::ffi::{CStr, CString, OsStr};
     use std::fs;
+    use std::fs::OpenOptions;
     use std::io;
     use std::mem::MaybeUninit;
     use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
     use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::OpenOptionsExt;
     use std::path::{Component, Path};
 
     use super::{CanonicalDirectoryV1, File, PrivateHomeError, PrivateHomeReason, TrustedFsError};
@@ -110,6 +112,12 @@ mod platform {
         directory: TrustedDirectory,
         identity: CanonicalDirectoryV1,
         owner_uid: libc::uid_t,
+    }
+
+    #[derive(Debug)]
+    pub(crate) struct TrustedWorkspaceRoot {
+        file: File,
+        identity: CanonicalDirectoryV1,
     }
 
     #[derive(Debug)]
@@ -400,6 +408,57 @@ mod platform {
                 owner_uid: self.owner_uid,
             };
             root.ensure_directory(name)
+        }
+    }
+
+    impl TrustedWorkspaceRoot {
+        pub(crate) fn open_exact(expected: &CanonicalDirectoryV1) -> Result<Self, TrustedFsError> {
+            let path = Path::new(&expected.physical_path);
+            if !path.is_absolute()
+                || path.components().any(|component| {
+                    !matches!(component, Component::RootDir | Component::Normal(_))
+                })
+            {
+                return Err(TrustedFsError::new(
+                    "workspace root requires an absolute normalized path",
+                ));
+            }
+            let file = OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW)
+                .open(path)
+                .map_err(|error| TrustedFsError::from_io("open exact workspace root", error))?;
+            let stat = fstat(file.as_raw_fd())?;
+            let physical_path = physical_path_from_handle(&file)?;
+            let physical_utf8 = physical_path
+                .to_str()
+                .filter(|path| path.starts_with('/') && !path.ends_with(" (deleted)"))
+                .ok_or_else(|| {
+                    TrustedFsError::new("opened workspace has no stable UTF-8 physical path")
+                })?;
+            let identity = directory_identity(&file, physical_utf8, &stat)?;
+            if &identity != expected {
+                return Err(TrustedFsError::new(
+                    "workspace root physical identity does not match request",
+                ));
+            }
+            let opened = Self { file, identity };
+            opened.revalidate()?;
+            Ok(opened)
+        }
+
+        pub(crate) fn revalidate(&self) -> Result<(), TrustedFsError> {
+            let stat = fstat(self.file.as_raw_fd())?;
+            let physical_path = physical_path_from_handle(&self.file)?;
+            if physical_path.to_str() != Some(self.identity.physical_path.as_str())
+                || directory_identity(&self.file, &self.identity.physical_path, &stat)?
+                    != self.identity
+            {
+                return Err(TrustedFsError::new(
+                    "workspace root physical identity changed",
+                ));
+            }
+            Ok(())
         }
     }
 
@@ -2886,10 +2945,29 @@ pub(crate) use platform::*;
 pub(crate) struct TrustedAuthorityRoot;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[derive(Debug)]
+pub(crate) struct TrustedWorkspaceRoot;
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 impl TrustedAuthorityRoot {
     pub(crate) fn open(_path: &std::path::Path) -> Result<Self, TrustedFsError> {
         Err(TrustedFsError::new(
             "A1 trusted authority storage is unsupported on this platform",
+        ))
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+impl TrustedWorkspaceRoot {
+    pub(crate) fn open_exact(_expected: &CanonicalDirectoryV1) -> Result<Self, TrustedFsError> {
+        Err(TrustedFsError::new(
+            "A1 trusted workspace binding is unsupported on this platform",
+        ))
+    }
+
+    pub(crate) fn revalidate(&self) -> Result<(), TrustedFsError> {
+        Err(TrustedFsError::new(
+            "A1 trusted workspace binding is unsupported on this platform",
         ))
     }
 }

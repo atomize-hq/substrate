@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::Path;
 
-use super::schema::{CanonicalDirectoryV1, TimestampV1};
+use super::schema::{AuthorityObjectCommitmentV1, CanonicalDirectoryV1, TimestampV1};
 use super::store_schema::StateRootV1;
 use super::trusted_fs::TrustedAuthorityRoot;
 
@@ -70,6 +70,50 @@ pub(super) fn prepare_typed_object_opened(
     platform::prepare_typed_object_opened(root, expected_root_revision, reference, bytes, context)
 }
 
+pub(super) fn prepare_generated_object_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    object_kind: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1,
+    bytes: &[u8],
+    context: Option<&ObjectVerificationContextV1>,
+) -> Result<GeneratedObjectV1, BootstrapError> {
+    platform::prepare_generated_object_opened(
+        root,
+        expected_root_revision,
+        object_kind,
+        bytes,
+        context,
+    )
+}
+
+pub(super) fn read_typed_object_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    reference: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    context: Option<&ObjectVerificationContextV1>,
+) -> Result<Vec<u8>, BootstrapError> {
+    platform::read_typed_object_opened(root, expected_root_revision, reference, context)
+}
+
+pub(super) fn allocate_sensitive_object_ref_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    object_kind: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1,
+    bytes: &[u8],
+    context: &ObjectVerificationContextV1,
+) -> Result<
+    crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    BootstrapError,
+> {
+    platform::allocate_sensitive_object_ref_opened(
+        root,
+        expected_root_revision,
+        object_kind,
+        bytes,
+        context,
+    )
+}
+
 #[cfg(test)]
 pub(crate) fn read_root(path: &Path) -> Result<StateRootV1, BootstrapError> {
     platform::read_root(path)
@@ -103,6 +147,32 @@ pub(super) fn compare_and_swap_opened_root_exact_current(
     proposed: &StateRootV1,
 ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
     platform::compare_and_swap_opened_root_exact_current(root, exact_current, expected, proposed)
+}
+
+pub(super) fn compare_and_swap_opened_root_exact_current_guarded(
+    root: &TrustedAuthorityRoot,
+    exact_current: &StateRootV1,
+    expected: &ExpectedRevisionsV1,
+    proposed: &StateRootV1,
+    start_birth: Option<&ExpectedStartAuthorityBirthV1>,
+    publication_guard: impl FnMut() -> Result<(), BootstrapError>,
+) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+    platform::compare_and_swap_opened_root_exact_current_guarded(
+        root,
+        exact_current,
+        expected,
+        proposed,
+        start_birth,
+        publication_guard,
+    )
+}
+
+pub(super) fn delete_release_eligible_transport_opened(
+    root: &TrustedAuthorityRoot,
+    exact_current: &StateRootV1,
+    intent_id: &str,
+) -> Result<(), BootstrapError> {
+    platform::delete_release_eligible_transport_opened(root, exact_current, intent_id)
 }
 
 pub(crate) fn legacy_writer_guard(path: &Path) -> Result<LegacyWriterGuard, BootstrapError> {
@@ -152,6 +222,14 @@ pub(crate) struct LegacyStateStoreDirectoryEntryV1 {
 pub(crate) struct ExpectedAuthorityRevisionV1 {
     pub(crate) orchestration_session_id: String,
     pub(crate) authority_revision: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct ExpectedStartAuthorityBirthV1 {
+    pub(super) orchestration_session_id: String,
+    pub(super) intent_id: String,
+    pub(super) issuer_request_id: String,
+    pub(super) payload_commitment: AuthorityObjectCommitmentV1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -208,6 +286,12 @@ impl fmt::Display for BootstrapError {
 
 impl std::error::Error for BootstrapError {}
 
+impl BootstrapError {
+    pub(super) fn transition_guard() -> Self {
+        Self("transition publication guard failed")
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ObjectVerificationContextV1 {
     pub(crate) intent_id: String,
@@ -225,6 +309,13 @@ pub(crate) enum ObjectPublicationOutcomeV1 {
     JoinedExactOrphan,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct GeneratedObjectV1 {
+    pub(super) reference:
+        crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(super) byte_length: u64,
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod platform {
     use std::fmt;
@@ -234,7 +325,8 @@ mod platform {
     #[cfg(test)]
     use super::LegacyMutationV1;
     use super::{
-        BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, InitializationCrashPointV1,
+        BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1,
+        ExpectedStartAuthorityBirthV1, GeneratedObjectV1, InitializationCrashPointV1,
         InitializationMaterialV1, KeyLifecycleCrashPointV1, LegacyStateStoreCollectionV1,
         ObjectPublicationOutcomeV1, ObjectVerificationContextV1, TransactionCommitOutcomeV1,
     };
@@ -245,12 +337,12 @@ mod platform {
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AgentDescriptorHashInputV1, ApplicationResultHashInputV1, AuthorityObjectCommitmentV1,
         AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
-        HostAttachContractHashInputV1, InputAcceptanceHashInputV1, PolicyObjectHashInputV1,
-        PostTurnCompletionHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
-        TerminalHandoffHashInputV1, TerminalHandoffStateV1,
+        DurableSessionAuthorityOriginV1, HostAttachContractHashInputV1, InputAcceptanceHashInputV1,
+        PolicyObjectHashInputV1, PostTurnCompletionHashInputV1, ResumeHandleHashInputV1,
+        RetainedWorkerObjectHashInputV1, TerminalHandoffHashInputV1, TerminalHandoffStateV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_format::{
-        key_id, nonce, store_id, validate_key_id, validate_ref_id,
+        key_id, nonce, object_ref_id, store_id, validate_key_id, validate_ref_id,
         AuthorityStoreCommitmentKeyFileV1, TempNameV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_schema::{
@@ -286,8 +378,8 @@ mod platform {
     #[path = "object_persistence.rs"]
     mod object_persistence;
     use object_persistence::publish_or_join_orphan;
-    use object_persistence::validate_orphan_candidate;
     use object_persistence::verify_object_bytes;
+    use object_persistence::{canonical_digest, sensitive_domain, validate_orphan_candidate};
     #[path = "reachability.rs"]
     mod reachability;
     use reachability::{add_expected_ref, collect_reachable_objects};
@@ -302,7 +394,8 @@ mod platform {
         begin_legacy_state_store_transaction as begin_legacy_transaction,
         begin_legacy_state_store_transaction_for_identity as begin_legacy_transaction_for_identity,
         compare_and_swap_opened_root_with, compare_and_swap_opened_root_with_exact_current,
-        compare_and_swap_root_with, with_existing_semantic_preflight,
+        compare_and_swap_opened_root_with_exact_current_guarded, compare_and_swap_root_with,
+        delete_release_eligible_transport_with_exact_current, with_existing_semantic_preflight,
         with_opened_existing_semantic_preflight, with_opened_semantic_preflight,
         SemanticPreflightMode,
     };
@@ -430,6 +523,33 @@ mod platform {
             proposed,
             system_material()?.root_nonce,
         )
+    }
+
+    pub(super) fn compare_and_swap_opened_root_exact_current_guarded(
+        root: &TrustedAuthorityRoot,
+        exact_current: &StateRootV1,
+        expected: &ExpectedRevisionsV1,
+        proposed: &StateRootV1,
+        start_birth: Option<&ExpectedStartAuthorityBirthV1>,
+        publication_guard: impl FnMut() -> Result<(), BootstrapError>,
+    ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+        compare_and_swap_opened_root_with_exact_current_guarded(
+            root,
+            Some(exact_current),
+            expected,
+            proposed,
+            system_material()?.root_nonce,
+            start_birth,
+            publication_guard,
+        )
+    }
+
+    pub(super) fn delete_release_eligible_transport_opened(
+        root: &TrustedAuthorityRoot,
+        exact_current: &StateRootV1,
+        intent_id: &str,
+    ) -> Result<(), BootstrapError> {
+        delete_release_eligible_transport_with_exact_current(root, exact_current, intent_id)
     }
 
     pub(super) fn begin_legacy_state_store_transaction(
@@ -584,6 +704,219 @@ mod platform {
                 context,
                 nonce_bytes,
             )
+        })
+    }
+
+    pub(super) fn prepare_generated_object_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        object_kind: AuthorityObjectKindV1,
+        bytes: &[u8],
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<GeneratedObjectV1, BootstrapError> {
+        with_opened_existing_semantic_preflight(root, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            transaction.reconcile()?;
+
+            let commitment = if let Some(domain) = sensitive_domain(object_kind) {
+                let record = transaction
+                    .root
+                    .commitment_key_registry
+                    .get(&transaction.root.active_commitment_key_id)
+                    .filter(|record| {
+                        record.state == AuthorityStoreCommitmentKeyStateV1::Active
+                            && record.key_id == transaction.root.active_commitment_key_id
+                    })
+                    .ok_or(BootstrapError("active commitment key is unavailable"))?;
+                let key = transaction
+                    .layout
+                    .keys
+                    .open_file(&format!("{}.key", record.key_id))
+                    .map_err(|_| BootstrapError("open active commitment key"))?;
+                let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
+                    &key.read_all()
+                        .map_err(|_| BootstrapError("read active commitment key"))?,
+                )
+                .map_err(|_| BootstrapError("decode active commitment key"))?;
+                let context =
+                    context.ok_or(BootstrapError("sensitive object parent context is missing"))?;
+                AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                    key_id: record.key_id.clone(),
+                    domain: String::from_utf8(domain.as_bytes().to_vec())
+                        .map_err(|_| BootstrapError("sensitive object domain is invalid"))?,
+                    digest_hex: store_hmac_sha256(
+                        &envelope.secret_key,
+                        domain,
+                        &transaction.root.authority_store_id,
+                        &context.intent_id,
+                        Some(&context.run_id),
+                        bytes,
+                    )
+                    .map_err(|_| BootstrapError("commit sensitive object"))?,
+                }
+            } else {
+                AuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: canonical_digest(object_kind, bytes)?,
+                }
+            };
+
+            let mut random = rand::thread_rng();
+            for _ in 0..32 {
+                let mut ref_entropy = [0_u8; 16];
+                let mut nonce_entropy = [0_u8; 16];
+                random.fill_bytes(&mut ref_entropy);
+                random.fill_bytes(&mut nonce_entropy);
+                let reference = AuthorityObjectRefV1 {
+                    ref_id: object_ref_id(ref_entropy),
+                    object_kind,
+                    schema_version: 1,
+                    commitment: commitment.clone(),
+                };
+                if transaction
+                    .root
+                    .object_index
+                    .contains_key(&reference.ref_id)
+                {
+                    continue;
+                }
+                validate_orphan_candidate(
+                    transaction.layout,
+                    &transaction.root,
+                    &reference,
+                    bytes,
+                    context,
+                )?;
+                publish_or_join_orphan(
+                    transaction.layout,
+                    &transaction.root,
+                    &reference,
+                    bytes,
+                    context,
+                    nonce_entropy,
+                )?;
+                return Ok(GeneratedObjectV1 {
+                    reference,
+                    byte_length: bytes.len() as u64,
+                });
+            }
+            Err(BootstrapError(
+                "unable to allocate collision-free object ID",
+            ))
+        })
+    }
+
+    pub(super) fn read_typed_object_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        reference: &AuthorityObjectRefV1,
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, BootstrapError> {
+        with_opened_existing_semantic_preflight(root, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            transaction.reconcile()?;
+            let index = transaction
+                .root
+                .object_index
+                .get(&reference.ref_id)
+                .filter(|index| {
+                    index.object_kind == reference.object_kind
+                        && index.object_schema_version == reference.schema_version
+                        && index.storage_state == AuthorityObjectStorageStateV1::Present
+                })
+                .ok_or(BootstrapError("typed object has no present index entry"))?;
+            let kind = transaction
+                .layout
+                .objects
+                .open_directory(kind_slug(reference.object_kind))
+                .map_err(|_| BootstrapError("open typed object kind directory"))?;
+            let version = kind
+                .open_directory(&format!("v{}", reference.schema_version))
+                .map_err(|_| BootstrapError("open typed object version directory"))?;
+            let bytes = version
+                .open_file(&format!("{}.obj", reference.ref_id))
+                .and_then(|file| file.read_all())
+                .map_err(|_| BootstrapError("read typed object"))?;
+            if bytes.len() as u64 != index.byte_length {
+                return Err(BootstrapError("typed object byte length mismatch"));
+            }
+            verify_object_bytes(
+                transaction.layout,
+                &transaction.root,
+                reference,
+                &bytes,
+                context,
+                true,
+            )?;
+            Ok(bytes)
+        })
+    }
+
+    pub(super) fn allocate_sensitive_object_ref_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        object_kind: AuthorityObjectKindV1,
+        bytes: &[u8],
+        context: &ObjectVerificationContextV1,
+    ) -> Result<AuthorityObjectRefV1, BootstrapError> {
+        with_opened_existing_semantic_preflight(root, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            transaction.reconcile()?;
+            let domain = sensitive_domain(object_kind)
+                .ok_or(BootstrapError("generated object kind is not sensitive"))?;
+            let record = transaction
+                .root
+                .commitment_key_registry
+                .get(&transaction.root.active_commitment_key_id)
+                .filter(|record| {
+                    record.state == AuthorityStoreCommitmentKeyStateV1::Active
+                        && record.key_id == transaction.root.active_commitment_key_id
+                })
+                .ok_or(BootstrapError("active commitment key is unavailable"))?;
+            let key = transaction
+                .layout
+                .keys
+                .open_file(&format!("{}.key", record.key_id))
+                .map_err(|_| BootstrapError("open active commitment key"))?;
+            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
+                &key.read_all()
+                    .map_err(|_| BootstrapError("read active commitment key"))?,
+            )
+            .map_err(|_| BootstrapError("decode active commitment key"))?;
+            let commitment = AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                key_id: record.key_id.clone(),
+                domain: String::from_utf8(domain.as_bytes().to_vec())
+                    .map_err(|_| BootstrapError("sensitive object domain is invalid"))?,
+                digest_hex: store_hmac_sha256(
+                    &envelope.secret_key,
+                    domain,
+                    &transaction.root.authority_store_id,
+                    &context.intent_id,
+                    Some(&context.run_id),
+                    bytes,
+                )
+                .map_err(|_| BootstrapError("commit sensitive object"))?,
+            };
+            let mut random = rand::thread_rng();
+            for _ in 0..32 {
+                let mut entropy = [0_u8; 16];
+                random.fill_bytes(&mut entropy);
+                let reference = AuthorityObjectRefV1 {
+                    ref_id: object_ref_id(entropy),
+                    object_kind,
+                    schema_version: 1,
+                    commitment: commitment.clone(),
+                };
+                if !transaction
+                    .root
+                    .object_index
+                    .contains_key(&reference.ref_id)
+                {
+                    return Ok(reference);
+                }
+            }
+            Err(BootstrapError(
+                "unable to allocate collision-free object ID",
+            ))
         })
     }
 
@@ -1061,11 +1394,11 @@ mod platform {
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 mod platform {
     use super::{
-        BootstrapClassificationV1, BootstrapError, ObjectPublicationOutcomeV1,
+        BootstrapClassificationV1, BootstrapError, GeneratedObjectV1, ObjectPublicationOutcomeV1,
         ObjectVerificationContextV1,
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
-        AuthorityObjectRefV1, CanonicalDirectoryV1,
+        AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV1;
 
@@ -1195,6 +1528,41 @@ mod platform {
         ))
     }
 
+    pub(super) fn prepare_generated_object_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _object_kind: AuthorityObjectKindV1,
+        _bytes: &[u8],
+        _context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<GeneratedObjectV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn read_typed_object_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _reference: &AuthorityObjectRefV1,
+        _context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn allocate_sensitive_object_ref_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _object_kind: AuthorityObjectKindV1,
+        _bytes: &[u8],
+        _context: &ObjectVerificationContextV1,
+    ) -> Result<AuthorityObjectRefV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
     pub(super) fn read_root(_path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
@@ -1235,6 +1603,29 @@ mod platform {
         _expected: &super::ExpectedRevisionsV1,
         _proposed: &StateRootV1,
     ) -> Result<super::TransactionCommitOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn compare_and_swap_opened_root_exact_current_guarded(
+        _root: &TrustedAuthorityRoot,
+        _exact_current: &StateRootV1,
+        _expected: &super::ExpectedRevisionsV1,
+        _proposed: &StateRootV1,
+        _start_birth: Option<&super::ExpectedStartAuthorityBirthV1>,
+        _publication_guard: impl FnMut() -> Result<(), BootstrapError>,
+    ) -> Result<super::TransactionCommitOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn delete_release_eligible_transport_opened(
+        _root: &TrustedAuthorityRoot,
+        _exact_current: &StateRootV1,
+        _intent_id: &str,
+    ) -> Result<(), BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
         ))

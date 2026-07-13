@@ -930,6 +930,26 @@ pub(super) fn compare_and_swap_opened_root_with_exact_current(
     proposed: &StateRootV1,
     nonce_bytes: [u8; 16],
 ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+    compare_and_swap_opened_root_with_exact_current_guarded(
+        root_handle,
+        exact_current,
+        expected,
+        proposed,
+        nonce_bytes,
+        None,
+        || Ok(()),
+    )
+}
+
+pub(super) fn compare_and_swap_opened_root_with_exact_current_guarded(
+    root_handle: &TrustedAuthorityRoot,
+    exact_current: Option<&StateRootV1>,
+    expected: &ExpectedRevisionsV1,
+    proposed: &StateRootV1,
+    nonce_bytes: [u8; 16],
+    start_birth: Option<&ExpectedStartAuthorityBirthV1>,
+    mut publication_guard: impl FnMut() -> Result<(), BootstrapError>,
+) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
     with_opened_existing_semantic_preflight(root_handle, |transaction| {
         validate_positive_expectations(expected)?;
         validate_proposed_root(&transaction.root, expected, proposed)?;
@@ -948,7 +968,7 @@ pub(super) fn compare_and_swap_opened_root_with_exact_current(
             return Err(BootstrapError("stale authority root revision"));
         }
         validate_current_authority_expectation(&transaction.root, expected)?;
-        validate_authority_changes(&transaction.root, proposed, expected)?;
+        validate_authority_changes(&transaction.root, proposed, expected, start_birth)?;
         transaction.reconcile()?;
         publish_replacement_root(
             transaction.layout,
@@ -956,9 +976,59 @@ pub(super) fn compare_and_swap_opened_root_with_exact_current(
             &transaction.legacy,
             proposed,
             nonce_bytes,
-            || transaction.validate_publication_candidate(expected.root_revision, proposed),
+            || {
+                publication_guard()?;
+                transaction.validate_publication_candidate(expected.root_revision, proposed)
+            },
         )?;
         Ok(TransactionCommitOutcomeV1::Committed(proposed.clone()))
+    })
+}
+
+pub(super) fn delete_release_eligible_transport_with_exact_current(
+    root_handle: &TrustedAuthorityRoot,
+    exact_current: &StateRootV1,
+    intent_id: &str,
+) -> Result<(), BootstrapError> {
+    with_opened_existing_semantic_preflight(root_handle, |transaction| {
+        if transaction.root != *exact_current {
+            return Err(BootstrapError(
+                "locked authority root differs from release observation",
+            ));
+        }
+        let intent = transaction
+            .root
+            .transition_intent_map
+            .get(intent_id)
+            .ok_or(BootstrapError("release intent is missing"))?;
+        let HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+            terminal_handoff_ref,
+        } = &intent.transport_payload_state
+        else {
+            return Err(BootstrapError("transport payload is not release eligible"));
+        };
+        let index = transaction
+            .root
+            .object_index
+            .get(&intent.transport_payload_ref.ref_id)
+            .ok_or(BootstrapError("release transport index is missing"))?;
+        if index.object_kind != AuthorityObjectKindV1::TransitionTransportPayload
+            || !matches!(
+                &index.storage_state,
+                AuthorityObjectStorageStateV1::ReleaseEligible {
+                    terminal_handoff_ref: indexed,
+                } if indexed == terminal_handoff_ref
+            )
+        {
+            return Err(BootstrapError(
+                "release transport parent and index disagree",
+            ));
+        }
+        transaction.reconcile()?;
+        transaction
+            .layout
+            .delete_release_eligible_transport(&intent.transport_payload_ref)
+            .map_err(|_| BootstrapError("delete release-eligible transport payload"))
     })
 }
 
@@ -1051,11 +1121,18 @@ fn validate_authority_changes(
     current: &StateRootV1,
     proposed: &StateRootV1,
     expected: &ExpectedRevisionsV1,
+    start_birth: Option<&ExpectedStartAuthorityBirthV1>,
 ) -> Result<(), BootstrapError> {
-    let target = expected
+    let revision_target = expected
         .authority
         .as_ref()
         .map(|authority| authority.orchestration_session_id.as_str());
+    let birth_target = start_birth.map(|birth| birth.orchestration_session_id.as_str());
+    if revision_target.is_some() && birth_target.is_some() {
+        return Err(BootstrapError(
+            "authority revision and Start birth cannot share one CAS",
+        ));
+    }
     let keys = current
         .session_namespace_map
         .keys()
@@ -1073,7 +1150,10 @@ fn validate_authority_changes(
             | (_, Some(SessionNamespaceRecordV1::Authority(_))) => true,
             _ => false,
         };
-        if authority_changed && target != Some(key.as_str()) {
+        if authority_changed
+            && revision_target != Some(key.as_str())
+            && birth_target != Some(key.as_str())
+        {
             return Err(BootstrapError(
                 "authority changed without its expected revision",
             ));
@@ -1091,6 +1171,40 @@ fn validate_authority_changes(
             Some(SessionNamespaceRecordV1::Authority(value))
                 if value.authority_revision == next => {}
             _ => return Err(BootstrapError("proposed authority revision is invalid")),
+        }
+    }
+    if let Some(birth) = start_birth {
+        let reservation_matches = matches!(
+            current
+                .session_namespace_map
+                .get(&birth.orchestration_session_id),
+            Some(SessionNamespaceRecordV1::StartReservation(value))
+                if value.orchestration_session_id == birth.orchestration_session_id
+                    && value.intent_id == birth.intent_id
+                    && value.issuer_request_id == birth.issuer_request_id
+                    && value.payload_commitment == birth.payload_commitment
+        );
+        let authority_matches = matches!(
+            proposed
+                .session_namespace_map
+                .get(&birth.orchestration_session_id),
+            Some(SessionNamespaceRecordV1::Authority(value))
+                if value.authority_revision == 1
+                    && matches!(
+                        &value.origin,
+                        DurableSessionAuthorityOriginV1::StartIntent {
+                            intent_id,
+                            issuer_request_id,
+                            payload_commitment,
+                        } if intent_id == &birth.intent_id
+                            && issuer_request_id == &birth.issuer_request_id
+                            && payload_commitment == &birth.payload_commitment
+                    )
+        );
+        if !reservation_matches || !authority_matches {
+            return Err(BootstrapError(
+                "Start authority birth does not match its exact reservation",
+            ));
         }
     }
     Ok(())

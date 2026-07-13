@@ -260,7 +260,10 @@ fn validate_transport_parent(
     Ok(())
 }
 
-fn canonical_digest(kind: AuthorityObjectKindV1, bytes: &[u8]) -> Result<String, BootstrapError> {
+pub(super) fn canonical_digest(
+    kind: AuthorityObjectKindV1,
+    bytes: &[u8],
+) -> Result<String, BootstrapError> {
     match kind {
         AuthorityObjectKindV1::AgentDescriptor => {
             canonical_digest_as::<AgentDescriptorHashInputV1>(bytes)
@@ -304,7 +307,7 @@ where
     canonical_sha256(&value).map_err(|_| BootstrapError("canonical object is invalid"))
 }
 
-fn sensitive_domain(kind: AuthorityObjectKindV1) -> Option<SensitiveDomainV1> {
+pub(super) fn sensitive_domain(kind: AuthorityObjectKindV1) -> Option<SensitiveDomainV1> {
     match kind {
         AuthorityObjectKindV1::TransitionInput => Some(SensitiveDomainV1::TransitionInput),
         AuthorityObjectKindV1::LeaseToken => Some(SensitiveDomainV1::ParticipantLeaseToken),

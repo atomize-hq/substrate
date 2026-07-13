@@ -193,7 +193,7 @@ impl<'a> StoreLayout<'a> {
         self.remove_matching_marker(root)?;
         self.reconcile_key_files(root)?;
         self.reconcile_released_objects(root)?;
-        self.validate_existing_objects(root, false)
+        self.validate_existing_objects(root, true)
     }
 
     pub(super) fn validate_closed_layout(&self) -> Result<(), StoreError> {
@@ -640,8 +640,16 @@ impl<'a> StoreLayout<'a> {
                 index.storage_state,
                 AuthorityObjectStorageStateV1::Released { .. }
             );
+            let release_eligible_transport_gap = allow_released_copy
+                && index.object_kind == AuthorityObjectKindV1::TransitionTransportPayload
+                && matches!(
+                    index.storage_state,
+                    AuthorityObjectStorageStateV1::ReleaseEligible { .. }
+                )
+                && !present.contains(ref_id);
             if present.contains(ref_id) != must_exist
                 && !(allow_released_copy && !must_exist && present.contains(ref_id))
+                && !release_eligible_transport_gap
             {
                 return Err(StoreError("typed object presence does not match root"));
             }
@@ -722,6 +730,15 @@ impl<'a> StoreLayout<'a> {
                 index.storage_state,
                 AuthorityObjectStorageStateV1::Released { .. }
             ) {
+                continue;
+            }
+            if object.reference.object_kind == AuthorityObjectKindV1::TransitionTransportPayload
+                && matches!(
+                    index.storage_state,
+                    AuthorityObjectStorageStateV1::ReleaseEligible { .. }
+                )
+                && self.object_file_is_absent(&object.reference)?
+            {
                 continue;
             }
             let bytes = self.read_object_bytes(&object.reference)?;
@@ -820,6 +837,61 @@ impl<'a> StoreLayout<'a> {
         Ok(())
     }
 
+    fn object_file_is_absent(&self, reference: &AuthorityObjectRefV1) -> Result<bool, StoreError> {
+        let kind = self
+            .objects
+            .open_directory(kind_slug(reference.object_kind))
+            .map_err(|_| StoreError("open release-eligible object kind"))?;
+        let version = kind
+            .open_directory("v1")
+            .map_err(|_| StoreError("open release-eligible object version"))?;
+        let name = format!("{}.obj", reference.ref_id);
+        match version
+            .entry_kind(&name)
+            .map_err(|_| StoreError("inspect release-eligible object"))?
+        {
+            None => Ok(true),
+            Some(EntryKind::RegularFile) => Ok(false),
+            Some(_) => Err(StoreError("release-eligible object entry is unsafe")),
+        }
+    }
+
+    pub(super) fn delete_release_eligible_transport(
+        &self,
+        reference: &AuthorityObjectRefV1,
+    ) -> Result<(), StoreError> {
+        if reference.object_kind != AuthorityObjectKindV1::TransitionTransportPayload {
+            return Err(StoreError("release deletion requires transport payload"));
+        }
+        let kind = self
+            .objects
+            .open_directory(kind_slug(reference.object_kind))
+            .map_err(|_| StoreError("open release transport kind"))?;
+        let version = kind
+            .open_directory("v1")
+            .map_err(|_| StoreError("open release transport version"))?;
+        let name = format!("{}.obj", reference.ref_id);
+        match version
+            .entry_kind(&name)
+            .map_err(|_| StoreError("inspect release transport object"))?
+        {
+            None => return Ok(()),
+            Some(EntryKind::RegularFile) => {}
+            Some(_) => return Err(StoreError("release transport object is unsafe")),
+        }
+        version
+            .unlink_file(&name)
+            .map_err(|_| StoreError("delete release transport object"))?;
+        version
+            .sync()
+            .map_err(|_| StoreError("sync release transport version"))?;
+        kind.sync()
+            .map_err(|_| StoreError("sync release transport kind"))?;
+        self.objects
+            .sync()
+            .map_err(|_| StoreError("sync release transport objects"))
+    }
+
     fn validate_decoded_object_graphs(
         &self,
         root: &StateRootV1,
@@ -853,10 +925,22 @@ impl<'a> StoreLayout<'a> {
                     let resume = resume_handles
                         .get(&reference.ref_id)
                         .ok_or(StoreError("attach resume handle is unreachable"))?;
+                    let expected_participant_id = match intent.mode {
+                        crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::Start => {
+                            &intent.target_authoritative_participant_id
+                        }
+                        crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::Attach
+                        | crate::execution::agent_runtime::host_session_authority::schema::HostSessionTransitionModeV1::ResumeOneTurn => intent
+                            .source_authoritative_participant_id
+                            .as_ref()
+                            .ok_or(StoreError(
+                                "successor resume handle has no source participant",
+                            ))?,
+                    };
                     validate_resume_identity(
                         resume,
                         &intent.orchestration_session_id,
-                        &intent.target_authoritative_participant_id,
+                        expected_participant_id,
                         &attach.contract.backend_id,
                         &attach.contract.protocol,
                     )?;
