@@ -2,9 +2,10 @@
 
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
 specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, reviewed
-`dead_end_thrash` family checkpoint, and `CTX-R6-09` focused control are complete; `CTX-R6-04` is a
-preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay, conditional-gap,
-production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
+`dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` focused controls are complete;
+`CTX-R6-04` is a preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay,
+conditional-gap, production-fix, phase-close, and closure tasks remain open until exact live proof is
+recorded.
 
 ## Required Staged Commit Gate
 
@@ -91,8 +92,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.2.2`, the `CTX-R6-10` successful-ungrounded-
-    verification control.
+  - Sole next authorized action: execute `R6-C.1.2.3`, the first `CTX-R6-11` truth-grounding
+    turn-shape-invariance control.
     Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
@@ -174,13 +175,18 @@ before that reconciled transition is committed and fresh-review-clean.
     only `truth artifact hint:` authority evidence and no action-gap evidence. No
     `R6-GAP-TGG-NO-ACTION` route is required, and no production code changed.
 
-- [ ] **R6-C.1.2.2 — Add, commit, and review successful ungrounded verification (`CTX-R6-10`).**
+- [x] **R6-C.1.2.2 — Add, commit, and review successful ungrounded verification (`CTX-R6-10`).**
   - Test: `truth_grounding_gap_flags_successful_verification_without_truth_reads`.
   - Acceptance: typed success without an earlier truth read yields `80 / High / Active`, flagged.
   - Verify: `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_successful_verification_without_truth_reads -- --exact --nocapture`.
   - If red: preserve witness and record only `R6-GAP-TGG-SUCCESS-WITHOUT-READ` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 5
+    filtered out`. A declared truth path, a typed successful `cargo test` result outside that path, and
+    no earlier truth read produced exactly `80 / High / Active`, flagged. Evidence retained both the
+    `truth artifact hint:` authority and the ungrounded `command family: cargo` verification action. No
+    `R6-GAP-TGG-SUCCESS-WITHOUT-READ` route is required, and no production code changed.
 
 - [ ] **R6-C.1.2.3 — Add, commit, and review turn-shape invariance (`CTX-R6-11`).**
   - Test: `truth_grounding_gap_is_event_order_invariant_across_turn_shapes`.

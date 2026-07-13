@@ -70,6 +70,59 @@ fn truth_grounding_gap_keeps_no_action_planning_clear() {
 }
 
 #[test]
+fn truth_grounding_gap_flags_successful_verification_without_truth_reads() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md and verify with `cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture`.",
+        ),
+        tool_row(
+            1,
+            "cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture",
+        ),
+        row(
+            2,
+            CompactionKind::ToolOutput,
+            "Exit code: 0\nrunning 1 test\ntest result: ok. 1 passed; 0 failed",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze successful ungrounded verification bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints
+        .last()
+        .expect("successful ungrounded verification checkpoint");
+    let score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("truth grounding gap score");
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+    assert!(score.evidence.iter().any(|evidence| {
+        evidence.reason == "truth artifact hint: docs/specs/agent-drift-analyzer-v0.4-spec.md"
+    }));
+    assert!(score
+        .evidence
+        .iter()
+        .any(|evidence| evidence.reason == "command family: cargo"));
+}
+
+#[test]
 fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_active() {
     let rows = vec![
         row(
