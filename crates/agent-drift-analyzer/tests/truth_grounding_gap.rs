@@ -123,6 +123,146 @@ fn truth_grounding_gap_flags_successful_verification_without_truth_reads() {
 }
 
 #[test]
+fn truth_grounding_gap_is_event_order_invariant_across_turn_shapes() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md.",
+        ),
+        row(
+            1,
+            CompactionKind::AssistantMessage,
+            "I will preserve the declared truth while preparing the requested update.",
+        ),
+        row(
+            2,
+            CompactionKind::AssistantMessage,
+            "I will keep the action order fixed across the session.",
+        ),
+        tool_row(3, "pwd"),
+        row(4, CompactionKind::ToolOutput, "/repo"),
+        row(
+            5,
+            CompactionKind::UserMessage,
+            "/goal Continue updating crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md and verify with `cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture`.",
+        ),
+        row(
+            6,
+            CompactionKind::AssistantMessage,
+            "I will continue with the same declared truth and event order.",
+        ),
+        row(
+            7,
+            CompactionKind::AssistantMessage,
+            "I will preserve the same verification action before reporting its result.",
+        ),
+        row(
+            8,
+            CompactionKind::AssistantMessage,
+            "I am verifying the requested source change now.",
+        ),
+        tool_row(9, "pwd"),
+        row(10, CompactionKind::ToolOutput, "/repo"),
+        tool_row(
+            11,
+            "cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture",
+        ),
+        row(
+            12,
+            CompactionKind::ToolOutput,
+            "Exit code: 0\nrunning 1 test\ntest result: ok. 1 passed; 0 failed",
+        ),
+    ];
+    let long_autonomous_rows = rows.clone();
+    let mut many_short_conversational_rows = rows;
+    for row in &mut many_short_conversational_rows[5..] {
+        row.turn_id = Some("turn-002".to_string());
+    }
+
+    let analyze = |rows: Vec<CompactionRow>, shape: &str| {
+        let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+        let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+            input_dir: fixture.input_dir.clone(),
+            output_dir: fixture.output_dir.clone(),
+        })
+        .unwrap_or_else(|error| panic!("analyze {shape} truth-grounding bundle: {error}"));
+        read_checkpoints(&result.checkpoints_path)
+    };
+
+    let long_checkpoints = analyze(long_autonomous_rows, "long-autonomous");
+    let short_checkpoints = analyze(many_short_conversational_rows, "many-short-conversational");
+
+    assert_eq!(long_checkpoints.len(), 2);
+    assert_eq!(short_checkpoints.len(), 2);
+    assert!(short_checkpoints.iter().all(|checkpoint| {
+        checkpoint.turn_context.as_ref().is_some_and(|context| {
+            context.execution_mode == agent_drift_analyzer::TurnExecutionMode::Conversational
+        })
+    }));
+    let long_checkpoint = long_checkpoints.last().expect("long-autonomous checkpoint");
+    let short_checkpoint = short_checkpoints
+        .last()
+        .expect("many-short-conversational checkpoint");
+    assert_eq!(
+        long_checkpoint
+            .turn_context
+            .as_ref()
+            .expect("long-autonomous turn context")
+            .execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Autonomous,
+    );
+    assert_eq!(
+        short_checkpoint
+            .turn_context
+            .as_ref()
+            .expect("many-short-conversational turn context")
+            .execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Conversational,
+    );
+
+    let long_score = long_checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("long-autonomous truth grounding gap score");
+    let short_score = short_checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("many-short-conversational truth grounding gap score");
+    for score in [long_score, short_score] {
+        assert_eq!(
+            (
+                score.raw_score,
+                score.confidence,
+                score.state,
+                score.flagged,
+            ),
+            (80, Confidence::High, DriftState::Active, true),
+        );
+    }
+
+    let long_reasons = long_score
+        .evidence
+        .iter()
+        .map(|evidence| evidence.reason.as_str())
+        .collect::<Vec<_>>();
+    let short_reasons = short_score
+        .evidence
+        .iter()
+        .map(|evidence| evidence.reason.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(long_reasons, short_reasons);
+    assert!(long_reasons.iter().any(|reason| {
+        *reason == "truth artifact hint: docs/specs/agent-drift-analyzer-v0.4-spec.md"
+    }));
+    assert!(long_reasons
+        .iter()
+        .any(|reason| *reason == "command family: cargo"));
+}
+
+#[test]
 fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_active() {
     let rows = vec![
         row(

@@ -2,10 +2,10 @@
 
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
 specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, reviewed
-`dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` focused controls are complete;
-`CTX-R6-04` is a preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay,
-conditional-gap, production-fix, phase-close, and closure tasks remain open until exact live proof is
-recorded.
+`dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` / first `CTX-R6-11`
+turn-shape-invariance focused controls are complete; `CTX-R6-04` is a preserved red requiring
+`R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay, conditional-gap, production-fix,
+phase-close, and closure tasks remain open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
 
@@ -92,8 +92,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.2.3`, the first `CTX-R6-11` truth-grounding
-    turn-shape-invariance control.
+  - Sole next authorized action: execute `R6-C.1.2.4`, the second `CTX-R6-11` truth-grounding
+    opaque-parent control.
     Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
@@ -188,7 +188,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `truth artifact hint:` authority and the ungrounded `command family: cargo` verification action. No
     `R6-GAP-TGG-SUCCESS-WITHOUT-READ` route is required, and no production code changed.
 
-- [ ] **R6-C.1.2.3 — Add, commit, and review turn-shape invariance (`CTX-R6-11`).**
+- [x] **R6-C.1.2.3 — Add, commit, and review turn-shape invariance (`CTX-R6-11`).**
   - Test: `truth_grounding_gap_is_event_order_invariant_across_turn_shapes`.
   - Acceptance: equivalent ungrounded event order in long/short turn representations yields
     `80 / High / Active` for both, flagged.
@@ -196,6 +196,12 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-TGG-TURN-INVARIANCE` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 6
+    filtered out`. Identical declared truth and event order reached the locked long-autonomous and
+    many-short-conversational execution modes while producing exactly `80 / High / Active`, flagged,
+    in both representations. Their evidence reasons were equivalent and retained both the
+    `truth artifact hint:` authority and the ungrounded `command family: cargo` verification action. No
+    `R6-GAP-TGG-TURN-INVARIANCE` route is required, and no production code changed.
 
 - [ ] **R6-C.1.2.4 — Add, commit, and review opaque-parent behavior (`CTX-R6-11`).**
   - Test: `truth_grounding_gap_keeps_opaque_parent_orchestration_clear_without_child_action`.
