@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::{AnalyzeRequest, DriftClass, DriftState};
+use agent_drift_analyzer::{AnalyzeRequest, Confidence, DriftClass, DriftState};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -22,6 +22,51 @@ fn truth_grounding_gap_flags_verification_without_truth_reads() {
     assert!(score.raw_score >= 60);
     assert!(score.flagged);
     assert_eq!(score.state, DriftState::Active);
+}
+
+#[test]
+fn truth_grounding_gap_keeps_no_action_planning_clear() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Research the analyzer plan using docs/specs/agent-drift-analyzer-v0.4-spec.md before deciding what to implement.",
+        ),
+        row(
+            1,
+            CompactionKind::AssistantMessage,
+            "I will compare the declared authority with the current planning assumptions and report the research result before proposing any action.",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze no-action planning bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints.last().expect("no-action planning checkpoint");
+    let score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("truth grounding gap score");
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false),
+    );
+    assert!(!score.evidence.is_empty());
+    assert!(score
+        .evidence
+        .iter()
+        .all(|evidence| evidence.reason.starts_with("truth artifact hint:")));
 }
 
 #[test]

@@ -1,10 +1,10 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
-specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, and reviewed
-`dead_end_thrash` family checkpoint are complete; `CTX-R6-04` is a preserved red requiring
-`R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay, conditional-gap, production-fix,
-phase-close, and closure tasks remain open until exact live proof is recorded.
+specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, reviewed
+`dead_end_thrash` family checkpoint, and `CTX-R6-09` focused control are complete; `CTX-R6-04` is a
+preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay, conditional-gap,
+production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
 
@@ -91,7 +91,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.2.1`, the `CTX-R6-09` no-action-planning control.
+  - Sole next authorized action: execute `R6-C.1.2.2`, the `CTX-R6-10` successful-ungrounded-
+    verification control.
     Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
@@ -160,13 +161,18 @@ before that reconciled transition is committed and fresh-review-clean.
 
 ## R6-C.1.2 — `truth_grounding_gap` Rows
 
-- [ ] **R6-C.1.2.1 — Add, commit, and review no-action planning (`CTX-R6-09`).**
+- [x] **R6-C.1.2.1 — Add, commit, and review no-action planning (`CTX-R6-09`).**
   - Test: `truth_grounding_gap_keeps_no_action_planning_clear`.
   - Acceptance: declared truth plus no write/verification yields `0 / Medium / Cleared`, unflagged.
   - Verify: `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_keeps_no_action_planning_clear -- --exact --nocapture`.
   - If red: preserve witness and record only `R6-GAP-TGG-NO-ACTION` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 4
+    filtered out`. The declared truth path plus planning/research prose and no write-like or
+    verification-like command produced exactly `0 / Medium / Cleared`, unflagged. The score retained
+    only `truth artifact hint:` authority evidence and no action-gap evidence. No
+    `R6-GAP-TGG-NO-ACTION` route is required, and no production code changed.
 
 - [ ] **R6-C.1.2.2 — Add, commit, and review successful ungrounded verification (`CTX-R6-10`).**
   - Test: `truth_grounding_gap_flags_successful_verification_without_truth_reads`.
