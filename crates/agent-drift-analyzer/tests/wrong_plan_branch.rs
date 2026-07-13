@@ -197,6 +197,60 @@ fn wrong_plan_branch_keeps_opaque_parent_orchestration_clear_without_child_actio
 }
 
 #[test]
+fn wrong_plan_branch_makes_no_claim_for_path_action_without_authority() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "Continue the current task.",
+        ),
+        tool_row(
+            1,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\n*** End Patch\nPATCH",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze empty-authority wrong-plan-branch bundle");
+    let context = &result.sessions[0].context;
+    assert!(context.truth_artifacts.is_empty());
+    assert_eq!(context.working_set_paths.len(), 1);
+    assert!(context
+        .working_set_paths
+        .iter()
+        .all(|path| path.source == "observed_command"));
+    assert_eq!(context.command_observations.len(), 1);
+    assert!(context.command_observations[0].write_like);
+    assert_eq!(
+        context.command_observations[0].paths,
+        vec!["crates/agent-drift-analyzer/src/lib.rs"]
+    );
+
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints.last().expect("empty-authority checkpoint");
+    let score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::WrongPlanBranch)
+        .expect("wrong plan branch score");
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (0, Confidence::Low, DriftState::Cleared, false),
+    );
+    assert!(score.evidence.is_empty());
+}
+
+#[test]
 fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
     let rows = vec![
         row(

@@ -5,9 +5,10 @@ specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, revie
 `dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` / both `CTX-R6-11`
 truth-grounding focused controls plus the `CTX-R6-12` truth-path-action and `CTX-R6-13`
 archetype-equivalence controls, reviewed `truth_grounding_gap` family checkpoint, and all three
-`CTX-R6-14` read-only-exploration, sanctioned-replan-scope, and opaque-parent controls are complete;
-`CTX-R6-04` and `CTX-R6-12` are preserved reds requiring `R6-GAP-DET-OPAQUE-PARENT` and
-`R6-GAP-TGG-TRUTH-PATH-ACTION`, respectively. All remaining controls, replay, conditional-gap,
+`CTX-R6-14` read-only-exploration, sanctioned-replan-scope, and opaque-parent controls plus the
+`CTX-R6-15` empty-authority control are complete; `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15` are
+preserved reds requiring `R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
+`R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. All remaining controls, replay, conditional-gap,
 production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
@@ -95,8 +96,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.3.4`, the `CTX-R6-15` empty-authority row.
-    Do not start a later `wrong_plan_branch` row, replay, a gap packet, or a production change first.
+  - Sole next authorized action: execute `R6-C.1.3.5`, the reviewed `wrong_plan_branch` family
+    checkpoint. Do not start the controls wall, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
@@ -306,7 +307,7 @@ before that reconciled transition is committed and fresh-review-clean.
     write/verification was present. The score produced exactly `0 / Medium / Cleared`, unflagged, with
     empty evidence. No `R6-GAP-WPB-OPAQUE-PARENT` route is required, and no production code changed.
 
-- [ ] **R6-C.1.3.4 — Add, commit, and review empty-authority no-claim (`CTX-R6-15`).**
+- [x] **R6-C.1.3.4 — Add, commit, and review empty-authority no-claim (`CTX-R6-15`).**
   - Test: `wrong_plan_branch_makes_no_claim_for_path_action_without_authority`.
   - Acceptance: path-bearing write/verification with empty authority yields
     `0 / Low / Cleared`, unflagged, empty evidence. Current source likely returns raw 60; that red result
@@ -315,6 +316,12 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-WPB-EMPTY-AUTHORITY` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
+  - Result (2026-07-13): `FAIL — PRESERVED RED`. The exact focused command completed with `0 passed;
+    1 failed; 5 filtered out`. Empty truth-artifact authority plus one working-set path sourced only from
+    the observed command and one write-like `apply_patch` action produced actual
+    `60 / Low / Active`, flagged, rather than the required `0 / Low / Cleared`, unflagged, with empty
+    evidence. This witness requires `R6-GAP-WPB-EMPTY-AUTHORITY`; no production code changed in
+    `R6-C.1-CONTROLS`.
 
 - [ ] **R6-C.1.3.5 — Run the reviewed `wrong_plan_branch` family checkpoint.**
   - Prerequisite: all four row commits above are independently review-clean.
