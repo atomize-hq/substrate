@@ -1302,6 +1302,23 @@ struct ForkChildPersistenceConfig {
 }
 
 #[cfg(target_os = "linux")]
+fn runtime_frame_identity(frame_sequence: u64) -> transport_api_types::RuntimeFrameIdentityV1 {
+    transport_api_types::RuntimeFrameIdentityV1 {
+        schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+        stream_id: "rts_repl_world_first_fixture".to_string(),
+        frame_sequence,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn runtime_event_identity(event_sequence: u64) -> transport_api_types::RuntimeEventIdentityV1 {
+    transport_api_types::RuntimeEventIdentityV1 {
+        event_id: format!("evt_repl_world_first_fixture_{event_sequence}"),
+        event_sequence,
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn member_stream_event(
     event_class: &str,
     message: &str,
@@ -1331,6 +1348,7 @@ fn member_stream_event(
         world_generation: Some(submit.world_generation),
         cmd_id: None,
         span_id: Some("member-turn-span".to_string()),
+        event_identity: Some(runtime_event_identity(1)),
         channel: Some("worker.reply".to_string()),
         identity_tuple: None,
         placement_posture: None,
@@ -1381,6 +1399,7 @@ fn generic_reply_stream_event(
         world_generation: Some(world_generation),
         cmd_id: None,
         span_id: Some("member-turn-span".to_string()),
+        event_identity: Some(runtime_event_identity(1)),
         channel: Some("worker.reply".to_string()),
         identity_tuple: None,
         placement_posture: None,
@@ -1555,16 +1574,26 @@ fn start_member_turn_intercept_proxy_with_scripts_and_fork_child_persistence(
                                 write_chunked_frame(
                                     &mut client,
                                     &transport_api_types::ExecuteStreamFrame::Start {
+                                        frame_identity: runtime_frame_identity(1),
                                         span_id: "member-turn-span".to_string(),
                                     },
                                 );
                                 write_chunked_frame(
                                     &mut client,
-                                    &transport_api_types::ExecuteStreamFrame::Event { event },
+                                    &transport_api_types::ExecuteStreamFrame::Event {
+                                        frame_identity: runtime_frame_identity(2),
+                                        event,
+                                    },
                                 );
                                 write_chunked_frame(
                                     &mut client,
                                     &transport_api_types::ExecuteStreamFrame::Exit {
+                                        frame_identity: runtime_frame_identity(3),
+                                        event_identity: runtime_event_identity(2),
+                                        terminal_identity:
+                                            transport_api_types::RuntimeTerminalIdentityV1::from(
+                                                &runtime_event_identity(2),
+                                            ),
                                         exit: 0,
                                         span_id: "member-turn-span".to_string(),
                                         scopes_used: Vec::new(),

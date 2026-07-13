@@ -10,6 +10,21 @@ use transport_api_types::{
     ExecuteStreamFrame, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
 };
 
+fn test_frame_identity(frame_sequence: u64) -> transport_api_types::RuntimeFrameIdentityV1 {
+    transport_api_types::RuntimeFrameIdentityV1 {
+        schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+        stream_id: "rts_telemetry_fixture".to_string(),
+        frame_sequence,
+    }
+}
+
+fn test_event_identity(event_sequence: u64) -> transport_api_types::RuntimeEventIdentityV1 {
+    transport_api_types::RuntimeEventIdentityV1 {
+        event_id: format!("evt_telemetry_fixture_{event_sequence}"),
+        event_sequence,
+    }
+}
+
 // Telemetry stream handling
 #[test]
 #[serial_test::serial]
@@ -21,12 +36,19 @@ fn consume_agent_stream_buffer_without_context_suppresses_agent_events() {
 
         let frames = [
             ExecuteStreamFrame::Stdout {
+                frame_identity: test_frame_identity(1),
                 chunk_b64: BASE64.encode("hello"),
             },
             ExecuteStreamFrame::Stderr {
+                frame_identity: test_frame_identity(2),
                 chunk_b64: BASE64.encode("oops"),
             },
             ExecuteStreamFrame::Exit {
+                frame_identity: test_frame_identity(3),
+                event_identity: test_event_identity(1),
+                terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                    &test_event_identity(1),
+                ),
                 exit: 0,
                 span_id: "spn_test".into(),
                 scopes_used: vec!["scope:a".into()],
@@ -68,6 +90,116 @@ fn consume_agent_stream_buffer_without_context_suppresses_agent_events() {
 }
 
 #[test]
+#[serial_test::serial]
+fn consume_agent_stream_buffer_preserves_runtime_event_identity_unchanged() {
+    let _guard = agent_events::acquire_event_test_guard();
+    let mut rx = init_event_channel();
+    let mut event = substrate_common::agent_events::AgentEvent::message(
+        "agent",
+        "session",
+        "run",
+        substrate_common::agent_events::MessageEventKind::Status,
+        "identified",
+    );
+    let event_identity = test_event_identity(1);
+    event.event_identity = Some(event_identity.clone());
+    let frames = [
+        ExecuteStreamFrame::Start {
+            frame_identity: test_frame_identity(1),
+            span_id: "spn_identity".to_string(),
+        },
+        ExecuteStreamFrame::Event {
+            frame_identity: test_frame_identity(2),
+            event,
+        },
+    ];
+    let mut buffer = Vec::new();
+    for frame in frames {
+        buffer.extend(frame.canonical_ndjson_bytes().expect("canonical frame"));
+    }
+
+    let mut exit_code = None;
+    let mut scopes_used = Vec::new();
+    let mut fs_diff = None;
+    consume_agent_stream_buffer(
+        "tester",
+        &mut buffer,
+        &mut exit_code,
+        &mut scopes_used,
+        &mut fs_diff,
+    )
+    .expect("consume identified stream");
+
+    let forwarded = rx.try_recv().expect("forwarded Event");
+    assert_eq!(forwarded.event_identity.as_ref(), Some(&event_identity));
+    assert!(exit_code.is_none());
+    clear_agent_event_sender();
+}
+
+#[test]
+fn consume_agent_stream_buffer_rejects_missing_event_identity_without_host_repair() {
+    let event = substrate_common::agent_events::AgentEvent::message(
+        "agent",
+        "session",
+        "run",
+        substrate_common::agent_events::MessageEventKind::Status,
+        "missing identity",
+    );
+    let frame = ExecuteStreamFrame::Event {
+        frame_identity: test_frame_identity(1),
+        event,
+    };
+    let mut buffer = serde_json::to_vec(&frame).expect("serialize malformed Event fixture");
+    buffer.push(b'\n');
+    let mut exit_code = None;
+    let mut scopes_used = Vec::new();
+    let mut fs_diff = None;
+
+    let err = consume_agent_stream_buffer(
+        "tester",
+        &mut buffer,
+        &mut exit_code,
+        &mut scopes_used,
+        &mut fs_diff,
+    )
+    .expect_err("missing runtime event identity must fail closed");
+    assert!(format!("{err:#}").contains("requires event.event_identity"));
+    assert!(exit_code.is_none());
+}
+
+#[test]
+fn stream_exhaustion_and_transport_error_do_not_synthesize_terminal_completion() {
+    let mut empty_buffer = Vec::new();
+    let mut exit_code = None;
+    let mut scopes_used = Vec::new();
+    let mut fs_diff = None;
+    consume_agent_stream_buffer(
+        "tester",
+        &mut empty_buffer,
+        &mut exit_code,
+        &mut scopes_used,
+        &mut fs_diff,
+    )
+    .expect("stream exhaustion is only an observation");
+    assert!(exit_code.is_none());
+
+    let error = ExecuteStreamFrame::Error {
+        frame_identity: test_frame_identity(1),
+        message: "transport lost".to_string(),
+    };
+    let mut error_buffer = error.canonical_ndjson_bytes().expect("canonical Error");
+    assert!(consume_agent_stream_buffer(
+        "tester",
+        &mut error_buffer,
+        &mut exit_code,
+        &mut scopes_used,
+        &mut fs_diff,
+    )
+    .is_err());
+    assert!(exit_code.is_none());
+}
+
+#[test]
 fn parse_fs_diff_from_agent_json() {
     let sample = r#"{
         "exit":0,
@@ -95,6 +227,11 @@ fn parse_fs_diff_from_agent_json() {
 #[test]
 fn consume_agent_stream_buffer_captures_process_event_summary() {
     let frame = ExecuteStreamFrame::Exit {
+        frame_identity: test_frame_identity(1),
+        event_identity: test_event_identity(1),
+        terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+            &test_event_identity(1),
+        ),
         exit: 0,
         span_id: "spn_proc".into(),
         scopes_used: vec![],

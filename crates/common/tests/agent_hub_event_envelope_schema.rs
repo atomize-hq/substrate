@@ -1,5 +1,8 @@
 use serde_json::{json, Value};
-use substrate_common::agent_events::{AgentEvent, AgentEventKind, MessageEventKind};
+use substrate_common::agent_events::{
+    AgentEvent, AgentEventKind, MessageEventKind, RuntimeEventIdentityV1, RuntimeFrameIdentityV1,
+    RuntimeTerminalIdentityV1,
+};
 
 fn minimal_valid_envelope_json() -> Value {
     json!({
@@ -10,6 +13,108 @@ fn minimal_valid_envelope_json() -> Value {
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
         "data": { "message": "ok" }
     })
+}
+
+#[test]
+fn runtime_identity_v1_exact_fields_roundtrip() {
+    let frame_json = json!({
+        "schema_version": 1,
+        "stream_id": "rts_019f5cfa",
+        "frame_sequence": 1
+    });
+    let frame: RuntimeFrameIdentityV1 =
+        serde_json::from_value(frame_json.clone()).expect("valid frame identity");
+    assert_eq!(serde_json::to_value(frame).expect("serialize"), frame_json);
+
+    let event_json = json!({
+        "event_id": "evt_019f5cfa",
+        "event_sequence": 1
+    });
+    let event: RuntimeEventIdentityV1 =
+        serde_json::from_value(event_json.clone()).expect("valid event identity");
+    assert_eq!(serde_json::to_value(event).expect("serialize"), event_json);
+
+    let terminal_json = json!({
+        "terminal_event_id": "evt_019f5cfa",
+        "terminal_event_sequence": 1
+    });
+    let terminal: RuntimeTerminalIdentityV1 =
+        serde_json::from_value(terminal_json.clone()).expect("valid terminal identity");
+    assert_eq!(
+        serde_json::to_value(terminal).expect("serialize"),
+        terminal_json
+    );
+}
+
+#[test]
+fn runtime_identity_v1_rejects_unknown_or_malformed_fields() {
+    for invalid in [
+        json!({"schema_version": 2, "stream_id": "rts_ok", "frame_sequence": 1}),
+        json!({"schema_version": 1, "stream_id": "", "frame_sequence": 1}),
+        json!({"schema_version": 1, "stream_id": "   ", "frame_sequence": 1}),
+        json!({"schema_version": 1, "stream_id": "rts_ok", "frame_sequence": 0}),
+        json!({
+            "schema_version": 1,
+            "stream_id": "rts_ok",
+            "frame_sequence": 1,
+            "event_sequence": 1
+        }),
+    ] {
+        assert!(
+            serde_json::from_value::<RuntimeFrameIdentityV1>(invalid).is_err(),
+            "malformed frame identity must fail closed"
+        );
+    }
+
+    for invalid in [
+        json!({"event_id": "", "event_sequence": 1}),
+        json!({"event_id": "   ", "event_sequence": 1}),
+        json!({"event_id": "evt_ok", "event_sequence": 0}),
+        json!({"event_id": "evt_ok", "event_sequence": 1, "stream_id": "rts_conflict"}),
+    ] {
+        assert!(
+            serde_json::from_value::<RuntimeEventIdentityV1>(invalid).is_err(),
+            "malformed event identity must fail closed"
+        );
+    }
+
+    for invalid in [
+        json!({"terminal_event_id": "", "terminal_event_sequence": 1}),
+        json!({"terminal_event_id": "   ", "terminal_event_sequence": 1}),
+        json!({"terminal_event_id": "evt_ok", "terminal_event_sequence": 0}),
+        json!({
+            "terminal_event_id": "evt_ok",
+            "terminal_event_sequence": 1,
+            "event_id": "evt_conflict"
+        }),
+    ] {
+        assert!(
+            serde_json::from_value::<RuntimeTerminalIdentityV1>(invalid).is_err(),
+            "malformed terminal identity must fail closed"
+        );
+    }
+}
+
+#[test]
+fn agent_event_runtime_identity_roundtrips_without_weakening_legacy_decode() {
+    let legacy: AgentEvent = serde_json::from_value(minimal_valid_envelope_json())
+        .expect("legacy standalone AgentEvent remains decodable");
+    assert!(legacy.event_identity.is_none());
+
+    let mut identified_json = minimal_valid_envelope_json();
+    identified_json
+        .as_object_mut()
+        .expect("event object")
+        .insert(
+            "event_identity".to_string(),
+            json!({"event_id": "evt_agent", "event_sequence": 7}),
+        );
+    let identified: AgentEvent =
+        serde_json::from_value(identified_json.clone()).expect("identified AgentEvent");
+    assert_eq!(
+        serde_json::to_value(identified).expect("serialize"),
+        identified_json
+    );
 }
 
 #[test]

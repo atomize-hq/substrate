@@ -15,6 +15,37 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant};
 
+fn runtime_frame_identity(
+    stream_key: &str,
+    frame_sequence: u64,
+) -> transport_api_types::RuntimeFrameIdentityV1 {
+    transport_api_types::RuntimeFrameIdentityV1 {
+        schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+        stream_id: format!("rts_repl_fixture_{stream_key}"),
+        frame_sequence,
+    }
+}
+
+fn runtime_event_identity(
+    stream_key: &str,
+    event_sequence: u64,
+) -> transport_api_types::RuntimeEventIdentityV1 {
+    transport_api_types::RuntimeEventIdentityV1 {
+        event_id: format!("evt_repl_fixture_{stream_key}_{event_sequence}"),
+        event_sequence,
+    }
+}
+
+fn runtime_terminal_identity(
+    stream_key: &str,
+    event_sequence: u64,
+) -> transport_api_types::RuntimeTerminalIdentityV1 {
+    transport_api_types::RuntimeTerminalIdentityV1::from(&runtime_event_identity(
+        stream_key,
+        event_sequence,
+    ))
+}
+
 #[derive(Debug, Clone)]
 pub struct PersistentStartSessionRecord {
     pub cwd: String,
@@ -364,6 +395,7 @@ impl ReplWorldAgentStub {
                     session_handle_id: &str,
                 ) -> transport_api_types::ExecuteStreamFrame {
                     transport_api_types::ExecuteStreamFrame::Event {
+                        frame_identity: runtime_frame_identity(span_id, 2),
                         event: substrate_common::agent_events::AgentEvent {
                             ts: chrono::Utc::now(),
                             agent_id: request.agent_id.clone(),
@@ -381,6 +413,7 @@ impl ReplWorldAgentStub {
                             world_generation: Some(dispatch.world_generation),
                             cmd_id: None,
                             span_id: Some(span_id.to_string()),
+                            event_identity: Some(runtime_event_identity(span_id, 1)),
                             channel: None,
                             identity_tuple: None,
                             placement_posture: None,
@@ -492,6 +525,7 @@ impl ReplWorldAgentStub {
                                 write_chunked_frame(
                                     &mut stream,
                                     &transport_api_types::ExecuteStreamFrame::Start {
+                                        frame_identity: runtime_frame_identity(&span_id, 1),
                                         span_id: span_id.clone(),
                                     },
                                 )
@@ -515,6 +549,11 @@ impl ReplWorldAgentStub {
                                         write_chunked_frame(
                                             &mut stream,
                                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                                frame_identity: runtime_frame_identity(&span_id, 3),
+                                                event_identity: runtime_event_identity(&span_id, 2),
+                                                terminal_identity: runtime_terminal_identity(
+                                                    &span_id, 2,
+                                                ),
                                                 exit: exit_code,
                                                 span_id: span_id.clone(),
                                                 scopes_used: Vec::new(),
@@ -563,6 +602,11 @@ impl ReplWorldAgentStub {
                                         write_chunked_frame(
                                             &mut stream,
                                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                                frame_identity: runtime_frame_identity(&span_id, 3),
+                                                event_identity: runtime_event_identity(&span_id, 2),
+                                                terminal_identity: runtime_terminal_identity(
+                                                    &span_id, 2,
+                                                ),
                                                 exit: exit_code_on_cancel,
                                                 span_id: span_id.clone(),
                                                 scopes_used: Vec::new(),
@@ -578,6 +622,11 @@ impl ReplWorldAgentStub {
                                         write_chunked_frame(
                                             &mut stream,
                                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                                frame_identity: runtime_frame_identity(&span_id, 2),
+                                                event_identity: runtime_event_identity(&span_id, 1),
+                                                terminal_identity: runtime_terminal_identity(
+                                                    &span_id, 1,
+                                                ),
                                                 exit: exit_code,
                                                 span_id: span_id.clone(),
                                                 scopes_used: Vec::new(),
@@ -593,6 +642,7 @@ impl ReplWorldAgentStub {
                                         write_chunked_frame(
                                             &mut stream,
                                             &transport_api_types::ExecuteStreamFrame::Error {
+                                                frame_identity: runtime_frame_identity(&span_id, 2),
                                                 message,
                                             },
                                         )
@@ -623,37 +673,59 @@ impl ReplWorldAgentStub {
                         let stderr_b64 = BASE64.encode(&output.stderr);
 
                         let mut frames = String::new();
+                        let mut frame_sequence = 1;
                         frames.push_str(
                             &serde_json::to_string(&transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: runtime_frame_identity(
+                                    "agent-span",
+                                    frame_sequence,
+                                ),
                                 span_id: "agent-span".to_string(),
                             })
                             .expect("serialize start"),
                         );
+                        frame_sequence += 1;
                         frames.push('\n');
                         if !output.stdout.is_empty() {
                             frames.push_str(
                                 &serde_json::to_string(
                                     &transport_api_types::ExecuteStreamFrame::Stdout {
+                                        frame_identity: runtime_frame_identity(
+                                            "agent-span",
+                                            frame_sequence,
+                                        ),
                                         chunk_b64: stdout_b64,
                                     },
                                 )
                                 .expect("serialize stdout"),
                             );
+                            frame_sequence += 1;
                             frames.push('\n');
                         }
                         if !output.stderr.is_empty() {
                             frames.push_str(
                                 &serde_json::to_string(
                                     &transport_api_types::ExecuteStreamFrame::Stderr {
+                                        frame_identity: runtime_frame_identity(
+                                            "agent-span",
+                                            frame_sequence,
+                                        ),
                                         chunk_b64: stderr_b64,
                                     },
                                 )
                                 .expect("serialize stderr"),
                             );
+                            frame_sequence += 1;
                             frames.push('\n');
                         }
                         frames.push_str(
                             &serde_json::to_string(&transport_api_types::ExecuteStreamFrame::Exit {
+                                frame_identity: runtime_frame_identity(
+                                    "agent-span",
+                                    frame_sequence,
+                                ),
+                                event_identity: runtime_event_identity("agent-span", 1),
+                                terminal_identity: runtime_terminal_identity("agent-span", 1),
                                 exit: output.status.code().unwrap_or(-1),
                                 span_id: "agent-span".to_string(),
                                 scopes_used: Vec::new(),
@@ -717,6 +789,7 @@ impl ReplWorldAgentStub {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: runtime_frame_identity(&span_id, 1),
                                 span_id: span_id.clone(),
                             },
                         )
@@ -724,6 +797,7 @@ impl ReplWorldAgentStub {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Stdout {
+                                frame_identity: runtime_frame_identity(&span_id, 2),
                                 chunk_b64: BASE64.encode(stdout.as_bytes()),
                             },
                         )
@@ -731,6 +805,9 @@ impl ReplWorldAgentStub {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                frame_identity: runtime_frame_identity(&span_id, 3),
+                                event_identity: runtime_event_identity(&span_id, 1),
+                                terminal_identity: runtime_terminal_identity(&span_id, 1),
                                 exit: 0,
                                 span_id,
                                 scopes_used: Vec::new(),

@@ -1552,13 +1552,12 @@ pub(crate) fn private_cancel_request_channel(
 }
 
 pub(crate) fn runtime_is_terminal(manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>) -> bool {
-    let state = manifest
+    manifest
         .lock()
         .expect("runtime manifest mutex poisoned")
-        .handle
-        .state
-        .clone();
-    !state.is_live()
+        .internal
+        .terminal_observed_at
+        .is_some()
 }
 
 pub(crate) fn runtime_stop_transport_ids(
@@ -2237,10 +2236,10 @@ where
                 .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
             match frame {
                 ExecuteStreamFrame::Start { .. } => {}
-                ExecuteStreamFrame::Event { event } => {
+                ExecuteStreamFrame::Event { event, .. } => {
                     on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
                 }
-                ExecuteStreamFrame::Stdout { chunk_b64 } => {
+                ExecuteStreamFrame::Stdout { chunk_b64, .. } => {
                     let decoded = BASE64
                         .decode(chunk_b64.as_bytes())
                         .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
@@ -2248,7 +2247,7 @@ where
                         String::from_utf8_lossy(&decoded).to_string(),
                     ));
                 }
-                ExecuteStreamFrame::Stderr { chunk_b64 } => {
+                ExecuteStreamFrame::Stderr { chunk_b64, .. } => {
                     let decoded = BASE64
                         .decode(chunk_b64.as_bytes())
                         .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
@@ -2259,14 +2258,18 @@ where
                 ExecuteStreamFrame::Exit { exit, .. } => {
                     observed_exit = Some(exit);
                 }
-                ExecuteStreamFrame::Error { message } => {
+                ExecuteStreamFrame::Error { message, .. } => {
                     return Err(anyhow::anyhow!("substrate: error: {message}"));
                 }
             }
         }
     }
 
-    let exit_code = observed_exit.unwrap_or(0);
+    let exit_code = observed_exit.ok_or_else(|| {
+        anyhow::anyhow!(
+            "substrate: error: member turn stream ended without an exact terminal Exit frame"
+        )
+    })?;
     Ok(SubmittedPromptCompletion {
         exit_code,
         warning: warning_for_exit_code(exit_code),
@@ -2967,7 +2970,12 @@ async fn stream_private_prompt_request(
     request: PrivatePromptRequest,
     world_scoped: bool,
 ) -> Result<()> {
-    if runtime_is_terminal(&runtime.manifest) {
+    let manifest_snapshot = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+    if !manifest_snapshot.handle.state.is_live() {
         let _ = request.envelope_tx.send(failed_prompt_envelope(
             "runtime",
             "owner_unreachable",
@@ -2975,12 +2983,6 @@ async fn stream_private_prompt_request(
         ));
         return Ok(());
     }
-
-    let manifest_snapshot = runtime
-        .manifest
-        .lock()
-        .expect("runtime manifest mutex poisoned")
-        .clone();
     let run_id = Uuid::now_v7().to_string();
     let accepted = PublicPromptEnvelope::Accepted {
         version: 1,
@@ -3632,13 +3634,13 @@ mod tests {
     use super::{
         apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
         prompt_completion_session_state, prompt_event_text,
-        reconcile_hidden_owner_helper_start_timeout, validate_public_prompt_command_request,
-        HiddenOwnerHelperLaunchPlan, HiddenOwnerHelperParticipantPlan,
-        HiddenOwnerHelperSessionPlan, HiddenOwnerHelperStartTimeoutReconciliation,
-        HiddenOwnerHelperStartupPromptPlan, LoadedPublicPrompt, OwnerHelperMode,
-        PrivateCancelOutcome, PrivateStopOutcome, PromptSubmitRuntime, PublicPromptAction,
-        PublicPromptCommandRequest, PublicSessionPosture, ResolvedRuntimeBackendKind,
-        ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
+        reconcile_hidden_owner_helper_start_timeout, runtime_is_terminal,
+        validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
+        HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+        HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
+        LoadedPublicPrompt, OwnerHelperMode, PrivateCancelOutcome, PrivateStopOutcome,
+        PromptSubmitRuntime, PublicPromptAction, PublicPromptCommandRequest, PublicSessionPosture,
+        ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
     };
     #[cfg(unix)]
     use super::{
@@ -3929,6 +3931,38 @@ mod tests {
             PrivateCancelOutcome::ProtocolError,
         ];
         assert_eq!(outcomes.len(), 4);
+    }
+
+    #[test]
+    fn runtime_terminal_predicate_requires_explicit_terminal_observation() {
+        let descriptor = RuntimeSelectionDescriptor {
+            agent_id: "codex-world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            binary_path: PathBuf::from("/usr/bin/codex"),
+        };
+        let mut manifest = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+            &descriptor,
+            "sess_transport_interruption".to_string(),
+            "ash_transport_interruption".to_string(),
+            "lease_transport_interruption".to_string(),
+        )
+        .expect("runtime participant");
+        manifest.transition_state(AgentRuntimeSessionState::Invalidated);
+        let manifest = Arc::new(Mutex::new(manifest));
+
+        assert!(
+            !runtime_is_terminal(&manifest),
+            "diagnostic invalidation without exact terminal observation must not yield AlreadyTerminal"
+        );
+
+        manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned")
+            .mark_terminal_state("exact terminal Exit observed");
+        assert!(runtime_is_terminal(&manifest));
     }
 
     #[test]

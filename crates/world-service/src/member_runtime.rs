@@ -28,6 +28,7 @@ use world_api::SharedWorldBindingSnapshot;
 
 use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlacementContext};
 use crate::prompt_fulfillment::PromptFulfillmentBridge;
+use crate::service::RuntimeEventStreamProducer;
 
 const MEMBER_ROLE: &str = "member";
 const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
@@ -228,9 +229,8 @@ impl MemberRuntimeManager {
         }
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
-        let _ = tx.send(ExecuteStreamFrame::Start {
-            span_id: span_id.clone(),
-        });
+        let mut producer = RuntimeEventStreamProducer::new();
+        let _ = tx.send(producer.start(span_id.clone())?);
 
         let manager = self.clone();
         let participant_id = dispatch.participant_id.clone();
@@ -254,7 +254,7 @@ impl MemberRuntimeManager {
                 {
                     manager.remember_uaa_session_id(&participant_id, session_id);
                 }
-                if let Some(frame) = frame_from_wrapper_event(
+                match frame_from_wrapper_event(
                     &context,
                     &binding,
                     &span_id,
@@ -262,8 +262,16 @@ impl MemberRuntimeManager {
                     &mut emitted_registered,
                     MemberStreamMode::Bootstrap,
                     active.agent_id.as_str(),
+                    &mut producer,
                 ) {
-                    let _ = tx.send(frame);
+                    Ok(Some(frame)) => {
+                        let _ = tx.send(frame);
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        tracing::error!(error = %err, "failed to identify member bootstrap Event");
+                        break;
+                    }
                 }
             }
 
@@ -282,7 +290,7 @@ impl MemberRuntimeManager {
                     active.uaa_session_id().is_some(),
                 )
             });
-            for frame in frames_from_completion(
+            let frames = frames_from_completion(
                 &context,
                 &binding,
                 &span_id,
@@ -291,8 +299,17 @@ impl MemberRuntimeManager {
                 &mut emitted_registered,
                 MemberStreamMode::Bootstrap,
                 active.agent_id.as_str(),
-            ) {
-                let _ = tx.send(frame);
+                &mut producer,
+            );
+            match frames {
+                Ok(frames) => {
+                    for frame in frames {
+                        let _ = tx.send(frame);
+                    }
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "failed to identify member bootstrap completion");
+                }
             }
 
             manager.finish_bootstrap(&participant_id, preserve_retained_member);
@@ -342,9 +359,8 @@ impl MemberRuntimeManager {
         self.register_turn(span_id.clone(), turn.clone());
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
-        let _ = tx.send(ExecuteStreamFrame::Start {
-            span_id: span_id.clone(),
-        });
+        let mut producer = RuntimeEventStreamProducer::new();
+        let _ = tx.send(producer.start(span_id.clone())?);
 
         let manager = self.clone();
         let context = active.submit_context(req.run_id.clone());
@@ -360,7 +376,7 @@ impl MemberRuntimeManager {
                 {
                     manager.remember_uaa_session_id(&turn.participant_id, session_id);
                 }
-                if let Some(frame) = frame_from_wrapper_event(
+                match frame_from_wrapper_event(
                     &context,
                     &binding,
                     &span_id,
@@ -368,8 +384,16 @@ impl MemberRuntimeManager {
                     &mut emitted_registered,
                     MemberStreamMode::SubmittedTurn,
                     active.agent_id.as_str(),
+                    &mut producer,
                 ) {
-                    let _ = tx.send(frame);
+                    Ok(Some(frame)) => {
+                        let _ = tx.send(frame);
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        tracing::error!(error = %err, "failed to identify submitted member Event");
+                        break;
+                    }
                 }
             }
 
@@ -381,7 +405,7 @@ impl MemberRuntimeManager {
                     manager.remember_uaa_session_id(&turn.participant_id, session_id);
                 }
             }
-            for frame in frames_from_completion(
+            let frames = frames_from_completion(
                 &context,
                 &binding,
                 &span_id,
@@ -390,8 +414,17 @@ impl MemberRuntimeManager {
                 &mut emitted_registered,
                 MemberStreamMode::SubmittedTurn,
                 active.agent_id.as_str(),
-            ) {
-                let _ = tx.send(frame);
+                &mut producer,
+            );
+            match frames {
+                Ok(frames) => {
+                    for frame in frames {
+                        let _ = tx.send(frame);
+                    }
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "failed to identify submitted member completion");
+                }
             }
 
             manager.unregister_turn(&span_id);
@@ -969,6 +1002,7 @@ fn build_submitted_turn_run_request(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn frame_from_wrapper_event(
     context: &MemberStreamContext,
     binding: &SharedWorldBindingSnapshot,
@@ -977,18 +1011,20 @@ fn frame_from_wrapper_event(
     emitted_registered: &mut bool,
     mode: MemberStreamMode,
     agent_id: &str,
-) -> Option<ExecuteStreamFrame> {
-    Some(ExecuteStreamFrame::Event {
-        event: agent_event_from_wrapper_event(
-            context,
-            binding,
-            span_id,
-            wrapper_event,
-            emitted_registered,
-            mode,
-            agent_id,
-        )?,
-    })
+    producer: &mut RuntimeEventStreamProducer,
+) -> Result<Option<ExecuteStreamFrame>> {
+    let Some(event) = agent_event_from_wrapper_event(
+        context,
+        binding,
+        span_id,
+        wrapper_event,
+        emitted_registered,
+        mode,
+        agent_id,
+    ) else {
+        return Ok(None);
+    };
+    producer.event(event).map(Some)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1001,8 +1037,9 @@ fn frames_from_completion(
     emitted_registered: &mut bool,
     mode: MemberStreamMode,
     agent_id: &str,
-) -> Vec<ExecuteStreamFrame> {
-    match completion {
+    producer: &mut RuntimeEventStreamProducer,
+) -> Result<Vec<ExecuteStreamFrame>> {
+    let frames = match completion {
         Ok(completion) => {
             let mut frames = Vec::new();
             if mode == MemberStreamMode::Bootstrap && !*emitted_registered {
@@ -1014,32 +1051,31 @@ fn frames_from_completion(
                     agent_id,
                 ) {
                     *emitted_registered = true;
-                    frames.push(ExecuteStreamFrame::Event { event });
+                    frames.push(producer.event(event)?);
                 }
             }
 
-            frames.push(ExecuteStreamFrame::Exit {
-                exit: exit_code_from_status(&completion.status),
-                span_id: span_id.to_string(),
-                scopes_used: Vec::new(),
-                fs_diff: None,
-                process_telemetry: ProcessTelemetry::default(),
-            });
+            frames.push(producer.exit(
+                exit_code_from_status(&completion.status),
+                span_id.to_string(),
+                Vec::new(),
+                None,
+                ProcessTelemetry::default(),
+            )?);
             frames
         }
         Err(AgentWrapperError::Backend { message }) if message == CANCELLED_MESSAGE => {
-            vec![ExecuteStreamFrame::Exit {
-                exit: cancel_exit_code(cancel_signal.as_deref()),
-                span_id: span_id.to_string(),
-                scopes_used: Vec::new(),
-                fs_diff: None,
-                process_telemetry: ProcessTelemetry::default(),
-            }]
+            vec![producer.exit(
+                cancel_exit_code(cancel_signal.as_deref()),
+                span_id.to_string(),
+                Vec::new(),
+                None,
+                ProcessTelemetry::default(),
+            )?]
         }
-        Err(err) => vec![ExecuteStreamFrame::Error {
-            message: format!("member runtime failed: {err}"),
-        }],
-    }
+        Err(err) => vec![producer.transport_error(format!("member runtime failed: {err}"))?],
+    };
+    Ok(frames)
 }
 
 fn agent_event_from_wrapper_event(
@@ -1165,6 +1201,7 @@ fn registered_event_from_data(
         world_generation: Some(binding.world_generation),
         cmd_id: None,
         span_id: Some(span_id.to_string()),
+        event_identity: None,
         channel: None,
         identity_tuple: None,
         placement_posture: None,
@@ -1292,8 +1329,9 @@ fn stream_response(
     rx: tokio::sync::mpsc::UnboundedReceiver<ExecuteStreamFrame>,
 ) -> Result<Response> {
     let stream = UnboundedReceiverStream::new(rx).map(|frame| {
-        let mut payload = serde_json::to_vec(&frame).expect("serialize member runtime frame");
-        payload.push(b'\n');
+        let payload = frame
+            .canonical_ndjson_bytes()
+            .expect("serialize identified member runtime frame");
         Ok::<Bytes, Infallible>(Bytes::from(payload))
     });
 
@@ -2449,6 +2487,8 @@ base_url = "https://gateway.example.invalid/v1"
     #[test]
     fn bootstrap_completion_without_session_handle_emits_only_exit() {
         let mut emitted_registered = false;
+        let mut producer = RuntimeEventStreamProducer::new();
+        producer.start("spn_bootstrap".to_string()).expect("Start");
         let frames = frames_from_completion(
             &sample_stream_context(),
             &sample_world_binding(),
@@ -2466,7 +2506,9 @@ base_url = "https://gateway.example.invalid/v1"
             &mut emitted_registered,
             MemberStreamMode::Bootstrap,
             "codex_world",
-        );
+            &mut producer,
+        )
+        .expect("completion frames");
 
         assert_eq!(
             frames.len(),
@@ -2545,6 +2587,8 @@ base_url = "https://gateway.example.invalid/v1"
     #[test]
     fn bootstrap_completion_with_session_handle_emits_registered_then_exit() {
         let mut emitted_registered = false;
+        let mut producer = RuntimeEventStreamProducer::new();
+        let start = producer.start("spn_bootstrap".to_string()).expect("Start");
         let frames = frames_from_completion(
             &sample_stream_context(),
             &sample_world_binding(),
@@ -2567,7 +2611,9 @@ base_url = "https://gateway.example.invalid/v1"
             &mut emitted_registered,
             MemberStreamMode::Bootstrap,
             "codex_world",
-        );
+            &mut producer,
+        )
+        .expect("completion frames");
 
         assert_eq!(
             frames.len(),
@@ -2576,7 +2622,7 @@ base_url = "https://gateway.example.invalid/v1"
         );
         assert!(matches!(
             frames.first(),
-            Some(ExecuteStreamFrame::Event { event }) if event.kind == AgentEventKind::Registered
+            Some(ExecuteStreamFrame::Event { event, .. }) if event.kind == AgentEventKind::Registered
         ));
         assert!(matches!(
             frames.get(1),
@@ -2586,6 +2632,41 @@ base_url = "https://gateway.example.invalid/v1"
             emitted_registered,
             "registered event tracking must be updated"
         );
+
+        let start_identity = match start {
+            ExecuteStreamFrame::Start { frame_identity, .. } => frame_identity,
+            other => panic!("unexpected frame: {other:?}"),
+        };
+        let (event_frame_identity, event_identity) = match &frames[0] {
+            ExecuteStreamFrame::Event {
+                frame_identity,
+                event,
+            } => (
+                frame_identity,
+                event.event_identity.as_ref().expect("event identity"),
+            ),
+            other => panic!("unexpected frame: {other:?}"),
+        };
+        let (exit_frame_identity, exit_event_identity, terminal_identity) = match &frames[1] {
+            ExecuteStreamFrame::Exit {
+                frame_identity,
+                event_identity,
+                terminal_identity,
+                ..
+            } => (frame_identity, event_identity, terminal_identity),
+            other => panic!("unexpected frame: {other:?}"),
+        };
+        assert_eq!(start_identity.frame_sequence, 1);
+        assert_eq!(event_frame_identity.frame_sequence, 2);
+        assert_eq!(exit_frame_identity.frame_sequence, 3);
+        assert_eq!(event_identity.event_sequence, 1);
+        assert_eq!(exit_event_identity.event_sequence, 2);
+        assert_eq!(event_frame_identity.stream_id, start_identity.stream_id);
+        assert_eq!(exit_frame_identity.stream_id, start_identity.stream_id);
+        assert!(terminal_identity.matches_event(exit_event_identity));
+        assert!(producer
+            .transport_error("late transport error".to_string())
+            .is_err());
     }
 
     #[test]

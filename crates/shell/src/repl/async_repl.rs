@@ -7314,6 +7314,41 @@ fn spawn_remote_private_cancel_owner(
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Default)]
+struct RemoteRuntimeTerminalObservation {
+    exact_terminal_observed: bool,
+    interrupted: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+impl RemoteRuntimeTerminalObservation {
+    fn decode_frame(&mut self, payload: &[u8]) -> std::result::Result<ExecuteStreamFrame, String> {
+        if self.interrupted || self.exact_terminal_observed {
+            return Err("world-scoped member runtime stream is already closed".to_string());
+        }
+
+        let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload).map_err(|err| {
+            self.interrupted = true;
+            format!("world-scoped member runtime stream protocol error: {err}")
+        })?;
+        match &frame {
+            ExecuteStreamFrame::Exit { .. } => self.exact_terminal_observed = true,
+            ExecuteStreamFrame::Error { .. } => self.interrupted = true,
+            _ => {}
+        }
+        Ok(frame)
+    }
+
+    fn mark_interrupted(&mut self) {
+        self.interrupted = true;
+    }
+
+    fn exact_terminal_observed(&self) -> bool {
+        self.exact_terminal_observed
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn start_remote_member_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
     initial_prompt: Option<String>,
@@ -7449,11 +7484,19 @@ async fn start_remote_member_runtime_with_prepared(
     let observe_task = tokio::spawn(async move {
         let mut body = std::pin::pin!(response.into_body());
         let mut buffer = Vec::new();
-        let mut saw_terminal = false;
+        let mut terminal_observation = RemoteRuntimeTerminalObservation::default();
+        let mut protocol_interruption = None::<String>;
 
-        while let Some(frame) = body.as_mut().frame().await {
-            let Ok(frame) = frame else {
-                break;
+        'stream: while let Some(frame) = body.as_mut().frame().await {
+            let frame = match frame {
+                Ok(frame) => frame,
+                Err(err) => {
+                    terminal_observation.mark_interrupted();
+                    protocol_interruption = Some(format!(
+                        "world-scoped member runtime stream transport error: {err}"
+                    ));
+                    break;
+                }
             };
             let Some(data) = frame.data_ref() else {
                 continue;
@@ -7469,19 +7512,24 @@ async fn start_remote_member_runtime_with_prepared(
                 if payload.is_empty() {
                     continue;
                 }
-                let Ok(frame) = serde_json::from_slice::<ExecuteStreamFrame>(payload) else {
-                    continue;
+                let frame = match terminal_observation.decode_frame(payload) {
+                    Ok(frame) => frame,
+                    Err(message) => {
+                        protocol_interruption = Some(message);
+                        break 'stream;
+                    }
                 };
 
                 match frame {
                     ExecuteStreamFrame::Start {
                         span_id: stream_span_id,
+                        ..
                     } => {
                         *span_id_for_events
                             .lock()
                             .expect("remote member span mutex poisoned") = Some(stream_span_id);
                     }
-                    ExecuteStreamFrame::Event { event } => {
+                    ExecuteStreamFrame::Event { event, .. } => {
                         let mut startup_became_live = false;
                         let (orchestration_snapshot, manifest_snapshot) = {
                             let mut orchestration_guard = event_orchestration_session
@@ -7532,7 +7580,6 @@ async fn start_remote_member_runtime_with_prepared(
                         }
                     }
                     ExecuteStreamFrame::Exit { exit, .. } => {
-                        saw_terminal = true;
                         let mut startup_failure = None;
                         let (orchestration_snapshot, manifest_snapshot) = {
                             let mut orchestration_guard = event_orchestration_session
@@ -7618,60 +7665,20 @@ async fn start_remote_member_runtime_with_prepared(
                                 RuntimeStartupSignal::Failed(reason),
                             );
                         }
-                        break;
+                        break 'stream;
                     }
-                    ExecuteStreamFrame::Error { message } => {
-                        saw_terminal = true;
-                        let mut startup_failure = None;
-                        let (orchestration_snapshot, manifest_snapshot, alert) = {
-                            let mut orchestration_guard = event_orchestration_session
-                                .lock()
-                                .expect("orchestration session mutex poisoned");
-                            let mut manifest_guard = event_manifest
-                                .lock()
-                                .expect("runtime manifest mutex poisoned");
-                            let reason = format!("remote member runtime failed: {message}");
-                            if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating {
-                                manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
-                                startup_failure = Some(reason.clone());
-                            } else {
-                                manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
-                            }
-                            manifest_guard.mark_terminal_state(reason.clone());
-                            manifest_guard.internal.last_error_bucket =
-                                Some("runtime_lifecycle".to_string());
-                            manifest_guard.internal.last_error_message = Some(reason.clone());
-                            orchestration_guard.touch_active();
-                            let mut event = AgentEvent::alert(
-                                manifest_guard.handle.agent_id.clone(),
-                                manifest_guard.handle.orchestration_session_id.clone(),
-                                run_id_for_events.clone(),
-                                runtime_invalidated_alert_code(&runtime_role_for_events),
-                                reason,
-                            );
-                            apply_runtime_participant_lineage(&mut event, &manifest_guard);
-                            (orchestration_guard.clone(), manifest_guard.clone(), event)
-                        };
-                        let _ = persist_runtime_snapshots(
-                            &event_store,
-                            &orchestration_snapshot,
-                            &manifest_snapshot,
-                        );
-                        let _ = publish_agent_event(alert);
-                        if let Some(reason) = startup_failure {
-                            signal_runtime_startup(
-                                &startup_signal_for_events,
-                                RuntimeStartupSignal::Failed(reason),
-                            );
-                        }
-                        break;
+                    ExecuteStreamFrame::Error { message, .. } => {
+                        protocol_interruption = Some(format!(
+                            "world-scoped member runtime reported a nonterminal transport error: {message}"
+                        ));
+                        break 'stream;
                     }
                     ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
                 }
             }
         }
 
-        if saw_terminal {
+        if terminal_observation.exact_terminal_observed() {
             return;
         }
 
@@ -7689,21 +7696,21 @@ async fn start_remote_member_runtime_with_prepared(
             let was_live = manifest_guard.is_authoritative_live();
             manifest_guard.set_event_stream_active(false);
             if was_allocating {
-                let reason =
-                    "attached control turn ended before ownership could be established".to_string();
+                let reason = protocol_interruption.clone().unwrap_or_else(|| {
+                    "attached control turn ended before ownership could be established".to_string()
+                });
                 manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
-                manifest_guard.mark_terminal_state(reason.clone());
-                manifest_guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
+                manifest_guard.internal.last_error_bucket = Some("bootstrap_transport".to_string());
                 manifest_guard.internal.last_error_message = Some(reason.clone());
                 orchestration_guard.touch_active();
                 startup_failure = Some(reason);
             } else if !shutdown_for_events.load(Ordering::SeqCst) && was_live {
-                let reason =
+                let reason = protocol_interruption.clone().unwrap_or_else(|| {
                     "world-scoped member control stream ended before completion observation"
-                        .to_string();
+                        .to_string()
+                });
                 manifest_guard.transition_state(AgentRuntimeSessionState::Invalidated);
-                manifest_guard.mark_terminal_state(reason.clone());
-                manifest_guard.internal.last_error_bucket = Some("runtime_lifecycle".to_string());
+                manifest_guard.internal.last_error_bucket = Some("runtime_transport".to_string());
                 manifest_guard.internal.last_error_message = Some(reason.clone());
                 orchestration_guard.touch_active();
                 let mut event = AgentEvent::alert(
@@ -8580,7 +8587,7 @@ async fn submit_world_targeted_turn(
 
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
-    let mut exit_code = 0;
+    let mut exit_code = None;
     while let Some(frame) = body.as_mut().frame().await {
         let frame = frame.map_err(|err| anyhow!("substrate: error: {err:#}"))?;
         let Some(data) = frame.data_ref() else {
@@ -8601,30 +8608,33 @@ async fn submit_world_targeted_turn(
                 .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
             match frame {
                 ExecuteStreamFrame::Start { .. } => {}
-                ExecuteStreamFrame::Event { event } => {
+                ExecuteStreamFrame::Event { event, .. } => {
                     handle_agent_event(event, telemetry, agent_printer);
                 }
-                ExecuteStreamFrame::Stdout { chunk_b64 } => {
+                ExecuteStreamFrame::Stdout { chunk_b64, .. } => {
                     let decoded = BASE64
                         .decode(chunk_b64.as_bytes())
                         .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
                     agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
                 }
-                ExecuteStreamFrame::Stderr { chunk_b64 } => {
+                ExecuteStreamFrame::Stderr { chunk_b64, .. } => {
                     let decoded = BASE64
                         .decode(chunk_b64.as_bytes())
                         .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
                     agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
-                    exit_code = exit;
+                    exit_code = Some(exit);
                 }
-                ExecuteStreamFrame::Error { message } => {
+                ExecuteStreamFrame::Error { message, .. } => {
                     return Err(anyhow!("substrate: error: {message}"));
                 }
             }
         }
     }
+    let exit_code = exit_code.ok_or_else(|| {
+        anyhow!("substrate: error: member turn stream ended without an exact terminal Exit frame")
+    })?;
     if exit_code != 0 {
         write_best_effort_stderr_line(&format!("Command failed with status: {exit_code}"));
     }
@@ -10984,6 +10994,105 @@ mod tests {
                 "unexpected eof"
             )),
         ]
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn remote_runtime_protocol_interruption_cannot_be_repaired_by_later_exit() {
+        let frame_identity = |frame_sequence| transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "rts_protocol_interruption_fixture".to_string(),
+            frame_sequence,
+        };
+        let terminal_event_identity = transport_api_types::RuntimeEventIdentityV1 {
+            event_id: "evt_protocol_interruption_terminal".to_string(),
+            event_sequence: 1,
+        };
+        let start = serde_json::to_vec(&ExecuteStreamFrame::Start {
+            frame_identity: frame_identity(1),
+            span_id: "spn_protocol_interruption".to_string(),
+        })
+        .expect("serialize Start frame");
+        let malformed_event = serde_json::to_vec(&ExecuteStreamFrame::Event {
+            frame_identity: frame_identity(2),
+            event: AgentEvent::alert(
+                "codex-world",
+                "sess_protocol_interruption",
+                "run_protocol_interruption",
+                "fixture",
+                "missing event identity",
+            ),
+        })
+        .expect("serialize intentionally malformed Event frame");
+        let exit = serde_json::to_vec(&ExecuteStreamFrame::Exit {
+            frame_identity: frame_identity(3),
+            event_identity: terminal_event_identity.clone(),
+            terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                &terminal_event_identity,
+            ),
+            exit: 0,
+            span_id: "spn_protocol_interruption".to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        })
+        .expect("serialize exact terminal Exit frame");
+
+        let mut observation = RemoteRuntimeTerminalObservation::default();
+        assert!(matches!(
+            observation.decode_frame(&start),
+            Ok(ExecuteStreamFrame::Start { .. })
+        ));
+        assert!(observation
+            .decode_frame(&malformed_event)
+            .expect_err("missing Event identity must interrupt the stream")
+            .contains("protocol error"));
+        assert!(observation
+            .decode_frame(&exit)
+            .expect_err("a later Exit must not repair an interrupted stream")
+            .contains("already closed"));
+        assert!(!observation.exact_terminal_observed());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn remote_runtime_error_frame_cannot_prove_terminal_completion() {
+        let frame_identity = |frame_sequence| transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "rts_error_fixture".to_string(),
+            frame_sequence,
+        };
+        let terminal_event_identity = transport_api_types::RuntimeEventIdentityV1 {
+            event_id: "evt_error_fixture_terminal".to_string(),
+            event_sequence: 1,
+        };
+        let error = serde_json::to_vec(&ExecuteStreamFrame::Error {
+            frame_identity: frame_identity(1),
+            message: "transport lost".to_string(),
+        })
+        .expect("serialize Error frame");
+        let exit = serde_json::to_vec(&ExecuteStreamFrame::Exit {
+            frame_identity: frame_identity(2),
+            event_identity: terminal_event_identity.clone(),
+            terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                &terminal_event_identity,
+            ),
+            exit: 0,
+            span_id: "spn_error_fixture".to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        })
+        .expect("serialize exact terminal Exit frame");
+
+        let mut observation = RemoteRuntimeTerminalObservation::default();
+        assert!(matches!(
+            observation.decode_frame(&error),
+            Ok(ExecuteStreamFrame::Error { .. })
+        ));
+        assert!(!observation.exact_terminal_observed());
+        assert!(observation.decode_frame(&exit).is_err());
+        assert!(!observation.exact_terminal_observed());
     }
 
     #[cfg(target_os = "linux")]

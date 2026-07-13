@@ -18,6 +18,150 @@ const PURE_AGENT_ROUTER: &str = "agent_hub";
 // This label is not, by itself, a claim of upstream UAA wire/API compatibility.
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 
+pub const RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1: u32 = 1;
+
+/// Producer-assigned identity shared by every frame in one runtime stream.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "RuntimeFrameIdentityV1Def")]
+pub struct RuntimeFrameIdentityV1 {
+    pub schema_version: u32,
+    pub stream_id: String,
+    pub frame_sequence: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeFrameIdentityV1Def {
+    schema_version: u32,
+    stream_id: String,
+    frame_sequence: u64,
+}
+
+impl RuntimeFrameIdentityV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1 {
+            return Err(format!(
+                "unsupported runtime frame identity schema_version: {} (expected {})",
+                self.schema_version, RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1
+            ));
+        }
+        validate_runtime_identity_id("stream_id", &self.stream_id)?;
+        validate_runtime_identity_sequence("frame_sequence", self.frame_sequence)
+    }
+}
+
+impl TryFrom<RuntimeFrameIdentityV1Def> for RuntimeFrameIdentityV1 {
+    type Error = String;
+
+    fn try_from(value: RuntimeFrameIdentityV1Def) -> Result<Self, Self::Error> {
+        let identity = Self {
+            schema_version: value.schema_version,
+            stream_id: value.stream_id,
+            frame_sequence: value.frame_sequence,
+        };
+        identity.validate()?;
+        Ok(identity)
+    }
+}
+
+/// Producer-assigned identity for one semantic event in a runtime stream.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "RuntimeEventIdentityV1Def")]
+pub struct RuntimeEventIdentityV1 {
+    pub event_id: String,
+    pub event_sequence: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeEventIdentityV1Def {
+    event_id: String,
+    event_sequence: u64,
+}
+
+impl RuntimeEventIdentityV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_runtime_identity_id("event_id", &self.event_id)?;
+        validate_runtime_identity_sequence("event_sequence", self.event_sequence)
+    }
+}
+
+impl TryFrom<RuntimeEventIdentityV1Def> for RuntimeEventIdentityV1 {
+    type Error = String;
+
+    fn try_from(value: RuntimeEventIdentityV1Def) -> Result<Self, Self::Error> {
+        let identity = Self {
+            event_id: value.event_id,
+            event_sequence: value.event_sequence,
+        };
+        identity.validate()?;
+        Ok(identity)
+    }
+}
+
+/// Exact semantic event identity named by the terminal runtime frame.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "RuntimeTerminalIdentityV1Def")]
+pub struct RuntimeTerminalIdentityV1 {
+    pub terminal_event_id: String,
+    pub terminal_event_sequence: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeTerminalIdentityV1Def {
+    terminal_event_id: String,
+    terminal_event_sequence: u64,
+}
+
+impl RuntimeTerminalIdentityV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_runtime_identity_id("terminal_event_id", &self.terminal_event_id)?;
+        validate_runtime_identity_sequence("terminal_event_sequence", self.terminal_event_sequence)
+    }
+
+    pub fn matches_event(&self, event: &RuntimeEventIdentityV1) -> bool {
+        self.terminal_event_id == event.event_id
+            && self.terminal_event_sequence == event.event_sequence
+    }
+}
+
+impl From<&RuntimeEventIdentityV1> for RuntimeTerminalIdentityV1 {
+    fn from(event: &RuntimeEventIdentityV1) -> Self {
+        Self {
+            terminal_event_id: event.event_id.clone(),
+            terminal_event_sequence: event.event_sequence,
+        }
+    }
+}
+
+impl TryFrom<RuntimeTerminalIdentityV1Def> for RuntimeTerminalIdentityV1 {
+    type Error = String;
+
+    fn try_from(value: RuntimeTerminalIdentityV1Def) -> Result<Self, Self::Error> {
+        let identity = Self {
+            terminal_event_id: value.terminal_event_id,
+            terminal_event_sequence: value.terminal_event_sequence,
+        };
+        identity.validate()?;
+        Ok(identity)
+    }
+}
+
+fn validate_runtime_identity_id(field: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("runtime identity {field} must be non-empty"));
+    }
+    Ok(())
+}
+
+fn validate_runtime_identity_sequence(field: &str, value: u64) -> Result<(), String> {
+    if value == 0 {
+        return Err(format!("runtime identity {field} must be positive"));
+    }
+    Ok(())
+}
+
 /// Canonical set of agent event categories.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -105,6 +249,11 @@ pub struct AgentEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span_id: Option<String>,
 
+    // Producer-assigned semantic runtime identity. Standalone legacy events may omit it;
+    // runtime Event frames require it at the transport boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_identity: Option<RuntimeEventIdentityV1>,
+
     // Routing hint (optional; secrets-safe)
     #[serde(
         default,
@@ -154,6 +303,8 @@ struct AgentEventDef {
     cmd_id: Option<String>,
     #[serde(default)]
     span_id: Option<String>,
+    #[serde(default)]
+    event_identity: Option<RuntimeEventIdentityV1>,
     #[serde(default, deserialize_with = "deserialize_sanitized_channel")]
     channel: Option<String>,
     #[serde(default)]
@@ -222,6 +373,7 @@ impl AgentEvent {
             world_generation: None,
             cmd_id: None,
             span_id: None,
+            event_identity: None,
             channel: None,
             identity_tuple: None,
             placement_posture: None,
@@ -290,6 +442,9 @@ impl AgentEvent {
     }
 
     pub fn validate_identity_contract(&self) -> Result<(), String> {
+        if let Some(event_identity) = self.event_identity.as_ref() {
+            event_identity.validate()?;
+        }
         validate_identity_tuple_and_placement_posture(
             self.identity_tuple.as_ref(),
             self.placement_posture.as_ref(),
@@ -392,6 +547,7 @@ impl TryFrom<AgentEventDef> for AgentEvent {
             world_generation: value.world_generation,
             cmd_id: value.cmd_id,
             span_id: value.span_id,
+            event_identity: value.event_identity,
             channel: value.channel,
             identity_tuple,
             placement_posture: value.placement_posture,

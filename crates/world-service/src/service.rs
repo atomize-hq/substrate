@@ -26,6 +26,8 @@ use std::convert::Infallible;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
+#[cfg(target_os = "linux")]
+use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 #[cfg(target_os = "linux")]
 use substrate_common::agent_events::{AgentEvent, AgentEventKind};
@@ -34,8 +36,6 @@ use substrate_common::{WorldFsMode, WorldRootMode};
 use tokio::task;
 #[cfg(target_os = "linux")]
 use tokio_stream::wrappers::UnboundedReceiverStream;
-#[cfg(target_os = "linux")]
-use transport_api_types::ExecuteStreamFrame;
 #[cfg(not(target_os = "linux"))]
 use transport_api_types::GatewayStatusV1;
 #[cfg(any(target_os = "linux", test))]
@@ -48,6 +48,11 @@ use transport_api_types::{
     PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
     PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry,
     WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
+};
+#[cfg(target_os = "linux")]
+use transport_api_types::{
+    ExecuteStreamFrame, RuntimeEventIdentityV1, RuntimeFrameIdentityV1, RuntimeTerminalIdentityV1,
+    RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
 };
 #[cfg(target_os = "linux")]
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
@@ -1290,25 +1295,17 @@ impl WorldService {
         if let Some(deny) = guard_deny {
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
             let message = crate::world_exec_guard::deny_message(&deny);
+            let mut producer = RuntimeEventStreamProducer::new();
             let frames = vec![
-                ExecuteStreamFrame::Start {
-                    span_id: span_id.clone(),
-                },
-                ExecuteStreamFrame::Stderr {
-                    chunk_b64: BASE64.encode(message.as_bytes()),
-                },
-                ExecuteStreamFrame::Exit {
-                    exit: 5,
-                    span_id,
-                    scopes_used: Vec::new(),
-                    fs_diff: None,
-                    process_telemetry: ProcessTelemetry::default(),
-                },
+                producer.start(span_id.clone())?,
+                producer.stderr(BASE64.encode(message.as_bytes()))?,
+                producer.exit(5, span_id, Vec::new(), None, ProcessTelemetry::default())?,
             ];
 
             let stream = futures_util::stream::iter(frames.into_iter().map(|frame| {
-                let mut payload = serde_json::to_vec(&frame).expect("serialize frame");
-                payload.push(b'\n');
+                let payload = frame
+                    .canonical_ndjson_bytes()
+                    .expect("serialize identified frame");
                 Ok::<Bytes, Infallible>(Bytes::from(payload))
             }));
 
@@ -1366,9 +1363,12 @@ impl WorldService {
         world::exec::note_pending_exec(&span_id);
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
-        let _ = tx.send(ExecuteStreamFrame::Start {
-            span_id: span_id.clone(),
-        });
+        let producer = Arc::new(Mutex::new(RuntimeEventStreamProducer::new()));
+        let start = producer
+            .lock()
+            .expect("runtime event stream producer lock poisoned")
+            .start(span_id.clone())?;
+        let _ = tx.send(start);
 
         let backend = self.backend.clone();
         #[cfg(target_os = "linux")]
@@ -1376,8 +1376,9 @@ impl WorldService {
         let agent_id = req.agent_id.clone();
         let shared_world_for_events = shared_world.clone();
         let span_id_for_cleanup = span_id.clone();
+        let producer_for_exec = producer.clone();
         task::spawn_blocking(move || {
-            let sink = Arc::new(StreamingSink::new(tx.clone()));
+            let sink = Arc::new(StreamingSink::new(tx.clone(), producer_for_exec.clone()));
             let guard = install_stream_sink(sink);
             let result = backend.exec(&world, exec_req);
             drop(guard);
@@ -1400,69 +1401,95 @@ impl WorldService {
                         exec_result.world_fs_strategy_final,
                         exec_result.world_fs_strategy_fallback_reason,
                     ) {
-                        let _ = tx.send(ExecuteStreamFrame::Event {
-                            event: AgentEvent {
-                                ts: chrono::Utc::now(),
-                                agent_id: agent_id.clone(),
-                                kind: AgentEventKind::Status,
-                                orchestration_session_id: shared_world_for_events
+                        let event = AgentEvent {
+                            ts: chrono::Utc::now(),
+                            agent_id: agent_id.clone(),
+                            kind: AgentEventKind::Status,
+                            orchestration_session_id: shared_world_for_events
+                                .as_ref()
+                                .map(|binding| binding.orchestration_session_id.clone())
+                                .unwrap_or_else(|| span_id.clone()),
+                            run_id: span_id.clone(),
+                            parent_run_id: None,
+                            participant_id: None,
+                            parent_participant_id: None,
+                            resumed_from_participant_id: None,
+                            backend_id: None,
+                            thread_id: None,
+                            role: None,
+                            world_id: Some(
+                                shared_world_for_events
                                     .as_ref()
-                                    .map(|binding| binding.orchestration_session_id.clone())
-                                    .unwrap_or_else(|| span_id.clone()),
-                                run_id: span_id.clone(),
-                                parent_run_id: None,
-                                participant_id: None,
-                                parent_participant_id: None,
-                                resumed_from_participant_id: None,
-                                backend_id: None,
-                                thread_id: None,
-                                role: None,
-                                world_id: Some(
-                                    shared_world_for_events
-                                        .as_ref()
-                                        .map(|binding| binding.world_id.clone())
-                                        .unwrap_or_else(|| world.id.clone()),
-                                ),
-                                world_generation: shared_world_for_events
-                                    .as_ref()
-                                    .map(|binding| binding.world_generation),
-                                cmd_id: None,
-                                span_id: Some(span_id.clone()),
-                                channel: None,
-                                identity_tuple: None,
-                                placement_posture: None,
-                                project: None,
-                                data: serde_json::json!({
-                                    "world_fs_strategy_primary": primary.as_str(),
-                                    "world_fs_strategy_final": final_strategy.as_str(),
-                                    "world_fs_strategy_fallback_reason": reason.as_str(),
-                                }),
-                            },
-                        });
+                                    .map(|binding| binding.world_id.clone())
+                                    .unwrap_or_else(|| world.id.clone()),
+                            ),
+                            world_generation: shared_world_for_events
+                                .as_ref()
+                                .map(|binding| binding.world_generation),
+                            cmd_id: None,
+                            span_id: Some(span_id.clone()),
+                            event_identity: None,
+                            channel: None,
+                            identity_tuple: None,
+                            placement_posture: None,
+                            project: None,
+                            data: serde_json::json!({
+                                "world_fs_strategy_primary": primary.as_str(),
+                                "world_fs_strategy_final": final_strategy.as_str(),
+                                "world_fs_strategy_fallback_reason": reason.as_str(),
+                            }),
+                        };
+                        let frame = producer_for_exec
+                            .lock()
+                            .expect("runtime event stream producer lock poisoned")
+                            .event(event);
+                        match frame {
+                            Ok(frame) => {
+                                let _ = tx.send(frame);
+                            }
+                            Err(err) => {
+                                tracing::error!(error = %err, "failed to identify runtime Event");
+                            }
+                        }
                     }
-                    let frame = ExecuteStreamFrame::Exit {
-                        exit: exec_result.exit,
-                        span_id,
-                        scopes_used: exec_result.scopes_used,
-                        fs_diff: exec_result.fs_diff,
-                        process_telemetry: exec_result.process_telemetry,
-                    };
-                    let _ = tx.send(frame);
+                    let frame = producer_for_exec
+                        .lock()
+                        .expect("runtime event stream producer lock poisoned")
+                        .exit(
+                            exec_result.exit,
+                            span_id,
+                            exec_result.scopes_used,
+                            exec_result.fs_diff,
+                            exec_result.process_telemetry,
+                        );
+                    match frame {
+                        Ok(frame) => {
+                            let _ = tx.send(frame);
+                        }
+                        Err(err) => {
+                            tracing::error!(error = %err, "failed to identify runtime Exit");
+                        }
+                    }
                 }
                 Err(e) => {
                     service.record_last_netfilter_failure_for_error(isolate_network, &e);
                     tracing::error!(error = %e, agent = agent_id, "exec failed");
-                    let _ = tx.send(ExecuteStreamFrame::Error {
-                        message: e.to_string(),
-                    });
+                    let frame = producer_for_exec
+                        .lock()
+                        .expect("runtime event stream producer lock poisoned")
+                        .transport_error(e.to_string());
+                    if let Ok(frame) = frame {
+                        let _ = tx.send(frame);
+                    }
                 }
             }
             world::exec::clear_registered_exec(&span_id_for_cleanup);
         });
 
         let stream = UnboundedReceiverStream::new(rx).map(|frame| {
-            let mut payload = serde_json::to_vec(&frame).expect("serialize frame");
-            payload.push(b'\n');
+            let payload = frame
+                .canonical_ndjson_bytes()
+                .expect("serialize identified frame");
             Ok::<Bytes, Infallible>(Bytes::from(payload))
         });
 
@@ -2396,14 +2423,158 @@ mod gateway_runtime_binding_tests {
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) struct RuntimeEventStreamProducer {
+    stream_id: String,
+    next_frame_sequence: u64,
+    next_event_sequence: u64,
+    started: bool,
+    closed: bool,
+}
+
+#[cfg(target_os = "linux")]
+impl RuntimeEventStreamProducer {
+    pub(crate) fn new() -> Self {
+        Self {
+            stream_id: format!("rts_{}", uuid::Uuid::now_v7()),
+            next_frame_sequence: 1,
+            next_event_sequence: 1,
+            started: false,
+            closed: false,
+        }
+    }
+
+    pub(crate) fn start(&mut self, span_id: String) -> Result<ExecuteStreamFrame> {
+        if self.started {
+            anyhow::bail!("runtime event stream Start was already emitted");
+        }
+        let frame_identity = self.next_frame_identity(false)?;
+        self.started = true;
+        Ok(ExecuteStreamFrame::Start {
+            frame_identity,
+            span_id,
+        })
+    }
+
+    pub(crate) fn stdout(&mut self, chunk_b64: String) -> Result<ExecuteStreamFrame> {
+        Ok(ExecuteStreamFrame::Stdout {
+            frame_identity: self.next_frame_identity(true)?,
+            chunk_b64,
+        })
+    }
+
+    pub(crate) fn stderr(&mut self, chunk_b64: String) -> Result<ExecuteStreamFrame> {
+        Ok(ExecuteStreamFrame::Stderr {
+            frame_identity: self.next_frame_identity(true)?,
+            chunk_b64,
+        })
+    }
+
+    pub(crate) fn event(&mut self, mut event: AgentEvent) -> Result<ExecuteStreamFrame> {
+        let (frame_identity, event_identity) = self.next_semantic_identities()?;
+        event.event_identity = Some(event_identity);
+        Ok(ExecuteStreamFrame::Event {
+            frame_identity,
+            event,
+        })
+    }
+
+    pub(crate) fn exit(
+        &mut self,
+        exit: i32,
+        span_id: String,
+        scopes_used: Vec<String>,
+        fs_diff: Option<substrate_common::FsDiff>,
+        process_telemetry: ProcessTelemetry,
+    ) -> Result<ExecuteStreamFrame> {
+        let (frame_identity, event_identity) = self.next_semantic_identities()?;
+        let terminal_identity = RuntimeTerminalIdentityV1::from(&event_identity);
+        self.closed = true;
+        Ok(ExecuteStreamFrame::Exit {
+            frame_identity,
+            event_identity,
+            terminal_identity,
+            exit,
+            span_id,
+            scopes_used,
+            fs_diff,
+            process_telemetry,
+        })
+    }
+
+    pub(crate) fn transport_error(&mut self, message: String) -> Result<ExecuteStreamFrame> {
+        let frame_identity = self.next_frame_identity(true)?;
+        self.closed = true;
+        Ok(ExecuteStreamFrame::Error {
+            frame_identity,
+            message,
+        })
+    }
+
+    fn next_frame_identity(&mut self, require_started: bool) -> Result<RuntimeFrameIdentityV1> {
+        self.ensure_open(require_started)?;
+        let frame_sequence = self.next_frame_sequence;
+        let next_frame_sequence = frame_sequence
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("runtime frame sequence exhausted"))?;
+        self.next_frame_sequence = next_frame_sequence;
+        Ok(RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: self.stream_id.clone(),
+            frame_sequence,
+        })
+    }
+
+    fn next_semantic_identities(
+        &mut self,
+    ) -> Result<(RuntimeFrameIdentityV1, RuntimeEventIdentityV1)> {
+        self.ensure_open(true)?;
+        let frame_sequence = self.next_frame_sequence;
+        let event_sequence = self.next_event_sequence;
+        let next_frame_sequence = frame_sequence
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("runtime frame sequence exhausted"))?;
+        let next_event_sequence = event_sequence
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("runtime event sequence exhausted"))?;
+        self.next_frame_sequence = next_frame_sequence;
+        self.next_event_sequence = next_event_sequence;
+        Ok((
+            RuntimeFrameIdentityV1 {
+                schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                stream_id: self.stream_id.clone(),
+                frame_sequence,
+            },
+            RuntimeEventIdentityV1 {
+                event_id: format!("evt_{}", uuid::Uuid::now_v7()),
+                event_sequence,
+            },
+        ))
+    }
+
+    fn ensure_open(&self, require_started: bool) -> Result<()> {
+        if self.closed {
+            anyhow::bail!("runtime event stream is closed");
+        }
+        if require_started && !self.started {
+            anyhow::bail!("runtime event stream Start has not been emitted");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
 struct StreamingSink {
     tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>,
+    producer: Arc<Mutex<RuntimeEventStreamProducer>>,
 }
 
 #[cfg(target_os = "linux")]
 impl StreamingSink {
-    fn new(tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>) -> Self {
-        Self { tx }
+    fn new(
+        tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>,
+        producer: Arc<Mutex<RuntimeEventStreamProducer>>,
+    ) -> Self {
+        Self { tx, producer }
     }
 }
 
@@ -2414,11 +2585,24 @@ impl StreamSink for StreamingSink {
             return;
         }
         let encoded = BASE64.encode(chunk);
+        // Assignment and enqueue are one producer operation. Releasing this lock between them
+        // would let concurrent stdout/stderr readers enqueue later identities first.
+        let mut producer = self
+            .producer
+            .lock()
+            .expect("runtime event stream producer lock poisoned");
         let frame = match kind {
-            StreamKind::Stdout => ExecuteStreamFrame::Stdout { chunk_b64: encoded },
-            StreamKind::Stderr => ExecuteStreamFrame::Stderr { chunk_b64: encoded },
+            StreamKind::Stdout => producer.stdout(encoded),
+            StreamKind::Stderr => producer.stderr(encoded),
         };
-        let _ = self.tx.send(frame);
+        match frame {
+            Ok(frame) => {
+                let _ = self.tx.send(frame);
+            }
+            Err(err) => {
+                tracing::error!(error = %err, "failed to identify runtime output frame");
+            }
+        }
     }
 }
 
@@ -3054,6 +3238,160 @@ pub(crate) fn resolve_landlock_allowlist_paths(
 mod tests {
     use super::*;
     use world_api::{SharedWorldOwnerAction, WorldHandle};
+
+    #[cfg(target_os = "linux")]
+    fn frame_identity(frame: &ExecuteStreamFrame) -> &transport_api_types::RuntimeFrameIdentityV1 {
+        match frame {
+            ExecuteStreamFrame::Start { frame_identity, .. }
+            | ExecuteStreamFrame::Stdout { frame_identity, .. }
+            | ExecuteStreamFrame::Stderr { frame_identity, .. }
+            | ExecuteStreamFrame::Event { frame_identity, .. }
+            | ExecuteStreamFrame::Exit { frame_identity, .. }
+            | ExecuteStreamFrame::Error { frame_identity, .. } => frame_identity,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn runtime_event_stream_producer_assigns_gap_free_frame_and_event_identity() {
+        let mut producer = RuntimeEventStreamProducer::new();
+        let frames = vec![
+            producer.start("spn_test".to_string()).expect("Start"),
+            producer.stdout(BASE64.encode(b"out")).expect("stdout"),
+            producer.stderr(BASE64.encode(b"err")).expect("stderr"),
+            producer
+                .event(AgentEvent::message(
+                    "agent",
+                    "session",
+                    "run",
+                    substrate_common::agent_events::MessageEventKind::Status,
+                    "working",
+                ))
+                .expect("Event"),
+            producer
+                .exit(
+                    0,
+                    "spn_test".to_string(),
+                    Vec::new(),
+                    None,
+                    ProcessTelemetry::default(),
+                )
+                .expect("Exit"),
+        ];
+
+        let stream_id = frame_identity(&frames[0]).stream_id.clone();
+        assert!(!stream_id.is_empty());
+        assert_eq!(
+            frames
+                .iter()
+                .map(|frame| frame_identity(frame).frame_sequence)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5]
+        );
+        assert!(frames
+            .iter()
+            .all(|frame| frame_identity(frame).stream_id == stream_id));
+
+        let event_identity = match &frames[3] {
+            ExecuteStreamFrame::Event { event, .. } => {
+                event.event_identity.as_ref().expect("semantic identity")
+            }
+            other => panic!("unexpected frame: {other:?}"),
+        };
+        assert_eq!(event_identity.event_sequence, 1);
+        let (terminal_event, terminal_identity) = match &frames[4] {
+            ExecuteStreamFrame::Exit {
+                event_identity,
+                terminal_identity,
+                ..
+            } => (event_identity, terminal_identity),
+            other => panic!("unexpected frame: {other:?}"),
+        };
+        assert_eq!(terminal_event.event_sequence, 2);
+        assert!(terminal_identity.matches_event(terminal_event));
+        assert!(producer.stdout(BASE64.encode(b"late")).is_err());
+
+        let original = frames[4].canonical_ndjson_bytes().expect("canonical Exit");
+        assert_eq!(
+            frames[4]
+                .clone()
+                .canonical_ndjson_bytes()
+                .expect("replayed Exit"),
+            original
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn runtime_event_stream_producer_uses_distinct_stream_ids_and_nonterminal_errors() {
+        let mut first = RuntimeEventStreamProducer::new();
+        let mut second = RuntimeEventStreamProducer::new();
+        let first_start = first.start("spn_first".to_string()).expect("first Start");
+        let second_start = second
+            .start("spn_second".to_string())
+            .expect("second Start");
+        assert_ne!(
+            frame_identity(&first_start).stream_id,
+            frame_identity(&second_start).stream_id
+        );
+
+        let error = first
+            .transport_error("transport lost".to_string())
+            .expect("Error");
+        assert_eq!(frame_identity(&error).frame_sequence, 2);
+        assert!(error.terminal_identity().is_none());
+        assert!(first
+            .exit(
+                1,
+                "spn_first".to_string(),
+                Vec::new(),
+                None,
+                ProcessTelemetry::default(),
+            )
+            .is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn streaming_sink_enqueues_concurrent_output_in_assigned_sequence_order() {
+        for _ in 0..256 {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let producer = Arc::new(Mutex::new(RuntimeEventStreamProducer::new()));
+            let start = producer
+                .lock()
+                .expect("producer lock")
+                .start("spn_concurrent".to_string())
+                .expect("Start");
+            tx.send(start).expect("enqueue Start");
+            let sink = Arc::new(StreamingSink::new(tx, producer));
+            let barrier = Arc::new(std::sync::Barrier::new(3));
+
+            std::thread::scope(|scope| {
+                for (kind, chunk) in [
+                    (StreamKind::Stdout, b"stdout".as_slice()),
+                    (StreamKind::Stderr, b"stderr".as_slice()),
+                ] {
+                    let sink = sink.clone();
+                    let barrier = barrier.clone();
+                    scope.spawn(move || {
+                        barrier.wait();
+                        sink.write(kind, chunk);
+                    });
+                }
+                barrier.wait();
+            });
+
+            let frames = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+            assert_eq!(frames.len(), 3);
+            assert_eq!(
+                frames
+                    .iter()
+                    .map(|frame| frame_identity(frame).frame_sequence)
+                    .collect::<Vec<_>>(),
+                vec![1, 2, 3]
+            );
+        }
+    }
 
     #[test]
     fn landlock_helper_src_accepts_substrate_world_service_name() {

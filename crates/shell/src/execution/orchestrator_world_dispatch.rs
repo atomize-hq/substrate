@@ -3224,7 +3224,7 @@ async fn execute_run_world_task_stream(
                 };
 
             match frame {
-                ExecuteStreamFrame::Start { span_id } => {
+                ExecuteStreamFrame::Start { span_id, .. } => {
                     if active_task_guard.is_none() {
                         active_task_record.task_run_id = span_id.clone();
                         active_task_guard = Some(
@@ -3238,7 +3238,7 @@ async fn execute_run_world_task_stream(
                     }
                     active_span_id = Some(span_id);
                 }
-                ExecuteStreamFrame::Event { event } => {
+                ExecuteStreamFrame::Event { event, .. } => {
                     if event.kind == AgentEventKind::Registered {
                         saw_registered_event = true;
                     }
@@ -3247,7 +3247,7 @@ async fn execute_run_world_task_stream(
                     exit_code = Some(exit);
                     break;
                 }
-                ExecuteStreamFrame::Error { message } => {
+                ExecuteStreamFrame::Error { message, .. } => {
                     if saw_registered_event {
                         if let Some(span_id) = active_span_id.as_ref() {
                             let _ = client
@@ -3342,10 +3342,12 @@ async fn execute_spawn_world_worker_stream(
             })?;
 
             match frame {
-                ExecuteStreamFrame::Start { span_id } => {
+                ExecuteStreamFrame::Start { span_id, .. } => {
                     launch_span_id = Some(span_id);
                 }
-                ExecuteStreamFrame::Event { event } if event.kind == AgentEventKind::Registered => {
+                ExecuteStreamFrame::Event { event, .. }
+                    if event.kind == AgentEventKind::Registered =>
+                {
                     let launch_span_id = launch_span_id.clone().ok_or_else(|| {
                         anyhow::anyhow!(
                             "spawn_world_worker registered without a streamed execute span_id"
@@ -3367,7 +3369,7 @@ async fn execute_spawn_world_worker_stream(
                         exit
                     );
                 }
-                ExecuteStreamFrame::Error { message } => {
+                ExecuteStreamFrame::Error { message, .. } => {
                     anyhow::bail!(message);
                 }
             }
@@ -3453,10 +3455,10 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                 };
 
             match frame {
-                ExecuteStreamFrame::Start { span_id } => {
+                ExecuteStreamFrame::Start { span_id, .. } => {
                     active_span_id = Some(span_id);
                 }
-                ExecuteStreamFrame::Event { event } => {
+                ExecuteStreamFrame::Event { event, .. } => {
                     if surfaced_thread_id.is_none() {
                         surfaced_thread_id = surfaced_thread_id_from_event(&event);
                     }
@@ -3498,7 +3500,7 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                     exit_code = Some(exit);
                     break;
                 }
-                ExecuteStreamFrame::Error { message } => {
+                ExecuteStreamFrame::Error { message, .. } => {
                     cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
                     anyhow::bail!(message);
                 }
@@ -5243,6 +5245,36 @@ mod tests {
     use world_service::WorldService;
 
     #[cfg(target_os = "linux")]
+    fn test_runtime_frame_identity(
+        frame_sequence: u64,
+    ) -> transport_api_types::RuntimeFrameIdentityV1 {
+        transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "rts_shell_world_dispatch_fixture".to_string(),
+            frame_sequence,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn test_runtime_event_identity(
+        event_sequence: u64,
+    ) -> transport_api_types::RuntimeEventIdentityV1 {
+        transport_api_types::RuntimeEventIdentityV1 {
+            event_id: format!("evt_shell_world_dispatch_fixture_{event_sequence}"),
+            event_sequence,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn test_runtime_terminal_identity(
+        event_sequence: u64,
+    ) -> transport_api_types::RuntimeTerminalIdentityV1 {
+        transport_api_types::RuntimeTerminalIdentityV1::from(&test_runtime_event_identity(
+            event_sequence,
+        ))
+    }
+
+    #[cfg(target_os = "linux")]
     struct EnvVarGuard {
         key: &'static str,
         previous: Option<String>,
@@ -6119,6 +6151,7 @@ mod tests {
             world_generation: Some(2),
             cmd_id: None,
             span_id: Some("spn_continue".to_string()),
+            event_identity: Some(test_runtime_event_identity(1)),
             channel: Some("worker.reply".to_string()),
             identity_tuple: None,
             placement_posture: None,
@@ -7591,6 +7624,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -7598,6 +7632,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event(json!({
                                 "event_class": "control_directive",
                                 "payload": {
@@ -7758,6 +7793,7 @@ mod tests {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: test_runtime_frame_identity(1),
                                 span_id: "member-turn-span".to_string(),
                             },
                         )
@@ -7765,6 +7801,7 @@ mod tests {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
+                                frame_identity: test_runtime_frame_identity(2),
                                 event: event.clone(),
                             },
                         )
@@ -7908,6 +7945,7 @@ mod tests {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: test_runtime_frame_identity(1),
                                 span_id: "member-turn-span".to_string(),
                             },
                         )
@@ -7915,6 +7953,7 @@ mod tests {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
+                                frame_identity: test_runtime_frame_identity(2),
                                 event: event.clone(),
                             },
                         )
@@ -7922,6 +7961,9 @@ mod tests {
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                frame_identity: test_runtime_frame_identity(3),
+                                event_identity: test_runtime_event_identity(2),
+                                terminal_identity: test_runtime_terminal_identity(2),
                                 exit: 0,
                                 span_id: "member-turn-span".to_string(),
                                 scopes_used: Vec::new(),
@@ -7998,6 +8040,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -8005,6 +8048,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event(json!({
                                 "event_class": "control_ack",
                                 "payload": {
@@ -8017,6 +8061,9 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -8104,6 +8151,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -8111,6 +8159,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event(json!({
                                 "event_class": "control_ack",
                                 "payload": {
@@ -8123,23 +8172,30 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-from-uaa",
-                                "turn_id": "turn-control",
-                                "item_id": "msg-control",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "directive applied"
-                                }
-                            })),
+                            frame_identity: test_runtime_frame_identity(3),
+                            event: substrate_common::agent_events::AgentEvent {
+                                event_identity: Some(test_runtime_event_identity(2)),
+                                ..sample_continue_stream_uaa_event(json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-from-uaa",
+                                    "turn_id": "turn-control",
+                                    "item_id": "msg-control",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "directive applied"
+                                    }
+                                }))
+                            },
                         },
                     )
                     .await;
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(4),
+                            event_identity: test_runtime_event_identity(3),
+                            terminal_identity: test_runtime_terminal_identity(3),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -8219,6 +8275,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -8226,6 +8283,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event(json!({
                                 "event_class": "approval_request",
                                 "payload": {
@@ -8238,23 +8296,30 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-from-uaa",
-                                "turn_id": "turn-1",
-                                "item_id": "msg-1",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "reply from worker"
-                                }
-                            })),
+                            frame_identity: test_runtime_frame_identity(3),
+                            event: substrate_common::agent_events::AgentEvent {
+                                event_identity: Some(test_runtime_event_identity(2)),
+                                ..sample_continue_stream_uaa_event(json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-from-uaa",
+                                    "turn_id": "turn-1",
+                                    "item_id": "msg-1",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "reply from worker"
+                                    }
+                                }))
+                            },
                         },
                     )
                     .await;
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(4),
+                            event_identity: test_runtime_event_identity(3),
+                            terminal_identity: test_runtime_terminal_identity(3),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -8335,6 +8400,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -8342,6 +8408,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event(json!({
                                 "event_class": "follow_up_question",
                                 "payload": {
@@ -8354,23 +8421,30 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-from-uaa",
-                                "turn_id": "turn-1",
-                                "item_id": "msg-1",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "reply from worker"
-                                }
-                            })),
+                            frame_identity: test_runtime_frame_identity(3),
+                            event: substrate_common::agent_events::AgentEvent {
+                                event_identity: Some(test_runtime_event_identity(2)),
+                                ..sample_continue_stream_uaa_event(json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-from-uaa",
+                                    "turn_id": "turn-1",
+                                    "item_id": "msg-1",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "reply from worker"
+                                    }
+                                }))
+                            },
                         },
                     )
                     .await;
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(4),
+                            event_identity: test_runtime_event_identity(3),
+                            terminal_identity: test_runtime_terminal_identity(3),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -8450,6 +8524,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -8457,6 +8532,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event(json!({
                                 "event_class": "blocked",
                                 "payload": {
@@ -8469,23 +8545,30 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_uaa_event(json!({
-                                "type": "item.completed",
-                                "thread_id": "thread-from-uaa",
-                                "turn_id": "turn-1",
-                                "item_id": "msg-1",
-                                "status": "completed",
-                                "item_type": "agent_message",
-                                "content": {
-                                    "text": "reply from worker"
-                                }
-                            })),
+                            frame_identity: test_runtime_frame_identity(3),
+                            event: substrate_common::agent_events::AgentEvent {
+                                event_identity: Some(test_runtime_event_identity(2)),
+                                ..sample_continue_stream_uaa_event(json!({
+                                    "type": "item.completed",
+                                    "thread_id": "thread-from-uaa",
+                                    "turn_id": "turn-1",
+                                    "item_id": "msg-1",
+                                    "status": "completed",
+                                    "item_type": "agent_message",
+                                    "content": {
+                                        "text": "reply from worker"
+                                    }
+                                }))
+                            },
                         },
                     )
                     .await;
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(4),
+                            event_identity: test_runtime_event_identity(3),
+                            terminal_identity: test_runtime_terminal_identity(3),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -9287,6 +9370,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -9294,6 +9378,7 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event_for_run(
                                 &parsed.run_id,
                                 serde_json::json!({
@@ -9309,6 +9394,9 @@ mod tests {
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -9443,6 +9531,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -9450,6 +9539,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event_for_run(
                                 &parsed.run_id,
                                 serde_json::json!({
@@ -9465,21 +9555,28 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
-                            event: sample_continue_stream_event_for_run(
-                                &parsed.run_id,
-                                serde_json::json!({
-                                    "event_class": "blocked",
-                                    "payload": {
-                                        "message": "waiting on host"
-                                    }
-                                }),
-                            ),
+                            frame_identity: test_runtime_frame_identity(3),
+                            event: substrate_common::agent_events::AgentEvent {
+                                event_identity: Some(test_runtime_event_identity(2)),
+                                ..sample_continue_stream_event_for_run(
+                                    &parsed.run_id,
+                                    serde_json::json!({
+                                        "event_class": "blocked",
+                                        "payload": {
+                                            "message": "waiting on host"
+                                        }
+                                    }),
+                                )
+                            },
                         },
                     )
                     .await;
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(4),
+                            event_identity: test_runtime_event_identity(3),
+                            terminal_identity: test_runtime_terminal_identity(3),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -9644,6 +9741,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: test_runtime_frame_identity(1),
                                 span_id: "member-turn-span".to_string(),
                             },
                         )
@@ -9651,6 +9749,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
+                                frame_identity: test_runtime_frame_identity(2),
                                 event: sample_continue_stream_event_for_run(
                                     &parsed.run_id,
                                     json!({
@@ -9668,6 +9767,9 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                frame_identity: test_runtime_frame_identity(3),
+                                event_identity: test_runtime_event_identity(2),
+                                terminal_identity: test_runtime_terminal_identity(2),
                                 exit: 0,
                                 span_id: "member-turn-span".to_string(),
                                 scopes_used: Vec::new(),
@@ -9892,6 +9994,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: test_runtime_frame_identity(1),
                                 span_id: "member-turn-span".to_string(),
                             },
                         )
@@ -9899,6 +10002,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
+                                frame_identity: test_runtime_frame_identity(2),
                                 event: sample_continue_stream_event_for_run(
                                     &parsed.run_id,
                                     json!({
@@ -10432,6 +10536,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -10439,6 +10544,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_uaa_event_for_run(
                                 &run_id,
                                 json!({
@@ -10459,6 +10565,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 17,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -10581,6 +10690,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -10588,6 +10698,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event_for_run(
                                 &parsed.run_id,
                                 json!({
@@ -10603,6 +10714,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -10790,6 +10904,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -10797,6 +10912,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_uaa_event_for_run(
                                 &run_id,
                                 json!({
@@ -10817,6 +10933,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 23,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -10899,6 +11018,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "fork-bootstrap-span".to_string(),
                         },
                     )
@@ -10906,6 +11026,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: substrate_common::agent_events::AgentEvent {
                                 ts: chrono::Utc::now(),
                                 kind: AgentEventKind::Registered,
@@ -10930,6 +11051,7 @@ agents:
                                 world_generation: Some(member_dispatch.world_generation),
                                 cmd_id: None,
                                 span_id: Some("fork-bootstrap-span".to_string()),
+                                event_identity: Some(test_runtime_event_identity(1)),
                                 channel: None,
                                 identity_tuple: None,
                                 placement_posture: None,
@@ -11078,6 +11200,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -11085,6 +11208,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_uaa_event_for_run(
                                 &parsed.run_id,
                                 json!({
@@ -11105,6 +11229,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -11156,6 +11283,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "fork-bootstrap-span".to_string(),
                         },
                     )
@@ -11163,6 +11291,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: substrate_common::agent_events::AgentEvent {
                                 ts: chrono::Utc::now(),
                                 kind: AgentEventKind::Registered,
@@ -11187,6 +11316,7 @@ agents:
                                 world_generation: Some(member_dispatch.world_generation),
                                 cmd_id: None,
                                 span_id: Some("fork-bootstrap-span".to_string()),
+                                event_identity: Some(test_runtime_event_identity(1)),
                                 channel: None,
                                 identity_tuple: None,
                                 placement_posture: None,
@@ -11343,6 +11473,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: test_runtime_frame_identity(1),
                                 span_id: "member-turn-span".to_string(),
                             },
                         )
@@ -11350,6 +11481,7 @@ agents:
                         write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_uaa_event_for_run(&parsed.run_id, json!({
                                 "type": "item.completed",
                                 "thread_id": "thread-delivered-fork-command",
@@ -11378,6 +11510,9 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                frame_identity: test_runtime_frame_identity(3),
+                                event_identity: test_runtime_event_identity(2),
+                                terminal_identity: test_runtime_terminal_identity(2),
                                 exit: 0,
                                 span_id: "member-turn-span".to_string(),
                                 scopes_used: Vec::new(),
@@ -11469,6 +11604,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -11476,6 +11612,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_uaa_event_for_run(
                                 &parsed.run_id,
                                 json!({
@@ -11496,6 +11633,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -11614,6 +11754,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -11621,6 +11762,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event_for_run(
                                 &parsed.run_id,
                                 serde_json::json!({
@@ -11647,6 +11789,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 0,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -11788,6 +11933,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -11795,6 +11941,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_uaa_event_for_run(
                                 &run_id,
                                 json!({
@@ -11815,6 +11962,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 17,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -11937,6 +12087,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -11944,6 +12095,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_event_for_run(
                                 &parsed.run_id,
                                 json!({
@@ -11959,6 +12111,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 17,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -12143,6 +12298,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Start {
+                                frame_identity: test_runtime_frame_identity(1),
                                 span_id: "member-turn-span".to_string(),
                             },
                         )
@@ -12150,6 +12306,7 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Event {
+                                frame_identity: test_runtime_frame_identity(2),
                                 event: sample_continue_stream_uaa_event_for_run(
                                     &run_id,
                                     json!({
@@ -12170,6 +12327,9 @@ agents:
                         write_chunked_frame(
                             &mut stream,
                             &transport_api_types::ExecuteStreamFrame::Exit {
+                                frame_identity: test_runtime_frame_identity(3),
+                                event_identity: test_runtime_event_identity(2),
+                                terminal_identity: test_runtime_terminal_identity(2),
                                 exit: 17,
                                 span_id: "member-turn-span".to_string(),
                                 scopes_used: Vec::new(),
@@ -12380,6 +12540,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "member-turn-span".to_string(),
                         },
                     )
@@ -12387,6 +12548,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: sample_continue_stream_uaa_event_for_run(
                                 &run_id,
                                 json!({
@@ -12407,6 +12569,9 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
                             exit: 17,
                             span_id: "member-turn-span".to_string(),
                             scopes_used: Vec::new(),
@@ -17679,6 +17844,7 @@ agents:
             world_generation: Some(request.world_generation),
             cmd_id: None,
             span_id: Some("spn_spawn".to_string()),
+            event_identity: Some(test_runtime_event_identity(1)),
             channel: None,
             identity_tuple: None,
             placement_posture: None,
@@ -17782,6 +17948,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "spn_spawn".to_string(),
                         },
                     )
@@ -17789,6 +17956,7 @@ agents:
                     write_chunked_frame(
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event: substrate_common::agent_events::AgentEvent {
                                 ts: chrono::Utc::now(),
                                 kind: AgentEventKind::Registered,
@@ -17809,6 +17977,7 @@ agents:
                                 world_generation: Some(member_dispatch.world_generation),
                                 cmd_id: None,
                                 span_id: Some("spn_spawn".to_string()),
+                                event_identity: Some(test_runtime_event_identity(1)),
                                 channel: None,
                                 identity_tuple: None,
                                 placement_posture: None,
@@ -17968,6 +18137,7 @@ agents:
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "spn_fork".to_string(),
                         })
                         .expect("serialize start frame");
@@ -17991,6 +18161,7 @@ agents:
                         world_generation: Some(member_dispatch.world_generation),
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
+                        event_identity: Some(test_runtime_event_identity(1)),
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -17998,6 +18169,7 @@ agents:
                     };
                     let registered =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event,
                         })
                         .expect("serialize registered frame");
@@ -18167,6 +18339,7 @@ agents:
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "spn_fork".to_string(),
                         })
                         .expect("serialize start frame");
@@ -18190,6 +18363,7 @@ agents:
                         world_generation: Some(member_dispatch.world_generation),
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
+                        event_identity: Some(test_runtime_event_identity(1)),
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -18197,6 +18371,7 @@ agents:
                     };
                     let registered =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event,
                         })
                         .expect("serialize registered frame");
@@ -18359,6 +18534,7 @@ agents:
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "spn_fork".to_string(),
                         })
                         .expect("serialize start frame");
@@ -18382,6 +18558,7 @@ agents:
                         world_generation: Some(member_dispatch.world_generation),
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
+                        event_identity: Some(test_runtime_event_identity(1)),
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -18389,6 +18566,7 @@ agents:
                     };
                     let registered =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event,
                         })
                         .expect("serialize registered frame");
@@ -18561,6 +18739,7 @@ agents:
                     let session_id = member_dispatch.orchestration_session_id.clone();
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "spn_fork".to_string(),
                         })
                         .expect("serialize start frame");
@@ -18584,6 +18763,7 @@ agents:
                         world_generation: Some(member_dispatch.world_generation),
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
+                        event_identity: Some(test_runtime_event_identity(1)),
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -18591,6 +18771,7 @@ agents:
                     };
                     let registered =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event,
                         })
                         .expect("serialize registered frame");
@@ -18808,6 +18989,7 @@ agents:
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "spn_fork".to_string(),
                         })
                         .expect("serialize start frame");
@@ -18831,6 +19013,7 @@ agents:
                         world_generation: Some(member_dispatch.world_generation),
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
+                        event_identity: Some(test_runtime_event_identity(1)),
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -18838,6 +19021,7 @@ agents:
                     };
                     let registered =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event,
                         })
                         .expect("serialize registered frame");
@@ -18983,6 +19167,7 @@ agents:
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
                             span_id: "spn_fork".to_string(),
                         })
                         .expect("serialize start frame");
@@ -19006,6 +19191,7 @@ agents:
                         world_generation: Some(member_dispatch.world_generation),
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
+                        event_identity: Some(test_runtime_event_identity(1)),
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -19013,6 +19199,7 @@ agents:
                     };
                     let registered =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
                             event,
                         })
                         .expect("serialize registered frame");

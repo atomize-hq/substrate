@@ -5,6 +5,10 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::Path;
 use substrate_common::agent_events::AgentEvent;
+pub use substrate_common::agent_events::{
+    RuntimeEventIdentityV1, RuntimeFrameIdentityV1, RuntimeTerminalIdentityV1,
+    RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+};
 pub use substrate_common::{
     validate_identity_tuple_and_placement_posture, FsDiff, IdentityTuple, PlacementExecution,
     PlacementPosture, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
@@ -1525,20 +1529,35 @@ impl TryFrom<GatewayLifecycleResponseDef> for GatewayLifecycleResponseV1 {
 }
 
 /// Streaming frame describing incremental execution output.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[allow(clippy::large_enum_variant)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecuteStreamFrame {
     /// Initial handshake announcing the span identifier for this execution.
-    Start { span_id: String },
+    Start {
+        frame_identity: RuntimeFrameIdentityV1,
+        span_id: String,
+    },
     /// Incremental stdout data (base64 encoded for transport safety).
-    Stdout { chunk_b64: String },
+    Stdout {
+        frame_identity: RuntimeFrameIdentityV1,
+        chunk_b64: String,
+    },
     /// Incremental stderr data (base64 encoded for transport safety).
-    Stderr { chunk_b64: String },
+    Stderr {
+        frame_identity: RuntimeFrameIdentityV1,
+        chunk_b64: String,
+    },
     /// Optional higher-level agent event forwarded from the world.
-    Event { event: AgentEvent },
+    Event {
+        frame_identity: RuntimeFrameIdentityV1,
+        event: AgentEvent,
+    },
     /// Terminal frame with exit metadata and optional filesystem diff.
     Exit {
+        frame_identity: RuntimeFrameIdentityV1,
+        event_identity: RuntimeEventIdentityV1,
+        terminal_identity: RuntimeTerminalIdentityV1,
         exit: i32,
         span_id: String,
         scopes_used: Vec<String>,
@@ -1548,7 +1567,190 @@ pub enum ExecuteStreamFrame {
         process_telemetry: ProcessTelemetry,
     },
     /// Error reported while attempting to execute the command.
-    Error { message: String },
+    Error {
+        frame_identity: RuntimeFrameIdentityV1,
+        message: String,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(clippy::large_enum_variant)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ExecuteStreamFrameDef {
+    Start {
+        frame_identity: RuntimeFrameIdentityV1,
+        span_id: String,
+    },
+    Stdout {
+        frame_identity: RuntimeFrameIdentityV1,
+        chunk_b64: String,
+    },
+    Stderr {
+        frame_identity: RuntimeFrameIdentityV1,
+        chunk_b64: String,
+    },
+    Event {
+        frame_identity: RuntimeFrameIdentityV1,
+        event: AgentEvent,
+        #[serde(default)]
+        event_identity: Option<RuntimeEventIdentityV1>,
+    },
+    Exit {
+        frame_identity: RuntimeFrameIdentityV1,
+        event_identity: RuntimeEventIdentityV1,
+        terminal_identity: RuntimeTerminalIdentityV1,
+        exit: i32,
+        span_id: String,
+        scopes_used: Vec<String>,
+        #[serde(default)]
+        fs_diff: Option<FsDiff>,
+        #[serde(flatten, default)]
+        process_telemetry: ProcessTelemetry,
+    },
+    Error {
+        frame_identity: RuntimeFrameIdentityV1,
+        message: String,
+    },
+}
+
+impl ExecuteStreamFrame {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        let frame_identity = match self {
+            Self::Start { frame_identity, .. }
+            | Self::Stdout { frame_identity, .. }
+            | Self::Stderr { frame_identity, .. }
+            | Self::Event { frame_identity, .. }
+            | Self::Exit { frame_identity, .. }
+            | Self::Error { frame_identity, .. } => frame_identity,
+        };
+        frame_identity.validate()?;
+
+        match self {
+            Self::Event { event, .. } => event
+                .event_identity
+                .as_ref()
+                .ok_or_else(|| "runtime Event frame requires event.event_identity".to_string())
+                .and_then(RuntimeEventIdentityV1::validate),
+            Self::Exit {
+                event_identity,
+                terminal_identity,
+                ..
+            } => {
+                event_identity.validate()?;
+                terminal_identity.validate()?;
+                if !terminal_identity.matches_event(event_identity) {
+                    return Err(
+                        "runtime Exit event_identity must equal terminal_identity".to_string()
+                    );
+                }
+                Ok(())
+            }
+            Self::Start { .. } | Self::Stdout { .. } | Self::Stderr { .. } | Self::Error { .. } => {
+                Ok(())
+            }
+        }
+    }
+
+    pub fn terminal_identity(&self) -> Option<&RuntimeTerminalIdentityV1> {
+        match self {
+            Self::Exit {
+                terminal_identity, ..
+            } => Some(terminal_identity),
+            _ => None,
+        }
+    }
+
+    /// Serialize one already-identified frame to its canonical replayable NDJSON bytes.
+    pub fn canonical_ndjson_bytes(&self) -> Result<Vec<u8>, String> {
+        self.validate_identity_contract()?;
+        let mut bytes = serde_json::to_vec(self).map_err(|err| err.to_string())?;
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+}
+
+impl TryFrom<ExecuteStreamFrameDef> for ExecuteStreamFrame {
+    type Error = String;
+
+    fn try_from(value: ExecuteStreamFrameDef) -> Result<Self, String> {
+        let frame = match value {
+            ExecuteStreamFrameDef::Start {
+                frame_identity,
+                span_id,
+            } => Self::Start {
+                frame_identity,
+                span_id,
+            },
+            ExecuteStreamFrameDef::Stdout {
+                frame_identity,
+                chunk_b64,
+            } => Self::Stdout {
+                frame_identity,
+                chunk_b64,
+            },
+            ExecuteStreamFrameDef::Stderr {
+                frame_identity,
+                chunk_b64,
+            } => Self::Stderr {
+                frame_identity,
+                chunk_b64,
+            },
+            ExecuteStreamFrameDef::Event {
+                frame_identity,
+                event,
+                event_identity,
+            } => {
+                if event_identity.is_some() {
+                    return Err(
+                        "runtime Event frame must not duplicate event_identity outside event"
+                            .to_string(),
+                    );
+                }
+                Self::Event {
+                    frame_identity,
+                    event,
+                }
+            }
+            ExecuteStreamFrameDef::Exit {
+                frame_identity,
+                event_identity,
+                terminal_identity,
+                exit,
+                span_id,
+                scopes_used,
+                fs_diff,
+                process_telemetry,
+            } => Self::Exit {
+                frame_identity,
+                event_identity,
+                terminal_identity,
+                exit,
+                span_id,
+                scopes_used,
+                fs_diff,
+                process_telemetry,
+            },
+            ExecuteStreamFrameDef::Error {
+                frame_identity,
+                message,
+            } => Self::Error {
+                frame_identity,
+                message,
+            },
+        };
+        frame.validate_identity_contract()?;
+        Ok(frame)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExecuteStreamFrame {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = ExecuteStreamFrameDef::deserialize(deserializer)?;
+        Self::try_from(value).map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Debug, thiserror::Error, Serialize, Deserialize)]
@@ -2274,8 +2476,164 @@ mod tests {
     }
 
     #[test]
+    fn runtime_identity_v1_types_are_shared_without_transport_aliases() {
+        let frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "rts_transport".to_string(),
+            frame_sequence: 1,
+        };
+        let event = RuntimeEventIdentityV1 {
+            event_id: "evt_transport".to_string(),
+            event_sequence: 1,
+        };
+        let terminal = RuntimeTerminalIdentityV1::from(&event);
+
+        assert!(frame.validate().is_ok());
+        assert!(event.validate().is_ok());
+        assert!(terminal.matches_event(&event));
+    }
+
+    fn runtime_frame_identity(sequence: u64) -> RuntimeFrameIdentityV1 {
+        RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "rts_transport".to_string(),
+            frame_sequence: sequence,
+        }
+    }
+
+    fn runtime_event_identity(sequence: u64) -> RuntimeEventIdentityV1 {
+        RuntimeEventIdentityV1 {
+            event_id: format!("evt_transport_{sequence}"),
+            event_sequence: sequence,
+        }
+    }
+
+    fn identified_agent_event(sequence: u64) -> AgentEvent {
+        let mut event = AgentEvent::message(
+            "agent",
+            "session",
+            "run",
+            substrate_common::agent_events::MessageEventKind::Status,
+            "ok",
+        );
+        event.event_identity = Some(runtime_event_identity(sequence));
+        event
+    }
+
+    #[test]
+    fn execute_stream_frame_v1_serializes_one_canonical_identity_representation() {
+        let event = ExecuteStreamFrame::Event {
+            frame_identity: runtime_frame_identity(2),
+            event: identified_agent_event(1),
+        };
+        let event_json = serde_json::to_value(&event).expect("serialize Event frame");
+        assert_eq!(event_json["frame_identity"]["schema_version"], json!(1));
+        assert_eq!(
+            event_json["frame_identity"]["stream_id"],
+            json!("rts_transport")
+        );
+        assert_eq!(event_json["frame_identity"]["frame_sequence"], json!(2));
+        assert_eq!(
+            event_json["event"]["event_identity"]["event_sequence"],
+            json!(1)
+        );
+        assert!(event_json.get("event_identity").is_none());
+
+        let terminal_event = runtime_event_identity(2);
+        let exit = ExecuteStreamFrame::Exit {
+            frame_identity: runtime_frame_identity(3),
+            event_identity: terminal_event.clone(),
+            terminal_identity: RuntimeTerminalIdentityV1::from(&terminal_event),
+            exit: 0,
+            span_id: "spn_test".to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: ProcessTelemetry::default(),
+        };
+        let exit_json = serde_json::to_value(&exit).expect("serialize Exit frame");
+        assert_eq!(
+            exit_json["event_identity"]["event_id"],
+            json!("evt_transport_2")
+        );
+        assert_eq!(
+            exit_json["terminal_identity"]["terminal_event_id"],
+            json!("evt_transport_2")
+        );
+
+        serde_json::from_value::<ExecuteStreamFrame>(event_json).expect("Event roundtrip");
+        serde_json::from_value::<ExecuteStreamFrame>(exit_json).expect("Exit roundtrip");
+    }
+
+    #[test]
+    fn execute_stream_frame_v1_rejects_missing_malformed_or_conflicting_identity() {
+        let valid_event = ExecuteStreamFrame::Event {
+            frame_identity: runtime_frame_identity(2),
+            event: identified_agent_event(1),
+        };
+        let mut missing_event_identity = serde_json::to_value(&valid_event).expect("serialize");
+        missing_event_identity["event"]
+            .as_object_mut()
+            .expect("event object")
+            .remove("event_identity");
+        assert!(serde_json::from_value::<ExecuteStreamFrame>(missing_event_identity).is_err());
+
+        let mut duplicate_event_identity = serde_json::to_value(&valid_event).expect("serialize");
+        duplicate_event_identity
+            .as_object_mut()
+            .expect("frame object")
+            .insert(
+                "event_identity".to_string(),
+                json!({"event_id": "evt_duplicate", "event_sequence": 1}),
+            );
+        assert!(serde_json::from_value::<ExecuteStreamFrame>(duplicate_event_identity).is_err());
+
+        let mut zero_frame_sequence = serde_json::to_value(&valid_event).expect("serialize");
+        zero_frame_sequence["frame_identity"]["frame_sequence"] = json!(0);
+        assert!(serde_json::from_value::<ExecuteStreamFrame>(zero_frame_sequence).is_err());
+
+        let terminal_event = runtime_event_identity(2);
+        let valid_exit = ExecuteStreamFrame::Exit {
+            frame_identity: runtime_frame_identity(3),
+            event_identity: terminal_event.clone(),
+            terminal_identity: RuntimeTerminalIdentityV1::from(&terminal_event),
+            exit: 0,
+            span_id: "spn_test".to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: ProcessTelemetry::default(),
+        };
+        let mut mismatched_terminal = serde_json::to_value(valid_exit).expect("serialize");
+        mismatched_terminal["terminal_identity"]["terminal_event_id"] = json!("evt_other");
+        assert!(serde_json::from_value::<ExecuteStreamFrame>(mismatched_terminal).is_err());
+    }
+
+    #[test]
+    fn execute_stream_frame_replay_preserves_identity_and_canonical_bytes() {
+        let frame = ExecuteStreamFrame::Event {
+            frame_identity: runtime_frame_identity(2),
+            event: identified_agent_event(1),
+        };
+        let original = frame.canonical_ndjson_bytes().expect("canonical bytes");
+        let replay = frame
+            .clone()
+            .canonical_ndjson_bytes()
+            .expect("replay bytes");
+        assert_eq!(replay, original);
+
+        let transport_error = ExecuteStreamFrame::Error {
+            frame_identity: runtime_frame_identity(3),
+            message: "transport lost".to_string(),
+        };
+        assert!(transport_error.terminal_identity().is_none());
+    }
+
+    #[test]
     fn serialize_stream_frame_roundtrip() {
+        let terminal_event = runtime_event_identity(1);
         let frame = ExecuteStreamFrame::Exit {
+            frame_identity: runtime_frame_identity(1),
+            event_identity: terminal_event.clone(),
+            terminal_identity: RuntimeTerminalIdentityV1::from(&terminal_event),
             exit: 0,
             span_id: "spn_test".into(),
             scopes_used: vec!["tcp:example.com:443".into()],
@@ -2319,6 +2677,7 @@ mod tests {
                 scopes_used,
                 fs_diff,
                 process_telemetry,
+                ..
             } => {
                 assert_eq!(exit, 0);
                 assert_eq!(span_id, "spn_test");

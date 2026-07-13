@@ -132,7 +132,8 @@ A1.1e -> B0 -> B1 -> B2.1 -> B3.1 -> C1 -> A1.2
 ```
 
 This corridor does not close A1.1d, bypass A2/A3 ownership, enable foreground early return, or
-promote any seam. B0 is the exact next implementation packet. B2.2 and B3.2 retain the deferred
-receipt-UX and broader retained-lifecycle work after A1 and the named A2/A3 boundaries. The first
-implementation PR in this corrected order must make B0's runtime-owned identity carrier true and
-prove it; similarly named event, span, or payload fields are not closure evidence.
+promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven;
+B1 is now the exact next dependency-ready implementation packet. B2.1 consumer replay/journal
+clauses remain open, and B2.2/B3.2 retain the deferred receipt-UX and broader retained-lifecycle
+work after A1 and the named A2/A3 boundaries. Similarly named event, span, or payload fields are not
+closure evidence.

@@ -2156,10 +2156,10 @@ fn consume_agent_stream_buffer_with_context(
         })?;
 
         match frame {
-            ExecuteStreamFrame::Start { span_id } => {
+            ExecuteStreamFrame::Start { span_id, .. } => {
                 *active_span_id = Some(span_id);
             }
-            ExecuteStreamFrame::Stdout { chunk_b64 } => {
+            ExecuteStreamFrame::Stdout { chunk_b64, .. } => {
                 let bytes = BASE64
                     .decode(chunk_b64.as_bytes())
                     .map_err(|e| anyhow::anyhow!("invalid stdout chunk: {}", e))?;
@@ -2171,7 +2171,7 @@ fn consume_agent_stream_buffer_with_context(
                     false,
                 );
             }
-            ExecuteStreamFrame::Stderr { chunk_b64 } => {
+            ExecuteStreamFrame::Stderr { chunk_b64, .. } => {
                 let bytes = BASE64
                     .decode(chunk_b64.as_bytes())
                     .map_err(|e| anyhow::anyhow!("invalid stderr chunk: {}", e))?;
@@ -2183,7 +2183,7 @@ fn consume_agent_stream_buffer_with_context(
                     true,
                 );
             }
-            ExecuteStreamFrame::Event { event } => {
+            ExecuteStreamFrame::Event { event, .. } => {
                 if let (Some(primary), Some(final_strategy), Some(reason)) = (
                     event
                         .data
@@ -2221,7 +2221,7 @@ fn consume_agent_stream_buffer_with_context(
                 *fs_diff = diff;
                 *process_telemetry = exit_process_telemetry;
             }
-            ExecuteStreamFrame::Error { message } => {
+            ExecuteStreamFrame::Error { message, .. } => {
                 if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
                     return Err(anyhow::Error::new(WorldFsStrategyUnavailableError {
                         raw_message: message.clone(),
@@ -2349,6 +2349,21 @@ mod tests {
         let mut payload = serde_json::to_vec(&frame).expect("serialize frame");
         payload.push(b'\n');
         hyper::body::Bytes::from(payload)
+    }
+
+    fn test_frame_identity(frame_sequence: u64) -> transport_api_types::RuntimeFrameIdentityV1 {
+        transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "rts_world_ops_fixture".to_string(),
+            frame_sequence,
+        }
+    }
+
+    fn test_event_identity(event_sequence: u64) -> transport_api_types::RuntimeEventIdentityV1 {
+        transport_api_types::RuntimeEventIdentityV1 {
+            event_id: format!("evt_world_ops_fixture_{event_sequence}"),
+            event_sequence,
+        }
     }
 
     #[test]
@@ -2727,9 +2742,15 @@ mod tests {
         rt.block_on(async {
             let frames = vec![
                 encode_stream_frame(ExecuteStreamFrame::Start {
+                    frame_identity: test_frame_identity(1),
                     span_id: "spn_interrupt".to_string(),
                 }),
                 encode_stream_frame(ExecuteStreamFrame::Exit {
+                    frame_identity: test_frame_identity(2),
+                    event_identity: test_event_identity(1),
+                    terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                        &test_event_identity(1),
+                    ),
                     exit: 130,
                     span_id: "spn_interrupt".to_string(),
                     scopes_used: Vec::new(),
@@ -2836,12 +2857,19 @@ mod tests {
             let mut rx = init_event_channel();
             let frames = vec![
                 encode_stream_frame(ExecuteStreamFrame::Start {
+                    frame_identity: test_frame_identity(1),
                     span_id: "spn-world".to_string(),
                 }),
                 encode_stream_frame(ExecuteStreamFrame::Stdout {
+                    frame_identity: test_frame_identity(2),
                     chunk_b64: BASE64.encode(b"hello world"),
                 }),
                 encode_stream_frame(ExecuteStreamFrame::Exit {
+                    frame_identity: test_frame_identity(3),
+                    event_identity: test_event_identity(1),
+                    terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                        &test_event_identity(1),
+                    ),
                     exit: 0,
                     span_id: "spn-world".to_string(),
                     scopes_used: Vec::new(),
