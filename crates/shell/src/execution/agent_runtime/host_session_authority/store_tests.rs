@@ -1476,6 +1476,29 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
     );
     let exact_observation = resolved.observation();
     let applied_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    let trusted_root = TrustedAuthorityRoot::open(root.path()).unwrap();
+    let mut mismatched_exact_current = applied.clone();
+    mismatched_exact_current.application_journal.clear();
+    let mut exact_current_candidate = applied.clone();
+    exact_current_candidate.root_revision += 1;
+    assert!(platform::compare_and_swap_opened_root_exact_current(
+        &trusted_root,
+        &mismatched_exact_current,
+        &ExpectedRevisionsV1 {
+            root_revision: applied.root_revision,
+            authority: None,
+        },
+        &exact_current_candidate,
+    )
+    .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        applied_bytes
+    );
+    assert!(fs::read_dir(root.path().join("authority-v1/tmp"))
+        .unwrap()
+        .next()
+        .is_none());
     let mut rewritten_history = applied.clone();
     rewritten_history.root_revision += 1;
     rewritten_history
@@ -1679,6 +1702,14 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
             .unwrap()
             .authority_record_commitment,
         expected_authority_commitment
+    );
+    let root_only_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    assert!(authority_facade
+        .resolve_exact(session_id, Some(&exact_observation))
+        .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        root_only_bytes
     );
     fs::write(
         root.path().join("authority-v1/state-root-v1.json"),
