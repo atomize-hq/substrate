@@ -32,8 +32,10 @@ flowchart TD
     EPR --> DPN["DispatchPolicyNarrowingPatch"]
     DPN --> WRR["WorldWorkReceiptRegistry"]
     WRR --> SUP["WorldWorkExecutionSupervisor"]
-    SUP --> MSG["WorldWorkerMessagingProtocol"]
+    DPN --> MSG["WorldWorkerMessagingProtocol"]
     MSG --> RWR["RetainedWorkerRuntime"]
+    RWR --> RET["RuntimeEventTransport"]
+    RET --> SUP
     SUP --> OBL["ObligationLedger"]
     OBL --> INBOX["InboxProjection"]
     OBL --> AUTO["AutoAttachProjection"]
@@ -64,10 +66,12 @@ flowchart TD
 | WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries | provider-specific execution or direct policy invention |
 | SteeringPolicyEngine | deny-by-default action/mode/backend/session/world/autonomy decisions | effective policy materialization or runtime launch |
 | EffectivePolicyResolver | parent-policy composition and immutable `PolicySnapshotV3` materialization | enforcement by advisory flags alone |
-| WorldWorkReceiptRegistry | durable active task/turn identity and monotonic state | stream ownership or worker lifecycle policy |
-| WorldWorkExecutionSupervisor | post-acceptance stream/event observation, reconciliation, obligation materialization, terminal closeout | foreground tool semantics or model-facing identity |
+| WorldWorkReceiptRegistry | proposed acceptance-record identity/request context before submission; durable accepted task/turn identity only after runtime acknowledgement; immutable recording of any owner-supplied host-transition correlation | runtime acceptance itself, stream ownership, host-transition interpretation, or worker lifecycle policy |
+| RuntimeEventTransport | producer-assigned stable stream/frame/event/terminal identity and monotonic ordering | receipt acceptance, durable observation, retained-message semantics, obligation semantics, or completeness |
+| WorldWorkExecutionSupervisor | no-gap durable post-acceptance observation journal, exact acceptance joins, opaque correlation-byte retention, duplicate/reorder rejection, restart reconciliation, and monotonic terminal closeout | foreground tool semantics, model-facing identity, retained-message or host-transition semantics, or obligation classification/materialization |
+| WorldWorkerMessagingProtocol | fail-closed producer-side normalization of provider events plus exact retained target/source, active-run, thread, typed event class, attention, and request/message/event causation semantics | transport ordering, receipt acceptance, observation ownership, or obligation materialization |
 | RetainedWorkerRuntime | worker create/continue/park/cancel/stop/fork/inspect/invalidate lifecycle | host-session posture or obligation projection |
-| ObligationLedger | canonical attention/review/deferred-action truth | host rendering, prompt replay, direct worker continuation |
+| ObligationLedger | obligation classification, idempotent materialization, canonical revisions and records, completeness watermarks/cuts, closed snapshots, and attention/review/deferred-action truth | runtime identity generation, stream observation, host rendering, prompt replay, or direct worker continuation |
 | Inbox / AutoAttach / Router | derived review view, attach eligibility, sanctioned host ownership restoration | approving, answering, forking, or continuing workers |
 | AgentConfigProjectionService | logical inventory and non-secret effective/native projection per worker identity; launch-time secret-handoff intent | treating `.codex`, `CODEX_HOME`, `config.toml`, auth files, or workspace files as credential authority |
 | WorldRuntimeAdapterExecutionEnvelope | guest-realizable launch contract bound to world, worker, config, policy snapshot, credential posture, and secret-handoff ref | raw credential payloads, provider-specific parsing, or unrestricted side effects |
@@ -103,13 +107,25 @@ Every world verb resolves exact session, caller, backend, world id/generation, a
 
 `run_world_task` and `continue_world_worker` persist accepted receipts and return durable handles before terminal exit. A blocking UX may wait on the receipt; it may not redefine the core contract. The supervisor—not the foreground tool call—owns the terminal-framed stream.
 
+Durable observation ownership may land before model-visible early return: the foreground may remain
+a compatibility waiter over the receipt while the supervisor alone ingests and closes the stream.
+
 ### 5. Cancel targets active work
 
 Cancel resolves an active task/turn receipt. Worker identity establishes routing context; it does not prove active cancelable work. `NoActiveCancelableWork` is distinct from stale linkage, invalid identity, owner unreachable, and already terminal.
 
 ### 6. Obligations are event-derived canonical truth
 
-Attention-driving runtime events are persisted and materialized into idempotent obligations as they arrive, before terminal exit when applicable. Host `awaiting_attention` derives from unresolved obligations. Worker `attention_pending` is a separate lifecycle state.
+Attention-driving runtime events are persisted by the supervisor and materialized by
+`ObligationLedger` into idempotent obligations as they arrive, before terminal exit when applicable.
+For an accepted retained stream, every post-acknowledgement semantic `Event` frame is normalized
+into the typed messaging envelope and included in the ledger's ordered classified-event set; an
+unknown, untyped, or omitted event keeps the materialization cut non-Complete.
+The ledger alone advances the per-session revision and materialized-through watermark and declares
+a Complete cut for an exact runtime-generated terminal event ID/sequence. Stream exhaustion, EOF,
+timeout, PID/helper/socket state, inbox rows, pending counts, worker flags, and compatibility
+projections cannot establish event completion or obligation completeness. Host `awaiting_attention`
+derives from unresolved obligations. Worker `attention_pending` is a separate lifecycle state.
 
 ### 7. Auto-attach restores ownership only
 

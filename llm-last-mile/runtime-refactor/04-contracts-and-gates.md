@@ -589,12 +589,23 @@ struct ObligationSnapshotRecordHashInputV1 {
     authority_store_id: String,
     orchestration_session_id: String,
     authoritative_participant_id: String,
-    source_run_id: String,
+    source_journal_event: SupervisorJournalEventRefV1,
     obligation_id: String,
     obligation_revision: u64,
-    causation_event_id: String,
-    causation_event_sequence: u64,
     state: ObligationSnapshotRecordStateV1,
+}
+
+struct SupervisorJournalEventRefV1 {
+    schema_version: u32,          // exactly 1
+    journal_entry_id: String,
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    stream_id: String,
+    frame_sequence: u64,
+    event_id: String,
+    event_sequence: u64,
+    transport_event_commitment: AuthorityObjectCommitmentV1,
 }
 
 struct UnresolvedAttentionObligationSnapshotEntryV1 {
@@ -609,6 +620,9 @@ enum ObligationAttentionDispositionV1 {
 }
 
 struct ObligationMaterializationCutV1 {
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    stream_id: String,
     session_ledger_revision: u64,
     terminal_event_id: String,
     terminal_event_sequence: u64,
@@ -620,10 +634,16 @@ struct ObligationSnapshotHashInputV1 {
     authority_store_id: String,
     orchestration_session_id: String,
     authoritative_participant_id: String,
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    stream_id: String,
+    accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    host_transition_correlation: HostTransitionWorkCorrelationV1,
     transition_intent_id: String,
-    run_id: String,
+    transition_run_id: String,
     authority_revision_observed: u64,
     materialization_cut: ObligationMaterializationCutV1,
+    materialized_journal_events: Vec<SupervisorJournalEventRefV1>,
     attention_disposition: ObligationAttentionDispositionV1,
     unresolved_attention_obligations: Vec<UnresolvedAttentionObligationSnapshotEntryV1>,
     captured_at: TimestampV1,
@@ -634,8 +654,13 @@ enum ObligationLedgerSnapshotReadV1 {
         authority_store_id: String,
         orchestration_session_id: String,
         authoritative_participant_id: String,
+        acceptance_record_id: String,
+        acceptance_record_revision: u64,
+        stream_id: String,
+        accepted_work_identity: AcceptedWorldWorkIdentityV1,
+        host_transition_correlation: HostTransitionWorkCorrelationV1,
         transition_intent_id: String,
-        run_id: String,
+        transition_run_id: String,
         authority_revision_observed: u64,
         observed_session_ledger_revision: u64,
         required_terminal_event_id: String,
@@ -686,6 +711,11 @@ struct PostTurnProtocolEventHashInputV1 {
     run_id: String,
     authority_revision_observed: u64,
     active_authoritative_participant_id: String,
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    stream_id: String,
+    accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    host_transition_correlation: HostTransitionWorkCorrelationV1,
     protocol_actor: HostPostTurnProtocolActorV1,
     event_id: String,
     event_sequence: u64,
@@ -698,6 +728,11 @@ struct PostTurnCompletionHashInputV1 {
     intent_id: String,
     run_id: String,
     authority_revision_observed: u64,
+    acceptance_record_id: String,
+    acceptance_record_revision: u64,
+    stream_id: String,
+    accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    host_transition_correlation: HostTransitionWorkCorrelationV1,
     terminal_event_id: String,
     terminal_event_sequence: u64,
     protocol_event_ref: AuthorityObjectRefV1,
@@ -725,6 +760,40 @@ struct TerminalHandoffHashInputV1 {
     recorded_at: TimestampV1,
 }
 ```
+
+`SupervisorJournalEventRefV1.transport_event_commitment` is the B2.1-owned `CanonicalSha256` over
+the complete canonical runtime event bytes. The supervisor treats those bytes as opaque transport
+truth: it verifies only B0 identity/order, B1 scope, canonical-byte equality, and journal replay.
+That generic contract lets B2.1 close without a B3.1 semantic dependency. Once B3.1 adopts an
+accepted retained stream, every post-acknowledgement `ExecuteStreamFrame::Event` before the exact
+terminal frame must decode exactly as the shared `WorldWorkerEventV1`; there is no producer-chosen
+"C1-eligible" subset. B3.1 validates each event's source/target participants and backends, world,
+accepted active run, thread, event class, attention bit, request/message causation, owner-supplied
+host-transition correlation when present, payload, and emission time against the B0/B1 join. A
+missing or invalid typed member makes the stream protocol-invalid and keeps the C1 cut
+non-Complete; neither B3.1 nor C1 may drop it. C1 revalidates that each generic journal commitment
+is the canonical commitment of its full envelope before classification, materialization, or
+snapshot capture. The canonical obligation record commits this typed ref, so a Complete snapshot
+cannot drop or substitute any retained event field.
+
+`ObligationSnapshotHashInputV1.materialized_journal_events` contains every post-acknowledgement
+retained `Event` journal ref in the exact acceptance/stream scope at or below the
+materialized-through watermark, sorted by `event_sequence`, with unique journal entry, frame, and
+event identities. It may be empty only when that closed retained scope contains no `Event` frame.
+The vector must be an exhaustive join against B2.1's journal, not a set chosen by event class or
+attention value. Every unresolved obligation entry's canonical source ref names an exact member of
+this vector. The vector is part of the snapshot hash, so `NoUnresolvedAttention` still commits the
+complete classified retained-event set and cannot prove completeness from a terminal watermark
+alone.
+
+For a transition-scoped obligation read, `accepted_work_identity` and
+`host_transition_correlation` are copied from the exact B1 acceptance record, and
+`acceptance_record_id`/revision plus `stream_id` match the B2.1 journal and materialization cut.
+The top-level `transition_intent_id`, `transition_run_id`, and
+`authority_revision_observed` exactly equal the same fields in `host_transition_correlation`; the
+accepted task/active-run identity remains distinct. Missing or mismatched correlation cannot return
+Complete and is never repaired from request IDs, active-run IDs, payloads, foreground state, or
+A1.2 guesses.
 
 Terminal handoff refs have this closed V1 matrix; `Some` refs must have the exact named kind and
 equal the corresponding intent substate/journal ref, and every unlisted ref is `None`:
@@ -1573,6 +1642,11 @@ enum HostSessionPostTurnApplicationV1 {
         completion_ref: AuthorityObjectRefV1,
         expected_run_id: String,
         expected_authority_revision: u64,
+        acceptance_record_id: String,
+        acceptance_record_revision: u64,
+        stream_id: String,
+        accepted_work_identity: AcceptedWorldWorkIdentityV1,
+        host_transition_correlation: HostTransitionWorkCorrelationV1,
         required_terminal_event_id: String,
         required_terminal_event_sequence: u64,
         recorded_at: TimestampV1,
@@ -1750,10 +1824,11 @@ A1.2 is the first packet allowed to perform production Start semantics. It owns 
 certificate validation, `ExpectedAbsent` acceptance, Start reservation plus intent issuance,
 claim/application, initial Start-origin authority birth, startup-ownership resolution, pending
 post-turn reconciliation, ledger-snapshot consumption, and release as one intent protocol. It does
-not own canonical obligations or their event/materialization cut. C1 owns that semantic producer;
-until it exists, A1.2 retains `AwaitingObligationCut` and cannot claim full packet closure. A1.3
-adopts the protocol on real CLI/REPL consumers; A1.1 primitive tests are not evidence that a
-production Start path is adopted.
+not own runtime event identity, receipt acceptance, durable observation, retained-event semantics,
+canonical obligations, or their event/materialization cut. B0, B1, B2.1, B3.1, and C1 own those
+prerequisites respectively. Until that corridor exists, A1.2 retains `AwaitingObligationCut` and
+cannot claim full packet closure. A1.3 adopts the protocol on real CLI/REPL consumers; A1.1
+primitive tests are not evidence that a production Start path is adopted.
 
 ### Start namespace reservation
 
@@ -1975,9 +2050,12 @@ introducing another intent contract:
     surviving Released bytes not durably removed as specified by the crash rules fails closed.
 14. Resume completion first publishes/verifies one immutable
     `PostTurnProtocolEventHashInputV1` object and then a `PostTurnCompletionHashInputV1` whose exact
-    `PostTurnProtocolEvent` ref, intent/claim/claimant-attempt/run/revision, terminal event ID, and
-    monotonically ordered run-local terminal event sequence all match that object and the persisted
-    Applied intent. `ResumableClean` and `TerminalClean`
+    `PostTurnProtocolEvent` ref, intent/claim/claimant-attempt/run/revision, B1 acceptance
+    ID/revision and accepted work identity, B0 stream, the exact owner-supplied host-transition correlation,
+    terminal event ID, and monotonically ordered run-local terminal event sequence all match that
+    object and the persisted Applied intent. The protocol-event/completion `run_id` equals the
+    correlation's `transition_run_id` and remains distinct from the accepted active-run ID.
+    `ResumableClean` and `TerminalClean`
     require a `TargetAuthoritativeParticipant` actor equal to the active participant, the exactly
     matching event kind, and Accepted input. `TerminalFailure` with reason
     `ResumeRuntimeCreationRejected` requires the `LaunchApplicationClaimant` actor to equal the
@@ -1991,27 +2069,38 @@ introducing another intent contract:
     `Terminal`, applies the post-turn result, terminalizes Pending input only for the two exact
     pre-acceptance failure reasons, and commits terminal handoff without an obligation snapshot.
     `ResumableClean` requires Accepted input and instead commits `AwaitingObligationCut` with the
-    completion ref and required event cut but does not mutate authority. Exact retry joins the same
-    event/completion/pending or terminal result, initial intent expiry cannot erase it, and
-    transport remains Retained until its exact release gate.
+    completion ref, exact acceptance/stream/transition correlation, and required event cut but does
+    not mutate authority. Exact retry joins the same event/completion/pending or terminal result,
+    initial intent expiry cannot erase it, and transport remains Retained until its exact release
+    gate.
 15. `ObligationLedger` alone owns the semantic query and produces
     `ObligationLedgerSnapshotReadV1`; `HostSessionAuthority` is a consume-only client. A Complete
-    snapshot binds exact authority store, session, active participant, transition intent, run,
-    observed authority revision, per-session ledger revision, terminal event ID/sequence, and a
-    `materialized_through_event_sequence` at least that terminal sequence. Revisions/sequences and
-    all identities are nonzero/non-empty as applicable. Each unresolved entry
-    binds obligation ID/revision and the exact `CanonicalSha256` commitment of
+    snapshot binds exact authority store, session, active participant, B1 acceptance record
+    ID/revision and accepted task/active-run identity, B0 stream ID, the unchanged verified
+    transition intent/revision/payload commitment and distinct transition run, observed authority
+    revision, per-session ledger revision, terminal event ID/sequence, and a
+    `materialized_through_event_sequence` at least that terminal sequence. The materialization cut
+    repeats the acceptance record and stream identity; all repeated fields must match exactly. The
+    snapshot also carries every post-acknowledgement retained `Event` journal ref through that
+    watermark as a typed B3.1 member, ordered by event sequence with unique journal/frame/event
+    identities and full canonical event commitments. It is exhaustively joined to B2.1's journal;
+    any untyped, omitted, substituted, or scope-mismatched retained event keeps the cut
+    non-Complete even when the attention disposition would otherwise be empty. Revisions/sequences
+    and all identities are nonzero/non-empty as
+    applicable. Each unresolved entry binds obligation ID/revision and the exact `CanonicalSha256` commitment of
     `ObligationSnapshotRecordHashInputV1`; entries are non-empty unique IDs sorted by raw UTF-8 byte
     order. `ObligationLedger` sets the closed attention disposition and guarantees it matches the
     complete canonical record set: NoUnresolvedAttention requires an empty entry vector and
     HasUnresolvedAttention requires a non-empty vector. It derives only from canonical obligation
     records, never inbox rows, counts, worker flags, helper state, or compatibility projections.
 16. A1.2 may publish the Complete snapshot bytes unchanged as `ObligationSnapshot` and validate
-    only their closed schema, exact scope/cut/ref commitments, and equality with the current
-    pending completion and authority. It cannot enumerate, classify, create, resolve, reinterpret,
-    repair, or overwrite obligations. The ledger revalidates the same per-session revision and
-    event cut immediately before the authority commit under the retained transaction/lock; the
-    lock supplies physical serialization but not semantic ownership. A Pending ledger read leaves
+    only their closed schema, exact acceptance/stream/transition scope, cut/ref commitments, and
+    equality with the current pending completion and authority. It cannot invent or repair the
+    correlation, equate transition run with active run, or enumerate, classify, create, resolve,
+    reinterpret, repair, or overwrite obligations. The ledger revalidates the same per-session
+    revision and event cut immediately before the authority commit under the retained
+    transaction/lock; the lock supplies physical serialization but not semantic ownership. A
+    Pending ledger read leaves
     `AwaitingObligationCut` unchanged. A Complete `HasUnresolvedAttention` result selects
     `AwaitingAttention`; Complete `NoUnresolvedAttention` selects `ParkedResumable`. One root
     transaction advances post-turn to Applied, mutates authority at most once, and stores the
@@ -2020,10 +2109,11 @@ introducing another intent contract:
 17. C1 owns the event-to-obligation materializer, canonical obligation revisions, and the complete
     per-session event cut required above. The current pre-C1 ledger cannot provide that semantic
     completeness proof: empty can mean either no unresolved obligation or not-yet-materialized
-    events. Therefore A1.2 can specify and persist the pending protocol but cannot close a
-    ResumableClean post-turn or claim its full packet exit before the C1-owned cut lands or the
-    canonical phase map explicitly moves only that prerequisite earlier. A1.2 does not start C1 or
-    claim `RG-OBL-01`/`RG-OBL-02`.
+    events. C1 in turn requires B0 runtime identity/order, B1 accepted run identity, B2.1 durable
+    observation/reconciliation, and B3.1 exact retained-event semantics. Therefore A1.2 can specify
+    and persist the pending protocol but cannot close a ResumableClean post-turn or claim its full
+    packet exit before that corridor lands. A1.2 does not implement any corridor owner or claim
+    `RG-EVENT-01`, `RG-SUP-01`, `RG-SUP-02`, `RG-MSG-01`, `RG-OBL-01`, or `RG-OBL-02`.
 
 ### Crash reconciliation
 
@@ -2052,10 +2142,10 @@ On process restart or before retrying a nonterminal intent, `HostSessionAuthorit
    mismatched object required by Retained/Present state is corruption. ReleaseEligible plus absent
    transport may advance only after exact terminal-handoff verification. Applied Start/Attach also
    verify their startup-ownership evidence/result ref. An AwaitingObligationCut Resume verifies its
-   exact post-turn protocol-event ref, completion/event equality, and cut scope and remains pending
-   until the semantic owner returns Complete; applied resumable post-turn Resume verifies the same
-   event/completion chain, its exact Complete obligation snapshot ref, and current ledger
-   revalidation.
+   exact post-turn protocol-event ref, completion/event equality, acceptance/stream/transition
+   correlation, and cut scope and remains pending until the semantic owner returns Complete;
+   applied resumable post-turn Resume verifies the same event/completion chain, its exact Complete
+   obligation snapshot ref, and current ledger revalidation.
 7. Missing plan transport is reprojected only after revisioned input/application/startup-ownership/
    post-turn checks.
    Applied Resume with pending post-turn work accepts only the exact actor-bound protocol-event ref,
@@ -2163,11 +2253,266 @@ Rules:
 6. Episode construction and launch follow durable transition application and cannot reset a parked
    session to `Allocating` or authorize a successor participant.
 
+## 2A. Runtime event identity and ordering carrier
+
+B0 extends the existing runtime stream family; it does not create a parallel transport. The
+runtime producer assigns identity before emission. Host decoders, receipt code, supervisors,
+messaging code, and the ledger consume those fields unchanged.
+
+```rust
+struct RuntimeFrameIdentityV1 {
+    schema_version: u32,          // exactly 1
+    stream_id: String,            // stable for one accepted runtime stream
+    frame_sequence: u64,          // starts at 1; strictly monotonic and gap-free
+}
+
+struct RuntimeEventIdentityV1 {
+    event_id: String,             // stable for one logical semantic event
+    event_sequence: u64,          // starts at 1; strictly monotonic within stream
+}
+
+struct RuntimeTerminalIdentityV1 {
+    terminal_event_id: String,
+    terminal_event_sequence: u64,
+}
+```
+
+Every `ExecuteStreamFrame` carries `RuntimeFrameIdentityV1`. Semantic `Event` frames additionally
+carry `RuntimeEventIdentityV1`; the terminal `Exit` frame carries both a semantic event identity
+and `RuntimeTerminalIdentityV1` with equal ID/sequence. `Start`, stdout, stderr, event, and terminal
+frames participate in the same frame sequence. `Error` is either a typed semantic terminal frame
+with exact terminal identity or an observation/transport error that cannot prove run completion.
+
+B0 rules:
+
+1. `stream_id`, frame sequence, event ID/sequence, and terminal identity are runtime-produced;
+   the host never synthesizes them from arrival order, timestamps, payload hashes, span IDs, EOF,
+   or process state.
+2. Re-emitting the same logical frame/event after retry or reconnect preserves every identity.
+   The producer never originates a second meaning at the same sequence position.
+3. Frame and event sequences are positive and strictly monotonic. An exact identity with identical
+   canonical bytes is valid replay and B2.1 consumes it as a no-op. A gap, reorder, conflicting
+   duplicate, or frame after terminal is protocol-invalid and B2.1 rejects it; that consumer-side
+   enforcement is not B0 ownership.
+4. The terminal frame is the final semantic event and names its exact event ID/sequence. Stream
+   exhaustion without it is not completion.
+5. B0 owns only the carrier. B1 owns acceptance, B2.1 owns durable observation/dedupe/restart,
+   B3.1 owns retained-event semantics, and C1 owns obligation materialization/completeness.
+
+## 2B. Bounded retained worker event envelope
+
+B3.1 supplies the minimum semantic envelope C1 needs without moving B3.2 early. It extends the
+existing shared `AgentEvent` in `crates/common/src/agent_events.rs` with one optional, explicitly
+typed top-level `worker_event` field. The same module defines the producer-construction-only
+`NormalizedWorldWorkerEventFacetV1`. In `world-service/member_runtime.rs`, one named fail-closed
+normalizer parses the existing provider `AgentWrapperEvent` kind/payload before `AgentEvent`
+construction and produces this facet; it is the sole permitted provider-payload interpretation for
+the C1 path. `ExecuteStreamFrame::Event { event: AgentEvent }` remains unchanged, so
+`world-service` can produce the envelope and shell consumers can validate it without host-side
+identity or semantic inference from `AgentEvent.data` or a second transport protocol.
+Both the equality-only commitment representation and its host-transition correlation carrier live
+in `crates/common/src/authority_commitment.rs` and are re-exported by
+`crates/common/src/lib.rs`. They contain no verifier or semantic authority:
+
+```rust
+enum OpaqueAuthorityCommitmentV1 {
+    CanonicalSha256 {
+        digest_hex: String,
+    },
+    StoreHmacSha256 {
+        key_id: String,
+        domain: String,
+        digest_hex: String,
+    },
+}
+
+struct HostTransitionWorkCorrelationV1 {
+    schema_version: u32,          // exactly 1
+    authority_store_id: String,
+    orchestration_session_id: String,
+    authoritative_participant_id: String,
+    transition_intent_id: String,
+    transition_intent_revision_observed: u64,
+    transition_run_id: String,
+    transition_payload_commitment: OpaqueAuthorityCommitmentV1,
+    authority_revision_observed: u64,
+}
+
+enum WorldWorkerEventClassV1 {
+    Reply,
+    ProgressUpdate,
+    FollowUpQuestion,
+    ApprovalRequest,
+    Blocked,
+    AttentionRequired,
+    ForkRequest,
+    ForkRecommendation,
+    Result,
+    Failure,
+}
+
+// Producer-construction type, not an independent wire envelope.
+struct NormalizedWorldWorkerEventFacetV1 {
+    schema_version: u32,          // exactly 1
+    thread_id: String,
+    event_class: WorldWorkerEventClassV1,
+    attention_required: bool,
+    causation_message_id: String,
+    causation_request_id: String,
+    payload: serde_json::Value,
+}
+
+struct WorldWorkerEventV1 {
+    schema_version: u32,          // exactly 1
+    acceptance_record_id: String,
+    stream_id: String,
+    frame_sequence: u64,
+    event_id: String,
+    event_sequence: u64,
+    request_id: String,
+    active_run_id: String,
+    host_transition_correlation: Option<HostTransitionWorkCorrelationV1>,
+    causation_message_id: String,
+    causation_request_id: String,
+    orchestration_session_id: String,
+    source_participant_id: String,
+    target_participant_id: String,
+    source_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    thread_id: String,
+    event_class: WorldWorkerEventClassV1,
+    attention_required: bool,
+    payload: serde_json::Value,
+    emitted_at: Timestamp,
+}
+
+struct AgentEvent {
+    // All existing legacy fields remain unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    worker_event: Option<WorldWorkerEventV1>,
+}
+```
+
+The exact B0 event identity is copied unchanged. `acceptance_record_id` and `active_run_id` join the
+B1 accepted retained turn. When B1 carries `host_transition_correlation`, B3.1 copies it unchanged;
+B3.1 rejects absence or mismatch rather than inferring intent/run/authority scope from request ID,
+active-run ID, foreground state, or payload. Before `AgentEvent` construction, the producer
+normalizer maps every provider wrapper event into exact thread/class/attention/payload semantics
+and joins request/message causation from the retained B1 context. Explicit supported non-attention
+wrapper shapes receive a typed non-attention class. Unknown, ambiguous, deferred, or malformed
+shapes fail the retained stream and C1 cut closed; they cannot be dropped, left untyped, or
+downgraded to progress or no-attention. The final source/target, world, run, thread, class,
+attention, and causation fields are explicit and validated before ledger delivery; the resulting
+B2.1 generic journal ref commits the exact canonical shared-envelope bytes without the supervisor
+interpreting them.
+
+After emission, neither host code nor C1 may infer a missing field from free text,
+`AgentEvent.data`, optional nested runtime payloads, the most recent worker, or foreground request
+state. Raw provider payload may remain as compatibility/debug data, but it is not semantic truth
+for the C1 path. B3.1 does not require an upstream provider-wrapper taxonomy change and does not
+complete host-to-worker messaging, retained lifecycle, park, cancel, stop, fork, or model-facing
+early return; those remain B3.2/B4.
+
+`worker_event` may be absent only for streams outside the B3.1-adopted accepted-retained scope. In
+that scope, every post-acknowledgement `ExecuteStreamFrame::Event` must carry it through the exact
+terminal cut; absence or invalidity is a protocol failure and makes a Complete C1 snapshot
+unavailable. Every identity/correlation/semantic field comes from this typed member rather than
+host parsing of `AgentEvent.data`. The normalizer may read provider `AgentWrapperEvent.data` only
+before emission, under its explicit exhaustive provider-shape tests, to construct
+`NormalizedWorldWorkerEventFacetV1`.
+`OpaqueAuthorityCommitmentV1` preserves the exact variant and fields of the HostSessionAuthority
+commitment supplied later by A1.2, but B1/B3.1/C1 may only retain and compare it; they cannot mint,
+verify, reinterpret, log as observability evidence, or use it as obligation semantics.
+
+## 2C. `WorldWorkAcceptanceRecordV1`
+
+B1 persists one minimal accepted-work anchor for either lifecycle family without pulling E2 or
+B3.2 into the early corridor:
+
+```rust
+struct WorldWorkAcceptanceContextV1 {
+    schema_version: u32,          // exactly 1
+    proposed_acceptance_record_id: String,
+    request_id: String,
+    message_id: Option<String>,
+    caller_backend_id: String,
+    host_transition_correlation: Option<HostTransitionWorkCorrelationV1>,
+}
+
+enum AcceptedWorldWorkIdentityV1 {
+    EphemeralTask {
+        task_run_id: String,
+    },
+    RetainedTurn {
+        active_run_id: String,
+        message_id: String,
+        target_participant_id: String,
+    },
+}
+
+struct WorldWorkAcceptanceRecordV1 {
+    schema_version: u32,          // exactly 1
+    acceptance_record_id: String,
+    request_id: String,
+    authority_store_id: String,
+    authority_revision_observed: u64,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    work_identity: AcceptedWorldWorkIdentityV1,
+    host_transition_correlation: Option<HostTransitionWorkCorrelationV1>,
+    current_policy_snapshot_ref: PolicySnapshotRefV1,
+    current_policy_snapshot_hash: String,
+    current_policy_revision: String,
+    runtime_acceptance: RuntimeAcceptanceEvidenceV1,
+    accepted_at: Timestamp,
+    record_revision: u64,
+}
+```
+
+B1 preallocates `proposed_acceptance_record_id` through ReceiptRegistry before submission, but that
+candidate is not an accepted record and is not inspectable as accepted work until the runtime
+acknowledgement arrives. `WorldWorkAcceptanceContextV1` lives in
+`crates/transport-api-types/src/lib.rs` and imports the common correlation type. The existing
+`ExecuteRequest` and `MemberTurnSubmitRequestV1` each gain one such typed context; `world-service`
+retains the same request-scoped context in its stream/member context. On acknowledgement, B1
+persists a record whose `acceptance_record_id`
+exactly equals the proposal and whose `runtime_acceptance` joins the acknowledged B0 stream. An
+exact submission retry reuses the same proposal; conflicting reuse fails closed. Subsequent B3.1
+events copy the retained acceptance ID, request/message causation, caller backend, and optional
+correlation into their typed `AgentEvent.worker_event` member; the existing member-turn request
+supplies orchestration session, caller/worker participant, worker backend, active run, and world.
+This is a typed
+request-envelope extension only: it neither creates acceptance before acknowledgement nor changes
+`ExecuteStreamFrame`.
+
+The record owns accepted work identity, not final lifecycle, supervisor claim, host-transition
+semantics, or model-facing receipt semantics. `host_transition_correlation` is absent for ordinary
+world work and remains absent on every production path until A1.2 supplies it from an already
+validated HostSessionAuthority transition. B1 defines and stores the optional carrier as part of
+its canonical acceptance record, validates only exact equality with the record's
+store/session/caller/authority fields, and retains it unchanged; it neither authenticates, issues,
+applies, nor interprets the transition and never equates `transition_run_id` with the distinct
+accepted task/active-run identity. The landed A1.1e facade is therefore sufficient for B1's current
+authority resolution without a new hash domain or verifier. Production A1.2 later becomes the sole
+source, first validating its own intent/revision/payload commitment and then supplying the exact
+correlation through the HostSessionAuthority-owned call boundary. B1 validates the exact current
+policy identity used for submission but does not invent the E2 retained-worker capability cap. E2
+creates the immutable run/cap commitments and the final active receipt references this exact
+acceptance record. A conflicting retry cannot create another record for the same runtime work
+identity. B2.1 creates its separate claim and journal only through this record.
+
 ## 3. `ActiveEphemeralTaskReceiptV1`
 
 ```rust
 struct ActiveEphemeralTaskReceiptV1 {
     schema_version: u32,
+    acceptance_record_id: String,
     task_run_id: String,
     request_id: String,
     orchestration_session_id: String,
@@ -2215,6 +2560,7 @@ Invalidated
 ```rust
 struct ActiveRetainedTurnReceiptV1 {
     schema_version: u32,
+    acceptance_record_id: String,
     active_run_id: String,
     request_id: String,
     orchestration_session_id: String,
@@ -2256,6 +2602,11 @@ Rules:
 
 ## 5. Receipt acceptance source
 
+The B1 acceptance record is an internal durable anchor, not the returnable active receipt described
+below. It captures exact current-policy and B0 acknowledgement truth. E2 must create the final
+immutable policy/cap commitment and B2.1 must persist its separate observation claim before B2.2
+may return the linked active receipt.
+
 A foreground call may return an accepted receipt only after all of the following are durable:
 
 1. exact session, caller, backend, world, and task/worker target identity;
@@ -2269,8 +2620,10 @@ The persisted acceptance evidence has this minimum shape:
 ```rust
 struct RuntimeAcceptanceEvidenceV1 {
     acknowledgement_kind: RuntimeAcceptanceAcknowledgementKindV1,
-    stream_or_submission_id: String,
-    frame_sequence: Option<u64>,
+    acceptance_record_id: String,
+    stream_id: String,
+    frame_sequence: u64,
+    runtime_submission_id: Option<String>,
     task_run_id: Option<String>,
     active_run_id: Option<String>,
     message_id: Option<String>,
@@ -2285,8 +2638,9 @@ enum RuntimeAcceptanceAcknowledgementKindV1 {
 }
 
 struct SupervisorObservationClaimV1 {
-    stream_or_submission_id: String,
-    last_durable_sequence: Option<u64>,
+    stream_id: String,
+    last_durable_frame_sequence: u64,
+    last_durable_event_sequence: Option<u64>,
     claim_revision: u64,
     lease_epoch: u64,
     resumable: bool,
@@ -2295,13 +2649,22 @@ struct SupervisorObservationClaimV1 {
 
 V1 acceptance boundaries:
 
-- For `run_world_task`, acceptance may use the first non-terminal `Start` or `Registered` frame only when the protocol defines that frame as runtime acceptance and it includes or unambiguously joins to `task_run_id`.
-- For `continue_world_worker`, acceptance requires an explicit retained-turn submission acknowledgement or first non-terminal frame that includes or unambiguously joins to `active_run_id`, `message_id`, and the exact retained target.
+- `RuntimeAcceptanceEvidenceV1.acceptance_record_id` exactly equals the request's proposed ID, and
+  the acknowledgement belongs to the runtime stream holding that same typed acceptance context;
+  absence or mismatch fails before record persistence or B3.1 event emission.
+- For `run_world_task`, acceptance may use the first non-terminal `Start` or `Registered` frame
+  only when the protocol defines that frame as runtime acceptance and its B0 stream/frame identity
+  includes or unambiguously joins to `task_run_id`.
+- For `continue_world_worker`, acceptance requires an explicit retained-turn submission
+  acknowledgement or first non-terminal B0 frame that includes or unambiguously joins to
+  `active_run_id`, `message_id`, and the exact retained target.
 - A socket write, HTTP request submission, process spawn attempt, or locally allocated ID is not runtime acceptance by itself.
 - A terminal-only identity observation cannot be relabeled as pre-terminal acceptance.
 - If the current runtime protocol cannot expose accepted identity before terminal exit, extend that protocol before changing the foreground tool to receipt-oriented early return.
 
-B1 may persist and inspect the acceptance record while the existing foreground call still waits. Foreground early return is not allowed until B2 can atomically hand the observation claim to the supervisor.
+B1 persists and inspects both task and retained-turn acceptance records while the existing
+foreground call still waits. B2.1 then atomically hands observation to the supervisor while that
+blocking compatibility behavior may remain. Foreground early return is a separate B2.2 gate.
 
 ## 6. `RetainedWorkerManifestV1`
 
@@ -2337,7 +2700,8 @@ Rules:
 2. Fork inherits the source cap by default and may narrow further; it cannot broaden.
 3. Clean turn exit may park the worker. It must not delete retained identity or resume continuity.
 4. World generation mismatch makes the worker unroutable/invalidated; it does not silently rebind.
-5. `active_turn_ref` is updated atomically with active-turn acceptance/closeout.
+5. `active_turn_ref` is a lifecycle reference updated atomically with B1 accepted-record creation
+   and supervisor closeout; RetainedWorkerRuntime does not own accepted-turn identity.
 
 ## 7. `DispatchPolicyNarrowingPatchV1`
 
@@ -2541,22 +2905,60 @@ Rules:
 
 ## 11. Supervisor idempotency and restart rules
 
-1. **Persist before return:** accepted receipt and immutable policy ref/hash are durable before the foreground caller receives success.
-2. **Single logical observer:** supervisors claim a lease with `(active_run_id, receipt_revision, lease_epoch)`. A stale lease cannot write a newer revision.
-3. **Restart discovery:** startup scans non-terminal accepted/running receipts and resumes observation or performs exact runtime reconciliation.
-4. **Frame dedupe:** each frame is keyed by `(active_run_id, stream_id, sequence)` or an equivalent stable key. Duplicate frames are no-ops.
-5. **Event dedupe:** durable worker events and obligations use stable event/causation IDs. Reprocessing cannot duplicate obligations.
-6. **Monotonic states:** terminal states never revert; stale observers cannot overwrite newer state; equal-revision conflicting writes fail closed.
-7. **Interrupted observation:** EOF/observer loss without terminal proof records an observation interruption and retry metadata. It does not fabricate terminal success.
-8. **Reconciliation:** if runtime truth proves the process/run ended without a valid terminal frame, close as `Failed` with diagnostics; if truth is ambiguous, remain non-terminal and retry/fail closed.
-9. **Atomic closeout:** terminal receipt state, worker active-turn clearing, terminal event, and obligation materialization commit atomically or through replay-safe idempotent steps.
-10. **Cancellation:** one durable cancel request ID is reused across retries; repeated transport delivery is safe.
-11. **Obligation timing:** attention events are persisted/materialized when observed, not deferred until terminal exit.
-12. **Diagnostics:** non-zero exit, stream error, reconciliation failure, and cancel failure retain exact active-run/session/world/policy joins.
+1. **Accepted anchor first:** B1 persists the acceptance record, exact current-policy identity, B0
+   stream identity, and acknowledgement sequence before B2.1 creates an observation claim.
+2. **Single logical observer:** supervisors claim a lease with
+   `(acceptance_record_id, record_revision, lease_epoch)`. A stale lease cannot write a newer
+   revision.
+3. **Durable observation journal:** at B1 acceptance, B2.1 installs the only post-acceptance
+   observation path with no unjournaled handoff gap. It records canonical B0 frame bytes and the
+   receipt-scoped frame/event cursor plus the exact B1 acceptance record ID/revision, accepted-work
+   identity, and optional transition correlation before waiter delivery or derived receipt/terminal
+   state.
+4. **Restart discovery:** startup scans non-terminal accepted/running receipts and resumes
+   observation from the durable cursor or performs exact runtime reconciliation.
+5. **Frame dedupe/order:** each frame is keyed by exact `(acceptance_record_id, stream_id,
+   frame_sequence)`. An identical duplicate is a no-op; a gap, reorder, conflicting duplicate, or
+   post-terminal frame fails closed.
+6. **Event dedupe/order:** durable worker events use exact `(acceptance_record_id, event_id,
+   event_sequence)` joined to their frame. Reprocessing cannot duplicate the journal entry. C1,
+   not the supervisor, decides whether and how that event materializes an obligation.
+   Once B3.1 lands, its semantic validator requires the event's acceptance ID, active run, and
+   optional transition correlation to exactly equal the B1 record before generic journal handoff;
+   absence, substitution, or mismatch fails closed without inference. B2.1's packet exit itself
+   requires only opaque canonical-event commitment plus B0/B1 identity and order.
+7. **Monotonic states:** terminal states never revert; stale observers cannot overwrite newer
+   state; equal-revision conflicting writes fail closed.
+8. **Interrupted observation:** EOF, timeout, observer/process loss, or PID/helper/socket state
+   without exact terminal event proof records an interruption and retry metadata. It does not
+   fabricate terminal success or a complete obligation cut.
+9. **Reconciliation:** only exact producer replay/reconciliation that returns the missing B0 frames
+   and exact terminal event may advance the cursor or close the run. A runtime known to have exited
+   without that terminal event records an interruption/protocol failure with diagnostics, remains
+   incomplete, and cannot produce a C1 Complete cut; ambiguous truth likewise retries/fails closed.
+10. **Terminal ordering:** only the exact B0 terminal event ID/sequence closes the observation
+    journal. Receipt terminal state and worker active-turn clearing commit atomically or through
+    replay-safe idempotent owner-approved steps; StateStore supplies persistence only.
+11. **Ledger handoff:** the supervisor invokes C1 with durable exact B3.1 events and the terminal
+    cut, including exact acceptance-record ID/revision, stream ID, accepted-work identity, and the
+    scope-equal owner-supplied transition correlation when a transition-scoped snapshot will be queried. It does not
+    classify/materialize obligations. C1 independently commits canonical ledger revisions and
+    completeness; coordinated storage never transfers semantic ownership.
+12. **Blocking compatibility:** B2.1 may leave the foreground waiting on the durable receipt after
+    handoff. Only B2.2 enables model-visible early return.
+13. **Cancellation:** one durable cancel request ID is reused across retries; repeated transport
+    delivery is safe.
+14. **Diagnostics:** non-zero exit, stream error, reconciliation failure, and cancel failure retain
+    exact active-run/session/world/policy/stream/event joins.
 
-## 12. Immutable `PolicySnapshotV3` acceptance rules
+## 12. Final-receipt immutable `PolicySnapshotV3` acceptance rules
 
-An active task/turn may be accepted only when all are true:
+B1's pre-E2 acceptance anchor records the exact current policy identity used by the runtime but is
+not a final receipt and is not model-facing. E2 owns the immutable active-run snapshot and retained
+worker cap below; B2.2 may expose a receipt only after those commitments and the B2.1 observation
+claim are durable and linked to the B1 record.
+
+A final active task/turn receipt may be exposed only when all are true:
 
 1. exact session, caller, backend, and world binding are resolved;
 2. steering policy allows the verb/mode/target;

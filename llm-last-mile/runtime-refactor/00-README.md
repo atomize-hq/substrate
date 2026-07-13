@@ -3,7 +3,7 @@
 **Status:** canonical control pack for future runtime-refactor slices
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
-**Repo-truth snapshot:** 2026-07-10; re-check live code before every slice
+**Repo-truth snapshot:** 2026-07-13; re-check live code before every slice
 
 ## Canonical repo location
 
@@ -102,7 +102,11 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
 - **Projection:** derives a view or runtime-native artifact from canonical truth.
 - **Enforcement:** makes the policy unavoidable on the side-effecting path.
 - **Receipt:** durable accepted-work identity returned before terminal completion.
+- **Runtime event carrier:** producer-assigned stable stream/frame/event/terminal identity and
+  monotonic ordering; it transports fact but owns neither durable observation nor semantics.
 - **Supervisor:** restart-safe owner of post-acceptance observation and closeout.
+- **Materialization cut:** the ObligationLedger-owned proof that canonical obligation
+  materialization covers an exact terminal event identity and sequence for one scoped run.
 - **Secret handoff:** one-time secure-FD delivery from host credential authority to the in-world Substrate gateway; never a UAA-native credential file projection.
 - **Runtime-family adapter:** provider mechanics only; never Substrate lifecycle or policy semantics.
 
@@ -119,4 +123,16 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
 
 ## Current control conclusion
 
-The current tree contains important constraints and footholds, but this pack does not classify any required seam as `ContractCorrectAndProven`. That is intentional. A0 should inventory the authority leaks without changing behavior. The first implementation PR after A0 should make one authority boundary true and prove it; it should not claim the architecture landed because similarly named artifacts already exist.
+The current tree contains important constraints and footholds, but this pack does not classify any
+required seam as `ContractCorrectAndProven`. That is intentional. A1.1e is landed and supplies the
+exact authority-resolution foundation for a bounded cycle-breaking prerequisite corridor:
+
+```text
+A1.1e -> B0 -> B1 -> B2.1 -> B3.1 -> C1 -> A1.2
+```
+
+This corridor does not close A1.1d, bypass A2/A3 ownership, enable foreground early return, or
+promote any seam. B0 is the exact next implementation packet. B2.2 and B3.2 retain the deferred
+receipt-UX and broader retained-lifecycle work after A1 and the named A2/A3 boundaries. The first
+implementation PR in this corrected order must make B0's runtime-owned identity carrier true and
+prove it; similarly named event, span, or payload fields are not closure evidence.
