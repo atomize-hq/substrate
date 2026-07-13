@@ -4,8 +4,8 @@ Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-1
 specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, reviewed
 `dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` / both `CTX-R6-11`
 truth-grounding focused controls plus the `CTX-R6-12` truth-path-action and `CTX-R6-13`
-archetype-equivalence controls, reviewed `truth_grounding_gap` family checkpoint, and the first two
-`CTX-R6-14` read-only-exploration and sanctioned-replan-scope controls are complete;
+archetype-equivalence controls, reviewed `truth_grounding_gap` family checkpoint, and all three
+`CTX-R6-14` read-only-exploration, sanctioned-replan-scope, and opaque-parent controls are complete;
 `CTX-R6-04` and `CTX-R6-12` are preserved reds requiring `R6-GAP-DET-OPAQUE-PARENT` and
 `R6-GAP-TGG-TRUTH-PATH-ACTION`, respectively. All remaining controls, replay, conditional-gap,
 production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
@@ -95,7 +95,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.3.3`, the `CTX-R6-14` opaque-parent row.
+  - Sole next authorized action: execute `R6-C.1.3.4`, the `CTX-R6-15` empty-authority row.
     Do not start a later `wrong_plan_branch` row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
@@ -292,7 +292,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `0 / Medium / Cleared`, unflagged, with empty evidence. No `R6-GAP-WPB-REPLAN-SCOPE` route is
     required, and no production code changed.
 
-- [ ] **R6-C.1.3.3 — Add, commit, and review opaque-parent behavior (`CTX-R6-14`).**
+- [x] **R6-C.1.3.3 — Add, commit, and review opaque-parent behavior (`CTX-R6-14`).**
   - Test: `wrong_plan_branch_keeps_opaque_parent_orchestration_clear_without_child_action`.
   - Acceptance: non-empty parent authority plus opaque orchestration and no attributable child action
     yields `0 / Medium / Cleared`, unflagged, empty evidence.
@@ -300,6 +300,11 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-WPB-OPAQUE-PARENT` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 4
+    filtered out`. A non-empty parent task frame declared source/truth authority, opaque delegated-parent
+    orchestration resolved to `ParentVisibleOrchestration`, and no attributable child path-bearing
+    write/verification was present. The score produced exactly `0 / Medium / Cleared`, unflagged, with
+    empty evidence. No `R6-GAP-WPB-OPAQUE-PARENT` route is required, and no production code changed.
 
 - [ ] **R6-C.1.3.4 — Add, commit, and review empty-authority no-claim (`CTX-R6-15`).**
   - Test: `wrong_plan_branch_makes_no_claim_for_path_action_without_authority`.
