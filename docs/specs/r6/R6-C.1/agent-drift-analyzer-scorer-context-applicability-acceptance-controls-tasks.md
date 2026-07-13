@@ -6,8 +6,9 @@ specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, revie
 truth-grounding focused controls plus the `CTX-R6-12` truth-path-action and `CTX-R6-13`
 archetype-equivalence controls, reviewed `truth_grounding_gap` family checkpoint, and all three
 `CTX-R6-14` read-only-exploration, sanctioned-replan-scope, and opaque-parent controls plus the
-`CTX-R6-15` empty-authority control are complete; `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15` are
-preserved reds requiring `R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
+`CTX-R6-15` empty-authority control and reviewed `wrong_plan_branch` family checkpoint are complete;
+`CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15` are preserved reds requiring
+`R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
 `R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. All remaining controls, replay, conditional-gap,
 production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
 
@@ -96,8 +97,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.3.5`, the reviewed `wrong_plan_branch` family
-    checkpoint. Do not start the controls wall, replay, a gap packet, or a production change first.
+  - Sole next authorized action: execute `R6-C.1.4.1`, the controls wall. Do not start replay, a gap
+    packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
@@ -323,11 +324,16 @@ before that reconciled transition is committed and fresh-review-clean.
     evidence. This witness requires `R6-GAP-WPB-EMPTY-AUTHORITY`; no production code changed in
     `R6-C.1-CONTROLS`.
 
-- [ ] **R6-C.1.3.5 — Run the reviewed `wrong_plan_branch` family checkpoint.**
+- [x] **R6-C.1.3.5 — Run the reviewed `wrong_plan_branch` family checkpoint.**
   - Prerequisite: all four row commits above are independently review-clean.
   - Verify: `cargo test -p agent-drift-analyzer wrong_plan_branch -- --nocapture`.
   - Acceptance: aggregate only reviewed row results; do not batch witnesses, edit production, or replace
     any row's commit/review boundary.
+  - Result (2026-07-13): deterministic reviewed aggregation completed. The exact family command exited
+    `101`; the `wrong_plan_branch` test binary reported `5 passed; 1 failed`. The sole failure was the
+    already-preserved `CTX-R6-15` witness: actual `60 / Low / Active`, flagged, versus required
+    `0 / Low / Cleared`, unflagged. All other family controls passed. No new witness was found, no
+    production code changed, and `R6-C.1-CONTROLS` remains active.
 
 ## R6-C.1.4 — Controls Wall And Transition
 
