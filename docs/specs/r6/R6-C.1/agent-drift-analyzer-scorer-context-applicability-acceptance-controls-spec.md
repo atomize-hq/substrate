@@ -69,6 +69,20 @@ none is red. It does not close R6.
    a no-code proof receipt. Rerun its exact row and family controls, cite the earlier causal commit, commit
    and freshly review the result/ledger reconciliation, and only then perform the normal transition. Do
    not edit production unnecessarily, or silently delete, merge, or relabel the named gap or witness.
+10. **Named gaps have first-class status, not an overloaded wildcard status.** The
+    `CONTROLS -> first GAP` transition creates a `Named R6 Gap Status Subledger` in control-pack
+    `05-proof-decision-regression-ledger.md` with one row per preserved red route in matrix/family order.
+    Every row records phase ID, exact witness/control, owning packet-doc paths, status,
+    predecessor/successor, and evidence/commit. The first row alone is `ACTIVE`, its predecessor is
+    `COMPLETE`, and every later row is `BLOCKED`; each later transition atomically makes the old active
+    row `COMPLETE` and only its immediate successor `ACTIVE`. The generic `R6-GAP-*` row in
+    `02-phase-and-gate-map.md` is only the linked aggregate (`CONDITIONAL`, `ACTIVE`, or `COMPLETE`),
+    never the status store for individual gaps.
+11. **Every activated gap begins with its own docs gate.** The first and only authorized task after a
+    named gap activates is to create its scorer-specific SPEC/PLAN/TASKS together, commit the three docs
+    atomically, and use fresh built-in `default` review/fix cycles until clean. Only then may that gap
+    make a production change or commit a no-code proof receipt. This applies even when the witness is
+    already green.
 
 ## Acceptance Control Matrix
 
@@ -136,13 +150,30 @@ of that family's row commits are independently review-clean. Replay commands, in
 - `R6-C.1-CONTROLS` ends as soon as every synthetic row has a deterministic preserved result. Its
   transition commit activates the first named red `R6-GAP-*` phase in matrix/family order, or
   `R6-REPLAY` when no row is red. Never run a gap while `R6-C.1-CONTROLS` is active.
-- Each red row owns one distinct gap phase. A review-clean gap transitions to the next named red gap; the
-  final review-clean gap transitions to `R6-REPLAY`. Gap phases never batch independent failures and do
-  not reactivate `R6-C.1-CONTROLS`.
+- At `CONTROLS -> first GAP`, instantiate the `Named R6 Gap Status Subledger` in
+  `05-proof-decision-regression-ledger.md`. Each red row owns one distinct subledger entry with: phase
+  ID; exact preserved witness/control; all three canonical owning packet-doc paths; current status;
+  predecessor and successor; and evidence/commit. The first gap alone is `ACTIVE`,
+  `R6-C.1-CONTROLS` is its `COMPLETE` predecessor, and later gaps are `BLOCKED`. At each gap transition,
+  atomically set the active gap `COMPLETE`, its immediate successor `ACTIVE`, and leave all later gaps
+  `BLOCKED`. A review-clean final gap transitions to `R6-REPLAY`. Gap phases never batch independent
+  failures or reactivate `R6-C.1-CONTROLS`.
+- The canonical gap packet paths are
+  `docs/specs/r6/R6-GAP-<SCORER>-<SEAM>/R6-GAP-<SCORER>-<SEAM>-spec.md`,
+  `docs/specs/r6/R6-GAP-<SCORER>-<SEAM>/R6-GAP-<SCORER>-<SEAM>-plan.md`, and
+  `docs/specs/r6/R6-GAP-<SCORER>-<SEAM>/R6-GAP-<SCORER>-<SEAM>-tasks.md`. At gap activation those paths
+  are recorded in the named-gap
+  subledger as plain `TO CREATE` path strings, not links or claims that the files exist. The transition
+  must not update or cite a nonexistent gap TASKS file. The first task after activation creates all three
+  files atomically. Each packet must name the exact preserved witness, exact GitNexus symbol/impact
+  command, minimal allowed files, production-fix acceptance and no-code acceptance, focused witness
+  command, owning-family/checkpoint walls, and the exact successor transition. Commit and fresh-review
+  those docs until clean before either execution path; after the docs gate lands, replace `TO CREATE`
+  with the actual packet-doc paths and their review-clean commit in the subledger.
 - When an earlier gap fix also makes a later sequential gap's exact preserved witness green, activate the
   later gap normally but make no production edit. Rerun that exact row test and the owning scorer-family
-  controls, record the earlier causal commit in the gap TASKS/receipt and changed ledger row, stage only
-  those result/ledger docs, run the staged commit gate, commit the no-code proof receipt/status
+  controls, record the earlier causal commit in the now-existing gap TASKS/receipt and changed ledger
+  row, stage only those result/ledger docs, run the staged commit gate, commit the no-code proof receipt/status
   reconciliation, and obtain fresh independent review. Preserve the named gap and original witness; do
   not silently delete or merge either. The receipt commit leaves that gap active and activates no
   successor. Only after the receipt is review-clean may the separate normal transition commit activate
@@ -167,26 +198,33 @@ update these exact active-phase mirrors together:
 
 | Authority surface | Exact fields / wording that move together |
 |---|---|
-| Packet tasks and results | The active packet's TASKS status/check box, exact row or phase result wording, proof receipt, completed phase, and next authorized phase/action. For a gap, this includes its named preserved witness and route; a no-code receipt records the earlier causal commit. |
+| This packet SPEC | Update this file's header `Status`. At `SPEC -> CONTROLS`, use `APPROVED / LANDED — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE`. At `CONTROLS -> successor`, use `APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; <successor> ACTIVE`. At a later gap transition, use `APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; <completed-gap> COMPLETE; <successor> ACTIVE`; after the final gap, `<successor>` is `R6-REPLAY`. Change status wording only; do not rewrite locked decisions. |
+| This packet PLAN | Update the PLAN header `Status` with the same exact phase-aware value as the SPEC. Do not rewrite plan decisions merely because the active phase moved. |
+| This packet TASKS | Check the docs-lock task at `SPEC -> CONTROLS`, record actual completed task/result checks, and set the header to `ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE`. At later transitions use `HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; <completed-predecessor> COMPLETE; <successor> ACTIVE` (omit the completed-gap clause when the predecessor is CONTROLS). Record the sole next authorized action. |
+| Active gap packet docs, conditional | On entry to a named gap, no gap TASKS is required or referenced: the sole next action is atomic creation/review of the three canonical `TO CREATE` paths. After that docs gate is committed and review-clean, its SPEC/PLAN/TASKS become required gap surfaces for actual proof and for the transition out of that gap. |
 | `docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md` | `Current work phase` and `Last repo-truth verification`. |
 | `docs/specs/hybrid-drift-r6-r8-control-pack/01-authority-and-status-map.md` | `Verified against`, `Current phase`, and the R6 `Current Status` row's `Status` and `Next allowed action`. |
-| `docs/specs/hybrid-drift-r6-r8-control-pack/02-phase-and-gate-map.md` | The `Master Sequence` status cells for the completed and newly active phases, plus their entry/exit-gate wording when the recorded proof changes a gate. Exactly one phase is `ACTIVE`. |
-| `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` | `Ledger status`, `Verified against`, the status/evidence/remaining-proof/owner cells of only the `CTX-R6-*` rows whose actual evidence changed, and the `Update Record` verified commit. Do not rewrite unaffected row evidence. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/02-phase-and-gate-map.md` | The `Master Sequence` status cells for the completed and newly active concrete phases, plus entry/exit-gate wording when proof changes. Its generic `R6-GAP-*` row links to the named-gap subledger and reports only aggregate `CONDITIONAL` before route instantiation, `ACTIVE` while any named gap is active, or `COMPLETE` when no gap is required or every named gap is complete. It never carries individual gap statuses. Exactly one concrete phase is `ACTIVE`. |
+| `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` | `Ledger status`; `Verified against`; changed `CTX-R6-*` cells; and `Update Record`. At `CONTROLS -> first GAP`, create/update the `Named R6 Gap Status Subledger` with one ordered row per red route and columns `Phase ID`, `Preserved witness/control`, `Owning packet docs`, `Status`, `Predecessor`, `Successor`, and `Evidence/commit`. Record canonical docs paths as non-link `TO CREATE` strings until they land. Every gap transition atomically updates these rows with the other mirrors. Do not rewrite unaffected row evidence. |
 | `docs/specs/hybrid-drift-r6-r8-control-pack/06-operator-prompt-library.md` | `Current First Invocation`: its current-phase sentence plus `PHASE_ID` and `ACTIVE_PACKET`. |
 | Root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md` | `Status`, `Current phase`, completed/current task wording, and sole next-authorized action/check box. |
 | Canonical R6 finding/MAP and landing order | Update `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, `docs/specs/r6/MAP.md`, and `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md` only when actual control or gap evidence changes their proof, status, or next-action wording. |
 
 The three transition-specific result locks are:
 
-1. **`R6-C.1-SPEC -> R6-C.1-CONTROLS`:** packet TASKS records the docs lock and fresh review clean;
-   `R6-C.1-SPEC` becomes complete and `R6-C.1-CONTROLS` becomes the sole active phase. No control row is
-   promoted without actual test output.
+1. **`R6-C.1-SPEC -> R6-C.1-CONTROLS`:** this packet's SPEC and PLAN receive the exact
+   `APPROVED / LANDED — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE` status; TASKS checks the
+   docs-lock task, records its review-clean commit, and reports `R6-C.1-CONTROLS` as the sole active
+   phase. No control row is promoted without actual test output.
 2. **`R6-C.1-CONTROLS -> first R6-GAP-* or R6-REPLAY`:** every synthetic row has a committed PASS or
-   preserved red result; controls become complete; the first red route in matrix/family order becomes
-   active, or `R6-REPLAY` becomes active when no row is red.
+   preserved red result; controls become complete; the three R6-C.1 packet headers use the prescribed
+   phase-aware values; all named-gap subledger rows are instantiated; the first red route in
+   matrix/family order becomes active and later rows remain blocked, or `R6-REPLAY` becomes active when
+   no row is red. The active gap's sole next action is its atomic scorer-specific docs gate.
 3. **Active `R6-GAP-* -> next R6-GAP-* or R6-REPLAY`:** the named gap has a committed, fresh-review-clean
-   fix or no-code proof receipt; that gap becomes complete and exactly the next red route, or final
-   `R6-REPLAY`, becomes active.
+   packet docs plus fix or no-code proof receipt; that gap and the R6-C.1 packet headers become
+   phase-current, the subledger marks that gap complete and exactly the next red route active, or final
+   `R6-REPLAY` active. The newly active gap again authorizes docs creation/review only.
 
 Do not churn unchanged semantic authority, but do not leave any active-phase mirror stale: every mirror
 listed above must agree on the one active phase, completed predecessor, verification commit, and next
