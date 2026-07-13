@@ -31,8 +31,8 @@ Primary source memos:
 | **RG-CANCEL-01** | Same-turn continue → cancel | **Unresolved** | Current retained cancel resolves worker state, `authoritative_live`, owner PID, `latest_run_id`, and `Running`; the blocking continue returns after that active window is gone. | In one host turn, continue returns accepted active-run ID and immediate cancel targets it. Final receipt is cancelled or pending closeout, never `stale_linkage` merely because the worker/owner parked. | B3, B4, E2 |
 | **RG-CANCEL-02** | Cancel outcome semantics | **Unresolved** | Current retained cancel terminal enum only expresses `Cancelled`; no-active work is reported through target-not-cancelable/stale-linkage-shaped errors. | Prove all categories from `04`: live cancel, pending closeout, already terminal, no active work, owner unreachable, invalid target, binding mismatch, ambiguity, and policy denial. | B4 |
 | **RG-MSG-01** | Typed retained-worker messaging and causation identity | **Unresolved; useful footholds only** | Typed payloads/events exist but remain mixed with prompt rendering, stream parsing, and foreground delivery. | Host-to-worker messages and worker-to-host events preserve exact target, thread, request/message/event causation, event class, ordering, and attention semantics across immediate and durable channels. | B3, C1 |
-| **RG-OBL-01** | Obligation materialization before terminal exit | **Unresolved** | `continue_world_worker` saves a surfaced event and calls `persist_continue_world_worker_obligation` only after the full stream function returns. | Attention-driving event is durable and creates one canonical obligation before terminal `Exit`; duplicate event/frame replay creates no duplicate; terminal failure does not erase it. | B2, C1 |
-| **RG-OBL-02** | Obligation as canonical truth; inbox/attention as projections | **Partially implemented, unproven** | Obligation records, inbox materialization, pending counts, and attach fields exist, but production timing is terminal-coupled and compatibility rows/counts still share state-store authority. | Rebuild inbox/auto-attach projections from obligations; host `AwaitingAttention` exactly follows unresolved attention-driving obligations; worker `AttentionPending` remains separate. | C1, C2 |
+| **RG-OBL-01** | Obligation materialization before terminal exit | **Unresolved** | `continue_world_worker` saves a surfaced event and calls `persist_continue_world_worker_obligation` only after the full stream function returns. | Attention-driving event is durable and creates one canonical obligation before terminal `Exit`; duplicate event/frame replay creates no duplicate; terminal failure does not erase it. The C1 ledger advances a monotonic per-session revision and materialized-through event watermark, returns Pending before the required terminal cut, and returns Complete only when canonical obligation materialization covers that event sequence. | B2, C1 |
+| **RG-OBL-02** | Obligation as canonical truth; inbox/attention as projections | **Partially implemented, unproven** | Obligation records, inbox materialization, pending counts, and attach fields exist, but production timing is terminal-coupled and compatibility rows/counts still share state-store authority. | The closed C1 snapshot query binds exact store/session/participant/intent/run/authority revision, ledger revision, terminal event/cut, disposition, and sorted canonical-record commitments; stale/mismatched scope, cut, disposition, or record fails closed, and both empty/no-attention and non-empty/attention dispositions are proven. HostSessionAuthority consumes that result unchanged. Rebuild inbox/auto-attach projections from obligations; host `AwaitingAttention` exactly follows unresolved attention-driving obligations; worker `AttentionPending` remains separate. | C1, C2 |
 | **RG-ATTACH-01** | Auto-attach claim and router trigger | **Partially implemented, unproven** | Eligibility, claim, settle, wrong-host checks, and helper launch exist; trigger is spawned after terminal-coupled obligation creation and has not been proven in the target event flow. | Multiple eligible obligations coalesce to one session claim; wrong-host/policy denial fail closed; restart/retry is idempotent; manual reattach and auto-attach do not create duplicate owners. | C2, C3 |
 | **RG-ATTACH-02** | Router must restore host ownership only | **Unresolved proof gate** | Current code launches a hidden owner helper, but no end-to-end proof establishes the permanent non-responsibility boundary. | Instrument the router entrypoint and assert it cannot submit prompts, approve, answer, fork, continue, cancel, or stop worker work; it records attach outcome and stops. | C3 |
 | **RG-UAA-01** | Codex/UAA guest runtime realizability | **Partially resolved; keep as baseline** | World Codex config and validator require `/var/lib/substrate/world-deps/bin/codex`; the old host-NVM exit-127 diagnosis is historical for current placement-aware config. | World Codex rejects host-local binary paths and succeeds only with guest-visible runtime deps; host and world envelope kinds remain distinct. | D1 |
@@ -48,6 +48,27 @@ Primary source memos:
 | **RG-SYNC-01** | Host-visible write sync semantics | **Unresolved/open debug bucket** | Debug evidence warns that task completion does not prove a host-visible file; current docs/runtime distinguish host-visible overlay behavior from full isolation/reconciliation. | Matrix proves: host-visible allowed write visibility, host-visible denied write, full-isolation non-visibility before reconciliation, explicit reconciliation result, retained-turn behavior, and narrowed allowlist behavior. | E4 |
 | **RG-WORKER-EXIT-01** | Non-zero Codex/UAA worker-turn exit semantics | **Unresolved/open debug bucket** | `codex exited non-zero` remains separate from repaired routing/stop seams; current blocking outcome can conflate runtime failure with authority/liveness loss. | Non-zero turn closes active receipt as durable `Failed` with exit diagnostics and policy/session/world joins; retained worker/session authority is preserved or explicitly invalidated for a stated lifecycle reason; no false success/attention loss. | B3, D3 |
 | **RG-OBS-01** | First-class world-dispatch observability | **Unresolved** | `docs/TRACE.md` states `run_world_task` and `continue_world_worker` lack first-class internal world-dispatch trace families. | Accepted receipt, supervisor claim/restart, event/obligation, cancel, broker operation, policy hash, non-secret credential-handoff state, and terminal closeout are joinable by request/active-run/session/world IDs without logging secret payloads or secret-derived fingerprints. | B2, D3 |
+
+`RG-AUTH-03` A1.2 proof additionally requires Start/Attach transport to remain retained until
+closed startup evidence binds exact store/session/intent/claim/claimant-attempt/run/application/authority/
+participant identity, the exact target-participant or launch-claimant protocol actor, and durably
+records the matching acceptance or definitive terminal reason. Timeout,
+EOF, helper/PID/socket/handle/readiness loss, and ambiguity remain Pending. Exact retries after
+`ReleaseEligible`, payload deletion, and `Released` join through terminal proof without requiring
+deleted transport bytes; an unexpected Released copy is removed and its exact object directory is
+`fsync`ed before success. Every Resume terminal outcome references one immutable, exact-scope
+post-turn protocol event with the matching actor, event ID/sequence, outcome/reason, input state,
+completion, and application result; transport/process/readiness/timeout/EOF/local-error inference
+cannot construct it. Resume terminal completion may close without an obligation snapshot, but
+resumable completion persists `AwaitingObligationCut` and retains transport until the
+`ObligationLedger` supplies a Complete per-session revision/event-materialization cut scoped to
+the exact store/session/participant/intent/run/authority. A1.2 consumes that closed disposition
+unchanged and cannot scan, classify, create, resolve, reinterpret, or overwrite obligations.
+Inbox/count/worker/compatibility truth is forbidden. C1 owns the canonical records and complete
+cut, so the current phase order leaves full A1.2 post-turn closure sequencing-blocked; this note
+does not move C1 or close `RG-OBL-01`/`RG-OBL-02`. The crash matrix includes startup evidence,
+snapshot publication/orphan staleness, terminal exact retry, and payload deletion/object-directory
+`fsync` windows.
 
 ## A0 closeout evidence
 
@@ -148,7 +169,11 @@ parked truth into the successor episode or rejects/reconciles it idempotently. I
 by heartbeat-only writes, timeout inflation, retrying the stale snapshot, last-writer-wins, or
 weakening stale checks. That is a broader owner seam than the proposed A1.1d-6 allowed scope, so the
 current stop classification is `ArchitecturalOwnerChangeRequired`. A1.2 owns the durable
-transition-protocol closure; A1.3 owns its real CLI/helper/REPL adoption and `RG-BASE-01` closure.
+transition-protocol closure, including the rule that every applied Resume terminal outcome carries
+an exact completion/post-turn-application pair. A1.3 owns its real CLI/helper/REPL adoption, the
+bounded transport of exact startup ownership acknowledgement or typed pre-ownership
+rejection/failure (never readiness, PID/helper/socket posture, timeout, EOF, or local-error
+inference), and `RG-BASE-01` closure.
 
 Unsafe ACL rejection is a negative security success, not positive product smoke. The positive
 `RG-BASE-01` smoke must run separately against a valid owner-only private bootstrap home with mode
@@ -234,9 +259,10 @@ not durable product artifacts. No unit/component result is promoted to integrate
 closeout remains open, native macOS closeout remains pending, `RG-AUTH-03`, `RG-HOME-01`,
 `RG-POLICY-03`, and `RG-BASE-01` remain open, and no seam is promoted. Real CLI/helper/REPL
 adoption, Start reservation, transition-intent issuance/claim/application, parked-successor repair,
-dispatch narrowing/enforcement, auto-attach adoption, and all A1.2 work were deliberately excluded.
-A1.2 has not begun; it is dependency-ready only for its canonical transition-protocol scope after
-this A1.1e closeout, while A1 as a whole remains incomplete and non-landable.
+dispatch narrowing/enforcement, auto-attach adoption, and all A1.2 work were deliberately excluded
+from that A1.1e closeout. A1.2 has since begun, but its resumable post-turn closure is
+sequencing-blocked on the C1-owned semantic materialization cut and A1.3 is not dependency-ready;
+A1 as a whole remains incomplete and non-landable.
 
 ## Baseline behaviors that all tracks preserve
 

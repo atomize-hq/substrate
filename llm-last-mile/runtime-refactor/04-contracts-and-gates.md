@@ -250,6 +250,9 @@ enum AuthorityObjectKindV1 {
     LeaseToken,
     ApplicationResult,
     InputAcceptance,
+    StartupOwnershipResult,
+    ObligationSnapshot,
+    PostTurnProtocolEvent,
     PostTurnCompletion,
     TerminalHandoff,
 }
@@ -293,6 +296,9 @@ TransitionInput=transition-input
 LeaseToken=lease-token
 ApplicationResult=application-result
 InputAcceptance=input-acceptance
+StartupOwnershipResult=startup-ownership-result
+ObligationSnapshot=obligation-snapshot
+PostTurnProtocolEvent=post-turn-protocol-event
 PostTurnCompletion=post-turn-completion
 TerminalHandoff=terminal-handoff
 ```
@@ -486,6 +492,7 @@ enum ApplicationResultPhaseV1 {
     },
     PostTurn {
         completion_ref: AuthorityObjectRefV1,
+        obligation_snapshot_ref: Option<AuthorityObjectRefV1>,
         authority_revision_before: u64,
         authority_revision_after: u64,
         active_authoritative_participant_id: String,
@@ -512,10 +519,178 @@ struct InputAcceptanceHashInputV1 {
     accepted_at: TimestampV1,
 }
 
+enum HostStartupTerminalReasonV1 {
+    RuntimeCreationRejected,
+    StartupFailedBeforeOwnership,
+}
+
+enum HostStartupOwnershipProtocolEventV1 {
+    OwnershipAccepted {
+        ownership_acknowledgement_id: String,
+    },
+    RuntimeCreationRejected {
+        rejection_id: String,
+    },
+    StartupFailedBeforeOwnership {
+        failure_id: String,
+    },
+}
+
+enum HostStartupOwnershipProtocolActorV1 {
+    TargetAuthoritativeParticipant {
+        participant_id: String,
+    },
+    LaunchApplicationClaimant {
+        claim_id: String,
+        claimant_attempt_id: String,
+    },
+}
+
+struct HostStartupOwnershipEvidenceV1 {
+    schema_version: u32,
+    evidence_id: String,
+    authority_store_id: String,
+    orchestration_session_id: String,
+    intent_id: String,
+    claim_id: String,
+    claimant_attempt_id: String,
+    run_id: String,
+    application_result_ref: AuthorityObjectRefV1,
+    expected_authority_revision: u64,
+    active_authoritative_participant_id: String,
+    protocol_actor: HostStartupOwnershipProtocolActorV1,
+    protocol_event: HostStartupOwnershipProtocolEventV1,
+    observed_at: TimestampV1,
+}
+
+enum StartupOwnershipOutcomeV1 {
+    Accepted,
+    TerminalReconciled {
+        reason: HostStartupTerminalReasonV1,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        authority_record_commitment: AuthorityObjectCommitmentV1,
+    },
+}
+
+struct StartupOwnershipResultHashInputV1 {
+    schema_version: u32,
+    evidence: HostStartupOwnershipEvidenceV1,
+    outcome: StartupOwnershipOutcomeV1,
+    resolved_at: TimestampV1,
+}
+
+enum ObligationSnapshotRecordStateV1 {
+    UnresolvedAttention,
+}
+
+struct ObligationSnapshotRecordHashInputV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    orchestration_session_id: String,
+    authoritative_participant_id: String,
+    source_run_id: String,
+    obligation_id: String,
+    obligation_revision: u64,
+    causation_event_id: String,
+    causation_event_sequence: u64,
+    state: ObligationSnapshotRecordStateV1,
+}
+
+struct UnresolvedAttentionObligationSnapshotEntryV1 {
+    obligation_id: String,
+    obligation_revision: u64,
+    canonical_record_commitment: AuthorityObjectCommitmentV1,
+}
+
+enum ObligationAttentionDispositionV1 {
+    NoUnresolvedAttention,
+    HasUnresolvedAttention,
+}
+
+struct ObligationMaterializationCutV1 {
+    session_ledger_revision: u64,
+    terminal_event_id: String,
+    terminal_event_sequence: u64,
+    materialized_through_event_sequence: u64,
+}
+
+struct ObligationSnapshotHashInputV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    orchestration_session_id: String,
+    authoritative_participant_id: String,
+    transition_intent_id: String,
+    run_id: String,
+    authority_revision_observed: u64,
+    materialization_cut: ObligationMaterializationCutV1,
+    attention_disposition: ObligationAttentionDispositionV1,
+    unresolved_attention_obligations: Vec<UnresolvedAttentionObligationSnapshotEntryV1>,
+    captured_at: TimestampV1,
+}
+
+enum ObligationLedgerSnapshotReadV1 {
+    Pending {
+        authority_store_id: String,
+        orchestration_session_id: String,
+        authoritative_participant_id: String,
+        transition_intent_id: String,
+        run_id: String,
+        authority_revision_observed: u64,
+        observed_session_ledger_revision: u64,
+        required_terminal_event_id: String,
+        required_terminal_event_sequence: u64,
+    },
+    Complete {
+        snapshot: ObligationSnapshotHashInputV1,
+    },
+}
+
 enum PostTurnCompletionOutcomeV1 {
     ResumableClean,
     TerminalClean,
     TerminalFailure,
+}
+
+enum HostPostTurnTerminalReasonV1 {
+    ResumeRuntimeCreationRejected,
+    TargetFailedBeforeInputAcceptance,
+    TargetFailedAfterInputAcceptance,
+}
+
+enum HostPostTurnProtocolEventKindV1 {
+    ResumableClean,
+    TerminalClean,
+    TerminalFailure {
+        reason: HostPostTurnTerminalReasonV1,
+    },
+}
+
+enum HostPostTurnProtocolActorV1 {
+    TargetAuthoritativeParticipant {
+        participant_id: String,
+    },
+    LaunchApplicationClaimant {
+        claim_id: String,
+        claimant_attempt_id: String,
+    },
+}
+
+struct PostTurnProtocolEventHashInputV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    orchestration_session_id: String,
+    intent_id: String,
+    claim_id: String,
+    claimant_attempt_id: String,
+    run_id: String,
+    authority_revision_observed: u64,
+    active_authoritative_participant_id: String,
+    protocol_actor: HostPostTurnProtocolActorV1,
+    event_id: String,
+    event_sequence: u64,
+    kind: HostPostTurnProtocolEventKindV1,
+    emitted_at: TimestampV1,
 }
 
 struct PostTurnCompletionHashInputV1 {
@@ -523,6 +698,9 @@ struct PostTurnCompletionHashInputV1 {
     intent_id: String,
     run_id: String,
     authority_revision_observed: u64,
+    terminal_event_id: String,
+    terminal_event_sequence: u64,
+    protocol_event_ref: AuthorityObjectRefV1,
     outcome: PostTurnCompletionOutcomeV1,
     completed_at: TimestampV1,
 }
@@ -541,11 +719,31 @@ struct TerminalHandoffHashInputV1 {
     terminal_state: TerminalHandoffStateV1,
     application_result_ref: Option<AuthorityObjectRefV1>,
     input_acceptance_ref: Option<AuthorityObjectRefV1>,
+    startup_ownership_result_ref: Option<AuthorityObjectRefV1>,
     post_turn_completion_ref: Option<AuthorityObjectRefV1>,
     post_turn_application_result_ref: Option<AuthorityObjectRefV1>,
     recorded_at: TimestampV1,
 }
 ```
+
+Terminal handoff refs have this closed V1 matrix; `Some` refs must have the exact named kind and
+equal the corresponding intent substate/journal ref, and every unlisted ref is `None`:
+
+| Terminal state and mode | Initial application | Input acceptance | Startup ownership | Post-turn completion/result |
+|---|---|---|---|---|
+| `Rejected` or `Expired`, every mode | none | none | none | none |
+| `Applied Start` or `Applied Attach` | exact initial `ApplicationResult` | exact `InputAcceptance` iff a Start input is Accepted; none only for input-free mode or a terminally reconciled Start whose input is exactly `TerminalWithoutAcceptance` | exact `StartupOwnershipResult` in Accepted or TerminalReconciled | none |
+| `Applied ResumeOneTurn`, every post-turn Applied outcome | exact initial `ApplicationResult` | exact `InputAcceptance` for Accepted input; none only for `TerminalFailure` with exact `TerminalWithoutAcceptance` | none | exact `PostTurnCompletion` and post-turn `ApplicationResult` pair; `ResumableClean` additionally carries the exact Complete obligation snapshot in the post-turn application, while `TerminalClean`/`TerminalFailure` carry none |
+
+An applied Resume cannot bypass post-turn application. `ResumableClean` and `TerminalClean`
+require exact Accepted input. `TerminalFailure` requires either Accepted input or, only for an
+exact pre-acceptance terminal event, atomically changes Pending input to
+`TerminalWithoutAcceptance` using that same terminal handoff. A terminally reconciled applied
+Start likewise atomically terminalizes any Pending input; an ownership-Accepted Start with Pending
+input remains nonterminal and retained. `AwaitingObligationCut` is nonterminal and cannot release
+transport or have a terminal handoff. A startup result protocol-event/outcome mismatch, a
+half-present post-turn pair, a forbidden cross-mode ref, or any ref not equal to parent/journal
+truth is corruption and fails closed.
 
 `CanonicalSha256` is exactly lowercase-hex
 `SHA-256(CanonicalJsonV1(named_hash_input))`. The authority-record commitment uses
@@ -554,12 +752,17 @@ intent payload uses `HostSessionTransitionPayloadHashInputV1`; descriptor and at
 objects use their named wrappers; resume handles, policy objects, and retained-worker reference
 objects use `ResumeHandleHashInputV1`, `PolicyObjectHashInputV1`, and
 `RetainedWorkerObjectHashInputV1`; both initial and post-turn application objects use
-`ApplicationResultHashInputV1`; acceptance, completion, and terminal-handoff objects use their
-corresponding named wrappers. `updated_at`, intent/claim/root revisions not explicitly present in a
+`ApplicationResultHashInputV1`; input acceptance, startup-ownership resolution, obligation
+snapshot records/snapshots, post-turn protocol events/completions, and terminal-handoff objects use their corresponding named
+wrappers. `HostStartupOwnershipEvidenceV1` is embedded in and committed by the startup result;
+each obligation snapshot entry carries the exact `CanonicalSha256` commitment of its
+`ObligationSnapshotRecordHashInputV1`.
+`updated_at`, intent/claim/root revisions not explicitly present in a
 wrapper, mutable state, presentation-only fields, plan/socket paths, and adjacent object metadata
 are not accidentally swept into a hash. Authority-record, lineage, payload, descriptor,
-attach-contract, resume-handle, policy, retained-worker, application, acceptance, completion, and
-terminal-handoff commitments must use `CanonicalSha256`; a `StoreHmacSha256` variant in those
+attach-contract, resume-handle, policy, retained-worker, application, input acceptance,
+startup-ownership resolution, obligation snapshot, post-turn protocol event/completion, and terminal-handoff commitments
+must use `CanonicalSha256`; a `StoreHmacSha256` variant in those
 fields fails closed.
 
 `AgentDescriptorV1` and `HostAttachContractV1` are the closed typed projections above, not
@@ -589,6 +792,9 @@ Every `AuthorityObjectKindV1` has exactly one V1 bytes and commitment rule:
 | `LeaseToken` | 1 | the exact UTF-8 lease-token bytes, with no normalization | `StoreHmacSha256` with `substrate.a1.participant-lease-token.v1` |
 | `ApplicationResult` | 1 | `CanonicalJsonV1(ApplicationResultHashInputV1)` | `CanonicalSha256` |
 | `InputAcceptance` | 1 | `CanonicalJsonV1(InputAcceptanceHashInputV1)` | `CanonicalSha256` |
+| `StartupOwnershipResult` | 1 | `CanonicalJsonV1(StartupOwnershipResultHashInputV1)` | `CanonicalSha256` |
+| `ObligationSnapshot` | 1 | `CanonicalJsonV1(ObligationSnapshotHashInputV1)` | `CanonicalSha256` |
+| `PostTurnProtocolEvent` | 1 | `CanonicalJsonV1(PostTurnProtocolEventHashInputV1)` | `CanonicalSha256` |
 | `PostTurnCompletion` | 1 | `CanonicalJsonV1(PostTurnCompletionHashInputV1)` | `CanonicalSha256` |
 | `TerminalHandoff` | 1 | `CanonicalJsonV1(TerminalHandoffHashInputV1)` | `CanonicalSha256` |
 
@@ -604,9 +810,15 @@ no adjacent index row can override the parent's kind, schema, or commitment.
 Golden fixtures must commit exact `CanonicalJsonV1` bytes and SHA-256 digest, plus fixed test-key
 HMAC values where sensitive refs occur. Start, Attach, and `ResumeOneTurn`-with-input fixtures use
 `HostSessionTransitionPayloadHashInputV1`; authority, lineage, attach-contract, application-result,
-terminal-handoff, descriptor, resume-handle, policy, and retained-worker fixtures use their named
-wrappers; the typed-ref fixture uses `AuthorityObjectRefV1` itself. Raw input, lease-token, and
-transport fixtures commit both exact bytes and fixed-key HMAC outputs. Each sensitive-domain
+input-acceptance, startup-ownership-result, obligation-snapshot-record, obligation-snapshot,
+post-turn-protocol-event, post-turn-completion, terminal-handoff, descriptor, resume-handle, policy, and retained-worker
+fixtures use their named wrappers; the typed-ref fixture uses `AuthorityObjectRefV1` itself. The
+fixture set covers every allowed `HostStartupOwnershipProtocolEventV1` actor/variant pairing and
+terminal reason plus rejected cross-actor pairings, both
+`ObligationAttentionDispositionV1` variants, every `HostPostTurnProtocolEventKindV1` variant and
+terminal reason/actor combination, a wrong-claimant-attempt rejection, and every terminal-handoff
+matrix row. Raw input,
+lease-token, and transport fixtures commit both exact bytes and fixed-key HMAC outputs. Each sensitive-domain
 fixture also rejects `run_present=0x00`, an empty run, and a different run from the parent intent.
 Issuer, helper,
 restart/reconciliation, and release tests consume the same fixture files rather than regenerating
@@ -808,6 +1020,7 @@ struct InitialTransitionApplicationJournalV1 {
 
 struct PostTurnApplicationJournalV1 {
     completion_ref: AuthorityObjectRefV1,
+    obligation_snapshot_ref: Option<AuthorityObjectRefV1>,
     authority_revision_before: u64,
     authority_revision_after: u64,
     authority_record_commitment: AuthorityObjectCommitmentV1,
@@ -1130,6 +1343,12 @@ Crash meaning is exact:
   object-index entry in its normal root transaction. Without that complete exact retry, the orphan
   remains retained and non-authoritative; its filename or bytes alone never reconstruct an intent,
   request, authority, or parent.
+- `ObligationSnapshot` is stricter than the generic orphan rule. After a crash between snapshot
+  publication and root commit, it may be adopted only if `ObligationLedger` reissues/revalidates
+  the same Complete snapshot bytes under the still-current per-session ledger revision and
+  materialization cut and every store/session/participant/intent/run/authority binding still
+  matches. Otherwise the orphan remains non-authoritative and a new current snapshot/ref is
+  published; an old empty or non-empty cut is never adopted merely because its bytes verify.
 - A committed parent ref in a required-present state whose object is missing, wrong-kind,
   wrong-version, wrong-domain/key, or commitment-mismatched is store corruption. Fail closed and
   never infer success.
@@ -1140,8 +1359,10 @@ Crash meaning is exact:
   `ENOENT` is followed by `fsync` of that exact transport object directory before the root may
   record `Released`, matching the durability barrier used after successful deletion.
 - `Released` is the sole intentional missing-object state. It requires the same exact terminal
-  handoff and no remaining transport bytes; an unexpected surviving copy is securely removed
-  under the lock and never regains authority meaning.
+  handoff and no remaining transport bytes. An unexpected surviving copy is removed
+  directory-relative under the lock and the exact transport object directory is `fsync`ed before
+  retry may join/report success; removal or durability uncertainty fails closed. The bytes never
+  regain authority meaning.
 - `Retained`/`Present` with a required object absent is store corruption and fails closed.
 - If root replacement completed but the parent-directory `fsync` failed, durability is unproven:
   the operation must not report durable success. Recovery acquires the lock, accepts only a
@@ -1320,12 +1541,14 @@ enum HostSessionTransitionIntentStateV1 {
     },
     Applied {
         claim_id: String,
+        claimant_attempt_id: String,
         authority_revision_before: Option<u64>,
         authority_revision_after: u64,
         active_authoritative_participant_id: String,
         resulting_posture: HostSessionPostureV1,
         authority_record_commitment: AuthorityObjectCommitmentV1,
         application_result_ref: AuthorityObjectRefV1,
+        startup_ownership: HostSessionStartupOwnershipApplicationV1,
         post_turn: HostSessionPostTurnApplicationV1,
         applied_at: TimestampV1,
     },
@@ -1346,13 +1569,45 @@ enum HostSessionPostTurnApplicationV1 {
         expected_run_id: String,
         expected_authority_revision: u64,
     },
+    AwaitingObligationCut {
+        completion_ref: AuthorityObjectRefV1,
+        expected_run_id: String,
+        expected_authority_revision: u64,
+        required_terminal_event_id: String,
+        required_terminal_event_sequence: u64,
+        recorded_at: TimestampV1,
+    },
     Applied {
         completion_ref: AuthorityObjectRefV1,
+        obligation_snapshot_ref: Option<AuthorityObjectRefV1>,
         authority_revision_before: u64,
         authority_revision_after: u64,
         resulting_posture: HostSessionPostureV1,
         application_result_ref: AuthorityObjectRefV1,
         applied_at: TimestampV1,
+    },
+}
+
+enum HostSessionStartupOwnershipApplicationV1 {
+    NotApplicable,
+    Pending {
+        expected_run_id: String,
+        expected_authority_revision: u64,
+        expected_active_authoritative_participant_id: String,
+    },
+    Accepted {
+        evidence_id: String,
+        result_ref: AuthorityObjectRefV1,
+        authority_revision: u64,
+        accepted_at: TimestampV1,
+    },
+    TerminalReconciled {
+        evidence_id: String,
+        result_ref: AuthorityObjectRefV1,
+        authority_revision_before: u64,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        reconciled_at: TimestampV1,
     },
 }
 
@@ -1456,9 +1711,10 @@ reservation, namespace, or release state.
    never enter logs, traces, diagnostics, rejection text, compatibility snapshots, or object IDs.
 5. `expires_at` is fixed at issuance, later than `issued_at`, and bounded by the V1 maximum.
    Ambient retries, plan rewrites, helper restarts, and reclaim do not extend it.
-6. `intent_revision` increments on every durable intent-state, claim, input-handoff, post-turn, or
-   transport-payload-state change. A stale intent or claim revision cannot mutate the record; this
-   does not block an exact read-only join.
+6. `intent_revision` increments on every durable intent-state, claim, input-handoff,
+   startup-ownership, post-turn (including `AwaitingObligationCut`), or transport-payload-state
+   change. A stale intent or claim revision cannot mutate the record; this does not block an exact
+   read-only join.
 7. The namespace and authority precondition permit at most one transition candidate for the exact
    reserved state. A different mode, target, issuer, intent, or commitment is a conflict, never a
    second candidate.
@@ -1492,9 +1748,12 @@ not broaden resolver semantics or convert unrelated callers.
 
 A1.2 is the first packet allowed to perform production Start semantics. It owns greenfield
 certificate validation, `ExpectedAbsent` acceptance, Start reservation plus intent issuance,
-claim/application, and initial Start-origin authority birth as one intent protocol. A1.3 adopts
-that protocol on real CLI/REPL consumers; A1.1 primitive tests are not evidence that a production
-Start path is adopted.
+claim/application, initial Start-origin authority birth, startup-ownership resolution, pending
+post-turn reconciliation, ledger-snapshot consumption, and release as one intent protocol. It does
+not own canonical obligations or their event/materialization cut. C1 owns that semantic producer;
+until it exists, A1.2 retains `AwaitingObligationCut` and cannot claim full packet closure. A1.3
+adopts the protocol on real CLI/REPL consumers; A1.1 primitive tests are not evidence that a
+production Start path is adopted.
 
 ### Start namespace reservation
 
@@ -1612,8 +1871,10 @@ introducing another intent contract:
    and verifies over the exact one-turn input bytes.
 4. `input_handoff` is `Pending` with that same input ref and run ID.
 5. `post_turn_disposition` is `ReconcileToAttentionParkOrTerminal`. A verified
-   `PostTurnCompletion` ref, claimed intent, exact unresolved-obligation read, and current authority
-   revision—not queue delivery, helper liveness, or timeout—determine the revision-checked result.
+   `PostTurnCompletion` ref, claimed intent, current authority revision, and—only for a resumable
+   outcome—a Complete `ObligationLedger` snapshot for the exact terminal event cut determine the
+   revision-checked result. Pending materialization keeps reconciliation Pending; queue delivery,
+   helper liveness, timeout, inbox rows/counts, and worker flags never determine posture.
 
 ### Lifecycle, retry, and fail-closed rules
 
@@ -1630,8 +1891,9 @@ introducing another intent contract:
    authority mutation, application journal, intent `Applied`, result ref, and object-index entry.
    Start also replaces its reservation with Authority in that root; Attach/Resume replace the
    existing Authority value at the next authority revision. No split embedded/external or
-   multi-root success model is permitted. Start/Attach record `post_turn=NotApplicable`; Resume
-   records exact run/revision `Pending`.
+   multi-root success model is permitted. Start/Attach record `startup_ownership=Pending` and
+   `post_turn=NotApplicable`; Resume records `startup_ownership=NotApplicable` and exact post-turn
+   run/revision `Pending`.
 5. Core Applied result is immutable. Exact intent/issuer/payload retry joins it despite an older
    read revision and never reallocates target, appends lineage, rewrites binding, or repeats the
    authority revision. Current revisions remain mandatory for mutations.
@@ -1651,24 +1913,117 @@ introducing another intent contract:
 9. Plan removal, helper loss, EOF, timeout, or process death changes transport evidence only. It
    cannot alter reservation, intent, authority, retention, or an applied result.
 10. Input acceptance CASes Pending to Accepted with an `InputAcceptanceHashInputV1` object bound to
-    exact intent/run/input ref/participant. Exact duplicate joins. Exact terminal failure before
-    acceptance uses the intent's `TerminalHandoff`; missing/stale/reordered/mismatched evidence
-    cannot change the substate.
+    exact intent/run/input ref/participant. Exact duplicate joins. For an applied Resume, definitive
+    terminal failure before acceptance must first publish and apply the exact `TerminalFailure`
+    post-turn completion/result pair; only its resulting terminal handoff may set
+    `TerminalWithoutAcceptance`. Missing/stale/reordered/mismatched evidence cannot change the
+    substate.
 11. Load/remove-before-use retries reproject from verified lease/input/transport refs through the
     existing builders. Applied retry may reproject only remaining handoff and never reapplies
     authority. Accepted or terminalized input is never redelivered.
-12. Transport stays `Retained`/object-index `Present` until one exact committed
+12. Applied Start/Attach resolve startup ownership through one revision-CAS operation owned by
+    `HostSessionAuthority`. The target authoritative participant's startup protocol produces
+    `OwnershipAccepted` only after accepting ownership of the exact applied session/intent/run,
+    application result, participant, and authority revision. The launch/application protocol
+    produces `RuntimeCreationRejected` only as an exact typed rejection before participant
+    ownership, and the target startup protocol produces `StartupFailedBeforeOwnership` only as an
+    exact typed failure causally before any ownership acknowledgement. The protocol actor is
+    closed: `OwnershipAccepted` and `StartupFailedBeforeOwnership` require
+    `TargetAuthoritativeParticipant` with participant ID exactly equal to the evidence's active
+    participant; `RuntimeCreationRejected` requires `LaunchApplicationClaimant` whose claim and
+    claimant-attempt IDs exactly equal both the evidence and the persisted Applied intent. Every
+    other actor/event pairing fails closed.
+    `HostExecutionEpisode` owns observation reporting and A1.3's bounded real helper/REPL adapter
+    transports that exact protocol event into one closed `HostStartupOwnershipEvidenceV1`; neither
+    may relabel local observations into a protocol event. `HostSessionAuthority`, not the episode
+    record, durably captures the submitted actor/event inside the committed
+    `StartupOwnershipResultHashInputV1`. The plan and `SurfaceAdapter` only transport it. The evidence binds exact
+    store, session, intent, claim, claimant attempt, run, application ref, expected authority
+    revision, active participant, event identifier, and observation time. Its `evidence_id` must
+    equal the identifier carried by its protocol-event variant and the stored startup substate's
+    `evidence_id` must equal the result evidence ID. `OwnershipAccepted` publishes
+    `StartupOwnershipResultHashInputV1` with unchanged current authority revision and mutates only
+    the intent revision/substate. `RuntimeCreationRejected` and `StartupFailedBeforeOwnership`
+    publish `TerminalReconciled` with the exactly corresponding reason; an event/outcome/reason
+    mismatch fails closed. Running state, readiness, endpoint publication, PID/process/helper/socket/
+    handle posture, timeout, EOF, local adapter error, plan loss, or ambiguity cannot construct any
+    of these protocol events and leaves startup ownership Pending.
+    A definitive terminal result atomically advances authority once without restoring a
+    pre-application snapshot: Start deterministically becomes `Terminal`; Attach deterministically
+    becomes `DetachedReconciled`. Both preserve session identity, workspace/store/world binding,
+    lineage, policy, descriptor, and active successor identity. The same root revision terminalizes
+    any Pending Start input to `TerminalWithoutAcceptance` and commits the exact terminal handoff;
+    crash/retry joins all three results or none. Exact duplicate evidence joins; a
+    conflicting evidence ID/protocol event, claimant, stale revision, substituted application, or
+    second authority advance fails closed.
+    This CAS increments `intent_revision` exactly once. A1.2 owns this internal decision protocol;
+    A1.3 owns invocation by the real helper/REPL consumer, and A2 later generalizes episode
+    observations without weakening these A1 commitments.
+13. Transport stays `Retained`/object-index `Present` until one exact committed
     `TerminalHandoffHashInputV1` proves release. Input-bearing modes require Accepted or
     TerminalWithoutAcceptance; input-free Start/Attach require NotApplicable. Applied Start/Attach
-    require exact application/startup ownership or terminal reconciliation. Resume requires
-    post-turn Applied or exact terminal failure. Rejected/Expired require proof of no application.
+    require `startup_ownership=Accepted` or `TerminalReconciled`, and the terminal handoff carries
+    that exact startup-ownership result ref. Every applied Resume terminal handoff requires
+    post-turn Applied with the exact completion/result pair; `TerminalClean` and `TerminalFailure`
+    carry no obligation snapshot, while `ResumableClean` carries the exact Complete ledger snapshot.
+    Rejected/Expired require proof of no application.
     One root revision records `ReleaseEligible` in both parent and object index, deletion retries
-    idempotently, and a later root records `Released`. A missing plan is never evidence.
-13. Resume completion first publishes/verifies a `PostTurnCompletionHashInputV1` object. One root
-    transaction advances post-turn Pending to Applied, mutates authority at most once, and stores
-    the completion/result refs in both intent state and `post_turn_application` journal. Exact
-    duplicate joins; stale, reordered, mismatched, or conflicting completion fails closed. Initial
-    intent expiry never erases an already-applied pending handoff/post-turn reconciliation.
+    idempotently, and a later root records `Released`. A missing plan is never evidence. Exact
+    issue/application/expiry retry verifies transport bytes only for Retained/Present; for
+    ReleaseEligible or Released it verifies the exact matching parent/index retention state and
+    terminal handoff without recursively requiring deleted bytes. A mismatched handoff/index or
+    surviving Released bytes not durably removed as specified by the crash rules fails closed.
+14. Resume completion first publishes/verifies one immutable
+    `PostTurnProtocolEventHashInputV1` object and then a `PostTurnCompletionHashInputV1` whose exact
+    `PostTurnProtocolEvent` ref, intent/claim/claimant-attempt/run/revision, terminal event ID, and
+    monotonically ordered run-local terminal event sequence all match that object and the persisted
+    Applied intent. `ResumableClean` and `TerminalClean`
+    require a `TargetAuthoritativeParticipant` actor equal to the active participant, the exactly
+    matching event kind, and Accepted input. `TerminalFailure` with reason
+    `ResumeRuntimeCreationRejected` requires the `LaunchApplicationClaimant` actor to equal the
+    applied claim/claimant attempt and may occur only before input acceptance. `TerminalFailure`
+    with reason `TargetFailedBeforeInputAcceptance` or `TargetFailedAfterInputAcceptance` requires
+    the exact active participant actor and respectively Pending or Accepted input. The completion
+    outcome must equal the protocol-event kind; actor,
+    reason, ID, sequence, scope, or ref mismatch fails closed. PID/helper/socket/handle/process
+    posture, readiness, timeout, EOF, stream loss, or a local adapter error is not a protocol event
+    and cannot construct completion. Terminal clean or failure atomically advances authority to
+    `Terminal`, applies the post-turn result, terminalizes Pending input only for the two exact
+    pre-acceptance failure reasons, and commits terminal handoff without an obligation snapshot.
+    `ResumableClean` requires Accepted input and instead commits `AwaitingObligationCut` with the
+    completion ref and required event cut but does not mutate authority. Exact retry joins the same
+    event/completion/pending or terminal result, initial intent expiry cannot erase it, and
+    transport remains Retained until its exact release gate.
+15. `ObligationLedger` alone owns the semantic query and produces
+    `ObligationLedgerSnapshotReadV1`; `HostSessionAuthority` is a consume-only client. A Complete
+    snapshot binds exact authority store, session, active participant, transition intent, run,
+    observed authority revision, per-session ledger revision, terminal event ID/sequence, and a
+    `materialized_through_event_sequence` at least that terminal sequence. Revisions/sequences and
+    all identities are nonzero/non-empty as applicable. Each unresolved entry
+    binds obligation ID/revision and the exact `CanonicalSha256` commitment of
+    `ObligationSnapshotRecordHashInputV1`; entries are non-empty unique IDs sorted by raw UTF-8 byte
+    order. `ObligationLedger` sets the closed attention disposition and guarantees it matches the
+    complete canonical record set: NoUnresolvedAttention requires an empty entry vector and
+    HasUnresolvedAttention requires a non-empty vector. It derives only from canonical obligation
+    records, never inbox rows, counts, worker flags, helper state, or compatibility projections.
+16. A1.2 may publish the Complete snapshot bytes unchanged as `ObligationSnapshot` and validate
+    only their closed schema, exact scope/cut/ref commitments, and equality with the current
+    pending completion and authority. It cannot enumerate, classify, create, resolve, reinterpret,
+    repair, or overwrite obligations. The ledger revalidates the same per-session revision and
+    event cut immediately before the authority commit under the retained transaction/lock; the
+    lock supplies physical serialization but not semantic ownership. A Pending ledger read leaves
+    `AwaitingObligationCut` unchanged. A Complete `HasUnresolvedAttention` result selects
+    `AwaitingAttention`; Complete `NoUnresolvedAttention` selects `ParkedResumable`. One root
+    transaction advances post-turn to Applied, mutates authority at most once, and stores the
+    completion/snapshot/result refs in intent state and `post_turn_application` journal. Exact
+    duplicate joins; stale, reordered, mismatched, or conflicting completion/cut fails closed.
+17. C1 owns the event-to-obligation materializer, canonical obligation revisions, and the complete
+    per-session event cut required above. The current pre-C1 ledger cannot provide that semantic
+    completeness proof: empty can mean either no unresolved obligation or not-yet-materialized
+    events. Therefore A1.2 can specify and persist the pending protocol but cannot close a
+    ResumableClean post-turn or claim its full packet exit before the C1-owned cut lands or the
+    canonical phase map explicitly moves only that prerequisite earlier. A1.2 does not start C1 or
+    claim `RG-OBL-01`/`RG-OBL-02`.
 
 ### Crash reconciliation
 
@@ -1695,10 +2050,17 @@ On process restart or before retrying a nonterminal intent, `HostSessionAuthorit
    former reservation. A visible Authority without matching application proof fails closed.
 6. Objects with no root parent are orphans and never prove issuance/application. A missing or
    mismatched object required by Retained/Present state is corruption. ReleaseEligible plus absent
-   transport may advance only after exact terminal-handoff verification.
-7. Missing plan transport is reprojected only after revisioned input/application/post-turn checks.
-   Applied Resume with pending post-turn work accepts only the exact completion/failure ref for its
-   committed run; ambiguous evidence remains pending and diagnosable.
+   transport may advance only after exact terminal-handoff verification. Applied Start/Attach also
+   verify their startup-ownership evidence/result ref. An AwaitingObligationCut Resume verifies its
+   exact post-turn protocol-event ref, completion/event equality, and cut scope and remains pending
+   until the semantic owner returns Complete; applied resumable post-turn Resume verifies the same
+   event/completion chain, its exact Complete obligation snapshot ref, and current ledger
+   revalidation.
+7. Missing plan transport is reprojected only after revisioned input/application/startup-ownership/
+   post-turn checks.
+   Applied Resume with pending post-turn work accepts only the exact actor-bound protocol-event ref,
+   matching completion/result, closed input state, and exact ledger cut when required for its
+   committed run; ambiguous or incomplete evidence remains pending and diagnosable.
 8. If root-directory fsync previously failed, report no inferred success. Reconcile whichever
    complete root revision and object set is verifiable, then use issuer index/application journal
    for exact retry; never choose the newest-looking orphan or temp file.
