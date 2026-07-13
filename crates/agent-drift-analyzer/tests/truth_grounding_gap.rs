@@ -336,6 +336,54 @@ fn truth_grounding_gap_keeps_opaque_parent_orchestration_clear_without_child_act
 }
 
 #[test]
+fn truth_grounding_gap_flags_truth_path_action_before_read() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update docs/specs/agent-drift-analyzer-v0.4-spec.md using that declared truth artifact before changing behavior.",
+        ),
+        tool_row(
+            1,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: docs/specs/agent-drift-analyzer-v0.4-spec.md\n*** End Patch\nPATCH",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze truth-path action-before-read bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints
+        .last()
+        .expect("truth-path action-before-read checkpoint");
+    let score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("truth grounding gap score");
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+    assert!(score.evidence.iter().any(|evidence| {
+        evidence.reason == "truth artifact hint: docs/specs/agent-drift-analyzer-v0.4-spec.md"
+    }));
+    assert!(score
+        .evidence
+        .iter()
+        .any(|evidence| evidence.reason == "command family: apply_patch"));
+}
+
+#[test]
 fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_active() {
     let rows = vec![
         row(
