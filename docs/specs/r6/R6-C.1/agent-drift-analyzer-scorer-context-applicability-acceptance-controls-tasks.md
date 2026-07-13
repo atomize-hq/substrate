@@ -1,8 +1,9 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
-specification-lock task and `CTX-R6-03` control are complete. All remaining controls, replay,
-conditional-gap, production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
+specification-lock task and `CTX-R6-03` / `CTX-R6-04` controls are complete; `CTX-R6-04` is a
+preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay, conditional-gap,
+production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
 
 ## Required Staged Commit Gate
 
@@ -89,7 +90,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.1.2`, the next row-atomic `R6-C.1-CONTROLS` acceptance control.
+  - Sole next authorized action: execute `R6-C.1.1.3`, the next row-atomic `R6-C.1-CONTROLS` acceptance control.
     Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
@@ -111,7 +112,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `PreviouslyCleanScopeBroken`, carried no direct frontier-advance signal, and named both the frontier
     fallback and the current repeated-failure evidence. No `R6-GAP-DET-REGRESSION` route is required.
 
-- [ ] **R6-C.1.1.2 — Add, commit, and review the opaque-parent row (`CTX-R6-04`).**
+- [x] **R6-C.1.1.2 — Add, commit, and review the opaque-parent row (`CTX-R6-04`).**
   - Test: `dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity`.
   - Input lock: opaque parent with no attributable child command observation; no repeated-failure or
     repeated-verification history; both active repetition bits false.
@@ -120,6 +121,11 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-DET-OPAQUE-PARENT` for later activation.
   - Commit/review: only this test plus result-only TASKS/ledger wording; required staged commit gate; fresh
     built-in `default` review until clean.
+  - Result (2026-07-13): `FAIL — PRESERVED RED`. The exact focused command completed with `0 passed;
+    1 failed; 15 filtered out`. The locked no-child-activity seam reached
+    `ParentVisibleOrchestration` and produced `0 / Medium / Cleared`, unflagged, with empty evidence,
+    rather than the required `0 / Low / Cleared`. The confidence-only mismatch requires
+    `R6-GAP-DET-OPAQUE-PARENT`; no production code changed in `R6-C.1-CONTROLS`.
 
 - [ ] **R6-C.1.1.3 — Add, commit, and review the equal-progress row (`CTX-R6-05`).**
   - Test: `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes`.

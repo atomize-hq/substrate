@@ -787,6 +787,75 @@ fn dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity() {
 }
 
 #[test]
+fn dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity() {
+    let mut spawn = row(
+        1,
+        CompactionKind::ToolCall,
+        "{\"goal\":\"implement the delegated acceptance control\"}",
+    );
+    spawn.dedupe_identity = Some(
+        "{\"call_id\":\"call-spawn\",\"name\":\"spawn_agent\",\"type\":\"function_call\"}"
+            .to_string(),
+    );
+    let mut wait = row(
+        3,
+        CompactionKind::ToolCall,
+        "{\"session_id\":\"019ea333-3333-7333-8333-333333333333\"}",
+    );
+    wait.dedupe_identity = Some(
+        "{\"call_id\":\"call-wait\",\"name\":\"wait_agent\",\"type\":\"function_call\"}"
+            .to_string(),
+    );
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Coordinate delegated work without overclaiming child progress.",
+        ),
+        spawn,
+        row(
+            2,
+            CompactionKind::SystemMessage,
+            "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
+        ),
+        wait,
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze opaque-parent dead-end-thrash bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints.last().expect("opaque-parent checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("opaque-parent session progress");
+    let thrash = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("dead end thrash score");
+
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(
+        (
+            thrash.raw_score,
+            thrash.confidence,
+            thrash.state,
+            thrash.flagged,
+            thrash.evidence.len(),
+        ),
+        (0, Confidence::Low, DriftState::Cleared, false, 0),
+    );
+}
+
+#[test]
 fn dead_end_thrash_suppresses_repeated_activity_when_the_frontier_advances() {
     let mut rows = vec![
         row(
