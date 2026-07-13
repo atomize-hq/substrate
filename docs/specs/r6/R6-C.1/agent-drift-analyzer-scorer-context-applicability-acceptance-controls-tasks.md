@@ -89,7 +89,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next action: execute `R6-C.1.1.1`, the first row-atomic `R6-C.1-CONTROLS` acceptance control.
+  - Sole next authorized action: execute `R6-C.1.1.2`, the next row-atomic `R6-C.1-CONTROLS` acceptance control.
     Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
