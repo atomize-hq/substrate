@@ -72,7 +72,7 @@ use crate::gateway_runtime::{
     GatewayRuntimeStartContext, LinuxWorldPlacementContext,
 };
 #[cfg(target_os = "linux")]
-use crate::member_runtime::MemberRuntimeManager;
+use crate::member_runtime::{MemberRuntimeLaunchAdmissionV1, MemberRuntimeManager};
 use crate::request_routing::resolve_snapshot_routing;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
@@ -1251,6 +1251,7 @@ impl WorldService {
         let shared_world = resolve_shared_world_binding(shared_owner_spec.as_ref(), &world)?;
 
         if let Some(dispatch) = req.member_dispatch.clone() {
+            let acceptance_context = req.acceptance_context.clone();
             let placement = self.resolve_authoritative_member_placement_context(
                 &dispatch,
                 world,
@@ -1279,7 +1280,10 @@ impl WorldService {
                     req.agent_id.clone(),
                     env_map,
                     span_id,
-                    dispatch,
+                    MemberRuntimeLaunchAdmissionV1 {
+                        dispatch,
+                        acceptance_context,
+                    },
                     placement.binding,
                     launch_placement,
                 )

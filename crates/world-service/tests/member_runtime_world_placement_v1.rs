@@ -77,6 +77,7 @@ fn make_member_dispatch_request(
                 binary_path: binary_path.display().to_string(),
             },
         }),
+        acceptance_context: None,
     }
 }
 
