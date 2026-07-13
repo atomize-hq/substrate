@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-DET-OPAQUE-PARENT
 
-Status: **ACTIVE — PACKET DOCS THEN LEDGER-RECONCILIATION GATES**. Sole current action: commit these three docs atomically and obtain fresh-review-clean status. A separate post-docs ledger reconciliation is then required. Production, witness rerun, proof receipt, transition, and successor work remain blocked until both gates are committed and fresh-review-clean.
+Status: **ACTIVE — PRODUCTION FIX PROOF GREEN; COMMIT/REVIEW PENDING**. The packet-docs gate is review-clean at `59092df2a`, and the separate ledger-reconciliation gate is review-clean at `beed76446`. The preserved pre-edit witness remained red, LOW-risk impact authorized the scorer-local path, and the production worktree now passes the exact focused and family proof. The production commit/review and the separate transition remain pending; no successor is active.
 
 ## Required Gates
 
@@ -24,21 +24,21 @@ The second command is required if `score_confidence` changes. Impact every addit
 
 ## Task Ledger
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.0 — Commit and independently review the packet docs.**
+- [x] **R6-GAP-DET-OPAQUE-PARENT.0 — Commit and independently review the packet docs.**
   - Files: exactly this SPEC, PLAN, and TASKS.
   - Verify: staged gate; complete staged-diff inspection.
   - Review: fresh built-in `default`; docs-only fix commits; fresh reviewer until clean.
-  - Result: pending. Do not start Task 1 first.
+  - Result: `59092df2a` (`docs: tighten opaque parent gap gates`) contains the three packet docs and received fresh built-in `default` `REVIEW CLEAN`.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.1 — Reconcile the review-clean packet into the canonical ledger.**
+- [x] **R6-GAP-DET-OPAQUE-PARENT.1 — Reconcile the review-clean packet into the canonical ledger.**
   - Prerequisite: Task 0 is committed and fresh-review-clean.
   - Separate orchestration batch: touch exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`.
   - Required update: in the `R6-GAP-DET-OPAQUE-PARENT` named-gap subledger row, replace all three `TO CREATE` markers with the actual SPEC/PLAN/TASKS paths and record the review-clean packet-docs commit. Reconcile only ledger-local current-status/next-action wording needed to make witness reconfirmation next; preserve the `CTX-R6-04` red disposition.
   - Commit/review: staged gate; separate ledger-only commit; fresh built-in `default` review; ledger-only fix commits and fresh reviewers until clean.
   - Blocking rule: do not start Task 2, rerun any witness, or edit production until this task is committed and fresh-review-clean.
-  - Result: pending.
+  - Result: `beed76446` (`docs: record opaque parent packet gate`) contains the ledger-only reconciliation and received fresh built-in `default` `REVIEW CLEAN`.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.2 — Reconfirm the preserved witness and select the authorized closure path.**
+- [x] **R6-GAP-DET-OPAQUE-PARENT.2 — Reconfirm the preserved witness and select the authorized closure path.**
   - Prerequisite: Tasks 0 and 1 are each committed and fresh-review-clean.
   - Witness: commit `87409b39a`; control `CTX-R6-04`.
   - Run:
@@ -48,7 +48,7 @@ The second command is required if `score_confidence` changes. Impact every addit
     cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
     ```
   - Red: use Task 3A. Unexpectedly green: preserve exact output and stop/escalate for authority reconciliation. This first named gap has no earlier sequential named-gap fix, so no-code closure is unavailable; do not attribute green to an unrelated already-landed commit.
-  - Result: pending; preserve exact output.
+  - Result: the pre-edit focused control remained red at `0 / Medium / Cleared`, unflagged, with empty evidence, versus required `0 / Low / Cleared`; the owning integration family reported `16 passed; 1 failed`, with only `CTX-R6-04` failing. The authorized path is Task 3A; no-code closure remains ineligible.
 
 - [ ] **R6-GAP-DET-OPAQUE-PARENT.3A — Land the smallest scorer-local production fix.**
   - Prerequisite: Task 2 remains red and impact is below HIGH.
@@ -63,7 +63,13 @@ The second command is required if `score_confidence` changes. Impact every addit
     cargo test -p agent-drift-analyzer checkpoints -- --nocapture
     ```
   - Commit/review: staged gate; atomic commit; fresh built-in `default` review; new fix commit and fresh reviewer until clean.
-  - Result: pending.
+  - Result: implementation and ordered proof are complete in the worktree; atomic commit and fresh review remain pending, so this task stays open.
+    - Impact: `score_dead_end_thrash` LOW with no upstream callers; `score_confidence` LOW with one direct caller (`score_dead_end_thrash`), two affected processes, and one affected `Scoring` module. No HIGH/CRITICAL risk was reported.
+    - Production: `score_confidence` now receives `SessionProgress` and ignores command observations as a confidence escalator only when the resolved dimension is `ParentVisibleOrchestration`; repeated verification/failure history and non-parent-visible command observations retain their existing confidence behavior. The preserved test and upstream progress construction were not edited.
+    - Focused `CTX-R6-04`: `1 passed; 0 failed; 16 filtered out`; the locked result is `0 / Low / Cleared`, unflagged, empty evidence, with `ParentVisibleOrchestration` preserved.
+    - Focused `CTX-R6-03`: `1 passed; 0 failed; 16 filtered out`; the regression result remains `30 / Medium / Active`, flagged.
+    - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`: all matching tests passed — owning integration target `17 passed; 0 failed`, acceptance target `1 passed; 0 failed`, and export target `2 passed; 0 failed`.
+    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`: all matching tests passed — unit target `35 passed; 0 failed`, checkpoints integration target `131 passed; 0 failed`, and export target `1 passed; 0 failed`.
 
 - [ ] **R6-GAP-DET-OPAQUE-PARENT.3B — No-code proof receipt — ineligible for this first gap.**
   - Eligibility rule: only a later named gap may use no-code closure, and only when an already-landed fix commit from an earlier named gap in the prescribed sequence demonstrably made that later gap's preserved witness green. An unrelated earlier commit is never eligible.
@@ -85,7 +91,7 @@ The second command is required if `score_confidence` changes. Impact every addit
   - Do not create, link, cite as existing, or execute the successor packet.
   - Commit/review: authority docs only; staged gate; separate commit; fresh independent review and new transition-only fixes until clean.
   - Stop: review-clean transition committed; no next-phase work.
-  - Result: pending.
+  - Result: pending; the gap remains ACTIVE until the production fix is committed and review-clean and a separate authority-only transition is landed and independently reviewed. No successor activation is authorized in this batch.
 
 ## Explicit Exclusions
 

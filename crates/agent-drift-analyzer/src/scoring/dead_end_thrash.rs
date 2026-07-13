@@ -33,7 +33,7 @@ pub(crate) fn score_dead_end_thrash(
                 class: DriftClass::DeadEndThrash,
                 state: DriftState::Cleared,
                 raw_score: 20,
-                confidence: score_confidence(analysis),
+                confidence: score_confidence(analysis, session_progress),
                 flagged: false,
                 evidence,
             },
@@ -50,7 +50,7 @@ pub(crate) fn score_dead_end_thrash(
                 class: DriftClass::DeadEndThrash,
                 state: DriftState::Cleared,
                 raw_score: decisive_stall_raw_score(analysis),
-                confidence: score_confidence(analysis),
+                confidence: score_confidence(analysis, session_progress),
                 flagged: true,
                 evidence,
             },
@@ -68,7 +68,7 @@ pub(crate) fn score_dead_end_thrash(
             class: DriftClass::DeadEndThrash,
             state: DriftState::Cleared,
             raw_score,
-            confidence: score_confidence(analysis),
+            confidence: score_confidence(analysis, session_progress),
             flagged,
             evidence,
         },
@@ -80,11 +80,15 @@ pub(crate) fn score_dead_end_thrash(
     )
 }
 
-fn score_confidence(analysis: &CheckpointAnalysis) -> Confidence {
+fn score_confidence(
+    analysis: &CheckpointAnalysis,
+    session_progress: &SessionProgress,
+) -> Confidence {
     if !analysis.repetition.repeated_verification_loops.is_empty() {
         Confidence::High
     } else if !analysis.repetition.repeated_failure_loops.is_empty()
-        || !analysis.current.context.command_observations.is_empty()
+        || (!analysis.current.context.command_observations.is_empty()
+            && session_progress.dimension != ProgressDimension::ParentVisibleOrchestration)
     {
         Confidence::Medium
     } else {
