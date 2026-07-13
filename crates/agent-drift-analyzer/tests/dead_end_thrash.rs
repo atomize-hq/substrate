@@ -856,6 +856,174 @@ fn dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activit
 }
 
 #[test]
+fn dead_end_thrash_scores_equal_progress_equally_across_turn_shapes() {
+    let mut rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Troubleshoot checkpoints::captures_progress without widening scope.",
+        ),
+        row(
+            1,
+            CompactionKind::AssistantMessage,
+            "I will keep the first attempt on the focused troubleshooting target.",
+        ),
+        row(
+            2,
+            CompactionKind::AssistantMessage,
+            "I will preserve the verifier output as the baseline witness.",
+        ),
+        tool_row(
+            3,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\n*** End Patch\nPATCH",
+        ),
+        tool_row(
+            4,
+            "cargo test --color never -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            5,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+        ),
+        row(6, CompactionKind::Error, "world failed"),
+        row(
+            7,
+            CompactionKind::UserMessage,
+            "/goal Re-run the same troubleshooting verifier after the focused fix.",
+        ),
+        row(
+            8,
+            CompactionKind::AssistantMessage,
+            "I will keep the rerun on the same troubleshooting target.",
+        ),
+        row(
+            9,
+            CompactionKind::AssistantMessage,
+            "I will preserve the existing failure-only history.",
+        ),
+        tool_row(
+            10,
+            "printf 'focused edit retained' > /tmp/focused-edit-receipt",
+        ),
+        tool_row(
+            11,
+            "cargo test --color always -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture",
+        ),
+        row(
+            12,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+        ),
+        row(13, CompactionKind::Error, "world failed"),
+    ];
+    rows[6].text_hash_hex = "hash-turn-shape-failure".to_string();
+    rows[13].text_hash_hex = "hash-turn-shape-failure".to_string();
+
+    let long_autonomous_rows = rows.clone();
+    let mut many_short_conversational_rows = rows;
+    for row in &mut many_short_conversational_rows[7..] {
+        row.turn_id = Some("turn-002".to_string());
+    }
+
+    let analyze = |rows: Vec<CompactionRow>, shape: &str| {
+        let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+        let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+            input_dir: fixture.input_dir.clone(),
+            output_dir: fixture.output_dir.clone(),
+        })
+        .unwrap_or_else(|error| panic!("analyze {shape} dead-end-thrash bundle: {error}"));
+        read_checkpoints(&result.checkpoints_path)
+    };
+
+    let long_checkpoints = analyze(long_autonomous_rows, "long-autonomous");
+    let short_checkpoints = analyze(many_short_conversational_rows, "many-short-conversational");
+
+    assert_eq!(long_checkpoints.len(), 2);
+    assert_eq!(short_checkpoints.len(), 2);
+    assert!(short_checkpoints.iter().all(|checkpoint| {
+        checkpoint.turn_context.as_ref().is_some_and(|context| {
+            context.execution_mode == agent_drift_analyzer::TurnExecutionMode::Conversational
+        })
+    }));
+    for checkpoints in [&long_checkpoints, &short_checkpoints] {
+        assert!(checkpoints[..checkpoints.len() - 1]
+            .iter()
+            .all(|checkpoint| {
+                checkpoint
+                    .drift_scores
+                    .iter()
+                    .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+                    .is_none_or(|score| score.state != DriftState::Active)
+            }));
+    }
+
+    let long_checkpoint = long_checkpoints.last().expect("long-autonomous checkpoint");
+    let short_checkpoint = short_checkpoints
+        .last()
+        .expect("many-short-conversational checkpoint");
+    assert_eq!(
+        long_checkpoint
+            .turn_context
+            .as_ref()
+            .expect("long-autonomous turn context")
+            .execution_mode,
+        agent_drift_analyzer::TurnExecutionMode::Autonomous,
+    );
+    let long_progress = long_checkpoint
+        .session_progress
+        .as_ref()
+        .expect("long-autonomous session progress");
+    let short_progress = short_checkpoint
+        .session_progress
+        .as_ref()
+        .expect("many-short-conversational session progress");
+    assert_eq!(long_progress, short_progress);
+    assert_eq!(
+        long_progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(long_progress.status, ProgressStatus::Advancing);
+    assert!(long_progress
+        .signals
+        .iter()
+        .any(|signal| signal.code == ProgressSignalCode::FailureFrontierAdvanced));
+
+    let long_thrash = long_checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("long-autonomous dead end thrash score");
+    let short_thrash = short_checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == agent_drift_analyzer::DriftClass::DeadEndThrash)
+        .expect("many-short-conversational dead end thrash score");
+    assert_eq!(long_thrash, short_thrash);
+    assert_eq!(
+        (
+            long_thrash.raw_score,
+            long_thrash.confidence,
+            long_thrash.state,
+            long_thrash.flagged,
+        ),
+        (20, Confidence::Medium, DriftState::HistoricalOnly, false),
+    );
+    assert!(long_thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason.starts_with("churn with progress evidence:")));
+    assert!(long_thrash
+        .evidence
+        .iter()
+        .any(|item| item.reason.contains("historical repeated failure evidence")));
+    assert!(long_thrash
+        .evidence
+        .iter()
+        .all(|item| !item.reason.contains("repeated verification")));
+}
+
+#[test]
 fn dead_end_thrash_suppresses_repeated_activity_when_the_frontier_advances() {
     let mut rows = vec![
         row(

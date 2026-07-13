@@ -1,9 +1,10 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
 Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-13. The
-specification-lock task and `CTX-R6-03` / `CTX-R6-04` controls are complete; `CTX-R6-04` is a
-preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay, conditional-gap,
-production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
+specification-lock task and `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls are complete;
+`CTX-R6-04` is a preserved red requiring `R6-GAP-DET-OPAQUE-PARENT`. All remaining controls, replay,
+conditional-gap, production-fix, phase-close, and closure tasks remain open until exact live proof is
+recorded.
 
 ## Required Staged Commit Gate
 
@@ -90,8 +91,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.1.3`, the next row-atomic `R6-C.1-CONTROLS` acceptance control.
-    Do not start another row, replay, a gap packet, or a production change first.
+  - Sole next authorized action: execute `R6-C.1.1.4`, the reviewed `dead_end_thrash` family
+    checkpoint. Do not start another row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
 
@@ -127,7 +128,7 @@ before that reconciled transition is committed and fresh-review-clean.
     rather than the required `0 / Low / Cleared`. The confidence-only mismatch requires
     `R6-GAP-DET-OPAQUE-PARENT`; no production code changed in `R6-C.1-CONTROLS`.
 
-- [ ] **R6-C.1.1.3 — Add, commit, and review the equal-progress row (`CTX-R6-05`).**
+- [x] **R6-C.1.1.3 — Add, commit, and review the equal-progress row (`CTX-R6-05`).**
   - Test: `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes`.
   - Input lock: long-autonomous and many-short sessions receive identical failure-only repeated history,
     `active_repeated_failure=true`, no repeated-verification history/activity, identical direct frontier
@@ -138,6 +139,12 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-DET-TURN-EQUIVALENCE` for later activation.
   - Commit/review: only this test plus result-only TASKS/ledger wording; required staged commit gate; fresh
     built-in `default` review until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 16
+    filtered out`. The long-autonomous and many-short-conversational sessions reached their locked
+    execution modes while producing identical advancing `TroubleshootingFrontier` progress with direct
+    `FailureFrontierAdvanced` evidence. Their failure-only repeated history produced equal
+    `20 / Medium / HistoricalOnly` scores, unflagged, with no repeated-verification evidence. No
+    `R6-GAP-DET-TURN-EQUIVALENCE` route is required.
 
 - [ ] **R6-C.1.1.4 — Run the reviewed `dead_end_thrash` family checkpoint.**
   - Prerequisite: all three row commits above are independently review-clean.
