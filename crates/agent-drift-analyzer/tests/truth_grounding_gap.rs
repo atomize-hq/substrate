@@ -263,6 +263,79 @@ fn truth_grounding_gap_is_event_order_invariant_across_turn_shapes() {
 }
 
 #[test]
+fn truth_grounding_gap_keeps_opaque_parent_orchestration_clear_without_child_action() {
+    let mut spawn = row(
+        1,
+        CompactionKind::ToolCall,
+        "{\"goal\":\"implement the delegated truth-grounding acceptance control\"}",
+    );
+    spawn.dedupe_identity = Some(
+        "{\"call_id\":\"call-spawn\",\"name\":\"spawn_agent\",\"type\":\"function_call\"}"
+            .to_string(),
+    );
+    let mut wait = row(
+        3,
+        CompactionKind::ToolCall,
+        "{\"session_id\":\"019ea333-3333-7333-8333-333333333333\"}",
+    );
+    wait.dedupe_identity = Some(
+        "{\"call_id\":\"call-wait\",\"name\":\"wait_agent\",\"type\":\"function_call\"}"
+            .to_string(),
+    );
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Coordinate delegated work using docs/specs/agent-drift-analyzer-v0.4-spec.md without overclaiming child progress.",
+        ),
+        spawn,
+        row(
+            2,
+            CompactionKind::SystemMessage,
+            "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
+        ),
+        wait,
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze opaque-parent truth-grounding bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints.last().expect("opaque-parent checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("opaque-parent session progress");
+    let score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("truth grounding gap score");
+
+    assert_eq!(
+        progress.dimension,
+        agent_drift_analyzer::ProgressDimension::ParentVisibleOrchestration,
+    );
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false),
+    );
+    assert!(!score.evidence.is_empty());
+    assert!(score
+        .evidence
+        .iter()
+        .all(|evidence| evidence.reason.starts_with("truth artifact hint:")));
+}
+
+#[test]
 fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_active() {
     let rows = vec![
         row(
