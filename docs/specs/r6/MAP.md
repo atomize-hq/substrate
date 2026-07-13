@@ -295,6 +295,29 @@ changes across the committed `R6-3` range, and still no `R6-1`/`R6-2`/`R6-3` rep
    schema, delegation, and `RepoRelativeEquivalentAfterCwdStrip` work remain outside this closeout. See
    the `R6-3` TASKS ledger and the `FINDINGS` `R6-3.X.2D Closeout` result note.
 
+## R6 Closeout Reconciliation (2026-07-12)
+
+The next-step recommendation that prompted this reconciliation proposed a new context-aware
+`dead_end_thrash` cutover. Live repo truth shows that work is already landed as `R6-1`:
+`score_session` builds analyzer-owned `SessionProgress`, and `score_dead_end_thrash` consumes it to
+distinguish troubleshooting-frontier advancement from non-advancing stalls. Re-planning that packet
+would duplicate closed work.
+
+The remaining R6 choices are also already bounded:
+
+- `R6-2` / `R6-3` and the `R6-3.X.2B` / `2C` / `2D` chain are closed enough to stop expanding
+  `semantic_goal_drift` without new evidence;
+- `R6-3.X.3` eligibility loosening remains deferred;
+- conditional `R6-4` reset migration remains deferred because its required reset-error evidence did
+  not appear;
+- `truth_grounding_gap` and `wrong_plan_branch` remain unchanged because the R6 design authorized
+  revisiting them only if typed context exposed an obvious evidence-backed improvement, and this
+  reconciliation found no required cutover.
+
+R6 is therefore **closed for roadmap sequencing**. This does not declare every conceivable scorer
+enhancement complete; it declares that unsupported R6 expansion must not delay the already-defined
+R7 delegated-session phase. The active successor authority is `docs/specs/r7/MAP.md`.
+
 ## Non-Goals For This Rescope
 
 - re-litigating `Decision Gate 0` (it is **resolved** to scoped Option C in the DESIGN doc; do not

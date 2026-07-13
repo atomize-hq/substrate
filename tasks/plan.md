@@ -1,50 +1,28 @@
-# R6-3.6 execution plan
+# Active Plan: R7 Bounded Delegated-Session Support
 
-Authoritative packet docs:
-- /Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r6/R6-3.6/agent-drift-analyzer-semantic-goal-drift-positive-controls-and-corpus-revalidation-spec.md
-- /Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r6/R6-3.6/agent-drift-analyzer-semantic-goal-drift-positive-controls-and-corpus-revalidation-plan.md
-- /Users/spensermcconnell/.codex/worktrees/97a0/substrate/docs/specs/r6/R6-3.6/agent-drift-analyzer-semantic-goal-drift-positive-controls-and-corpus-revalidation-tasks.md
+Canonical authority:
+`docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Execution mode: slash-build-auto + incremental-implementation + test-driven-development.
+Status: PLANNED / NOT IMPLEMENTED
 
-## Dependency order
+## Dependency Order
 
-1. Baseline capture and review gate confirmation
-   - Record git status/log
-   - Re-run focused semantic-goal-drift tests
-   - Confirm Claude `--model opus` lane
+1. `R7-0`: docs lock and sanitized linkage fixtures.
+2. `R7-1`: compactor reciprocal link extraction and explicit direct-child closure.
+3. `R7-2`: analyzer link graph and checkpoint v0.8 public delegation contract.
+4. `R7-3`: separate parent-visible and child-visible progress trajectories.
+5. `R7-4`: trajectory-local scorer guardrails, with no new drift class by default.
+6. `R7-5`: delegated acceptance matrix and real-session validation.
+7. `R7-6`: minimal replay/live sentinel compatibility; R8 remains separate.
 
-2. Acceptance harness expansion
-   - Convert the hardcoded 3-case invariant into a curated bounded corpus invariant
-   - Add assertions for full eligibility (`unknowns.is_empty()`) and stable-anchor proof
+## Execution Rules
 
-3. Positive-control fixtures
-   - Add at least five true-positive pivot fixtures covering repo / crate / file / work-item / verification pivots
-   - Land with focused acceptance + scorer verification
+- Follow the canonical task ledger one bounded task at a time.
+- Run GitNexus upstream impact analysis before editing every implementation symbol.
+- Run the task-local verification wall before advancing.
+- Keep parent and child checkpoints separate; never flatten or copy child progress into the parent.
+- Run `npx gitnexus detect-changes -r 97a0-substrate` before every commit.
+- Preserve unrelated worktree changes.
 
-4. Negative-control fixtures and boundary guardrails
-   - Add at least five legitimate non-pivot fixtures
-   - Pin non-containment boundaries, with at least one acceptance-path case
-
-5. Funnel reporting
-   - Inspect existing checkpoint exports
-   - Add the smallest honest reporting deltas possible without widening analyzer export surface
-
-6. Verification wall and corpus rerun
-   - Focused tests
-   - Full agent-drift-analyzer tests
-   - Workspace clippy + fmt
-   - Batch harness rerun or explicit blocker
-
-7. Docs closeout
-   - Update FINDINGS / MAP / R6-3 task ledger with counts, funnel results, delegation split, residue, and next-step decision
-
-8. Final Claude code review
-   - Run Claude on the landed packet diff with `--model opus`
-   - Address any findings before final closeout claim
-
-## Commit discipline
-
-- One commit per implementation task or tightly-coupled slice
-- Never stage unrelated files
-- Each slice must include its own task-status update when relevant
+Read the canonical plan for architecture decisions, packet checkpoints, risks, parallelization, and
+the final verification wall.
