@@ -1525,6 +1525,30 @@ Attach/Resume against `ActiveAttached`, `Terminal`, or `Invalid` is rejected; on
 of the already-Applied intent may join. No `StartTombstone` can satisfy any A1 transition. A1 does
 not create, resolve, or change obligations when selecting the deterministic post-turn posture.
 
+Parked-successor application sharpens these existing mode/precondition/application rules without
+introducing another intent contract:
+
+1. `Active` orchestration-session lifecycle with `ParkedResumable` posture is valid current durable
+   authority, not session absence or a request to allocate a replacement session.
+2. A successor cannot replace that authority with a caller-constructed `Allocating` snapshot.
+3. `Attach` or `ResumeOneTurn` uses the exact expected authority revision and authority-record
+   commitment/hash already required by `ExpectedRevision`.
+4. Application atomically advances posture and authoritative lineage while preserving session
+   identity, nonterminal lifecycle identity, and the exact world binding unless a separately
+   authorized protocol changes that binding.
+5. The target participant becomes the authority-approved successor only through transition
+   application; StateStore persists that selected result and does not choose the transition.
+6. Host execution episode construction and launch occur only after durable application.
+7. `PID=0`, no active handle, helper/readiness state, a completed prior prompt, or a pending new
+   prompt cannot satisfy, deny, or replace the authority precondition.
+8. Prompt bytes may be committed through the immutable `TransitionInput` ref. Prompt delivery,
+   stream, acceptance, pending, or completion status remains transport/application evidence, not
+   authority.
+9. Exact retry joins the committed intent, application, input-handoff, and post-turn result under
+   the retry rules below; it never constructs another successor snapshot.
+10. Failure after application reconciles from durable intent/application truth and must not restore
+    a stale pre-transition snapshot or regress lifecycle to `Allocating`.
+
 `Start` requires all of the following:
 
 1. `authority_precondition` is `ExpectedAbsent`; A1.2 issuance first verifies the exact greenfield
@@ -1752,6 +1776,10 @@ Rules:
 2. An observation whose `observed_authority_revision` is stale cannot mutate authority.
 3. Episode exit does not delete session, worker, binding, receipt, or obligation truth.
 4. Private transport success may accelerate delivery; it does not define durable success.
+5. PID, process/helper presence, active handles, readiness, and prompt-stream state are episode or
+   transport observations only; their absence does not erase `ParkedResumable` authority.
+6. Episode construction and launch follow durable transition application and cannot reset a parked
+   session to `Allocating` or authorize a successor participant.
 
 ## 3. `ActiveEphemeralTaskReceiptV1`
 
