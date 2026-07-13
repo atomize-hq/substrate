@@ -1,6 +1,6 @@
 # R6-GAP-DET-OPAQUE-PARENT — Opaque-Parent Confidence Gap
 
-Status: **ACTIVE — PACKET DOCS GATE**. `R6-C.1-CONTROLS` is complete and this is the sole active named gap. No witness rerun, production edit, proof receipt, or successor work is authorized until these three packet docs are committed and fresh-review-clean.
+Status: **ACTIVE — PACKET DOCS THEN LEDGER-RECONCILIATION GATES**. `R6-C.1-CONTROLS` is complete and this is the sole active named gap. No witness rerun, production edit, proof receipt, or successor work is authorized until these three packet docs are committed and fresh-review-clean **and** the separate post-docs ledger reconciliation below is committed and fresh-review-clean.
 
 ## Objective And Preserved Witness
 
@@ -37,8 +37,9 @@ Run the second command only when editing that helper, and run the same exact imp
 ## Allowed Files By Atomic Batch
 
 - Docs gate: exactly these three canonical packet docs.
+- Post-docs ledger-reconciliation gate: exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`, in a separate orchestration batch after the packet docs are fresh-review-clean. Replace the active named-gap row's three `TO CREATE` markers with the actual packet paths, record the review-clean packet-docs commit, and reconcile only ledger-local current-status/next-action wording needed to make witness reconfirmation next without changing the preserved-red disposition. Commit this batch and obtain a fresh built-in `default` review; review fixes remain limited to that ledger. No witness or production work may share or precede this batch.
 - Production-fix batch: `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`; `crates/agent-drift-analyzer/tests/dead_end_thrash.rs` only for an additional narrow regression that does not alter the preserved witness; this TASKS file; and `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` for actual `CTX-R6-04` and named-gap evidence.
-- No-code receipt: this TASKS file and the proof ledger only.
+- No no-code receipt batch is allowed for this first named gap.
 - Review fixes: only files already allowed for the batch under review.
 - Transition: the active-phase mirrors in the landed R6-C.1 transition manifest, including this packet, with no production file and no successor packet file.
 
@@ -52,7 +53,7 @@ Use this path only while the exact witness remains red. The smallest scorer-loca
 
 ### No-code path
 
-Use this path only if the exact witness is already green before a packet production edit and repository history identifies an already-landed causal commit. Because this is the first named gap, no earlier gap fix exists by default; without a concrete causal commit, no-code closure is unavailable. Record the causal hash and exact outputs in TASKS and the ledger, preserve witness `87409b39a`, commit a docs-only receipt, and obtain fresh review. The receipt does not activate the successor.
+No-code closure is available only to a **later** named gap when an already-landed fix commit from an earlier named gap in the prescribed sequence demonstrably made that later gap's preserved witness green. An unrelated earlier commit is never a valid receipt basis. Because this packet is the first named gap, it has no eligible earlier sequential named-gap commit and the no-code path is unavailable. If its exact witness is unexpectedly green before a packet production edit, preserve the exact output and stop under the escalation contract for authority reconciliation; do not close this gap from any unrelated already-landed commit.
 
 ## Exact Verification
 
@@ -78,6 +79,6 @@ git diff --cached --check
 git diff --cached
 ```
 
-Commit each fix batch atomically. Dispatch a fresh built-in `default` reviewer after the docs, fix/receipt, every review-fix, and transition boundary; fixes use new commits and fresh reviewers until `REVIEW CLEAN`.
+Commit each batch atomically. Dispatch a fresh built-in `default` reviewer after the packet docs, ledger reconciliation, production fix, every review-fix, and transition boundary; fixes use new commits and fresh reviewers until `REVIEW CLEAN`.
 
-The gap exits only after its docs and fix or no-code receipt are committed, exact verification is recorded, and both are fresh-review-clean. A separate narrow transition commit then marks `R6-GAP-DET-OPAQUE-PARENT` complete and activates `R6-GAP-TGG-TRUTH-PATH-ACTION` at its docs-only gate. Record that successor's three canonical paths as `TO CREATE`; do not reference a successor TASKS file, create its docs, or execute it in this phase. Stop after the transition commit is independently review-clean.
+The gap exits only after its packet docs, post-docs ledger reconciliation, and production fix are separately committed, exact verification is recorded, and every required boundary is fresh-review-clean. No-code receipt cannot close this first named gap. A separate narrow transition commit then marks `R6-GAP-DET-OPAQUE-PARENT` complete and activates `R6-GAP-TGG-TRUTH-PATH-ACTION` at its docs-only gate. Record that successor's three canonical paths as `TO CREATE`; do not reference a successor TASKS file, create its docs, or execute it in this phase. Stop after the transition commit is independently review-clean.

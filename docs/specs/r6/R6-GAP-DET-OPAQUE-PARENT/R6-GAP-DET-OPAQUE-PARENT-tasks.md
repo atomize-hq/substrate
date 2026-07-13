@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-DET-OPAQUE-PARENT
 
-Status: **ACTIVE — PACKET DOCS GATE**. Sole current action: commit these three docs atomically and obtain fresh-review-clean status. Production, witness rerun, proof receipt, transition, and successor work remain blocked until then.
+Status: **ACTIVE — PACKET DOCS THEN LEDGER-RECONCILIATION GATES**. Sole current action: commit these three docs atomically and obtain fresh-review-clean status. A separate post-docs ledger reconciliation is then required. Production, witness rerun, proof receipt, transition, and successor work remain blocked until both gates are committed and fresh-review-clean.
 
 ## Required Gates
 
@@ -30,7 +30,16 @@ The second command is required if `score_confidence` changes. Impact every addit
   - Review: fresh built-in `default`; docs-only fix commits; fresh reviewer until clean.
   - Result: pending. Do not start Task 1 first.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.1 — Reconfirm the preserved witness and select one closure path.**
+- [ ] **R6-GAP-DET-OPAQUE-PARENT.1 — Reconcile the review-clean packet into the canonical ledger.**
+  - Prerequisite: Task 0 is committed and fresh-review-clean.
+  - Separate orchestration batch: touch exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`.
+  - Required update: in the `R6-GAP-DET-OPAQUE-PARENT` named-gap subledger row, replace all three `TO CREATE` markers with the actual SPEC/PLAN/TASKS paths and record the review-clean packet-docs commit. Reconcile only ledger-local current-status/next-action wording needed to make witness reconfirmation next; preserve the `CTX-R6-04` red disposition.
+  - Commit/review: staged gate; separate ledger-only commit; fresh built-in `default` review; ledger-only fix commits and fresh reviewers until clean.
+  - Blocking rule: do not start Task 2, rerun any witness, or edit production until this task is committed and fresh-review-clean.
+  - Result: pending.
+
+- [ ] **R6-GAP-DET-OPAQUE-PARENT.2 — Reconfirm the preserved witness and select the authorized closure path.**
+  - Prerequisite: Tasks 0 and 1 are each committed and fresh-review-clean.
   - Witness: commit `87409b39a`; control `CTX-R6-04`.
   - Run:
 
@@ -38,11 +47,11 @@ The second command is required if `score_confidence` changes. Impact every addit
     cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity -- --exact --nocapture
     cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture
     ```
-  - Red: use Task 2A. Green: Task 2B is allowed only with an identifiable already-landed causal commit.
+  - Red: use Task 3A. Unexpectedly green: preserve exact output and stop/escalate for authority reconciliation. This first named gap has no earlier sequential named-gap fix, so no-code closure is unavailable; do not attribute green to an unrelated already-landed commit.
   - Result: pending; preserve exact output.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.2A — Land the smallest scorer-local production fix.**
-  - Prerequisite: Task 1 remains red and impact is below HIGH.
+- [ ] **R6-GAP-DET-OPAQUE-PARENT.3A — Land the smallest scorer-local production fix.**
+  - Prerequisite: Task 2 remains red and impact is below HIGH.
   - Files: `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`; the existing test file only for a necessary additional narrow regression; this TASKS; and the proof ledger's changed `CTX-R6-04` / named-gap evidence.
   - Acceptance: opaque parent stays `ParentVisibleOrchestration`; thrash becomes exactly `0 / Low / Cleared`, unflagged, empty evidence; parent orchestration does not become child misconduct; the regression control remains `30 / Medium / Active`, flagged.
   - Verify in order:
@@ -56,20 +65,18 @@ The second command is required if `score_confidence` changes. Impact every addit
   - Commit/review: staged gate; atomic commit; fresh built-in `default` review; new fix commit and fresh reviewer until clean.
   - Result: pending.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.2B — Close by no-code proof receipt, if eligible.**
-  - Prerequisite: exact witness green before a packet edit and a concrete already-landed causal commit recorded. This first gap has no earlier gap fix by default; absent a causal hash, this task is ineligible.
-  - Files: this TASKS and proof ledger only.
-  - Proof: exact witness plus owning `dead_end_thrash` family command pass; record outputs and causal hash; preserve witness `87409b39a`.
-  - Commit/review: docs-only receipt; staged gate; fresh review/fix loop. Leave this gap active.
-  - Result: pending / not yet eligible.
+- [ ] **R6-GAP-DET-OPAQUE-PARENT.3B — No-code proof receipt — ineligible for this first gap.**
+  - Eligibility rule: only a later named gap may use no-code closure, and only when an already-landed fix commit from an earlier named gap in the prescribed sequence demonstrably made that later gap's preserved witness green. An unrelated earlier commit is never eligible.
+  - This packet is the first sequential named gap, so it cannot satisfy the prerequisite. An unexpected pre-edit green result must be preserved and escalated for authority reconciliation under Task 2, not converted into a receipt.
+  - Result: ineligible for this phase.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.3 — Obtain a review-clean fix or receipt.**
-  - Require Task 2A or 2B committed with actual proof and a fresh `REVIEW CLEAN` verdict.
+- [ ] **R6-GAP-DET-OPAQUE-PARENT.4 — Obtain a review-clean production fix.**
+  - Require Task 3A committed with actual proof and a fresh `REVIEW CLEAN` verdict.
   - Record all commit hashes, exact command results, findings, dispositions, and review verdict here.
   - Result: pending.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.4 — Land and independently review the narrow transition.**
-  - Prerequisite: Task 0 and Task 3 review-clean.
+- [ ] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
+  - Prerequisite: Tasks 0, 1, and 4 review-clean.
   - Apply the full R6-C.1 gap-transition authority manifest. Mark this gap `COMPLETE`; activate only `R6-GAP-TGG-TRUTH-PATH-ACTION`; keep later gaps blocked.
   - Successor boundary: record only these non-link `TO CREATE` paths and authorize their atomic docs gate:
     - `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-spec.md`

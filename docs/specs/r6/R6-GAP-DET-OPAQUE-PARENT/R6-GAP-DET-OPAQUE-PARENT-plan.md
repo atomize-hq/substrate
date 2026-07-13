@@ -1,6 +1,6 @@
 # Plan: R6-GAP-DET-OPAQUE-PARENT
 
-Status: **ACTIVE — PACKET DOCS GATE**. This plan becomes executable only after the three canonical packet docs are committed and fresh-review-clean.
+Status: **ACTIVE — PACKET DOCS THEN LEDGER-RECONCILIATION GATES**. This plan's witness and production steps become executable only after the three canonical packet docs are committed and fresh-review-clean and a separate post-docs ledger reconciliation is committed and fresh-review-clean.
 
 ## Decisions
 
@@ -9,7 +9,7 @@ Status: **ACTIVE — PACKET DOCS GATE**. This plan becomes executable only after
 3. Do not interpret parent `spawn_agent` / `wait_agent` observations as attributable child thrash. Do not add R7 child linkage.
 4. Use one existing regression pattern: `dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity`, locked at `30 / Medium / Active`, flagged.
 5. Run focused proof before the authorized R6-C.1 family/checkpoint walls.
-6. Keep the fix or no-code receipt commit separate from the final authority transition.
+6. Keep the production-fix commit separate from the final authority transition.
 
 ## Ordered Execution
 
@@ -17,14 +17,20 @@ Status: **ACTIVE — PACKET DOCS GATE**. This plan becomes executable only after
 
 Create and stage only this SPEC/PLAN/TASKS family, run the staged commit gate, commit atomically, and send a fresh built-in `default` reviewer. Make docs-only fix commits and repeat with a fresh reviewer until clean. No gap execution occurs first.
 
-### 1. Reconfirm The Preserved Seam
+### 1. Reconcile The Review-Clean Packet Into The Ledger
 
-After the docs gate is review-clean, run the exact `CTX-R6-04` command. Then run the owning family command to establish live pre-edit scope. Preserve all output.
+After the docs gate is review-clean, make a separate orchestration batch touching exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`. In its active named-gap subledger row, replace the three `TO CREATE` markers with the actual packet paths and record the review-clean packet-docs commit. Reconcile only ledger-local current-status/next-action wording needed to remove the completed packet-docs gate and make witness reconfirmation next; preserve the red witness disposition. Run the staged gate, commit, and dispatch a fresh built-in `default` reviewer. Use ledger-only fix commits and fresh reviewers until clean.
+
+No witness rerun, production edit, or proof receipt is authorized until this reconciliation is committed and fresh-review-clean.
+
+### 2. Reconfirm The Preserved Seam
+
+After both entry gates are review-clean, run the exact `CTX-R6-04` command. Then run the owning family command to establish live pre-edit scope. Preserve all output.
 
 - If red, continue to the production-fix path.
-- If green, use the no-code path only when a concrete already-landed causal commit is identifiable; otherwise the closure evidence is insufficient.
+- If unexpectedly green, preserve the exact output and stop/escalate for authority reconciliation. This is the first sequential named gap, so no earlier named-gap fix can make it eligible for no-code closure; an unrelated already-landed commit is never a valid receipt basis.
 
-### 2A. Production-Fix Path
+### 3A. Production-Fix Path
 
 1. Run GitNexus impact before edits:
 
@@ -46,13 +52,13 @@ After the docs gate is review-clean, run the exact `CTX-R6-04` command. Then run
    ```
 5. Record exact results in this packet's TASKS and only the `CTX-R6-04` / named-gap ledger evidence that changed.
 
-### 2B. No-Code Path
+### 3B. No-Code Path — Not Eligible Here
 
-Do not touch production. Cite the already-landed causal commit, rerun the exact witness and owning `dead_end_thrash` family command, and record exact outputs in TASKS and the ledger. Stage only those docs. This receipt leaves the gap active and does not replace the separate transition.
+No-code closure is reserved for a later named gap whose witness is made green by an already-landed fix commit from an earlier named gap in the prescribed sequence. This first gap cannot meet that prerequisite. If its pre-edit witness is unexpectedly green, preserve the output and stop/escalate for authority reconciliation; do not create a receipt from an unrelated already-landed commit.
 
-### 3. Commit And Fresh Review
+### 4. Commit And Fresh Review
 
-For the fix or receipt, and for every review-fix commit:
+For the fix, and for every review-fix commit:
 
 ```bash
 git add -- <intended-files-only>
@@ -63,7 +69,7 @@ git diff --cached
 
 Commit atomically. Dispatch a fresh built-in `default` reviewer. Apply actionable findings in a new bounded commit and repeat with a fresh reviewer until clean.
 
-### 4. Transition And Stop
+### 5. Transition And Stop
 
 Only after the gap proof is committed and review-clean, make a separate authority-only transition using the complete landed R6-C.1 transition manifest. At minimum it must:
 
