@@ -4,7 +4,8 @@ Status: **ACTIVE — R6-C.1-SPEC COMPLETE; R6-C.1-CONTROLS ACTIVE** on 2026-07-1
 specification-lock task, `CTX-R6-03` / `CTX-R6-04` / `CTX-R6-05` controls, reviewed
 `dead_end_thrash` family checkpoint, and `CTX-R6-09` / `CTX-R6-10` / both `CTX-R6-11`
 truth-grounding focused controls plus the `CTX-R6-12` truth-path-action and `CTX-R6-13`
-archetype-equivalence controls and reviewed `truth_grounding_gap` family checkpoint are complete;
+archetype-equivalence controls, reviewed `truth_grounding_gap` family checkpoint, and the first
+`CTX-R6-14` read-only-exploration control are complete;
 `CTX-R6-04` and `CTX-R6-12` are preserved reds requiring `R6-GAP-DET-OPAQUE-PARENT` and
 `R6-GAP-TGG-TRUTH-PATH-ACTION`, respectively. All remaining controls, replay, conditional-gap,
 production-fix, phase-close, and closure tasks remain open until exact live proof is recorded.
@@ -94,7 +95,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`. The full
     `cargo test -p agent-drift-analyzer -- --nocapture` suite was `PASS`. No test, source, or fixture
     changed in that artifact series.
-  - Sole next authorized action: execute `R6-C.1.3.1`, the `CTX-R6-14` read-only-exploration row.
+  - Sole next authorized action: execute `R6-C.1.3.2`, the `CTX-R6-14` sanctioned-replan-scope row.
     Do not start a later `wrong_plan_branch` row, replay, a gap packet, or a production change first.
 
 ## R6-C.1.1 — `dead_end_thrash` Rows
@@ -263,7 +264,7 @@ before that reconciled transition is committed and fresh-review-clean.
 
 ## R6-C.1.3 — `wrong_plan_branch` Rows
 
-- [ ] **R6-C.1.3.1 — Add, commit, and review read-only exploration (`CTX-R6-14`).**
+- [x] **R6-C.1.3.1 — Add, commit, and review read-only exploration (`CTX-R6-14`).**
   - Test: `wrong_plan_branch_ignores_read_only_out_of_scope_exploration`.
   - Acceptance: non-empty authority plus out-of-scope read yields
     `0 / Medium / Cleared`, unflagged, empty evidence.
@@ -271,6 +272,11 @@ before that reconciled transition is committed and fresh-review-clean.
   - If red: preserve witness and record only `R6-GAP-WPB-READ-ONLY` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
     until clean.
+  - Result (2026-07-13): `PASS`. The exact focused command completed with `1 passed; 0 failed; 2
+    filtered out`. A non-empty task frame declared the authorized source and truth paths, while a
+    read-only `sed` command named a different path. The score produced exactly
+    `0 / Medium / Cleared`, unflagged, with empty evidence. No `R6-GAP-WPB-READ-ONLY` route is required,
+    and no production code changed.
 
 - [ ] **R6-C.1.3.2 — Add, commit, and review sanctioned-replan scope (`CTX-R6-14`).**
   - Test: `wrong_plan_branch_accepts_write_under_sanctioned_replan_scope`.

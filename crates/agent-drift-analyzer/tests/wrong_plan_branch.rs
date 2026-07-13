@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::{AnalyzeRequest, DriftState};
+use agent_drift_analyzer::{AnalyzeRequest, Confidence, DriftClass, DriftState};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -23,6 +23,45 @@ fn wrong_plan_branch_scores_out_of_scope_changes() {
 
     assert!(score.raw_score >= 60);
     assert!(score.flagged);
+}
+
+#[test]
+fn wrong_plan_branch_ignores_read_only_out_of_scope_exploration() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md.",
+        ),
+        tool_row(1, "sed -n '1,120p' docs/specs/unrelated-plan.md"),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze read-only out-of-scope exploration bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let checkpoint = checkpoints
+        .last()
+        .expect("read-only out-of-scope exploration checkpoint");
+    let score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::WrongPlanBranch)
+        .expect("wrong plan branch score");
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false),
+    );
+    assert!(score.evidence.is_empty());
 }
 
 #[test]
