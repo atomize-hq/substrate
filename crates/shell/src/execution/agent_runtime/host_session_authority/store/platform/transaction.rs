@@ -761,7 +761,7 @@ pub(super) fn with_semantic_preflight<T>(
     with_opened_semantic_preflight(&root_handle, mode, operation)
 }
 
-fn with_opened_semantic_preflight<T>(
+pub(super) fn with_opened_semantic_preflight<T>(
     root_handle: &TrustedAuthorityRoot,
     mode: SemanticPreflightMode,
     operation: impl FnOnce(
@@ -848,8 +848,15 @@ pub(super) fn with_existing_semantic_preflight<T>(
 ) -> Result<T, BootstrapError> {
     let root_handle = TrustedAuthorityRoot::open(path)
         .map_err(|_| BootstrapError("open trusted authority root"))?;
+    with_opened_existing_semantic_preflight(&root_handle, operation)
+}
+
+pub(super) fn with_opened_existing_semantic_preflight<T>(
+    root_handle: &TrustedAuthorityRoot,
+    operation: impl FnOnce(&SemanticTransaction<'_, '_>) -> Result<T, BootstrapError>,
+) -> Result<T, BootstrapError> {
     with_opened_semantic_preflight(
-        &root_handle,
+        root_handle,
         SemanticPreflightMode::AuthorityOperation,
         |layout, _, observed, _lock| {
             if observed.classification != BootstrapClassificationV1::ValidExisting {
@@ -862,7 +869,7 @@ pub(super) fn with_existing_semantic_preflight<T>(
                 .ok_or(BootstrapError("semantic preflight omitted existing root"))?;
             operation(&SemanticTransaction {
                 layout,
-                trusted_root: &root_handle,
+                trusted_root: root_handle,
                 root,
                 legacy: observed.legacy,
             })
@@ -876,9 +883,41 @@ pub(super) fn compare_and_swap_root_with(
     proposed: &StateRootV1,
     nonce_bytes: [u8; 16],
 ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
-    with_existing_semantic_preflight(path, |transaction| {
+    let root_handle = TrustedAuthorityRoot::open(path)
+        .map_err(|_| BootstrapError("open trusted authority root"))?;
+    compare_and_swap_opened_root_with(&root_handle, expected, proposed, nonce_bytes)
+}
+
+pub(super) fn compare_and_swap_opened_root_with(
+    root_handle: &TrustedAuthorityRoot,
+    expected: &ExpectedRevisionsV1,
+    proposed: &StateRootV1,
+    nonce_bytes: [u8; 16],
+) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+    compare_and_swap_opened_root_with_exact_current(
+        root_handle,
+        None,
+        expected,
+        proposed,
+        nonce_bytes,
+    )
+}
+
+pub(super) fn compare_and_swap_opened_root_with_exact_current(
+    root_handle: &TrustedAuthorityRoot,
+    exact_current: Option<&StateRootV1>,
+    expected: &ExpectedRevisionsV1,
+    proposed: &StateRootV1,
+    nonce_bytes: [u8; 16],
+) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+    with_opened_existing_semantic_preflight(root_handle, |transaction| {
         validate_positive_expectations(expected)?;
         validate_proposed_root(&transaction.root, expected, proposed)?;
+        if exact_current.is_some_and(|current| transaction.root != *current) {
+            return Err(BootstrapError(
+                "locked authority root differs from exact observed root",
+            ));
+        }
         if transaction.root == *proposed {
             validate_exact_retry_expectation(expected, proposed)?;
             transaction.reconcile()?;

@@ -8,6 +8,8 @@
 #[allow(dead_code)]
 pub(crate) mod canonical_json;
 #[allow(dead_code)]
+pub(crate) mod facade;
+#[allow(dead_code)]
 pub(crate) mod hash;
 #[allow(dead_code)]
 pub(crate) mod schema;
@@ -21,6 +23,10 @@ pub(crate) mod store_schema;
 pub(crate) mod trusted_fs;
 #[allow(dead_code)]
 pub(crate) mod validation;
+
+pub(crate) use facade::{
+    AuthorityObservationV1, HostSessionAuthority, OpenedBootstrapHomeV1, ResolvedSessionAuthorityV1,
+};
 
 #[cfg(test)]
 mod golden_vectors;

@@ -719,9 +719,9 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AgentDescriptorHashInputV1, ApplicationResultHashInputV1, ApplicationResultPhaseV1,
-        AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
-        DurableSessionAuthorityOriginV1, HostAttachContractHashInputV1,
-        HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
+        AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
+        AuthorityObjectRefV1, DurableSessionAuthorityHashInputV1, DurableSessionAuthorityOriginV1,
+        HostAttachContractHashInputV1, HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
         HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1,
         HostSessionTransitionModeV1, PolicyObjectHashInputV1, ResumeHandleHashInputV1,
         TerminalHandoffHashInputV1, TerminalHandoffStateV1, TransitionTransportPayloadObjectV1,
@@ -731,8 +731,8 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         HostSessionTransitionApplicationJournalV1, HostSessionTransitionInputHandoffV1,
         HostSessionTransitionIntentStateV1, HostSessionTransitionIntentV1,
         HostSessionTransitionTransportPayloadStateV1, InitialTransitionApplicationJournalV1,
-        IssuerRequestIndexEntryV1, SessionIdReservationV1, SessionIdTombstoneV1,
-        SessionNamespaceRecordV1, StartTombstoneStateV1,
+        IssuerRequestIndexEntryV1, PostTurnApplicationJournalV1, SessionIdReservationV1,
+        SessionIdTombstoneV1, SessionNamespaceRecordV1, StartTombstoneStateV1,
     };
 
         fn canonical_ref<T>(
@@ -1184,6 +1184,8 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         classify(root.path()),
         BootstrapClassificationV1::ValidExisting
     );
+    let reserved_facade = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root.path()).unwrap();
+    assert!(reserved_facade.resolve_exact(session_id, None).is_err());
 
     let resume_bytes = include_bytes!("testdata/resume-handle.json").as_slice();
     let resume_ref = canonical_ref::<ResumeHandleHashInputV1>(
@@ -1206,10 +1208,62 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
             digest_hex: canonical_sha256(&authority_attach).unwrap(),
         },
     };
-    let authority_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
-        digest_hex: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
-    };
     let applied_at = TimestampV1::parse("2026-07-11T12:54:12.000000000Z").unwrap();
+    let authority_intent = candidate.transition_intent_map[intent_id].clone();
+    let authority_record = DurableSessionAuthorityV1 {
+        schema_version: 1,
+        orchestration_session_id: session_id.into(),
+        shell_trace_session_id: "trace-vector".into(),
+        authority_revision: 1,
+        origin: DurableSessionAuthorityOriginV1::StartIntent {
+            intent_id: intent_id.into(),
+            issuer_request_id: request_id.into(),
+            payload_commitment: authority_intent.payload_commitment.clone(),
+        },
+        authoritative_participant_lineage: vec!["participant-vector".into()],
+        active_authoritative_participant_id: Some("participant-vector".into()),
+        workspace_binding: authority_intent.workspace_binding.clone(),
+        world_binding: None,
+        host_attach_contract_ref: Some(authority_attach_ref.clone()),
+        retained_worker_refs: Vec::new(),
+        internal_resume_handle_refs: vec![resume_ref.clone()],
+        lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+        current_policy_ref: Some(policy_ref.clone()),
+        current_policy_revision: Some("policy-v1".into()),
+        updated_at: applied_at.clone(),
+    };
+    let expected_authority_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: canonical_sha256(&DurableSessionAuthorityHashInputV1 {
+            schema_version: authority_record.schema_version,
+            orchestration_session_id: authority_record.orchestration_session_id.clone(),
+            shell_trace_session_id: authority_record.shell_trace_session_id.clone(),
+            authority_revision: authority_record.authority_revision,
+            origin: authority_record.origin.clone(),
+            authoritative_participant_lineage: authority_record
+                .authoritative_participant_lineage
+                .clone(),
+            active_authoritative_participant_id: authority_record
+                .active_authoritative_participant_id
+                .clone(),
+            workspace_binding: authority_record.workspace_binding.clone(),
+            world_binding: authority_record.world_binding.clone(),
+            host_attach_contract_ref: authority_record.host_attach_contract_ref.clone(),
+            retained_worker_refs: authority_record.retained_worker_refs.clone(),
+            internal_resume_handle_refs: authority_record.internal_resume_handle_refs.clone(),
+            lifecycle_posture: authority_record.lifecycle_posture,
+            current_policy_ref: authority_record.current_policy_ref.clone(),
+            current_policy_revision: authority_record.current_policy_revision.clone(),
+        })
+        .unwrap(),
+    };
+    let expected_lineage_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: canonical_sha256(&AuthoritativeLineageHashInputV1 {
+            schema_version: 1,
+            orchestration_session_id: authority_record.orchestration_session_id.clone(),
+            participant_ids: authority_record.authoritative_participant_lineage.clone(),
+        })
+        .unwrap(),
+    };
     let application = ApplicationResultHashInputV1 {
         schema_version: 1,
         intent_id: intent_id.into(),
@@ -1220,7 +1274,7 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
             authority_revision_after: 1,
             active_authoritative_participant_id: "participant-vector".into(),
             resulting_posture: HostSessionPostureV1::ActiveAttached,
-            authority_record_commitment: authority_commitment.clone(),
+            authority_record_commitment: expected_authority_commitment.clone(),
             post_turn_pending_run_id: None,
         },
         applied_at: applied_at.clone(),
@@ -1246,7 +1300,7 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         authority_revision_after: 1,
         active_authoritative_participant_id: "participant-vector".into(),
         resulting_posture: HostSessionPostureV1::ActiveAttached,
-        authority_record_commitment: authority_commitment.clone(),
+        authority_record_commitment: expected_authority_commitment.clone(),
         application_result_ref: application_ref.clone(),
         post_turn: Box::new(
             crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionPostTurnApplicationV1::NotApplicable,
@@ -1255,28 +1309,7 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
     };
     applied.session_namespace_map.insert(
         session_id.into(),
-        SessionNamespaceRecordV1::Authority(Box::new(DurableSessionAuthorityV1 {
-            schema_version: 1,
-            orchestration_session_id: session_id.into(),
-            shell_trace_session_id: "trace-vector".into(),
-            authority_revision: 1,
-            origin: DurableSessionAuthorityOriginV1::StartIntent {
-                intent_id: intent_id.into(),
-                issuer_request_id: request_id.into(),
-                payload_commitment: intent.payload_commitment.clone(),
-            },
-            authoritative_participant_lineage: vec!["participant-vector".into()],
-            active_authoritative_participant_id: Some("participant-vector".into()),
-            workspace_binding: intent.workspace_binding.clone(),
-            world_binding: None,
-            host_attach_contract_ref: Some(authority_attach_ref.clone()),
-            retained_worker_refs: Vec::new(),
-            internal_resume_handle_refs: vec![resume_ref.clone()],
-            lifecycle_posture: HostSessionPostureV1::ActiveAttached,
-            current_policy_ref: Some(policy_ref.clone()),
-            current_policy_revision: Some("policy-v1".into()),
-            updated_at: applied_at.clone(),
-        })),
+        SessionNamespaceRecordV1::Authority(Box::new(authority_record.clone())),
     );
     applied.application_journal.insert(
         intent_id.into(),
@@ -1286,7 +1319,7 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
             initial_application: InitialTransitionApplicationJournalV1 {
                 authority_revision_before: None,
                 authority_revision_after: 1,
-                authority_record_commitment: authority_commitment,
+                authority_record_commitment: expected_authority_commitment.clone(),
                 application_result_ref: application_ref.clone(),
                 applied_at: applied_at.clone(),
             },
@@ -1304,6 +1337,69 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
     }
     applied.root_revision += 1;
     applied.validate().unwrap();
+    let mut cross_session_proof = applied.clone();
+    let mut other_intent = cross_session_proof.transition_intent_map[intent_id].clone();
+    other_intent.intent_id = "intent-other-session".into();
+    other_intent.orchestration_session_id = "session-other".into();
+    let mut other_journal = cross_session_proof.application_journal[intent_id].clone();
+    other_journal.intent_id = other_intent.intent_id.clone();
+    cross_session_proof
+        .transition_intent_map
+        .insert(other_intent.intent_id.clone(), other_intent.clone());
+    cross_session_proof
+        .application_journal
+        .insert(other_journal.intent_id.clone(), other_journal);
+    assert_eq!(
+        crate::execution::agent_runtime::host_session_authority::facade::exact_current_authority_proof(
+            &cross_session_proof,
+            session_id,
+            1,
+        )
+        .unwrap(),
+        &expected_authority_commitment
+    );
+    other_intent.orchestration_session_id = session_id.into();
+    cross_session_proof
+        .transition_intent_map
+        .insert(other_intent.intent_id.clone(), other_intent);
+    assert!(
+        crate::execution::agent_runtime::host_session_authority::facade::exact_current_authority_proof(
+            &cross_session_proof,
+            session_id,
+            1,
+        )
+        .is_err()
+    );
+    let mut higher_same_session_proof = applied.clone();
+    higher_same_session_proof
+        .application_journal
+        .get_mut(intent_id)
+        .unwrap()
+        .post_turn_application = Some(PostTurnApplicationJournalV1 {
+        completion_ref: application_ref.clone(),
+        authority_revision_before: 1,
+        authority_revision_after: 2,
+        authority_record_commitment: expected_authority_commitment.clone(),
+        application_result_ref: application_ref.clone(),
+        applied_at: applied_at.clone(),
+    });
+    assert!(
+        crate::execution::agent_runtime::host_session_authority::facade::exact_current_authority_proof(
+            &higher_same_session_proof,
+            session_id,
+            1,
+        )
+        .is_err()
+    );
+    assert_eq!(
+        crate::execution::agent_runtime::host_session_authority::facade::exact_current_authority_proof(
+            &higher_same_session_proof,
+            session_id,
+            2,
+        )
+        .unwrap(),
+        &expected_authority_commitment
+    );
     for (reference, bytes, nonce) in [
         (&resume_ref, resume_bytes, [0x84; 16]),
         (
@@ -1325,7 +1421,84 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         classify(root.path()),
         BootstrapClassificationV1::ValidExisting
     );
+    let authority_facade = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root.path()).unwrap();
+    let mut mismatched_authority_proof = applied.clone();
+    let SessionNamespaceRecordV1::Authority(authority) = mismatched_authority_proof
+        .session_namespace_map
+        .get_mut(session_id)
+        .unwrap()
+    else {
+        panic!("expected authority")
+    };
+    authority.current_policy_revision = Some("policy-mismatched-with-proof".into());
+    fs::write(
+        root.path().join("authority-v1/state-root-v1.json"),
+        crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(
+            &mismatched_authority_proof,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        classify(root.path()),
+        BootstrapClassificationV1::ValidExisting
+    );
+    assert!(authority_facade.resolve_exact(session_id, None).is_err());
+    fs::write(
+        root.path().join("authority-v1/state-root-v1.json"),
+        crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(&applied)
+            .unwrap(),
+    )
+    .unwrap();
+    let resolved = authority_facade.resolve_exact(session_id, None).unwrap();
+    assert_eq!(resolved.root_revision, applied.root_revision);
+    assert_eq!(resolved.authority.authority_revision, 1);
+    assert_eq!(
+        resolved.authority.workspace_binding.authority_store_id,
+        applied.authority_store_id
+    );
+    assert_eq!(resolved.authority.world_binding, None);
+    assert_eq!(
+        resolved.authority_record_commitment,
+        expected_authority_commitment
+    );
+    assert_eq!(
+        resolved.authoritative_lineage_commitment,
+        expected_lineage_commitment
+    );
+    let reopened = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root.path()).unwrap();
+    assert_eq!(
+        reopened
+            .resolve_exact(session_id, None)
+            .unwrap()
+            .observation(),
+        resolved.observation()
+    );
+    let exact_observation = resolved.observation();
     let applied_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    let mut rewritten_history = applied.clone();
+    rewritten_history.root_revision += 1;
+    rewritten_history
+        .application_journal
+        .get_mut(intent_id)
+        .unwrap()
+        .initial_application
+        .authority_record_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: "ab".repeat(32),
+    };
+    assert!(authority_facade
+        .compare_and_swap_root(
+            &ExpectedRevisionsV1 {
+                root_revision: applied.root_revision,
+                authority: None,
+            },
+            &rewritten_history,
+        )
+        .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        applied_bytes
+    );
     assert!(compare_and_swap_root(
         root.path(),
         &ExpectedRevisionsV1 {
@@ -1353,6 +1526,8 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         panic!("expected authority")
     };
     authority.authority_revision += 1;
+    authority.current_policy_ref = None;
+    authority.current_policy_revision = None;
     let authority_expectation = ExpectedRevisionsV1 {
         root_revision: applied.root_revision,
         authority: Some(ExpectedAuthorityRevisionV1 {
@@ -1360,11 +1535,29 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
             authority_revision: 1,
         }),
     };
+    let authority_bytes_before_rejected_update =
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    assert!(authority_facade
+        .compare_and_swap_root(&authority_expectation, &authority_update)
+        .is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        authority_bytes_before_rejected_update
+    );
+    assert_eq!(
+        authority_facade
+            .resolve_exact(session_id, Some(&exact_observation))
+            .unwrap()
+            .observation(),
+        exact_observation
+    );
+    assert!(authority_facade
+        .resolve_exact("missing-session", None)
+        .is_err());
     assert_eq!(
         compare_and_swap_root(root.path(), &authority_expectation, &authority_update).unwrap(),
         TransactionCommitOutcomeV1::Committed(authority_update.clone())
     );
-    assert!(compare_and_swap_root(root.path(), &authority_expectation, &authority_update).is_err());
     let committed_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
     let stale_authority_expectation = ExpectedRevisionsV1 {
         root_revision: applied.root_revision,
@@ -1460,6 +1653,33 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
         &multiple_authorities,
     )
     .is_err());
+    fs::write(
+        root.path().join("authority-v1/state-root-v1.json"),
+        crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(&applied)
+            .unwrap(),
+    )
+    .unwrap();
+    let mut root_only_update = applied.clone();
+    root_only_update.root_revision += 1;
+    assert_eq!(
+        authority_facade
+            .compare_and_swap_root(
+                &ExpectedRevisionsV1 {
+                    root_revision: applied.root_revision,
+                    authority: None,
+                },
+                &root_only_update,
+            )
+            .unwrap(),
+        TransactionCommitOutcomeV1::Committed(root_only_update.clone())
+    );
+    assert_eq!(
+        authority_facade
+            .resolve_exact(session_id, None)
+            .unwrap()
+            .authority_record_commitment,
+        expected_authority_commitment
+    );
     fs::write(
         root.path().join("authority-v1/state-root-v1.json"),
         crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(&applied)

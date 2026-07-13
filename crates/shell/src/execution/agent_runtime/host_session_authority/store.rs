@@ -3,6 +3,7 @@ use std::path::Path;
 
 use super::schema::TimestampV1;
 use super::store_schema::StateRootV1;
+use super::trusted_fs::TrustedAuthorityRoot;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BootstrapClassificationV1 {
@@ -13,14 +14,25 @@ pub(crate) enum BootstrapClassificationV1 {
     CorruptOrUnsupported,
 }
 
+#[cfg(test)]
 pub(crate) fn classify(path: &Path) -> BootstrapClassificationV1 {
     platform::classify(path)
 }
 
+pub(super) fn classify_opened(root: &TrustedAuthorityRoot) -> BootstrapClassificationV1 {
+    platform::classify_opened(root)
+}
+
+#[cfg(test)]
 pub(crate) fn bootstrap(path: &Path) -> Result<StateRootV1, BootstrapError> {
     platform::bootstrap(path)
 }
 
+pub(super) fn bootstrap_opened(root: &TrustedAuthorityRoot) -> Result<StateRootV1, BootstrapError> {
+    platform::bootstrap_opened(root)
+}
+
+#[cfg(test)]
 pub(crate) fn rotate_commitment_key(
     path: &Path,
     expected_root_revision: u64,
@@ -28,6 +40,7 @@ pub(crate) fn rotate_commitment_key(
     platform::rotate_commitment_key(path, expected_root_revision)
 }
 
+#[cfg(test)]
 pub(crate) fn retire_commitment_key(
     path: &Path,
     key_id: &str,
@@ -36,6 +49,7 @@ pub(crate) fn retire_commitment_key(
     platform::retire_commitment_key(path, key_id, expected_root_revision)
 }
 
+#[cfg(test)]
 pub(crate) fn prepare_typed_object(
     path: &Path,
     expected_root_revision: u64,
@@ -46,16 +60,49 @@ pub(crate) fn prepare_typed_object(
     platform::prepare_typed_object(path, expected_root_revision, reference, bytes, context)
 }
 
+pub(super) fn prepare_typed_object_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    reference: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    bytes: &[u8],
+    context: Option<&ObjectVerificationContextV1>,
+) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+    platform::prepare_typed_object_opened(root, expected_root_revision, reference, bytes, context)
+}
+
+#[cfg(test)]
 pub(crate) fn read_root(path: &Path) -> Result<StateRootV1, BootstrapError> {
     platform::read_root(path)
 }
 
+pub(super) fn read_opened_root(root: &TrustedAuthorityRoot) -> Result<StateRootV1, BootstrapError> {
+    platform::read_opened_root(root)
+}
+
+#[cfg(test)]
 pub(crate) fn compare_and_swap_root(
     path: &Path,
     expected: &ExpectedRevisionsV1,
     proposed: &StateRootV1,
 ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
     platform::compare_and_swap_root(path, expected, proposed)
+}
+
+pub(super) fn compare_and_swap_opened_root(
+    root: &TrustedAuthorityRoot,
+    expected: &ExpectedRevisionsV1,
+    proposed: &StateRootV1,
+) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+    platform::compare_and_swap_opened_root(root, expected, proposed)
+}
+
+pub(super) fn compare_and_swap_opened_root_exact_current(
+    root: &TrustedAuthorityRoot,
+    exact_current: &StateRootV1,
+    expected: &ExpectedRevisionsV1,
+    proposed: &StateRootV1,
+) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+    platform::compare_and_swap_opened_root_exact_current(root, exact_current, expected, proposed)
 }
 
 pub(crate) fn legacy_writer_guard(path: &Path) -> Result<LegacyWriterGuard, BootstrapError> {
@@ -241,10 +288,14 @@ mod platform {
     mod transaction;
     #[cfg(test)]
     use transaction::retain_classified_legacy_directories_test;
+    #[cfg(test)]
+    use transaction::with_semantic_preflight;
     pub(crate) use transaction::LegacyStateStoreTransactionV1;
     use transaction::{
         begin_legacy_state_store_transaction as begin_legacy_transaction,
-        compare_and_swap_root_with, with_existing_semantic_preflight, with_semantic_preflight,
+        compare_and_swap_opened_root_with, compare_and_swap_opened_root_with_exact_current,
+        compare_and_swap_root_with, with_existing_semantic_preflight,
+        with_opened_existing_semantic_preflight, with_opened_semantic_preflight,
         SemanticPreflightMode,
     };
 
@@ -252,9 +303,21 @@ mod platform {
         classify_checked(path).unwrap_or(BootstrapClassificationV1::CorruptOrUnsupported)
     }
 
+    pub(super) fn classify_opened(root: &TrustedAuthorityRoot) -> BootstrapClassificationV1 {
+        classify_opened_checked(root).unwrap_or(BootstrapClassificationV1::CorruptOrUnsupported)
+    }
+
     pub(super) fn bootstrap(path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
-        with_semantic_preflight(
-            path,
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open trusted authority root"))?;
+        bootstrap_opened(&root)
+    }
+
+    pub(super) fn bootstrap_opened(
+        root: &TrustedAuthorityRoot,
+    ) -> Result<StateRootV1, BootstrapError> {
+        with_opened_semantic_preflight(
+            root,
             SemanticPreflightMode::AuthorityOperation,
             |layout, bootstrap_home, observed, _lock| {
                 let material = match observed.classification {
@@ -298,19 +361,36 @@ mod platform {
         bytes: &[u8],
         context: Option<&ObjectVerificationContextV1>,
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
-        let material = system_material()?;
-        prepare_typed_object_with(
-            path,
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open trusted authority root"))?;
+        prepare_typed_object_opened(&root, expected_root_revision, reference, bytes, context)
+    }
+
+    pub(super) fn prepare_typed_object_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        reference: &AuthorityObjectRefV1,
+        bytes: &[u8],
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        prepare_typed_object_opened_with(
+            root,
             expected_root_revision,
             reference,
             bytes,
             context,
-            material.key_nonce,
+            system_material()?.key_nonce,
         )
     }
 
     pub(super) fn read_root(path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
         with_existing_semantic_preflight(path, |transaction| Ok(transaction.root.clone()))
+    }
+
+    pub(super) fn read_opened_root(
+        root: &TrustedAuthorityRoot,
+    ) -> Result<StateRootV1, BootstrapError> {
+        with_opened_existing_semantic_preflight(root, |transaction| Ok(transaction.root.clone()))
     }
 
     pub(super) fn compare_and_swap_root(
@@ -319,6 +399,29 @@ mod platform {
         proposed: &StateRootV1,
     ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
         compare_and_swap_root_with(path, expected, proposed, system_material()?.root_nonce)
+    }
+
+    pub(super) fn compare_and_swap_opened_root(
+        root: &TrustedAuthorityRoot,
+        expected: &ExpectedRevisionsV1,
+        proposed: &StateRootV1,
+    ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+        compare_and_swap_opened_root_with(root, expected, proposed, system_material()?.root_nonce)
+    }
+
+    pub(super) fn compare_and_swap_opened_root_exact_current(
+        root: &TrustedAuthorityRoot,
+        exact_current: &StateRootV1,
+        expected: &ExpectedRevisionsV1,
+        proposed: &StateRootV1,
+    ) -> Result<TransactionCommitOutcomeV1, BootstrapError> {
+        compare_and_swap_opened_root_with_exact_current(
+            root,
+            Some(exact_current),
+            expected,
+            proposed,
+            system_material()?.root_nonce,
+        )
     }
 
     pub(super) fn begin_legacy_state_store_transaction(
@@ -428,7 +531,27 @@ mod platform {
         context: Option<&ObjectVerificationContextV1>,
         nonce_bytes: [u8; 16],
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
-        with_existing_semantic_preflight(path, |transaction| {
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open trusted authority root"))?;
+        prepare_typed_object_opened_with(
+            &root,
+            expected_root_revision,
+            reference,
+            bytes,
+            context,
+            nonce_bytes,
+        )
+    }
+
+    fn prepare_typed_object_opened_with(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        reference: &AuthorityObjectRefV1,
+        bytes: &[u8],
+        context: Option<&ObjectVerificationContextV1>,
+        nonce_bytes: [u8; 16],
+    ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        with_opened_existing_semantic_preflight(root, |transaction| {
             transaction.require_expected_root(expected_root_revision)?;
             validate_orphan_candidate(
                 transaction.layout,
@@ -841,8 +964,16 @@ mod platform {
     fn classify_checked(
         path: &std::path::Path,
     ) -> Result<BootstrapClassificationV1, BootstrapError> {
-        with_semantic_preflight(
-            path,
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open trusted authority root"))?;
+        classify_opened_checked(&root)
+    }
+
+    fn classify_opened_checked(
+        root: &TrustedAuthorityRoot,
+    ) -> Result<BootstrapClassificationV1, BootstrapError> {
+        with_opened_semantic_preflight(
+            root,
             SemanticPreflightMode::AuthorityOperation,
             |layout, bootstrap_home, observed, _lock| {
                 if observed.classification == BootstrapClassificationV1::UnsupportedLegacyState {
@@ -986,7 +1117,19 @@ mod platform {
         BootstrapClassificationV1::CorruptOrUnsupported
     }
 
+    pub(super) fn classify_opened(_root: &TrustedAuthorityRoot) -> BootstrapClassificationV1 {
+        BootstrapClassificationV1::CorruptOrUnsupported
+    }
+
     pub(super) fn bootstrap(_path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn bootstrap_opened(
+        _root: &TrustedAuthorityRoot,
+    ) -> Result<StateRootV1, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
         ))
@@ -1023,7 +1166,27 @@ mod platform {
         ))
     }
 
+    pub(super) fn prepare_typed_object_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _reference: &AuthorityObjectRefV1,
+        _bytes: &[u8],
+        _context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
     pub(super) fn read_root(_path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn read_opened_root(
+        _root: &TrustedAuthorityRoot,
+    ) -> Result<StateRootV1, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
         ))
@@ -1031,6 +1194,27 @@ mod platform {
 
     pub(super) fn compare_and_swap_root(
         _path: &std::path::Path,
+        _expected: &super::ExpectedRevisionsV1,
+        _proposed: &StateRootV1,
+    ) -> Result<super::TransactionCommitOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn compare_and_swap_opened_root(
+        _root: &TrustedAuthorityRoot,
+        _expected: &super::ExpectedRevisionsV1,
+        _proposed: &StateRootV1,
+    ) -> Result<super::TransactionCommitOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn compare_and_swap_opened_root_exact_current(
+        _root: &TrustedAuthorityRoot,
+        _exact_current: &StateRootV1,
         _expected: &super::ExpectedRevisionsV1,
         _proposed: &StateRootV1,
     ) -> Result<super::TransactionCommitOutcomeV1, BootstrapError> {
