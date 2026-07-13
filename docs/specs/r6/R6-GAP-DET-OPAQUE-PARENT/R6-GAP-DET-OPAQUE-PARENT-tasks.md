@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-DET-OPAQUE-PARENT
 
-Status: **ACTIVE — PRODUCTION COMMIT LANDED; REVIEW FIX IN WORKTREE**. The packet-docs gate is review-clean at `59092df2a`, and the separate ledger-reconciliation gate is review-clean at `beed76446`. Production commit `bcd94bf4f` landed the scorer-local fix, but fresh review returned two required findings. The bounded review fix and expanded proof are green in the worktree; Task 4 remains pending until that fix is committed and fresh-review-clean. The separate transition remains pending, and no successor is active.
+Status: **ACTIVE — REVIEW-FIX CANDIDATE LANDED; FRESH RE-REVIEW PENDING**. The packet-docs gate is review-clean at `59092df2a`, and the separate ledger-reconciliation gate is review-clean at `beed76446`. Production commit `bcd94bf4f` landed the scorer-local fix, and review-fix candidate `931e50c85` addresses the two required findings from its first fresh review with expanded green proof. A fresh re-review of that production series returned one bookkeeping P2, corrected below; Task 4 remains pending until the production series through `931e50c85` is fresh-review-clean. The separate transition remains pending, and no successor is active.
 
 ## Required Gates
 
@@ -80,16 +80,18 @@ The second command is required if `score_confidence` changes. Impact every addit
   - Require Task 3A committed with actual proof and a fresh `REVIEW CLEAN` verdict.
   - Record all commit hashes, exact command results, findings, dispositions, and review verdict here.
   - Review of `bcd94bf4f`: **CHANGES REQUIRED** with two required findings.
-    1. **P1 — confidence exception was too broad.** Every no-history `ParentVisibleOrchestration` result ignored command observations, including partial/mixed visibility whose typed `SessionProgress` confidence is Medium. The worktree fix now suppresses command-observation escalation only for `ParentVisibleOrchestration + Low`; it does not duplicate raw delegation inference. A regression derived from the existing partial-child-visibility synthesis proves `ParentVisibleOrchestration / Mixed / Medium` progress retains `dead_end_thrash` at `0 / Medium / Cleared`, unflagged, with empty evidence.
-    2. **P2 — landed state was recorded as pending worktree.** The TASKS and control-pack ledger now record `bcd94bf4f` as landed but review-blocked, with this review fix still in the worktree and the named gap still ACTIVE.
-  - Current review-fix proof:
+    1. **P1 — confidence exception was too broad.** Every no-history `ParentVisibleOrchestration` result ignored command observations, including partial/mixed visibility whose typed `SessionProgress` confidence is Medium. Review-fix candidate `931e50c85` suppresses command-observation escalation only for `ParentVisibleOrchestration + Low`; it does not duplicate raw delegation inference. A regression derived from the existing partial-child-visibility synthesis proves `ParentVisibleOrchestration / Mixed / Medium` progress retains `dead_end_thrash` at `0 / Medium / Cleared`, unflagged, with empty evidence.
+    2. **P2 — landed state was recorded as pending worktree.** The TASKS and control-pack ledger recorded `bcd94bf4f` as landed but review-blocked while that bounded review fix was still uncommitted. Review-fix candidate `931e50c85` landed the bounded production/test/docs change while the named gap remained ACTIVE.
+  - Review-fix candidate proof at `931e50c85`:
     - Focused `CTX-R6-04`: `1 passed; 0 failed; 17 filtered out`; remains `0 / Low / Cleared`, unflagged, empty evidence.
     - New partial/mixed parent-visible exact regression: `1 passed; 0 failed; 17 filtered out`; result `0 / Medium / Cleared`, unflagged, empty evidence.
     - Focused `CTX-R6-03`: `1 passed; 0 failed; 17 filtered out`; remains `30 / Medium / Active`, flagged.
     - `cargo test -p agent-drift-analyzer dead_end_thrash -- --nocapture`: all `21` matching tests passed — owning integration target `18 passed; 0 failed`, acceptance target `1 passed; 0 failed`, export target `2 passed; 0 failed`.
     - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`: all `167` matching tests passed — unit target `35 passed; 0 failed`, checkpoints integration target `131 passed; 0 failed`, export target `1 passed; 0 failed`.
     - `cargo fmt --all -- --check` and `cargo check -p agent-drift-analyzer`: passed.
-  - Result: pending; commit the bounded review fix and obtain a fresh `REVIEW CLEAN` verdict before Task 5.
+  - Fresh re-review of the production series through `931e50c85`: **CHANGES REQUIRED** with one finding.
+    1. **P2 — landed review-fix candidate was still described as an uncommitted worktree.** The TASKS and control-pack ledger called the now-landed `931e50c85` review fix pending worktree work. This bounded bookkeeping correction records `931e50c85` as the landed review-fix candidate without changing its proof, the ACTIVE gap posture, or successor authority.
+  - Result: pending; obtain a fresh `REVIEW CLEAN` verdict for the production series through `931e50c85` with the corrected bookkeeping before Task 5.
 
 - [ ] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 0, 1, and 4 review-clean.
@@ -101,7 +103,7 @@ The second command is required if `score_confidence` changes. Impact every addit
   - Do not create, link, cite as existing, or execute the successor packet.
   - Commit/review: authority docs only; staged gate; separate commit; fresh independent review and new transition-only fixes until clean.
   - Stop: review-clean transition committed; no next-phase work.
-  - Result: pending; the gap remains ACTIVE until the production fix is committed and review-clean and a separate authority-only transition is landed and independently reviewed. No successor activation is authorized in this batch.
+  - Result: pending; the gap remains ACTIVE until the production series through review-fix candidate `931e50c85` is fresh-review-clean and a separate authority-only transition is landed and independently reviewed. No successor activation is authorized in this batch.
 
 ## Explicit Exclusions
 
