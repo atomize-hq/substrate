@@ -1,12 +1,12 @@
 # Hybrid Drift R6-R8 Control Pack
 
-**Pack version:** 0.1
+**Pack version:** 0.2
 
 **Pack status:** ACTIVE / BOOTSTRAP
 
 **Current work phase:** `R6-C.0A — Closure-audit authority remediation`
 
-**Last repo-truth verification:** `12934a77d7e670300fa620660a88277f39ba3d90`
+**Last repo-truth verification:** `72f9078cf5ce2f24527f700c3121c1a89147e53c`
 
 ## Purpose
 
@@ -46,6 +46,7 @@ correct the authority/pack drift in a docs-only change, and re-verify before con
 | `03-selective-context-manifests.md` | Phase-specific read sets, source/test surfaces, commands, and context budgets. |
 | `04-reusable-phase-runner.md` | Reusable prompt for a fresh session, parameterized by phase and packet. |
 | `05-proof-decision-regression-ledger.md` | Proof claims, decision gates, gaps, dispositions, and closeout bookkeeping. |
+| `06-operator-prompt-library.md` | Copy-paste prompts for autonomous phase, task, review, recovery, and transition interactions. |
 
 ## Non-Negotiable Sequence
 

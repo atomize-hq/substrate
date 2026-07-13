@@ -7,6 +7,7 @@ packet inside that phase.
 REPO: /Users/spensermcconnell/.codex/worktrees/97a0/substrate
 PHASE_ID: <PACK-0 | R6-C.0A | R6-C.1-SPEC | R6-C.1-CONTROLS | R6-GAP-* | R6-REPLAY | R6-CLOSE | R7-PROMOTE | R7-0..R7-6 | R8-SPEC | R8-IMPLEMENT>
 ACTIVE_PACKET: <none or exact packet id>
+AUTONOMY_MODE: escalation-only
 
 OBJECTIVE
 Execute exactly the selected hybrid-drift phase/packet using the R6-R8 control pack. Ground every
@@ -50,6 +51,8 @@ PLANNING
 Before editing, state assumptions and produce a lightweight plan with one in-progress step. For
 R6-C.1-SPEC and R8-SPEC, write and review the specification/plan/task artifacts before code. For a
 failed control, preserve the witness and create a bounded fix packet before production changes.
+Do not pause for routine approval of a repo-grounded plan when `AUTONOMY_MODE` is
+`escalation-only`.
 
 CODE INTELLIGENCE
 Before editing any function, class, or method:
@@ -99,6 +102,17 @@ phase authority, inspect the committed diff, and return findings-first with exac
 self-approve. If findings exist, fix them in a new commit and repeat with a fresh reviewer until
 clean. Do not use shell or `codex exec` reviewer stand-ins.
 
+OPERATOR ESCALATION
+- Continue autonomously through ordinary implementation, focused test failures, bounded fixes,
+  commits, reviewer findings, and ledger updates that live authority already determines.
+- A failing R6 acceptance control is not by itself a reason to ask the operator: preserve it and
+  prepare the bounded conditional gap packet required by the phase map.
+- Involve the operator only for an unresolved product/authority choice, a HIGH/CRITICAL GitNexus
+  blast radius, destructive or unrelated-work handling, a required external action, or a scope
+  change not already authorized.
+- Use the structured `DECISION REQUIRED` or `ACTION REQUIRED` report in
+  `06-operator-prompt-library.md`; do not ask open-ended progress questions.
+
 STOP CONDITIONS
 - selected phase entry gate is not met;
 - authority documents contradict and live repo truth cannot resolve the intended contract;
@@ -126,4 +140,6 @@ Report:
 - Routine implementation stays in one focused session; phase transitions start fresh sessions.
 - A review session receives only the committed diff, phase authority, applicable manifest, and
   proof output—not the entire authoring conversation.
+- The copy-paste interaction prompts and escalation contract live in
+  `06-operator-prompt-library.md`.
 - If a task ends with “thoughts?” or similar, provide analysis only and make no edits.

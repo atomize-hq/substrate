@@ -14,7 +14,7 @@ At most one implementation phase may be active. Docs-only authority repair may p
 
 | Phase | Status | Deliverable | Entry gate | Exit gate |
 |---|---|---|---|---|
-| `PACK-0` | COMPLETE | This six-file context pack | R6/R7 authority correction `6362edf4e` landed | Pack cross-doc checks passed and root active docs link to it. |
+| `PACK-0` | COMPLETE | This context pack | R6/R7 authority correction `6362edf4e` landed | Pack cross-doc checks passed and root active docs link to it. |
 | `R6-C.0A` | ACTIVE | Pass 1 authority remediation | Fresh review findings recorded in `01` and `05` | Canonical finding/root/R6/R7 gates and proof wording agree. |
 | `R6-C.1-SPEC` | BLOCKED | R6-C.1 SPEC/PLAN/TASKS | `R6-C.0A` complete | Expanded control matrix, expected decisions, files, commands, and stop rules review-clean. |
 | `R6-C.1-CONTROLS` | BLOCKED | Acceptance controls only | R6-C.1 docs landed | Every control has a deterministic result and failing controls are preserved. |
