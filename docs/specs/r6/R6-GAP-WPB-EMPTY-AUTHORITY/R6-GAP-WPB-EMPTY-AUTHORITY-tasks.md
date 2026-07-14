@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-WPB-EMPTY-AUTHORITY
 
-Status: **ACTIVE — PACKET DOCS REVIEW CLEAN; PACKET-GATE AUTHORITY RECONCILIATION CANDIDATE; PRESERVED RED; NO GAP EXECUTION YET**. Witness `59f098b35` remains the only `CTX-R6-15` behavior receipt: historical `60 / Low / Active`, flagged, with command-action evidence, against the separate locked target `0 / Low / Cleared`, unflagged, with empty evidence. Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`; active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. Task 1 landed at `eb24b59da` as the packet-gate authority-reconciliation review candidate and is pending fresh review; it is not review-clean. Keep Task 1 unchecked, and do not check execution or transition tasks until their exact commit, verification, and fresh-review results exist.
+Status: **ACTIVE — PACKET AND PACKET-GATE AUTHORITY REVIEW CLEAN; PRODUCTION-FIX CANDIDATE PROOF GREEN; FRESH REVIEW PENDING**. Witness `59f098b35` remains the historical `CTX-R6-15` red receipt: `60 / Low / Active`, flagged, with command-action evidence, against the separate locked target `0 / Low / Cleared`, unflagged, with empty evidence. Packet-doc series `8734f4dbe` + `334e7c6ac` and packet-gate authority series `eb24b59da` + `e7006f4b2` each received fresh independent built-in `default` `REVIEW CLEAN`. The active packet remains `R6-GAP-WPB-EMPTY-AUTHORITY`; the scorer-local Task 3A implementation and proof are an uncommitted closure candidate pending the staged gate, commit, and fresh review. Keep the gap `ACTIVE` and `R6-REPLAY` `BLOCKED`; do not mark Task 3A or Task 4 complete and do not begin transition work.
 
 ## Required Gates
 
@@ -30,16 +30,16 @@ Record risk, callers, processes, and modules. Impact every other existing symbol
   - Commit/review: first commit contains only these three files; fresh built-in `default` review; docs-only fix commits and fresh reviewers until clean.
   - Result: **COMPLETE**. Packet-doc series `8734f4dbe` + `334e7c6ac` contains only this SPEC, PLAN, and TASKS family and received fresh independent built-in `default` `REVIEW CLEAN`. This result adds no behavior proof and does not execute the gap.
 
-- [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.1 — Reconcile the review-clean packet across current authority.**
+- [x] **R6-GAP-WPB-EMPTY-AUTHORITY.1 — Reconcile the review-clean packet across current authority.**
   - Prerequisite: Task 0 committed and fresh-review-clean.
   - Files: exactly root `SPEC.md`, `tasks/plan.md`, `tasks/todo.md`; `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`; `docs/specs/r6/MAP.md`; `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`; control-pack `00-README.md`, `01-authority-and-status-map.md`, `02-phase-and-gate-map.md`, `05-proof-decision-regression-ledger.md`, and `06-operator-prompt-library.md`; this packet's SPEC, PLAN, and TASKS status/task mirrors; the completed `R6-GAP-TGG-TRUTH-PATH-ACTION` SPEC, PLAN, and TASKS current-status/next-action mirrors; and `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md`, `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-plan.md`, and `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-tasks.md`.
   - Update: replace this named-gap row's three `TO CREATE` markers with actual SPEC/PLAN/TASKS paths; record the actual review-clean packet-doc series; remove only current-status/next-action claims that the files are absent or packet creation is next; keep this gap `ACTIVE`; set `ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY`; keep `R6-REPLAY` `BLOCKED`; and make exact `CTX-R6-15` witness reconfirmation the sole next action.
   - Honesty: preserve witness `59f098b35` as historical `60 / Low / Active`, flagged, with command-action evidence; preserve target `0 / Low / Cleared`, unflagged, with empty evidence; add no new proof result, terminal scorer disposition, or gap-complete claim.
   - Commit/review: separate authority-only commit, staged gate, fresh built-in `default` review, authority-only fixes and fresh reviewers until clean.
   - Blocking rule: no Task 2 witness, Task 3 impact/edit, or no-code receipt begins first.
-  - Result: **LANDED REVIEW CANDIDATE PENDING FRESH REVIEW**. Commit `eb24b59da` is the landed packet-gate authority-reconciliation review candidate; it is not review-clean. Keep Task 1 unchecked. Exact `CTX-R6-15` witness reconfirmation remains blocked until the corrected series is fresh-review-clean.
+  - Result: **COMPLETE**. Packet-gate authority series `eb24b59da` + `e7006f4b2` received fresh independent built-in `default` `REVIEW CLEAN`. That review-clean boundary authorized Task 2 without adding behavior proof, closing the gap, or unblocking replay.
 
-- [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.2 — Reconfirm the preserved witness and select one route.**
+- [x] **R6-GAP-WPB-EMPTY-AUTHORITY.2 — Reconfirm the preserved witness and select one route.**
   - Prerequisite: Tasks 0 and 1 each committed and fresh-review-clean.
   - Witness: `CTX-R6-15` at commit `59f098b35`.
   - Run:
@@ -51,7 +51,7 @@ Record risk, callers, processes, and modules. Impact every other existing symbol
 
   - Red: select Task 3A.
   - Green: select Task 3B only when an already-landed, review-clean earlier sequential named-gap commit is demonstrably causal. Otherwise preserve output and escalate for authority reconciliation.
-  - Result: pending; do not rerun during the packet-docs gate.
+  - Result: **COMPLETE — TASK 3A SELECTED**. Before the edit, the exact witness exited `101` with `0 passed; 1 failed` and reproduced actual `60 / Low / Active`, flagged, versus required `0 / Low / Cleared`, unflagged; the owning family also exited `101` with `5 passed; 1 failed`, and only `CTX-R6-15` failed. The preserved red therefore selected the bounded production-fix route; Task 3B is ineligible.
 
 - [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.3A — Land the smallest scorer-local production fix.**
   - Eligibility: Task 2 remains red; pre-edit impact is below HIGH; no wider symbol/file is required.
@@ -76,7 +76,7 @@ Record risk, callers, processes, and modules. Impact every other existing symbol
 
   - Record: impact details; exact per-control tuples; family/checkpoint/full-suite counts; static command exits; staged detect scope/risk; changed files; commit hash; and any failure disposition.
   - Commit/review: atomic staged gate, commit, fresh built-in `default` reviewer; new bounded fix commit and fresh reviewer until clean.
-  - Result: pending.
+  - Result: **CURRENT STAGED IMPLEMENTATION/PROOF CANDIDATE — FRESH REVIEW PENDING**. Exact pre-edit GitNexus impact for `score_wrong_plan_branch` was `LOW`: `0` direct callers, `0` affected processes, and `0` affected modules. The candidate changes only `crates/agent-drift-analyzer/src/scoring/wrong_plan_branch.rs`: command observations are skipped when the deduplicated effective-authority set is empty. No test file changed because the preserved exact witness already guards the behavior. Post-edit proof is green: exact `CTX-R6-15` and each of the four protected controls passed `1 / 1` with exit `0`; the target now asserts `0 / Low / Cleared`, unflagged, with empty evidence; read-only, sanctioned-replan, and opaque-parent controls each retain `0 / Medium / Cleared`, unflagged, with empty evidence; the later-return control retains first-interval `60 / Active`, flagged, then later `0 / Cleared`, unflagged. The full `wrong_plan_branch` family passed `6 / 6`; checkpoint proof passed `35` unit + `131` integration plus the matching export/truth tests; the full analyzer passed `156` unit, `6` acceptance, `133` checkpoint, `2` context, `18` dead-end, `5` end-to-end, `21` export, `12` input, `6` objective, `3` progress, `2` semantic, `1` task-frame, `22` truth-grounding, and `6` wrong-branch tests. Format, check, literal all-target clippy with `-D warnings`, and diff check each exited `0`. Staged GitNexus detect reported `LOW` risk across exactly `3` files and `8` changed symbols with `0` affected processes; cached diff check passed. Commit and fresh review remain pending; keep this task unchecked.
 
 - [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.3B — Record an eligible already-green no-code proof receipt.**
   - Eligibility: Task 2 is green because an identified, already-landed, review-clean earlier sequential named-gap fix changed the live result. A green result alone is insufficient.
@@ -84,13 +84,13 @@ Record risk, callers, processes, and modules. Impact every other existing symbol
   - Verify: run the complete Task 3A proof wall unchanged and record the causal commit plus exact output.
   - Commit/review: atomic docs-only proof receipt, staged gate, fresh built-in `default` review; bounded docs-only fixes and fresh reviewers until clean. The gap remains active; transition stays separate.
   - Ineligible handling: if no causal commit can be proven, preserve output and escalate rather than check this task.
-  - Result: pending route selection.
+  - Result: **NOT SELECTED**. The exact witness was red before the candidate edit, so only Task 3A is eligible.
 
 - [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.4 — Obtain a review-clean closure candidate.**
   - Require exactly one of Tasks 3A/3B committed with actual proof and a fresh `REVIEW CLEAN` verdict.
   - Record all closure-series hashes, proof results, reviewer findings, fix dispositions, and final verdict here and in only the corresponding ledger evidence.
   - Do not mark the gap complete or activate replay in a closure candidate/receipt commit.
-  - Result: pending.
+  - Result: **PENDING FRESH REVIEW**. Task 3A is an uncommitted candidate; no closure commit or review verdict exists yet.
 
 - [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.5 — Land and independently review the narrow transition to `R6-REPLAY`.**
   - Prerequisite: Tasks 0, 1, and 4 review-clean.
@@ -105,21 +105,21 @@ Record risk, callers, processes, and modules. Impact every other existing symbol
 
 Fill only from live output:
 
-- route and causal commit, if no-code:
-- pre-edit impact risk/callers/processes/modules:
-- focused `CTX-R6-15` result:
-- read-only regression result:
-- sanctioned-replan regression result:
-- opaque-parent regression result:
-- later-return regression result:
-- full `wrong_plan_branch` family result:
-- checkpoint result:
-- full analyzer result:
-- fmt/check/literal-clippy/diff results:
-- staged `detect-changes` scope/risk:
-- closure commit(s):
-- review findings/fixes/final verdict:
-- ledger/status updates:
+- route and causal commit, if no-code: production-fix Task 3A selected from the reproduced red; no-code route not eligible.
+- pre-edit impact risk/callers/processes/modules: `LOW`; `0` direct callers; `0` affected processes; `0` affected modules.
+- focused `CTX-R6-15` result: `1 / 1`, exit `0`; `0 / Low / Cleared`, unflagged, empty evidence.
+- read-only regression result: `1 / 1`, exit `0`; `0 / Medium / Cleared`, unflagged, empty evidence.
+- sanctioned-replan regression result: `1 / 1`, exit `0`; `0 / Medium / Cleared`, unflagged, empty evidence.
+- opaque-parent regression result: `1 / 1`, exit `0`; `0 / Medium / Cleared`, unflagged, empty evidence.
+- later-return regression result: `1 / 1`, exit `0`; first interval `60 / Active`, flagged, then later `0 / Cleared`, unflagged.
+- full `wrong_plan_branch` family result: `6 / 6`, exit `0`.
+- checkpoint result: `35` unit + `131` integration plus matching export/truth tests, exit `0`.
+- full analyzer result: `156` unit + `6` acceptance + `133` checkpoint + `2` context + `18` dead-end + `5` end-to-end + `21` export + `12` input + `6` objective + `3` progress + `2` semantic + `1` task-frame + `22` truth-grounding + `6` wrong-branch tests, all passed; exit `0`.
+- fmt/check/literal-clippy/diff results: each exit `0`.
+- staged `detect-changes` scope/risk: `LOW`; exactly `3` files and `8` changed symbols; `0` affected processes; cached diff check passed.
+- closure commit(s): pending.
+- review findings/fixes/final verdict: pending fresh built-in `default` review after commit.
+- ledger/status updates: current TASKS plus only `CTX-R6-15`, the named-gap row, and the update record in the canonical ledger; gap remains `ACTIVE`, active packet remains `R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` remains `BLOCKED`.
 
 ## Explicit Exclusions
 

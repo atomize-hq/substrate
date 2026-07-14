@@ -16,7 +16,10 @@ pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDr
     expected.dedup();
     let mut out_of_scope = Vec::new();
     for command in &analysis.interval.command_observations {
-        if command.paths.is_empty() || (!command.write_like && !command.verification_like) {
+        if expected.is_empty()
+            || command.paths.is_empty()
+            || (!command.write_like && !command.verification_like)
+        {
             continue;
         }
         let matches_scope = command.paths.iter().all(|path| {
