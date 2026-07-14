@@ -1,0 +1,79 @@
+# Plan: R6-GAP-WPB-EMPTY-AUTHORITY
+
+Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. The packet-authoring batch is exactly this SPEC/PLAN/TASKS family. No witness, production, no-code receipt, or replay work is authorized before the packet-docs and separate ledger gates are committed and fresh-review-clean.
+
+## Locked Decisions
+
+1. Preserve witness `59f098b35` and `CTX-R6-15` at `0 / Low / Cleared`, unflagged, with empty evidence.
+2. Treat `truth_artifacts` plus only non-`observed_command` working-set paths as authority. Observed command paths describe action; they cannot authorize themselves.
+3. Keep the repair inside `score_wrong_plan_branch` and `wrong_plan_branch.rs`. The matching test file is optional only for a necessary distinct regression.
+4. Make the minimum empty-effective-authority change; preserve all non-empty-authority scoring and evidence semantics.
+5. Prove the exact witness and protected controls before the family, checkpoint, full-analyzer, and static walls.
+6. Keep proof receipt and phase transition separate. The transition activates `R6-REPLAY` but does not execute it or assign a terminal scorer disposition.
+
+## Ordered Execution
+
+### 0. Commit And Review The Packet Docs
+
+Create and stage only the three canonical packet docs. Check path/test/command consistency, run the staged commit gate, commit atomically, and dispatch a fresh built-in `default` reviewer. Apply docs-only findings in new commits and repeat with a fresh reviewer until clean.
+
+### 1. Reconcile The Review-Clean Packet Into The Ledger
+
+After Step 0 is review-clean, touch exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`. Replace the active named-gap row's three `TO CREATE` markers with actual packet paths, record the review-clean packet-docs commit, and change only current-status/next-action wording needed to make witness reconfirmation next. Preserve `CTX-R6-15` as red. Commit this ledger-only batch and fresh-review/fix until clean.
+
+No witness rerun, impact command, production edit, or no-code receipt begins before Steps 0 and 1 are each committed and review-clean.
+
+### 2. Reconfirm The Witness And Select One Route
+
+Run the exact `CTX-R6-15` control, then the full `wrong_plan_branch` family, and preserve all output.
+
+- Red: proceed to Step 3A.
+- Green with an identified earlier sequential named-gap commit that causally made it pass: proceed to Step 3B.
+- Green without that causal receipt basis: preserve the witness output and escalate for authority reconciliation.
+
+### 3A. Production-Fix Route
+
+1. Run and record:
+
+   ```bash
+   npx gitnexus impact score_wrong_plan_branch -r 97a0-substrate --direction upstream --depth 3
+   ```
+
+   Impact every additional existing symbol before editing it. Stop on HIGH/CRITICAL or a required edit beyond the bounded scorer/test files.
+2. Change only `crates/agent-drift-analyzer/src/scoring/wrong_plan_branch.rs`, plus `crates/agent-drift-analyzer/tests/wrong_plan_branch.rs` only if a distinct narrow regression is required. Empty effective authority must yield no claim; do not alter the authority model or adjacent branches.
+3. Run the exact witness and four protected regressions, then the owning family, checkpoints, full analyzer, format, check, literal all-target clippy, and diff check in the SPEC order.
+4. Record actual impact, proof, disposition, and failure details in TASKS and only the corresponding ledger evidence.
+
+### 3B. Already-Green No-Code Receipt
+
+Change no source or test. Cite the already-landed, review-clean earlier named-gap commit that causally made `CTX-R6-15` pass. Run the same complete verification wall as Step 3A and record actual results in this TASKS and the corresponding ledger cells. A merely green current result without causal proof is not eligible.
+
+### 4. Commit And Fresh-Review The Closure Candidate
+
+For production: stage only the scorer file, any justified focused test change, this TASKS, and the corresponding ledger evidence. For no-code: stage only this TASKS and that ledger. Run:
+
+```bash
+git add -- <intended-files-only>
+npx gitnexus detect-changes --scope staged -r 97a0-substrate
+git diff --cached --check
+git diff --cached
+```
+
+Commit atomically. Dispatch a fresh built-in `default` reviewer. Land each actionable finding in a new batch limited to the files allowed for the reviewed route, rerun affected focused proof before the full wall, and repeat with a fresh reviewer until `REVIEW CLEAN`.
+
+### 5. Transition To Replay Authority And Stop
+
+After Step 4 is committed and review-clean, use the complete Required Phase-Transition Authority Manifest from the landed R6-C.1 TASKS. In one authority-only transition:
+
+- mark `R6-GAP-WPB-EMPTY-AUTHORITY` complete in its packet/status mirrors and named-gap subledger;
+- make the generic `R6-GAP-*` row complete;
+- activate only `R6-REPLAY` and record its Prompt 1 invocation as the next eligible interaction;
+- reconcile root, R6-C.1, control-pack, ledger, operator-prompt, and conditional status/proof mirrors with actual hashes and proof;
+- assign no terminal `wrong_plan_branch` disposition and make no R6-close claim;
+- run no replay command and start no replay packet or fixture work.
+
+Run the staged gate, commit, and dispatch a fresh independent reviewer. Apply transition-only findings in new transition-only commits and repeat until clean. Stop at that review-clean transition.
+
+## Escalation Boundary
+
+Escalate only for HIGH/CRITICAL impact, an unavoidable edit outside the scorer-local boundary, an already-green witness without an eligible causal earlier-gap commit, unavailable preserved evidence, unisolatable unrelated work, or review proving the locked authority semantics incomplete. Routine red proof, LOW/MEDIUM impact, tests, commits, and review fixes remain autonomous.
