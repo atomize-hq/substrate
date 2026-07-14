@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` docs-gate review-fix series pending fresh independent review, not review-clean)**
 
 ## Dependency Order
 
@@ -26,10 +26,12 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transitio
 7. **COMPLETE through fresh review-clean `6b42e5476` + `e65df2561` + `cd4e24119`:** the final named
    gap, `R6-GAP-WPB-EMPTY-AUTHORITY`, landed its bounded scorer fix, focused/family/checkpoint/full
    proof, receipt corrections, and fresh independent `REVIEW CLEAN`.
-8. **ACTIVE / TRANSITION REVIEW CLEAN:** authority transition series `56bb9966f` + `07a3b1fe5`
-   received fresh independent built-in `default` `REVIEW CLEAN`, marks aggregate `R6-GAP-*`
-   complete, and activates only `R6-REPLAY` with active packet `none`. Prompt 1 for that replay phase
-   is the sole next eligible invocation; no replay work was executed by the transition.
+8. **ACTIVE / PACKET DOCS-GATE REVIEW-FIX PENDING FRESH REVIEW:** authority transition series
+   `56bb9966f` + `07a3b1fe5` remains fresh independent built-in `default` `REVIEW CLEAN`. Replay then
+   completed `CTX-R6-01` and preserved trusted `CTX-R6-02` behavioral RED at `60cde3dd7`. Active packet
+   `R6-GAP-DET-REPLAY-STALL` has landed packet docs/annotation `200725001` and first authority
+   correction `08fa86e94`; this final correction completes the review-fix candidate, but Task `.0`
+   awaits a fresh clean verdict. Current action is fresh series review/fix, not Prompt 2 or Rust.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
@@ -58,6 +60,7 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transitio
 All three named gaps are complete. Final implementation/review-fix series `6b42e5476` +
 `e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`. Authority
 transition series `56bb9966f` + `07a3b1fe5` also received fresh independent built-in `default`
-`REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`. Prompt 1 for that replay
-phase is the sole next eligible invocation; no replay command, terminal scorer disposition, R6 close,
-or R7/R8 work was executed by the transition.
+`REVIEW CLEAN` and activated only `R6-REPLAY`. Current active packet is
+`R6-GAP-DET-REPLAY-STALL`; packet docs/annotation `200725001` and first authority correction
+`08fa86e94` are landed, while this final correction and the full Task `.0` series await fresh review.
+No Rust edit, terminal scorer disposition, R6 close, or R7/R8 work is authorized yet.

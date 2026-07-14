@@ -1,8 +1,11 @@
 # Tasks: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / DOCS GATE CANDIDATE** within `R6-REPLAY`. Trusted witness `60cde3dd7`
-preserves `CTX-R6-02` red. No task below is complete, no packet review-clean claim is made, and no
-Rust edit is authorized before Tasks 0 and 1 close.
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-FIX SERIES PENDING FRESH REVIEW** within
+`R6-REPLAY`. Trusted witness `60cde3dd7` preserves `CTX-R6-02` red. Packet docs/annotation
+`200725001` and first authority correction `08fa86e94` are landed; this final status correction
+completes the current review-fix candidate, but no task below is complete and no packet review-clean
+claim is made until a fresh independent reviewer returns clean. No Rust edit is authorized before
+Tasks 0 and 1 close.
 
 ## Required Commit Gate
 
@@ -24,6 +27,10 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - Verify: JSON parse; local Markdown links/status wording; required staged gate; `git diff --check`.
   - Review: fresh built-in `default`; bounded docs/annotation fix commits; fresh reviewer until clean.
   - Boundary: do not run the witness or edit Rust until this task is committed and review-clean.
+  - Current receipt: packet docs/annotation `200725001` landed with fresh review findings; first
+    authority correction `08fa86e94` landed; this final status correction completes the review-fix
+    candidate. The full series now requires a fresh independent verdict and remains incomplete/not
+    review-clean. Current action is series review/fix, not Prompt 2 or Rust.
 
 - [ ] **R6-GAP-DET-REPLAY-STALL.1 — Refresh impact and obtain the required operator decision.**
   - Prerequisite: Task 0 review-clean.

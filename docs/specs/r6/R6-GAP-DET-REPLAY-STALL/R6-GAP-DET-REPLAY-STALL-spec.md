@@ -1,8 +1,10 @@
 # R6-GAP-DET-REPLAY-STALL — Concurrent Replay Output Attribution
 
-Status: **ACTIVE PACKET / DOCS GATE CANDIDATE** within `R6-REPLAY`. Witness commit `60cde3dd7`
-preserves the trusted `CTX-R6-02` behavioral red. These packet docs require atomic commit and fresh
-built-in `default` review before witness reconfirmation or any Rust edit.
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-FIX SERIES PENDING FRESH REVIEW** within
+`R6-REPLAY`. Witness commit `60cde3dd7` preserves the trusted `CTX-R6-02` behavioral red. Packet
+docs/annotation `200725001` and first authority correction `08fa86e94` are landed; this final status
+correction completes the current review-fix candidate, but Task `.0` and the full series remain
+incomplete/not review-clean until a fresh independent verdict. Do not reconfirm the witness or edit Rust.
 
 ## Objective And Preserved Witness
 

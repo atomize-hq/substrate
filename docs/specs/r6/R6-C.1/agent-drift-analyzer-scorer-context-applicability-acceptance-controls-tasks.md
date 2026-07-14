@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / DOCS-GATE CANDIDATE** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-FIX SERIES PENDING FRESH REVIEW** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -16,8 +16,10 @@ CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` also received fres
 built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`.
 `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is also fresh independent built-in
 `default` `REVIEW CLEAN`. Trusted `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED and routes
-to active packet `R6-GAP-DET-REPLAY-STALL`, whose docs gate is only an uncommitted candidate. Prompt
-2 Task `.0` is next; after that gate is fresh-review-clean, DECISION REQUIRED
+to active packet `R6-GAP-DET-REPLAY-STALL`. Packet docs/annotation `200725001` and first authority
+correction `08fa86e94` are landed; this final status correction completes the review-fix candidate,
+but Task `.0` and the full series await fresh independent review and are not review-clean. Current
+action is fresh series review/fix, not Prompt 2 or Rust. After a clean verdict, DECISION REQUIRED
 `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` must precede Rust. `CTX-R6-06`, the family wall,
 `R6-CLOSE`, and R7/R8 remain pending or blocked as owned.
 
@@ -526,8 +528,10 @@ before that reconciled transition is committed and fresh-review-clean.
     verifier-bearing, `225` with at least two failures regardless of command, `161` subagent,
     `189` non-identical failed-command candidates, `0` malformed, `224` analyzed; this was the sole
     exact match.
-  - Route: active packet `R6-GAP-DET-REPLAY-STALL` at docs-gate candidate. Prompt 2 Task `.0` first;
-    after review-clean docs, DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before Rust.
+  - Route: active packet `R6-GAP-DET-REPLAY-STALL`. Packet docs/annotation `200725001` and first
+    authority correction `08fa86e94` are landed; this final status correction and the full Task `.0`
+    series await fresh independent review. Current action is fresh series review/fix, not Prompt 2 or
+    Rust. After a clean verdict, DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` gates Rust.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
   - Boundary: no `CTX-R6-06`, family wall, terminal disposition, `R6-CLOSE`, or R7/R8 work yet.
 

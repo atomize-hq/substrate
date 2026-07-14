@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; packet docs-gate commit `200725001` landed with fresh `REVIEW FINDINGS` and is not review-clean)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; packet docs/annotation `200725001` and first authority correction `08fa86e94` landed; current final status correction and full Task `.0` series pending fresh review, not review-clean)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -41,9 +41,10 @@ Hard decisions:
   focused behavioral order assertion.
 - Trusted depth-1 built-in `default` subagent rollout
   `019eb311-c7ce-7f50-ae13-b51a5b5461c3` satisfies the selected-checkpoint `CTX-R6-02` input
-  contract. Witness `60cde3dd7` preserves the behavioral red; packet docs-gate commit `200725001`
-  is landed under fresh review findings. Complete its bounded review-fix loop, then issue DECISION
-  REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit.
+  contract. Witness `60cde3dd7` preserves the behavioral red; packet docs/annotation `200725001`
+  and first authority correction `08fa86e94` are landed. This final correction completes the current
+  review-fix candidate, but Task `.0` awaits a fresh clean verdict. Continue fresh series review/fix,
+  then issue DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit.
 - R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
   single-session scorer semantics.
 
@@ -56,9 +57,10 @@ All three named gaps are now complete with review-clean focused proof. The final
 in this review series is landed, marks the prior aggregate `R6-GAP-*` set complete, and activates
 `R6-REPLAY`. Transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
 `default` `REVIEW CLEAN`. Replay has since completed `CTX-R6-01` and preserved trusted `CTX-R6-02`
-behavioral RED at `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` is the active packet. Its docs-gate commit
-`200725001` is landed under fresh `REVIEW FINDINGS`, and the current next interaction is completion
-of the bounded review-fix/docs-gate loop. After that series is fresh-review-clean, DECISION REQUIRED
+behavioral RED at `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` is the active packet. Packet docs/annotation
+`200725001` and first authority correction `08fa86e94` are landed; this final status correction
+completes the review-fix candidate, but Task `.0` and the full series remain not review-clean. The
+current action is fresh series review/fix, not Prompt 2 or Rust. After that series is fresh-review-clean, DECISION REQUIRED
 `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` must precede Rust. `CTX-R6-06`, R6 closure, terminal
 dispositions, successor execution, and all R7/R8 work remain blocked.
 

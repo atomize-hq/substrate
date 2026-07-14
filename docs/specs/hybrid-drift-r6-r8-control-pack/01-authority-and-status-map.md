@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f`, fresh independent built-in `default` `REVIEW CLEAN`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` docs-gate candidate is not review-clean
+**Verified against:** `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f`, fresh independent built-in `default` `REVIEW CLEAN`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; packet docs/annotation `200725001` and first authority correction `08fa86e94` landed; current final status correction and full docs-gate series pending fresh review
 
-**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `R6-GAP-DET-REPLAY-STALL` at docs-gate candidate; `CTX-R6-01` fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-02` behavioral RED at `60cde3dd7`)
+**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.0` docs-gate review-fix series pending fresh review; `CTX-R6-01` fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-02` behavioral RED at `60cde3dd7`)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / R6-GAP-DET-REPLAY-STALL DOCS GATE CANDIDATE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Use Prompt 2 for exact packet Task `.0`; after its fresh-review-clean docs gate, issue DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before Rust. Do not start `CTX-R6-06`, R6 close, or R7/R8 work first. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / R6-GAP-DET-REPLAY-STALL DOCS-GATE REVIEW-FIX SERIES PENDING FRESH REVIEW** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Fresh-review the full `200725001` + `08fa86e94` + current-correction series and continue bounded fixes if needed. Task `.0` remains incomplete/not review-clean; do not use Prompt 2 or edit Rust. After a fresh clean verdict, issue DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`. Do not start `CTX-R6-06`, R6 close, or R7/R8 work first. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 

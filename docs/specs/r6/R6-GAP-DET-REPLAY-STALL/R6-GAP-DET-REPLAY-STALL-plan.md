@@ -1,8 +1,11 @@
 # Plan: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / DOCS GATE CANDIDATE** within `R6-REPLAY`. Witness `60cde3dd7` is preserved
-red; no production edit is authorized before the docs gate is fresh-review-clean and the explicit
-HIGH-impact operator decision is recorded.
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-FIX SERIES PENDING FRESH REVIEW** within
+`R6-REPLAY`. Witness `60cde3dd7` is preserved red. Packet docs/annotation `200725001` and first
+authority correction `08fa86e94` are landed; this final status correction completes the review-fix
+candidate, but Task `.0` remains incomplete/not review-clean pending a fresh series verdict. No
+production edit is authorized before that gate is fresh-review-clean and the explicit HIGH-impact
+operator decision is recorded.
 
 ## Decisions
 
@@ -17,9 +20,11 @@ HIGH-impact operator decision is recorded.
 
 ### 0. Lock And Review The Packet
 
-Commit the three packet docs atomically with the authorized fixture-annotation correction, run the
-staged gate, and dispatch a fresh built-in `default` reviewer. Use docs/annotation-only fix commits
-and fresh reviewers until clean. Do not rerun the witness or edit Rust first.
+Packet docs/annotation commit `200725001` landed and its first fresh review returned findings. First
+authority correction `08fa86e94` landed; this final status correction completes the current review-fix
+candidate. Dispatch a fresh built-in `default` reviewer over the full series and use additional
+docs-only fix commits/fresh reviewers if needed. Do not mark Task `.0` complete, rerun the witness,
+or edit Rust until the series is fresh-review-clean.
 
 ### 1. Refresh Impact And Obtain Operator Acceptance
 

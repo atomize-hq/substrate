@@ -308,26 +308,16 @@ result, current phase status, and the next eligible interaction.
 `default` subagent rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; witness commit `60cde3dd7`
 preserves `CTX-R6-02` behavioral RED at checkpoint `5` (`TroubleshootingFrontier / Stalled`,
 flagged `Active / 30 / High`) because failed calls `420`/`474` are misattributed to successful
-siblings `421`/`475`. `R6-REPLAY` remains the sole active phase. Active packet
-`R6-GAP-DET-REPLAY-STALL` is only an uncommitted docs-gate candidate, not review-clean.
+siblings `421`/`475`. `R6-REPLAY` remains the sole active phase and
+`R6-GAP-DET-REPLAY-STALL` remains its active packet. Packet docs/annotation `200725001` landed and
+received fresh review findings; first authority correction `08fa86e94` also landed. This final status
+correction completes the current review-fix candidate, but Task `.0` and the full series remain
+incomplete/not review-clean until a fresh independent reviewer returns a clean verdict.
 
-The next eligible interaction uses Prompt 2 for the docs gate only:
-
-```text
-/goal Execute exactly one bounded hybrid-drift task/packet through commit and independent
-review-clean status, involving me only for a structured decision or external action.
-
-REPO: /Users/spensermcconnell/.codex/worktrees/97a0/substrate
-PHASE_ID: R6-REPLAY
-ACTIVE_PACKET: R6-GAP-DET-REPLAY-STALL
-TASK_ID: R6-GAP-DET-REPLAY-STALL.0
-ACCEPTANCE: The packet SPEC/PLAN/TASKS plus authorized expected.json annotation correction are
-atomically committed and fresh built-in default review-clean without any Rust edit.
-AUTONOMY_MODE: escalation-only
-STOP_AT: R6-GAP-DET-REPLAY-STALL.0 review-clean; keep R6-REPLAY active
-```
-
-After Task `.0` is fresh-review-clean, refresh the locked impacts and issue DECISION REQUIRED
-`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit. Do not claim the docs gate is already
-review-clean. Do not start `CTX-R6-06`, `R6-CLOSE`, R7, or R8. This example is not a permanent status
-override.
+The current eligible interaction is the already-running fresh series review/fix loop, not Prompt 2
+and not Rust. Review range: packet docs/annotation `200725001`, first authority correction
+`08fa86e94`, and the commit containing this final status correction. Keep `PHASE_ID: R6-REPLAY` and
+`ACTIVE_PACKET: R6-GAP-DET-REPLAY-STALL`; use Prompt 4 only if a separate recovery invocation is
+needed. After Task `.0` is fresh-review-clean, refresh the locked impacts and issue DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit. Do not start `CTX-R6-06`, `R6-CLOSE`,
+R7, or R8. This current-status block is not a permanent authority override.

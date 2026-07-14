@@ -105,8 +105,11 @@ independent built-in `default` `REVIEW CLEAN`, making only `R6-GAP-WPB-EMPTY-AUT
 that boundary. Its implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` now
 also received fresh independent built-in `default` `REVIEW CLEAN`, completing the final named gap.
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
-`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active
-packet `none`; Prompt 1 for that replay phase is the sole next eligible invocation.
+`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Replay has since
+completed `CTX-R6-01` and preserved trusted `CTX-R6-02` behavioral RED at `60cde3dd7`; active packet
+`R6-GAP-DET-REPLAY-STALL` has landed packet docs/annotation `200725001` and first authority correction
+`08fa86e94`. This final status correction completes the Task `.0` review-fix candidate, but the full
+series awaits fresh independent review and is not review-clean.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -119,7 +122,7 @@ control.” The current honest sequence is:
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
 5. keep the landed final gap-to-replay authority transition series `56bb9966f + 07a3b1fe5` at fresh independent `REVIEW CLEAN`
-6. use Prompt 1 for the next eligible later-phase invocation with `PHASE_ID: R6-REPLAY` and `ACTIVE_PACKET: none`; all named gaps are complete
+6. fresh-review/fix the full `R6-GAP-DET-REPLAY-STALL` Task `.0` docs-gate series; do not use Prompt 2 or edit Rust before it is review-clean
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
@@ -764,8 +767,10 @@ proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and comple
 `6b42e5476` + `e65df2561` + `cd4e24119` fresh independent `REVIEW CLEAN`). The frozen dead-end
 corpus still proves invariance rather than comparative integrated improvement. R6 remains partial.
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
-`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active
-packet `none`; Prompt 1 for that replay phase is the sole next eligible invocation.
+`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Current replay
+state has `CTX-R6-01` complete and trusted `CTX-R6-02` behavioral RED at `60cde3dd7`, routed to active
+packet `R6-GAP-DET-REPLAY-STALL`. Packet docs/annotation `200725001` and first authority correction
+`08fa86e94` are landed; this final correction and the full Task `.0` series await fresh review.
 
 ## Packet R7: Full Delegated-Session Support
 

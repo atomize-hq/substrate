@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / DOCS-GATE CANDIDATE** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED. The packet docs gate is not review-clean; `CTX-R6-06` follows packet completion.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-FIX SERIES PENDING FRESH REVIEW** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED. Packet docs/annotation `200725001` and first authority correction `08fa86e94` are landed; this final correction and the full series await fresh independent review. Task `.0` is not review-clean; `CTX-R6-06` follows packet completion.
 This plan is ordered and test-first.
 
 ## Plan Decisions
