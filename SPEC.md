@@ -41,10 +41,10 @@ Hard decisions:
   focused behavioral order assertion.
 - Trusted depth-1 built-in `default` subagent rollout
   `019eb311-c7ce-7f50-ae13-b51a5b5461c3` satisfies the selected-checkpoint `CTX-R6-02` input
-  contract. Witness `60cde3dd7` preserves the behavioral red; packet docs/annotation `200725001`
-  and first authority correction `08fa86e94` are landed. This final correction completes the current
-  review-fix candidate, but Task `.0` awaits a fresh clean verdict. Continue fresh series review/fix,
-  then issue DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit.
+  contract. Witness `60cde3dd7` preserves the behavioral red; Task `.0` series `200725001` +
+  `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW
+  CLEAN`. The current gate is DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before
+  any Rust edit.
 - R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
   single-session scorer semantics.
 

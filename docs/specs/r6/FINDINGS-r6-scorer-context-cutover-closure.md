@@ -25,11 +25,11 @@ series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-
 built-in `default` `REVIEW CLEAN` and made `R6-REPLAY` the sole active phase. `CTX-R6-01` is
 complete through fresh independent review-clean series `a0089c8de` + `968a4377f`. Trusted witness
 `60cde3dd7` preserves `CTX-R6-02` behavioral RED and routes it to active packet
-`R6-GAP-DET-REPLAY-STALL`. Packet docs/annotation `200725001` and first authority correction
-`08fa86e94` are landed; this final status correction completes the review-fix candidate, but Task `.0`
-and the full series await fresh independent review and are not review-clean. `CTX-R6-06` and the replay
-family wall remain pending; no terminal disposition is assigned. R7 remains design-ready draft work, but
-it is **not implementation-ready**.
+`R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` +
+`9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The current gate is
+DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit. `CTX-R6-06` and
+the replay family wall remain pending; no terminal disposition is assigned. R7 remains design-ready
+draft work, but it is **not implementation-ready**.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
 context, archetype, and progress. A scorer is complete when its chosen inputs match the behavior it
@@ -123,7 +123,9 @@ Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` also re
 independent built-in `default` `REVIEW CLEAN`, completing the named gap. Authority transition series
 `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default` `REVIEW CLEAN` and activates
 only `R6-REPLAY`; current active packet `R6-GAP-DET-REPLAY-STALL` owns trusted `CTX-R6-02` witness
-`60cde3dd7`, and its Task `.0` review-fix series awaits a fresh independent verdict.
+`60cde3dd7`. Its Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received
+fresh independent built-in `default` `REVIEW CLEAN`; current work is the pre-Rust DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` gate.
 
 ## Broad R6 Acceptance-Claim Audit
 
