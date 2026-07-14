@@ -239,6 +239,284 @@ fn conflicting_start_retry_is_non_mutating() {
 }
 
 #[test]
+fn start_world_binding_matrix_accepts_host_without_binding() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+
+    assert!(matches!(
+        authority
+            .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300,)
+            .unwrap(),
+        TransitionIssueOutcomeV1::Issued(_)
+    ));
+}
+
+#[test]
+fn start_world_binding_matrix_accepts_host_with_exact_binding() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-host-1".into(),
+        world_generation: 11,
+    });
+
+    assert!(matches!(
+        authority
+            .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300,)
+            .unwrap(),
+        TransitionIssueOutcomeV1::Issued(_)
+    ));
+}
+
+#[test]
+fn start_world_binding_matrix_accepts_world_with_exact_binding() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-runtime-1".into(),
+        world_generation: 12,
+    });
+
+    assert!(matches!(
+        authority
+            .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300,)
+            .unwrap(),
+        TransitionIssueOutcomeV1::Issued(_)
+    ));
+}
+
+#[test]
+fn start_world_binding_matrix_rejects_world_without_binding_without_mutation() {
+    let (parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    let root_file = parent.path().join("home/authority-v1/state-root-v1.json");
+    let before = fs::read(&root_file).unwrap();
+
+    assert!(authority
+        .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300,)
+        .is_err());
+    assert_eq!(fs::read(&root_file).unwrap(), before);
+    assert!(authority.read_a12a_root().is_err());
+}
+
+#[test]
+fn start_world_binding_matrix_rejects_scope_mismatch_without_mutation() {
+    let (parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    let root_file = parent.path().join("home/authority-v1/state-root-v1.json");
+    let before = fs::read(&root_file).unwrap();
+
+    assert!(authority
+        .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300,)
+        .is_err());
+    assert_eq!(fs::read(&root_file).unwrap(), before);
+    assert!(authority.read_a12a_root().is_err());
+}
+
+#[test]
+fn start_world_binding_matrix_rejects_empty_world_id_without_mutation() {
+    let (parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: String::new(),
+        world_generation: 13,
+    });
+    let root_file = parent.path().join("home/authority-v1/state-root-v1.json");
+    let before = fs::read(&root_file).unwrap();
+
+    assert!(authority
+        .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300,)
+        .is_err());
+    assert_eq!(fs::read(&root_file).unwrap(), before);
+    assert!(authority.read_a12a_root().is_err());
+}
+
+#[test]
+fn host_world_binding_exact_retry_joins_and_changed_binding_conflicts_do_not_mutate() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-host-retry-1".into(),
+        world_generation: 14,
+    });
+    let issued_at = timestamp("2026-07-14T12:00:00.000000000Z");
+    let TransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_start_at(&request, issued_at.clone(), 300)
+        .unwrap()
+    else {
+        panic!("first issuance must commit")
+    };
+    let before = authority.read_a12a_root().unwrap();
+
+    assert_eq!(
+        authority
+            .issue_start_at(&request, issued_at.clone(), 300)
+            .unwrap(),
+        TransitionIssueOutcomeV1::Joined(issued)
+    );
+    assert_eq!(authority.read_a12a_root().unwrap(), before);
+
+    let mut changed_world_id = request.clone();
+    changed_world_id.world_binding.as_mut().unwrap().world_id = "world-host-retry-2".into();
+    assert!(authority
+        .issue_start_at(&changed_world_id, issued_at.clone(), 300)
+        .is_err());
+    assert_eq!(authority.read_a12a_root().unwrap(), before);
+
+    let mut changed_generation = request;
+    changed_generation
+        .world_binding
+        .as_mut()
+        .unwrap()
+        .world_generation += 1;
+    assert!(authority
+        .issue_start_at(&changed_generation, issued_at, 300)
+        .is_err());
+    assert_eq!(authority.read_a12a_root().unwrap(), before);
+}
+
+#[test]
+fn applied_host_world_binding_preserves_host_placement_and_exact_session_binding() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-host-applied-1".into(),
+        world_generation: 15,
+    });
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+
+    let resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(resolved.authority.authority_revision, 1);
+    assert_eq!(
+        resolved
+            .authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some(request.target_authoritative_participant_id.as_str())
+    );
+    assert_eq!(
+        resolved.caller.participant_id,
+        request.target_authoritative_participant_id
+    );
+    assert_eq!(
+        resolved.caller.role,
+        AuthorityParticipantRoleV1::Orchestrator
+    );
+    assert_eq!(
+        resolved.caller.descriptor,
+        request.start_contract.descriptor
+    );
+    assert_eq!(
+        resolved.caller.descriptor.execution_scope,
+        AgentExecutionScopeV1::Host
+    );
+    assert_eq!(
+        resolved.host_attach_contract.execution_scope,
+        AgentExecutionScopeV1::Host
+    );
+    assert_eq!(
+        resolved
+            .host_attach_contract
+            .attach_launch_knobs
+            .requested_execution_scope,
+        AgentExecutionScopeV1::Host
+    );
+    assert_eq!(
+        resolved.host_attach_contract.attach_launch_knobs,
+        request.start_contract.launch_knobs
+    );
+    assert_eq!(resolved.authority.world_binding, request.world_binding);
+
+    let descriptor_json = serde_json::to_value(&resolved.caller.descriptor).unwrap();
+    let descriptor = descriptor_json.as_object().unwrap();
+    assert!(!descriptor.contains_key("world_binding"));
+    assert!(!descriptor.contains_key("world_id"));
+    assert!(!descriptor.contains_key("world_generation"));
+}
+
+#[test]
+fn applied_host_without_world_binding_resolves_exact_host_authority() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+
+    let resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(resolved.authority.authority_revision, 1);
+    assert_eq!(resolved.authority.world_binding, None);
+    assert_eq!(
+        resolved.caller.descriptor,
+        request.start_contract.descriptor
+    );
+    assert_eq!(
+        resolved.host_attach_contract.execution_scope,
+        AgentExecutionScopeV1::Host
+    );
+    assert_eq!(
+        resolved.host_attach_contract.attach_launch_knobs,
+        request.start_contract.launch_knobs
+    );
+    assert_eq!(
+        resolved.caller.participant_id,
+        request.target_authoritative_participant_id
+    );
+}
+
+#[test]
+fn exact_current_authority_read_rejects_corrupt_persisted_descriptor() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-host-corrupt-1".into(),
+        world_generation: 16,
+    });
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    assert!(authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .is_ok());
+
+    let root = authority.read_a12a_root().unwrap();
+    let descriptor_ref = &root.transition_intent_map[&request.intent_id].descriptor_ref;
+    let descriptor_path = Path::new(&request.workspace_binding.authority_store_root.physical_path)
+        .join("authority-v1")
+        .join("objects")
+        .join("agent-descriptor")
+        .join("v1")
+        .join(format!("{}.obj", descriptor_ref.ref_id));
+    fs::write(descriptor_path, b"substituted descriptor bytes").unwrap();
+
+    assert!(authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .is_err());
+}
+
+#[test]
 fn invalid_start_rejects_before_upgrade_or_semantic_mutation() {
     let (parent, authority, binding) = authority();
     let request = start_request(binding);

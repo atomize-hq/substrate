@@ -507,8 +507,6 @@ impl HostSessionAuthority {
             || attach.contract.backend_id != descriptor.descriptor.backend_id
             || attach.contract.execution_scope != descriptor.descriptor.execution_scope
             || attach.contract.protocol != descriptor.descriptor.protocol
-            || (descriptor.descriptor.execution_scope == super::schema::AgentExecutionScopeV1::Host
-                && authority.world_binding.is_some())
             || (descriptor.descriptor.execution_scope
                 == super::schema::AgentExecutionScopeV1::World
                 && authority.world_binding.is_none())
