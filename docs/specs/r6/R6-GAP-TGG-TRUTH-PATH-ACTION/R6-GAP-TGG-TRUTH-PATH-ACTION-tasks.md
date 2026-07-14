@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — FINAL PROOF RECEIPT REVIEW GATE**. The operator decisions `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised: boundary series `2067149ce` + `023417c03`, Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier proof/blocker receipt series `a341066a3` + `0da262979`, and the one-expression source commit `5622ddb73` all received fresh independent built-in `default` `REVIEW CLEAN`. The required post-decision proof is green, including the literal all-target clippy gate, and the former receipt-series review-state discrepancy is resolved. No implementation, proof, or source-review blocker remains. Task 3A and Task 4 remain unchecked completion candidates only until this final TASKS/ledger proof-receipt series itself receives fresh `REVIEW CLEAN`; transition and successor activation remain blocked. After that review, a narrow status reconciliation may mark Tasks 3A and 4 complete before the separate transition.
+Status: **ACTIVE — READY FOR TRANSITION / TASK 5 GATE**. The operator decisions `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised: boundary series `2067149ce` + `023417c03`, Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier proof/blocker receipt series `a341066a3` + `0da262979`, and the one-expression source commit `5622ddb73` all received fresh independent built-in `default` `REVIEW CLEAN`. The required post-decision proof is green, including the literal all-target clippy gate, and final proof-receipt series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. Tasks 3A and 4 are complete. Task 5 remains unchecked, the phase is not complete, and the phase transition and successor activation remain blocked until a separate authority-only transition commit is landed and freshly review-clean.
 
 ## Required Gates
 
@@ -80,7 +80,7 @@ Record a separate literal pre-edit command/result for every other existing helpe
   - Stop rule: do not edit `dead_end_thrash.rs` before this docs series is committed and fresh-review-clean. After that gate, land the authorized one-expression source fix in a separate atomic commit containing only `dead_end_thrash.rs`.
   - Completion record: complete at boundary series `2067149ce` (`docs: authorize clippy scope fix`) + `023417c03` (`docs: reconcile clippy scope amendment`), which received fresh built-in `default` `REVIEW CLEAN`. This authorizes only the separate one-expression source fix and does not itself prove or close Task 3A.
 
-- [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3A — Implement and prove Option-A typed provenance.**
+- [x] **R6-GAP-TGG-TRUTH-PATH-ACTION.3A — Implement and prove Option-A typed provenance.**
   - Prerequisites: Tasks 2A, 2B, and 2C committed and fresh-review-clean; all required GitNexus impacts below HIGH; no unisolatable unrelated work.
   - Allowed files only:
     - `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs` — `score_truth_grounding_gap`, the provenance type (private unless cross-module signature threading requires `pub(crate)`), and necessary private helpers;
@@ -144,21 +144,22 @@ Record a separate literal pre-edit command/result for every other existing helpe
   - One-expression source fix: `5622ddb73` (`fix: simplify dead-end confidence gate`) changed exactly `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs` and only the De Morgan-equivalent Boolean expression in `score_confidence`. Fresh independent built-in `default` review returned `REVIEW CLEAN`, confirming no lint allowance, scoring-behavior, threshold, evidence, or adjacent dead-end change.
   - Earlier review-clean proof/blocker receipt series: `a341066a3` (`docs: record grounding proof blocker`) + `0da262979` (`docs: reconcile grounding proof receipt`) received fresh built-in `default` `REVIEW CLEAN` after correcting the P2 landed-state wording. Its former review-state discrepancy remains resolved; the later `5622ddb73` source fix and green literal clippy gate supersede its historical blocker state, while this final receipt supplies the post-fix completion evidence.
   - **EXECUTED — `R6-TGG-CLIPPY-SCOPE-01 = A`:** review-clean boundary series `2067149ce` + `023417c03` authorized exactly one additional production file; separate atomic source commit `5622ddb73` landed the semantics-preserving `clippy::nonminimal_bool` simplification in `score_confidence`, passed the locked proof wall, and received fresh independent `REVIEW CLEAN`.
+  - Final proof-receipt review: `fee9c2b16` (`docs: record final grounding proof`) + `6674a8316` (`docs: reconcile final proof receipt`) received fresh independent built-in `default` `REVIEW CLEAN`. That reviewer independently reran the nine packet-locked grounding controls (`9 / 9`), three focused dead-end controls (`3 / 3`), full `dead_end_thrash` (`18 / 18`), full `truth_grounding_gap` (`22 / 22`), checkpoint matches (`35` unit + `131` integration plus matching export/provenance tests), format, check, literal all-target clippy with `-D warnings`, and diff check; all passed.
   - Historical non-acceptance: `52c9ab296` + `73132aead` remains review-findings evidence, not completion. `6409ae072` remains a review-clean witness, not a production closure.
-  - Completion record: **INCOMPLETE / COMPLETION CANDIDATE AT FINAL RECEIPT REVIEW GATE**. Tasks 2A, 2B, and 2C, the Option-A implementation, the separate clippy source fix, the exact required proof, and both fresh source reviews are clean, and no unresolved implementation/proof/source-review blocker remains. Keep Task 3A unchecked until this final TASKS/ledger receipt series itself receives fresh `REVIEW CLEAN`; afterward a narrow status reconciliation may mark Tasks 3A and 4 complete before the transition.
+  - Completion record: **COMPLETE** at final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent built-in `default` `REVIEW CLEAN`. No implementation, proof, source-review, or receipt-review blocker remains. This completes Task 3A only; it does not complete the phase or activate the successor.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3B — Attributed no-code proof receipt — ineligible and not selected.**
   - Task 2 selected the production path; the operator has now selected internal provenance Option A.
   - No no-code attribution or receipt is authorized. Leave unchecked as the preserved unselected branch.
 
-- [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.4 — Obtain a review-clean closure path.**
+- [x] **R6-GAP-TGG-TRUTH-PATH-ACTION.4 — Obtain a review-clean closure path.**
   - Require Task 3A committed with exact focused/family/checkpoint/static proof and fresh built-in `default` `REVIEW CLEAN`.
   - Record actual commit hashes, impact results, command counts/results, review findings/dispositions, and final verdict here.
-  - Current state: **OPEN / COMPLETION CANDIDATE AT FINAL RECEIPT REVIEW GATE**. Boundary series `2067149ce` + `023417c03`, implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier receipt series `a341066a3` + `0da262979`, source commit `5622ddb73`, the required proof wall, and fresh source review are all clean. No unresolved implementation/proof/source-review blocker remains; keep Task 4 unchecked until this final TASKS/ledger receipt series receives fresh `REVIEW CLEAN`, then allow only the narrow Tasks 3A/4 status reconciliation before the separate transition.
+  - Current state: **COMPLETE** at final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent built-in `default` `REVIEW CLEAN`. Boundary series `2067149ce` + `023417c03`, implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier receipt series `a341066a3` + `0da262979`, source commit `5622ddb73`, the required proof wall, fresh source review, and final receipt review are all clean. Task 5 is now the sole current gate; this does not complete the phase or activate the successor.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 2A, 2B, 3A, and 4 committed and review-clean.
-  - Current state: **BLOCKED**. No transition or successor work is authorized.
+  - Current state: **READY FOR TRANSITION / CURRENT TASK 5 GATE**. Task 5 remains unchecked. The phase is not complete, and the phase transition and successor activation remain blocked from acceptance until a separate authority-only transition commit is landed and freshly review-clean.
   - Exact authority-only manifest:
     - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
     - `SPEC.md`
