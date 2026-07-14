@@ -491,7 +491,9 @@ before that reconciled transition is committed and fresh-review-clean.
     `56bb9966f` + `07a3b1fe5` boundary, Prompt 1 for `R6-REPLAY` with active packet `none` was the
     sole next eligible invocation, and replay work had not yet started. Current replay state is
     recorded below: `CTX-R6-01` is complete, `CTX-R6-02` is preserved RED at `60cde3dd7`, and
-    `R6-GAP-DET-REPLAY-STALL` is the active packet at docs-gate candidate.
+    `R6-GAP-DET-REPLAY-STALL` is the active packet. Task `.2` is complete; Task `.2A` decision
+    `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current; Task `.3` remains incomplete with an
+    uncommitted candidate; Task `.4` and later gates remain blocked.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 

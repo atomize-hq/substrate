@@ -326,8 +326,9 @@ complete and is never active alongside a gap.
   trusted fixture `019f1ecb-b93a-7570-8d8d-9ce4e711880b` is `HistoricalOnly / 20 / High`, unflagged.
 - `CTX-R6-02` — trusted subagent fixture `019eb311-c7ce-7f50-ae13-b51a5b5461c3` is preserved
   behavioral RED at `60cde3dd7` and routes to active packet `R6-GAP-DET-REPLAY-STALL`; packet docs
-  are review-clean, Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` is accepted, and Task `.2`
-  is next.
+  are review-clean, Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` is accepted, Task `.2` is
+  complete, and Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current. Task `.3`
+  remains incomplete with an uncommitted candidate; Task `.4` and later gates remain blocked.
 - `CTX-R6-06` — run the existing frozen-corpus preservation control:
 
 ```bash
@@ -355,7 +356,7 @@ replaced in replay selection; they do not create a production gap.
 
 | IDs | Planned disposition |
 |---|---|
-| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet at docs-gate candidate. |
+| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Task `.2` is complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current; Task `.3` remains incomplete with an uncommitted candidate; Task `.4` and later gates remain blocked. |
 | `CTX-R6-03` through `CTX-R6-05` | Row-atomic `dead_end_thrash` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-06` | Existing frozen-corpus preservation control executes only in `R6-REPLAY`. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no `semantic_goal_drift` reopening. |
