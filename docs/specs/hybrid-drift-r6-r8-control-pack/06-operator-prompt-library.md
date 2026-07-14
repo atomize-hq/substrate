@@ -301,19 +301,31 @@ Finish with where the resolution was recorded, resumed work and commits, verific
 result, current phase status, and the next eligible interaction.
 ```
 
-## Current First Invocation
+## Current Resume Invocation
 
 Final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh
 independent built-in `default` `REVIEW CLEAN`. Authority transition series `56bb9966f` +
 `07a3b1fe5` also received fresh independent built-in `default` `REVIEW CLEAN`, marks aggregate
 `R6-GAP-*` complete, and makes `R6-REPLAY` the sole concrete active phase with active packet `none`.
-The next eligible default invocation uses Prompt 1 with:
+Replay implementation/fix series `a0089c8de` + `968a4377f` completed `CTX-R6-01` and received fresh
+independent built-in `default` `REVIEW CLEAN`. `CTX-R6-02` remains open at ACTION REQUIRED
+`R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8 remain
+pending or blocked as owned. The next eligible interaction uses Prompt 6 with:
 
 ```text
+/goal Record the supplied decision or verify the supplied external unblock, then resume the exact
+blocked hybrid-drift scope through its normal proof, commit, and review-clean boundary.
+
+REPO: /Users/spensermcconnell/.codex/worktrees/97a0/substrate
 PHASE_ID: R6-REPLAY
 ACTIVE_PACKET: none
+ESCALATION_ID: R6-REPLAY-CTX-R6-02-TRUSTED-STALL
+RESOLUTION: Trusted non-delegated real rollout <session-id> is available at <path>.
+RATIONALE: The artifact supplies repeated failed verifier attempts with
+TroubleshootingFrontier/Stalled, no later direct frontier advance, and Active/flagged dead_end_thrash.
+AUTONOMY_MODE: escalation-only
 ```
 
-The session must re-check that status from live repo truth and execute only the selected replay
-phase. The review-clean transition did not assign terminal scorer dispositions and did not start
-replay, `R6-CLOSE`, R7, or R8 work. This example is not a permanent status override.
+The session must verify that artifact and status from live repo truth, then resume only the blocked
+replay scope. Do not start `CTX-R6-06`, `R6-CLOSE`, R7, or R8 before `CTX-R6-02` passes its exact
+contract. This example is not a permanent status override.

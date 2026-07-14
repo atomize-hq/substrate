@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY COMPLETE; R6-REPLAY ACTIVE** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY COMPLETE; R6-REPLAY ACTIVE / ACTION REQUIRED AT CTX-R6-02** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -13,9 +13,12 @@ also received fresh independent built-in `default` `REVIEW CLEAN`, completing th
 activating the final gap. That route is now complete after implementation/review-fix series
 `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW
 CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` also received fresh independent
-built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`. Prompt 1
-for that replay phase is the sole next eligible invocation; no replay, phase-close, terminal scorer
-disposition, or R7/R8 work was executed by the transition.
+built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`.
+`CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is also fresh independent built-in
+`default` `REVIEW CLEAN`. `CTX-R6-02` remains open at ACTION REQUIRED
+`R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; `CTX-R6-06`, the replay family wall, `R6-CLOSE`, and R7/R8
+remain pending or blocked as owned. The current next interaction is Prompt 6 with the missing trusted
+true-stall artifact, not a new Prompt 1 invocation.
 
 ## Required Staged Commit Gate
 
@@ -490,8 +493,8 @@ before that reconciled transition is committed and fresh-review-clean.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 
-- [ ] **R6-C.1.6.1 — Select and execute advancing replay (`CTX-R6-01`) in `R6-REPLAY`.**
-  - Future exact test: `acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged`.
+- [x] **R6-C.1.6.1 — Select and execute advancing replay (`CTX-R6-01`) in `R6-REPLAY`.**
+  - Exact test: `acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged`.
   - Contract: a trusted annotated real-rollout-derived fixture proves repeated failures plus direct
     frontier advancement; final result is unflagged/non-`Active`. Exact raw score/confidence/state wait for
     selection; `HistoricalOnly` is allowed with no prior active score and `Recovered` only with prior
@@ -499,14 +502,35 @@ before that reconciled transition is committed and fresh-review-clean.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged -- --exact --nocapture`.
   - Boundary: reject or replace a fixture-shape mismatch. Do not open a production gap for bad fixture
     selection; only a behavior red after trusted input validation may use `R6-GAP-DET-REPLAY-ADVANCING`.
+  - Result (2026-07-14): implementation/fix series `a0089c8de` + `968a4377f` received fresh
+    independent built-in `default` `REVIEW CLEAN`. Trusted non-delegated real rollout
+    `019f1ecb-b93a-7570-8d8d-9ce4e711880b` retains identical failing verifier calls at compact
+    events `164` and `183` with exit-`101` outputs at `165` and `184`. Full-analyzer checkpoint `2`
+    exposes `FailureSignatureRepeated`; checkpoint `7` is `TroubleshootingFrontier / Advancing`
+    with `VerificationClean` and `VerificationScopeBroadened`. Its `dead_end_thrash` result is
+    `HistoricalOnly / 20 / High`, unflagged, with no earlier `Active` score.
 
 - [ ] **R6-C.1.6.2 — Select and execute true-stall replay (`CTX-R6-02`) in `R6-REPLAY`.**
   - Future exact test: `acceptance_fixtures_integrated_true_stall_stays_active`.
-  - Contract: a trusted annotated real-rollout-derived fixture proves repeated failure with no frontier
-    movement; final result is flagged/`Active`. Exact raw score/confidence wait for selection.
+  - Contract: a trusted annotated non-delegated real-rollout-derived fixture proves repeated failed
+    verifier attempts with `TroubleshootingFrontier / Stalled`, no later direct frontier advance, and
+    a flagged/`Active` `dead_end_thrash` result. Exact raw score/confidence wait for selection.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
   - Boundary: reject or replace a fixture-shape mismatch. Do not open a production gap for bad fixture
     selection; only a behavior red after trusted input validation may use `R6-GAP-DET-REPLAY-STALL`.
+  - Current state: **ACTION REQUIRED — `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`.** The committed
+    fixture corpus contains no exact true-stall witness. An exhaustive bounded local metadata screen
+    for 2026-06-01 through 2026-07-13 inspected `3,423` rollout files, `1,125` non-subagent/root
+    sessions, `515` sessions with verifier-like calls, and `30` sessions with at least two failed
+    identical verifier commands (`0` malformed logs); no qualifying witness was proven.
+  - Closest candidates were rejected honestly: `019f34e8-97cc-7852-8dd4-13a87efa4221` was
+    `TroubleshootingFrontier / Regressing` and `HistoricalOnly / 20`, unflagged;
+    `019f355d-ea49-77c2-a0e3-43a1d79d06d3` was `PlanningConvergence / Stalled` and repeated
+    `git diff --check`, not a failed test verifier; `019f385e-d2f2-7b90-9642-5a273e0e2f2a` and
+    `019f3a4f-89c4-73a2-9bc0-2589b7430485` were `TroubleshootingFrontier / Regressing` and later
+    advanced through `VerificationClean`.
+  - Resume condition: supply the session ID or path of a trusted non-delegated real rollout that
+    compacts and analyzes to the exact contract above, then use Prompt 6 with this escalation ID.
 
 - [ ] **R6-C.1.6.3 — Execute frozen-corpus preservation (`CTX-R6-06`) in `R6-REPLAY`.**
   - Existing exact test:

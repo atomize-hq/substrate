@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; authority transition series 56bb9966f + 07a3b1fe5 fresh independent built-in default REVIEW CLEAN`
+**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; CTX-R6-01 fresh independent built-in default REVIEW CLEAN; ACTION REQUIRED R6-REPLAY-CTX-R6-02-TRUSTED-STALL`
 
-**Last repo-truth verification:** final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119`, fresh independent built-in `default` `REVIEW CLEAN`; authority transition series `56bb9966f` + `07a3b1fe5`, fresh independent built-in `default` `REVIEW CLEAN`
+**Last repo-truth verification:** `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f`, fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-02` external-artifact escalation `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -23,8 +23,11 @@ packet docs landed in series `8734f4dbe` + `334e7c6ac` and received fresh indepe
 named gap with exact, protected, family, checkpoint, full-analyzer, and static proof green. The
 authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
 `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active
-packet `none`. Prompt 1 for that replay phase is the sole next eligible invocation; no replay, R6
-closeout, terminal scorer disposition, or R7/R8 work was executed by the transition.
+packet `none`. `CTX-R6-01` is complete through fresh independent review-clean series `a0089c8de` +
+`968a4377f`. `CTX-R6-02` is open at ACTION REQUIRED
+`R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8 remain
+pending or blocked as owned. The next interaction is Prompt 6 after the trusted true-stall artifact
+is supplied, not a new Prompt 1 invocation.
 
 ## Purpose
 

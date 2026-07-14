@@ -19,7 +19,7 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R6-C.1-SPEC` | COMPLETE | R6-C.1 SPEC/PLAN/TASKS | `R6-C.0A` complete | Expanded control matrix, expected decisions, files, commands, and stop rules landed and received fresh `REVIEW CLEAN` at `ea19b39a7`. |
 | `R6-C.1-CONTROLS` | COMPLETE | Acceptance controls only | SATISFIED — R6-C.1 docs landed and received fresh `REVIEW CLEAN` at `ea19b39a7` | SATISFIED — all thirteen controls have deterministic results (`10 PASS / 3 preserved RED`) and the controls wall is recorded at `5618f7864`. |
 | [`R6-GAP-*`](05-proof-decision-regression-ledger.md#named-r6-gap-status-subledger) | COMPLETE | One bounded scorer-specific gap phase per proven red | SATISFIED — the named-gap subledger instantiated all three preserved reds sequentially | SATISFIED — every named witness has review-clean focused proof and the final authority transition is landed. |
-| `R6-REPLAY` | ACTIVE | Bounded real-rollout/replay closeout | SATISFIED — controls and all conditional fixes complete; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN` | Integrated advancing and true-stall witnesses plus frozen invariance evidence are documented. |
+| `R6-REPLAY` | ACTIVE | Bounded real-rollout/replay closeout | SATISFIED — controls and all conditional fixes complete; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN` | OPEN — `CTX-R6-01` series `a0089c8de` + `968a4377f` is fresh independent `REVIEW CLEAN`; ACTION REQUIRED `R6-REPLAY-CTX-R6-02-TRUSTED-STALL` blocks `CTX-R6-02`, then `CTX-R6-06` and the family wall. |
 | `R6-CLOSE` | BLOCKED | R6 `CLOSED` authority reconciliation | Replay closeout green; no ordinary gap open | Every scorer has a terminal disposition and all root/R6/R7 status docs agree. |
 | `R7-PROMOTE` | BLOCKED | Promote preserved R7 drafts to implementation-ready | R6 finding says `CLOSED` | R7 MAP/SPEC/PLAN/TASKS and root mirrors agree; implementation has not yet started. |
 | `R7-0..R7-6` | BLOCKED | Bounded direct-child delegated-session support | R7 promoted | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
@@ -33,9 +33,11 @@ implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` receive
 independent built-in `default` `REVIEW CLEAN` with exact, protected, family, checkpoint,
 full-analyzer, and static proof green. Authority transition series `56bb9966f` + `07a3b1fe5`
 received fresh independent built-in `default` `REVIEW CLEAN` and activates exactly one concrete
-phase: `R6-REPLAY`, with active packet `none`. Prompt 1 for that phase is the sole next eligible
-invocation; no replay, R6 closeout, terminal scorer disposition, or R7/R8 work was executed by the
-transition.
+phase: `R6-REPLAY`, with active packet `none`. Replay work has since completed `CTX-R6-01` through
+fresh independent review-clean series `a0089c8de` + `968a4377f`. `CTX-R6-02` is open at ACTION
+REQUIRED `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; the current next interaction is Prompt 6 after the
+trusted true-stall artifact is supplied. `CTX-R6-06`, the family wall, R6 closeout, terminal scorer
+dispositions, and R7/R8 work remain pending or blocked as owned.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

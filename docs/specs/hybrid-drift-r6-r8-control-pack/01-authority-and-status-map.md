@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119`, fresh independent built-in `default` `REVIEW CLEAN`; authority transition series `56bb9966f` + `07a3b1fe5`, fresh independent built-in `default` `REVIEW CLEAN`
+**Verified against:** `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f`, fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-02` external-artifact escalation `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`
 
-**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)
+**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `none`; `CTX-R6-01` fresh independent built-in `default` `REVIEW CLEAN`; ACTION REQUIRED `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Prompt 1 may execute only `R6-REPLAY` with active packet `none`; do not start R6 close or R7/R8 work. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / ACTION REQUIRED AT CTX-R6-02** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Supply the trusted true-stall artifact and resume through Prompt 6 with escalation `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; do not start `CTX-R6-06`, R6 close, or R7/R8 work first. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
