@@ -2,7 +2,10 @@
 
 mod support;
 
-use agent_drift_analyzer::DriftState;
+use agent_drift_analyzer::{
+    analyze_bundle, AnalyzeRequest, Confidence, DriftClass, DriftState, ProgressDimension,
+    ProgressSignalCode, ProgressStatus,
+};
 use support::{load_acceptance_case, ACCEPTANCE_CASE_IDS, ACCEPTANCE_EXCLUDED_CASES};
 
 fn sorted_entry_names(path: &std::path::Path) -> Vec<String> {
@@ -162,4 +165,129 @@ fn acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_postu
         sticky_score.raw_score, 20,
         "sticky success-tail witness must stay at raw_score 20"
     );
+}
+
+#[test]
+fn acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged() {
+    const CASE_ID: &str = "019e899c-453f-71f2-a99d-155848c7b081";
+    const SELECTED_CHECKPOINT_ORDINAL: usize = 3;
+
+    let fixture_dir = camino::Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/progress_acceptance")
+        .join(CASE_ID);
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_dir.join("manifest.json"))
+            .expect("read advancing replay manifest"),
+    )
+    .expect("parse advancing replay manifest");
+    assert_eq!(
+        manifest["session_ids"],
+        serde_json::json!([CASE_ID]),
+        "trusted replay fixture must contain only the selected real rollout"
+    );
+
+    let expected: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_dir.join("expected.json"))
+            .expect("read advancing replay annotation"),
+    )
+    .expect("parse advancing replay annotation");
+    assert_eq!(expected["fixture_kind"], "annotated_real_rollout");
+    assert_eq!(expected["source_rollout_id"], CASE_ID);
+    let fixture_notes = expected["notes"]
+        .as_str()
+        .expect("advancing replay fixture notes");
+    assert!(fixture_notes.contains("CTX-R6-01"));
+    assert!(fixture_notes.contains("event 171"));
+    assert_eq!(
+        expected["selected_checkpoint"]["ordinal"],
+        SELECTED_CHECKPOINT_ORDINAL
+    );
+
+    let compact_rows = std::fs::read_to_string(fixture_dir.join("rows.compact.jsonl"))
+        .expect("read advancing replay compact rows");
+    let repeated_failure_output = compact_rows
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("parse compact row"))
+        .find(|row| row["event_index"] == 171 && row["kind"] == "tool_output")
+        .expect("trusted replay fixture must retain the repeated-failure output");
+    let repeated_failure_text = repeated_failure_output["text"]
+        .as_str()
+        .expect("repeated-failure output text");
+    assert!(
+        repeated_failure_text
+            .contains("real_session_live_coordinator_persists_cursor_across_restarts ... FAILED"),
+        "trusted replay fixture must retain the first concrete failure"
+    );
+    assert!(
+        repeated_failure_text.contains(
+            "real_session_live_coordinator_rejects_invalid_persisted_cursor_state ... FAILED"
+        ),
+        "trusted replay fixture must retain the second concrete failure"
+    );
+    assert!(
+        repeated_failure_text.contains("test result: FAILED. 3 passed; 2 failed"),
+        "trusted replay fixture must retain the repeated-failure result summary"
+    );
+
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let output_dir = camino::Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("output");
+    std::fs::create_dir_all(&output_dir).expect("create advancing replay output dir");
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture_dir,
+        output_dir,
+    })
+    .expect("analyze trusted advancing repeated-failure fixture");
+    let session = result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == CASE_ID)
+        .expect("selected real-rollout session");
+    let checkpoint = session
+        .checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.ordinal == SELECTED_CHECKPOINT_ORDINAL)
+        .expect("selected advancing checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("selected checkpoint progress");
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::Advancing);
+    assert!(
+        progress
+            .signals
+            .iter()
+            .any(|signal| signal.code == ProgressSignalCode::VerificationClean),
+        "selected checkpoint must carry a direct troubleshooting-frontier advancement signal"
+    );
+
+    let dead_end_score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::DeadEndThrash)
+        .expect("selected dead_end_thrash score");
+    assert!(!dead_end_score.flagged);
+    assert_ne!(dead_end_score.state, DriftState::Active);
+    assert!(
+        session
+            .checkpoints
+            .iter()
+            .take_while(|candidate| candidate.ordinal < SELECTED_CHECKPOINT_ORDINAL)
+            .filter_map(|candidate| {
+                candidate
+                    .drift_scores
+                    .iter()
+                    .find(|score| score.class == DriftClass::DeadEndThrash)
+            })
+            .all(|score| score.state != DriftState::Active),
+        "HistoricalOnly is allowed only because no prior checkpoint was Active"
+    );
+    assert_eq!(dead_end_score.state, DriftState::HistoricalOnly);
+    assert_eq!(dead_end_score.raw_score, 20);
+    assert_eq!(dead_end_score.confidence, Confidence::High);
 }
