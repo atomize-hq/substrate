@@ -2204,6 +2204,7 @@ where
                 )
             })?,
             prompt: prompt.to_string(),
+            acceptance_context: None,
         }
     };
 
@@ -3823,6 +3824,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn prompt_submit_continuity_prefers_persisted_session_contract() {
         with_store(|store| {
             let descriptor = RuntimeSelectionDescriptor {
@@ -3866,6 +3868,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn prompt_submit_continuity_falls_back_to_manifest_when_session_contract_missing() {
         with_store(|store| {
             let descriptor = RuntimeSelectionDescriptor {

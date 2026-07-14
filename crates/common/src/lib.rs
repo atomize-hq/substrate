@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 pub mod agent_events;
 pub mod agent_identity;
+pub mod authority_commitment;
 pub mod fs_diff;
 pub mod gateway_auth_bundle;
 pub mod identity;
@@ -16,6 +17,7 @@ pub mod world_exec_guard;
 
 pub use agent_events::{AgentEvent, AgentEventKind};
 pub use agent_identity::derive_agent_backend_id;
+pub use authority_commitment::{HostTransitionWorkCorrelationV1, OpaqueAuthorityCommitmentV1};
 pub use fs_diff::FsDiff;
 pub use gateway_auth_bundle::{
     allowed_gateway_auth_fields, gateway_auth_bundle_schema_version, required_gateway_auth_fields,

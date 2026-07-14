@@ -122,6 +122,22 @@ pub(crate) fn begin_legacy_state_store_transaction(
     platform::begin_legacy_state_store_transaction(path)
 }
 
+pub(crate) fn bind_world_work_receipt_registry_storage(
+    path: &Path,
+    expected_root: &CanonicalDirectoryV1,
+    expected_authority_store_id: &str,
+) -> Result<WorldWorkReceiptRegistryStorageV1, BootstrapError> {
+    WorldWorkReceiptRegistryStorageV1::bind(path, expected_root, expected_authority_store_id)
+}
+
+pub(crate) fn bind_world_work_execution_supervisor_storage(
+    path: &Path,
+    expected_root: &CanonicalDirectoryV1,
+    expected_authority_store_id: &str,
+) -> Result<WorldWorkExecutionSupervisorStorageV1, BootstrapError> {
+    WorldWorkExecutionSupervisorStorageV1::bind(path, expected_root, expected_authority_store_id)
+}
+
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 fn legacy_transaction_admission_handoff_test(
     path: &Path,
@@ -130,7 +146,10 @@ fn legacy_transaction_admission_handoff_test(
     platform::legacy_transaction_admission_handoff_test(path, after_classification)
 }
 
-pub(crate) use platform::LegacyStateStoreTransactionV1;
+pub(crate) use platform::{
+    LegacyStateStoreTransactionV1, WorldWorkExecutionSupervisorStorageV1,
+    WorldWorkReceiptRegistryStorageV1,
+};
 pub(crate) type LegacyWriterGuard = LegacyStateStoreTransactionV1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -297,7 +316,6 @@ mod platform {
     use transaction::retain_classified_legacy_directories_test;
     #[cfg(test)]
     use transaction::with_semantic_preflight;
-    pub(crate) use transaction::LegacyStateStoreTransactionV1;
     use transaction::{
         begin_legacy_state_store_transaction as begin_legacy_transaction,
         begin_legacy_state_store_transaction_for_identity as begin_legacy_transaction_for_identity,
@@ -305,6 +323,10 @@ mod platform {
         compare_and_swap_root_with, with_existing_semantic_preflight,
         with_opened_existing_semantic_preflight, with_opened_semantic_preflight,
         SemanticPreflightMode,
+    };
+    pub(crate) use transaction::{
+        LegacyStateStoreTransactionV1, WorldWorkExecutionSupervisorStorageV1,
+        WorldWorkReceiptRegistryStorageV1,
     };
 
     pub(super) fn classify(path: &std::path::Path) -> BootstrapClassificationV1 {
@@ -1070,6 +1092,100 @@ mod platform {
     use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV1;
 
     pub(crate) struct LegacyStateStoreTransactionV1;
+
+    #[derive(Clone, Debug)]
+    pub(crate) struct WorldWorkReceiptRegistryStorageV1;
+
+    pub(crate) struct WorldWorkReceiptRegistryTransactionV1<'storage> {
+        _storage: std::marker::PhantomData<&'storage ()>,
+    }
+
+    #[derive(Clone, Debug)]
+    pub(crate) struct WorldWorkExecutionSupervisorStorageV1;
+
+    pub(crate) struct WorldWorkExecutionSupervisorTransactionV1<'storage> {
+        _storage: std::marker::PhantomData<&'storage ()>,
+    }
+
+    impl WorldWorkReceiptRegistryStorageV1 {
+        pub(crate) fn bind(
+            _path: &std::path::Path,
+            _expected_root: &CanonicalDirectoryV1,
+            _expected_authority_store_id: &str,
+        ) -> Result<Self, BootstrapError> {
+            Err(BootstrapError(
+                "B1 receipt-registry storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn begin_transaction(
+            &self,
+        ) -> Result<WorldWorkReceiptRegistryTransactionV1<'_>, BootstrapError> {
+            Err(BootstrapError(
+                "B1 receipt-registry storage is unsupported on this platform",
+            ))
+        }
+    }
+
+    impl WorldWorkReceiptRegistryTransactionV1<'_> {
+        pub(crate) fn read_registry(&mut self) -> Result<Option<Vec<u8>>, BootstrapError> {
+            Err(BootstrapError(
+                "B1 receipt-registry storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn replace_registry(&mut self, _bytes: &[u8]) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "B1 receipt-registry storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn finish(self) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "B1 receipt-registry storage is unsupported on this platform",
+            ))
+        }
+    }
+
+    impl WorldWorkExecutionSupervisorStorageV1 {
+        pub(crate) fn bind(
+            _path: &std::path::Path,
+            _expected_root: &CanonicalDirectoryV1,
+            _expected_authority_store_id: &str,
+        ) -> Result<Self, BootstrapError> {
+            Err(BootstrapError(
+                "B2.1 supervisor storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn begin_transaction(
+            &self,
+        ) -> Result<WorldWorkExecutionSupervisorTransactionV1<'_>, BootstrapError> {
+            Err(BootstrapError(
+                "B2.1 supervisor storage is unsupported on this platform",
+            ))
+        }
+    }
+
+    impl WorldWorkExecutionSupervisorTransactionV1<'_> {
+        pub(crate) fn read_supervisor(&mut self) -> Result<Option<Vec<u8>>, BootstrapError> {
+            Err(BootstrapError(
+                "B2.1 supervisor storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn replace_supervisor(&mut self, _bytes: &[u8]) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "B2.1 supervisor storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn finish(self) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "B2.1 supervisor storage is unsupported on this platform",
+            ))
+        }
+    }
 
     impl LegacyStateStoreTransactionV1 {
         pub(crate) fn read_file(

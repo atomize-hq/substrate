@@ -107,12 +107,15 @@ use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
 #[cfg(target_os = "linux")]
-use crate::execution::orchestrator_world_dispatch::dispatch_run_world_task_request_with_started_task_run_id_tx;
-#[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::prepare_fork_world_worker_bootstrap;
 use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
     prepare_spawn_world_worker_bootstrap,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::{
+    dispatch_run_world_task_request_with_started_task_run_id_tx,
+    recover_world_work_execution_observations,
 };
 use crate::execution::prompt_fulfillment::{
     PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
@@ -600,6 +603,23 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         } else {
             None
+        };
+        #[cfg(target_os = "linux")]
+        let _world_work_recovery_tasks = {
+            let recovery = AgentRuntimeStateStore::new()
+                .and_then(|store| recover_world_work_execution_observations(&store));
+            match recovery {
+                Ok(tasks) => tasks,
+                Err(error) => {
+                    let message = format!(
+                        "substrate: error: failed to recover accepted world work observation: {error:#}"
+                    );
+                    agent_printer.print(message.clone());
+                    write_best_effort_stderr_line(&message);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    return Ok(1);
+                }
+            }
         };
         let (toolbox_request_tx, mut toolbox_request_rx) =
             internal_toolbox_dispatch_request_channel();
@@ -7437,9 +7457,12 @@ async fn start_remote_member_runtime_with_prepared(
     );
 
     let workspace_root = PathBuf::from(startup_context.snapshot().workspace_root.clone());
-    let (client, request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(&transport_request, &workspace_root)
-            .map_err(runtime_bootstrap_failure_from_anyhow)?;
+    let (client, request, _agent_id) = build_agent_client_and_member_dispatch_request_for_cwd(
+        &transport_request,
+        &workspace_root,
+        None,
+    )
+    .map_err(runtime_bootstrap_failure_from_anyhow)?;
     let response = client
         .execute_stream(request)
         .await
@@ -8577,6 +8600,7 @@ async fn submit_world_targeted_turn(
                 )
             })?,
             prompt: prompt.to_string(),
+            acceptance_context: None,
         }
     };
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;

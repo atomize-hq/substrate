@@ -28,6 +28,7 @@ use world_api::SharedWorldBindingSnapshot;
 
 use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlacementContext};
 use crate::prompt_fulfillment::PromptFulfillmentBridge;
+use crate::runtime_replay::{publish_replayable_frame, RuntimeReplayRegistry};
 use crate::service::RuntimeEventStreamProducer;
 
 const MEMBER_ROLE: &str = "member";
@@ -41,12 +42,18 @@ const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CO
 pub(crate) struct MemberRuntimeManager {
     active_members: Arc<RwLock<ActiveMemberRegistry>>,
     active_turns_by_span_id: Arc<RwLock<HashMap<String, Arc<ActiveSubmittedTurn>>>>,
+    runtime_replay: RuntimeReplayRegistry,
 }
 
 #[derive(Default)]
 struct ActiveMemberRegistry {
     by_participant_id: HashMap<String, Arc<ActiveMemberRuntime>>,
     by_retained_key: HashMap<RetainedMemberKey, RetainedMemberSlot>,
+}
+
+pub(crate) struct MemberRuntimeLaunchAdmissionV1 {
+    pub(crate) dispatch: MemberDispatchRequestV1,
+    pub(crate) acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
 }
 
 struct ActiveMemberRuntime {
@@ -86,6 +93,7 @@ struct ActiveSubmittedTurn {
 struct MemberStreamContext {
     orchestration_session_id: String,
     run_id: String,
+    acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
     participant_id: String,
     parent_participant_id: Option<String>,
     resumed_from_participant_id: Option<String>,
@@ -113,8 +121,16 @@ struct RetainedMemberSlot {
 }
 
 impl MemberRuntimeManager {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn with_replay_registry(runtime_replay: RuntimeReplayRegistry) -> Self {
+        Self {
+            runtime_replay,
+            ..Self::default()
+        }
     }
 
     pub(crate) async fn launch(
@@ -122,10 +138,25 @@ impl MemberRuntimeManager {
         agent_id: String,
         env: HashMap<String, String>,
         span_id: String,
-        dispatch: MemberDispatchRequestV1,
+        admission: MemberRuntimeLaunchAdmissionV1,
         binding: SharedWorldBindingSnapshot,
         placement: LinuxWorldPlacementContext,
     ) -> Result<Response> {
+        let MemberRuntimeLaunchAdmissionV1 {
+            dispatch,
+            acceptance_context,
+        } = admission;
+        if let Some(context) = acceptance_context.as_ref() {
+            context
+                .validate()
+                .map_err(crate::service::BadRequestError::new)?;
+            if context.request_id != dispatch.run_id || context.message_id.is_some() {
+                return Err(crate::service::BadRequestError::new(
+                    "task acceptance context does not match member dispatch".to_string(),
+                )
+                .into());
+            }
+        }
         let actual_binary = validate_member_runtime_binary(&dispatch)?;
         let PreparedMemberRuntimeLauncher {
             launcher_path,
@@ -228,21 +259,44 @@ impl MemberRuntimeManager {
             return Err(err);
         }
 
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
-        let mut producer = RuntimeEventStreamProducer::new();
-        let _ = tx.send(producer.start(span_id.clone())?);
-
-        let manager = self.clone();
-        let participant_id = dispatch.participant_id.clone();
         let context = MemberStreamContext {
             orchestration_session_id: dispatch.orchestration_session_id.clone(),
             run_id: dispatch.run_id.clone(),
+            acceptance_context,
             participant_id: dispatch.participant_id.clone(),
             parent_participant_id: dispatch.parent_participant_id.clone(),
             resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
             backend_id: dispatch.backend_id.clone(),
             protocol: json!(dispatch.protocol),
         };
+        let (mut producer, start) = match start_member_runtime_stream(
+            &context,
+            MemberStreamMode::Bootstrap,
+            span_id.clone(),
+        ) {
+            Ok(stream) => stream,
+            Err(error) => {
+                active.cancel_bootstrap();
+                self.unregister_member(&active.participant_id);
+                return Err(error);
+            }
+        };
+        let replay_publisher = match self
+            .runtime_replay
+            .begin_for_acceptance(context.acceptance_context.as_ref(), &start)
+        {
+            Ok(publisher) => publisher,
+            Err(error) => {
+                active.cancel_bootstrap();
+                self.unregister_member(&active.participant_id);
+                return Err(error);
+            }
+        };
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
+        let _ = tx.send(start);
+
+        let manager = self.clone();
+        let participant_id = dispatch.participant_id.clone();
         tokio::spawn(async move {
             let mut events = handle.events;
             let completion = handle.completion;
@@ -265,7 +319,11 @@ impl MemberRuntimeManager {
                     &mut producer,
                 ) {
                     Ok(Some(frame)) => {
-                        let _ = tx.send(frame);
+                        if let Err(err) =
+                            publish_replayable_frame(replay_publisher.as_ref(), &tx, frame)
+                        {
+                            tracing::error!(error = %err, "failed to publish replayable member bootstrap Event");
+                        }
                     }
                     Ok(None) => {}
                     Err(err) => {
@@ -304,7 +362,11 @@ impl MemberRuntimeManager {
             match frames {
                 Ok(frames) => {
                     for frame in frames {
-                        let _ = tx.send(frame);
+                        if let Err(err) =
+                            publish_replayable_frame(replay_publisher.as_ref(), &tx, frame)
+                        {
+                            tracing::error!(error = %err, "failed to publish replayable member bootstrap completion");
+                        }
                     }
                 }
                 Err(err) => {
@@ -319,6 +381,8 @@ impl MemberRuntimeManager {
     }
 
     pub(crate) async fn submit_turn(&self, req: MemberTurnSubmitRequestV1) -> Result<Response> {
+        req.validate()
+            .map_err(crate::service::BadRequestError::new)?;
         let active = self.find_submit_target(&req)?;
         validate_submit_turn_request(&req, RetainedMemberIdentity::from_active(active.as_ref()))?;
         self.validate_submit_target_slot(&req)?;
@@ -351,19 +415,40 @@ impl MemberRuntimeManager {
             }
         };
 
+        let context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
+        let (mut producer, start) = match start_member_runtime_stream(
+            &context,
+            MemberStreamMode::SubmittedTurn,
+            span_id.clone(),
+        ) {
+            Ok(stream) => stream,
+            Err(error) => {
+                cancel.cancel();
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(error);
+            }
+        };
+        let replay_publisher = match self
+            .runtime_replay
+            .begin_for_acceptance(context.acceptance_context.as_ref(), &start)
+        {
+            Ok(publisher) => publisher,
+            Err(error) => {
+                cancel.cancel();
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(error);
+            }
+        };
         let turn = Arc::new(ActiveSubmittedTurn {
             participant_id: active.participant_id.clone(),
             cancel,
             last_signal: Mutex::new(None),
         });
         self.register_turn(span_id.clone(), turn.clone());
-
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
-        let mut producer = RuntimeEventStreamProducer::new();
-        let _ = tx.send(producer.start(span_id.clone())?);
+        let _ = tx.send(start);
 
         let manager = self.clone();
-        let context = active.submit_context(req.run_id.clone());
         let binding = active.binding.clone();
         tokio::spawn(async move {
             let mut events = handle.events;
@@ -387,7 +472,11 @@ impl MemberRuntimeManager {
                     &mut producer,
                 ) {
                     Ok(Some(frame)) => {
-                        let _ = tx.send(frame);
+                        if let Err(err) =
+                            publish_replayable_frame(replay_publisher.as_ref(), &tx, frame)
+                        {
+                            tracing::error!(error = %err, "failed to publish replayable submitted member Event");
+                        }
                     }
                     Ok(None) => {}
                     Err(err) => {
@@ -419,7 +508,11 @@ impl MemberRuntimeManager {
             match frames {
                 Ok(frames) => {
                     for frame in frames {
-                        let _ = tx.send(frame);
+                        if let Err(err) =
+                            publish_replayable_frame(replay_publisher.as_ref(), &tx, frame)
+                        {
+                            tracing::error!(error = %err, "failed to publish replayable submitted member completion");
+                        }
                     }
                 }
                 Err(err) => {
@@ -1476,10 +1569,15 @@ impl ActiveMemberRuntime {
         let _ = fs::remove_dir_all(&self.launcher_dir);
     }
 
-    fn submit_context(&self, run_id: String) -> MemberStreamContext {
+    fn submit_context(
+        &self,
+        run_id: String,
+        acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
+    ) -> MemberStreamContext {
         MemberStreamContext {
             orchestration_session_id: self.orchestration_session_id.clone(),
             run_id,
+            acceptance_context,
             participant_id: self.participant_id.clone(),
             parent_participant_id: self.parent_participant_id.clone(),
             resumed_from_participant_id: self.resumed_from_participant_id.clone(),
@@ -1487,6 +1585,39 @@ impl ActiveMemberRuntime {
             protocol: self.protocol.clone(),
         }
     }
+}
+
+impl MemberStreamContext {
+    fn validate_acceptance_for_mode(&self, mode: MemberStreamMode) -> Result<()> {
+        let Some(context) = self.acceptance_context.as_ref() else {
+            return Ok(());
+        };
+        context
+            .validate()
+            .map_err(crate::service::BadRequestError::new)?;
+        let message_shape_matches = match mode {
+            MemberStreamMode::Bootstrap => context.message_id.is_none(),
+            MemberStreamMode::SubmittedTurn => context.message_id.is_some(),
+        };
+        if context.request_id != self.run_id || !message_shape_matches {
+            return Err(crate::service::BadRequestError::new(
+                "member stream acceptance context does not match runtime request".to_string(),
+            )
+            .into());
+        }
+        Ok(())
+    }
+}
+
+fn start_member_runtime_stream(
+    context: &MemberStreamContext,
+    mode: MemberStreamMode,
+    span_id: String,
+) -> Result<(RuntimeEventStreamProducer, ExecuteStreamFrame)> {
+    context.validate_acceptance_for_mode(mode)?;
+    let mut producer = RuntimeEventStreamProducer::new();
+    let start = producer.start(span_id)?;
+    Ok((producer, start))
 }
 
 impl ActiveSubmittedTurn {
@@ -1734,7 +1865,87 @@ mod tests {
             world_id: "world_123".to_string(),
             world_generation: 7,
             prompt: "continue".to_string(),
+            acceptance_context: None,
         }
+    }
+
+    fn sample_member_stream_context(message_id: Option<&str>) -> MemberStreamContext {
+        MemberStreamContext {
+            orchestration_session_id: "orch_123".to_string(),
+            run_id: "run_turn".to_string(),
+            acceptance_context: Some(transport_api_types::WorldWorkAcceptanceContextV1 {
+                schema_version: 1,
+                proposed_acceptance_record_id: "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc"
+                    .to_string(),
+                request_id: "run_turn".to_string(),
+                message_id: message_id.map(str::to_string),
+                caller_backend_id: "cli:codex".to_string(),
+                host_transition_correlation: None,
+            }),
+            participant_id: "ash_member".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: json!("substrate.agent.session"),
+        }
+    }
+
+    #[test]
+    fn task_acceptance_context_is_retained_before_first_start_acknowledgement() {
+        let context = sample_member_stream_context(None);
+        let retained = context.acceptance_context.clone();
+        let (_, start) = start_member_runtime_stream(
+            &context,
+            MemberStreamMode::Bootstrap,
+            "spn_task_b1".to_string(),
+        )
+        .expect("start task stream after retaining exact context");
+        assert_eq!(context.acceptance_context, retained);
+        let ExecuteStreamFrame::Start {
+            frame_identity,
+            span_id,
+        } = start
+        else {
+            panic!("first task acknowledgement must be Start");
+        };
+        assert_eq!(span_id, "spn_task_b1");
+        assert_eq!(frame_identity.frame_sequence, 1);
+    }
+
+    #[test]
+    fn retained_acceptance_context_requires_message_and_exact_run_before_start() {
+        let context =
+            sample_member_stream_context(Some("wwm_018f0f2e-7b4c-7aa1-8c22-123456789abd"));
+        let retained = context.acceptance_context.clone();
+        let (_, start) = start_member_runtime_stream(
+            &context,
+            MemberStreamMode::SubmittedTurn,
+            "spn_turn_b1".to_string(),
+        )
+        .expect("start retained stream after retaining exact context");
+        assert_eq!(context.acceptance_context, retained);
+        assert!(matches!(
+            start,
+            ExecuteStreamFrame::Start {
+                frame_identity,
+                span_id,
+            } if frame_identity.frame_sequence == 1 && span_id == "spn_turn_b1"
+        ));
+
+        let mut wrong_run = context.clone();
+        wrong_run.run_id = "substituted-run".to_string();
+        assert!(start_member_runtime_stream(
+            &wrong_run,
+            MemberStreamMode::SubmittedTurn,
+            "spn_must_not_start".to_string(),
+        )
+        .is_err());
+        assert!(start_member_runtime_stream(
+            &sample_member_stream_context(None),
+            MemberStreamMode::SubmittedTurn,
+            "spn_must_not_start".to_string(),
+        )
+        .is_err());
     }
 
     fn sample_retained_identity() -> RetainedMemberIdentity<'static> {
@@ -2467,6 +2678,7 @@ base_url = "https://gateway.example.invalid/v1"
         MemberStreamContext {
             orchestration_session_id: "orch_123".to_string(),
             run_id: "run_bootstrap".to_string(),
+            acceptance_context: None,
             participant_id: "ash_member".to_string(),
             parent_participant_id: None,
             resumed_from_participant_id: None,

@@ -12,6 +12,8 @@ mod member_runtime;
 mod prompt_fulfillment;
 pub mod pty;
 mod request_routing;
+#[cfg(target_os = "linux")]
+mod runtime_replay;
 pub mod service;
 #[cfg(unix)]
 mod socket_activation;
@@ -270,6 +272,10 @@ fn build_router(service: WorldService) -> Router {
         .route("/v1/gateway/sync", post(handlers::gateway_sync))
         .route("/v1/gateway/restart", post(handlers::gateway_restart))
         .route("/v1/execute/stream", post(handlers::execute_stream))
+        .route(
+            "/v1/execute/stream/replay",
+            post(handlers::execute_stream_replay),
+        )
         .route("/v1/member_turn/stream", post(handlers::member_turn_stream))
         .route("/v1/stream", get(handlers::stream))
         .route("/v1/trace/:span_id", get(handlers::get_trace))

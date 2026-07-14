@@ -19,7 +19,7 @@ use super::{
     mapping::MEMBER_ROLE,
     state_store::{
         exact_continue_retained_worker_is_routable, validate_retained_worker_authoritative_lineage,
-        AgentRuntimeStateStore,
+        AgentRuntimeStateStore, ResolvedWorldWorkRegistryAuthorityV1,
     },
 };
 
@@ -854,43 +854,19 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
 
     match handle {
         HostToolFollowUpHandleV1::ActiveTask(active_task) => {
-            let Some(task) = store.load_active_ephemeral_world_task(
+            let registry_authority = store.resolve_world_work_registry_authority(
                 &metadata.orchestration_session_id,
-                &active_task.task_run_id,
-            )?
-            else {
-                bail!(
-                    "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
-                    metadata.orchestration_session_id,
-                    active_task.task_run_id
-                );
-            };
-
-            if task.caller_participant_id != authority.caller_participant.participant_id() {
-                bail!(
-                    "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
-                    metadata.orchestration_session_id,
-                    active_task.task_run_id,
-                    authority.caller_participant.participant_id()
-                );
-            }
-            if task.world_id != world_binding.world_id
-                || task.world_generation != world_binding.world_generation
-            {
-                bail!(
-                    "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
-                    metadata.orchestration_session_id,
-                    active_task.task_run_id
-                );
-            }
-
-            Ok(ResolvedFollowUpDispatchAuthorityV1 {
-                mode: WorldDispatchModeV1::Ephemeral,
-                target_backend_id: task.target_backend_id,
-                task_run_id: Some(task.task_run_id),
-                target_participant_id: None,
+                authority.caller_participant.participant_id(),
+                &world_binding.world_id,
+                world_binding.world_generation,
+            )?;
+            resolve_active_task_follow_up_authority_v1(
+                &registry_authority,
+                metadata,
+                authority.caller_participant.participant_id(),
+                active_task,
                 world_binding,
-            })
+            )
         }
         HostToolFollowUpHandleV1::RetainedWorker(retained_worker) => {
             let Some(record) = store.load_session(&metadata.orchestration_session_id)? else {
@@ -999,6 +975,45 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
     }
 }
 
+fn resolve_active_task_follow_up_authority_v1(
+    registry_authority: &ResolvedWorldWorkRegistryAuthorityV1,
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    authoritative_caller_participant_id: &str,
+    active_task: &ActiveTaskHandleV1,
+    world_binding: HostToolRuntimeWorldBindingV1,
+) -> anyhow::Result<ResolvedFollowUpDispatchAuthorityV1> {
+    metadata.validate()?;
+    world_binding.validate()?;
+    let observation = registry_authority.resolve_active_ephemeral_observation(
+        &metadata.orchestration_session_id,
+        authoritative_caller_participant_id,
+        None,
+        &world_binding.world_id,
+        world_binding.world_generation,
+        &active_task.task_run_id,
+    )?;
+    let claim = observation.claim;
+    Ok(project_active_task_follow_up_authority_v1(
+        active_task.task_run_id.clone(),
+        claim.target_backend_id,
+        world_binding,
+    ))
+}
+
+fn project_active_task_follow_up_authority_v1(
+    task_run_id: String,
+    target_backend_id: String,
+    world_binding: HostToolRuntimeWorldBindingV1,
+) -> ResolvedFollowUpDispatchAuthorityV1 {
+    ResolvedFollowUpDispatchAuthorityV1 {
+        mode: WorldDispatchModeV1::Ephemeral,
+        target_backend_id,
+        task_run_id: Some(task_run_id),
+        target_participant_id: None,
+        world_binding,
+    }
+}
+
 pub(crate) fn translate_follow_up_tool_to_internal_dispatch_request_v1(
     store: &AgentRuntimeStateStore,
     metadata: &HostToolRuntimeDispatchMetadataV1,
@@ -1007,6 +1022,15 @@ pub(crate) fn translate_follow_up_tool_to_internal_dispatch_request_v1(
     payload: WorldDispatchPayloadV1,
 ) -> anyhow::Result<WorldDispatchRequestV1> {
     let authority = resolve_follow_up_dispatch_authority_v1(store, metadata, tool_name, &handle)?;
+    build_follow_up_dispatch_request_from_authority_v1(metadata, tool_name, authority, payload)
+}
+
+fn build_follow_up_dispatch_request_from_authority_v1(
+    metadata: &HostToolRuntimeDispatchMetadataV1,
+    tool_name: HostToolNameV1,
+    authority: ResolvedFollowUpDispatchAuthorityV1,
+    payload: WorldDispatchPayloadV1,
+) -> anyhow::Result<WorldDispatchRequestV1> {
     build_dispatch_request_v1(
         metadata,
         &authority.world_binding,
@@ -1306,14 +1330,16 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{
-        host_tool_contract, host_tool_contracts_v1, normalize_cancel_world_work_outcome_v1,
+        build_follow_up_dispatch_request_from_authority_v1, host_tool_contract,
+        host_tool_contracts_v1, normalize_cancel_world_work_outcome_v1,
         normalize_continue_world_worker_outcome_v1, normalize_inspect_world_worker_outcome_v1,
         normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
-        normalize_stop_world_worker_outcome_v1, resolve_follow_up_dispatch_authority_v1,
+        normalize_stop_world_worker_outcome_v1, resolve_active_task_follow_up_authority_v1,
+        resolve_follow_up_dispatch_authority_v1,
         translate_follow_up_tool_to_internal_dispatch_request_v1,
         translate_host_tool_invocation_request_to_internal_dispatch_request_v1,
         translate_run_world_task_to_internal_dispatch_request_v1,
-        translate_spawn_world_worker_to_internal_dispatch_request_v1,
+        translate_spawn_world_worker_to_internal_dispatch_request_v1, ActiveTaskHandleV1,
         HostToolFollowUpHandleRequirementV1, HostToolFollowUpHandleV1,
         HostToolInvocationRequestEnvelopeV1, HostToolModelArgumentFamilyV1, HostToolNameV1,
         HostToolRuntimeDispatchMetadataV1, HostToolRuntimeWorldBindingV1, RunWorldTaskToolCallV1,
@@ -1334,7 +1360,6 @@ mod tests {
     use crate::execution::agent_runtime::session::{
         AgentRuntimeParticipantRecord, AgentRuntimeSessionState,
     };
-    use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
     use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
     use crate::execution::agent_runtime::{
         AgentRuntimeStateStore, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
@@ -2046,92 +2071,133 @@ mod tests {
         });
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
-    fn dispatch_contract_adapter_follow_up_resolution_uses_authoritative_active_task_state() {
-        with_store(|store| {
-            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
-            let parent = active_parent(&orchestrator);
-            store
-                .persist_orchestration_session(&parent)
-                .expect("persist parent");
-            store
-                .persist_participant(&orchestrator)
-                .expect("persist orchestrator");
+    fn dispatch_contract_adapter_follow_up_resolution_uses_authoritative_active_task_state(
+    ) {
+        let (_root, registry, supervisor, claim) =
+            crate::execution::orchestrator_world_dispatch::tests::seed_b21_ephemeral_observation(
+                "task-run-packet2",
+            );
+        let authority =
+            crate::execution::orchestrator_world_dispatch::tests::b21_registry_authority_for_test(
+                registry,
+                supervisor.clone(),
+                &claim.authority_store_id,
+            );
+        let metadata = HostToolRuntimeDispatchMetadataV1 {
+            request_id: "req-packet2-active".to_string(),
+            idempotency_key: "idem-packet2-active".to_string(),
+            orchestration_session_id: claim.orchestration_session_id.clone(),
+            caller_participant_id: claim.caller_participant_id.clone(),
+        };
+        let handle = ActiveTaskHandleV1 {
+            task_run_id: "task-run-packet2".to_string(),
+        };
+        let world_binding = HostToolRuntimeWorldBindingV1 {
+            world_id: claim.world_id.clone(),
+            world_generation: claim.world_generation,
+        };
 
-            let guard = store
-                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                    orchestration_session_id: "sess_packet2".to_string(),
-                    task_run_id: "task-run-packet2".to_string(),
-                    caller_participant_id: "orch_packet2".to_string(),
-                    target_backend_id: "cli:codex_world".to_string(),
-                    world_id: "world-17".to_string(),
-                    world_generation: 2,
-                })
-                .expect("register active task");
-
-            let metadata = sample_runtime_metadata();
-            let resolved = resolve_follow_up_dispatch_authority_v1(
-                store,
-                &metadata,
-                HostToolNameV1::CancelWorldWork,
-                &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
-                    task_run_id: "task-run-packet2".to_string(),
-                }),
-            )
-            .expect("resolve active-task follow-up authority");
-
-            assert_eq!(resolved.mode, WorldDispatchModeV1::Ephemeral);
-            assert_eq!(resolved.target_backend_id, "cli:codex_world");
-            assert_eq!(resolved.task_run_id.as_deref(), Some("task-run-packet2"));
-            assert!(resolved.target_participant_id.is_none());
-            assert_eq!(resolved.world_binding.world_id, "world-17");
-            assert_eq!(resolved.world_binding.world_generation, 2);
-
-            let inspect_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
-                store,
-                &metadata,
+        for (tool_name, payload, expected_action) in [
+            (
                 HostToolNameV1::InspectWorldWorker,
-                HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
-                    task_run_id: "task-run-packet2".to_string(),
-                }),
                 WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
-            )
-            .expect("translate active inspect request");
-            let cancel_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
-                store,
-                &metadata,
+                WorldDispatchActionV1::InspectWorldWorker,
+            ),
+            (
                 HostToolNameV1::CancelWorldWork,
-                HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
-                    task_run_id: "task-run-packet2".to_string(),
-                }),
                 WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
-                    reason: Some("host_requested_stop".to_string()),
+                    reason: Some("operator requested cancel".to_string()),
                     graceful: Some(true),
                 }),
+                WorldDispatchActionV1::CancelWorldWork,
+            ),
+        ] {
+            let resolved = resolve_active_task_follow_up_authority_v1(
+                &authority,
+                &metadata,
+                &claim.caller_participant_id,
+                &handle,
+                world_binding.clone(),
             )
-            .expect("translate active cancel request");
+            .expect("resolve active-task authority from receipt/supervisor truth");
+            let request = build_follow_up_dispatch_request_from_authority_v1(
+                &metadata, tool_name, resolved, payload,
+            )
+            .expect("translate receipt/supervisor-backed active-task request");
+            let validated = request.validate().expect("validate active-task request");
+            assert_eq!(validated.action, expected_action);
+            assert_eq!(validated.mode, WorldDispatchModeV1::Ephemeral);
+            assert_eq!(validated.task_run_id.as_deref(), Some("task-run-packet2"));
+            assert_eq!(validated.target_backend_id, claim.target_backend_id);
+            assert_eq!(validated.world_id, claim.world_id);
+            assert_eq!(validated.world_generation, claim.world_generation);
+        }
 
-            let inspect_validated = inspect_request
-                .validate()
-                .expect("validate inspect request");
-            assert_eq!(inspect_validated.mode, WorldDispatchModeV1::Ephemeral);
-            assert_eq!(
-                inspect_validated.task_run_id.as_deref(),
-                Some("task-run-packet2")
-            );
-            assert!(inspect_validated.target_participant_id.is_none());
+        let absent = resolve_active_task_follow_up_authority_v1(
+            &authority,
+            &metadata,
+            &claim.caller_participant_id,
+            &ActiveTaskHandleV1 {
+                task_run_id: "task-run-absent".to_string(),
+            },
+            world_binding.clone(),
+        )
+        .expect_err("absent active task must fail closed");
+        assert!(absent.to_string().starts_with("active_task_not_found:"));
 
-            let cancel_validated = cancel_request.validate().expect("validate cancel request");
-            assert_eq!(cancel_validated.mode, WorldDispatchModeV1::Ephemeral);
-            assert_eq!(
-                cancel_validated.task_run_id.as_deref(),
-                Some("task-run-packet2")
-            );
-            assert_eq!(cancel_validated.world_id, "world-17");
+        let mismatched = resolve_active_task_follow_up_authority_v1(
+            &authority,
+            &metadata,
+            "other-orchestrator",
+            &handle,
+            world_binding.clone(),
+        )
+        .expect_err("caller mismatch must fail closed");
+        assert!(mismatched.to_string().starts_with("stale_linkage:"));
 
-            drop(guard);
-        });
+        let event_identity = transport_api_types::RuntimeEventIdentityV1 {
+            event_id: "evt_packet2_terminal".to_string(),
+            event_sequence: 1,
+        };
+        let terminal = transport_api_types::ExecuteStreamFrame::Exit {
+            frame_identity: transport_api_types::RuntimeFrameIdentityV1 {
+                schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                stream_id: claim.stream_id.clone(),
+                frame_sequence: 2,
+            },
+            terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                &event_identity,
+            ),
+            event_identity,
+            exit: 0,
+            span_id: claim.runtime_submission_id.clone(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        };
+        supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical terminal"),
+            )
+            .expect("journal exact terminal");
+        let terminal_error = resolve_active_task_follow_up_authority_v1(
+            &authority,
+            &metadata,
+            &claim.caller_participant_id,
+            &handle,
+            world_binding,
+        )
+        .expect_err("terminal task must not remain active-routable");
+        assert!(terminal_error
+            .to_string()
+            .starts_with("active_task_not_found:"));
     }
 
     #[test]
