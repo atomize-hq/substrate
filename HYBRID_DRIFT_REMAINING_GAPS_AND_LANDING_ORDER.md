@@ -866,7 +866,11 @@ The next honest work target is:
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
 - authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`
-- **next eligible interaction:** Prompt 1 for `R6-REPLAY` with active packet `none`
+- **current action:** fresh-review/fix the full `R6-GAP-DET-REPLAY-STALL` Task `.0` docs-gate
+  series `200725001` + `08fa86e94` + `d03f5a355` + this Immediate Next Action correction; keep
+  `R6-REPLAY` active with `R6-GAP-DET-REPLAY-STALL` as its active packet, and do not use Prompt 2 or
+  edit Rust. After a fresh clean verdict, issue DECISION REQUIRED
+  `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; keep `CTX-R6-06`, `R6-CLOSE`, and R7 blocked meanwhile
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed
