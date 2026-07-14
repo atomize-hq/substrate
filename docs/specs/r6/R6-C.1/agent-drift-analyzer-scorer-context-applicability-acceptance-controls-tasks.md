@@ -224,9 +224,9 @@ before that reconciled transition is committed and fresh-review-clean.
 
 - [x] **R6-C.1.2.5 — Add, commit, and review truth-path action before read (`CTX-R6-12`).**
   - Test: `truth_grounding_gap_flags_truth_path_action_before_read`.
-  - Acceptance: write/verification touching declared truth before any read yields
-    `80 / High / Active`, flagged, with authority and action evidence. Current source likely fails; that
-    red result is the witness, not permission to change production in `R6-C.1-CONTROLS`.
+  - Controls-wall acceptance: write/verification touching declared truth before any read yields
+    `80 / High / Active`, flagged, with authority and action evidence. At controls-wall capture, any red
+    result was a witness, not permission to change production in `R6-C.1-CONTROLS`.
   - Verify: `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_truth_path_action_before_read -- --exact --nocapture`.
   - If red: preserve witness and record only `R6-GAP-TGG-TRUTH-PATH-ACTION` for later activation.
   - Commit/review: one-row test-only commit; required staged commit gate; fresh built-in `default` review
@@ -237,6 +237,9 @@ before that reconciled transition is committed and fresh-review-clean.
     rather than the required `80 / High / Active`, flagged, with authority and action evidence. This
     witness requires `R6-GAP-TGG-TRUTH-PATH-ACTION`; no production code changed in
     `R6-C.1-CONTROLS`.
+  - Later resolution (2026-07-14): `R6-GAP-TGG-TRUTH-PATH-ACTION` resolved the preserved witness, and
+    review-clean final proof-receipt series `fee9c2b16` + `6674a8316` records the exact control passing
+    at current source. This does not rewrite the historical controls-wall result above.
 
 - [x] **R6-C.1.2.6 — Add, commit, and review archetype equivalence (`CTX-R6-13`).**
   - Test: `truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes`.

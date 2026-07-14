@@ -1,9 +1,9 @@
 # R6-C.1 — Scorer Context Applicability Acceptance Controls
 
 Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE — TRANSITION REVIEW PENDING** on 2026-07-14.
-All synthetic controls are complete in the TASKS ledger. The first preserved red is now proven
-focused through its complete named gap; the other two remain open only through their distinct named
-gap phases.
+All synthetic controls are complete in the TASKS ledger. The first two preserved reds, `CTX-R6-04`
+and `CTX-R6-12`, and their named gap phases are complete; only `CTX-R6-15` remains open through
+`R6-GAP-WPB-EMPTY-AUTHORITY`.
 
 Authority order: the corrected
 [`R6` closure finding](../FINDINGS-r6-scorer-context-cutover-closure.md) owns the scorer applicability
@@ -29,11 +29,14 @@ none is red. It does not close R6.
 
 1. **Grounding is provenance, not outcome quality.** A write or verification touching a declared truth
    path before any read is still ungrounded. The expected result is `80 / High / Active`, flagged, with
-   authority and action evidence. The live branch currently excludes that action from both grounded-read
-   and ungrounded-action buckets; that likely produces an honest red witness. It is not authority because
-   it would let the action that creates the obligation satisfy the obligation. `truth_grounding_gap`
-   owns whether declared truth was read **before** action; success, path coincidence, progress, turn shape,
-   and archetype do not establish prior grounding.
+   authority and action evidence. At controls-wall capture, source excluded that action from both the
+   grounded-read and ungrounded-action buckets and produced the preserved red witness. That historical
+   exclusion was not authority: path coincidence could not let the action that creates the obligation
+   satisfy the obligation.
+   The later `R6-GAP-TGG-TRUTH-PATH-ACTION` implementation and review-clean proof resolved the source
+   mismatch while preserving the contract: `truth_grounding_gap` owns whether declared truth was read
+   **before** action; success, path coincidence, progress, turn shape, and archetype do not establish prior
+   grounding.
 2. **No authority means no wrong-branch claim.** A path-bearing write or verification with empty truth
    and working-set authority expects `0 / Low / Cleared`, unflagged, with empty evidence. The live scorer
    can emit `60 / Low / Active`; that likely produces an honest red witness. It is not authority because
@@ -100,7 +103,7 @@ conditional: create it only after the named control is committed as a failing wi
 | `CTX-R6-10` | `truth_grounding_gap_flags_successful_verification_without_truth_reads` | Declared truth path; typed successful verification outside that path; no earlier truth read. | `80 / High / Active`, flagged. Typed success must not fabricate grounding. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_successful_verification_without_truth_reads -- --exact --nocapture` | `R6-GAP-TGG-SUCCESS-WITHOUT-READ` |
 | `CTX-R6-11` | `truth_grounding_gap_is_event_order_invariant_across_turn_shapes` | Same declared truth and same ungrounded action order, represented once as one long autonomous turn and once as many short turns. | Both `80 / High / Active`, flagged, with equivalent evidence semantics. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_is_event_order_invariant_across_turn_shapes -- --exact --nocapture` | `R6-GAP-TGG-TURN-INVARIANCE` |
 | `CTX-R6-11` | `truth_grounding_gap_keeps_opaque_parent_orchestration_clear_without_child_action` | Declared truth path plus opaque parent orchestration; no attributable child write/verification. | `0 / Medium / Cleared`, unflagged; authority evidence only. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_keeps_opaque_parent_orchestration_clear_without_child_action -- --exact --nocapture` | `R6-GAP-TGG-OPAQUE-PARENT` |
-| `CTX-R6-12` | `truth_grounding_gap_flags_truth_path_action_before_read` | Declared truth path; first write/verification touches that path; no earlier read. | `80 / High / Active`, flagged; evidence includes the authority and action. Likely intentional red witness at current source. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_truth_path_action_before_read -- --exact --nocapture` | `R6-GAP-TGG-TRUTH-PATH-ACTION` |
+| `CTX-R6-12` | `truth_grounding_gap_flags_truth_path_action_before_read` | Declared truth path; first write/verification touches that path; no earlier read. | `80 / High / Active`, flagged; evidence includes the authority and action. Historical controls-wall result: preserved red. Current source: pass at the review-clean final proof receipt. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_truth_path_action_before_read -- --exact --nocapture` | `R6-GAP-TGG-TRUTH-PATH-ACTION` |
 | `CTX-R6-13` | `truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes` | Planning/research and implementation sessions differ only in archetype/task framing; both take the same write/verification action before reading declared truth. | Both `80 / High / Active`, flagged. Action creates the same provenance obligation in either archetype. | None | `cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes -- --exact --nocapture` | `R6-GAP-TGG-ARCHETYPE-INVARIANCE` |
 | `CTX-R6-14` | `wrong_plan_branch_ignores_read_only_out_of_scope_exploration` | Non-empty authority; read-only command names an out-of-scope path. | `0 / Medium / Cleared`, unflagged, empty evidence. | None | `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_ignores_read_only_out_of_scope_exploration -- --exact --nocapture` | `R6-GAP-WPB-READ-ONLY` |
 | `CTX-R6-14` | `wrong_plan_branch_accepts_write_under_sanctioned_replan_scope` | A sanctioned path pivot updates current truth/working-set authority before a write under the new path. | `0 / Medium / Cleared`, unflagged, empty evidence. | None | `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_accepts_write_under_sanctioned_replan_scope -- --exact --nocapture` | `R6-GAP-WPB-REPLAN-SCOPE` |
