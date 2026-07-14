@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-DET-OPAQUE-PARENT` (ACTIVE; active packet: none; packet-docs gate only)**
+Current phase: **`R6-GAP-TGG-TRUTH-PATH-ACTION` (ACTIVE; active packet: none; docs-only gate)**
 
 ## Dependency Order
 
@@ -19,17 +19,20 @@ Current phase: **`R6-GAP-DET-OPAQUE-PARENT` (ACTIVE; active packet: none; packet
    SPEC/PLAN/TASKS landed and received final fresh `REVIEW CLEAN`.
 4. **COMPLETE at `5618f7864`:** the thirteen synthetic acceptance controls resolved as
    `10 PASS / 3 preserved RED`, with no production change.
-5. **ACTIVE:** atomically create and freshly review only the three canonical
-   `R6-GAP-DET-OPAQUE-PARENT` packet docs recorded as `TO CREATE` in the named-gap subledger.
-6. Resolve the three preserved red routes sequentially in matrix order; do not batch gaps or begin
-   production/no-code proof before the active route's docs gate is review-clean.
-7. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence after all named
+5. **COMPLETE through fresh review-clean `d13f0a71c`:** the first named gap,
+   `R6-GAP-DET-OPAQUE-PARENT`, landed its bounded scorer fix and focused/family/checkpoint proof.
+6. **ACTIVE:** atomically create and freshly review only the three canonical
+   `R6-GAP-TGG-TRUTH-PATH-ACTION` packet docs recorded as non-link `TO CREATE` paths in the named-gap
+   subledger. Do not begin successor production/no-code proof before this docs gate is review-clean.
+7. Resolve `R6-GAP-TGG-TRUTH-PATH-ACTION` and then `R6-GAP-WPB-EMPTY-AUTHORITY` as distinct
+   sequential phases; do not batch them or activate replay early.
+8. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence after all named
    gaps are complete.
-8. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
+9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
    proven or narrowed honestly. Ordinary “still open” is not a closure disposition.
-9. Only then promote the preserved R7 drafts to implementation-ready.
+10. Only then promote the preserved R7 drafts to implementation-ready.
 
 ## Execution Rules
 
@@ -50,6 +53,6 @@ Current phase: **`R6-GAP-DET-OPAQUE-PARENT` (ACTIVE; active packet: none; packet
   `git diff --cached --check`, and inspect the complete `git diff --cached` before committing.
 - Preserve unrelated worktree changes.
 
-No production code change, witness rerun, or no-code proof receipt is authorized until the active
-`R6-GAP-DET-OPAQUE-PARENT` packet-docs gate is committed and fresh-review-clean. The later named gaps
-and `R6-REPLAY` remain blocked.
+No successor production code change, witness rerun, or no-code proof receipt is authorized until the
+active `R6-GAP-TGG-TRUTH-PATH-ACTION` docs-only gate is committed and fresh-review-clean.
+`R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY` remain blocked.

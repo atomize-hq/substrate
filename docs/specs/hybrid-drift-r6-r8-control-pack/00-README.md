@@ -4,16 +4,19 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-GAP-DET-OPAQUE-PARENT — packet-docs gate only`
+**Current work phase:** `R6-GAP-TGG-TRUTH-PATH-ACTION — docs-only gate`
 
-**Last repo-truth verification:** `5618f7864`
+**Last repo-truth verification:** `d13f0a71c`
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
 `R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
-`R6-GAP-WPB-EMPTY-AUTHORITY`. Only the first is active; its sole authorized work is atomic creation
-and fresh review of its three canonical packet docs. The later gaps and `R6-REPLAY` remain blocked,
-and no production, replay, R6 closeout, or R7/R8 work is authorized first.
+`R6-GAP-WPB-EMPTY-AUTHORITY`. The first gap is complete after production series `bcd94bf4f` +
+`931e50c85` + `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`, with its exact focused,
+family, checkpoint, and format/check proof green. Only `R6-GAP-TGG-TRUTH-PATH-ACTION` is active;
+its sole authorized work is atomic creation and fresh review of its three canonical non-link `TO
+CREATE` paths. `R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY` remain blocked, and no successor
+implementation, replay, R6 closeout, or R7/R8 work is authorized first.
 
 ## Purpose
 

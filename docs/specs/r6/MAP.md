@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED** as of 2026-07-12. The scoped packet history below is
+Status: **PARTIAL / CLOSURE AUDIT REQUIRED** as of 2026-07-13. The scoped packet history below is
 landed, but the broad scorer-context charter is not closed for sequencing. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`; its narrow remaining packet is
 `R6-C.1 — Scorer Context Applicability Acceptance Controls`. This map began as a scaffold created on
@@ -344,14 +344,17 @@ the R6 closure gate.
 synthetic controls resolved as `10 PASS / 3 preserved RED`, checkpoints passed, and no production
 code changed. In matrix order the preserved routes are:
 
-1. `R6-GAP-DET-OPAQUE-PARENT` for `CTX-R6-04`, witness `87409b39a` — **ACTIVE**, packet-docs gate only;
-2. `R6-GAP-TGG-TRUTH-PATH-ACTION` for `CTX-R6-12`, witness `e67d8b214` — **BLOCKED**; and
+1. `R6-GAP-DET-OPAQUE-PARENT` for `CTX-R6-04`, witness `87409b39a` — **COMPLETE** after production
+   series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`;
+2. `R6-GAP-TGG-TRUTH-PATH-ACTION` for `CTX-R6-12`, witness `e67d8b214` — **ACTIVE**, docs-only gate; and
 3. `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15`, witness `59f098b35` — **BLOCKED**.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED** and `R6-REPLAY` remains blocked. The sole next
-authorized action is atomic creation and fresh review of the active gap's three canonical packet
-docs recorded as non-link `TO CREATE` paths in the named-gap subledger. Those files do not yet exist;
-do not execute the gap or begin a production/no-code proof path first.
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**; `R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY`
+remain blocked. The sole next authorized action is atomic creation and fresh review of the three
+canonical `R6-GAP-TGG-TRUTH-PATH-ACTION` packet docs recorded as non-link `TO CREATE` paths in the
+named-gap subledger. Those files do not yet exist; do not execute the active gap or begin a
+production/no-code proof path first. No terminal scorer disposition, replay close, or R6 close is
+claimed.
 
 ## Non-Goals For This Rescope
 

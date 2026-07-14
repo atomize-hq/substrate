@@ -1,8 +1,9 @@
 # R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-DET-OPAQUE-PARENT ACTIVE** on 2026-07-13.
-All synthetic controls are complete in the TASKS ledger; the three preserved reds remain open only
-through their distinct named gap phases.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-DET-OPAQUE-PARENT COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION ACTIVE** on 2026-07-13.
+All synthetic controls are complete in the TASKS ledger. The first preserved red is now proven
+focused through its complete named gap; the other two remain open only through their distinct named
+gap phases.
 
 Authority order: the corrected
 [`R6` closure finding](../FINDINGS-r6-scorer-context-cutover-closure.md) owns the scorer applicability

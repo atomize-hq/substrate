@@ -28,10 +28,12 @@ At most one implementation phase may be active. Docs-only authority repair may p
 
 `PACK-0`, `R6-C.0A`, `R6-C.1-SPEC`, and `R6-C.1-CONTROLS` are complete. The generic `R6-GAP-*`
 row is aggregate `ACTIVE` because the named-gap subledger contains exactly one concrete active phase:
-`R6-GAP-DET-OPAQUE-PARENT`. `R6-GAP-TGG-TRUTH-PATH-ACTION` and
-`R6-GAP-WPB-EMPTY-AUTHORITY` remain `BLOCKED`, and `R6-REPLAY` remains `BLOCKED`. The active route
-authorizes only atomic creation and fresh review of its three canonical packet docs; those files do
-not yet exist. No production, witness rerun, replay, R6 closeout, or R7/R8 work is authorized first.
+`R6-GAP-TGG-TRUTH-PATH-ACTION`. `R6-GAP-DET-OPAQUE-PARENT` is `COMPLETE` after production series
+`bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh `REVIEW CLEAN`;
+`R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY` remain `BLOCKED`. The active route authorizes only
+atomic creation and fresh review of its three canonical non-link `TO CREATE` paths; those files do
+not yet exist. No successor implementation, witness rerun, replay, R6 closeout, or R7/R8 work is
+authorized first.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

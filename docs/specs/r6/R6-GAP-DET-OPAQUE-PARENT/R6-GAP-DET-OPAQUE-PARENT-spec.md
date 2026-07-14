@@ -1,6 +1,6 @@
 # R6-GAP-DET-OPAQUE-PARENT — Opaque-Parent Confidence Gap
 
-Status: **ACTIVE — PACKET DOCS THEN LEDGER-RECONCILIATION GATES**. `R6-C.1-CONTROLS` is complete and this is the sole active named gap. No witness rerun, production edit, proof receipt, or successor work is authorized until these three packet docs are committed and fresh-review-clean **and** the separate post-docs ledger reconciliation below is committed and fresh-review-clean.
+Status: **COMPLETE — PRODUCTION SERIES THROUGH `d13f0a71c` REVIEW CLEAN; SUCCESSOR DOCS-ONLY GATE ACTIVE**. Packet docs `59092df2a`, ledger reconciliation `beed76446`, and production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` each satisfied their required fresh built-in `default` review gates. `CTX-R6-04` is proven focused and this gap is complete. This authority update activates only `R6-GAP-TGG-TRUTH-PATH-ACTION` at its docs-only gate without claiming an unknown transition commit or review verdict.
 
 ## Objective And Preserved Witness
 

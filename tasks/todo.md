@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-DET-OPAQUE-PARENT` (ACTIVE; active packet: none; packet-docs gate only)**
+Current phase: **`R6-GAP-TGG-TRUTH-PATH-ACTION` (ACTIVE; active packet: none; docs-only gate)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -23,14 +23,17 @@ Current phase: **`R6-GAP-DET-OPAQUE-PARENT` (ACTIVE; active packet: none; packet
 - [x] Add, atomically commit, and freshly review all thirteen `dead_end_thrash`,
   `truth_grounding_gap`, and `wrong_plan_branch` controls; the wall receipt `5618f7864` records
   `10 PASS / 3 preserved RED` with no production change.
-- [ ] **Sole next authorized action:** atomically create and freshly review the active gap's three
-  canonical docs: `docs/specs/r6/R6-GAP-DET-OPAQUE-PARENT/R6-GAP-DET-OPAQUE-PARENT-spec.md`,
-  `docs/specs/r6/R6-GAP-DET-OPAQUE-PARENT/R6-GAP-DET-OPAQUE-PARENT-plan.md`, and
-  `docs/specs/r6/R6-GAP-DET-OPAQUE-PARENT/R6-GAP-DET-OPAQUE-PARENT-tasks.md`. They do not yet exist;
-  do not execute the gap or change production first.
-- [ ] Resolve `R6-GAP-DET-OPAQUE-PARENT`, then `R6-GAP-TGG-TRUTH-PATH-ACTION`, then
-  `R6-GAP-WPB-EMPTY-AUTHORITY` as distinct sequential phases; later gaps remain blocked until their
-  predecessor transitions them active.
+- [x] Resolve `R6-GAP-DET-OPAQUE-PARENT`; production series `bcd94bf4f` + `931e50c85` +
+  `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN` with its focused, family,
+  checkpoint, and format/check proof green.
+- [ ] **Sole next authorized action:** atomically create and freshly review exactly these three
+  non-link `TO CREATE` paths; they do not yet exist, and no successor execution begins first:
+  - TO CREATE `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-spec.md`
+  - TO CREATE `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-plan.md`
+  - TO CREATE `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-tasks.md`
+- [ ] Resolve active `R6-GAP-TGG-TRUTH-PATH-ACTION`, then
+  `R6-GAP-WPB-EMPTY-AUTHORITY` as distinct sequential phases; the later gap remains blocked until its
+  predecessor transitions it active.
 - [ ] Re-run focused scorer tests, full analyzer tests, and the bounded replay wall.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.

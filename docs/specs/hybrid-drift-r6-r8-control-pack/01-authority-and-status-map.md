@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** `5618f7864`
+**Verified against:** `d13f0a71c`
 
-**Current phase:** `R6-GAP-DET-OPAQUE-PARENT` (**ACTIVE**; active packet: none; packet-docs gate only)
+**Current phase:** `R6-GAP-TGG-TRUTH-PATH-ACTION` (**ACTIVE**; active packet: none; docs-only gate)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Atomically create and freshly review the three canonical `R6-GAP-DET-OPAQUE-PARENT` packet docs recorded as `TO CREATE` in the named-gap subledger; make no production change first. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Atomically create and freshly review the three canonical `R6-GAP-TGG-TRUTH-PATH-ACTION` packet docs recorded as non-link `TO CREATE` paths in the named-gap subledger; make no successor implementation change first. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
@@ -46,9 +46,9 @@ themselves prove the broader R6 charter closed.
 
 | Surface | Interim audit posture | R6 terminal requirement |
 |---|---|---|
-| `dead_end_thrash` | Preserved `CTX-R6-04` red; `R6-GAP-DET-OPAQUE-PARENT` active at its docs-only gate | TBD: **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with justification**. |
+| `dead_end_thrash` | `CTX-R6-04` proven focused; `R6-GAP-DET-OPAQUE-PARENT` complete after production series through `d13f0a71c` received fresh `REVIEW CLEAN` | TBD at `R6-CLOSE`: **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with justification**. |
 | `semantic_goal_drift` | Cutover complete by design | **Cutover complete**. Revisit only if a new failing behavioral witness appears. |
-| `truth_grounding_gap` | Preserved `CTX-R6-12` red; `R6-GAP-TGG-TRUTH-PATH-ACTION` blocked on the active gap | TBD: one of the four exact terminal categories after its named gap is resolved. |
+| `truth_grounding_gap` | Preserved `CTX-R6-12` red; `R6-GAP-TGG-TRUTH-PATH-ACTION` active at its docs-only gate | TBD: one of the four exact terminal categories after its named gap is resolved. |
 | `wrong_plan_branch` | Preserved `CTX-R6-15` red; `R6-GAP-WPB-EMPTY-AUTHORITY` blocked on the grounding gap | TBD: one of the four exact terminal categories after its named gap is resolved. |
 | `scoring/mod.rs` | Dispatcher infrastructure | **Fit-for-purpose exception** as routing infrastructure; not a fifth scorer. |
 

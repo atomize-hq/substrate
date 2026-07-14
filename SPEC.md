@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-DET-OPAQUE-PARENT` (ACTIVE; active packet: none; packet-docs gate only)**
+Current phase: **`R6-GAP-TGG-TRUTH-PATH-ACTION` (ACTIVE; active packet: none; docs-only gate)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -20,11 +20,13 @@ Hard decisions:
 - `semantic_goal_drift` is cutover complete by design. It consumes structured objectives, stable
   target anchors, sanctioned replans, delegation visibility, and checkpoint history. Do not reopen
   it without new failing evidence.
-- `dead_end_thrash` passed its regression and turn-shape-equivalence controls but preserved the
-  opaque-parent confidence red `CTX-R6-04`; `R6-GAP-DET-OPAQUE-PARENT` is the sole active named route.
-  Its frozen four-case corpus remains posture invariance, not comparative integrated improvement.
+- `dead_end_thrash` now has focused `CTX-R6-04` proof at `0 / Low / Cleared`, unflagged, with empty
+  evidence after production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh built-in
+  `default` `REVIEW CLEAN`; `R6-GAP-DET-OPAQUE-PARENT` is complete. Its frozen four-case corpus
+  remains posture invariance, not comparative integrated improvement, and no terminal scorer
+  disposition is assigned before `R6-CLOSE`.
 - `truth_grounding_gap` passed its other applicability controls but preserved the truth-path action
-  red `CTX-R6-12`; `R6-GAP-TGG-TRUTH-PATH-ACTION` is blocked behind the active dead-end gap.
+  red `CTX-R6-12`; `R6-GAP-TGG-TRUTH-PATH-ACTION` is the sole active route at its docs-only gate.
 - `wrong_plan_branch` passed its read-only, sanctioned-replan, and delegated-parent controls but
   preserved the empty-authority red `CTX-R6-15`; `R6-GAP-WPB-EMPTY-AUTHORITY` is blocked behind the
   grounding gap.
@@ -38,11 +40,11 @@ Hard decisions:
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
-controls resolved as `10 PASS / 3 preserved RED`, with no production change. The sole authorized
-current action is atomic creation and fresh review of the three canonical
-`R6-GAP-DET-OPAQUE-PARENT` packet docs recorded as non-link `TO CREATE` paths in the named-gap
-subledger; those files do not yet exist. Gap execution, replay closeout, R6 closure, and all R7/R8
-work remain blocked.
+controls resolved as `10 PASS / 3 preserved RED`, with no production change in that controls wall.
+The first named gap is now complete with the review-clean proof above. The sole authorized current
+action is atomic creation and fresh review of the three canonical `R6-GAP-TGG-TRUTH-PATH-ACTION`
+packet docs recorded as non-link `TO CREATE` paths in the named-gap subledger; those files do not yet
+exist. Successor execution, replay closeout, R6 closure, and all R7/R8 work remain blocked.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

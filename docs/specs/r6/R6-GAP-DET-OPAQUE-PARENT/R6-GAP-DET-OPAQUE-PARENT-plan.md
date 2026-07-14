@@ -1,6 +1,6 @@
 # Plan: R6-GAP-DET-OPAQUE-PARENT
 
-Status: **ACTIVE — PACKET DOCS THEN LEDGER-RECONCILIATION GATES**. This plan's witness and production steps become executable only after the three canonical packet docs are committed and fresh-review-clean and a separate post-docs ledger reconciliation is committed and fresh-review-clean.
+Status: **COMPLETE — PRODUCTION SERIES THROUGH `d13f0a71c` REVIEW CLEAN; SUCCESSOR DOCS-ONLY GATE ACTIVE**. Packet docs `59092df2a`, ledger reconciliation `beed76446`, and production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` satisfied the required gates. This authority update activates only `R6-GAP-TGG-TRUTH-PATH-ACTION` for atomic successor-doc creation/review without claiming an unknown transition commit or review verdict.
 
 ## Decisions
 

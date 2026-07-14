@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-DET-OPAQUE-PARENT
 
-Status: **ACTIVE — REVIEW-FIX CANDIDATE LANDED; FRESH RE-REVIEW PENDING**. The packet-docs gate is review-clean at `59092df2a`, and the separate ledger-reconciliation gate is review-clean at `beed76446`. Production commit `bcd94bf4f` landed the scorer-local fix, and review-fix candidate `931e50c85` addresses the two required findings from its first fresh review with expanded green proof. A fresh re-review of that production series returned one bookkeeping P2, corrected below; Task 4 remains pending until the production series through `931e50c85` is fresh-review-clean. The separate transition remains pending, and no successor is active.
+Status: **COMPLETE — PRODUCTION SERIES THROUGH `d13f0a71c` REVIEW CLEAN; SUCCESSOR DOCS-ONLY GATE ACTIVE**. The packet-docs gate is review-clean at `59092df2a`, the separate ledger-reconciliation gate is review-clean at `beed76446`, and production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`. `CTX-R6-04` is proven focused and this gap is complete. This authority update activates only `R6-GAP-TGG-TRUTH-PATH-ACTION` at its docs-only gate without claiming an unknown transition commit or review verdict.
 
 ## Required Gates
 
@@ -63,7 +63,9 @@ The second command is required if `score_confidence` changes. Impact every addit
     cargo test -p agent-drift-analyzer checkpoints -- --nocapture
     ```
   - Commit/review: staged gate; atomic commit; fresh built-in `default` review; new fix commit and fresh reviewer until clean.
-  - Result: committed as `bcd94bf4f` (`fix: cap opaque parent thrash confidence`) with the ordered proof green. Fresh review found two required fixes, so the commit is landed but review-blocked and Task 4 remains open.
+  - Historical result at `bcd94bf4f`: committed as `bcd94bf4f` (`fix: cap opaque parent thrash
+    confidence`) with the ordered proof green. Fresh review found two required fixes, so that commit
+    remained review-blocked and Task 4 stayed open at that review point.
     - Impact: `score_dead_end_thrash` LOW with no upstream callers; `score_confidence` LOW with one direct caller (`score_dead_end_thrash`), two affected processes, and one affected `Scoring` module. No HIGH/CRITICAL risk was reported.
     - Production at `bcd94bf4f`: `score_confidence` receives `SessionProgress` and attempted to keep opaque parent-only activity at Low confidence without editing upstream progress construction. Review later found that the exception covered every no-history `ParentVisibleOrchestration` case rather than only the typed Low-confidence seam.
     - Focused `CTX-R6-04`: `1 passed; 0 failed; 16 filtered out`; the locked result is `0 / Low / Cleared`, unflagged, empty evidence, with `ParentVisibleOrchestration` preserved.
@@ -76,7 +78,7 @@ The second command is required if `score_confidence` changes. Impact every addit
   - This packet is the first sequential named gap, so it cannot satisfy the prerequisite. An unexpected pre-edit green result must be preserved and escalated for authority reconciliation under Task 2, not converted into a receipt.
   - Result: ineligible for this phase.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.4 — Obtain a review-clean production fix.**
+- [x] **R6-GAP-DET-OPAQUE-PARENT.4 — Obtain a review-clean production fix.**
   - Require Task 3A committed with actual proof and a fresh `REVIEW CLEAN` verdict.
   - Record all commit hashes, exact command results, findings, dispositions, and review verdict here.
   - Review of `bcd94bf4f`: **CHANGES REQUIRED** with two required findings.
@@ -91,19 +93,30 @@ The second command is required if `score_confidence` changes. Impact every addit
     - `cargo fmt --all -- --check` and `cargo check -p agent-drift-analyzer`: passed.
   - Fresh re-review of the production series through `931e50c85`: **CHANGES REQUIRED** with one finding.
     1. **P2 — landed review-fix candidate was still described as an uncommitted worktree.** The TASKS and control-pack ledger called the now-landed `931e50c85` review fix pending worktree work. This bounded bookkeeping correction records `931e50c85` as the landed review-fix candidate without changing its proof, the ACTIVE gap posture, or successor authority.
-  - Result: pending; obtain a fresh `REVIEW CLEAN` verdict for the production series through `931e50c85` with the corrected bookkeeping before Task 5.
+  - Final review result: production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh
+    built-in `default` **REVIEW CLEAN**. Final proof remained exact: focused `CTX-R6-04` passed at
+    `0 / Low / Cleared`, unflagged, empty evidence; the partial/mixed parent-visible regression passed
+    at `0 / Medium / Cleared`, unflagged, empty evidence; focused `CTX-R6-03` remained
+    `30 / Medium / Active`, flagged; all `21` matching `dead_end_thrash` tests and all `167` matching
+    checkpoint tests passed; and `cargo fmt --all -- --check` plus
+    `cargo check -p agent-drift-analyzer` passed.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
+- [x] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 0, 1, and 4 review-clean.
   - Apply the full R6-C.1 gap-transition authority manifest. Mark this gap `COMPLETE`; activate only `R6-GAP-TGG-TRUTH-PATH-ACTION`; keep later gaps blocked.
   - Successor boundary: record only these non-link `TO CREATE` paths and authorize their atomic docs gate:
-    - `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-spec.md`
-    - `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-plan.md`
-    - `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-tasks.md`
+    - TO CREATE `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-spec.md`
+    - TO CREATE `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-plan.md`
+    - TO CREATE `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/R6-GAP-TGG-TRUTH-PATH-ACTION-tasks.md`
   - Do not create, link, cite as existing, or execute the successor packet.
   - Commit/review: authority docs only; staged gate; separate commit; fresh independent review and new transition-only fixes until clean.
   - Stop: review-clean transition committed; no next-phase work.
-  - Result: pending; the gap remains ACTIVE until the production series through review-fix candidate `931e50c85` is fresh-review-clean and a separate authority-only transition is landed and independently reviewed. No successor activation is authorized in this batch.
+  - Transition result (2026-07-13): this authority update applies the required statuses: marks
+    `R6-GAP-DET-OPAQUE-PARENT` complete; activates only `R6-GAP-TGG-TRUTH-PATH-ACTION` at its
+    docs-only gate with the three exact non-link `TO CREATE` paths above; and keeps
+    `R6-GAP-WPB-EMPTY-AUTHORITY` plus `R6-REPLAY` blocked. It does not claim an unknown transition
+    commit or review verdict. The sole next action is atomic creation and fresh review of those three
+    successor docs; they do not exist yet and no successor implementation is authorized.
 
 ## Explicit Exclusions
 

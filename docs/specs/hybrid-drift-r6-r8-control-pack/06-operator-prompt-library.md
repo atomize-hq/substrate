@@ -303,11 +303,11 @@ result, current phase status, and the next eligible interaction.
 
 ## Current First Invocation
 
-The named-gap subledger identifies `R6-GAP-DET-OPAQUE-PARENT` as the sole concrete active phase. Its
+The named-gap subledger identifies `R6-GAP-TGG-TRUTH-PATH-ACTION` as the sole concrete active phase. Its
 default invocation is Prompt 1 with:
 
 ```text
-PHASE_ID: R6-GAP-DET-OPAQUE-PARENT
+PHASE_ID: R6-GAP-TGG-TRUTH-PATH-ACTION
 ACTIVE_PACKET: none
 ```
 

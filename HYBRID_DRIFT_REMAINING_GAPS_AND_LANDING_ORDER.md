@@ -93,11 +93,13 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The next open gap is no longer archetype identification, first-cut progress export, `R5.75`, or the
-R6 acceptance-control matrix. `R6-C.1-CONTROLS` completed at the `5618f7864` wall as
-`10 PASS / 3 preserved RED`, with no production change. The sole active route is now
-`R6-GAP-DET-OPAQUE-PARENT` at its packet-docs gate; `R6-GAP-TGG-TRUTH-PATH-ACTION`,
-`R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` remain blocked in that order.
+The next open gap is no longer archetype identification, first-cut progress export, `R5.75`, the
+R6 acceptance-control matrix, or the opaque-parent confidence seam. `R6-C.1-CONTROLS` completed at
+the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
+`R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
+`d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`. The sole active route is now
+`R6-GAP-TGG-TRUTH-PATH-ACTION` at its docs-only gate; `R6-GAP-WPB-EMPTY-AUTHORITY` and
+`R6-REPLAY` remain blocked in that order.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -107,8 +109,9 @@ control.” The current honest sequence is:
 
 1. keep `R5`, `R5.5`, and `R5.75` landed
 2. keep `R6-C.1-CONTROLS` complete with its actual `10 PASS / 3 preserved RED` disposition
-3. create and freshly review the active `R6-GAP-DET-OPAQUE-PARENT` packet docs before any gap execution
-4. resolve the three named R6 gaps sequentially in matrix order
+3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
+4. create and freshly review the active `R6-GAP-TGG-TRUTH-PATH-ACTION` packet docs before its
+   execution, then resolve the remaining named gaps sequentially in matrix order
 5. run bounded R6 replay/closeout only after all named gaps complete
 6. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
@@ -746,9 +749,10 @@ layer has passed the landed `R5.5` baseline and the narrower `R5.75` follow-on g
 controls resolved as `10 PASS / 3 preserved RED`, checkpoints passed, and no production changed.
 The passing equal-progress turn-shape control narrows the second claim honestly: turn structure
 informs archetype/progress construction but does not independently change `dead_end_thrash` when
-the relevant derived progress is equal. The three preserved reds route, in order, to active
-`R6-GAP-DET-OPAQUE-PARENT` (`CTX-R6-04`, `87409b39a`), blocked
-`R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`, `e67d8b214`), and blocked
+the relevant derived progress is equal. The three preserved reds route, in order, to complete
+`R6-GAP-DET-OPAQUE-PARENT` (`CTX-R6-04`, `87409b39a`; production series through fresh
+review-clean `d13f0a71c`), active docs-only `R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`,
+`e67d8b214`), and blocked
 `R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`). The frozen dead-end corpus still proves
 invariance rather than comparative integrated improvement. R6 remains partial; `R6-REPLAY` remains
 blocked.
@@ -838,11 +842,14 @@ The next honest work target is:
 - keep `R5.75` closed as the landed pre-`R6` hardening/validation family
 - keep `R6-C.1-CONTROLS` complete at `5618f7864` with `10 PASS / 3 preserved RED`; do not reopen
   `semantic_goal_drift` without new failing evidence
+- keep `R6-GAP-DET-OPAQUE-PARENT` complete after production series `bcd94bf4f` + `931e50c85` +
+  `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`; do not promote this focused proof to
+  a terminal scorer disposition or replay/close claim
 - **sole next authorized action:** atomically create and freshly review the three canonical
-  `R6-GAP-DET-OPAQUE-PARENT` packet docs recorded as non-link `TO CREATE` paths in the named-gap
+  `R6-GAP-TGG-TRUTH-PATH-ACTION` packet docs recorded as non-link `TO CREATE` paths in the named-gap
   subledger; those files do not yet exist, and no production/no-code proof begins first
-- keep `R6-GAP-TGG-TRUTH-PATH-ACTION`, `R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` blocked until
-  their ordered predecessor gates complete
+- keep `R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY` blocked until their ordered predecessor gates
+  complete
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed
