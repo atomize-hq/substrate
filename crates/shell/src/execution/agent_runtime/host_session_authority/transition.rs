@@ -1825,8 +1825,6 @@ fn validate_new_start_request(
     if material.descriptor.schema_version != 1
         || material.policy.schema_version != 1
         || material.descriptor.execution_scope != material.launch_knobs.requested_execution_scope
-        || (material.descriptor.execution_scope == super::schema::AgentExecutionScopeV1::Host
-            && request.world_binding.is_some())
         || (material.descriptor.execution_scope == super::schema::AgentExecutionScopeV1::World
             && request.world_binding.is_none())
     {
@@ -1883,8 +1881,6 @@ fn validate_start_request_shape(
     if material.descriptor.schema_version != 1
         || material.policy.schema_version != 1
         || material.descriptor.execution_scope != material.launch_knobs.requested_execution_scope
-        || (material.descriptor.execution_scope == super::schema::AgentExecutionScopeV1::Host
-            && request.world_binding.is_some())
         || (material.descriptor.execution_scope == super::schema::AgentExecutionScopeV1::World
             && request.world_binding.is_none())
     {
