@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-WPB-EMPTY-AUTHORITY
 
-Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. Witness `59f098b35` remains the only `CTX-R6-15` behavior receipt. These docs record future gates, not current proof. Do not check execution or transition tasks until their exact commit, verification, and fresh-review results exist.
+Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. Witness `59f098b35` remains the only `CTX-R6-15` behavior receipt: historical `60 / Low / Active`, flagged, with command-action evidence, against the separate locked target `0 / Low / Cleared`, unflagged, with empty evidence. These docs record future gates, not current proof. Do not check execution or transition tasks until their exact commit, verification, and fresh-review results exist.
 
 ## Required Gates
 
@@ -25,16 +25,17 @@ Record risk, callers, processes, and modules. Impact every other existing symbol
 
 - [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.0 — Commit and independently review the packet docs.**
   - Files: exactly this SPEC, PLAN, and TASKS.
-  - Sanity: confirm all three canonical paths exist; every named source/test path exists; every named test is present exactly once in `crates/agent-drift-analyzer/tests/wrong_plan_branch.rs`; SPEC/PLAN/TASKS use the same control, scope, commands, and route rules.
+  - Sanity: confirm all three canonical paths exist; every named source/test path exists; every named test is present exactly once in `crates/agent-drift-analyzer/tests/wrong_plan_branch.rs`; SPEC/PLAN/TASKS use the same control, scope, commands, route rules, historical red result, and separate locked target.
   - Verify: path/link sanity, `git diff --check`, then the staged gate and complete staged-diff inspection.
   - Commit/review: first commit contains only these three files; fresh built-in `default` review; docs-only fix commits and fresh reviewers until clean.
   - Result: pending.
 
-- [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.1 — Reconcile the review-clean packet into the canonical ledger.**
+- [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.1 — Reconcile the review-clean packet across current authority.**
   - Prerequisite: Task 0 committed and fresh-review-clean.
-  - File: exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`.
-  - Update: replace this named-gap row's three `TO CREATE` markers with actual SPEC/PLAN/TASKS paths; record the review-clean packet-docs commit; reconcile only ledger-local status/next-action wording needed to make witness reconfirmation next; preserve the red `CTX-R6-15` result and active gap.
-  - Commit/review: separate ledger-only commit, staged gate, fresh built-in `default` review, ledger-only fixes and fresh reviewers until clean.
+  - Files: exactly root `SPEC.md`, `tasks/plan.md`, `tasks/todo.md`; `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`; `docs/specs/r6/MAP.md`; `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`; control-pack `00-README.md`, `01-authority-and-status-map.md`, `02-phase-and-gate-map.md`, `05-proof-decision-regression-ledger.md`, and `06-operator-prompt-library.md`; this packet's SPEC, PLAN, and TASKS status/task mirrors; the completed `R6-GAP-TGG-TRUTH-PATH-ACTION` SPEC, PLAN, and TASKS current-status/next-action mirrors; and `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md`, `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-plan.md`, and `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-tasks.md`.
+  - Update: replace this named-gap row's three `TO CREATE` markers with actual SPEC/PLAN/TASKS paths; record the actual review-clean packet-doc series; remove only current-status/next-action claims that the files are absent or packet creation is next; keep this gap `ACTIVE`; set `ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY`; keep `R6-REPLAY` `BLOCKED`; and make exact `CTX-R6-15` witness reconfirmation the sole next action.
+  - Honesty: preserve witness `59f098b35` as historical `60 / Low / Active`, flagged, with command-action evidence; preserve target `0 / Low / Cleared`, unflagged, with empty evidence; add no new proof result, terminal scorer disposition, or gap-complete claim.
+  - Commit/review: separate authority-only commit, staged gate, fresh built-in `default` review, authority-only fixes and fresh reviewers until clean.
   - Blocking rule: no Task 2 witness, Task 3 impact/edit, or no-code receipt begins first.
   - Result: pending.
 

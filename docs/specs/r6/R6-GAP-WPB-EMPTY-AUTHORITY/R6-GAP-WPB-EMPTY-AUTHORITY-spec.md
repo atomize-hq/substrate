@@ -1,6 +1,6 @@
 # R6-GAP-WPB-EMPTY-AUTHORITY — Empty-Authority No-Claim Gap
 
-Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. `CTX-R6-15` is preserved at witness `59f098b35`; transition series `2937dbe5a` + `91f55f6bf` made this the sole active phase with active packet `none`. This first atomic batch creates only this SPEC, PLAN, and TASKS. Witness reconfirmation, production work, and no-code receipt work remain blocked until these docs and the separate ledger reconciliation are each committed and fresh-review-clean.
+Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. `CTX-R6-15` is preserved at witness `59f098b35`; transition series `2937dbe5a` + `91f55f6bf` made this the sole active phase with active packet `none`. This first atomic batch creates only this SPEC, PLAN, and TASKS. Witness reconfirmation, production work, and no-code receipt work remain blocked until these docs and the separate packet-gate authority reconciliation are each committed and fresh-review-clean.
 
 ## Objective And Locked Contract
 
@@ -77,7 +77,23 @@ Record exact counts, dispositions, command exits, and any unrelated failure hone
 ## Atomic Batches, Review, And Exit
 
 1. Packet docs: exactly this SPEC, PLAN, and TASKS; commit and obtain fresh built-in `default` review until clean.
-2. Ledger reconciliation: after Batch 1 is review-clean, touch exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`; replace this gap's three `TO CREATE` markers with actual paths, record the review-clean packet-docs commit, preserve the red disposition, and make witness reconfirmation next. Commit and fresh-review until clean.
+2. Packet-gate authority reconciliation: after Batch 1 is review-clean, reconcile every live current-status/next-action surface that still says the packet is absent or packet creation is next. Limit the batch to:
+   - `SPEC.md`;
+   - `tasks/plan.md`;
+   - `tasks/todo.md`;
+   - `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`;
+   - `docs/specs/r6/MAP.md`;
+   - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`;
+   - `docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md`;
+   - `docs/specs/hybrid-drift-r6-r8-control-pack/01-authority-and-status-map.md`;
+   - `docs/specs/hybrid-drift-r6-r8-control-pack/02-phase-and-gate-map.md`;
+   - `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`;
+   - `docs/specs/hybrid-drift-r6-r8-control-pack/06-operator-prompt-library.md`;
+   - this packet's SPEC, PLAN, and TASKS status/task mirrors;
+   - the completed predecessor's SPEC, PLAN, and TASKS current-status/next-action mirrors under `docs/specs/r6/R6-GAP-TGG-TRUTH-PATH-ACTION/`; and
+   - `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md`, `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-plan.md`, and `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-tasks.md`.
+
+   Record the actual review-clean packet-doc series; replace the three `TO CREATE` markers with the exact landed paths; keep the gap `ACTIVE`; set `ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY`; keep `R6-REPLAY` `BLOCKED`; and make exact witness reconfirmation the sole next action. Preserve the historical `60 / Low / Active`, flagged, command-action-evidence receipt and the separate target `0 / Low / Cleared`, unflagged, empty-evidence contract. Do not add a new proof result, terminal scorer disposition, or gap-complete claim. Commit this authority-only reconciliation separately and fresh-review until clean.
 3. Closure candidate: use either the bounded production-fix files or the TASKS-plus-ledger no-code receipt; record actual proof; commit atomically and fresh-review until clean.
 4. Transition: only after the closure candidate is review-clean, apply the complete landed R6-C.1 phase-transition authority manifest in a separate authority-only commit. Mark this gap complete and activate `R6-REPLAY`; assign no terminal `wrong_plan_branch` disposition, execute no replay control, and start no replay work. Fresh-review fixes remain transition-only. Stop when the transition series is committed and review-clean.
 

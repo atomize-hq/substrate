@@ -1,10 +1,10 @@
 # Plan: R6-GAP-WPB-EMPTY-AUTHORITY
 
-Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. The packet-authoring batch is exactly this SPEC/PLAN/TASKS family. No witness, production, no-code receipt, or replay work is authorized before the packet-docs and separate ledger gates are committed and fresh-review-clean.
+Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. The packet-authoring batch is exactly this SPEC/PLAN/TASKS family. No witness, production, no-code receipt, or replay work is authorized before the packet-docs and separate packet-gate authority-reconciliation gates are committed and fresh-review-clean.
 
 ## Locked Decisions
 
-1. Preserve witness `59f098b35` and `CTX-R6-15` at `0 / Low / Cleared`, unflagged, with empty evidence.
+1. Preserve witness `59f098b35` and `CTX-R6-15` as the historical red result `60 / Low / Active`, flagged, with command-action evidence. Separately preserve the locked target `0 / Low / Cleared`, unflagged, with empty evidence.
 2. Treat `truth_artifacts` plus only non-`observed_command` working-set paths as authority. Observed command paths describe action; they cannot authorize themselves.
 3. Keep the repair inside `score_wrong_plan_branch` and `wrong_plan_branch.rs`. The matching test file is optional only for a necessary distinct regression.
 4. Make the minimum empty-effective-authority change; preserve all non-empty-authority scoring and evidence semantics.
@@ -17,9 +17,19 @@ Status: **ACTIVE — PACKET DOCS GATE; PRESERVED RED; NO GAP EXECUTION YET**. Th
 
 Create and stage only the three canonical packet docs. Check path/test/command consistency, run the staged commit gate, commit atomically, and dispatch a fresh built-in `default` reviewer. Apply docs-only findings in new commits and repeat with a fresh reviewer until clean.
 
-### 1. Reconcile The Review-Clean Packet Into The Ledger
+### 1. Reconcile The Review-Clean Packet Across Current Authority
 
-After Step 0 is review-clean, touch exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`. Replace the active named-gap row's three `TO CREATE` markers with actual packet paths, record the review-clean packet-docs commit, and change only current-status/next-action wording needed to make witness reconfirmation next. Preserve `CTX-R6-15` as red. Commit this ledger-only batch and fresh-review/fix until clean.
+After Step 0 is review-clean, make a separate narrow authority-only reconciliation across every live surface whose current status or next action still says these packet files are absent or that packet creation is next:
+
+- root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md`;
+- `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` and `docs/specs/r6/MAP.md`;
+- `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`;
+- control-pack `00-README.md`, `01-authority-and-status-map.md`, `02-phase-and-gate-map.md`, `05-proof-decision-regression-ledger.md`, and `06-operator-prompt-library.md`;
+- this packet's SPEC, PLAN, and TASKS status/task mirrors;
+- the completed `R6-GAP-TGG-TRUTH-PATH-ACTION` SPEC, PLAN, and TASKS current-status/next-action mirrors; and
+- `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md`, `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-plan.md`, and `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-tasks.md`.
+
+Record the actual review-clean packet-doc series and exact packet paths. Keep `R6-GAP-WPB-EMPTY-AUTHORITY` `ACTIVE`, set `ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY`, keep `R6-REPLAY` `BLOCKED`, and make the exact `CTX-R6-15` witness reconfirmation the sole next action. Preserve historical witness `59f098b35` as `60 / Low / Active`, flagged, with command-action evidence, and preserve the separate locked target as `0 / Low / Cleared`, unflagged, with empty evidence. Do not update proof or terminal disposition beyond that committed history. Commit this reconciliation separately and fresh-review/fix until clean.
 
 No witness rerun, impact command, production edit, or no-code receipt begins before Steps 0 and 1 are each committed and review-clean.
 
