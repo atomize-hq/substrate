@@ -25,15 +25,18 @@ Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + 
 
 ### 1. Refresh Impact And Obtain Operator Acceptance
 
-Run upstream impact for `pair_output_rows` and context for `build_command_attempts`. Current evidence
-is LOW for the edited helper (`1` direct caller, `17` indexed impacts, `0` processes, `1` module) and
-HIGH for its caller/context (`16` direct indexed callers/tests). Because HIGH requires a warning,
+Run upstream impact for `pair_output_rows` and context for `build_command_attempts`. Task `.1`
+recorded evidence was LOW for the edited helper (`1` direct caller, `17` indexed impacts, `0`
+processes, `1` module) and HIGH for its caller/context (`16` direct indexed callers/tests). The
+current refreshed evidence remains LOW for `pair_output_rows` (`1` direct caller, `18` indexed
+impacts, `0` processes, `1` module) and HIGH for `build_command_attempts` (`17` direct indexed
+callers/tests, `0` processes, `1` module). Because HIGH requires a warning,
 issue `DECISION REQUIRED` ID `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` and stop the edit boundary until
 the operator accepts the bounded one-file change and proof wall. Stop/recommend rejection if impact
 becomes CRITICAL or the boundary widens.
 
-**Complete:** refreshed evidence remained LOW for `pair_output_rows` (`1` direct caller, `17`
-indexed impacts, `0` processes, `1` module) and HIGH for `build_command_attempts` caller context
+**Complete:** the Task `.1` recorded evidence remained LOW for `pair_output_rows` (`1` direct caller,
+`17` indexed impacts, `0` processes, `1` module) and HIGH for `build_command_attempts` caller context
 (`16` direct indexed callers/tests, `0` processes, `1` module). The operator replied
 `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on 2026-07-14; receipt `d788f45c9` is fresh
 independent `REVIEW CLEAN`. That decision authorized Tasks `.2`-`.4` only inside the locked

@@ -64,10 +64,10 @@ the escalation contract rather than widening it.
 
 ## Mandatory Pre-Edit Decision Gate
 
-Recorded GitNexus evidence reports `pair_output_rows` as LOW risk (`1` direct caller, `17` indexed
-impacts, `0` affected processes, `1` module), while its `build_command_attempts` caller/context is
-HIGH (`16` direct indexed callers/tests). Repository rules require warning before proceeding when
-impact is HIGH.
+Task `.1` recorded GitNexus evidence reports `pair_output_rows` as LOW risk (`1` direct caller, `17`
+indexed impacts, `0` affected processes, `1` module), while its `build_command_attempts`
+caller/context is HIGH (`16` direct indexed callers/tests). Repository rules require warning before
+proceeding when impact is HIGH.
 
 After these docs are committed and fresh-review-clean, refresh both upstream impacts and issue a
 structured `DECISION REQUIRED` report with ID `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`. That gate
@@ -134,7 +134,7 @@ excludes the failed target lane, producing `InsufficientEvidence`. Its GitNexus 
 under the current authority. Separately, frozen `CTX-R6-06` rollout
 `019e894a-86c9-71e3-b57b-e3d3285f0988` becomes `HistoricalOnly` instead of locked `Recovered`
 because truthful pairing exposes expected-negative check `831 -> 837`, exit `1`. Likely owner
-`recovery_state` has HIGH upstream impact (`1` direct, `34` total, `3` processes, `2` modules).
+`recovery_state` has HIGH upstream impact (`1` direct, `30` impacted, `3` processes, `2` modules).
 
 The prior `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` decision authorized only the locked
 `attempt.rs` change and its wall. It did not authorize progress, recovery, or test-helper scope. Do

@@ -35,8 +35,11 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - Prerequisite: Task 0 review-clean.
   - Refresh upstream impact for `pair_output_rows`; inspect `build_command_attempts` as its caller and
     packet-wide context.
-  - Current evidence: `pair_output_rows` LOW (`1` direct caller, `17` indexed impacts, `0` processes,
-    `1` module); `build_command_attempts` context HIGH (`16` direct indexed callers/tests).
+  - Task `.1` recorded evidence: `pair_output_rows` LOW (`1` direct caller, `17` indexed impacts, `0`
+    processes, `1` module); `build_command_attempts` context HIGH (`16` direct indexed callers/tests).
+  - Current refreshed evidence: `pair_output_rows` LOW (`1` direct caller, `18` indexed impacts, `0`
+    processes, `1` module); `build_command_attempts` context HIGH (`17` direct indexed callers/tests,
+    `0` processes, `1` module).
   - Required output: structured `DECISION REQUIRED` ID
     `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`, recommending acceptance of the locked one-file fix plus
     full proof wall. Record explicit operator acceptance before any Rust edit.
@@ -71,7 +74,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     shared comparability helpers remain out of scope.
   - Frozen control: rollout `019e894a-86c9-71e3-b57b-e3d3285f0988` becomes `HistoricalOnly`
     instead of `Recovered` after truthful pairing exposes expected-negative check `831 -> 837`, exit
-    `1`. Likely owner `recovery_state` impact is HIGH (`1` direct / `34` total / `3` processes / `2`
+    `1`. Likely owner `recovery_state` impact is HIGH (`1` direct / `30` impacted / `3` processes / `2`
     modules).
   - Option A: preserve locked `CTX-R6-02` Stalled/Active and `CTX-R6-06` Recovered contracts;
     authorize a docs-first, fresh-review-clean same-packet amendment for the smallest call-ID cutover
