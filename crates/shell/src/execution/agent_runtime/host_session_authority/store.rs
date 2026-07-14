@@ -32,6 +32,12 @@ pub(super) fn bootstrap_opened(root: &TrustedAuthorityRoot) -> Result<StateRootV
     platform::bootstrap_opened(root)
 }
 
+pub(super) fn upgrade_greenfield_root_opened(
+    root: &TrustedAuthorityRoot,
+) -> Result<RootUpgradeOutcomeV1, BootstrapError> {
+    platform::upgrade_greenfield_root_opened(root)
+}
+
 #[cfg(test)]
 pub(crate) fn rotate_commitment_key(
     path: &Path,
@@ -191,6 +197,19 @@ enum KeyLifecycleCrashPointV1 {
     RootPublished,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GreenfieldUpgradeCrashPointV1 {
+    BeforeRootPublication,
+    FinalRevalidationMismatch,
+    AfterRootPublication,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RootUpgradeOutcomeV1 {
+    Upgraded(super::store_schema::StateRootV2),
+    JoinedExact(super::store_schema::StateRootV2),
+}
+
 #[derive(Clone, Copy)]
 enum LegacyMutationV1 {
     ReplaceSessions,
@@ -234,9 +253,10 @@ mod platform {
     #[cfg(test)]
     use super::LegacyMutationV1;
     use super::{
-        BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, InitializationCrashPointV1,
-        InitializationMaterialV1, KeyLifecycleCrashPointV1, LegacyStateStoreCollectionV1,
-        ObjectPublicationOutcomeV1, ObjectVerificationContextV1, TransactionCommitOutcomeV1,
+        BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1,
+        GreenfieldUpgradeCrashPointV1, InitializationCrashPointV1, InitializationMaterialV1,
+        KeyLifecycleCrashPointV1, LegacyStateStoreCollectionV1, ObjectPublicationOutcomeV1,
+        ObjectVerificationContextV1, RootUpgradeOutcomeV1, TransactionCommitOutcomeV1,
     };
     use crate::execution::agent_runtime::host_session_authority::canonical_json;
     use crate::execution::agent_runtime::host_session_authority::hash::{
@@ -260,6 +280,7 @@ mod platform {
         HostSessionPostTurnApplicationV1, HostSessionTransitionInputHandoffV1,
         HostSessionTransitionIntentStateV1, HostSessionTransitionIntentV1,
         HostSessionTransitionTransportPayloadStateV1, SessionNamespaceRecordV1, StateRootV1,
+        StateRootV2, VersionedStateRoot,
     };
     use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
         DirectoryEntry, EntryKind, TrustedAuthorityRoot, TrustedDirectory, TrustedFile,
@@ -338,6 +359,169 @@ mod platform {
                 bootstrap_locked(layout, bootstrap_home, observed, material, None)
             },
         )
+    }
+
+    pub(super) fn upgrade_greenfield_root_opened(
+        root: &TrustedAuthorityRoot,
+    ) -> Result<RootUpgradeOutcomeV1, BootstrapError> {
+        upgrade_greenfield_root_opened_with(root, system_material()?.root_nonce, None)
+    }
+
+    #[cfg(test)]
+    pub(super) fn upgrade_greenfield_root_test(
+        path: &std::path::Path,
+        nonce_bytes: [u8; 16],
+        stop: Option<GreenfieldUpgradeCrashPointV1>,
+    ) -> Result<RootUpgradeOutcomeV1, BootstrapError> {
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open trusted authority root for greenfield upgrade"))?;
+        upgrade_greenfield_root_opened_with(&root, nonce_bytes, stop)
+    }
+
+    fn upgrade_greenfield_root_opened_with(
+        root_handle: &TrustedAuthorityRoot,
+        nonce_bytes: [u8; 16],
+        stop: Option<GreenfieldUpgradeCrashPointV1>,
+    ) -> Result<RootUpgradeOutcomeV1, BootstrapError> {
+        root_handle
+            .revalidate()
+            .map_err(|_| BootstrapError("UnsupportedNonGreenfieldRootV1"))?;
+        let lock_scope = StoreLayoutLockScope::open_existing_activated(root_handle.directory())
+            .map_err(|_| BootstrapError("UnsupportedNonGreenfieldRootV1"))?;
+        let _lock = lock_scope
+            .root_lock
+            .lock_exclusive_owned()
+            .map_err(|_| BootstrapError("lock greenfield upgrade root"))?;
+        lock_scope
+            .validate_temps()
+            .map_err(|_| BootstrapError("UnsupportedNonGreenfieldRootV1"))?;
+        let layout = lock_scope
+            .finish()
+            .map_err(|_| BootstrapError("UnsupportedNonGreenfieldRootV1"))?;
+        layout
+            .validate_closed_layout()
+            .map_err(|_| BootstrapError("UnsupportedNonGreenfieldRootV1"))?;
+        let legacy = LegacyObservation::capture(layout.bootstrap)
+            .map_err(|_| BootstrapError("UnsupportedNonGreenfieldRootV1"))?;
+        if legacy.has_artifact {
+            return Err(BootstrapError("UnsupportedNonGreenfieldRootV1"));
+        }
+        let current = layout
+            .read_greenfield_upgrade_root(root_handle.identity())
+            .map_err(greenfield_upgrade_store_error)?;
+        layout
+            .reconcile_temps()
+            .map_err(|_| BootstrapError("reconcile eligible greenfield upgrade temps"))?;
+        let VersionedStateRoot::V1(v1) = current else {
+            let VersionedStateRoot::V2(v2) = current else {
+                unreachable!("closed root version")
+            };
+            legacy
+                .revalidate(layout.bootstrap)
+                .map_err(|_| BootstrapError("revalidate legacy state for V2 exact join"))?;
+            root_handle
+                .revalidate()
+                .map_err(|_| BootstrapError("revalidate trusted root for V2 exact join"))?;
+            if layout
+                .read_greenfield_upgrade_root(root_handle.identity())
+                .map_err(greenfield_upgrade_store_error)?
+                != VersionedStateRoot::V2(v2.clone())
+            {
+                return Err(BootstrapError(
+                    "greenfield V2 exact retry changed under lock",
+                ));
+            }
+            layout
+                .remove_matching_marker_v2(&v2)
+                .map_err(|_| BootstrapError("reconcile V2 initialization marker"))?;
+            layout
+                .authority
+                .sync()
+                .map_err(|_| BootstrapError("sync exact-joined V2 authority directory"))?;
+            return Ok(RootUpgradeOutcomeV1::JoinedExact(v2));
+        };
+        let v2 = StateRootV2::try_from_greenfield_v1(&v1)
+            .map_err(|_| BootstrapError("UnsupportedNonGreenfieldRootV1"))?;
+        let temp_name = TempNameV1::Root {
+            root_revision: v2.root_revision,
+            nonce: nonce(nonce_bytes),
+        }
+        .file_name();
+        let bytes = canonical_json::to_vec(&v2)
+            .map_err(|_| BootstrapError("encode strict StateRootV2 upgrade"))?;
+        let mut temp = layout
+            .tmp
+            .create_file(&temp_name)
+            .map_err(|_| BootstrapError("create StateRootV2 upgrade temp"))?;
+        temp.write_all(&bytes)
+            .map_err(|_| BootstrapError("write StateRootV2 upgrade temp"))?;
+        temp.sync()
+            .map_err(|_| BootstrapError("sync StateRootV2 upgrade temp"))?;
+        if stop == Some(GreenfieldUpgradeCrashPointV1::BeforeRootPublication) {
+            return Err(BootstrapError(
+                "injected crash before StateRootV2 publication",
+            ));
+        }
+        let final_state_is_exact = stop
+            != Some(GreenfieldUpgradeCrashPointV1::FinalRevalidationMismatch)
+            && legacy.revalidate(layout.bootstrap).is_ok()
+            && root_handle.revalidate().is_ok()
+            && matches!(
+                layout.read_greenfield_upgrade_root(root_handle.identity()),
+                Ok(VersionedStateRoot::V1(ref current)) if current == &v1
+            );
+        if !final_state_is_exact {
+            remove_rejected_upgrade_temp(&layout, &temp_name)?;
+            return Err(BootstrapError("UnsupportedNonGreenfieldRootV1"));
+        }
+        layout
+            .tmp
+            .rename_replace(&temp_name, temp, &layout.authority, ROOT_FILE)
+            .map_err(|_| BootstrapError("publish strict StateRootV2 upgrade"))?;
+        layout
+            .authority
+            .sync()
+            .map_err(|_| BootstrapError("sync StateRootV2 authority directory"))?;
+        if stop == Some(GreenfieldUpgradeCrashPointV1::AfterRootPublication) {
+            return Err(BootstrapError(
+                "injected crash after StateRootV2 publication",
+            ));
+        }
+        if layout
+            .read_greenfield_upgrade_root(root_handle.identity())
+            .map_err(greenfield_upgrade_store_error)?
+            != VersionedStateRoot::V2(v2.clone())
+        {
+            return Err(BootstrapError(
+                "published StateRootV2 does not exactly match upgrade candidate",
+            ));
+        }
+        layout
+            .remove_matching_marker_v2(&v2)
+            .map_err(|_| BootstrapError("remove matching V2 initialization marker"))?;
+        layout
+            .authority
+            .sync()
+            .map_err(|_| BootstrapError("sync reconciled V2 authority directory"))?;
+        Ok(RootUpgradeOutcomeV1::Upgraded(v2))
+    }
+
+    fn greenfield_upgrade_store_error(_error: StoreError) -> BootstrapError {
+        BootstrapError("UnsupportedNonGreenfieldRootV1")
+    }
+
+    fn remove_rejected_upgrade_temp(
+        layout: &StoreLayout<'_>,
+        temp_name: &str,
+    ) -> Result<(), BootstrapError> {
+        layout
+            .tmp
+            .unlink_file(temp_name)
+            .map_err(|_| BootstrapError("remove rejected StateRootV2 upgrade temp"))?;
+        layout
+            .tmp
+            .sync()
+            .map_err(|_| BootstrapError("sync rejected StateRootV2 upgrade temp removal"))
     }
 
     pub(super) fn rotate_commitment_key(
@@ -1062,7 +1246,7 @@ mod platform {
 mod platform {
     use super::{
         BootstrapClassificationV1, BootstrapError, ObjectPublicationOutcomeV1,
-        ObjectVerificationContextV1,
+        ObjectVerificationContextV1, RootUpgradeOutcomeV1,
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AuthorityObjectRefV1, CanonicalDirectoryV1,
@@ -1147,6 +1331,14 @@ mod platform {
     pub(super) fn bootstrap_opened(
         _root: &TrustedAuthorityRoot,
     ) -> Result<StateRootV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn upgrade_greenfield_root_opened(
+        _root: &TrustedAuthorityRoot,
+    ) -> Result<RootUpgradeOutcomeV1, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
         ))

@@ -67,6 +67,67 @@ pub(crate) struct StateRootV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct StateRootV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) bootstrap_home: CanonicalDirectoryV1,
+    pub(crate) root_revision: u64,
+    pub(crate) active_commitment_key_id: String,
+    pub(crate) commitment_key_registry: BTreeMap<String, AuthorityStoreCommitmentKeyV1>,
+    pub(crate) greenfield_namespace_certificate: GreenfieldNamespaceCertificateV1,
+    pub(crate) session_namespace_map: BTreeMap<String, SessionNamespaceRecordV1>,
+    pub(crate) transition_intent_map: BTreeMap<String, HostSessionTransitionIntentV2>,
+    pub(crate) issuer_request_index: BTreeMap<String, IssuerRequestIndexEntryV1>,
+    pub(crate) application_journal: BTreeMap<String, HostSessionTransitionApplicationJournalV2>,
+    pub(crate) retained_worker_registration_request_index:
+        BTreeMap<String, RetainedWorkerAuthorityRegistrationRequestV1>,
+    pub(crate) retained_worker_registration_journal:
+        BTreeMap<String, RetainedWorkerAuthorityRegistrationV1>,
+    pub(crate) object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum VersionedStateRoot {
+    V1(StateRootV1),
+    V2(StateRootV2),
+}
+
+impl VersionedStateRoot {
+    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, StoreSchemaError> {
+        let syntax: serde_json::Value = super::canonical_json::from_slice(bytes)
+            .map_err(|_| StoreSchemaError("invalid canonical authority root"))?;
+        let version = syntax
+            .as_object()
+            .and_then(|object| object.get("schema_version"))
+            .and_then(serde_json::Value::as_u64)
+            .ok_or(StoreSchemaError(
+                "authority root schema discriminator is missing or invalid",
+            ))?;
+        match version {
+            1 => super::canonical_json::from_slice(bytes)
+                .map(Self::V1)
+                .map_err(|_| StoreSchemaError("invalid strict StateRootV1")),
+            2 => super::canonical_json::from_slice(bytes)
+                .map(Self::V2)
+                .map_err(|_| StoreSchemaError("invalid strict StateRootV2")),
+            _ => Err(StoreSchemaError(
+                "unsupported authority root schema version",
+            )),
+        }
+    }
+
+    pub(crate) fn to_canonical_bytes(
+        &self,
+    ) -> Result<Vec<u8>, super::canonical_json::CanonicalJsonError> {
+        match self {
+            Self::V1(root) => super::canonical_json::to_vec(root),
+            Self::V2(root) => super::canonical_json::to_vec(root),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct GreenfieldNamespaceCertificateV1 {
     pub(crate) schema_version: u32,
     pub(crate) authority_store_id: String,
@@ -187,6 +248,30 @@ pub(crate) struct HostSessionTransitionApplicationJournalV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostSessionTransitionApplicationJournalV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) intent_id: String,
+    pub(crate) initial_application: InitialTransitionApplicationJournalV1,
+    pub(crate) startup_terminal_application: Option<StartupOwnershipTerminalApplicationJournalV1>,
+    pub(crate) post_turn_application: Option<PostTurnApplicationJournalV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StartupOwnershipTerminalApplicationJournalV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) startup_ownership_result_ref: AuthorityObjectRefV1,
+    pub(crate) evidence_id: String,
+    pub(crate) authority_revision_before: u64,
+    pub(crate) authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    pub(crate) authority_revision_after: u64,
+    pub(crate) resulting_posture: HostSessionPostureV1,
+    pub(crate) authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    pub(crate) applied_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
 pub(crate) enum AuthorityObjectStorageStateV1 {
     Present,
@@ -278,6 +363,153 @@ pub(crate) enum HostSessionTransitionIntentStateV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostSessionTransitionIntentV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) intent_id: String,
+    pub(crate) issuer_request_id: String,
+    pub(crate) intent_revision: u64,
+    pub(crate) mode: HostSessionTransitionModeV1,
+    pub(crate) authority_precondition: HostSessionAuthorityPreconditionV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) shell_trace_session_id: String,
+    pub(crate) caller: HostSessionTransitionCallerV1,
+    pub(crate) source_authoritative_participant_id: Option<String>,
+    pub(crate) target_authoritative_participant_id: String,
+    pub(crate) target_participant_lease_token_ref: AuthorityObjectRefV1,
+    pub(crate) run_id: String,
+    pub(crate) resulting_authoritative_lineage: Vec<String>,
+    pub(crate) workspace_binding: WorkspaceBindingV1,
+    pub(crate) world_binding: Option<WorldBindingV1>,
+    pub(crate) descriptor_ref: AuthorityObjectRefV1,
+    pub(crate) host_attach_contract_ref: AuthorityObjectRefV1,
+    pub(crate) resume_handle_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) transition_input_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) post_turn_disposition: Option<HostPostTurnDispositionV1>,
+    pub(crate) transport_payload_ref: AuthorityObjectRefV1,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) issued_at: TimestampV1,
+    pub(crate) expires_at: TimestampV1,
+    pub(crate) state: HostSessionTransitionIntentStateV2,
+    pub(crate) input_handoff: HostSessionTransitionInputHandoffV1,
+    pub(crate) transport_payload_state: HostSessionTransitionTransportPayloadStateV1,
+    pub(crate) updated_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostSessionTransitionIntentStateV2 {
+    Issued,
+    Claimed {
+        claim_id: String,
+        claimant_attempt_id: String,
+        claim_revision: u64,
+        claimed_at: TimestampV1,
+        claim_expires_at: TimestampV1,
+    },
+    Applied {
+        claim_id: String,
+        claimant_attempt_id: String,
+        authority_revision_before: Option<u64>,
+        authority_revision_after: u64,
+        active_authoritative_participant_id: String,
+        resulting_posture: HostSessionPostureV1,
+        authority_record_commitment: AuthorityObjectCommitmentV1,
+        application_result_ref: AuthorityObjectRefV1,
+        startup_ownership: HostSessionStartupOwnershipApplicationV1,
+        post_turn: HostSessionPostTurnApplicationV1,
+        applied_at: TimestampV1,
+    },
+    Rejected {
+        reason: HostSessionTransitionTerminalRejectionV1,
+        terminal_handoff_ref: AuthorityObjectRefV1,
+        rejected_at: TimestampV1,
+    },
+    Expired {
+        terminal_handoff_ref: AuthorityObjectRefV1,
+        expired_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostSessionStartupOwnershipApplicationV1 {
+    NotApplicable,
+    Pending {
+        expected_run_id: String,
+        expected_authority_revision: u64,
+        expected_active_authoritative_participant_id: String,
+    },
+    Accepted {
+        evidence_id: String,
+        result_ref: AuthorityObjectRefV1,
+        authority_revision: u64,
+        accepted_at: TimestampV1,
+    },
+    TerminalReconciled {
+        evidence_id: String,
+        result_ref: AuthorityObjectRefV1,
+        authority_revision_before: u64,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        reconciled_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum RetainedWorkerAuthorityRegistrationRequestStateV1 {
+    Reserved,
+    Applied {
+        authority_revision_after: u64,
+        authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedWorkerAuthorityRegistrationRequestV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) issuer_request_id: String,
+    pub(crate) registration_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) authority_revision_before: u64,
+    pub(crate) authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    pub(crate) retained_participant_id: String,
+    pub(crate) descriptor_ref_id: String,
+    pub(crate) descriptor_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) resume_handle_ref_id: String,
+    pub(crate) resume_handle_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) retained_worker_ref_id: String,
+    pub(crate) retained_worker_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) current_policy_ref: AuthorityObjectRefV1,
+    pub(crate) world_binding: WorldBindingV1,
+    pub(crate) registered_at: TimestampV1,
+    pub(crate) state: RetainedWorkerAuthorityRegistrationRequestStateV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedWorkerAuthorityRegistrationV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) issuer_request_id: String,
+    pub(crate) registration_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) authority_revision_before: u64,
+    pub(crate) authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    pub(crate) authority_revision_after: u64,
+    pub(crate) authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    pub(crate) retained_participant_id: String,
+    pub(crate) authoritative_lineage_commitment_after: AuthorityObjectCommitmentV1,
+    pub(crate) descriptor_ref: AuthorityObjectRefV1,
+    pub(crate) resume_handle_ref: AuthorityObjectRefV1,
+    pub(crate) retained_worker_ref: AuthorityObjectRefV1,
+    pub(crate) current_policy_ref: AuthorityObjectRefV1,
+    pub(crate) world_binding: WorldBindingV1,
+    pub(crate) registered_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
 pub(crate) enum HostSessionPostTurnApplicationV1 {
     NotApplicable,
@@ -349,6 +581,107 @@ impl AuthorityStoreInitializationV1 {
         validate_key_id(&self.initial_key_id)
             .map_err(|_| StoreSchemaError("invalid initialization key ID"))?;
         required(&self.bootstrap_home.physical_path)
+    }
+}
+
+impl StateRootV2 {
+    pub(crate) fn try_from_greenfield_v1(root: &StateRootV1) -> Result<Self, StoreSchemaError> {
+        if !root.session_namespace_map.is_empty()
+            || !root.transition_intent_map.is_empty()
+            || !root.issuer_request_index.is_empty()
+            || !root.application_journal.is_empty()
+            || !root.object_index.is_empty()
+        {
+            return Err(StoreSchemaError("UnsupportedNonGreenfieldRootV1"));
+        }
+        root.validate()?;
+        let upgraded = Self {
+            schema_version: 2,
+            authority_store_id: root.authority_store_id.clone(),
+            bootstrap_home: root.bootstrap_home.clone(),
+            root_revision: root
+                .root_revision
+                .checked_add(1)
+                .ok_or(StoreSchemaError("authority root revision overflow"))?,
+            active_commitment_key_id: root.active_commitment_key_id.clone(),
+            commitment_key_registry: root.commitment_key_registry.clone(),
+            greenfield_namespace_certificate: root.greenfield_namespace_certificate.clone(),
+            session_namespace_map: BTreeMap::new(),
+            transition_intent_map: BTreeMap::new(),
+            issuer_request_index: BTreeMap::new(),
+            application_journal: BTreeMap::new(),
+            retained_worker_registration_request_index: BTreeMap::new(),
+            retained_worker_registration_journal: BTreeMap::new(),
+            object_index: BTreeMap::new(),
+        };
+        upgraded.validate_greenfield()?;
+        Ok(upgraded)
+    }
+
+    pub(crate) fn validate_greenfield(&self) -> Result<(), StoreSchemaError> {
+        if self.schema_version != 2 {
+            return Err(StoreSchemaError("StateRootV2 requires schema version 2"));
+        }
+        validate_store_id(&self.authority_store_id)
+            .map_err(|_| StoreSchemaError("invalid authority store ID"))?;
+        required(&self.bootstrap_home.physical_path)?;
+        if self.root_revision < 2 {
+            return Err(StoreSchemaError("V2 root revision must be at least two"));
+        }
+        if self.greenfield_namespace_certificate.schema_version != 1
+            || self.greenfield_namespace_certificate.authority_store_id != self.authority_store_id
+            || self.greenfield_namespace_certificate.bootstrap_home != self.bootstrap_home
+        {
+            return Err(StoreSchemaError(
+                "greenfield certificate does not match V2 root identity",
+            ));
+        }
+        let mut active_count = 0_usize;
+        for (key, value) in &self.commitment_key_registry {
+            require_version(value.schema_version)?;
+            validate_key_id(&value.key_id)
+                .map_err(|_| StoreSchemaError("invalid commitment key ID"))?;
+            if key != &value.key_id || value.authority_store_id != self.authority_store_id {
+                return Err(StoreSchemaError("commitment key registry entry mismatch"));
+            }
+            if value.state == AuthorityStoreCommitmentKeyStateV1::Active {
+                active_count += 1;
+                if value.key_id != self.active_commitment_key_id {
+                    return Err(StoreSchemaError("active key ID does not match root"));
+                }
+            }
+        }
+        if active_count != 1
+            || self
+                .commitment_key_registry
+                .get(&self.active_commitment_key_id)
+                .map(|key| key.state)
+                != Some(AuthorityStoreCommitmentKeyStateV1::Active)
+        {
+            return Err(StoreSchemaError("root must contain exactly one active key"));
+        }
+        if !self
+            .commitment_key_registry
+            .values()
+            .any(|key| key.created_at == self.greenfield_namespace_certificate.certified_at)
+        {
+            return Err(StoreSchemaError(
+                "greenfield certificate timestamp has no initial key",
+            ));
+        }
+        if !self.session_namespace_map.is_empty()
+            || !self.transition_intent_map.is_empty()
+            || !self.issuer_request_index.is_empty()
+            || !self.application_journal.is_empty()
+            || !self.retained_worker_registration_request_index.is_empty()
+            || !self.retained_worker_registration_journal.is_empty()
+            || !self.object_index.is_empty()
+        {
+            return Err(StoreSchemaError(
+                "A1.2a-1 StateRootV2 must remain greenfield-empty",
+            ));
+        }
+        Ok(())
     }
 }
 

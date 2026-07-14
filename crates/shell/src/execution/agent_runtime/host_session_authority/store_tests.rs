@@ -3,9 +3,20 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::*;
 use crate::execution::agent_runtime::host_session_authority::canonical_json;
+use crate::execution::agent_runtime::host_session_authority::schema::{
+    AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
+    HostSessionAuthorityPreconditionV1, HostSessionTransitionCallerKindV1,
+    HostSessionTransitionCallerV1, HostSessionTransitionModeV1, PolicyObjectHashInputV1,
+    WorkspaceBindingV1,
+};
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    AuthorityObjectIndexEntryV1, AuthorityObjectStorageStateV1,
     AuthorityStoreCommitmentAlgorithmV1, AuthorityStoreCommitmentKeyStateV1,
-    AuthorityStoreCommitmentKeyV1,
+    AuthorityStoreCommitmentKeyV1, HostSessionTransitionApplicationJournalV1,
+    HostSessionTransitionInputHandoffV1, HostSessionTransitionIntentStateV1,
+    HostSessionTransitionIntentV1, HostSessionTransitionTransportPayloadStateV1,
+    InitialTransitionApplicationJournalV1, IssuerRequestIndexEntryV1, SessionIdReservationV1,
+    SessionNamespaceRecordV1, StateRootV2, VersionedStateRoot,
 };
 use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
 
@@ -35,6 +46,439 @@ fn material(seed: u8) -> InitializationMaterialV1 {
         secret_key: [seed.wrapping_add(5); 32],
         created_at: TimestampV1::parse("2026-07-11T12:49:11.000000000Z").unwrap(),
     }
+}
+
+fn placeholder_commitment() -> AuthorityObjectCommitmentV1 {
+    AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: "ab".repeat(32),
+    }
+}
+
+fn placeholder_ref(ref_id: &str, object_kind: AuthorityObjectKindV1) -> AuthorityObjectRefV1 {
+    AuthorityObjectRefV1 {
+        ref_id: ref_id.into(),
+        object_kind,
+        schema_version: 1,
+        commitment: placeholder_commitment(),
+    }
+}
+
+fn placeholder_v1_intent(root: &StateRootV1) -> HostSessionTransitionIntentV1 {
+    let timestamp = TimestampV1::parse("2026-07-11T12:49:11.000000000Z").unwrap();
+    HostSessionTransitionIntentV1 {
+        schema_version: 1,
+        intent_id: "intent-upgrade-occupied".into(),
+        issuer_request_id: "request-upgrade-occupied".into(),
+        intent_revision: 1,
+        mode: HostSessionTransitionModeV1::Start,
+        authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+        orchestration_session_id: "session-upgrade-occupied".into(),
+        shell_trace_session_id: "trace-upgrade-occupied".into(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::PublicCli,
+            caller_participant_id: None,
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        source_authoritative_participant_id: None,
+        target_authoritative_participant_id: "participant-upgrade-occupied".into(),
+        target_participant_lease_token_ref: placeholder_ref(
+            "ao_11111111111111111111111111111111",
+            AuthorityObjectKindV1::LeaseToken,
+        ),
+        run_id: "run-upgrade-occupied".into(),
+        resulting_authoritative_lineage: vec!["participant-upgrade-occupied".into()],
+        workspace_binding: WorkspaceBindingV1 {
+            workspace_root: root.bootstrap_home.clone(),
+            authority_store_root: root.bootstrap_home.clone(),
+            authority_store_id: root.authority_store_id.clone(),
+        },
+        world_binding: None,
+        descriptor_ref: placeholder_ref(
+            "ao_22222222222222222222222222222222",
+            AuthorityObjectKindV1::AgentDescriptor,
+        ),
+        host_attach_contract_ref: placeholder_ref(
+            "ao_33333333333333333333333333333333",
+            AuthorityObjectKindV1::HostAttachContract,
+        ),
+        resume_handle_ref: None,
+        transition_input_ref: None,
+        post_turn_disposition: None,
+        transport_payload_ref: placeholder_ref(
+            "ao_44444444444444444444444444444444",
+            AuthorityObjectKindV1::TransitionTransportPayload,
+        ),
+        payload_commitment: placeholder_commitment(),
+        issued_at: timestamp.clone(),
+        expires_at: TimestampV1::parse("2026-07-11T12:54:11.000000000Z").unwrap(),
+        state: HostSessionTransitionIntentStateV1::Issued,
+        input_handoff: HostSessionTransitionInputHandoffV1::NotApplicable,
+        transport_payload_state: HostSessionTransitionTransportPayloadStateV1::Retained,
+        updated_at: timestamp,
+    }
+}
+
+#[test]
+fn strict_root_version_discrimination_preserves_v1_bytes_and_rejects_mixed_shapes() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x01), None).unwrap();
+    let v1_bytes = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    let decoded_v1 = VersionedStateRoot::decode(&v1_bytes).unwrap();
+    assert_eq!(decoded_v1, VersionedStateRoot::V1(v1.clone()));
+    assert_eq!(decoded_v1.to_canonical_bytes().unwrap(), v1_bytes);
+
+    let v2 = StateRootV2::try_from_greenfield_v1(&v1).unwrap();
+    let v2_bytes = canonical_json::to_vec(&v2).unwrap();
+    let decoded_v2 = VersionedStateRoot::decode(&v2_bytes).unwrap();
+    assert_eq!(decoded_v2, VersionedStateRoot::V2(v2));
+    assert_eq!(decoded_v2.to_canonical_bytes().unwrap(), v2_bytes);
+
+    let mut v1_with_v2_fields: serde_json::Value = serde_json::from_slice(&v1_bytes).unwrap();
+    let object = v1_with_v2_fields.as_object_mut().unwrap();
+    object.insert(
+        "retained_worker_registration_request_index".into(),
+        serde_json::json!({}),
+    );
+    object.insert(
+        "retained_worker_registration_journal".into(),
+        serde_json::json!({}),
+    );
+    assert!(
+        VersionedStateRoot::decode(&canonical_json::to_vec(&v1_with_v2_fields).unwrap()).is_err()
+    );
+
+    let mut v2_missing_field: serde_json::Value = serde_json::from_slice(&v2_bytes).unwrap();
+    v2_missing_field
+        .as_object_mut()
+        .unwrap()
+        .remove("retained_worker_registration_journal");
+    assert!(
+        VersionedStateRoot::decode(&canonical_json::to_vec(&v2_missing_field).unwrap()).is_err()
+    );
+
+    let mut unknown_version: serde_json::Value = serde_json::from_slice(&v1_bytes).unwrap();
+    unknown_version["schema_version"] = serde_json::json!(3);
+    assert!(
+        VersionedStateRoot::decode(&canonical_json::to_vec(&unknown_version).unwrap()).is_err()
+    );
+}
+
+#[test]
+fn greenfield_v1_to_v2_conversion_rejects_each_occupied_semantic_map() {
+    let root = root();
+    let empty = platform::bootstrap_test(root.path(), material(0x02), None).unwrap();
+
+    let mut occupied = empty.clone();
+    occupied.session_namespace_map.insert(
+        "session-upgrade-occupied".into(),
+        SessionNamespaceRecordV1::StartReservation(SessionIdReservationV1 {
+            schema_version: 1,
+            orchestration_session_id: "session-upgrade-occupied".into(),
+            intent_id: "intent-upgrade-occupied".into(),
+            issuer_request_id: "request-upgrade-occupied".into(),
+            payload_commitment: placeholder_commitment(),
+            reserved_at: material(0x02).created_at,
+        }),
+    );
+    assert!(StateRootV2::try_from_greenfield_v1(&occupied).is_err());
+
+    let mut occupied = empty.clone();
+    occupied.transition_intent_map.insert(
+        "intent-upgrade-occupied".into(),
+        placeholder_v1_intent(&empty),
+    );
+    assert!(StateRootV2::try_from_greenfield_v1(&occupied).is_err());
+
+    let mut occupied = empty.clone();
+    occupied.issuer_request_index.insert(
+        "request-upgrade-occupied".into(),
+        IssuerRequestIndexEntryV1 {
+            schema_version: 1,
+            issuer_request_id: "request-upgrade-occupied".into(),
+            orchestration_session_id: "session-upgrade-occupied".into(),
+            intent_id: "intent-upgrade-occupied".into(),
+            payload_commitment: placeholder_commitment(),
+        },
+    );
+    assert!(StateRootV2::try_from_greenfield_v1(&occupied).is_err());
+
+    let mut occupied = empty.clone();
+    occupied.application_journal.insert(
+        "intent-upgrade-occupied".into(),
+        HostSessionTransitionApplicationJournalV1 {
+            schema_version: 1,
+            intent_id: "intent-upgrade-occupied".into(),
+            initial_application: InitialTransitionApplicationJournalV1 {
+                authority_revision_before: None,
+                authority_revision_after: 1,
+                authority_record_commitment: placeholder_commitment(),
+                application_result_ref: placeholder_ref(
+                    "ao_55555555555555555555555555555555",
+                    AuthorityObjectKindV1::ApplicationResult,
+                ),
+                applied_at: material(0x02).created_at,
+            },
+            post_turn_application: None,
+        },
+    );
+    assert!(StateRootV2::try_from_greenfield_v1(&occupied).is_err());
+
+    let mut occupied = empty;
+    occupied.object_index.insert(
+        "ao_66666666666666666666666666666666".into(),
+        AuthorityObjectIndexEntryV1 {
+            schema_version: 1,
+            ref_id: "ao_66666666666666666666666666666666".into(),
+            object_kind: AuthorityObjectKindV1::Policy,
+            object_schema_version: 1,
+            byte_length: 1,
+            storage_state: AuthorityObjectStorageStateV1::Present,
+        },
+    );
+    assert!(StateRootV2::try_from_greenfield_v1(&occupied).is_err());
+}
+
+#[test]
+fn greenfield_upgrade_is_atomic_crash_recoverable_and_exactly_retryable() {
+    let before_publication = root();
+    let v1 = platform::bootstrap_test(before_publication.path(), material(0x03), None).unwrap();
+    let v1_bytes = fs::read(
+        before_publication
+            .path()
+            .join("authority-v1/state-root-v1.json"),
+    )
+    .unwrap();
+    assert!(platform::upgrade_greenfield_root_test(
+        before_publication.path(),
+        [0x31; 16],
+        Some(GreenfieldUpgradeCrashPointV1::BeforeRootPublication),
+    )
+    .is_err());
+    assert_eq!(
+        fs::read(
+            before_publication
+                .path()
+                .join("authority-v1/state-root-v1.json")
+        )
+        .unwrap(),
+        v1_bytes
+    );
+    let upgraded =
+        platform::upgrade_greenfield_root_test(before_publication.path(), [0x32; 16], None)
+            .unwrap();
+    let RootUpgradeOutcomeV1::Upgraded(v2) = upgraded else {
+        panic!("first complete upgrade must publish V2")
+    };
+    assert_eq!(v2.schema_version, 2);
+    assert_eq!(v2.root_revision, v1.root_revision + 1);
+    assert!(v2.retained_worker_registration_request_index.is_empty());
+    assert!(v2.retained_worker_registration_journal.is_empty());
+
+    let committed_bytes = fs::read(
+        before_publication
+            .path()
+            .join("authority-v1/state-root-v1.json"),
+    )
+    .unwrap();
+    assert_eq!(
+        platform::upgrade_greenfield_root_test(before_publication.path(), [0x33; 16], None,)
+            .unwrap(),
+        RootUpgradeOutcomeV1::JoinedExact(v2.clone())
+    );
+    assert_eq!(
+        fs::read(
+            before_publication
+                .path()
+                .join("authority-v1/state-root-v1.json")
+        )
+        .unwrap(),
+        committed_bytes
+    );
+
+    let after_publication = root();
+    platform::bootstrap_test(after_publication.path(), material(0x04), None).unwrap();
+    assert!(platform::upgrade_greenfield_root_test(
+        after_publication.path(),
+        [0x41; 16],
+        Some(GreenfieldUpgradeCrashPointV1::AfterRootPublication),
+    )
+    .is_err());
+    let published = VersionedStateRoot::decode(
+        &fs::read(
+            after_publication
+                .path()
+                .join("authority-v1/state-root-v1.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let VersionedStateRoot::V2(published) = published else {
+        panic!("post-publication crash must leave exact V2")
+    };
+    assert_eq!(
+        platform::upgrade_greenfield_root_test(after_publication.path(), [0x42; 16], None).unwrap(),
+        RootUpgradeOutcomeV1::JoinedExact(published)
+    );
+
+    let rejected = root();
+    platform::bootstrap_test(rejected.path(), material(0x43), None).unwrap();
+    let root_path = rejected.path().join("authority-v1/state-root-v1.json");
+    let before = fs::read(&root_path).unwrap();
+    let error = platform::upgrade_greenfield_root_test(
+        rejected.path(),
+        [0x44; 16],
+        Some(GreenfieldUpgradeCrashPointV1::FinalRevalidationMismatch),
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), "UnsupportedNonGreenfieldRootV1");
+    assert_eq!(fs::read(root_path).unwrap(), before);
+    assert_eq!(
+        fs::read_dir(rejected.path().join("authority-v1/tmp"))
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn greenfield_upgrade_rejects_orphans_without_any_mutation() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x05), None).unwrap();
+    let value = PolicyObjectHashInputV1 {
+        schema_version: 1,
+        policy_revision: "policy-upgrade-orphan".into(),
+        canonical_policy_snapshot_sha256: "cd".repeat(32),
+    };
+    let bytes = canonical_json::to_vec(&value).unwrap();
+    let reference = AuthorityObjectRefV1 {
+        ref_id: "ao_77777777777777777777777777777777".into(),
+        object_kind: AuthorityObjectKindV1::Policy,
+        schema_version: 1,
+        commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex:
+                crate::execution::agent_runtime::host_session_authority::hash::canonical_sha256(
+                    &value,
+                )
+                .unwrap(),
+        },
+    };
+    platform::publish_object_test(root.path(), &reference, &bytes, None, [0x51; 16]).unwrap();
+    let root_path = root.path().join("authority-v1/state-root-v1.json");
+    let before = fs::read(&root_path).unwrap();
+    let object_path = root
+        .path()
+        .join("authority-v1/objects/policy/v1/ao_77777777777777777777777777777777.obj");
+    let error = platform::upgrade_greenfield_root_test(root.path(), [0x52; 16], None).unwrap_err();
+    assert_eq!(error.to_string(), "UnsupportedNonGreenfieldRootV1");
+    assert_eq!(fs::read(root_path).unwrap(), before);
+    assert_eq!(fs::read(object_path).unwrap(), bytes);
+    assert_eq!(before, canonical_json::to_vec(&v1).unwrap());
+}
+
+#[test]
+fn greenfield_upgrade_rejects_legacy_artifacts_without_any_mutation() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x53), None).unwrap();
+    let root_path = root.path().join("authority-v1/state-root-v1.json");
+    let before = fs::read(&root_path).unwrap();
+    let sessions = root.path().join("run/agent-hub/sessions");
+    fs::create_dir_all(&sessions).unwrap();
+    for directory in [
+        root.path().join("run"),
+        root.path().join("run/agent-hub"),
+        sessions.clone(),
+    ] {
+        fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let artifact = sessions.join("legacy.json");
+    fs::write(&artifact, b"legacy").unwrap();
+    fs::set_permissions(&artifact, fs::Permissions::from_mode(0o600)).unwrap();
+    let preserved_temp = root
+        .path()
+        .join("authority-v1/tmp/root--r2--54545454545454545454545454545454.tmp");
+    fs::write(&preserved_temp, b"unpublished").unwrap();
+    fs::set_permissions(&preserved_temp, fs::Permissions::from_mode(0o600)).unwrap();
+
+    let error = platform::upgrade_greenfield_root_test(root.path(), [0x54; 16], None).unwrap_err();
+    assert_eq!(error.to_string(), "UnsupportedNonGreenfieldRootV1");
+    assert_eq!(fs::read(root_path).unwrap(), before);
+    assert_eq!(fs::read(artifact).unwrap(), b"legacy");
+    assert_eq!(fs::read(preserved_temp).unwrap(), b"unpublished");
+    assert_eq!(before, canonical_json::to_vec(&v1).unwrap());
+}
+
+#[test]
+fn greenfield_upgrade_classifies_unsafe_roots_without_reconciling_temps() {
+    let root = root();
+    platform::bootstrap_test(root.path(), material(0x55), None).unwrap();
+    let root_path = root.path().join("authority-v1/state-root-v1.json");
+    let mut syntax: serde_json::Value =
+        canonical_json::from_slice(&fs::read(&root_path).unwrap()).unwrap();
+    syntax
+        .as_object_mut()
+        .unwrap()
+        .insert("unexpected_v2_field".into(), serde_json::json!({}));
+    let invalid_bytes = canonical_json::to_vec(&syntax).unwrap();
+    fs::write(&root_path, &invalid_bytes).unwrap();
+    let preserved_temp = root
+        .path()
+        .join("authority-v1/tmp/root--r2--55555555555555555555555555555555.tmp");
+    fs::write(&preserved_temp, b"unpublished").unwrap();
+    fs::set_permissions(&preserved_temp, fs::Permissions::from_mode(0o600)).unwrap();
+
+    let error = platform::upgrade_greenfield_root_test(root.path(), [0x56; 16], None).unwrap_err();
+    assert_eq!(error.to_string(), "UnsupportedNonGreenfieldRootV1");
+    assert_eq!(fs::read(root_path).unwrap(), invalid_bytes);
+    assert_eq!(fs::read(preserved_temp).unwrap(), b"unpublished");
+}
+
+#[test]
+fn greenfield_upgrade_rejects_absent_store_without_creating_scaffold() {
+    let root = root();
+    let error = platform::upgrade_greenfield_root_test(root.path(), [0x57; 16], None).unwrap_err();
+    assert_eq!(error.to_string(), "UnsupportedNonGreenfieldRootV1");
+    assert!(!root.path().join("authority-v1").exists());
+}
+
+#[test]
+fn greenfield_upgrade_preserves_retired_key_registry_and_rejects_unknown_v2_routes() {
+    let root = root();
+    let initial = platform::bootstrap_test(root.path(), material(0x06), None).unwrap();
+    let retired_key_id = initial.active_commitment_key_id.clone();
+    let rotated = platform::rotate_commitment_key_test(root.path(), material(0x07), None).unwrap();
+    let retired =
+        platform::retire_commitment_key_test(root.path(), &retired_key_id, [0x61; 16], None)
+            .unwrap();
+    assert_eq!(
+        retired.commitment_key_registry[&retired_key_id].state,
+        AuthorityStoreCommitmentKeyStateV1::Retired
+    );
+    assert!(!root
+        .path()
+        .join(format!("authority-v1/keys/{retired_key_id}.key"))
+        .exists());
+
+    let RootUpgradeOutcomeV1::Upgraded(v2) =
+        platform::upgrade_greenfield_root_test(root.path(), [0x62; 16], None).unwrap()
+    else {
+        panic!("eligible retired-key V1 root must upgrade")
+    };
+    assert_eq!(v2.commitment_key_registry, retired.commitment_key_registry);
+    assert_eq!(
+        v2.active_commitment_key_id,
+        rotated.active_commitment_key_id
+    );
+
+    let unknown = root.path().join("authority-v1/objects/unknown-empty-kind");
+    fs::create_dir(&unknown).unwrap();
+    fs::set_permissions(&unknown, fs::Permissions::from_mode(0o700)).unwrap();
+    let before = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    assert!(platform::upgrade_greenfield_root_test(root.path(), [0x63; 16], None).is_err());
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        before
+    );
 }
 
 #[test]

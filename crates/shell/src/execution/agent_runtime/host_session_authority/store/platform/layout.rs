@@ -92,6 +92,40 @@ impl<'a> StoreLayoutLockScope<'a> {
         })
     }
 
+    pub(super) fn open_existing_activated(root: &'a TrustedDirectory) -> Result<Self, StoreError> {
+        let authority = match root
+            .entry_kind(AUTHORITY_DIRECTORY)
+            .map_err(|_| StoreError("inspect existing authority layout"))?
+        {
+            Some(EntryKind::Directory) => root
+                .open_directory(AUTHORITY_DIRECTORY)
+                .map_err(|_| StoreError("open existing authority layout"))?,
+            None | Some(_) => return Err(StoreError("activated authority layout is absent")),
+        };
+        if authority
+            .entry_kind(ROOT_FILE)
+            .map_err(|_| StoreError("inspect activated authority root"))?
+            != Some(EntryKind::RegularFile)
+        {
+            return Err(StoreError("activated authority root is absent or unsafe"));
+        }
+        let lock = authority
+            .open_directory("lock")
+            .map_err(|_| StoreError("open existing authority lock directory"))?;
+        let tmp = authority
+            .open_directory("tmp")
+            .map_err(|_| StoreError("open existing authority temp directory"))?;
+        let root_lock = create_or_open_lock(&lock, true)?;
+        Ok(Self {
+            bootstrap: root,
+            authority,
+            lock,
+            tmp,
+            root_lock,
+            strict: true,
+        })
+    }
+
     pub(super) fn authority_activated(&self) -> Result<bool, StoreError> {
         Ok(self
             .authority
@@ -452,6 +486,178 @@ impl<'a> StoreLayout<'a> {
         self.validate_existing_objects(&root, true)?;
         self.validate_reachable_objects(&root)?;
         Ok(root)
+    }
+
+    pub(super) fn read_greenfield_upgrade_root(
+        &self,
+        bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
+    ) -> Result<VersionedStateRoot, StoreError> {
+        let file = self
+            .authority
+            .open_file(ROOT_FILE)
+            .map_err(|_| StoreError("open greenfield upgrade root"))?;
+        let bytes = file
+            .read_all()
+            .map_err(|_| StoreError("read greenfield upgrade root"))?;
+        let root = VersionedStateRoot::decode(&bytes)
+            .map_err(|_| StoreError("decode strict greenfield upgrade root"))?;
+        match &root {
+            VersionedStateRoot::V1(root) => {
+                root.validate()
+                    .map_err(|_| StoreError("validate strict greenfield StateRootV1"))?;
+                if &root.bootstrap_home != bootstrap_home {
+                    return Err(StoreError("greenfield StateRootV1 home mismatch"));
+                }
+                self.validate_existing_keys(root)?;
+                self.validate_existing_objects(root, true)?;
+                self.validate_reachable_objects(root)?;
+                self.validate_greenfield_upgrade_occupancy(
+                    &root.authority_store_id,
+                    &root.commitment_key_registry,
+                )?;
+                StateRootV2::try_from_greenfield_v1(root)
+                    .map_err(|_| StoreError("UnsupportedNonGreenfieldRootV1"))?;
+                self.validate_matching_marker_if_present(root)?;
+            }
+            VersionedStateRoot::V2(root) => {
+                root.validate_greenfield()
+                    .map_err(|_| StoreError("validate strict greenfield StateRootV2"))?;
+                if &root.bootstrap_home != bootstrap_home {
+                    return Err(StoreError("greenfield StateRootV2 home mismatch"));
+                }
+                self.validate_existing_keys_v2(root)?;
+                self.validate_greenfield_upgrade_occupancy(
+                    &root.authority_store_id,
+                    &root.commitment_key_registry,
+                )?;
+                self.validate_matching_marker_if_present_v2(root)?;
+            }
+        }
+        Ok(root)
+    }
+
+    fn validate_greenfield_upgrade_occupancy(
+        &self,
+        authority_store_id: &str,
+        registry: &std::collections::BTreeMap<String, AuthorityStoreCommitmentKeyV1>,
+    ) -> Result<(), StoreError> {
+        let keys = self
+            .keys
+            .entries()
+            .map_err(|_| StoreError("enumerate greenfield upgrade keys"))?;
+        for entry in keys {
+            let key_id = entry
+                .name
+                .strip_suffix(".key")
+                .ok_or(StoreError("UnsupportedNonGreenfieldRootV1"))?;
+            let record = registry
+                .get(key_id)
+                .ok_or(StoreError("UnsupportedNonGreenfieldRootV1"))?;
+            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
+                &self
+                    .keys
+                    .open_file(&entry.name)
+                    .map_err(|_| StoreError("open greenfield upgrade key"))?
+                    .read_all()
+                    .map_err(|_| StoreError("read greenfield upgrade key"))?,
+            )
+            .map_err(|_| StoreError("decode greenfield upgrade key"))?;
+            if envelope.authority_store_id != authority_store_id
+                || envelope.key_id != record.key_id
+                || envelope.created_at != record.created_at
+            {
+                return Err(StoreError("greenfield upgrade key identity mismatch"));
+            }
+        }
+        for kind_entry in self
+            .objects
+            .entries()
+            .map_err(|_| StoreError("enumerate greenfield upgrade object kinds"))?
+        {
+            if kind_entry.kind != EntryKind::Directory || kind_from_slug(&kind_entry.name).is_none()
+            {
+                return Err(StoreError("greenfield upgrade object kind is invalid"));
+            }
+            self.objects
+                .revalidate_entry(&kind_entry)
+                .map_err(|_| StoreError("greenfield upgrade object kind changed"))?;
+            let kind = self
+                .objects
+                .open_directory(&kind_entry.name)
+                .map_err(|_| StoreError("open greenfield upgrade object kind"))?;
+            for version_entry in kind
+                .entries()
+                .map_err(|_| StoreError("enumerate greenfield upgrade object versions"))?
+            {
+                if version_entry.kind != EntryKind::Directory || version_entry.name != "v1" {
+                    return Err(StoreError("greenfield upgrade object version is invalid"));
+                }
+                kind.revalidate_entry(&version_entry)
+                    .map_err(|_| StoreError("greenfield upgrade object version changed"))?;
+                let version = kind
+                    .open_directory(&version_entry.name)
+                    .map_err(|_| StoreError("open greenfield upgrade object version"))?;
+                if !version
+                    .entries()
+                    .map_err(|_| StoreError("enumerate greenfield upgrade objects"))?
+                    .is_empty()
+                {
+                    return Err(StoreError("UnsupportedNonGreenfieldRootV1"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_existing_keys_v2(&self, root: &StateRootV2) -> Result<(), StoreError> {
+        let entries = self
+            .keys
+            .entries()
+            .map_err(|_| StoreError("enumerate V2 commitment keys"))?;
+        for entry in &entries {
+            let key_id = entry
+                .name
+                .strip_suffix(".key")
+                .ok_or(StoreError("commitment key filename is invalid"))?;
+            validate_key_id(key_id)
+                .map_err(|_| StoreError("commitment key filename is invalid"))?;
+            if entry.kind != EntryKind::RegularFile {
+                return Err(StoreError("commitment key entry is unsafe"));
+            }
+            self.keys
+                .revalidate_entry(entry)
+                .map_err(|_| StoreError("commitment key changed during validation"))?;
+            let record = root
+                .commitment_key_registry
+                .get(key_id)
+                .ok_or(StoreError("V2 root has an unregistered commitment key"))?;
+            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
+                &self
+                    .keys
+                    .open_file(&entry.name)
+                    .map_err(|_| StoreError("open registered V2 commitment key"))?
+                    .read_all()
+                    .map_err(|_| StoreError("read registered V2 commitment key"))?,
+            )
+            .map_err(|_| StoreError("decode registered V2 commitment key"))?;
+            if record.algorithm != AuthorityStoreCommitmentAlgorithmV1::HmacSha256
+                || envelope.authority_store_id != root.authority_store_id
+                || envelope.authority_store_id != record.authority_store_id
+                || envelope.key_id != record.key_id
+                || envelope.created_at != record.created_at
+            {
+                return Err(StoreError("registered V2 commitment key identity mismatch"));
+            }
+        }
+        for record in root.commitment_key_registry.values() {
+            let present = entries
+                .iter()
+                .any(|entry| entry.name == format!("{}.key", record.key_id));
+            if record.state != AuthorityStoreCommitmentKeyStateV1::Retired && !present {
+                return Err(StoreError("required V2 commitment key file is missing"));
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn validate_root_candidate(&self, root: &StateRootV1) -> Result<(), StoreError> {
@@ -1059,6 +1265,50 @@ impl<'a> StoreLayout<'a> {
             }
             Some(_) => Err(StoreError("committed initialization marker is unsafe")),
         }
+    }
+
+    pub(super) fn validate_matching_marker_if_present_v2(
+        &self,
+        root: &StateRootV2,
+    ) -> Result<(), StoreError> {
+        match self
+            .authority
+            .entry_kind(INIT_FILE)
+            .map_err(|_| StoreError("inspect committed V2 initialization marker"))?
+        {
+            None => Ok(()),
+            Some(EntryKind::RegularFile) => {
+                let marker = self.read_marker()?;
+                let key = root
+                    .commitment_key_registry
+                    .get(&marker.initial_key_id)
+                    .ok_or(StoreError("initial commitment key is absent from V2 root"))?;
+                if marker.authority_store_id != root.authority_store_id
+                    || marker.bootstrap_home != root.bootstrap_home
+                    || marker.created_at != key.created_at
+                    || marker.created_at != root.greenfield_namespace_certificate.certified_at
+                {
+                    return Err(StoreError("committed V2 initialization marker mismatch"));
+                }
+                Ok(())
+            }
+            Some(_) => Err(StoreError("committed V2 initialization marker is unsafe")),
+        }
+    }
+
+    pub(super) fn remove_matching_marker_v2(&self, root: &StateRootV2) -> Result<(), StoreError> {
+        self.validate_matching_marker_if_present_v2(root)?;
+        if self
+            .authority
+            .entry_kind(INIT_FILE)
+            .map_err(|_| StoreError("inspect V2 initialization marker for removal"))?
+            .is_some()
+        {
+            self.authority
+                .unlink_file(INIT_FILE)
+                .map_err(|_| StoreError("remove committed V2 initialization marker"))?;
+        }
+        Ok(())
     }
 
     pub(super) fn keys_empty(&self) -> Result<bool, StoreError> {
