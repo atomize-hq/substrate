@@ -128,12 +128,17 @@ required seam as `ContractCorrectAndProven`. That is intentional. A1.1e is lande
 exact authority-resolution foundation for a bounded cycle-breaking prerequisite corridor:
 
 ```text
-A1.1e -> B0 -> B1 -> B2.1 -> B3.1 -> C1 -> A1.2
+A1.1e -> B0 -> B1-3a/B1-3b receipt core
+                  -> B2.1-1 -> B2.1-2 -> B2.1-3
+                  -> B1/B2.1 joint production closeout -> B3.1 -> C1 -> A1.2
 ```
 
 This corridor does not close A1.1d, bypass A2/A3 ownership, enable foreground early return, or
-promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven;
-B1 is now the exact next dependency-ready implementation packet. B2.1 consumer replay/journal
-clauses remain open, and B2.2/B3.2 retain the deferred receipt-UX and broader retained-lifecycle
-work after A1 and the named A2/A3 boundaries. Similarly named event, span, or payload fields are not
-closure evidence.
+promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven.
+The B1-3a/B1-3b proposal, acknowledgement, and activated-store acceptance-record core is the exact
+next recovery/review packet; it may become independently review-clean without claiming B1
+production completion. B2.1 may begin only from that review-clean core, and B1 cannot close until
+the accepted production paths enter the durable supervisor without attempting the legacy
+active-task writer. B1 and B2.1 therefore share one production integration closeout before B3.1.
+B2.2/B3.2 retain the deferred receipt-UX and broader retained-lifecycle work after A1 and the named
+A2/A3 boundaries. Similarly named event, span, or payload fields are not closure evidence.

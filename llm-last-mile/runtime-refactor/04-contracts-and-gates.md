@@ -1825,8 +1825,9 @@ certificate validation, `ExpectedAbsent` acceptance, Start reservation plus inte
 claim/application, initial Start-origin authority birth, startup-ownership resolution, pending
 post-turn reconciliation, ledger-snapshot consumption, and release as one intent protocol. It does
 not own runtime event identity, receipt acceptance, durable observation, retained-event semantics,
-canonical obligations, or their event/materialization cut. B0, B1, B2.1, B3.1, and C1 own those
-prerequisites respectively. Until that corridor exists, A1.2 retains `AwaitingObligationCut` and
+canonical obligations, or their event/materialization cut. B0, the B1 receipt core, B2.1 and the
+joint B1/B2.1 production closeout, B3.1, and C1 own those prerequisites respectively. Until that
+corridor exists, A1.2 retains `AwaitingObligationCut` and
 cannot claim full packet closure. A1.3 adopts the protocol on real CLI/REPL consumers; A1.1
 primitive tests are not evidence that a production Start path is adopted.
 
@@ -2507,6 +2508,22 @@ creates the immutable run/cap commitments and the final active receipt reference
 acceptance record. A conflicting retry cannot create another record for the same runtime work
 identity. B2.1 creates its separate claim and journal only through this record.
 
+### B1 receipt-core review versus production completion
+
+B1-3a/B1-3b may become independently review-clean once proposal allocation, exact retry,
+acknowledgement validation, activated-store persistence, immutable acceptance inspection, and
+legacy-writer rejection are proven. That review point is the only prerequisite that B2.1 consumes;
+it is not B1 production completion.
+
+On both the ephemeral-task and retained-turn production paths, the exact acceptance transition is
+the handoff boundary. After the immutable record commits, B2.1-1 must durably create or exact-join
+the supervisor observation claim before the stream loop reads any subsequent frame. The ephemeral
+path must not call `register_active_ephemeral_world_task`, and the retained path must not leave the
+foreground loop as the observation owner. Any claim conflict or stale identity fails closed without
+ignoring acceptance or falling back to a legacy/generic writer. B1 and B2.1 close only after one
+joint production integration gate proves both paths; B3.1 cannot begin from receipt-core review
+alone.
+
 ### B1 frozen proposal, persistence, and revision semantics
 
 `WorldWorkReceiptRegistry` allocates `proposed_acceptance_record_id` as
@@ -2895,8 +2912,10 @@ V1 acceptance boundaries:
 - If the current runtime protocol cannot expose accepted identity before terminal exit, extend that protocol before changing the foreground tool to receipt-oriented early return.
 
 B1 persists and inspects both task and retained-turn acceptance records while the existing
-foreground call still waits. B2.1 then atomically hands observation to the supervisor while that
-blocking compatibility behavior may remain. Foreground early return is a separate B2.2 gate.
+foreground call still waits. B2.1-1 then performs the no-gap durable supervisor handoff at the same
+accepted production boundary, B2.1-2 makes that foreground call a waiter over journal truth, and
+B2.1-3 proves restart reconciliation. Foreground early return is a separate B2.2 gate, and B1 is not
+production-complete until the joint B1/B2.1 closeout passes.
 
 ## 6. `RetainedWorkerManifestV1`
 
@@ -3138,8 +3157,41 @@ Rules:
 
 ## 11. Supervisor idempotency and restart rules
 
+`WorldWorkExecutionSupervisor` owns one canonical receipt-scoped claim-and-journal state containing
+active observation identity, lease/observer epoch, exact durable cursor, canonical B0 frame/event
+entries, interruption/reconciliation state, and immutable terminal closeout. This state is not an
+active-task side table and cannot be interpreted by StateStore or HostSessionAuthority. A dedicated
+`WorldWorkExecutionSupervisorStorageV1`-shaped capability may provide opaque crash-safe physical
+persistence in the activated authority store, but it has no caller-selected path/collection API and
+does not create a generic activated-store writer. Legacy activated-store rejection remains
+unchanged.
+
+The claim identity binds the exact authority store, B1 acceptance-record ID and revision,
+orchestration session, accepted task/active-run identity, B0 stream, world ID/generation, and claim
+revision/observer epoch. An exact duplicate claim joins; a conflicting or stale claim fails closed.
+Neither the receipt registry nor the physical store may mutate or infer supervisor state.
+
+B2.1 is reviewed in three ordered subpackets:
+
+1. **B2.1-1 — durable claim and no-gap handoff:** create or exact-join the claim at exact B1
+   acceptance before reading the next frame; replace `register_active_ephemeral_world_task` on the
+   accepted ephemeral path and transfer the accepted retained path from foreground observation
+   ownership to that same claim.
+2. **B2.1-2 — journal and blocking waiter:** persist canonical frame/event bytes and exact identity
+   before compatibility delivery; exact replay is a no-op and every gap, reorder, conflict, stale
+   observer, or post-terminal write fails closed. Foreground inspect/wait and the minimum cancel
+   compatibility consume receipt/supervisor truth without owning it.
+3. **B2.1-3 — restart and terminal reconciliation:** reopen every nonterminal claim at its exact
+   cursor, resume only through exact producer replay/reconciliation, and keep terminal closeout
+   immutable/idempotent. Missing exact terminal truth remains nonterminal/interrupted.
+
+After those reviews, the joint B1/B2.1 production closeout must prove ephemeral and retained
+acceptance, legacy-writer exclusion, caller-drop/restart survival, blocking compatibility, and exact
+terminal behavior before B3.1 becomes dependency-ready.
+
 1. **Accepted anchor first:** B1 persists the acceptance record, exact current-policy identity, B0
-   stream identity, and acknowledgement sequence before B2.1 creates an observation claim.
+   stream identity, and acknowledgement sequence before B2.1-1 creates an observation claim in the
+   same production handoff without reading a subsequent frame.
 2. **Single logical observer:** supervisors claim a lease with
    `(acceptance_record_id, record_revision, lease_epoch)`. A stale lease cannot write a newer
    revision.
@@ -3148,8 +3200,14 @@ Rules:
    receipt-scoped frame/event cursor plus the exact B1 acceptance record ID/revision, accepted-work
    identity, and optional transition correlation before waiter delivery or derived receipt/terminal
    state.
-4. **Restart discovery:** startup scans non-terminal accepted/running receipts and resumes
-   observation from the durable cursor or performs exact runtime reconciliation.
+4. **Restart discovery:** startup enumerates canonical nonterminal supervisor claims/cursors,
+   exact-joins each to its immutable B1 acceptance record, and resumes only from that durable
+   cursor or through exact runtime replay/reconciliation. A crash after acceptance publication but
+   before claim publication leaves an accepted-but-unclaimed handoff, not active or terminal
+   inference: the supervisor performs a bounded exact anti-join against immutable accepted records,
+   validates the full claim identity, creates an interrupted claim at the acknowledgement cursor,
+   and requires exact producer replay/reconciliation before advancing it. Missing claim state alone
+   never proves running, completion, cancellation, or failure.
 5. **Frame dedupe/order:** each frame is keyed by exact `(acceptance_record_id, stream_id,
    frame_sequence)`. An identical duplicate is a no-op; a gap, reorder, conflicting duplicate, or
    post-terminal frame fails closed.
@@ -3169,16 +3227,18 @@ Rules:
    and exact terminal event may advance the cursor or close the run. A runtime known to have exited
    without that terminal event records an interruption/protocol failure with diagnostics, remains
    incomplete, and cannot produce a C1 Complete cut; ambiguous truth likewise retries/fails closed.
-10. **Terminal ordering:** only the exact B0 terminal event ID/sequence closes the observation
-    journal. Receipt terminal state and worker active-turn clearing commit atomically or through
-    replay-safe idempotent owner-approved steps; StateStore supplies persistence only.
+10. **Terminal ordering:** only the exact B0 terminal event ID/sequence closes the supervisor
+    observation journal. Supervisor terminal closeout and worker active-turn clearing commit
+    atomically or through replay-safe idempotent owner-approved steps; the immutable B1 acceptance
+    record does not change, and StateStore supplies persistence only.
 11. **Ledger handoff:** the supervisor invokes C1 with durable exact B3.1 events and the terminal
     cut, including exact acceptance-record ID/revision, stream ID, accepted-work identity, and the
     scope-equal owner-supplied transition correlation when a transition-scoped snapshot will be queried. It does not
     classify/materialize obligations. C1 independently commits canonical ledger revisions and
     completeness; coordinated storage never transfers semantic ownership.
 12. **Blocking compatibility:** B2.1 may leave the foreground waiting on the durable receipt after
-    handoff. Only B2.2 enables model-visible early return.
+    handoff. Dropping that waiter or any foreground guard cannot delete the acceptance record,
+    supervisor claim, journal, or work. Only B2.2 enables model-visible early return.
 13. **Cancellation:** one durable cancel request ID is reused across retries; repeated transport
     delivery is safe.
 14. **Diagnostics:** non-zero exit, stream error, reconciliation failure, and cancel failure retain
@@ -3259,4 +3319,7 @@ A contract is not considered landed until tests prove:
 6. every revision-bound host transition joins intent issuance, claim, authority application, and exact result on the real CLI and REPL path, including crash reconciliation and no-reapply exact retry;
 7. at least one smoke/e2e path joins session, binding, policy, receipt, runtime event, and terminal/obligation truth;
 8. credential-requiring world UAA proof joins the envelope to a consumed one-time in-world gateway handoff without copied secret files or inherited descriptors; and
-9. no compatibility copy or `CompatibilityUnproven` evidence is used for contract promotion.
+9. no compatibility copy or `CompatibilityUnproven` evidence is used for contract promotion; and
+10. B1/B2.1 production proof shows both accepted work families enter the durable supervisor without
+    a legacy-writer attempt, caller/foreground drop does not erase truth, and B3.1 begins only after
+    the joint closeout.

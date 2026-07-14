@@ -61,14 +61,14 @@ flowchart TD
 |---|---|---|
 | SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations | durable posture, world binding, retained continuity, successor allocation, terminal truth, transition-intent issuance/claim/application |
 | HostSessionAuthority | exact session/caller/lineage/binding resolution; durable posture transitions; revision-bound host-transition-intent issuance, claim validation, replay-safe application, and reconciliation | transport loops, provider mechanics, compatibility projection |
-| StateStore | atomic persistence, migrations, schema evolution | lifecycle policy, routing policy, liveness-derived authority |
+| StateStore | bounded atomic physical persistence, migrations, schema evolution | lifecycle, receipt, supervisor, routing, or liveness-derived semantic authority; generic activated-store writes |
 | CompatibilityReadModel | legacy reads, torn-root diagnostics, compatibility projection/migration | new authority writes or overriding newer revisions |
-| WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries | provider-specific execution or direct policy invention |
+| WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries; blocking compatibility inspect/wait/cancel routing that consumes exact receipt/supervisor truth | provider-specific execution, direct policy invention, or ownership of accepted-work/observation truth |
 | SteeringPolicyEngine | deny-by-default action/mode/backend/session/world/autonomy decisions | effective policy materialization or runtime launch |
 | EffectivePolicyResolver | parent-policy composition and immutable `PolicySnapshotV3` materialization | enforcement by advisory flags alone |
-| WorldWorkReceiptRegistry | proposed acceptance-record identity/request context before submission; durable accepted task/turn identity only after runtime acknowledgement; immutable recording of any owner-supplied host-transition correlation | runtime acceptance itself, stream ownership, host-transition interpretation, or worker lifecycle policy |
+| WorldWorkReceiptRegistry | proposed acceptance-record identity/request context before submission; durable immutable accepted task/turn identity only after runtime acknowledgement; immutable recording of any owner-supplied host-transition correlation | runtime acceptance itself, active observation claims, frame/event journals, terminal reconciliation, stream ownership, host-transition interpretation, or worker lifecycle policy |
 | RuntimeEventTransport | producer-assigned stable stream/frame/event/terminal identity and monotonic ordering | receipt acceptance, durable observation, retained-message semantics, obligation semantics, or completeness |
-| WorldWorkExecutionSupervisor | no-gap durable post-acceptance observation journal, exact acceptance joins, opaque correlation-byte retention, duplicate/reorder rejection, restart reconciliation, and monotonic terminal closeout | foreground tool semantics, model-facing identity, retained-message or host-transition semantics, or obligation classification/materialization |
+| WorldWorkExecutionSupervisor | durable active-observation claims, no-gap post-acceptance frame/event journal, exact acceptance joins, opaque correlation-byte retention, duplicate/reorder rejection, caller-drop survival, restart recovery/reconciliation, and monotonic terminal closeout | proposal or immutable acceptance-record truth, foreground tool semantics, model-facing identity, retained-message or host-transition semantics, or obligation classification/materialization |
 | WorldWorkerMessagingProtocol | fail-closed producer-side normalization of provider events plus exact retained target/source, active-run, thread, typed event class, attention, and request/message/event causation semantics | transport ordering, receipt acceptance, observation ownership, or obligation materialization |
 | RetainedWorkerRuntime | worker create/continue/park/cancel/stop/fork/inspect/invalidate lifecycle | host-session posture or obligation projection |
 | ObligationLedger | obligation classification, idempotent materialization, canonical revisions and records, completeness watermarks/cuts, closed snapshots, and attention/review/deferred-action truth | runtime identity generation, stream observation, host rendering, prompt replay, or direct worker continuation |
@@ -109,6 +109,9 @@ Every world verb resolves exact session, caller, backend, world id/generation, a
 
 Durable observation ownership may land before model-visible early return: the foreground may remain
 a compatibility waiter over the receipt while the supervisor alone ingests and closes the stream.
+At the exact acceptance transition, the supervisor claim must become durable before any subsequent
+frame can be consumed outside its journal. Dropping a foreground waiter or guard cannot delete an
+accepted record, supervisor claim, journal entry, or supervised work.
 
 ### 5. Cancel targets active work
 
