@@ -286,6 +286,7 @@ fn build_execute_request(input: ExecuteRequestInput) -> ExecuteRequest {
         world_network: Some(input.world_network),
         world_fs_mode: Some(input.world_fs_mode),
         member_dispatch: input.member_dispatch,
+        acceptance_context: input.acceptance_context,
     }
 }
 
@@ -299,6 +300,7 @@ struct ExecuteRequestInput {
     world_network: transport_api_types::WorldNetworkRoutingV1,
     world_fs_mode: WorldFsMode,
     member_dispatch: Option<MemberDispatchRequestV1>,
+    acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
 }
 
 #[allow(dead_code)]
@@ -1122,12 +1124,19 @@ pub(crate) fn build_agent_client_and_member_dispatch_request(
 pub(crate) fn build_agent_client_and_member_dispatch_request_for_cwd(
     request: &MemberDispatchTransportRequest,
     cwd_path: &std::path::Path,
+    acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
 ) -> anyhow::Result<(
     transport_api_client::AgentClient,
     transport_api_types::ExecuteRequest,
     String,
 )> {
-    build_agent_client_and_member_dispatch_request_impl(request, cwd_path)
+    let (client, mut execute_request, agent_id) =
+        build_agent_client_and_member_dispatch_request_impl(request, cwd_path)?;
+    execute_request.acceptance_context = acceptance_context;
+    execute_request
+        .validate()
+        .map_err(|error| anyhow::anyhow!(error))?;
+    Ok((client, execute_request, agent_id))
 }
 
 pub(crate) fn build_agent_client_and_pending_diff_request() -> anyhow::Result<(
@@ -1213,6 +1222,7 @@ fn build_agent_client_and_request_impl(
         world_network,
         world_fs_mode: current_world_fs_mode(),
         member_dispatch: None,
+        acceptance_context: None,
     });
 
     Ok((client, request, agent_id))
@@ -1260,6 +1270,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         world_network,
         world_fs_mode: current_world_fs_mode(),
         member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+        acceptance_context: None,
     });
 
     Ok((client, request, agent_id))
@@ -1404,6 +1415,7 @@ fn build_agent_client_and_request_impl(
             world_network,
             world_fs_mode: current_world_fs_mode(),
             member_dispatch: None,
+            acceptance_context: None,
         });
 
         return Ok((client, request, agent_id));
@@ -1457,6 +1469,7 @@ fn build_agent_client_and_request_impl(
         world_network,
         world_fs_mode: current_world_fs_mode(),
         member_dispatch: None,
+        acceptance_context: None,
     });
 
     Ok((client, request, agent_id))
@@ -1502,6 +1515,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
             world_network,
             world_fs_mode: current_world_fs_mode(),
             member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+            acceptance_context: None,
         });
 
         return Ok((client, request, agent_id));
@@ -1551,6 +1565,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         world_network,
         world_fs_mode: current_world_fs_mode(),
         member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+        acceptance_context: None,
     });
 
     Ok((client, request, agent_id))
@@ -1699,6 +1714,7 @@ fn build_agent_client_and_request_impl(
         world_network,
         world_fs_mode: current_world_fs_mode(),
         member_dispatch: None,
+        acceptance_context: None,
     });
 
     Ok((client, request, agent_id))
@@ -1765,6 +1781,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
         world_network,
         world_fs_mode: current_world_fs_mode(),
         member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+        acceptance_context: None,
     });
 
     Ok((client, request, agent_id))
@@ -2699,6 +2716,7 @@ mod tests {
                     binary_path: "/usr/bin/codex".to_string(),
                 },
             )),
+            acceptance_context: None,
         });
 
         assert!(request.cmd.is_empty());

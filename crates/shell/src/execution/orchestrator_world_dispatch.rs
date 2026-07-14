@@ -15,7 +15,13 @@ use std::{fs::OpenOptions, io::Write};
 use anyhow::Context;
 use anyhow::Result;
 #[cfg(target_os = "linux")]
+use chrono::Utc;
+#[cfg(target_os = "linux")]
 use gethostname::gethostname;
+#[cfg(target_os = "linux")]
+use serde::Serialize;
+#[cfg(target_os = "linux")]
+use sha2::{Digest, Sha256};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
@@ -49,9 +55,13 @@ use crate::execution::agent_runtime::dispatch_contract::{
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
-    ActiveEphemeralWorldTaskGuard, ActiveEphemeralWorldTaskRecord,
+    AcceptedWorldWorkIdentityV1, ActiveEphemeralWorldTaskGuard, ActiveEphemeralWorldTaskRecord,
     PreparedInternalApprovalResponseObligationCloseout,
-    PreparedInternalClarificationResponseObligationCloseout,
+    PreparedInternalClarificationResponseObligationCloseout, ProposedWorldWorkIdentityV1,
+    RuntimeAcceptanceAcknowledgementKindV1, RuntimeAcceptanceEvidenceV1,
+    WorldWorkAcceptanceProposalV1, WorldWorkAcceptanceRecordV1, WorldWorkProposalAllocationV1,
+    WorldWorkProposalFamilyV1, WorldWorkProposalReservationOutcomeV1, WorldWorkReceiptRegistry,
+    WorldWorkSubmissionIdentityV1,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
@@ -1151,6 +1161,230 @@ pub(crate) struct PreparedForkWorldWorkerBootstrap {
 }
 
 #[cfg(target_os = "linux")]
+struct PreparedTaskAcceptanceSubmission {
+    receipt_registry: WorldWorkReceiptRegistry,
+    proposal: WorldWorkAcceptanceProposalV1,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+}
+
+#[cfg(target_os = "linux")]
+struct PreparedRetainedAcceptanceSubmission {
+    receipt_registry: WorldWorkReceiptRegistry,
+    proposal: WorldWorkAcceptanceProposalV1,
+    submit_request: transport_api_types::MemberTurnSubmitRequestV1,
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_task_acceptance_submission(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    workspace_root: &Path,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> Result<PreparedTaskAcceptanceSubmission> {
+    let resolved_policy =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
+            .context("resolve B1 task submission policy snapshot")?;
+    let registry_authority = prepared.store.resolve_world_work_registry_authority(
+        &prepared.request.orchestration_session_id,
+        &prepared.request.caller_participant_id,
+        &prepared.request.world_id,
+        prepared.request.world_generation,
+    )?;
+    let caller_backend_id = prepared.caller_participant.handle.backend_id.clone();
+    let request_id = prepared.request.request_id.clone();
+    let proposal_outcome = registry_authority
+        .receipt_registry
+        .prepare_world_work_acceptance_proposal(
+            &prepared.request.orchestration_session_id,
+            &request_id,
+            WorldWorkProposalFamilyV1::EphemeralTask,
+            |allocation| {
+                let transport_request = task_transport_request_from_allocation(
+                    &allocation,
+                    &prepared.request,
+                    descriptor,
+                )?;
+                let acceptance_context =
+                    world_work_acceptance_context(&allocation, &request_id, &caller_backend_id);
+                let (_, execute_request, _) =
+                    build_agent_client_and_member_dispatch_request_for_cwd(
+                        &transport_request,
+                        workspace_root,
+                        Some(acceptance_context.clone()),
+                    )?;
+                ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
+                let member_dispatch_request =
+                    execute_request.member_dispatch.clone().ok_or_else(|| {
+                        anyhow::anyhow!("B1 task ExecuteRequest omitted member dispatch")
+                    })?;
+                let digest =
+                    canonical_world_work_submission_sha256(&prepared.request, &execute_request)?;
+                Ok(WorldWorkAcceptanceProposalV1 {
+                    schema_version: 1,
+                    acceptance_context,
+                    authority_store_id: registry_authority.authority_store_id.clone(),
+                    authority_revision_observed: registry_authority.authority_revision_observed,
+                    orchestration_session_id: prepared.request.orchestration_session_id.clone(),
+                    caller_participant_id: prepared.request.caller_participant_id.clone(),
+                    caller_backend_id: caller_backend_id.clone(),
+                    target_backend_id: prepared.request.target_backend_id.clone(),
+                    world_id: prepared.request.world_id.clone(),
+                    world_generation: prepared.request.world_generation,
+                    proposed_work: ProposedWorldWorkIdentityV1::EphemeralTask,
+                    submission_identity: WorldWorkSubmissionIdentityV1::EphemeralTask {
+                        validated_dispatch_request: prepared.request.clone(),
+                        member_dispatch_request,
+                        canonical_execute_request_sha256: digest,
+                    },
+                    current_policy_snapshot_ref: registry_authority
+                        .current_policy_snapshot_ref
+                        .clone(),
+                    current_policy_snapshot_hash: resolved_policy.snapshot_hash.clone(),
+                    current_policy_revision: registry_authority.current_policy_revision.clone(),
+                    created_at: allocation.created_at,
+                })
+            },
+        )?;
+    let proposal = match proposal_outcome {
+        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+        WorldWorkProposalReservationOutcomeV1::Accepted(record) => {
+            anyhow::bail!(
+                "world work request already joined acceptance record {}; foreground observation remains owned by the original blocking call",
+                record.acceptance_record_id
+            )
+        }
+    };
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        member_dispatch_request,
+        canonical_execute_request_sha256,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 task proposal changed submission family");
+    };
+    let transport_request = member_dispatch_transport_request_from_typed(member_dispatch_request);
+    let (client, execute_request, _) = build_agent_client_and_member_dispatch_request_for_cwd(
+        &transport_request,
+        workspace_root,
+        Some(proposal.acceptance_context.clone()),
+    )?;
+    ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
+    let digest = canonical_world_work_submission_sha256(&prepared.request, &execute_request)?;
+    if &digest != canonical_execute_request_sha256
+        || execute_request.member_dispatch.as_ref() != Some(member_dispatch_request)
+    {
+        anyhow::bail!("B1 task proposal reconstruction conflict before transport");
+    }
+    Ok(PreparedTaskAcceptanceSubmission {
+        receipt_registry: registry_authority.receipt_registry,
+        proposal,
+        client,
+        execute_request,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_retained_acceptance_submission(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    workspace_root: &Path,
+) -> Result<PreparedRetainedAcceptanceSubmission> {
+    let resolved_policy =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
+            .context("resolve B1 retained submission policy snapshot")?;
+    let registry_authority = prepared.store.resolve_world_work_registry_authority(
+        &prepared.request.orchestration_session_id,
+        &prepared.request.caller_participant_id,
+        &prepared.request.world_id,
+        prepared.request.world_generation,
+    )?;
+    let caller_backend_id = prepared.caller_participant.handle.backend_id.clone();
+    let request_id = prepared.request.request_id.clone();
+    let target_participant_id = prepared
+        .request
+        .target_participant_id
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("retained B1 submission requires exact target"))?;
+    let proposal_outcome = registry_authority
+        .receipt_registry
+        .prepare_world_work_acceptance_proposal(
+            &prepared.request.orchestration_session_id,
+            &request_id,
+            WorldWorkProposalFamilyV1::RetainedTurn,
+            |allocation| {
+                let acceptance_context =
+                    world_work_acceptance_context(&allocation, &request_id, &caller_backend_id);
+                let submit_request =
+                    build_continue_world_worker_submit_request_with_acceptance_context(
+                        prepared,
+                        acceptance_context.clone(),
+                    )?;
+                let message_id = acceptance_context
+                    .message_id
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("retained B1 allocation omitted message ID"))?;
+                let digest =
+                    canonical_world_work_submission_sha256(&prepared.request, &submit_request)?;
+                Ok(WorldWorkAcceptanceProposalV1 {
+                    schema_version: 1,
+                    acceptance_context,
+                    authority_store_id: registry_authority.authority_store_id.clone(),
+                    authority_revision_observed: registry_authority.authority_revision_observed,
+                    orchestration_session_id: prepared.request.orchestration_session_id.clone(),
+                    caller_participant_id: prepared.request.caller_participant_id.clone(),
+                    caller_backend_id: caller_backend_id.clone(),
+                    target_backend_id: prepared.request.target_backend_id.clone(),
+                    world_id: prepared.request.world_id.clone(),
+                    world_generation: prepared.request.world_generation,
+                    proposed_work: ProposedWorldWorkIdentityV1::RetainedTurn {
+                        active_run_id: request_id.clone(),
+                        message_id,
+                        target_participant_id: target_participant_id.clone(),
+                    },
+                    submission_identity: WorldWorkSubmissionIdentityV1::RetainedTurn {
+                        validated_dispatch_request: prepared.request.clone(),
+                        canonical_member_turn_submit_request_sha256: digest,
+                    },
+                    current_policy_snapshot_ref: registry_authority
+                        .current_policy_snapshot_ref
+                        .clone(),
+                    current_policy_snapshot_hash: resolved_policy.snapshot_hash.clone(),
+                    current_policy_revision: registry_authority.current_policy_revision.clone(),
+                    created_at: allocation.created_at,
+                })
+            },
+        )?;
+    let proposal = match proposal_outcome {
+        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+        WorldWorkProposalReservationOutcomeV1::Accepted(record) => {
+            anyhow::bail!(
+                "world work request already joined acceptance record {}; foreground observation remains owned by the original blocking call",
+                record.acceptance_record_id
+            )
+        }
+    };
+    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+        canonical_member_turn_submit_request_sha256,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 retained proposal changed submission family");
+    };
+    let submit_request = build_continue_world_worker_submit_request_with_acceptance_context(
+        prepared,
+        proposal.acceptance_context.clone(),
+    )?;
+    let digest = canonical_world_work_submission_sha256(&prepared.request, &submit_request)?;
+    if &digest != canonical_member_turn_submit_request_sha256 {
+        anyhow::bail!("B1 retained proposal reconstruction conflict before transport");
+    }
+    Ok(PreparedRetainedAcceptanceSubmission {
+        receipt_registry: registry_authority.receipt_registry,
+        proposal,
+        submit_request,
+    })
+}
+
+#[cfg(target_os = "linux")]
 async fn run_world_task(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
@@ -1195,11 +1429,14 @@ async fn run_world_task_with_started_task_run_id_tx(
             .world_generation
             .unwrap_or(prepared.request.world_generation),
     };
-    let transport_request = build_run_world_task_transport_request(&prepared.request, &descriptor)?;
+    let acceptance_submission =
+        prepare_task_acceptance_submission(&prepared, &workspace_root, &descriptor)?;
     let stream_result = execute_run_world_task_stream(
         &prepared.store,
-        &workspace_root,
-        &transport_request,
+        &acceptance_submission.receipt_registry,
+        acceptance_submission.client,
+        acceptance_submission.execute_request,
+        &acceptance_submission.proposal,
         active_task_record,
         started_task_run_id_tx,
     )
@@ -1348,11 +1585,14 @@ async fn continue_world_worker(
     let _fork_command_bootstrap_guard =
         acquire_continue_world_worker_fork_command_bootstrap_guard(&prepared, &base_policy)?;
 
-    let submit_request = build_continue_world_worker_submit_request(&prepared)?;
-    let stream_result = execute_continue_world_worker_stream_for_turn_kind(
+    let acceptance_submission = prepare_retained_acceptance_submission(&prepared, &workspace_root)?;
+    let submit_request = acceptance_submission.submit_request;
+    let stream_result = execute_accepted_continue_world_worker_stream_for_turn_kind(
         &submit_request,
         &base_policy,
         turn_kind,
+        &acceptance_submission.receipt_registry,
+        &acceptance_submission.proposal,
     )
     .await?;
     close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
@@ -2986,6 +3226,380 @@ fn validate_authoritative_world_binding_for_steering(
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Serialize)]
+struct WorldWorkSubmissionHashInputV1<'a, T> {
+    domain: &'static str,
+    validated_dispatch_request: &'a ValidatedWorldDispatchRequestV1,
+    transport_request: &'a T,
+}
+
+#[cfg(target_os = "linux")]
+fn append_b1_canonical_json(value: &serde_json::Value, output: &mut Vec<u8>) -> Result<()> {
+    match value {
+        serde_json::Value::Null => output.extend_from_slice(b"null"),
+        serde_json::Value::Bool(value) => {
+            output.extend_from_slice(if *value { b"true" } else { b"false" })
+        }
+        serde_json::Value::Number(value) => output.extend_from_slice(value.to_string().as_bytes()),
+        serde_json::Value::String(value) => {
+            serde_json::to_writer(output, value).context("encode B1 canonical JSON string")?;
+        }
+        serde_json::Value::Array(values) => {
+            output.push(b'[');
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 {
+                    output.push(b',');
+                }
+                append_b1_canonical_json(value, output)?;
+            }
+            output.push(b']');
+        }
+        serde_json::Value::Object(values) => {
+            output.push(b'{');
+            let mut keys = values.keys().collect::<Vec<_>>();
+            keys.sort_unstable();
+            for (index, key) in keys.into_iter().enumerate() {
+                if index != 0 {
+                    output.push(b',');
+                }
+                serde_json::to_writer(&mut *output, key)
+                    .context("encode B1 canonical JSON object key")?;
+                output.push(b':');
+                append_b1_canonical_json(&values[key], output)?;
+            }
+            output.push(b'}');
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn canonical_world_work_submission_sha256<T: Serialize>(
+    request: &ValidatedWorldDispatchRequestV1,
+    transport_request: &T,
+) -> Result<String> {
+    let input = WorldWorkSubmissionHashInputV1 {
+        domain: "substrate.b1.world-work-submission.v1",
+        validated_dispatch_request: request,
+        transport_request,
+    };
+    let value = serde_json::to_value(input).context("shape B1 submission hash input")?;
+    let mut canonical = Vec::new();
+    append_b1_canonical_json(&value, &mut canonical)?;
+    let mut hasher = Sha256::new();
+    hasher.update(canonical);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_exact_submission_policy_snapshot(
+    execute_request: &transport_api_types::ExecuteRequest,
+    resolved_policy: &crate::execution::policy_snapshot::ResolvedPolicySnapshot,
+) -> Result<()> {
+    let request_bytes = serde_json::to_vec(&execute_request.policy_snapshot)
+        .context("serialize submitted PolicySnapshotV3")?;
+    let resolved_bytes = serde_json::to_vec(&resolved_policy.snapshot)
+        .context("serialize resolved PolicySnapshotV3")?;
+    if request_bytes != resolved_bytes {
+        anyhow::bail!("B1 task submission policy snapshot changed before transport");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn member_dispatch_transport_request_from_typed(
+    request: &transport_api_types::MemberDispatchRequestV1,
+) -> MemberDispatchTransportRequest {
+    MemberDispatchTransportRequest {
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        participant_id: request.participant_id.clone(),
+        orchestrator_participant_id: request.orchestrator_participant_id.clone(),
+        parent_participant_id: request.parent_participant_id.clone(),
+        resumed_from_participant_id: request.resumed_from_participant_id.clone(),
+        backend_id: request.backend_id.clone(),
+        protocol: request.protocol.clone(),
+        run_id: request.run_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        initial_prompt: request.initial_prompt.clone(),
+        backend_kind: request.resolved_runtime.backend_kind,
+        binary_path: request.resolved_runtime.binary_path.clone(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn task_transport_request_from_allocation(
+    allocation: &WorldWorkProposalAllocationV1,
+    request: &ValidatedWorldDispatchRequestV1,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> Result<MemberDispatchTransportRequest> {
+    let Some(existing) = allocation.existing_proposal.as_ref() else {
+        return build_run_world_task_transport_request(request, descriptor);
+    };
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        member_dispatch_request,
+        ..
+    } = &existing.submission_identity
+    else {
+        anyhow::bail!("stored task proposal has the wrong submission family");
+    };
+    Ok(member_dispatch_transport_request_from_typed(
+        member_dispatch_request,
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn world_work_acceptance_context(
+    allocation: &WorldWorkProposalAllocationV1,
+    request_id: &str,
+    caller_backend_id: &str,
+) -> transport_api_types::WorldWorkAcceptanceContextV1 {
+    transport_api_types::WorldWorkAcceptanceContextV1 {
+        schema_version: 1,
+        proposed_acceptance_record_id: allocation.acceptance_record_id.clone(),
+        request_id: request_id.to_string(),
+        message_id: allocation.message_id.clone(),
+        caller_backend_id: caller_backend_id.to_string(),
+        host_transition_correlation: None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn build_world_work_acceptance_record(
+    proposal: &WorldWorkAcceptanceProposalV1,
+    work_identity: AcceptedWorldWorkIdentityV1,
+    frame_identity: &transport_api_types::RuntimeFrameIdentityV1,
+    runtime_submission_id: String,
+) -> WorldWorkAcceptanceRecordV1 {
+    let accepted_at = Utc::now();
+    let (task_run_id, active_run_id, message_id, retained_participant_id) = match &work_identity {
+        AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => {
+            (Some(task_run_id.clone()), None, None, None)
+        }
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            target_participant_id,
+        } => (
+            None,
+            Some(active_run_id.clone()),
+            Some(message_id.clone()),
+            Some(target_participant_id.clone()),
+        ),
+    };
+    WorldWorkAcceptanceRecordV1 {
+        schema_version: 1,
+        acceptance_record_id: proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone(),
+        request_id: proposal.request_id().to_string(),
+        authority_store_id: proposal.authority_store_id.clone(),
+        authority_revision_observed: proposal.authority_revision_observed,
+        orchestration_session_id: proposal.orchestration_session_id.clone(),
+        caller_participant_id: proposal.caller_participant_id.clone(),
+        caller_backend_id: proposal.caller_backend_id.clone(),
+        target_backend_id: proposal.target_backend_id.clone(),
+        world_id: proposal.world_id.clone(),
+        world_generation: proposal.world_generation,
+        work_identity,
+        host_transition_correlation: proposal
+            .acceptance_context
+            .host_transition_correlation
+            .clone(),
+        current_policy_snapshot_ref: proposal.current_policy_snapshot_ref.clone(),
+        current_policy_snapshot_hash: proposal.current_policy_snapshot_hash.clone(),
+        current_policy_revision: proposal.current_policy_revision.clone(),
+        runtime_acceptance: RuntimeAcceptanceEvidenceV1 {
+            acknowledgement_kind: RuntimeAcceptanceAcknowledgementKindV1::StartFrame,
+            acceptance_record_id: proposal
+                .acceptance_context
+                .proposed_acceptance_record_id
+                .clone(),
+            stream_id: frame_identity.stream_id.clone(),
+            frame_sequence: frame_identity.frame_sequence,
+            runtime_submission_id: Some(runtime_submission_id),
+            task_run_id,
+            active_run_id,
+            message_id,
+            retained_participant_id,
+            observed_at: accepted_at,
+        },
+        accepted_at,
+        record_revision: 1,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_task_submission_against_proposal(
+    execute_request: &transport_api_types::ExecuteRequest,
+    proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<()> {
+    proposal.validate()?;
+    execute_request.validate().map_err(anyhow::Error::msg)?;
+    if execute_request.acceptance_context.as_ref() != Some(&proposal.acceptance_context) {
+        anyhow::bail!("B1 task request context changed before runtime submission");
+    }
+    if proposal.proposed_work != ProposedWorldWorkIdentityV1::EphemeralTask {
+        anyhow::bail!("B1 task submission joined a retained proposal");
+    }
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        validated_dispatch_request,
+        member_dispatch_request,
+        canonical_execute_request_sha256,
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 task proposal changed submission family");
+    };
+    if execute_request.member_dispatch.as_ref() != Some(member_dispatch_request) {
+        anyhow::bail!("B1 task member dispatch changed before runtime submission");
+    }
+    let digest =
+        canonical_world_work_submission_sha256(validated_dispatch_request, execute_request)?;
+    if &digest != canonical_execute_request_sha256 {
+        anyhow::bail!("B1 task request fingerprint changed before runtime submission");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_retained_submission_against_proposal(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<()> {
+    proposal.validate()?;
+    request.validate().map_err(anyhow::Error::msg)?;
+    if request.acceptance_context.as_ref() != Some(&proposal.acceptance_context) {
+        anyhow::bail!("B1 retained request context changed before runtime submission");
+    }
+    let ProposedWorldWorkIdentityV1::RetainedTurn {
+        active_run_id,
+        message_id,
+        target_participant_id,
+    } = &proposal.proposed_work
+    else {
+        anyhow::bail!("B1 retained submission joined a task proposal");
+    };
+    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+        validated_dispatch_request,
+        canonical_member_turn_submit_request_sha256,
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 retained proposal changed submission family");
+    };
+    if request.orchestration_session_id != proposal.orchestration_session_id
+        || request.participant_id != *target_participant_id
+        || request.orchestrator_participant_id != proposal.caller_participant_id
+        || request.backend_id != proposal.target_backend_id
+        || request.run_id != *active_run_id
+        || request.world_id != proposal.world_id
+        || request.world_generation != proposal.world_generation
+        || request
+            .acceptance_context
+            .as_ref()
+            .and_then(|context| context.message_id.as_ref())
+            != Some(message_id)
+    {
+        anyhow::bail!("B1 retained request identity changed before runtime submission");
+    }
+    let digest = canonical_world_work_submission_sha256(validated_dispatch_request, request)?;
+    if &digest != canonical_member_turn_submit_request_sha256 {
+        anyhow::bail!("B1 retained request fingerprint changed before runtime submission");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn consume_task_acceptance_acknowledgement<F>(
+    execute_request: &transport_api_types::ExecuteRequest,
+    proposal: &WorldWorkAcceptanceProposalV1,
+    frame: Option<&transport_api_types::ExecuteStreamFrame>,
+    already_accepted: bool,
+    persist: F,
+) -> Result<String>
+where
+    F: FnOnce(WorldWorkAcceptanceRecordV1) -> Result<()>,
+{
+    if already_accepted {
+        anyhow::bail!("run_world_task stream emitted repeated Start frame");
+    }
+    validate_task_submission_against_proposal(execute_request, proposal)?;
+    let Some(transport_api_types::ExecuteStreamFrame::Start {
+        frame_identity,
+        span_id,
+    }) = frame
+    else {
+        anyhow::bail!("run_world_task acceptance requires a preterminal Start frame");
+    };
+    frame_identity.validate().map_err(anyhow::Error::msg)?;
+    if frame_identity.frame_sequence != 1 {
+        anyhow::bail!("run_world_task acceptance requires Start frame sequence 1");
+    }
+    if span_id.is_empty() || span_id.trim() != span_id {
+        anyhow::bail!("run_world_task Start frame omitted exact task_run_id");
+    }
+    persist(build_world_work_acceptance_record(
+        proposal,
+        AcceptedWorldWorkIdentityV1::EphemeralTask {
+            task_run_id: span_id.clone(),
+        },
+        frame_identity,
+        span_id.clone(),
+    ))?;
+    Ok(span_id.clone())
+}
+
+#[cfg(target_os = "linux")]
+fn consume_retained_acceptance_acknowledgement<F>(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+    frame: Option<&transport_api_types::ExecuteStreamFrame>,
+    already_accepted: bool,
+    persist: F,
+) -> Result<String>
+where
+    F: FnOnce(WorldWorkAcceptanceRecordV1) -> Result<()>,
+{
+    if already_accepted {
+        anyhow::bail!("continue_world_worker stream emitted repeated Start frame");
+    }
+    validate_retained_submission_against_proposal(request, proposal)?;
+    let Some(transport_api_types::ExecuteStreamFrame::Start {
+        frame_identity,
+        span_id,
+    }) = frame
+    else {
+        anyhow::bail!("retained B1 acceptance requires a preterminal Start frame");
+    };
+    frame_identity.validate().map_err(anyhow::Error::msg)?;
+    if frame_identity.frame_sequence != 1 {
+        anyhow::bail!("retained B1 acceptance requires Start frame sequence 1");
+    }
+    if span_id.is_empty() || span_id.trim() != span_id {
+        anyhow::bail!("retained B1 Start frame omitted runtime submission identity");
+    }
+    let ProposedWorldWorkIdentityV1::RetainedTurn {
+        active_run_id,
+        message_id,
+        target_participant_id,
+    } = &proposal.proposed_work
+    else {
+        anyhow::bail!("retained B1 acknowledgement joined task proposal");
+    };
+    persist(build_world_work_acceptance_record(
+        proposal,
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id: active_run_id.clone(),
+            message_id: message_id.clone(),
+            target_participant_id: target_participant_id.clone(),
+        },
+        frame_identity,
+        span_id.clone(),
+    ))?;
+    Ok(span_id.clone())
+}
+
+#[cfg(target_os = "linux")]
 fn build_run_world_task_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
@@ -3147,7 +3761,19 @@ fn build_continue_world_worker_submit_request(
         world_id,
         world_generation,
         prompt,
+        acceptance_context: None,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn build_continue_world_worker_submit_request_with_acceptance_context(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    acceptance_context: transport_api_types::WorldWorkAcceptanceContextV1,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    let mut request = build_continue_world_worker_submit_request(prepared)?;
+    request.acceptance_context = Some(acceptance_context);
+    request.validate().map_err(anyhow::Error::msg)?;
+    Ok(request)
 }
 
 #[cfg(target_os = "linux")]
@@ -3165,8 +3791,10 @@ fn member_runtime_backend_kind(
 #[cfg(target_os = "linux")]
 async fn execute_run_world_task_stream(
     store: &AgentRuntimeStateStore,
-    workspace_root: &Path,
-    request: &MemberDispatchTransportRequest,
+    receipt_registry: &WorldWorkReceiptRegistry,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
     mut active_task_record: ActiveEphemeralWorldTaskRecord,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
 ) -> Result<RunWorldTaskStreamResult> {
@@ -3174,11 +3802,9 @@ async fn execute_run_world_task_stream(
     use substrate_common::agent_events::AgentEventKind;
     use transport_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame};
 
-    let (client, execute_request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root)
-            .context("failed to build member dispatch execute request for run_world_task")?;
+    validate_task_submission_against_proposal(&execute_request, acceptance_proposal)?;
     let response = client
-        .execute_stream(execute_request)
+        .execute_stream(execute_request.clone())
         .await
         .map_err(|err| {
             anyhow::anyhow!("failed to launch run_world_task over world member dispatch: {err:#}")
@@ -3224,26 +3850,42 @@ async fn execute_run_world_task_stream(
                 };
 
             match frame {
-                ExecuteStreamFrame::Start { span_id, .. } => {
-                    if active_task_guard.is_none() {
-                        active_task_record.task_run_id = span_id.clone();
-                        active_task_guard = Some(
-                            store
-                                .register_active_ephemeral_world_task(active_task_record.clone())?,
-                        );
-                        if let Some(started_task_run_id_tx) = started_task_run_id_tx.as_ref() {
-                            let _ = started_task_run_id_tx.send(span_id.clone());
-                        }
-                        terminal_truth_guard.register_task_run_id(span_id.clone());
+                start_frame @ ExecuteStreamFrame::Start { .. } => {
+                    let span_id = consume_task_acceptance_acknowledgement(
+                        &execute_request,
+                        acceptance_proposal,
+                        Some(&start_frame),
+                        active_task_guard.is_some(),
+                        |record| {
+                            receipt_registry
+                                .persist_world_work_acceptance(record)
+                                .map(|_| ())
+                        },
+                    )?;
+                    active_task_record.task_run_id = span_id.clone();
+                    active_task_guard = Some(
+                        store.register_active_ephemeral_world_task(active_task_record.clone())?,
+                    );
+                    if let Some(started_task_run_id_tx) = started_task_run_id_tx.as_ref() {
+                        let _ = started_task_run_id_tx.send(span_id.clone());
                     }
+                    terminal_truth_guard.register_task_run_id(span_id.clone());
                     active_span_id = Some(span_id);
                 }
                 ExecuteStreamFrame::Event { event, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!("run_world_task stream emitted Event before accepted Start");
+                    }
                     if event.kind == AgentEventKind::Registered {
                         saw_registered_event = true;
                     }
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "run_world_task stream emitted terminal Exit before accepted Start"
+                        );
+                    }
                     exit_code = Some(exit);
                     break;
                 }
@@ -3260,7 +3902,11 @@ async fn execute_run_world_task_stream(
                     }
                     anyhow::bail!(message);
                 }
-                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
+                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!("run_world_task stream emitted output before accepted Start");
+                    }
+                }
             }
         }
 
@@ -3293,7 +3939,7 @@ async fn execute_spawn_world_worker_stream(
     use transport_api_types::ExecuteStreamFrame;
 
     let (client, execute_request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root)
+        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root, None)
             .context("failed to build member dispatch execute request for spawn_world_worker")?;
     let response = client
         .execute_stream(execute_request)
@@ -3401,6 +4047,34 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
     policy: &Policy,
     turn_kind: ContinueWorldWorkerTurnKind,
 ) -> Result<ContinueWorldWorkerStreamResult> {
+    execute_continue_world_worker_stream_for_turn_kind_impl(request, policy, turn_kind, None).await
+}
+
+#[cfg(target_os = "linux")]
+async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    policy: &Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    receipt_registry: &WorldWorkReceiptRegistry,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<ContinueWorldWorkerStreamResult> {
+    validate_retained_submission_against_proposal(request, acceptance_proposal)?;
+    execute_continue_world_worker_stream_for_turn_kind_impl(
+        request,
+        policy,
+        turn_kind,
+        Some((receipt_registry, acceptance_proposal)),
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+async fn execute_continue_world_worker_stream_for_turn_kind_impl(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    policy: &Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    acceptance: Option<(&WorldWorkReceiptRegistry, &WorldWorkAcceptanceProposalV1)>,
+) -> Result<ContinueWorldWorkerStreamResult> {
     use http_body_util::BodyExt as _;
     use transport_api_types::ExecuteStreamFrame;
 
@@ -3455,10 +4129,38 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                 };
 
             match frame {
-                ExecuteStreamFrame::Start { span_id, .. } => {
-                    active_span_id = Some(span_id);
+                start_frame @ ExecuteStreamFrame::Start { .. } => {
+                    if let Some((receipt_registry, acceptance_proposal)) = acceptance {
+                        let span_id = consume_retained_acceptance_acknowledgement(
+                            request,
+                            acceptance_proposal,
+                            Some(&start_frame),
+                            active_span_id.is_some(),
+                            |record| {
+                                receipt_registry
+                                    .persist_world_work_acceptance(record)
+                                    .map(|_| ())
+                            },
+                        )?;
+                        active_span_id = Some(span_id);
+                    } else {
+                        let ExecuteStreamFrame::Start { span_id, .. } = start_frame else {
+                            unreachable!("matched Start frame")
+                        };
+                        if active_span_id.is_some() {
+                            anyhow::bail!(
+                                "continue_world_worker stream emitted repeated Start frame"
+                            );
+                        }
+                        active_span_id = Some(span_id);
+                    }
                 }
                 ExecuteStreamFrame::Event { event, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted Event before Start acknowledgement"
+                        );
+                    }
                     if surfaced_thread_id.is_none() {
                         surfaced_thread_id = surfaced_thread_id_from_event(&event);
                     }
@@ -3497,6 +4199,11 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                     }
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted terminal Exit before Start acknowledgement"
+                        );
+                    }
                     exit_code = Some(exit);
                     break;
                 }
@@ -3504,7 +4211,13 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                     cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
                     anyhow::bail!(message);
                 }
-                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
+                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted output before Start acknowledgement"
+                        );
+                    }
+                }
             }
         }
 
@@ -6126,6 +6839,7 @@ mod tests {
             world_id: "world-17".to_string(),
             world_generation: 2,
             prompt: "follow up".to_string(),
+            acceptance_context: None,
         }
     }
 
@@ -6258,6 +6972,383 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn b1_test_policy_ref(
+    ) -> crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1 {
+        use crate::execution::agent_runtime::host_session_authority::schema::{
+            AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
+        };
+
+        AuthorityObjectRefV1 {
+            ref_id: "policy-ref-b1-shell".to_string(),
+            object_kind: AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "a".repeat(64),
+            },
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_task_acceptance_submission() -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::ExecuteRequest,
+    ) {
+        let validated_dispatch_request = sample_request();
+        let acceptance_context = transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc".to_string(),
+            request_id: validated_dispatch_request.request_id.clone(),
+            message_id: None,
+            caller_backend_id: "cli:codex".to_string(),
+            host_transition_correlation: None,
+        };
+        let member_dispatch_request = MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: validated_dispatch_request.orchestration_session_id.clone(),
+            participant_id: "awm_018f0f2e-7b4c-7aa1-8c22-123456789abd".to_string(),
+            orchestrator_participant_id: validated_dispatch_request.caller_participant_id.clone(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: validated_dispatch_request.target_backend_id.clone(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: validated_dispatch_request.request_id.clone(),
+            world_id: validated_dispatch_request.world_id.clone(),
+            world_generation: validated_dispatch_request.world_generation,
+            initial_prompt: Some("hello world".to_string()),
+            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/usr/bin/codex".to_string(),
+            },
+        };
+        let execute_request = ExecuteRequest {
+            profile: None,
+            cmd: String::new(),
+            cwd: Some("/tmp".to_string()),
+            env: None,
+            pty: false,
+            agent_id: "codex-world".to_string(),
+            budget: None,
+            policy_snapshot: minimal_policy_snapshot(),
+            shared_world: None,
+            world_network: None,
+            world_fs_mode: None,
+            member_dispatch: Some(member_dispatch_request.clone()),
+            acceptance_context: Some(acceptance_context.clone()),
+        };
+        let canonical_execute_request_sha256 =
+            canonical_world_work_submission_sha256(&validated_dispatch_request, &execute_request)
+                .expect("hash task submission");
+        let proposal = WorldWorkAcceptanceProposalV1 {
+            schema_version: 1,
+            acceptance_context,
+            authority_store_id: "authority-store-b1".to_string(),
+            authority_revision_observed: 11,
+            orchestration_session_id: validated_dispatch_request.orchestration_session_id.clone(),
+            caller_participant_id: validated_dispatch_request.caller_participant_id.clone(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: validated_dispatch_request.target_backend_id.clone(),
+            world_id: validated_dispatch_request.world_id.clone(),
+            world_generation: validated_dispatch_request.world_generation,
+            proposed_work: ProposedWorldWorkIdentityV1::EphemeralTask,
+            submission_identity: WorldWorkSubmissionIdentityV1::EphemeralTask {
+                validated_dispatch_request,
+                member_dispatch_request,
+                canonical_execute_request_sha256,
+            },
+            current_policy_snapshot_ref: b1_test_policy_ref(),
+            current_policy_snapshot_hash: "b".repeat(64),
+            current_policy_revision: "policy-revision-b1".to_string(),
+            created_at: Utc::now(),
+        };
+        (proposal, execute_request)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_retained_acceptance_submission() -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::MemberTurnSubmitRequestV1,
+    ) {
+        let validated_dispatch_request = sample_continue_request();
+        let message_id = "wwm_018f0f2e-7b4c-7aa1-8c22-123456789abe".to_string();
+        let acceptance_context = transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abf".to_string(),
+            request_id: validated_dispatch_request.request_id.clone(),
+            message_id: Some(message_id.clone()),
+            caller_backend_id: "cli:codex".to_string(),
+            host_transition_correlation: None,
+        };
+        let mut request = sample_continue_submit_request();
+        request.acceptance_context = Some(acceptance_context.clone());
+        let canonical_member_turn_submit_request_sha256 =
+            canonical_world_work_submission_sha256(&validated_dispatch_request, &request)
+                .expect("hash retained submission");
+        let proposal = WorldWorkAcceptanceProposalV1 {
+            schema_version: 1,
+            acceptance_context,
+            authority_store_id: "authority-store-b1".to_string(),
+            authority_revision_observed: 11,
+            orchestration_session_id: validated_dispatch_request.orchestration_session_id.clone(),
+            caller_participant_id: validated_dispatch_request.caller_participant_id.clone(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: validated_dispatch_request.target_backend_id.clone(),
+            world_id: validated_dispatch_request.world_id.clone(),
+            world_generation: validated_dispatch_request.world_generation,
+            proposed_work: ProposedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: request.run_id.clone(),
+                message_id,
+                target_participant_id: request.participant_id.clone(),
+            },
+            submission_identity: WorldWorkSubmissionIdentityV1::RetainedTurn {
+                validated_dispatch_request,
+                canonical_member_turn_submit_request_sha256,
+            },
+            current_policy_snapshot_ref: b1_test_policy_ref(),
+            current_policy_snapshot_hash: "b".repeat(64),
+            current_policy_revision: "policy-revision-b1".to_string(),
+            created_at: Utc::now(),
+        };
+        (proposal, request)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn b1_test_terminal_frame() -> transport_api_types::ExecuteStreamFrame {
+        transport_api_types::ExecuteStreamFrame::Exit {
+            frame_identity: test_runtime_frame_identity(1),
+            event_identity: test_runtime_event_identity(1),
+            terminal_identity: test_runtime_terminal_identity(1),
+            exit: 0,
+            span_id: "spn_terminal_only".to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn b1_task_acknowledgement_rejects_nonstart_eof_mismatch_and_repetition_before_persist() {
+        use std::cell::Cell;
+
+        let (proposal, request) = sample_task_acceptance_submission();
+        let persisted = Cell::new(0usize);
+        let error = transport_api_types::ExecuteStreamFrame::Error {
+            frame_identity: test_runtime_frame_identity(1),
+            message: "not accepted".to_string(),
+        };
+        for frame in [Some(&error), Some(&b1_test_terminal_frame()), None] {
+            let result =
+                consume_task_acceptance_acknowledgement(&request, &proposal, frame, false, |_| {
+                    persisted.set(persisted.get() + 1);
+                    Ok(())
+                });
+            assert!(result.is_err());
+            assert_eq!(persisted.get(), 0);
+        }
+
+        let wrong_sequence = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(2),
+            span_id: "spn_task_b1".to_string(),
+        };
+        assert!(consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&wrong_sequence),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 0);
+
+        let mut changed_request = request.clone();
+        changed_request.agent_id = "different-agent".to_string();
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: "spn_task_b1".to_string(),
+        };
+        assert!(consume_task_acceptance_acknowledgement(
+            &changed_request,
+            &proposal,
+            Some(&start),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 0);
+
+        let span_id = consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                assert_eq!(record.runtime_acceptance.frame_sequence, 1);
+                assert_eq!(
+                    record.runtime_acceptance.task_run_id.as_deref(),
+                    Some("spn_task_b1")
+                );
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("valid Start is accepted");
+        assert_eq!(span_id, "spn_task_b1");
+        assert_eq!(persisted.get(), 1);
+        assert!(consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            true,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn b1_retained_acknowledgement_joins_exact_request_and_rejects_terminal_or_drift() {
+        use std::cell::Cell;
+
+        let (proposal, request) = sample_retained_acceptance_submission();
+        let persisted = Cell::new(0usize);
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&b1_test_terminal_frame()),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            None,
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+
+        let error = transport_api_types::ExecuteStreamFrame::Error {
+            frame_identity: test_runtime_frame_identity(1),
+            message: "not accepted".to_string(),
+        };
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&error),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        let wrong_sequence = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(2),
+            span_id: "spn_retained_b1".to_string(),
+        };
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&wrong_sequence),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: "spn_retained_b1".to_string(),
+        };
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            true,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        let mut changed_target = request.clone();
+        changed_target.participant_id = "ash_other".to_string();
+        assert!(consume_retained_acceptance_acknowledgement(
+            &changed_target,
+            &proposal,
+            Some(&start),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        let mut changed_message = request.clone();
+        changed_message
+            .acceptance_context
+            .as_mut()
+            .expect("acceptance context")
+            .message_id = Some("wwm_018f0f2e-7b4c-7aa1-8c22-123456789aba".to_string());
+        assert!(consume_retained_acceptance_acknowledgement(
+            &changed_message,
+            &proposal,
+            Some(&start),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 0);
+
+        consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                assert_eq!(
+                    record.runtime_acceptance.active_run_id.as_deref(),
+                    Some("req_continue")
+                );
+                assert_eq!(
+                    record.runtime_acceptance.message_id,
+                    proposal.acceptance_context.message_id
+                );
+                assert_eq!(
+                    record.runtime_acceptance.retained_participant_id.as_deref(),
+                    Some("ash_member")
+                );
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("valid retained Start is accepted");
+        assert_eq!(persisted.get(), 1);
+    }
+
+    #[cfg(target_os = "linux")]
     const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str =
         "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 
@@ -6331,6 +7422,7 @@ mod tests {
                     binary_path: binary_path.display().to_string(),
                 },
             }),
+            acceptance_context: None,
         }
     }
 

@@ -7437,9 +7437,12 @@ async fn start_remote_member_runtime_with_prepared(
     );
 
     let workspace_root = PathBuf::from(startup_context.snapshot().workspace_root.clone());
-    let (client, request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(&transport_request, &workspace_root)
-            .map_err(runtime_bootstrap_failure_from_anyhow)?;
+    let (client, request, _agent_id) = build_agent_client_and_member_dispatch_request_for_cwd(
+        &transport_request,
+        &workspace_root,
+        None,
+    )
+    .map_err(runtime_bootstrap_failure_from_anyhow)?;
     let response = client
         .execute_stream(request)
         .await
@@ -8577,6 +8580,7 @@ async fn submit_world_targeted_turn(
                 )
             })?,
             prompt: prompt.to_string(),
+            acceptance_context: None,
         }
     };
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;

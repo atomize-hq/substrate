@@ -89,6 +89,7 @@ fn make_member_dispatch_request(
                 binary_path: binary_path.display().to_string(),
             },
         }),
+        acceptance_context: None,
     }
 }
 
@@ -122,6 +123,7 @@ fn make_member_turn_submit_request(
         world_id: world_id.to_string(),
         world_generation,
         prompt: prompt.to_string(),
+        acceptance_context: None,
     }
 }
 
