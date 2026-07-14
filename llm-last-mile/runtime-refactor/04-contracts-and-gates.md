@@ -3244,6 +3244,47 @@ terminal behavior before B3.1 becomes dependency-ready.
 14. **Diagnostics:** non-zero exit, stream error, reconciliation failure, and cancel failure retain
     exact active-run/session/world/policy/stream/event joins.
 
+## 11A. Differential-baseline transition gate
+
+A broad-suite differential is monotonic only when exact test-name set comparison and the same
+normalized failure-signature procedure prove every transition. Totals alone are not evidence. This
+is the permanent `RG-DIFF-01` regression gate recorded in `05`.
+
+Allowed transitions are limited to:
+
+- historical pass to pass;
+- historical failure to the same failure with the same normalized signature;
+- historical failure to pass only with the exact causal-resolution proof below; and
+- a new test that passes.
+
+The following transitions or explanations are forbidden:
+
+- a historical pass becomes a failure;
+- a historical test is removed, hidden, filtered, renamed to evade comparison, or newly ignored;
+- a historical failure has an unexplained changed signature;
+- a historical failure passes because an assertion was deleted or weakened;
+- success bypasses the intended production path; or
+- success disables behavior, swallows an error, adds a permissive fallback, or uses test-only
+  branching.
+
+For every historical failure that becomes a pass, the closeout evidence must:
+
+1. preserve the exact historical test name;
+2. record its historical failure message and normalized signature;
+3. reproduce that historical failure at the exact baseline;
+4. prove current success through the intended production path;
+5. inspect the test-source changes;
+6. show assertions are unchanged or strengthened, or explain and independently prove an
+   intentional semantic rewrite;
+7. map the transition to an exact slice behavior and changed symbol;
+8. prove no unrelated feature or enforcement behavior was removed; and
+9. obtain independent review.
+
+The evidence must also publish the complete historical and current inventories, exact transition
+matrix, retained-failure names and normalized signatures, failure-to-pass manifest, new-test
+manifest, and hashes for those artifacts. Any uncertain transition is
+`BaselineRegressionAmbiguous`; it cannot satisfy closeout or contract promotion.
+
 ## 12. Final-receipt immutable `PolicySnapshotV3` acceptance rules
 
 B1's pre-E2 acceptance anchor records the exact current policy identity used by the runtime but is

@@ -376,6 +376,7 @@ open remains a blocking regression gate until its named owner and real-path proo
 | **RG-BASE-02** | REPL first-dispatch `run_world_task` binding repair | Correct binding succeeds; stale/mismatched world generation fails closed; no generic binding synthesis on unrelated surfaces. |
 | **RG-BASE-03** | Parked host ordinary-command and continuity parity | Unprefixed `ls`/`pwd` remain usable; policy-required `cd ../` cage denial remains; later targeted host turn reuses session/UAA continuity; public CLI parity stays green. |
 | **RG-BASE-04** | Retained spawn/fork/exact continue/exact stop plus ambiguity close | Exact source and child handles route correctly; backend-only follow-up with multiple retained workers fails closed; source detached stop and child live-transport stop remain valid. |
+| **RG-DIFF-01** | Monotonic broad-suite differential; a historical failure becoming a pass is neither automatic success nor automatic regression | Apply the exact-name and normalized-signature transition gate in `04`. Preserve complete inventories and artifact hashes; prove every historical failure-to-pass transition at the exact baseline and current production path; inspect test and assertion diffs; map the causal change to the owning slice and symbol; prove no bypass, weakened enforcement, removed behavior, hidden/renamed/ignored test, or unrelated capability loss; and obtain independent review. Any uncertain transition is `BaselineRegressionAmbiguous` and keeps the owning closeout open. |
 
 ## Cross-gate smoke scenarios
 
