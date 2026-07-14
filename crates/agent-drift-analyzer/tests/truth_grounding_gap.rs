@@ -800,6 +800,57 @@ fn truth_grounding_gap_does_not_ground_path_b_from_path_a_read() {
 }
 
 #[test]
+fn truth_grounding_gap_does_not_ground_pathless_action_from_partial_path_reads() {
+    let path_a = "docs/specs/truth-path-a.md";
+    let path_b = "docs/specs/truth-path-b.md";
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            &format!(
+                "/goal Verify the result using {path_a} and {path_b} as the declared truth artifacts."
+            ),
+        ),
+        tool_row(1, &format!("sed -n '1,120p' {path_a}")),
+        row(
+            2,
+            CompactionKind::AssistantMessage,
+            "Only path A is grounded; I am moving to the verification checkpoint.",
+        ),
+        tool_row(
+            3,
+            "cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze partially grounded pathless action bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let score = truth_grounding_gap_score(
+        checkpoints
+            .last()
+            .expect("partially grounded pathless action checkpoint"),
+    );
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+    assert!(score
+        .evidence
+        .iter()
+        .any(|evidence| evidence.reason == "command family: cargo"));
+}
+
+#[test]
 fn truth_grounding_gap_does_not_match_lexical_path_prefixes() {
     let read_path = "docs/specs/truth.md";
     let truth_path = "docs/specs/truth.md.bak";
@@ -830,6 +881,66 @@ fn truth_grounding_gap_does_not_match_lexical_path_prefixes() {
             .expect("lexical path-prefix collision checkpoint"),
     );
 
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+}
+
+#[test]
+fn truth_grounding_gap_prunes_read_before_lexical_prefix_redeclaration() {
+    let truth_path = "docs/specs/truth.md";
+    let lexical_prefix_path = "docs/specs/truth.md.bak";
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            &format!("/goal Read {truth_path} as the declared truth artifact before acting."),
+        ),
+        tool_row(1, &format!("sed -n '1,120p' {truth_path}")),
+        row(
+            2,
+            CompactionKind::UserMessage,
+            &format!(
+                "/goal Switch the current task frame to {lexical_prefix_path} as the only declared truth artifact."
+            ),
+        ),
+        tool_row(3, "pwd"),
+        row(
+            4,
+            CompactionKind::UserMessage,
+            &format!("/goal Re-declare {truth_path} and update it without a new read."),
+        ),
+        tool_row(
+            5,
+            &format!(
+                "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+            ),
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze lexical-prefix removal and re-declaration bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert_eq!(checkpoints.len(), 3);
+    assert!(checkpoints[1]
+        .task_frame
+        .objective
+        .contains(lexical_prefix_path));
+    let score = truth_grounding_gap_score(
+        checkpoints
+            .last()
+            .expect("lexical-prefix re-declared truth-path action checkpoint"),
+    );
     assert_eq!(
         (
             score.raw_score,

@@ -5,6 +5,7 @@ use crate::checkpoint::{
     CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
 };
 use crate::context::CommandObservation;
+use crate::input::extract_path_hints;
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX: &str = "historical truth-grounding gap:";
@@ -30,7 +31,9 @@ pub(crate) fn score_truth_grounding_gap(
         let matching_paths = matching_truth_paths(command, &truth_paths);
         if command.write_like || command.verification_like {
             let grounded = if matching_paths.is_empty() {
-                !provenance.grounded_paths.is_empty()
+                truth_paths
+                    .iter()
+                    .all(|path| provenance.grounded_paths.contains(path))
             } else {
                 matching_paths
                     .iter()
@@ -103,13 +106,18 @@ pub(crate) fn score_truth_grounding_gap(
 
 fn declared_truth_paths(analysis: &CheckpointAnalysis) -> BTreeSet<String> {
     let task_frame = &analysis.current.task_frame;
+    let extracted_paths = extract_path_hints(&task_frame.objective);
     let objective_paths = task_frame
         .truth_artifacts
         .iter()
-        .filter(|path| task_frame.objective.contains(path.as_str()))
+        .filter(|path| {
+            extracted_paths
+                .iter()
+                .any(|extracted| Path::new(extracted) == Path::new(path))
+        })
         .cloned()
         .collect::<BTreeSet<_>>();
-    if objective_paths.is_empty() {
+    if extracted_paths.is_empty() {
         task_frame.truth_artifacts.iter().cloned().collect()
     } else {
         objective_paths
