@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-TGG-TRUTH-PATH-ACTION` (ACTIVE; active packet: none; docs-only gate)**
+Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate; transition review pending)**
 
 ## Dependency Order
 
@@ -21,11 +21,12 @@ Current phase: **`R6-GAP-TGG-TRUTH-PATH-ACTION` (ACTIVE; active packet: none; do
    `10 PASS / 3 preserved RED`, with no production change.
 5. **COMPLETE through fresh review-clean `d13f0a71c`:** the first named gap,
    `R6-GAP-DET-OPAQUE-PARENT`, landed its bounded scorer fix and focused/family/checkpoint proof.
-6. **ACTIVE:** atomically create and freshly review only the three canonical
-   `R6-GAP-TGG-TRUTH-PATH-ACTION` packet docs recorded as non-link `TO CREATE` paths in the named-gap
-   subledger. Do not begin successor production/no-code proof before this docs gate is review-clean.
-7. Resolve `R6-GAP-TGG-TRUTH-PATH-ACTION` and then `R6-GAP-WPB-EMPTY-AUTHORITY` as distinct
-   sequential phases; do not batch them or activate replay early.
+6. **COMPLETE through final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent
+   `REVIEW CLEAN`:** `R6-GAP-TGG-TRUTH-PATH-ACTION` landed its bounded Option-A fix and proof.
+7. **ACTIVE CANDIDATE / TRANSITION REVIEW PENDING:** after this authority-only transition is fresh
+   review-clean, atomically create and freshly review only the three canonical
+   `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs recorded as non-link `TO CREATE` paths in the named-gap
+   subledger. Do not begin successor production/no-code proof before either gate is review-clean.
 8. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence after all named
    gaps are complete.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
@@ -53,6 +54,6 @@ Current phase: **`R6-GAP-TGG-TRUTH-PATH-ACTION` (ACTIVE; active packet: none; do
   `git diff --cached --check`, and inspect the complete `git diff --cached` before committing.
 - Preserve unrelated worktree changes.
 
-No successor production code change, witness rerun, or no-code proof receipt is authorized until the
-active `R6-GAP-TGG-TRUTH-PATH-ACTION` docs-only gate is committed and fresh-review-clean.
-`R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY` remain blocked.
+No successor packet creation, production code change, witness rerun, or no-code proof receipt is
+authorized until this authority-only transition candidate is fresh-review-clean. Then only the
+`R6-GAP-WPB-EMPTY-AUTHORITY` docs-only packet-creation gate is eligible. `R6-REPLAY` remains blocked.

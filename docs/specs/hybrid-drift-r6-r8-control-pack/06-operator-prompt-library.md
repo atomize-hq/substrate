@@ -303,11 +303,13 @@ result, current phase status, and the next eligible interaction.
 
 ## Current First Invocation
 
-The named-gap subledger identifies `R6-GAP-TGG-TRUTH-PATH-ACTION` as the sole concrete active phase. Its
-default invocation is Prompt 1 with:
+The named-gap subledger transition candidate identifies `R6-GAP-WPB-EMPTY-AUTHORITY` as the sole
+concrete active phase at its docs-only packet-creation gate. Successor work must not begin until the
+transition candidate receives fresh review. After that gate is clean, its default invocation is
+Prompt 1 with:
 
 ```text
-PHASE_ID: R6-GAP-TGG-TRUTH-PATH-ACTION
+PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY
 ACTIVE_PACKET: none
 ```
 

@@ -1,18 +1,19 @@
 # R6-GAP-TGG-TRUTH-PATH-ACTION — Truth-Path Action-Before-Read Gap
 
-Status: **ACTIVE — OPTION-A LEDGER REVIEW-FIX GATE**. The operator has resolved `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`: repair the internal, typed, session-local, path-scoped truth-grounding provenance seam. Packet-amendment series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`, completing Task 2A. Ledger reconciliation candidate `dba992383` is landed but received fresh `REVIEW FINDINGS` P1/P2. The only current authorized action is a ledger-only fix commit followed by fresh review; no source or test edit is authorized until Task 2B receives fresh `REVIEW CLEAN`.
+Status: **COMPLETE — IMPLEMENTATION/PROOF REVIEW CLEAN; TRANSITION CANDIDATE APPLIED; FRESH TRANSITION REVIEW PENDING**. The operator decisions `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised. Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, one-expression source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. This authority-only transition candidate activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate, keeps `R6-REPLAY` blocked, and claims no transition commit hash or review verdict. No successor work begins until fresh transition review is clean.
 
 ## Decision Record And Current Evidence
 
 - Decision: **Option A**, explicitly selected by the operator on 2026-07-13.
 - Decision receipt: `48f259d25` (`docs: record grounding provenance review gap`). This is the decision-required receipt, not production proof or closure.
-- Review-clean packet-amendment series: `49b2bbd7f` (`docs: authorize typed grounding provenance`) plus `70c0ca9f4` (`docs: tighten grounding provenance gates`) received fresh built-in `default` `REVIEW CLEAN`. This completes Task 2A but is not implementation proof.
-- Landed ledger reconciliation candidate: `dba992383` (`docs: record grounding provenance decision`) received fresh `REVIEW FINDINGS` P1/P2. It is neither a review-clean Task 2B gate nor implementation authority.
+- Review-clean packet-amendment series: `49b2bbd7f` (`docs: authorize typed grounding provenance`) plus `70c0ca9f4` (`docs: tighten grounding provenance gates`) received fresh built-in `default` `REVIEW CLEAN`.
+- Review-clean ledger reconciliation series: `dba992383` + `70955db2a` received fresh built-in `default` `REVIEW CLEAN` and completed Task 2B.
 - Review-clean witness: `6409ae072` (`test: preserve cross-checkpoint grounding gaps`) changes only `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` and independently received fresh `REVIEW CLEAN`.
 - Preserved incomplete series: production `52c9ab296` plus receipt `73132aead` received fresh `REVIEW FINDINGS` P1. The later receipt `48f259d25` records that disposition and keeps Task 3A unchecked.
-- Historical entry gates remain complete: packet docs `03754a2de` and ledger reconciliation `a5380c04e` each received fresh built-in `default` `REVIEW CLEAN` for the earlier scorer-only boundary. They do not substitute for the still-open Option-A ledger reconciliation in Task 2B.
+- Historical entry gates remain complete: packet docs `03754a2de` and ledger reconciliation `a5380c04e` each received fresh built-in `default` `REVIEW CLEAN` for the earlier scorer-only boundary.
+- Review-clean implementation/proof: Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, one-expression clippy source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` each received fresh independent built-in `default` `REVIEW CLEAN`. The nine packet-locked controls, full `truth_grounding_gap`, dead-end regressions, checkpoints, format, check, literal all-target clippy, and diff gate are green with exact counts recorded in TASKS.
 
-No fresh `REVIEW CLEAN` verdict is claimed for `dba992383` or its future ledger-only fix series, and no implementation command result or closure proof is claimed by this amendment.
+This transition candidate claims no transition commit hash or review verdict. It assigns no terminal scorer disposition and makes no replay or R6-close claim.
 
 ## Objective And Preserved Controls
 
@@ -60,17 +61,17 @@ Series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CL
 - this packet's PLAN;
 - this packet's TASKS.
 
-This completed docs-only gate does not authorize source, test, or implementation work while Task 2B remains open.
+This completed docs-only gate is historical; the later ledger and implementation/proof gates are also complete.
 
-### Ledger-only decision reconciliation — current review-fix batch
+### Ledger-only decision reconciliation — complete
 
 Exactly:
 
 - `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`.
 
-Candidate `dba992383` is landed and received fresh `REVIEW FINDINGS` P1/P2. Fix only the actionable ledger findings in a new ledger-only commit, preserve `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`, the review-clean packet-amendment series, the expanded bounded source/test authority, and Task 3A as the next action. Preserve the gap as active and make no proof or closure claim. Obtain fresh built-in `default` `REVIEW CLEAN` before implementation.
+Series `dba992383` + `70955db2a` received fresh built-in `default` `REVIEW CLEAN`, preserving `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and the bounded source/test authority before implementation.
 
-### Option-A implementation/proof batch — only after both gates are review-clean
+### Option-A implementation/proof batch — complete
 
 Only:
 
@@ -142,4 +143,4 @@ git diff --cached --check
 git diff --cached
 ```
 
-Commit atomically and dispatch a fresh built-in `default` reviewer. Apply findings in a new bounded commit and repeat with a fresh built-in `default` reviewer until `REVIEW CLEAN`. Task 3A, Task 4, the authority transition, and successor work remain incomplete. Only a later review-clean implementation/proof series may unlock the separate authority-only transition already listed in TASKS.
+The implementation/proof and final receipt series received fresh independent built-in `default` `REVIEW CLEAN`; Tasks 3A and 4 are complete. The authority-only transition candidate is now applied with Task 5 intentionally unchecked pending fresh transition review. No successor work begins first.

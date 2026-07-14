@@ -4,19 +4,22 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-GAP-TGG-TRUTH-PATH-ACTION — docs-only gate`
+**Current work phase:** `R6-GAP-WPB-EMPTY-AUTHORITY — docs-only packet-creation gate (transition review pending)`
 
-**Last repo-truth verification:** `d13f0a71c`
+**Last repo-truth verification:** `37c24b259` with final proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
 `R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
 `R6-GAP-WPB-EMPTY-AUTHORITY`. The first gap is complete after production series `bcd94bf4f` +
 `931e50c85` + `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`, with its exact focused,
-family, checkpoint, and format/check proof green. Only `R6-GAP-TGG-TRUTH-PATH-ACTION` is active;
-its sole authorized work is atomic creation and fresh review of its three canonical non-link `TO
-CREATE` paths. `R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY` remain blocked, and no successor
-implementation, replay, R6 closeout, or R7/R8 work is authorized first.
+family, checkpoint, and format/check proof green. `R6-GAP-TGG-TRUTH-PATH-ACTION` is complete after
+its implementation/proof and final proof-receipt series received fresh independent built-in
+`default` `REVIEW CLEAN`. This transition candidate activates only
+`R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate; its three canonical paths remain
+non-link `TO CREATE` entries and no packet file exists. Fresh transition review is still pending, so
+no successor work may begin. `R6-REPLAY` remains blocked, and no replay, R6 closeout, or R7/R8 work
+is authorized first.
 
 ## Purpose
 

@@ -1,6 +1,6 @@
 # Plan: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — OPTION-A LEDGER REVIEW-FIX GATE**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` is operator-decided. Decision receipt `48f259d25` and review-clean witness `6409ae072` preserve the two opposite cross-checkpoint failures. Packet-amendment series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`, completing Task 2A. Ledger reconciliation candidate `dba992383` is landed but received fresh `REVIEW FINDINGS` P1/P2. Do not implement before a ledger-only fix series receives fresh `REVIEW CLEAN` and completes Task 2B.
+Status: **COMPLETE — IMPLEMENTATION/PROOF REVIEW CLEAN; TRANSITION CANDIDATE APPLIED; FRESH TRANSITION REVIEW PENDING**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised. Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, one-expression source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. This transition candidate activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate, keeps `R6-REPLAY` blocked, and claims no transition commit hash or review verdict.
 
 ## Locked Decisions
 
@@ -20,11 +20,11 @@ Status: **ACTIVE — OPTION-A LEDGER REVIEW-FIX GATE**. `R6-TGG-CROSS-CHECKPOINT
 
 Packet-amendment series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`. Task 2A is complete. The visibility contract remains locked: every new helper is private, and only the provenance type may use `pub(crate)` if cross-module signature threading requires it.
 
-That completed docs-only gate does not authorize source, test, or implementation work while Task 2B remains open.
+That completed docs-only gate is historical; the later ledger and implementation/proof gates are also complete.
 
 ### 1. Reconcile The Operator Decision In The Canonical Ledger
 
-Candidate `dba992383` is landed but received fresh `REVIEW FINDINGS` P1/P2. The current allowed fix batch touches exactly:
+Historical candidate `dba992383` received fresh `REVIEW FINDINGS` P1/P2. The completed fix batch touched exactly:
 
 `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`
 
@@ -36,7 +36,7 @@ Record:
 - the bounded three-source-file internal provenance seam and focused test authority;
 - Task 3A as next while the gap stays active and unproven.
 
-Fix only the actionable ledger findings, run the staged gate, commit separately, and obtain fresh built-in `default` `REVIEW CLEAN`. Use ledger-only fix commits and fresh reviewers until clean. Task 2B remains incomplete, and this separate reconciliation is required before implementation.
+Series `dba992383` + `70955db2a` fixed the actionable ledger findings and received fresh built-in `default` `REVIEW CLEAN`, completing Task 2B before implementation.
 
 ### 2. Run Every Pre-Edit Impact Gate
 
@@ -124,7 +124,7 @@ Commit atomically and dispatch a fresh built-in `default` reviewer. Apply each a
 
 ### 6. Transition And Stop
 
-Do not check Task 4 or begin the authority transition until the Option-A closure series has exact green proof and fresh `REVIEW CLEAN`. Then use the already listed authority-only transition manifest in TASKS in a separate commit/review series. Keep `R6-REPLAY` blocked, activate only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only gate, create no successor packet, and stop after the transition is review-clean.
+Task 4 is complete after the Option-A closure and final proof-receipt series received exact green proof and fresh `REVIEW CLEAN`. This authority-only transition candidate uses the manifest in TASKS, keeps `R6-REPLAY` blocked, and activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate. Task 5 stays unchecked and successor work stays blocked until the transition series receives fresh review. Create no successor packet and stop after the transition is review-clean.
 
 ## Escalation Boundary
 

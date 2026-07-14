@@ -1,6 +1,6 @@
 # R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-DET-OPAQUE-PARENT COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION ACTIVE** on 2026-07-13.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE — TRANSITION REVIEW PENDING** on 2026-07-14.
 All synthetic controls are complete in the TASKS ledger. The first preserved red is now proven
 focused through its complete named gap; the other two remain open only through their distinct named
 gap phases.

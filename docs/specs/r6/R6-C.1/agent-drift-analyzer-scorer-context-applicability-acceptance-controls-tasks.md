@@ -1,16 +1,17 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-DET-OPAQUE-PARENT COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION ACTIVE** on 2026-07-13. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE — TRANSITION REVIEW PENDING** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
 `R6-GAP-DET-OPAQUE-PARENT`, `R6-GAP-TGG-TRUTH-PATH-ACTION`, and
 `R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. The first route is complete after the fresh built-in
 `default` `REVIEW CLEAN` verdict for production series `bcd94bf4f` + `931e50c85` + `d13f0a71c`.
-Only `R6-GAP-TGG-TRUTH-PATH-ACTION` is active, at its docs-only gate;
-`R6-GAP-WPB-EMPTY-AUTHORITY` and `R6-REPLAY` remain blocked. The sole next authorized action is
-atomic creation and fresh review of the successor's three canonical non-link `TO CREATE` paths. No
-successor implementation, replay, phase-close, or R7/R8 work is authorized first.
+The second route is complete after final proof-receipt series `fee9c2b16` + `6674a8316` received
+fresh independent built-in `default` `REVIEW CLEAN`. This transition candidate activates only
+`R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate and keeps `R6-REPLAY` blocked.
+Fresh transition review is the current gate; no successor work, replay, phase-close, or R7/R8 work
+is authorized first.
 
 ## Required Staged Commit Gate
 
@@ -409,10 +410,12 @@ before that reconciled transition is committed and fresh-review-clean.
   - Boundary: this is the first and only authorized task after activation. No production edit, witness
     rerun for a no-code receipt, or proof receipt may begin until these docs are committed and
     independently review-clean. The no-code path does not bypass this task.
-  - Sequential result (2026-07-13): the first gap instance, `R6-GAP-DET-OPAQUE-PARENT`, completed its
-    packet-docs gate at `59092df2a` and ledger reconciliation at `beed76446`, both fresh `REVIEW
-    CLEAN`. This generic task remains open because active successor `R6-GAP-TGG-TRUTH-PATH-ACTION`
-    has not created its docs; its exact three paths remain non-link `TO CREATE` entries.
+  - Sequential result through 2026-07-14: `R6-GAP-DET-OPAQUE-PARENT` completed its packet-docs gate
+    at `59092df2a` and ledger reconciliation at `beed76446`; `R6-GAP-TGG-TRUTH-PATH-ACTION`
+    completed its packet-docs gate at `03754a2de` and ledger reconciliation at `a5380c04e`; all four
+    gates received fresh `REVIEW CLEAN`. This generic task remains open because active successor
+    `R6-GAP-WPB-EMPTY-AUTHORITY` has not created its docs; its exact three paths remain non-link
+    `TO CREATE` entries, and successor work is blocked pending fresh transition review.
 
 - [ ] **R6-C.1.5.2 — Execute the review-clean active gap as one distinct phase.**
   - Prerequisite: R6-C.1.5.1 is review-clean for this exact named gap; its SPEC/PLAN/TASKS now exist; the
@@ -432,13 +435,19 @@ before that reconciled transition is committed and fresh-review-clean.
     named gap and original witness; never silently delete, merge, or relabel them. The receipt commit
     leaves the gap active and activates no successor; the normal transition remains separate.
   - Boundary: no second gap is active or executed concurrently; no return to `R6-C.1-CONTROLS`.
-  - Sequential result (2026-07-13): the first gap instance completed execution. Production series
+  - Sequential result through 2026-07-14: the first gap instance completed execution. Production series
     `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN` with
     `CTX-R6-04` at `0 / Low / Cleared`, unflagged, empty evidence; the new partial/mixed regression at
     `0 / Medium / Cleared`, unflagged, empty evidence; `CTX-R6-03` preserved at
     `30 / Medium / Active`, flagged; all `21` matching `dead_end_thrash` tests and all `167` matching
-    checkpoint tests passing; and format/check passing. This generic task remains open because later
-    named-gap execution has not occurred.
+    checkpoint tests passing; and format/check passing. The second gap instance also completed:
+    Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, source commit
+    `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` received fresh independent
+    built-in `default` `REVIEW CLEAN`; packet-locked grounding controls passed `9 / 9`, full
+    `truth_grounding_gap` passed `22 / 22`, exact dead-end controls passed `3 / 3`, full
+    `dead_end_thrash` passed `18 / 18`, checkpoints passed `35` unit + `131` integration plus
+    matching export/provenance tests, and format/check/literal-clippy/diff passed. This generic task
+    remains open because the final named-gap execution has not occurred.
 
 - [ ] **R6-C.1.5.3 — Transition sequentially between gaps, then to `R6-REPLAY`.**
   - Acceptance: after the active gap fix or no-code proof receipt is committed and review-clean, a
@@ -452,11 +461,12 @@ before that reconciled transition is committed and fresh-review-clean.
     R6-C.1.5.1 creates it; do not cite that TASKS as existing.
   - Verify: apply every field in the Required Phase-Transition Authority Manifest; required staged commit
     gate and fresh independent review for every gap transition.
-  - Sequential result (2026-07-13): this authority update marks only
-    `R6-GAP-DET-OPAQUE-PARENT` complete, activates only `R6-GAP-TGG-TRUTH-PATH-ACTION` at its
-    docs-only gate, and keeps `R6-GAP-WPB-EMPTY-AUTHORITY` plus `R6-REPLAY` blocked. It applies the
-    transition statuses without claiming an unknown transition commit or review verdict. The generic
-    task remains open because later gap transitions and the final replay transition remain undone.
+  - Sequential result candidate (2026-07-14): this authority-only update marks
+    `R6-GAP-TGG-TRUTH-PATH-ACTION` complete, activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its
+    docs-only packet-creation gate, and keeps `R6-REPLAY` blocked. It claims no unknown transition
+    commit or review verdict; fresh transition review remains required and no successor work begins
+    first. The generic task remains open because this transition review, the final gap transition,
+    and the replay transition remain undone.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 
