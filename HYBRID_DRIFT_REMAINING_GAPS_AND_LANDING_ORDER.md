@@ -116,9 +116,12 @@ sticky rollout's candidate transition is checkpoint `9` `Advancing / HistoricalO
 checkpoint `10` `HistoricalOnly 20`, rather than clean `f898d61e7` checkpoint `9`
 `Regressing / Active 40` to checkpoint `10` `Recovered 20`. Event `831 -> 837` and
 `recovery_state` are non-causal; the conflict is canonical `Recovered` requiring an immediately
-previous same-class `Active` score. Task `.2B` decision
-`R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.3` remains incomplete and
-uncommitted with no widened implementation authority, and Task `.4` is blocked.
+previous same-class `Active` score. The operator replied exactly
+`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; Task `.2B` is complete. Current
+sticky authority is `HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` is
+historical evidence only. This approved authority/expected-disposition change still awaits its
+source/test/fixture-expected implementation and proof. Task `.3` is authorized/current within the
+review-clean amendment but remains incomplete and uncommitted, and Task `.4` is blocked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -131,10 +134,9 @@ control.” The current honest sequence is:
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
 5. keep the landed final gap-to-replay authority transition series `56bb9966f + 07a3b1fe5` at fresh independent `REVIEW CLEAN`
-6. preserve completed Task `.2A` and fresh-review-clean packet amendment series `d631e0c56` +
-   `6498c343f`; resolve Task `.2B` decision
-   `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` before any further candidate edit, commit,
-   or proof
+6. preserve completed Tasks `.2A` and `.2B` plus fresh-review-clean packet amendment series
+   `d631e0c56` + `6498c343f`; execute only the selected Option-A Task `.3` source/test/fixture-expected
+   boundary, prove and commit it, then run Task `.4`
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
@@ -785,9 +787,11 @@ packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `
 independent built-in `default` `REVIEW CLEAN`; Task `.1` decision receipt `d788f45c9` also received
 fresh independent `REVIEW CLEAN`, and Task `.2` is complete. Task `.2A` Option A is accepted and
 complete; packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW
-CLEAN`. Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task
-`.3` is incomplete with an uncommitted candidate and no widened implementation authority; Task `.4`
-is blocked.
+CLEAN`. Task `.2B` Option A is accepted and complete by exact reply
+`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; sticky `CTX-R6-06` current
+authority is `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline
+evidence only. Task `.3` is authorized/current but incomplete with an uncommitted candidate and no
+implementation/proof receipt; Task `.4` is blocked until Task `.3` proof and commit.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -883,10 +887,11 @@ The next honest work target is:
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
 - authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`
-- **current action:** preserve completed Task `.2A` and fresh-review-clean packet amendment series
-  `d631e0c56` + `6498c343f`. Keep `R6-REPLAY` and packet `R6-GAP-DET-REPLAY-STALL` active and
-  obtain decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` at Task `.2B`; do not
-  commit or widen the uncommitted Task `.3` candidate. Keep Task `.4`, `CTX-R6-06`, the family wall,
+- **current action:** preserve completed Tasks `.2A` and `.2B` and fresh-review-clean packet amendment
+  series `d631e0c56` + `6498c343f`. Keep `R6-REPLAY` and packet
+  `R6-GAP-DET-REPLAY-STALL` active; execute authorized/current Task `.3` only within selected Option A.
+  The uncommitted candidate remains incomplete and is not proof or review-clean implementation. Keep
+  Task `.4` blocked until Task `.3` proof/commit, and keep `CTX-R6-06` replay proof, the family wall,
   `R6-CLOSE`, and R7 blocked
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred

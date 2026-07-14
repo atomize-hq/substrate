@@ -2,15 +2,20 @@
 
 Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
 `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
-DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** within `R6-REPLAY`. Trusted
+OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** within
+`R6-REPLAY`. Trusted
 witness `60cde3dd7` preserves `CTX-R6-02` red. Task `.0` series `200725001` + `08fa86e94` +
 `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` each received fresh independent built-in
 `default` `REVIEW CLEAN`. Task `.2` is complete. The operator accepted Task `.2A` with
 `DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A` on 2026-07-14, authorizing this docs-first
 same-packet amendment but not unconditional implementation. Diagnosis proves an internal conflict
-between frozen `Recovered` and canonical state semantics. The uncommitted Task `.3` candidate is not
-proof or a review-clean result; decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is
-now required. `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
+between frozen `Recovered` and canonical state semantics. The operator then replied exactly
+`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.2B` is complete: current
+sticky `CTX-R6-06` authority is `HistoricalOnly / 20`, unflagged, and the old `Recovered / 20`
+expectation is historical baseline evidence only. This approved authority/expected-disposition change
+still awaits source/test/fixture-expected implementation and proof in Task `.3`. The uncommitted Task
+`.3` candidate is not proof or a review-clean result. Task `.4`, `CTX-R6-06` replay proof, the family
+wall, `R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Required Commit Gate
 
@@ -81,12 +86,12 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - Receipt: on 2026-07-14 the operator explicitly replied
     `DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A`, selecting the docs-first same-packet
     amendment and accepting the recorded HIGH `recovery_state` boundary.
-  - Disposition: complete as a scope decision only. It authorizes this amendment, not unconditional
-    implementation. Amendment diagnosis proves that `recovery_state` is the wrong seam and that
-    preserving frozen `Recovered` conflicts with canonical state semantics. Task `.2B` must resolve
-    that conflict before any Rust/test/expectation edit.
+  - Disposition: complete as a scope decision only. It authorized this amendment, not unconditional
+    implementation. Amendment diagnosis proved that `recovery_state` is the wrong seam and that
+    preserving frozen `Recovered` conflicts with canonical state semantics. At this historical `.2A`
+    boundary Task `.2B` still had to resolve that conflict; selected Option A has since done so.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.2B — Resolve the recovered-semantics conflict — CURRENT GATE.**
+- [x] **R6-GAP-DET-REPLAY-STALL.2B — Resolve the recovered-semantics conflict — OPTION A ACCEPTED.**
   - Decision: `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02`.
   - Clean baseline: at `f898d61e7`, exact
     `acceptance_fixtures_representative_sticky_success_tail_stays_recovered` passes `1 / 1` (log
@@ -103,24 +108,27 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     `assign_drift_states` LOW (`2 / 4 / 1 / 2`). Accepted HIGH `recovery_state` scope is not edit
     authority because it is the wrong seam; all recovery/state functions remain forbidden unless a
     later explicit operator choice authorizes them.
-  - Option A (recommended): reclassify sticky `CTX-R6-06` to
+  - Selected Option A: reclassify sticky `CTX-R6-06` to
     `HistoricalOnly / 20`, unflagged; preserve truthful pairing and canonical transition semantics;
-    authorize the conditional bounded amendment in Task `.3`.
-  - Option B: discard the pairing candidate and retain frozen `Recovered`, leaving `CTX-R6-02`
+    authorize the selected bounded amendment in Task `.3`.
+  - Rejected Option B: discard the pairing candidate and retain frozen `Recovered`, leaving `CTX-R6-02`
     unresolved and every downstream replay gate blocked.
-  - Option C (not recommended): explicitly redefine `Recovered` beyond immediately previous
+  - Rejected Option C: explicitly redefine `Recovered` beyond immediately previous
     same-class `Active` and authorize a broad cross-family contract/test review.
-  - Boundary: create no nested/successor packet and make no Rust/test/expectation edit before the
-    decision plus fresh-review-clean amendment. Reply
-    `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A|B|C|explicit alternative`.
+  - Receipt: on 2026-07-14 the operator explicitly replied
+    `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. This selects current
+    `HistoricalOnly / 20`, unflagged authority while preserving truthful pairing and canonical
+    immediately-prior-`Active` transition semantics.
+  - Disposition: complete as an authority/expected-disposition decision only. The source, test,
+    fixture-expected, proof, commit, and implementation review work remains current Task `.3`.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.3 — Land the selected bounded pairing/progress fix — BLOCKED.**
+- [ ] **R6-GAP-DET-REPLAY-STALL.3 — Land the selected bounded pairing/progress fix — AUTHORIZED / CURRENT.**
   - Initial candidate file: `crates/agent-drift-analyzer/src/checkpoint/attempt.rs`.
   - Change: call-ID-exclusive scanning when a command ID exists; no positional fallback in that lane;
     unchanged legacy adjacency/Error/Unknown fallback without an ID.
   - Unit regression: `checkpoints_pair_concurrent_tool_outputs_by_call_id` proves interleaved calls
     receive only their matching outputs and outcomes.
-  - Conditional Option-A amendment after Task `.2B` and fresh review-clean docs:
+  - Selected Option-A amendment within fresh-review-clean series `d631e0c56` + `6498c343f`:
     - keep the `attempt.rs` candidate unchanged in intent;
     - edit only `assess_troubleshooting_progress` plus new private lane helpers. Keep current attempts
       in event order; a current attempt is a lane tail exactly when no later current attempt satisfies
@@ -153,13 +161,13 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
       `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture`, update that
       sticky assertion to `HistoricalOnly / 20`, unflagged while the other three explicit postures
       remain unchanged.
-  - Impact every additional existing symbol before editing it. Even under Option A, do not edit
+  - Impact every additional existing symbol before editing it. Under selected Option A, do not edit
     `recovery_state`, `drift_state_for_score`, `assign_drift_states`, shared comparability, scorer
     logic, compactor logic, raw fixtures, schemas, replay presentation, sentinel surfaces, R7, or R8.
-  - Current state: incomplete. Candidate patch SHA-256
+  - Current state: authorized but incomplete. Candidate patch SHA-256
     `030d3d3e97640ba8fd4cf71f29f886b2273ec6e653aefa622aacaeb7057fdae7`, backed up at
-    `/tmp/r6-pairing-fix-secondary-red.patch`, remains uncommitted and unproven. It must not be
-    committed or widened before Task `.2B` and the selected review-clean amendment.
+    `/tmp/r6-pairing-fix-secondary-red.patch`, remains uncommitted and unproven. Implement only the
+    selected Task `.3` boundary; no recovery/state or other forbidden seam is authorized.
 
 - [ ] **R6-GAP-DET-REPLAY-STALL.4 — Run exact proof, commit, and close fresh review — BLOCKED.**
   - Verify in order:
@@ -185,7 +193,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     ```
 
   - The compactor normalization command is optional confirmation, not edit authority.
-  - Option-A acceptance: target evidence events `420`/`474`; siblings `421`/`475` excluded;
+  - Selected Option-A acceptance: target evidence events `420`/`474`; siblings `421`/`475` excluded;
     `CTX-R6-02` checkpoint/score unchanged; clean target `492 -> 495`, sibling `493 -> 496`; sticky
     expected disposition alone becomes `HistoricalOnly / 20`, unflagged, with raw rows unchanged; the
     frozen `dead_end_thrash` corpus updates that sticky assertion while its other three postures remain
@@ -212,4 +220,4 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   `dead_end_thrash Active / 30 / High`.
 - Committed-baseline defect: evidence names the successful siblings because `pair_output_rows` uses
   positional pairing across concurrent calls. The preserved uncommitted candidate corrects that
-  attribution but is not authorized for commit before Task `.2B` and its fresh-review-clean amendment.
+  attribution, but the current Task `.3` implementation and proof have not yet landed.

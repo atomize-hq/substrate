@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` gates the uncommitted pairing candidate; no widened implementation is authorized. `CTX-R6-06` follows only after packet completion.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Exact Task `.2B` Option-A reply makes sticky `CTX-R6-06` authority `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. Task `.3` implementation/proof remains pending. `CTX-R6-06` follows only after packet completion.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -30,7 +30,8 @@ This plan is ordered and test-first.
    contract behavior. Reject a fixture-shape mismatch; do not route it to a production gap.
 9. `CTX-R6-06` is an executable preservation control owned by `R6-REPLAY`: run existing test
    `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture` and preserve three
-   cleared final postures plus one recovered final posture.
+   cleared final postures plus the Task `.2B` selected sticky `HistoricalOnly / 20`, unflagged posture.
+   The former recovered posture remains historical clean-baseline evidence only.
 10. Dispatcher exact ordering is source-proven infrastructure, not a closure behavior contract. No
     focused ordering test is planned.
 11. Before every commit, stage only intended files and lock GitNexus and review to that staged diff:
@@ -328,9 +329,10 @@ complete and is never active alongside a gap.
   behavioral RED at `60cde3dd7` and routes to active packet `R6-GAP-DET-REPLAY-STALL`; packet docs
   are review-clean, Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` is accepted, Task `.2` is
   complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` +
-  `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` decision
-  `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.3` remains incomplete
-  with an uncommitted candidate and no widened implementation authority; Task `.4` and later gates
+  `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` Option A is accepted and complete by
+  exact reply `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.3` is
+  authorized/current but remains incomplete with an uncommitted candidate and no implementation or
+  green-proof receipt; Task `.4` and later gates
   remain blocked.
 - `CTX-R6-06` — run the existing frozen-corpus preservation control:
 
@@ -338,8 +340,9 @@ complete and is never active alongside a gap.
 cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture
 ```
 
-The exact expected posture is three `Cleared / 0 / unflagged` cases and one
-`Recovered / 20 / unflagged` case. Fixture-shape mismatches for `CTX-R6-01`/`02` are rejected or
+The current exact expected posture is three `Cleared / 0 / unflagged` cases and one
+`HistoricalOnly / 20 / unflagged` case. The old `Recovered / 20 / unflagged` result is historical
+clean-baseline evidence only. Fixture-shape mismatches for `CTX-R6-01`/`02` are rejected or
 replaced in replay selection; they do not create a production gap.
 
 ## Ledger And Status Update Points
@@ -359,7 +362,7 @@ replaced in replay selection; they do not create a production gap.
 
 | IDs | Planned disposition |
 |---|---|
-| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Task `.2A` Option A is accepted and complete; packet amendment series `d631e0c56` + `6498c343f` is review-clean; Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.3` remains incomplete with an uncommitted candidate and no widened implementation authority; Task `.4` and later gates remain blocked. |
+| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Tasks `.2A` and `.2B` Option A are accepted and complete; packet amendment series `d631e0c56` + `6498c343f` is review-clean. Task `.3` is authorized/current but remains incomplete with an uncommitted candidate and no implementation/proof receipt; Task `.4` and later gates remain blocked. |
 | `CTX-R6-03` through `CTX-R6-05` | Row-atomic `dead_end_thrash` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-06` | Existing frozen-corpus preservation control executes only in `R6-REPLAY`. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no `semantic_goal_drift` reopening. |

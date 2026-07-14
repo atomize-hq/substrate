@@ -2,7 +2,8 @@
 
 Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
 `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
-DECISION REQUIRED / TASK `.3` INCOMPLETE** within `R6-REPLAY`. Witness commit `60cde3dd7`
+OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** within
+`R6-REPLAY`. Witness commit `60cde3dd7`
 preserves the trusted `CTX-R6-02` behavioral red. Task `.0` docs-gate/review-fix series `200725001` +
 `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` decision receipt `d788f45c9` each received
 fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Task `.2A` with
@@ -10,9 +11,15 @@ fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Task 
 this docs-first same-packet amendment and accepted the recorded HIGH `recovery_state` boundary; it
 did not authorize an unconditional implementation. The amendment diagnosis proves that
 `recovery_state` is the wrong seam and that the requested frozen `Recovered` outcome conflicts with
-canonical state semantics. Decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` now gates
-all further Rust/test/fixture-expectation work. `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8
-remain blocked.
+canonical state semantics. The operator then replied exactly
+`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` on 2026-07-14. Task `.2B` is
+complete: sticky `CTX-R6-06` authority is now `HistoricalOnly / 20`, unflagged, while the former
+`Recovered / 20` result remains historical clean-baseline evidence only. This is an approved
+authority/expected-disposition change pending source, test, and fixture-expected implementation; it
+does not claim that implementation, proof, green walls, a committed candidate, or implementation
+review-clean status exists. Task `.3` is authorized and current within fresh-review-clean amendment
+`d631e0c56` + `6498c343f`; the preserved candidate remains incomplete and uncommitted. Task `.4`,
+`CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Objective And Preserved Witness
 
@@ -63,13 +70,13 @@ The fix is locked to this behavior:
    proves each concurrent call receives only its own outcome.
 
 The initial production scope was only `crates/agent-drift-analyzer/src/checkpoint/attempt.rs`. Task
-`.2A` accepted a docs-first same-packet amendment after that boundary proved insufficient, but did not
-authorize implementation before the amendment resolved its own semantic conflict. Task `.2B` now
-selects whether to keep truthful pairing and canonical state semantics, discard the pairing candidate,
-or explicitly redefine `Recovered`. Until that decision is recorded and its docs gate is
-fresh-review-clean, do not edit progress construction, recovery/state functions, scoring,
-comparability, fixture rows or expectations, compactor normalization, public schemas, replay
-presentation, R7, or R8.
+`.2A` accepted a docs-first same-packet amendment after that boundary proved insufficient. Task `.2B`
+then selected Option A: preserve truthful pairing and canonical immediately-prior-`Active` transition
+semantics, and reclassify the sticky expected disposition to `HistoricalOnly / 20`, unflagged. Task
+`.3` may now implement only the selected boundary below. Progress construction and the named
+source/test/fixture-expectation surfaces are authorized only as specified there; recovery/state
+functions, scoring, shared comparability, fixture rows, compactor normalization, public schemas,
+replay presentation, R7, and R8 remain forbidden.
 
 ## Mandatory Pre-Edit Decision Gate
 
@@ -87,7 +94,7 @@ stopping instead.
 
 ## Acceptance And Exact Proof
 
-If Task `.2B` selects Option A, the implementation is acceptable only when:
+Under selected Task `.2B` Option A, the implementation is acceptable only when:
 
 - the interleaving unit test proves call-ID-exclusive output pairing;
 - exact `CTX-R6-02` is green with evidence on target events `420` and `474`, not siblings `421` and
@@ -125,7 +132,7 @@ git diff --check
 The compactor normalization command is a read-only optional cross-check of the already-correct
 call-ID contract; no compactor change is allowed.
 
-## Post-Pairing Stop State And Semantic Decision Gate
+## Post-Pairing Stop State And Resolved Semantic Decision
 
 Task `.2` reconfirmed the exact committed-baseline red with exit `101` at
 `acceptance_fixtures.rs:463`, on the event-`420` truthful-evidence assertion. The preserved log is
@@ -151,7 +158,7 @@ excludes the failed target lane, producing `InsufficientEvidence`. Its GitNexus 
 `f898d61e7` is LOW (`4` direct, `12` total, `0` processes, `2` modules). Shared comparability helpers
 must not be changed under the current authority.
 
-Task `.2A` asked the operator to preserve both the `CTX-R6-02` Stalled/Active contract and the frozen
+Task `.2A` asked the operator to preserve both the `CTX-R6-02` Stalled/Active contract and the then-frozen
 `CTX-R6-06` Recovered contract while accepting a docs-first amendment beyond `attempt.rs`, including
 the recorded HIGH `recovery_state` boundary. The operator replied
 `DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A` on 2026-07-14. That completes Task `.2A` as a
@@ -179,10 +186,11 @@ accepted HIGH `recovery_state` boundary is not edit authority because diagnosis 
 seam. `recovery_state`, `drift_state_for_score`, `assign_drift_states`, and every other recovery/state
 function remain forbidden unless a later explicit operator choice authorizes them.
 
-Do not create a nested or successor packet. Same-packet internal gate `.2B` asks:
+Do not create a nested or successor packet. The following is the resolved historical `.2B` decision
+report; it is retained as the durable rationale for selected Option A:
 
 ```text
-DECISION REQUIRED
+DECISION RESOLVED
 ID: R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02
 PHASE/PACKET: R6-REPLAY / R6-GAP-DET-REPLAY-STALL
 QUESTION: Resolve the conflict between truthful output pairing plus canonical score-state transitions and the previously frozen CTX-R6-06 Recovered expectation.
@@ -194,11 +202,12 @@ B. Discard the pairing candidate and retain the frozen Recovered expectation, le
 C. Explicitly redefine Recovered beyond immediately previous same-class Active and authorize a broad cross-family contract/test review.
 RECOMMENDATION: A. It preserves truthful per-call evidence and the existing canonical score-state contract; only the stale sticky expected disposition changes. C is not recommended because it broadens a local attribution/progress repair into a cross-family state-contract change.
 SAFE WORK ALREADY COMPLETED: Task .0 and Task .1 are review-clean; Task .2 and the accepted Task .2A scope decision are complete; the candidate, clean-baseline proof, and every secondary red are preserved but uncommitted.
-BLOCKED SCOPE ONLY: Further Rust/test-helper/expectation edits, candidate commit, Task .4 proof/commit, CTX-R6-06, family wall, packet transition, R6-CLOSE, and R7/R8.
-REPLY FORMAT: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A|B|C|explicit alternative
+RESOLUTION: A. Reclassify sticky CTX-R6-06 to HistoricalOnly / 20, unflagged; preserve truthful pairing and canonical immediately-prior-Active transition semantics; authorize the bounded Task .3 amendment.
+REPLY RECEIVED: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A
+STILL BLOCKED: Task .4 until Task .3 implementation/proof/commit; CTX-R6-06 replay proof, family wall, packet transition, R6-CLOSE, and R7/R8.
 ```
 
-If `.2B` selects Option A, the amendment-ready implementation boundary is:
+Task `.2B` Option A selects this implementation boundary for current Task `.3`:
 
 1. preserve the current `attempt.rs` pairing candidate unchanged in intent;
 2. edit only `assess_troubleshooting_progress` plus new private lane helpers, using the existing
@@ -237,7 +246,7 @@ If `.2B` selects Option A, the amendment-ready implementation boundary is:
 8. run focused pairing/progress/`CTX-R6-02`/sticky proof before the checkpoint, progress-corpus,
    `dead_end_thrash`, full-analyzer, compactor normalization, and static walls.
 
-Even under Option A, do not edit `recovery_state`, `drift_state_for_score`, `assign_drift_states`,
+Under Option A, do not edit `recovery_state`, `drift_state_for_score`, `assign_drift_states`,
 shared comparability, scorer logic, compactor logic, raw fixtures, sentinel surfaces, R7, or R8.
 
 ## Commit, Review, And Exit
@@ -247,7 +256,7 @@ Before every commit, stage only intended files, run
 inspect `git diff --cached`. Commit each batch atomically and dispatch a fresh built-in `default`
 reviewer. Apply findings in a new commit and repeat with a fresh reviewer until clean.
 
-This packet exits only after the docs gate, every required operator decision, an authorized bounded
+This packet exits only after the docs gate, every required operator decision, the authorized bounded
 production fix, exact proof, proof receipt, and narrow authority transition are each committed and
 fresh-review-clean. The current candidate is not a commit, proof receipt, or review-clean result.
 The transition completes `CTX-R6-02`, clears the active packet, and returns control to still-active

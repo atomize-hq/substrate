@@ -2,14 +2,19 @@
 
 Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
 `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
-DECISION REQUIRED / TASK `.3` INCOMPLETE** within `R6-REPLAY`. Witness `60cde3dd7` is preserved
+OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** within
+`R6-REPLAY`. Witness `60cde3dd7` is preserved
 red. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` decision
 receipt `d788f45c9` each received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2`
 reconfirmed the exact pre-edit red. On 2026-07-14 the operator accepted Task `.2A` with
 `DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A`. That scope decision authorized this
 docs-first amendment, not unconditional implementation. Diagnosis proves the requested frozen
-`Recovered` result conflicts with canonical state semantics, so Task `.2B` decision
-`R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current.
+`Recovered` result conflicts with canonical state semantics. The operator then replied exactly
+`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.2B` is complete and
+reclassifies current sticky `CTX-R6-06` authority to `HistoricalOnly / 20`, unflagged; `Recovered / 20`
+is historical baseline evidence only. This authority/expected-disposition change is approved, but its
+source/test/fixture-expectation implementation, proof, commit, and implementation review remain
+pending in current Task `.3`.
 
 ## Decisions
 
@@ -48,8 +53,9 @@ becomes CRITICAL or the boundary widens.
 `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on 2026-07-14; receipt `d788f45c9` is fresh
 independent `REVIEW CLEAN`. That decision authorized Tasks `.2`-`.4` only inside the locked
 `attempt.rs` boundary. Task `.2` is complete, but the Task `.3` candidate proved that boundary
-insufficient; Task `.2A` accepted the docs-first amendment, and Task `.2B` now gates further work.
-`CTX-R6-06`, `R6-CLOSE`, and R7/R8 remain blocked.
+insufficient; Task `.2A` accepted the docs-first amendment. Task `.2B` Option A has since resolved
+the semantic gate and makes Task `.3` current. `CTX-R6-06`,
+`R6-CLOSE`, and R7/R8 remain blocked.
 
 ### 2. Reconfirm The Preserved Red — Complete
 
@@ -73,7 +79,7 @@ fresh-review-clean same-packet amendment beyond `attempt.rs`, including the reco
 blind `recovery_state` edit or any implementation before the amendment reconciles its internal
 semantic conflict. Do not create a nested or successor packet.
 
-### 2B. Resolve The Recovered-Semantics Conflict — Current Gate
+### 2B. Resolve The Recovered-Semantics Conflict — Option A Accepted And Complete
 
 Clean `f898d61e7` passes exact
 `acceptance_fixtures_representative_sticky_success_tail_stays_recovered` (`1 / 1`; log
@@ -84,13 +90,13 @@ wall, making checkpoint `9` `Advancing / HistoricalOnly 20`, unflagged, and chec
 cause; `recovery_state` does not read attempt outcomes. Canonical `Recovered` requires an immediately
 previous same-class `Active` score, which no longer exists after truthful pairing.
 
-Issue `DECISION REQUIRED` ID `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` and stop. Option
-A (recommended) reclassifies sticky `CTX-R6-06` to `HistoricalOnly / 20`, unflagged, preserving
-truthful pairing and canonical transition semantics. Option B discards the candidate and retains the
-frozen `Recovered` expectation, leaving `CTX-R6-02` unresolved. Option C explicitly redefines
-`Recovered` beyond immediately previous same-class `Active` and authorizes a broad cross-family
-contract/test review; it is not recommended. Await reply
-`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A|B|C|explicit alternative`.
+The operator replied exactly
+`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` on 2026-07-14. Selected Option A
+reclassifies sticky `CTX-R6-06` to `HistoricalOnly / 20`, unflagged, preserves truthful pairing and
+canonical immediately-prior-`Active` transition semantics, and authorizes the bounded Task `.3`
+amendment. The old `Recovered / 20` expectation remains historical clean-baseline evidence only.
+Option B and Option C are rejected. This completes `.2B` as an authority/expected-disposition
+decision, not as source/test/fixture-expectation implementation or proof.
 
 Verified impacts at `f898d61e7`: `assess_troubleshooting_progress` LOW (`4 / 12 / 0 / 2`);
 `recovery_state` HIGH (`1 / 30 / 3 / 2`); `drift_state_for_score` LOW (`1 / 4 / 1 / 2`); and
@@ -98,7 +104,7 @@ Verified impacts at `f898d61e7`: `assess_troubleshooting_progress` LOW (`4 / 12 
 authority because diagnosis proves it is the wrong seam. All recovery/state functions remain
 forbidden unless a later explicit choice authorizes them.
 
-### 3. Implement The Selected Bounded Fix — Blocked On `.2B`
+### 3. Implement The Selected Bounded Fix — Authorized And Current
 
 The original `attempt.rs` candidate remains preserved and uncommitted:
 
@@ -108,7 +114,7 @@ The original `attempt.rs` candidate remains preserved and uncommitted:
 - when absent, preserve existing adjacent `ToolOutput`/`Error`/output-shaped `Unknown` behavior; and
 - add `checkpoints_pair_concurrent_tool_outputs_by_call_id` covering interleaved calls and outputs.
 
-If `.2B` selects Option A and this docs amendment is fresh-review-clean:
+Under selected `.2B` Option A within fresh-review-clean amendment `d631e0c56` + `6498c343f`:
 
 - keep the `attempt.rs` pairing candidate unchanged in intent;
 - edit only `assess_troubleshooting_progress` plus new private lane helpers. Keep current attempts in
@@ -139,7 +145,7 @@ If `.2B` selects Option A and this docs amendment is fresh-review-clean:
   edit raw rollout rows. The frozen `dead_end_thrash` corpus test must change only that sticky
   assertion and keep its other three explicit postures unchanged.
 
-Impact every additional existing symbol before editing it. Even under Option A, do not edit
+Impact every additional existing symbol before editing it. Under Option A, do not edit
 `recovery_state`, `drift_state_for_score`, `assign_drift_states`, shared comparability, scorer logic,
 compactor logic, raw fixtures, public schemas, replay presentation, sentinel surfaces, R7, or R8.
 
@@ -149,8 +155,9 @@ compactor logic, raw fixtures, public schemas, replay presentation, sentinel sur
 `420 -> 423` and `474 -> 477` as failed while `421 -> 425` and `475 -> 479` are clean. Exact
 `CTX-R6-02` remains red at line `455`; analyzer-library, checkpoints-integration,
 `dead_end_thrash`, and progress-corpus walls are respectively `144/13`, `109/24`, `15/3`, and
-`2/1` pass/fail. Do not commit or widen this candidate before Task `.2B` is resolved and the selected
-amendment is committed and fresh-review-clean.
+`2/1` pass/fail. These are preserved pre-implementation candidate results, not green proof. Task `.3`
+is now authorized to implement exactly the selected boundary; the candidate remains incomplete and
+uncommitted until that work and its proof land.
 
 ### 4. Prove, Commit, And Fresh-Review — Blocked
 
@@ -189,8 +196,8 @@ fresh independent review. Do not activate `R6-CLOSE` or start R7/R8.
 
 ## Escalation Boundary
 
-The original HIGH-impact warning/acceptance, post-pairing Task `.2A` scope decision, and current Task
-`.2B` semantic decision are material gates. Otherwise escalate only
+The original HIGH-impact warning/acceptance, post-pairing Task `.2A` scope decision, and resolved Task
+`.2B` Option-A semantic decision are material gates. Otherwise escalate only
 for changed semantic authority, CRITICAL impact, an invalid preserved witness, required scope outside
 the selected `.2B` boundary, unisolatable unrelated work, or review proving the packet invalid.
 Routine red proof, tests, commits, and review fixes remain autonomous after acceptance.

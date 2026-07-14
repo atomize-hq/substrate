@@ -305,15 +305,17 @@ result, current phase status, and the next eligible interaction.
 
 `R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. Task `.2A` Option A is accepted
 and complete; packet-only amendment series `d631e0c56` + `6498c343f` received fresh independent
-built-in `default` `REVIEW CLEAN`. The uncommitted Task `.3` pairing candidate remains incomplete
-and is not proof or review-clean. No widened implementation is authorized. Task `.2B` decision
-`R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.4`, `CTX-R6-06`, the
-family wall, `R6-CLOSE`, R7, and R8 remain blocked.
+built-in `default` `REVIEW CLEAN`. Exact reply
+`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` completes Task `.2B`: sticky
+`CTX-R6-06` current authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical
+baseline evidence only. Task `.3` is authorized/current, but its uncommitted pairing candidate remains
+incomplete and is not source/test/fixture-expected implementation proof or review-clean implementation.
+Task `.4`, `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, R7, and R8 remain blocked.
 
-Current decision report:
+Historical resolved Task `.2B` decision report:
 
 ```text
-DECISION REQUIRED
+DECISION RESOLVED
 ID: R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02
 PHASE/PACKET: R6-REPLAY / R6-GAP-DET-REPLAY-STALL
 QUESTION: Preserve truthful pairing and canonical immediately-prior-Active recovery semantics by reclassifying the sticky CTX-R6-06 result to HistoricalOnly, discard the pairing candidate to retain Recovered, or redefine Recovered broadly?
@@ -325,8 +327,23 @@ B. Discard the uncommitted pairing candidate and retain frozen Recovered, leavin
 C. Redefine Recovered beyond immediately previous same-class Active and authorize a broad cross-family contract/test review.
 RECOMMENDATION: A. It preserves truthful call attribution and the already-canonical transition rule without editing the diagnosed non-causal recovery/state seams.
 SAFE WORK ALREADY COMPLETED: Task .2A and its packet amendment are fresh-review-clean; the candidate and secondary reds are preserved but uncommitted.
-BLOCKED SCOPE ONLY: Any widened Rust/test/expectation edit, candidate commit, Task .4, CTX-R6-06, family wall, packet transition, R6-CLOSE, and R7/R8.
-REPLY FORMAT: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A|B|C|explicit alternative
+RESOLUTION: A. Reclassify sticky CTX-R6-06 to HistoricalOnly / 20, unflagged; preserve truthful pairing and canonical transition semantics; authorize bounded Task .3.
+REPLY RECEIVED: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A
+STILL BLOCKED: Task .4 until Task .3 proof/commit; CTX-R6-06 replay proof, family wall, packet transition, R6-CLOSE, and R7/R8.
+```
+
+Historical resolved Task `.2B` Prompt 6 invocation:
+
+```text
+/goal Record the supplied decision, then resume the exact blocked hybrid-drift scope through its normal proof, commit, and review-clean boundary.
+
+REPO: /Users/spensermcconnell/.codex/worktrees/97a0/substrate
+PHASE_ID: R6-REPLAY
+ACTIVE_PACKET: R6-GAP-DET-REPLAY-STALL
+ESCALATION_ID: R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02
+RESOLUTION: ACCEPT Option A; reclassify sticky CTX-R6-06 authority to HistoricalOnly / 20, unflagged, preserve truthful pairing and canonical immediately-prior-Active transitions, and execute bounded Task .3
+RATIONALE: Operator selected Option A; old Recovered / 20 remains historical baseline only, and implementation/proof is still pending.
+AUTONOMY_MODE: escalation-only
 ```
 
 Historical resolved Task `.2A` Prompt 6 invocation:
