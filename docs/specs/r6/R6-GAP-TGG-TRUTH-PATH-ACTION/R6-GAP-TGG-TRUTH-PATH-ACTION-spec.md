@@ -1,17 +1,18 @@
 # R6-GAP-TGG-TRUTH-PATH-ACTION — Truth-Path Action-Before-Read Gap
 
-Status: **ACTIVE — OPTION-A PACKET-AMENDMENT REVIEW GATE**. The operator has resolved `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`: repair the internal, typed, session-local, path-scoped truth-grounding provenance seam. Candidate `49b2bbd7f` (`docs: authorize typed grounding provenance`) has landed and is pending fresh review; Task 2A remains unchecked until the packet-amendment series actually receives fresh built-in `default` `REVIEW CLEAN`. This decision and landed candidate do not authorize implementation. The packet-required next gate remains a separate ledger-only decision reconciliation before any source or test edit.
+Status: **ACTIVE — OPTION-A LEDGER REVIEW-FIX GATE**. The operator has resolved `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`: repair the internal, typed, session-local, path-scoped truth-grounding provenance seam. Packet-amendment series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`, completing Task 2A. Ledger reconciliation candidate `dba992383` is landed but received fresh `REVIEW FINDINGS` P1/P2. The only current authorized action is a ledger-only fix commit followed by fresh review; no source or test edit is authorized until Task 2B receives fresh `REVIEW CLEAN`.
 
 ## Decision Record And Current Evidence
 
 - Decision: **Option A**, explicitly selected by the operator on 2026-07-13.
 - Decision receipt: `48f259d25` (`docs: record grounding provenance review gap`). This is the decision-required receipt, not production proof or closure.
-- Landed packet-amendment candidate: `49b2bbd7f` (`docs: authorize typed grounding provenance`). It is pending fresh review and is neither review-clean authority nor implementation proof.
+- Review-clean packet-amendment series: `49b2bbd7f` (`docs: authorize typed grounding provenance`) plus `70c0ca9f4` (`docs: tighten grounding provenance gates`) received fresh built-in `default` `REVIEW CLEAN`. This completes Task 2A but is not implementation proof.
+- Landed ledger reconciliation candidate: `dba992383` (`docs: record grounding provenance decision`) received fresh `REVIEW FINDINGS` P1/P2. It is neither a review-clean Task 2B gate nor implementation authority.
 - Review-clean witness: `6409ae072` (`test: preserve cross-checkpoint grounding gaps`) changes only `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` and independently received fresh `REVIEW CLEAN`.
 - Preserved incomplete series: production `52c9ab296` plus receipt `73132aead` received fresh `REVIEW FINDINGS` P1. The later receipt `48f259d25` records that disposition and keeps Task 3A unchecked.
-- Historical entry gates remain complete: packet docs `03754a2de` and ledger reconciliation `a5380c04e` each received fresh built-in `default` `REVIEW CLEAN` for the earlier scorer-only boundary. They do not authorize this expanded Option-A boundary; this amendment must pass its own commit-and-review gate.
+- Historical entry gates remain complete: packet docs `03754a2de` and ledger reconciliation `a5380c04e` each received fresh built-in `default` `REVIEW CLEAN` for the earlier scorer-only boundary. They do not substitute for the still-open Option-A ledger reconciliation in Task 2B.
 
-No fresh `REVIEW CLEAN` verdict is claimed for `49b2bbd7f` or its packet-only fix series, and no implementation command result or closure proof is claimed by this amendment.
+No fresh `REVIEW CLEAN` verdict is claimed for `dba992383` or its future ledger-only fix series, and no implementation command result or closure proof is claimed by this amendment.
 
 ## Objective And Preserved Controls
 
@@ -51,23 +52,23 @@ Every new helper must be private. The provenance type must also be private unles
 
 ## Authorized Files By Atomic Batch
 
-### Packet-amendment gate — current batch
+### Packet-amendment gate — complete
 
-Candidate `49b2bbd7f` has landed and is pending fresh review. Any review-fix batch remains exactly:
+Series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`; Task 2A is complete. Its allowed files were exactly:
 
 - this SPEC;
 - this packet's PLAN;
 - this packet's TASKS.
 
-No source, test, ledger, staging, or implementation belongs in the current batch.
+This completed docs-only gate does not authorize source, test, or implementation work while Task 2B remains open.
 
-### Ledger-only decision reconciliation — next required batch
+### Ledger-only decision reconciliation — current review-fix batch
 
 Exactly:
 
 - `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`.
 
-Record `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`, the review-clean packet-amendment commit, the expanded bounded source/test authority, and Task 3A as the next action. Preserve the gap as active and make no proof or closure claim. Commit separately and obtain fresh built-in `default` `REVIEW CLEAN` before implementation.
+Candidate `dba992383` is landed and received fresh `REVIEW FINDINGS` P1/P2. Fix only the actionable ledger findings in a new ledger-only commit, preserve `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`, the review-clean packet-amendment series, the expanded bounded source/test authority, and Task 3A as the next action. Preserve the gap as active and make no proof or closure claim. Obtain fresh built-in `default` `REVIEW CLEAN` before implementation.
 
 ### Option-A implementation/proof batch — only after both gates are review-clean
 

@@ -1,6 +1,6 @@
 # Plan: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — OPTION-A PACKET-AMENDMENT REVIEW GATE**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` is operator-decided. Decision receipt `48f259d25` and review-clean witness `6409ae072` preserve the two opposite cross-checkpoint failures. Packet-amendment candidate `49b2bbd7f` has landed and is pending fresh review; Task 2A remains unchecked until the packet-amendment series receives fresh built-in `default` `REVIEW CLEAN`. Do not implement before that verdict and the separate ledger-only decision reconciliation are each review-clean.
+Status: **ACTIVE — OPTION-A LEDGER REVIEW-FIX GATE**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` is operator-decided. Decision receipt `48f259d25` and review-clean witness `6409ae072` preserve the two opposite cross-checkpoint failures. Packet-amendment series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`, completing Task 2A. Ledger reconciliation candidate `dba992383` is landed but received fresh `REVIEW FINDINGS` P1/P2. Do not implement before a ledger-only fix series receives fresh `REVIEW CLEAN` and completes Task 2B.
 
 ## Locked Decisions
 
@@ -16,15 +16,15 @@ Status: **ACTIVE — OPTION-A PACKET-AMENDMENT REVIEW GATE**. `R6-TGG-CROSS-CHEC
 
 ## Ordered Execution
 
-### 0. Finish Fresh Review Of The Landed Packet-Amendment Candidate
+### 0. Packet-Amendment Review Gate — Complete
 
-Candidate `49b2bbd7f` has landed and is pending fresh review. Current allowed review-fix files are exactly the same three packet docs. Inspect only that diff, run `git diff --check`, commit fixes atomically, and dispatch a fresh built-in `default` reviewer. Apply docs-only findings in new docs-only commits and use a fresh built-in `default` reviewer each time until `REVIEW CLEAN`. Keep Task 2A unchecked until the clean verdict exists.
+Packet-amendment series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`. Task 2A is complete. The visibility contract remains locked: every new helper is private, and only the provenance type may use `pub(crate)` if cross-module signature threading requires it.
 
-No ledger, source, test, staging beyond the intended packet docs, or implementation is authorized while the landed packet-amendment candidate remains review-pending.
+That completed docs-only gate does not authorize source, test, or implementation work while Task 2B remains open.
 
 ### 1. Reconcile The Operator Decision In The Canonical Ledger
 
-After Step 0 is committed and review-clean, use a separate ledger-only batch touching exactly:
+Candidate `dba992383` is landed but received fresh `REVIEW FINDINGS` P1/P2. The current allowed fix batch touches exactly:
 
 `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`
 
@@ -36,7 +36,7 @@ Record:
 - the bounded three-source-file internal provenance seam and focused test authority;
 - Task 3A as next while the gap stays active and unproven.
 
-Run the staged gate, commit separately, and obtain fresh built-in `default` `REVIEW CLEAN`. Use ledger-only fix commits and fresh reviewers until clean. This separate reconciliation is required before implementation.
+Fix only the actionable ledger findings, run the staged gate, commit separately, and obtain fresh built-in `default` `REVIEW CLEAN`. Use ledger-only fix commits and fresh reviewers until clean. Task 2B remains incomplete, and this separate reconciliation is required before implementation.
 
 ### 2. Run Every Pre-Edit Impact Gate
 

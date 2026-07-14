@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — OPTION-A PACKET-AMENDMENT REVIEW GATE**. The operator explicitly decided `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`. Decision receipt `48f259d25` and independently review-clean test witness `6409ae072` remain historical evidence. Packet-amendment candidate `49b2bbd7f` has landed and is pending fresh review; Task 2A remains unchecked until its packet-only series receives fresh built-in `default` `REVIEW CLEAN`. Task 2B is the separate ledger-only gate, and Task 3A, Task 4, the transition, and successor work remain incomplete.
+Status: **ACTIVE — OPTION-A LEDGER REVIEW-FIX GATE**. The operator explicitly decided `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`. Decision receipt `48f259d25` and independently review-clean test witness `6409ae072` remain historical evidence. Packet-amendment series `49b2bbd7f` plus `70c0ca9f4` received fresh built-in `default` `REVIEW CLEAN`, completing Task 2A. Ledger reconciliation candidate `dba992383` is landed but received fresh `REVIEW FINDINGS` P1/P2, so Task 2B remains unchecked and the only current authorized action is a ledger-only fix commit plus fresh review. Task 3A, Task 4, the transition, and successor work remain incomplete.
 
 ## Required Gates
 
@@ -50,22 +50,24 @@ Record a separate literal pre-edit command/result for every other existing helpe
   - Receipt: current commit `48f259d25` (`docs: record grounding provenance review gap`) records the P1, the review-clean witness, the `10 passed; 2 failed` historical family result, and the need for an operator decision. It is a decision receipt, not proof or closure.
   - Decision: operator selected `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` on 2026-07-13.
 
-- [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.2A — Commit and freshly review this Option-A packet amendment.**
-  - Landed candidate: `49b2bbd7f` (`docs: authorize typed grounding provenance`) is pending fresh review and does not complete this task.
-  - Current review-fix scope: exactly this SPEC, PLAN, and TASKS; no other file.
+- [x] **R6-GAP-TGG-TRUTH-PATH-ACTION.2A — Commit and freshly review this Option-A packet amendment.**
+  - Review-clean series: `49b2bbd7f` (`docs: authorize typed grounding provenance`) plus `70c0ca9f4` (`docs: tighten grounding provenance gates`) received fresh built-in `default` `REVIEW CLEAN`.
+  - Reviewed scope: exactly this SPEC, PLAN, and TASKS; no other file.
   - Required amendment: replace docs-only/scorer-only implementation authority with the bounded typed, session-local, path-scoped seam across `score_truth_grounding_gap`, `score_session`, and `analyze_loaded_bundle` plus necessary private helpers, focused tests, TASKS, and the canonical ledger.
   - Verify: inspect only the three-file diff and run `git diff --check`; do not run scorer tests or edit implementation.
   - Commit/review: atomic packet-only commit; fresh built-in `default`; docs-only fixes in new commits and fresh reviewers until `REVIEW CLEAN`.
-  - Completion record: leave unchecked until the packet-amendment candidate/fix series has an actual fresh `REVIEW CLEAN` verdict; `49b2bbd7f` alone is not completion.
-  - Stop rule: Task 2B and Task 3A remain unauthorized until this task is committed and review-clean.
+  - Completion record: complete at review-clean series `49b2bbd7f` plus `70c0ca9f4`; this is packet authority, not implementation proof.
+  - Stop rule: Task 3A remains unauthorized until Task 2B is committed and fresh-review-clean.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.2B — Reconcile the Option-A decision in the canonical ledger.**
   - Prerequisite: Task 2A committed and fresh-review-clean.
   - Separate allowed batch: exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`.
+  - Landed candidate: `dba992383` (`docs: record grounding provenance decision`) received fresh `REVIEW FINDINGS` P1/P2 and does not complete this task.
+  - Current action: fix only the actionable ledger findings in a new ledger-only commit, then dispatch a fresh built-in `default` reviewer.
   - Record the explicit Option-A decision, review-clean witness `6409ae072`, decision receipt `48f259d25`, Task 2A's actual review-clean commit, the bounded internal seam, and Task 3A as next.
   - Preserve the gap as ACTIVE, Task 3A unchecked, Task 4 open, and transition/successor blocked. Make no future proof claim.
   - Commit/review: staged gate; ledger-only commit; fresh built-in `default`; ledger-only fixes and fresh reviewers until `REVIEW CLEAN`.
-  - Completion record: leave unchecked until the commit hash and actual fresh review verdict exist.
+  - Completion record: leave unchecked until the ledger candidate/fix series has an actual fresh `REVIEW CLEAN` verdict; `dba992383` alone is not completion.
   - Stop rule: no source or test edit before this separate gate is review-clean.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3A — Implement and prove Option-A typed provenance.**
