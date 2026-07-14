@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **COMPLETE CANDIDATE — IMPLEMENTATION/PROOF REVIEW CLEAN; TRANSITION APPLIED; FRESH TRANSITION REVIEW PENDING**. The operator decisions `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised: boundary series `2067149ce` + `023417c03`, Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier proof/blocker receipt series `a341066a3` + `0da262979`, and the one-expression source commit `5622ddb73` all received fresh independent built-in `default` `REVIEW CLEAN`. The required post-decision proof is green, including the literal all-target clippy gate, and final proof-receipt series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. Tasks 3A and 4 are complete. This authority-only transition candidate marks the gap complete and activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate, but Task 5 remains unchecked and successor work remains blocked until fresh transition review is clean. No transition commit hash or review verdict is claimed.
+Status: **COMPLETE — IMPLEMENTATION/PROOF AND TRANSITION REVIEW CLEAN**. The operator decisions `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised: boundary series `2067149ce` + `023417c03`, Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier proof/blocker receipt series `a341066a3` + `0da262979`, the one-expression source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` all received fresh independent built-in `default` `REVIEW CLEAN`. Authority-only transition series `2937dbe5a` + `91f55f6bf` also received fresh independent built-in `default` `REVIEW CLEAN`, completing Tasks 3A, 4, and 5. Only `R6-GAP-WPB-EMPTY-AUTHORITY` is active at its docs-only packet-creation gate with active packet `none`; `R6-REPLAY` remains blocked, and no successor packet was created or executed.
 
 ## Required Gates
 
@@ -146,7 +146,7 @@ Record a separate literal pre-edit command/result for every other existing helpe
   - **EXECUTED — `R6-TGG-CLIPPY-SCOPE-01 = A`:** review-clean boundary series `2067149ce` + `023417c03` authorized exactly one additional production file; separate atomic source commit `5622ddb73` landed the semantics-preserving `clippy::nonminimal_bool` simplification in `score_confidence`, passed the locked proof wall, and received fresh independent `REVIEW CLEAN`.
   - Final proof-receipt review: `fee9c2b16` (`docs: record final grounding proof`) + `6674a8316` (`docs: reconcile final proof receipt`) received fresh independent built-in `default` `REVIEW CLEAN`. That reviewer independently reran the nine packet-locked grounding controls (`9 / 9`), three focused dead-end controls (`3 / 3`), full `dead_end_thrash` (`18 / 18`), full `truth_grounding_gap` (`22 / 22`), checkpoint matches (`35` unit + `131` integration plus matching export/provenance tests), format, check, literal all-target clippy with `-D warnings`, and diff check; all passed.
   - Historical non-acceptance: `52c9ab296` + `73132aead` remains review-findings evidence, not completion. `6409ae072` remains a review-clean witness, not a production closure.
-  - Completion record: **COMPLETE** at final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent built-in `default` `REVIEW CLEAN`. No implementation, proof, source-review, or receipt-review blocker remains. At the Task 3A boundary this completed only Task 3A; the later transition candidate applies the phase-status change without altering that historical gate.
+  - Completion record: **COMPLETE** at final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent built-in `default` `REVIEW CLEAN`. No implementation, proof, source-review, or receipt-review blocker remains. At the Task 3A boundary this completed only Task 3A; the later review-clean transition series applies the phase-status change without altering that historical gate.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3B — Attributed no-code proof receipt — ineligible and not selected.**
   - Task 2 selected the production path; the operator has now selected internal provenance Option A.
@@ -155,11 +155,11 @@ Record a separate literal pre-edit command/result for every other existing helpe
 - [x] **R6-GAP-TGG-TRUTH-PATH-ACTION.4 — Obtain a review-clean closure path.**
   - Require Task 3A committed with exact focused/family/checkpoint/static proof and fresh built-in `default` `REVIEW CLEAN`.
   - Record actual commit hashes, impact results, command counts/results, review findings/dispositions, and final verdict here.
-  - Completion state: **COMPLETE** at final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent built-in `default` `REVIEW CLEAN`. Boundary series `2067149ce` + `023417c03`, implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier receipt series `a341066a3` + `0da262979`, source commit `5622ddb73`, the required proof wall, fresh source review, and final receipt review are all clean. At that boundary Task 5 became the sole next gate; the transition candidate below now applies its phase-status change while preserving the still-pending fresh-review requirement.
+  - Completion state: **COMPLETE** at final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent built-in `default` `REVIEW CLEAN`. Boundary series `2067149ce` + `023417c03`, implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier receipt series `a341066a3` + `0da262979`, source commit `5622ddb73`, the required proof wall, fresh source review, and final receipt review are all clean. At that boundary Task 5 became the sole next gate; the review-clean transition series below later completed that phase-status change.
 
-- [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.5 — Land and independently review the narrow transition.**
+- [x] **R6-GAP-TGG-TRUTH-PATH-ACTION.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 2A, 2B, 3A, and 4 committed and review-clean.
-  - Current state: **TRANSITION CANDIDATE APPLIED / FRESH REVIEW PENDING**. The authority mirrors mark this gap complete, activate only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate, and keep `R6-REPLAY` blocked. Task 5 remains unchecked, no transition hash or review verdict is claimed, and no successor work may begin until the transition series is freshly `REVIEW CLEAN`.
+  - Current state: **COMPLETE / FRESH TRANSITION REVIEW CLEAN**. Authority-only transition series `2937dbe5a` + `91f55f6bf` marks this gap complete, activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate with active packet `none`, and keeps `R6-REPLAY` blocked.
   - Exact authority-only manifest:
     - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
     - `SPEC.md`
@@ -184,9 +184,13 @@ Record a separate literal pre-edit command/result for every other existing helpe
   - Do not create, link, cite as existing, or execute the successor packet.
   - Commit/review: separate authority-only commit; fresh independent built-in `default`; transition-only fix commits and fresh reviewers until clean.
   - Stop: transition review-clean; no successor work.
-  - Transition candidate result (2026-07-14): applied the exact authority-only manifest and successor
-    boundary without creating or linking any successor file. Fresh independent review remains
-    pending; therefore this checkbox stays open and successor execution remains blocked.
+  - Transition result (2026-07-14): `2937dbe5a` applied the exact authority-only manifest and
+    successor boundary without creating or linking any successor file. Its first fresh review found
+    one P2 stale R6-C.1 source-state issue; `91f55f6bf` fixed it, and a fresh independent built-in
+    `default` reviewer returned `REVIEW CLEAN` for the series with no findings. The reviewer verified
+    the original `CTX-R6-12` exact control `1 / 1` green, diff check clean, and all three exact
+    successor paths absent and represented only as non-link `TO CREATE` strings. Task 5 is complete;
+    Prompt 1 packet creation is now eligible, but no successor work starts in this phase.
 
 ## Explicit Exclusions
 

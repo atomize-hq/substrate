@@ -27,14 +27,15 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
 `PACK-0`, `R6-C.0A`, `R6-C.1-SPEC`, and `R6-C.1-CONTROLS` are complete. The generic `R6-GAP-*`
-row is aggregate `ACTIVE` because this transition candidate leaves exactly one concrete named phase
-active: `R6-GAP-WPB-EMPTY-AUTHORITY`. `R6-GAP-DET-OPAQUE-PARENT` is `COMPLETE` after production
+row is aggregate `ACTIVE` because review-clean transition series `2937dbe5a` + `91f55f6bf` leaves
+exactly one concrete named phase active: `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only
+packet-creation gate, with active packet `none`. `R6-GAP-DET-OPAQUE-PARENT` is `COMPLETE` after production
 series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh `REVIEW CLEAN`, and
 `R6-GAP-TGG-TRUTH-PATH-ACTION` is `COMPLETE` after final proof-receipt series `fee9c2b16` +
-`6674a8316` received fresh `REVIEW CLEAN`. `R6-REPLAY` remains `BLOCKED`. The active route authorizes
-only atomic creation and fresh review of its three canonical non-link `TO CREATE` paths after this
-transition candidate itself receives fresh review; those files do not yet exist. No successor
-implementation, witness rerun, replay, R6 closeout, or R7/R8 work is authorized first.
+`6674a8316` received fresh `REVIEW CLEAN`. `R6-REPLAY` remains `BLOCKED`. The active route now
+authorizes only Prompt 1 followed by atomic creation and fresh review of its three canonical
+non-link `TO CREATE` paths; those files do not yet exist. No successor implementation, witness
+rerun, replay, R6 closeout, or R7/R8 work is authorized first.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

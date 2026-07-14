@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate; transition review pending)**
+Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -30,9 +30,8 @@ Hard decisions:
   `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. Its
   terminal scorer disposition remains reserved for `R6-CLOSE`.
 - `wrong_plan_branch` passed its read-only, sanctioned-replan, and delegated-parent controls but
-  preserved the empty-authority red `CTX-R6-15`; this transition candidate activates only
-  `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate. Successor work remains blocked
-  until this transition receives fresh review.
+  preserved the empty-authority red `CTX-R6-15`; review-clean transition series `2937dbe5a` +
+  `91f55f6bf` activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate.
 - Transitive data availability is not behavioral integration; non-applicable context is an explicit
   fit-for-purpose decision, not missing plumbing.
 - The semantic acceptance corpus-shape test proves fixture integrity; the separate live
@@ -44,12 +43,12 @@ Hard decisions:
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
 controls resolved as `10 PASS / 3 preserved RED`, with no production change in that controls wall.
-The first two named gaps are now complete with review-clean proof. This transition candidate applies
-the next ordered state without claiming its own review verdict: only
-`R6-GAP-WPB-EMPTY-AUTHORITY` is active at its docs-only packet-creation gate, and its three canonical
-paths remain non-link `TO CREATE` entries in the named-gap subledger. No successor packet file exists.
-Successor work remains blocked until the transition receives fresh review; replay closeout, R6
-closure, and all R7/R8 work remain blocked.
+The first two named gaps are now complete with review-clean proof. Transition series `2937dbe5a` +
+`91f55f6bf` received fresh independent built-in `default` `REVIEW CLEAN`, so only
+`R6-GAP-WPB-EMPTY-AUTHORITY` is active at its docs-only packet-creation gate, with active packet
+`none`. Its three canonical paths remain non-link `TO CREATE` entries in the named-gap subledger,
+and no successor packet file exists. Prompt 1 packet creation is now eligible; replay closeout, R6
+closure, successor execution, and all R7/R8 work remain blocked.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

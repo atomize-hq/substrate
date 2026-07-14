@@ -350,11 +350,11 @@ code changed. In matrix order the preserved routes are:
    series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`;
    and
 3. `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15`, witness `59f098b35` — **ACTIVE**, docs-only
-   packet-creation gate under this transition candidate; fresh transition review remains pending.
+   packet-creation gate with active packet `none` after transition series `2937dbe5a` + `91f55f6bf`
+   received fresh independent built-in `default` `REVIEW CLEAN`.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED** and `R6-REPLAY` remains blocked. Fresh independent
-review of this authority-only transition candidate is the current gate. After it is clean, the sole
-next authorized action is atomic creation and fresh review of the three canonical
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED** and `R6-REPLAY` remains blocked. The sole next
+authorized action is Prompt 1 followed by atomic creation and fresh review of the three canonical
 `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs recorded as non-link `TO CREATE` paths in the named-gap
 subledger. Those files do not yet exist; do not execute the active gap or begin a production/no-code
 proof path first. No terminal `truth_grounding_gap` disposition, replay close, or R6 close is claimed.

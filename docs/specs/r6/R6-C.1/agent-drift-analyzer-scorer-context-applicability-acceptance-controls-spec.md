@@ -1,6 +1,6 @@
 # R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE — TRANSITION REVIEW PENDING** on 2026-07-14.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE AT DOCS-ONLY GATE** on 2026-07-14. Transition series `2937dbe5a` + `91f55f6bf` received fresh independent built-in `default` `REVIEW CLEAN`.
 All synthetic controls are complete in the TASKS ledger. The first two preserved reds, `CTX-R6-04`
 and `CTX-R6-12`, and their named gap phases are complete; only `CTX-R6-15` remains open through
 `R6-GAP-WPB-EMPTY-AUTHORITY`.

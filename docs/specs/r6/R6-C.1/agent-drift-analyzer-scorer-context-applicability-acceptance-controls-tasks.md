@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE — TRANSITION REVIEW PENDING** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE AT DOCS-ONLY GATE** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -8,10 +8,11 @@ preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, r
 `R6-GAP-WPB-EMPTY-AUTHORITY`, respectively. The first route is complete after the fresh built-in
 `default` `REVIEW CLEAN` verdict for production series `bcd94bf4f` + `931e50c85` + `d13f0a71c`.
 The second route is complete after final proof-receipt series `fee9c2b16` + `6674a8316` received
-fresh independent built-in `default` `REVIEW CLEAN`. This transition candidate activates only
-`R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate and keeps `R6-REPLAY` blocked.
-Fresh transition review is the current gate; no successor work, replay, phase-close, or R7/R8 work
-is authorized first.
+fresh independent built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf`
+also received fresh independent built-in `default` `REVIEW CLEAN`, completing the second route and
+activating only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate with active packet
+`none`. Prompt 1 packet creation is now eligible; no successor implementation, replay, phase-close,
+or R7/R8 work is authorized first.
 
 ## Required Staged Commit Gate
 
@@ -416,9 +417,10 @@ before that reconciled transition is committed and fresh-review-clean.
   - Sequential result through 2026-07-14: `R6-GAP-DET-OPAQUE-PARENT` completed its packet-docs gate
     at `59092df2a` and ledger reconciliation at `beed76446`; `R6-GAP-TGG-TRUTH-PATH-ACTION`
     completed its packet-docs gate at `03754a2de` and ledger reconciliation at `a5380c04e`; all four
-    gates received fresh `REVIEW CLEAN`. This generic task remains open because active successor
-    `R6-GAP-WPB-EMPTY-AUTHORITY` has not created its docs; its exact three paths remain non-link
-    `TO CREATE` entries, and successor work is blocked pending fresh transition review.
+    gates received fresh `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` then received
+    fresh independent built-in `default` `REVIEW CLEAN`. This generic task remains open because active
+    successor `R6-GAP-WPB-EMPTY-AUTHORITY` has not created its docs; its exact three paths remain
+    non-link `TO CREATE` entries, and Prompt 1 packet creation is the sole next eligible action.
 
 - [ ] **R6-C.1.5.2 — Execute the review-clean active gap as one distinct phase.**
   - Prerequisite: R6-C.1.5.1 is review-clean for this exact named gap; its SPEC/PLAN/TASKS now exist; the
@@ -464,12 +466,12 @@ before that reconciled transition is committed and fresh-review-clean.
     R6-C.1.5.1 creates it; do not cite that TASKS as existing.
   - Verify: apply every field in the Required Phase-Transition Authority Manifest; required staged commit
     gate and fresh independent review for every gap transition.
-  - Sequential result candidate (2026-07-14): this authority-only update marks
+  - Sequential result (2026-07-14): authority-only transition series `2937dbe5a` + `91f55f6bf`
+    received fresh independent built-in `default` `REVIEW CLEAN`, marks
     `R6-GAP-TGG-TRUTH-PATH-ACTION` complete, activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its
-    docs-only packet-creation gate, and keeps `R6-REPLAY` blocked. It claims no unknown transition
-    commit or review verdict; fresh transition review remains required and no successor work begins
-    first. The generic task remains open because this transition review, the final gap transition,
-    and the replay transition remain undone.
+    docs-only packet-creation gate with active packet `none`, and keeps `R6-REPLAY` blocked. The
+    generic task remains open because the final gap transition and replay transition remain undone;
+    no successor packet was created or executed by this transition.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 

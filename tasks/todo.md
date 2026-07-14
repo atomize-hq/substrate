@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate; transition review pending)**
+Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -29,9 +29,12 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs
 - [x] Resolve `R6-GAP-TGG-TRUTH-PATH-ACTION`; final proof-receipt series `fee9c2b16` + `6674a8316`
   received fresh independent built-in `default` `REVIEW CLEAN` with exact focused, family,
   checkpoint, format, check, literal-clippy, and diff proof green.
-- [ ] Obtain fresh independent review of the authority-only transition candidate; no successor work
-  begins until it is `REVIEW CLEAN`.
-- [ ] **Next eligible action after transition review clean:** atomically create and freshly review
+- [x] Complete the authority-only transition at `2937dbe5a` + `91f55f6bf`; the first review found
+  one P2 stale R6-C.1 source-state issue, the fix reconciled it, and a fresh independent built-in
+  `default` series reviewer returned `REVIEW CLEAN` with the original `CTX-R6-12` exact control `1 /
+  1` green, diff check clean, and all three successor files absent/non-link.
+- [ ] **Next eligible action:** invoke Prompt 1 with `PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY` and
+  `ACTIVE_PACKET: none`, then atomically create and freshly review
   exactly these three non-link `TO CREATE` paths; they do not yet exist, and no successor execution
   begins first:
   - TO CREATE `docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-spec.md`

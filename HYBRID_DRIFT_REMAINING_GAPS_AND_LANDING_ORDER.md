@@ -99,9 +99,9 @@ the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change i
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
 `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`. `R6-GAP-TGG-TRUTH-PATH-ACTION`
 is complete after its final proof-receipt series `fee9c2b16` + `6674a8316` received fresh
-built-in `default` `REVIEW CLEAN`. This transition candidate activates only
-`R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate and keeps `R6-REPLAY`
-blocked. Successor work remains blocked until the transition candidate receives fresh review.
+built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` then received fresh
+independent built-in `default` `REVIEW CLEAN`, making only `R6-GAP-WPB-EMPTY-AUTHORITY` active at
+its docs-only packet-creation gate while `R6-REPLAY` remains blocked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -113,8 +113,8 @@ control.” The current honest sequence is:
 2. keep `R6-C.1-CONTROLS` complete with its actual `10 PASS / 3 preserved RED` disposition
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
-5. after this transition is freshly review-clean, create and freshly review the active
-   `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs before its execution
+5. the current eligible action is to use Prompt 1 to atomically create and freshly review the
+   active `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs before any execution begins
 6. run bounded R6 replay/closeout only after all named gaps complete
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
@@ -850,8 +850,8 @@ The next honest work target is:
   a terminal scorer disposition or replay/close claim
 - keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete after its implementation/proof and final
   proof-receipt series received fresh `REVIEW CLEAN`
-- **next eligible action only after this transition candidate is fresh-review-clean:** atomically
-  create and freshly review the three canonical `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs recorded
+- **next eligible action:** use Prompt 1 for `R6-GAP-WPB-EMPTY-AUTHORITY` with active packet `none`,
+  then atomically create and freshly review the three canonical `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs recorded
   as non-link `TO CREATE` paths in the named-gap subledger; those files do not yet exist, and no
   production/no-code proof begins first
 - keep `R6-REPLAY` blocked until the remaining named-gap and replay entry gates complete

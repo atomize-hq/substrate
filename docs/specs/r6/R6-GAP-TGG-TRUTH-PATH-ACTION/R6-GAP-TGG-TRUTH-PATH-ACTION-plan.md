@@ -1,6 +1,6 @@
 # Plan: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **COMPLETE — IMPLEMENTATION/PROOF REVIEW CLEAN; TRANSITION CANDIDATE APPLIED; FRESH TRANSITION REVIEW PENDING**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised. Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, one-expression source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. This transition candidate activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate, keeps `R6-REPLAY` blocked, and claims no transition commit hash or review verdict.
+Status: **COMPLETE — IMPLEMENTATION/PROOF AND TRANSITION REVIEW CLEAN**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised. Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, one-expression source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` also received fresh independent built-in `default` `REVIEW CLEAN`, activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate with active packet `none`, and keeps `R6-REPLAY` blocked.
 
 ## Locked Decisions
 
@@ -124,7 +124,7 @@ Commit atomically and dispatch a fresh built-in `default` reviewer. Apply each a
 
 ### 6. Transition And Stop
 
-Task 4 is complete after the Option-A closure and final proof-receipt series received exact green proof and fresh `REVIEW CLEAN`. This authority-only transition candidate uses the manifest in TASKS, keeps `R6-REPLAY` blocked, and activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate. Task 5 stays unchecked and successor work stays blocked until the transition series receives fresh review. Create no successor packet and stop after the transition is review-clean.
+Task 4 is complete after the Option-A closure and final proof-receipt series received exact green proof and fresh `REVIEW CLEAN`. Authority-only transition series `2937dbe5a` + `91f55f6bf` used the manifest in TASKS and received fresh independent built-in `default` `REVIEW CLEAN`, completing Task 5. It keeps `R6-REPLAY` blocked and activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate with active packet `none`. Create no successor packet here; stop at this review-clean transition.
 
 ## Escalation Boundary
 

@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate; transition review pending)**
+Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate)**
 
 ## Dependency Order
 
@@ -23,10 +23,12 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs
    `R6-GAP-DET-OPAQUE-PARENT`, landed its bounded scorer fix and focused/family/checkpoint proof.
 6. **COMPLETE through final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent
    `REVIEW CLEAN`:** `R6-GAP-TGG-TRUTH-PATH-ACTION` landed its bounded Option-A fix and proof.
-7. **ACTIVE CANDIDATE / TRANSITION REVIEW PENDING:** after this authority-only transition is fresh
-   review-clean, atomically create and freshly review only the three canonical
-   `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs recorded as non-link `TO CREATE` paths in the named-gap
-   subledger. Do not begin successor production/no-code proof before either gate is review-clean.
+7. **ACTIVE / DOCS-ONLY PACKET-CREATION GATE:** transition series `2937dbe5a` + `91f55f6bf`
+   received fresh independent built-in `default` `REVIEW CLEAN`. Invoke Prompt 1 with
+   `PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY` and `ACTIVE_PACKET: none`, then atomically create and
+   freshly review only the three canonical packet docs recorded as non-link `TO CREATE` paths in the
+   named-gap subledger. Do not begin successor production/no-code proof before that docs gate is
+   review-clean.
 8. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence after all named
    gaps are complete.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
@@ -54,6 +56,7 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs
   `git diff --cached --check`, and inspect the complete `git diff --cached` before committing.
 - Preserve unrelated worktree changes.
 
-No successor packet creation, production code change, witness rerun, or no-code proof receipt is
-authorized until this authority-only transition candidate is fresh-review-clean. Then only the
-`R6-GAP-WPB-EMPTY-AUTHORITY` docs-only packet-creation gate is eligible. `R6-REPLAY` remains blocked.
+Transition series `2937dbe5a` + `91f55f6bf` is fresh independent built-in `default` `REVIEW CLEAN`.
+Only Prompt 1 and the `R6-GAP-WPB-EMPTY-AUTHORITY` docs-only packet-creation gate are eligible. No
+successor production code change, witness rerun, or no-code proof receipt is authorized before those
+packet docs are review-clean. `R6-REPLAY` remains blocked.

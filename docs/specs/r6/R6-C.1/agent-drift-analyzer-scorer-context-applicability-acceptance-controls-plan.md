@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE — TRANSITION REVIEW PENDING** on 2026-07-14.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE AT DOCS-ONLY GATE** on 2026-07-14. Transition series `2937dbe5a` + `91f55f6bf` received fresh independent built-in `default` `REVIEW CLEAN`.
 This plan is ordered and test-first.
 
 ## Plan Decisions
