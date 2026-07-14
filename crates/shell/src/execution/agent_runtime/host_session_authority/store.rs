@@ -231,11 +231,21 @@ impl std::error::Error for BootstrapError {}
 pub(crate) struct ObjectVerificationContextV1 {
     pub(crate) intent_id: String,
     pub(crate) run_id: String,
-    pub(crate) parent_intent: Option<
+    pub(crate) parent_intent: Option<VersionedObjectVerificationParentIntentV1>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum VersionedObjectVerificationParentIntentV1 {
+    V1(
         Box<
             crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentV1,
         >,
-    >,
+    ),
+    V2(
+        Box<
+            crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentV2,
+        >,
+    ),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -257,6 +267,7 @@ mod platform {
         GreenfieldUpgradeCrashPointV1, InitializationCrashPointV1, InitializationMaterialV1,
         KeyLifecycleCrashPointV1, LegacyStateStoreCollectionV1, ObjectPublicationOutcomeV1,
         ObjectVerificationContextV1, RootUpgradeOutcomeV1, TransactionCommitOutcomeV1,
+        VersionedObjectVerificationParentIntentV1,
     };
     use crate::execution::agent_runtime::host_session_authority::canonical_json;
     use crate::execution::agent_runtime::host_session_authority::hash::{
@@ -274,11 +285,13 @@ mod platform {
         AuthorityStoreCommitmentKeyFileV1, TempNameV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_schema::{
-        AuthorityObjectStorageStateV1, AuthorityStoreCommitmentAlgorithmV1,
-        AuthorityStoreCommitmentKeyStateV1, AuthorityStoreCommitmentKeyV1,
-        AuthorityStoreInitializationV1, GreenfieldNamespaceCertificateV1,
-        HostSessionPostTurnApplicationV1, HostSessionTransitionInputHandoffV1,
-        HostSessionTransitionIntentStateV1, HostSessionTransitionIntentV1,
+        AuthorityObjectIndexEntryV1, AuthorityObjectStorageStateV1,
+        AuthorityStoreCommitmentAlgorithmV1, AuthorityStoreCommitmentKeyStateV1,
+        AuthorityStoreCommitmentKeyV1, AuthorityStoreInitializationV1,
+        GreenfieldNamespaceCertificateV1, HostSessionPostTurnApplicationV1,
+        HostSessionStartupOwnershipApplicationV1, HostSessionTransitionInputHandoffV1,
+        HostSessionTransitionIntentStateV1, HostSessionTransitionIntentStateV2,
+        HostSessionTransitionIntentV1, HostSessionTransitionIntentV2,
         HostSessionTransitionTransportPayloadStateV1, SessionNamespaceRecordV1, StateRootV1,
         StateRootV2, VersionedStateRoot,
     };
@@ -303,6 +316,10 @@ mod platform {
     use layout::{LockedClassification, StoreLayout, StoreLayoutLockScope};
     #[path = "key_lifecycle.rs"]
     mod key_lifecycle;
+    #[cfg(test)]
+    use key_lifecycle::{
+        retire_commitment_key_versioned_with, rotate_commitment_key_versioned_with,
+    };
     use key_lifecycle::{retire_commitment_key_with, rotate_commitment_key_with};
     #[path = "object_persistence.rs"]
     mod object_persistence;
@@ -311,7 +328,7 @@ mod platform {
     use object_persistence::verify_object_bytes;
     #[path = "reachability.rs"]
     mod reachability;
-    use reachability::{add_expected_ref, collect_reachable_objects};
+    use reachability::{add_expected_ref, collect_reachable_objects, collect_reachable_objects_v2};
     #[path = "transaction.rs"]
     mod transaction;
     #[cfg(test)]
@@ -324,8 +341,8 @@ mod platform {
         begin_legacy_state_store_transaction_for_identity as begin_legacy_transaction_for_identity,
         compare_and_swap_opened_root_with, compare_and_swap_opened_root_with_exact_current,
         compare_and_swap_root_with, with_existing_semantic_preflight,
-        with_opened_existing_semantic_preflight, with_opened_semantic_preflight,
-        SemanticPreflightMode,
+        with_existing_versioned_semantic_preflight, with_opened_existing_semantic_preflight,
+        with_opened_semantic_preflight, SemanticPreflightMode,
     };
 
     pub(super) fn classify(path: &std::path::Path) -> BootstrapClassificationV1 {
@@ -376,6 +393,15 @@ mod platform {
         let root = TrustedAuthorityRoot::open(path)
             .map_err(|_| BootstrapError("open trusted authority root for greenfield upgrade"))?;
         upgrade_greenfield_root_opened_with(&root, nonce_bytes, stop)
+    }
+
+    #[cfg(test)]
+    pub(super) fn reachable_v2_ref_ids_test(
+        root: &StateRootV2,
+    ) -> Result<Vec<String>, BootstrapError> {
+        collect_reachable_objects_v2(root)
+            .map(|reachable| reachable.into_keys().collect())
+            .map_err(|_| BootstrapError("collect strict V2 reachable objects"))
     }
 
     fn upgrade_greenfield_root_opened_with(
@@ -653,6 +679,18 @@ mod platform {
     }
 
     #[cfg(test)]
+    pub(super) fn rotate_commitment_key_versioned_test(
+        path: &std::path::Path,
+        material: InitializationMaterialV1,
+        stop: Option<KeyLifecycleCrashPointV1>,
+    ) -> Result<VersionedStateRoot, BootstrapError> {
+        let root = with_existing_versioned_semantic_preflight(path, |transaction| {
+            Ok(transaction.root.clone())
+        })?;
+        rotate_commitment_key_versioned_with(path, root.root_revision(), Some(material), stop)
+    }
+
+    #[cfg(test)]
     pub(super) fn retire_commitment_key_test(
         path: &std::path::Path,
         key_id: &str,
@@ -661,6 +699,19 @@ mod platform {
     ) -> Result<StateRootV1, BootstrapError> {
         let expected_root_revision = read_root(path)?.root_revision;
         retire_commitment_key_with(path, key_id, expected_root_revision, root_nonce, stop)
+    }
+
+    #[cfg(test)]
+    pub(super) fn retire_commitment_key_versioned_test(
+        path: &std::path::Path,
+        key_id: &str,
+        root_nonce: [u8; 16],
+        stop: Option<KeyLifecycleCrashPointV1>,
+    ) -> Result<VersionedStateRoot, BootstrapError> {
+        let root = with_existing_versioned_semantic_preflight(path, |transaction| {
+            Ok(transaction.root.clone())
+        })?;
+        retire_commitment_key_versioned_with(path, key_id, root.root_revision(), root_nonce, stop)
     }
 
     #[cfg(test)]
@@ -1093,6 +1144,47 @@ mod platform {
             .tmp
             .rename_replace(&temp_name, temp, &layout.authority, ROOT_FILE)
             .map_err(|_| BootstrapError("replace authority state root"))
+    }
+
+    fn publish_versioned_replacement_root(
+        layout: &StoreLayout<'_>,
+        trusted_root: &TrustedAuthorityRoot,
+        legacy: &LegacyObservation,
+        root: &VersionedStateRoot,
+        nonce_bytes: [u8; 16],
+        mut validate_candidate: impl FnMut() -> Result<(), BootstrapError>,
+    ) -> Result<(), BootstrapError> {
+        legacy
+            .revalidate(layout.bootstrap)
+            .map_err(|_| BootstrapError("revalidate legacy state before versioned root temp"))?;
+        validate_candidate()?;
+        let temp_name = TempNameV1::Root {
+            root_revision: root.root_revision(),
+            nonce: nonce(nonce_bytes),
+        }
+        .file_name();
+        let bytes = root
+            .to_canonical_bytes()
+            .map_err(|_| BootstrapError("encode versioned replacement state root"))?;
+        let mut temp = layout
+            .tmp
+            .create_file(&temp_name)
+            .map_err(|_| BootstrapError("create versioned replacement state root temp"))?;
+        temp.write_all(&bytes)
+            .map_err(|_| BootstrapError("write versioned replacement state root temp"))?;
+        temp.sync()
+            .map_err(|_| BootstrapError("sync versioned replacement state root temp"))?;
+        legacy
+            .revalidate(layout.bootstrap)
+            .map_err(|_| BootstrapError("revalidate legacy state before versioned root replace"))?;
+        validate_candidate()?;
+        trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root before versioned replace"))?;
+        layout
+            .tmp
+            .rename_replace(&temp_name, temp, &layout.authority, ROOT_FILE)
+            .map_err(|_| BootstrapError("replace versioned authority state root"))
     }
 
     #[cfg(test)]

@@ -1,8 +1,57 @@
 use super::*;
 
-pub(super) fn publish_or_join_orphan(
+pub(super) trait ObjectVerificationRootV1 {
+    fn authority_store_id(&self) -> &str;
+    fn active_commitment_key_id(&self) -> &str;
+    fn commitment_key_registry(
+        &self,
+    ) -> &std::collections::BTreeMap<String, AuthorityStoreCommitmentKeyV1>;
+    fn object_index(&self) -> &std::collections::BTreeMap<String, AuthorityObjectIndexEntryV1>;
+}
+
+impl ObjectVerificationRootV1 for StateRootV1 {
+    fn authority_store_id(&self) -> &str {
+        &self.authority_store_id
+    }
+
+    fn active_commitment_key_id(&self) -> &str {
+        &self.active_commitment_key_id
+    }
+
+    fn commitment_key_registry(
+        &self,
+    ) -> &std::collections::BTreeMap<String, AuthorityStoreCommitmentKeyV1> {
+        &self.commitment_key_registry
+    }
+
+    fn object_index(&self) -> &std::collections::BTreeMap<String, AuthorityObjectIndexEntryV1> {
+        &self.object_index
+    }
+}
+
+impl ObjectVerificationRootV1 for StateRootV2 {
+    fn authority_store_id(&self) -> &str {
+        &self.authority_store_id
+    }
+
+    fn active_commitment_key_id(&self) -> &str {
+        &self.active_commitment_key_id
+    }
+
+    fn commitment_key_registry(
+        &self,
+    ) -> &std::collections::BTreeMap<String, AuthorityStoreCommitmentKeyV1> {
+        &self.commitment_key_registry
+    }
+
+    fn object_index(&self) -> &std::collections::BTreeMap<String, AuthorityObjectIndexEntryV1> {
+        &self.object_index
+    }
+}
+
+pub(super) fn publish_or_join_orphan<R: ObjectVerificationRootV1>(
     layout: &StoreLayout<'_>,
-    root: &StateRootV1,
+    root: &R,
     reference: &AuthorityObjectRefV1,
     bytes: &[u8],
     context: Option<&ObjectVerificationContextV1>,
@@ -54,14 +103,14 @@ pub(super) fn publish_or_join_orphan(
     }
 }
 
-pub(super) fn validate_orphan_candidate(
+pub(super) fn validate_orphan_candidate<R: ObjectVerificationRootV1>(
     layout: &StoreLayout<'_>,
-    root: &StateRootV1,
+    root: &R,
     reference: &AuthorityObjectRefV1,
     bytes: &[u8],
     context: Option<&ObjectVerificationContextV1>,
 ) -> Result<(), BootstrapError> {
-    if root.object_index.contains_key(&reference.ref_id) {
+    if root.object_index().contains_key(&reference.ref_id) {
         return Err(BootstrapError("typed object is already authoritative"));
     }
     match existing_orphan_bytes(layout, reference)? {
@@ -125,9 +174,9 @@ fn existing_orphan_bytes(
     Ok(existing)
 }
 
-pub(super) fn verify_object_bytes(
+pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(
     layout: &StoreLayout<'_>,
-    root: &StateRootV1,
+    root: &R,
     reference: &AuthorityObjectRefV1,
     bytes: &[u8],
     context: Option<&ObjectVerificationContextV1>,
@@ -168,31 +217,46 @@ pub(super) fn verify_object_bytes(
             if reference.object_kind == AuthorityObjectKindV1::TransitionTransportPayload {
                 let parent = context
                     .parent_intent
-                    .as_deref()
+                    .as_ref()
                     .ok_or(BootstrapError("transport payload parent is missing"))?;
-                if context.intent_id != parent.intent_id
-                    || context.run_id != parent.run_id
-                    || reference != &parent.transport_payload_ref
-                {
-                    return Err(BootstrapError(
-                        "transport ref or HMAC context disagrees with parent",
-                    ));
+                match parent {
+                    VersionedObjectVerificationParentIntentV1::V1(parent) => {
+                        if context.intent_id != parent.intent_id
+                            || context.run_id != parent.run_id
+                            || reference != &parent.transport_payload_ref
+                        {
+                            return Err(BootstrapError(
+                                "transport ref or HMAC context disagrees with V1 parent",
+                            ));
+                        }
+                        validate_transport_parent_v1(bytes, parent)?;
+                    }
+                    VersionedObjectVerificationParentIntentV1::V2(parent) => {
+                        if context.intent_id != parent.intent_id
+                            || context.run_id != parent.run_id
+                            || reference != &parent.transport_payload_ref
+                        {
+                            return Err(BootstrapError(
+                                "transport ref or HMAC context disagrees with V2 parent",
+                            ));
+                        }
+                        validate_transport_parent_v2(bytes, parent)?;
+                    }
                 }
-                validate_transport_parent(bytes, parent)?;
             } else if context.parent_intent.is_some() {
                 return Err(BootstrapError(
                     "sensitive object has an unexpected full parent",
                 ));
             }
             let record = root
-                .commitment_key_registry
+                .commitment_key_registry()
                 .get(key_id)
                 .filter(|record| {
                     if allow_verification_only {
                         record.state != AuthorityStoreCommitmentKeyStateV1::Retired
                     } else {
                         record.state == AuthorityStoreCommitmentKeyStateV1::Active
-                            && record.key_id == root.active_commitment_key_id
+                            && record.key_id == root.active_commitment_key_id()
                     }
                 })
                 .ok_or(BootstrapError("sensitive object key is unavailable"))?;
@@ -209,7 +273,7 @@ pub(super) fn verify_object_bytes(
             let actual = store_hmac_sha256(
                 &envelope.secret_key,
                 expected_domain,
-                &root.authority_store_id,
+                root.authority_store_id(),
                 &context.intent_id,
                 Some(&context.run_id),
                 bytes,
@@ -223,7 +287,7 @@ pub(super) fn verify_object_bytes(
     Ok(())
 }
 
-fn validate_transport_parent(
+fn validate_transport_parent_v1(
     bytes: &[u8],
     intent: &HostSessionTransitionIntentV1,
 ) -> Result<(), BootstrapError> {
@@ -255,6 +319,43 @@ fn validate_transport_parent(
     {
         return Err(BootstrapError(
             "transport payload and parent intent disagree",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_transport_parent_v2(
+    bytes: &[u8],
+    intent: &HostSessionTransitionIntentV2,
+) -> Result<(), BootstrapError> {
+    use crate::execution::agent_runtime::host_session_authority::schema::TransitionTransportPayloadObjectV1;
+    use crate::execution::agent_runtime::host_session_authority::validation::ValidatedCanonicalV1;
+
+    let payload: TransitionTransportPayloadObjectV1 = canonical_json::from_slice(bytes)
+        .map_err(|_| BootstrapError("transport payload bytes are invalid"))?;
+    payload
+        .validate()
+        .map_err(|_| BootstrapError("transport payload schema is invalid"))?;
+    if payload.intent_id != intent.intent_id
+        || payload.mode != intent.mode
+        || payload.orchestration_session_id != intent.orchestration_session_id
+        || payload.shell_trace_session_id != intent.shell_trace_session_id
+        || payload.caller != intent.caller
+        || payload.source_authoritative_participant_id != intent.source_authoritative_participant_id
+        || payload.target_authoritative_participant_id != intent.target_authoritative_participant_id
+        || payload.target_participant_lease_token_ref != intent.target_participant_lease_token_ref
+        || payload.run_id != intent.run_id
+        || payload.resulting_authoritative_lineage != intent.resulting_authoritative_lineage
+        || payload.workspace_binding != intent.workspace_binding
+        || payload.world_binding != intent.world_binding
+        || payload.descriptor_ref != intent.descriptor_ref
+        || payload.host_attach_contract_ref != intent.host_attach_contract_ref
+        || payload.resume_handle_ref != intent.resume_handle_ref
+        || payload.transition_input_ref != intent.transition_input_ref
+        || payload.post_turn_disposition != intent.post_turn_disposition
+    {
+        return Err(BootstrapError(
+            "transport payload and V2 parent intent disagree",
         ));
     }
     Ok(())

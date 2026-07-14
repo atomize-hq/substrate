@@ -371,6 +371,13 @@ pub(super) struct SemanticTransaction<'layout, 'root> {
     pub(super) legacy: LegacyObservation,
 }
 
+pub(super) struct VersionedSemanticTransaction<'layout, 'root> {
+    pub(super) layout: &'layout StoreLayout<'root>,
+    pub(super) trusted_root: &'root TrustedAuthorityRoot,
+    pub(super) root: VersionedStateRoot,
+    pub(super) legacy: LegacyObservation,
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum SemanticPreflightMode {
     AuthorityOperation,
@@ -494,6 +501,91 @@ impl SemanticTransaction<'_, '_> {
             .validate_root_candidate(candidate)
             .map_err(|_| BootstrapError("revalidate exact committed authority root"))
     }
+}
+
+impl VersionedSemanticTransaction<'_, '_> {
+    pub(super) fn require_expected_root(
+        &self,
+        expected_root_revision: u64,
+    ) -> Result<(), BootstrapError> {
+        if self.root.root_revision() == expected_root_revision {
+            Ok(())
+        } else {
+            Err(BootstrapError("stale authority root revision"))
+        }
+    }
+
+    pub(super) fn reconcile(&self) -> Result<(), BootstrapError> {
+        match &self.root {
+            VersionedStateRoot::V1(root) => self.layout.reconcile_after_preflight(root),
+            VersionedStateRoot::V2(root) => self.layout.reconcile_after_preflight_v2(root),
+        }
+        .map_err(|_| BootstrapError("reconcile versioned authority store after preflight"))
+    }
+
+    pub(super) fn validate_publication_candidate(
+        &self,
+        expected_root_revision: u64,
+        candidate: &VersionedStateRoot,
+    ) -> Result<(), BootstrapError> {
+        self.trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root for versioned candidate"))?;
+        self.require_expected_root(expected_root_revision)?;
+        let current = self
+            .layout
+            .read_existing_versioned_without_reconciliation(self.root.bootstrap_home())
+            .map_err(|_| BootstrapError("reread locked versioned root"))?;
+        if current != self.root {
+            return Err(BootstrapError("locked versioned authority root changed"));
+        }
+        let next_revision = expected_root_revision
+            .checked_add(1)
+            .ok_or(BootstrapError("expected versioned root revision overflow"))?;
+        if candidate.root_revision() != next_revision
+            || candidate.authority_store_id() != current.authority_store_id()
+            || candidate.bootstrap_home() != current.bootstrap_home()
+            || candidate.greenfield_namespace_certificate()
+                != current.greenfield_namespace_certificate()
+            || !matches!(
+                (&current, candidate),
+                (VersionedStateRoot::V1(_), VersionedStateRoot::V1(_))
+                    | (VersionedStateRoot::V2(_), VersionedStateRoot::V2(_))
+            )
+        {
+            return Err(BootstrapError(
+                "versioned publication candidate identity or revision is invalid",
+            ));
+        }
+        validate_versioned_candidate(self.layout, candidate)?;
+        self.legacy
+            .revalidate(self.layout.bootstrap)
+            .map_err(|_| BootstrapError("revalidate legacy state for versioned candidate"))?;
+        self.trusted_root
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate trusted root after versioned candidate"))?;
+        let current = self
+            .layout
+            .read_existing_versioned_without_reconciliation(self.root.bootstrap_home())
+            .map_err(|_| BootstrapError("reread locked versioned root after validation"))?;
+        if current != self.root {
+            return Err(BootstrapError(
+                "locked versioned authority root changed during validation",
+            ));
+        }
+        validate_versioned_candidate(self.layout, candidate)
+    }
+}
+
+fn validate_versioned_candidate(
+    layout: &StoreLayout<'_>,
+    candidate: &VersionedStateRoot,
+) -> Result<(), BootstrapError> {
+    match candidate {
+        VersionedStateRoot::V1(root) => layout.validate_root_candidate(root),
+        VersionedStateRoot::V2(root) => layout.validate_root_candidate_v2(root),
+    }
+    .map_err(|_| BootstrapError("validate versioned publication candidate"))
 }
 
 impl LegacyStateStoreTransactionV1 {
@@ -869,6 +961,66 @@ pub(super) fn with_existing_semantic_preflight<T>(
     let root_handle = TrustedAuthorityRoot::open(path)
         .map_err(|_| BootstrapError("open trusted authority root"))?;
     with_opened_existing_semantic_preflight(&root_handle, operation)
+}
+
+pub(super) fn with_existing_versioned_semantic_preflight<T>(
+    path: &std::path::Path,
+    operation: impl FnOnce(&VersionedSemanticTransaction<'_, '_>) -> Result<T, BootstrapError>,
+) -> Result<T, BootstrapError> {
+    let root_handle = TrustedAuthorityRoot::open(path)
+        .map_err(|_| BootstrapError("open trusted versioned authority root"))?;
+    with_opened_existing_versioned_semantic_preflight(&root_handle, operation)
+}
+
+pub(super) fn with_opened_existing_versioned_semantic_preflight<T>(
+    root_handle: &TrustedAuthorityRoot,
+    operation: impl FnOnce(&VersionedSemanticTransaction<'_, '_>) -> Result<T, BootstrapError>,
+) -> Result<T, BootstrapError> {
+    root_handle
+        .revalidate()
+        .map_err(|_| BootstrapError("revalidate trusted versioned authority root"))?;
+    let lock_scope = StoreLayoutLockScope::open_existing_activated(root_handle.directory())
+        .map_err(|_| BootstrapError("open activated versioned authority layout"))?;
+    let _lock = lock_scope
+        .root_lock
+        .lock_exclusive_owned()
+        .map_err(|_| BootstrapError("lock versioned authority root"))?;
+    lock_scope
+        .validate_temps()
+        .map_err(|_| BootstrapError("validate versioned authority temps"))?;
+    lock_scope
+        .reconcile_temps()
+        .map_err(|_| BootstrapError("reconcile versioned authority temps"))?;
+    let layout = lock_scope
+        .finish()
+        .map_err(|_| BootstrapError("open versioned authority layout"))?;
+    layout
+        .validate_closed_layout()
+        .map_err(|_| BootstrapError("validate versioned authority layout"))?;
+    let legacy = LegacyObservation::capture(layout.bootstrap)
+        .map_err(|_| BootstrapError("capture versioned authority legacy state"))?;
+    if legacy.has_artifact {
+        return Err(BootstrapError(
+            "legacy state is incompatible with versioned authority",
+        ));
+    }
+    let root = layout
+        .read_existing_versioned_without_reconciliation(root_handle.identity())
+        .map_err(|_| BootstrapError("read existing versioned authority root"))?;
+    match &root {
+        VersionedStateRoot::V1(root) => layout
+            .validate_matching_marker_if_present(root)
+            .map_err(|_| BootstrapError("validate V1 initialization marker"))?,
+        VersionedStateRoot::V2(root) => layout
+            .validate_matching_marker_if_present_v2(root)
+            .map_err(|_| BootstrapError("validate V2 initialization marker"))?,
+    }
+    operation(&VersionedSemanticTransaction {
+        layout: &layout,
+        trusted_root: root_handle,
+        root,
+        legacy,
+    })
 }
 
 pub(super) fn with_opened_existing_semantic_preflight<T>(

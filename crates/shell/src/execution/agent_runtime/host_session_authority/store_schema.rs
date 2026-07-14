@@ -124,6 +124,80 @@ impl VersionedStateRoot {
             Self::V2(root) => super::canonical_json::to_vec(root),
         }
     }
+
+    pub(crate) fn validate(&self) -> Result<(), StoreSchemaError> {
+        match self {
+            Self::V1(root) => root.validate(),
+            Self::V2(root) => root.validate(),
+        }
+    }
+
+    pub(crate) fn root_revision(&self) -> u64 {
+        match self {
+            Self::V1(root) => root.root_revision,
+            Self::V2(root) => root.root_revision,
+        }
+    }
+
+    pub(crate) fn authority_store_id(&self) -> &str {
+        match self {
+            Self::V1(root) => &root.authority_store_id,
+            Self::V2(root) => &root.authority_store_id,
+        }
+    }
+
+    pub(crate) fn bootstrap_home(&self) -> &CanonicalDirectoryV1 {
+        match self {
+            Self::V1(root) => &root.bootstrap_home,
+            Self::V2(root) => &root.bootstrap_home,
+        }
+    }
+
+    pub(crate) fn greenfield_namespace_certificate(&self) -> &GreenfieldNamespaceCertificateV1 {
+        match self {
+            Self::V1(root) => &root.greenfield_namespace_certificate,
+            Self::V2(root) => &root.greenfield_namespace_certificate,
+        }
+    }
+
+    pub(crate) fn active_commitment_key_id(&self) -> &str {
+        match self {
+            Self::V1(root) => &root.active_commitment_key_id,
+            Self::V2(root) => &root.active_commitment_key_id,
+        }
+    }
+
+    pub(crate) fn active_commitment_key_id_mut(&mut self) -> &mut String {
+        match self {
+            Self::V1(root) => &mut root.active_commitment_key_id,
+            Self::V2(root) => &mut root.active_commitment_key_id,
+        }
+    }
+
+    pub(crate) fn commitment_key_registry(
+        &self,
+    ) -> &BTreeMap<String, AuthorityStoreCommitmentKeyV1> {
+        match self {
+            Self::V1(root) => &root.commitment_key_registry,
+            Self::V2(root) => &root.commitment_key_registry,
+        }
+    }
+
+    pub(crate) fn commitment_key_registry_mut(
+        &mut self,
+    ) -> &mut BTreeMap<String, AuthorityStoreCommitmentKeyV1> {
+        match self {
+            Self::V1(root) => &mut root.commitment_key_registry,
+            Self::V2(root) => &mut root.commitment_key_registry,
+        }
+    }
+
+    pub(crate) fn set_root_revision(&mut self, revision: u64) {
+        match self {
+            Self::V1(root) => root.root_revision = revision,
+            Self::V2(root) => root.root_revision = revision,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -416,8 +490,8 @@ pub(crate) enum HostSessionTransitionIntentStateV2 {
         resulting_posture: HostSessionPostureV1,
         authority_record_commitment: AuthorityObjectCommitmentV1,
         application_result_ref: AuthorityObjectRefV1,
-        startup_ownership: HostSessionStartupOwnershipApplicationV1,
-        post_turn: HostSessionPostTurnApplicationV1,
+        startup_ownership: Box<HostSessionStartupOwnershipApplicationV1>,
+        post_turn: Box<HostSessionPostTurnApplicationV1>,
         applied_at: TimestampV1,
     },
     Rejected {
@@ -619,6 +693,21 @@ impl StateRootV2 {
     }
 
     pub(crate) fn validate_greenfield(&self) -> Result<(), StoreSchemaError> {
+        self.validate()?;
+        if !self.session_namespace_map.is_empty()
+            || !self.transition_intent_map.is_empty()
+            || !self.issuer_request_index.is_empty()
+            || !self.application_journal.is_empty()
+            || !self.object_index.is_empty()
+        {
+            return Err(StoreSchemaError(
+                "A1.2a-1 StateRootV2 must remain greenfield-empty",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), StoreSchemaError> {
         if self.schema_version != 2 {
             return Err(StoreSchemaError("StateRootV2 requires schema version 2"));
         }
@@ -669,20 +758,593 @@ impl StateRootV2 {
                 "greenfield certificate timestamp has no initial key",
             ));
         }
-        if !self.session_namespace_map.is_empty()
-            || !self.transition_intent_map.is_empty()
-            || !self.issuer_request_index.is_empty()
-            || !self.application_journal.is_empty()
-            || !self.retained_worker_registration_request_index.is_empty()
+        if !self.retained_worker_registration_request_index.is_empty()
             || !self.retained_worker_registration_journal.is_empty()
-            || !self.object_index.is_empty()
         {
             return Err(StoreSchemaError(
-                "A1.2a-1 StateRootV2 must remain greenfield-empty",
+                "A1.2a StateRootV2 cannot contain retained registration state",
             ));
+        }
+
+        for (key, record) in &self.session_namespace_map {
+            if key != record.orchestration_session_id() {
+                return Err(StoreSchemaError("V2 session namespace map key mismatch"));
+            }
+            validate_namespace_record_identity(
+                record,
+                &self.authority_store_id,
+                &self.bootstrap_home,
+            )?;
+        }
+        for (key, intent) in &self.transition_intent_map {
+            if key != &intent.intent_id || intent.schema_version != 2 {
+                return Err(StoreSchemaError("V2 transition intent map entry mismatch"));
+            }
+            required(&intent.intent_id)?;
+            required(&intent.issuer_request_id)?;
+            required(&intent.orchestration_session_id)?;
+            required(&intent.shell_trace_session_id)?;
+            required(&intent.target_authoritative_participant_id)?;
+            required(&intent.run_id)?;
+            if intent.intent_revision == 0
+                || intent.workspace_binding.authority_store_id != self.authority_store_id
+                || intent.workspace_binding.authority_store_root != self.bootstrap_home
+                || intent.issued_at.as_str() >= intent.expires_at.as_str()
+            {
+                return Err(StoreSchemaError("V2 transition intent binding mismatch"));
+            }
+            self.validate_start_intent_relations(intent)?;
+        }
+        for (key, entry) in &self.issuer_request_index {
+            if key != &entry.issuer_request_id {
+                return Err(StoreSchemaError("V2 issuer request index key mismatch"));
+            }
+            require_version(entry.schema_version)?;
+            let intent = self
+                .transition_intent_map
+                .get(&entry.intent_id)
+                .ok_or(StoreSchemaError("V2 issuer request references no intent"))?;
+            if intent.issuer_request_id != entry.issuer_request_id
+                || intent.orchestration_session_id != entry.orchestration_session_id
+                || intent.payload_commitment != entry.payload_commitment
+            {
+                return Err(StoreSchemaError("V2 issuer request and intent disagree"));
+            }
+        }
+        for (key, journal) in &self.application_journal {
+            if key != &journal.intent_id || journal.schema_version != 2 {
+                return Err(StoreSchemaError("V2 application journal entry mismatch"));
+            }
+            if !self.transition_intent_map.contains_key(&journal.intent_id) {
+                return Err(StoreSchemaError(
+                    "V2 application journal references no intent",
+                ));
+            }
+        }
+        if self.issuer_request_index.len() != self.transition_intent_map.len() {
+            return Err(StoreSchemaError(
+                "every V2 intent requires one issuer index entry",
+            ));
+        }
+        for record in self.session_namespace_map.values() {
+            self.validate_start_namespace_relations(record)?;
+        }
+        for (key, entry) in &self.object_index {
+            require_version(entry.schema_version)?;
+            validate_ref_id(&entry.ref_id)
+                .map_err(|_| StoreSchemaError("invalid V2 object index ref ID"))?;
+            if key != &entry.ref_id || entry.object_schema_version != SCHEMA_VERSION {
+                return Err(StoreSchemaError("V2 object index entry mismatch"));
+            }
+            if entry.object_kind != AuthorityObjectKindV1::TransitionTransportPayload
+                && entry.storage_state != AuthorityObjectStorageStateV1::Present
+            {
+                return Err(StoreSchemaError(
+                    "only V2 transport payload objects may be released",
+                ));
+            }
         }
         Ok(())
     }
+
+    fn validate_start_intent_relations(
+        &self,
+        intent: &HostSessionTransitionIntentV2,
+    ) -> Result<(), StoreSchemaError> {
+        if intent.mode != HostSessionTransitionModeV1::Start
+            || intent.authority_precondition != HostSessionAuthorityPreconditionV1::ExpectedAbsent
+            || intent.source_authoritative_participant_id.is_some()
+            || intent.resume_handle_ref.is_some()
+            || intent.post_turn_disposition.is_some()
+            || !matches!(
+                intent.caller.kind,
+                super::schema::HostSessionTransitionCallerKindV1::PublicCli
+                    | super::schema::HostSessionTransitionCallerKindV1::Repl
+            )
+            || intent.caller.caller_participant_id.is_some()
+            || intent.caller.auto_attach_obligation_id.is_some()
+            || intent.caller.auto_attach_claim_owner.is_some()
+            || intent.resulting_authoritative_lineage.last()
+                != Some(&intent.target_authoritative_participant_id)
+            || intent.resulting_authoritative_lineage.len() != 1
+            || intent.target_participant_lease_token_ref.object_kind
+                != AuthorityObjectKindV1::LeaseToken
+            || intent.descriptor_ref.object_kind != AuthorityObjectKindV1::AgentDescriptor
+            || intent.host_attach_contract_ref.object_kind
+                != AuthorityObjectKindV1::HostAttachContract
+            || intent.transport_payload_ref.object_kind
+                != AuthorityObjectKindV1::TransitionTransportPayload
+            || intent.transport_payload_state
+                != HostSessionTransitionTransportPayloadStateV1::Retained
+        {
+            return Err(StoreSchemaError("strict V2 intent is not a valid Start"));
+        }
+        match (&intent.transition_input_ref, &intent.input_handoff) {
+            (None, HostSessionTransitionInputHandoffV1::NotApplicable) => {}
+            (
+                Some(reference),
+                HostSessionTransitionInputHandoffV1::Pending { input_ref, run_id },
+            ) if reference.object_kind == AuthorityObjectKindV1::TransitionInput
+                && input_ref == reference
+                && run_id == &intent.run_id => {}
+            (
+                Some(reference),
+                HostSessionTransitionInputHandoffV1::Accepted {
+                    input_ref, run_id, ..
+                }
+                | HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance {
+                    input_ref,
+                    run_id,
+                    ..
+                },
+            ) if reference.object_kind == AuthorityObjectKindV1::TransitionInput
+                && input_ref == reference
+                && run_id == &intent.run_id => {}
+            _ => return Err(StoreSchemaError("V2 Start input handoff is inconsistent")),
+        }
+        let issuer = self
+            .issuer_request_index
+            .get(&intent.issuer_request_id)
+            .ok_or(StoreSchemaError("V2 Start has no issuer request entry"))?;
+        if issuer.intent_id != intent.intent_id
+            || issuer.orchestration_session_id != intent.orchestration_session_id
+            || issuer.payload_commitment != intent.payload_commitment
+        {
+            return Err(StoreSchemaError("V2 Start and issuer request disagree"));
+        }
+        let namespace = self
+            .session_namespace_map
+            .get(&intent.orchestration_session_id)
+            .ok_or(StoreSchemaError("V2 Start has no namespace record"))?;
+        match &intent.state {
+            HostSessionTransitionIntentStateV2::Issued => {
+                if intent.intent_revision != 1 || !v2_start_input_is_pending(intent) {
+                    return Err(StoreSchemaError(
+                        "issued V2 Start revision/input is invalid",
+                    ));
+                }
+                self.validate_non_applied_start(intent, namespace)?;
+            }
+            HostSessionTransitionIntentStateV2::Claimed {
+                claim_id,
+                claimant_attempt_id,
+                claim_revision,
+                claimed_at,
+                claim_expires_at,
+            } => {
+                required(claim_id)?;
+                required(claimant_attempt_id)?;
+                if *claim_revision < 2
+                    || *claim_revision != intent.intent_revision
+                    || claimed_at.as_str() >= claim_expires_at.as_str()
+                    || !v2_start_input_is_pending(intent)
+                {
+                    return Err(StoreSchemaError("V2 Start claim is invalid"));
+                }
+                self.validate_non_applied_start(intent, namespace)?;
+            }
+            HostSessionTransitionIntentStateV2::Applied {
+                claim_id,
+                claimant_attempt_id,
+                authority_revision_before,
+                authority_revision_after,
+                active_authoritative_participant_id,
+                resulting_posture,
+                authority_record_commitment,
+                application_result_ref,
+                startup_ownership,
+                post_turn,
+                applied_at,
+            } => {
+                required(claim_id)?;
+                required(claimant_attempt_id)?;
+                if intent.intent_revision < 3
+                    || authority_revision_before.is_some()
+                    || *authority_revision_after != 1
+                    || active_authoritative_participant_id
+                        != &intent.target_authoritative_participant_id
+                    || *resulting_posture != HostSessionPostureV1::ActiveAttached
+                    || application_result_ref.object_kind
+                        != AuthorityObjectKindV1::ApplicationResult
+                    || post_turn.as_ref() != &HostSessionPostTurnApplicationV1::NotApplicable
+                    || !v2_start_input_is_applied_pending(intent)
+                {
+                    return Err(StoreSchemaError("V2 applied Start result is invalid"));
+                }
+                let HostSessionStartupOwnershipApplicationV1::Pending {
+                    expected_run_id,
+                    expected_authority_revision,
+                    expected_active_authoritative_participant_id,
+                } = startup_ownership.as_ref()
+                else {
+                    return Err(StoreSchemaError(
+                        "A1.2a applied Start ownership must remain Pending",
+                    ));
+                };
+                if expected_run_id != &intent.run_id
+                    || expected_authority_revision != authority_revision_after
+                    || expected_active_authoritative_participant_id
+                        != active_authoritative_participant_id
+                {
+                    return Err(StoreSchemaError(
+                        "V2 applied Start ownership expectation is invalid",
+                    ));
+                }
+                let SessionNamespaceRecordV1::Authority(authority) = namespace else {
+                    return Err(StoreSchemaError("V2 applied Start has no authority"));
+                };
+                if authority.authority_revision != *authority_revision_after
+                    || authority.shell_trace_session_id != intent.shell_trace_session_id
+                    || authority.authoritative_participant_lineage
+                        != intent.resulting_authoritative_lineage
+                    || authority.active_authoritative_participant_id.as_ref()
+                        != Some(active_authoritative_participant_id)
+                    || authority.workspace_binding != intent.workspace_binding
+                    || authority.world_binding != intent.world_binding
+                    || authority.host_attach_contract_ref.as_ref()
+                        != Some(&intent.host_attach_contract_ref)
+                    || authority.lifecycle_posture != *resulting_posture
+                    || !authority_origin_matches_v2(authority, intent)
+                {
+                    return Err(StoreSchemaError("V2 Start authority does not match intent"));
+                }
+                let journal = self
+                    .application_journal
+                    .get(&intent.intent_id)
+                    .ok_or(StoreSchemaError("V2 applied Start has no journal"))?;
+                let initial = &journal.initial_application;
+                if journal.startup_terminal_application.is_some()
+                    || journal.post_turn_application.is_some()
+                    || initial.authority_revision_before != *authority_revision_before
+                    || initial.authority_revision_after != *authority_revision_after
+                    || initial.authority_record_commitment != *authority_record_commitment
+                    || initial.application_result_ref != *application_result_ref
+                    || initial.applied_at != *applied_at
+                {
+                    return Err(StoreSchemaError("V2 applied Start and journal disagree"));
+                }
+            }
+            HostSessionTransitionIntentStateV2::Rejected {
+                reason,
+                terminal_handoff_ref,
+                ..
+            } => {
+                if intent.intent_revision < 2 || !v2_start_input_is_terminal(intent) {
+                    return Err(StoreSchemaError(
+                        "rejected V2 Start revision/input is invalid",
+                    ));
+                }
+                self.validate_terminal_start(intent, namespace)?;
+                let SessionNamespaceRecordV1::StartTombstone(tombstone) = namespace else {
+                    return Err(StoreSchemaError("rejected V2 Start has no tombstone"));
+                };
+                if !tombstone_matches_rejected_v2(tombstone, intent, *reason, terminal_handoff_ref)
+                {
+                    return Err(StoreSchemaError("rejected V2 Start tombstone mismatch"));
+                }
+            }
+            HostSessionTransitionIntentStateV2::Expired {
+                terminal_handoff_ref,
+                ..
+            } => {
+                if intent.intent_revision < 2 || !v2_start_input_is_terminal(intent) {
+                    return Err(StoreSchemaError(
+                        "expired V2 Start revision/input is invalid",
+                    ));
+                }
+                self.validate_terminal_start(intent, namespace)?;
+                let SessionNamespaceRecordV1::StartTombstone(tombstone) = namespace else {
+                    return Err(StoreSchemaError("expired V2 Start has no tombstone"));
+                };
+                if !tombstone_matches_expired_v2(tombstone, intent, terminal_handoff_ref) {
+                    return Err(StoreSchemaError("expired V2 Start tombstone mismatch"));
+                }
+            }
+        }
+        let transport_index = self
+            .object_index
+            .get(&intent.transport_payload_ref.ref_id)
+            .ok_or(StoreSchemaError(
+                "V2 transport payload has no object index entry",
+            ))?;
+        if transport_index.object_kind != AuthorityObjectKindV1::TransitionTransportPayload
+            || !transport_states_match(
+                &intent.transport_payload_state,
+                &transport_index.storage_state,
+            )
+        {
+            return Err(StoreSchemaError(
+                "V2 transport parent and object index disagree",
+            ));
+        }
+        validate_terminal_ref_unity_v2(intent, namespace)
+    }
+
+    fn validate_non_applied_start(
+        &self,
+        intent: &HostSessionTransitionIntentV2,
+        namespace: &SessionNamespaceRecordV1,
+    ) -> Result<(), StoreSchemaError> {
+        if self.application_journal.contains_key(&intent.intent_id) {
+            return Err(StoreSchemaError("non-applied V2 Start has a journal"));
+        }
+        let SessionNamespaceRecordV1::StartReservation(reservation) = namespace else {
+            return Err(StoreSchemaError("non-applied V2 Start has no reservation"));
+        };
+        if !reservation_matches_v2(reservation, intent) {
+            return Err(StoreSchemaError("V2 Start reservation ownership mismatch"));
+        }
+        Ok(())
+    }
+
+    fn validate_terminal_start(
+        &self,
+        intent: &HostSessionTransitionIntentV2,
+        namespace: &SessionNamespaceRecordV1,
+    ) -> Result<(), StoreSchemaError> {
+        if self.application_journal.contains_key(&intent.intent_id)
+            || !matches!(namespace, SessionNamespaceRecordV1::StartTombstone(_))
+        {
+            return Err(StoreSchemaError("terminal V2 Start proof is inconsistent"));
+        }
+        Ok(())
+    }
+
+    fn validate_start_namespace_relations(
+        &self,
+        record: &SessionNamespaceRecordV1,
+    ) -> Result<(), StoreSchemaError> {
+        let intent_id = match record {
+            SessionNamespaceRecordV1::Authority(authority) => match &authority.origin {
+                DurableSessionAuthorityOriginV1::StartIntent { intent_id, .. } => intent_id,
+            },
+            SessionNamespaceRecordV1::StartReservation(reservation) => &reservation.intent_id,
+            SessionNamespaceRecordV1::StartTombstone(tombstone) => &tombstone.intent_id,
+        };
+        let intent = self
+            .transition_intent_map
+            .get(intent_id)
+            .ok_or(StoreSchemaError("V2 namespace record has no Start intent"))?;
+        let matches = match record {
+            SessionNamespaceRecordV1::Authority(authority) => {
+                matches!(
+                    intent.state,
+                    HostSessionTransitionIntentStateV2::Applied { .. }
+                ) && authority_origin_matches_v2(authority, intent)
+            }
+            SessionNamespaceRecordV1::StartReservation(reservation) => {
+                matches!(
+                    intent.state,
+                    HostSessionTransitionIntentStateV2::Issued
+                        | HostSessionTransitionIntentStateV2::Claimed { .. }
+                ) && reservation_matches_v2(reservation, intent)
+            }
+            SessionNamespaceRecordV1::StartTombstone(tombstone) => match &intent.state {
+                HostSessionTransitionIntentStateV2::Rejected {
+                    reason,
+                    terminal_handoff_ref,
+                    ..
+                } => {
+                    tombstone_matches_rejected_v2(tombstone, intent, *reason, terminal_handoff_ref)
+                }
+                HostSessionTransitionIntentStateV2::Expired {
+                    terminal_handoff_ref,
+                    ..
+                } => tombstone_matches_expired_v2(tombstone, intent, terminal_handoff_ref),
+                _ => false,
+            },
+        };
+        if matches {
+            Ok(())
+        } else {
+            Err(StoreSchemaError("V2 namespace ownership is inconsistent"))
+        }
+    }
+}
+
+fn validate_namespace_record_identity(
+    record: &SessionNamespaceRecordV1,
+    authority_store_id: &str,
+    bootstrap_home: &CanonicalDirectoryV1,
+) -> Result<(), StoreSchemaError> {
+    match record {
+        SessionNamespaceRecordV1::Authority(authority) => {
+            require_version(authority.schema_version)?;
+            required(&authority.orchestration_session_id)?;
+            required(&authority.shell_trace_session_id)?;
+            if authority.authority_revision == 0
+                || authority.workspace_binding.authority_store_id != authority_store_id
+                || &authority.workspace_binding.authority_store_root != bootstrap_home
+                || !authority.retained_worker_refs.is_empty()
+                || !authority.internal_resume_handle_refs.is_empty()
+                || authority
+                    .active_authoritative_participant_id
+                    .as_ref()
+                    .is_some_and(|active| {
+                        !authority.authoritative_participant_lineage.contains(active)
+                    })
+            {
+                return Err(StoreSchemaError("V2 durable authority binding mismatch"));
+            }
+        }
+        SessionNamespaceRecordV1::StartReservation(reservation) => {
+            require_version(reservation.schema_version)?;
+            required(&reservation.orchestration_session_id)?;
+            required(&reservation.intent_id)?;
+            required(&reservation.issuer_request_id)?;
+        }
+        SessionNamespaceRecordV1::StartTombstone(tombstone) => {
+            require_version(tombstone.schema_version)?;
+            required(&tombstone.orchestration_session_id)?;
+            required(&tombstone.intent_id)?;
+            required(&tombstone.issuer_request_id)?;
+            if tombstone.terminal_handoff_ref.object_kind != AuthorityObjectKindV1::TerminalHandoff
+            {
+                return Err(StoreSchemaError("V2 Start tombstone ref kind is invalid"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reservation_matches_v2(
+    reservation: &SessionIdReservationV1,
+    intent: &HostSessionTransitionIntentV2,
+) -> bool {
+    reservation.orchestration_session_id == intent.orchestration_session_id
+        && reservation.intent_id == intent.intent_id
+        && reservation.issuer_request_id == intent.issuer_request_id
+        && reservation.payload_commitment == intent.payload_commitment
+}
+
+fn v2_start_input_is_pending(intent: &HostSessionTransitionIntentV2) -> bool {
+    matches!(
+        (&intent.transition_input_ref, &intent.input_handoff),
+        (None, HostSessionTransitionInputHandoffV1::NotApplicable)
+            | (Some(_), HostSessionTransitionInputHandoffV1::Pending { .. })
+    )
+}
+
+fn v2_start_input_is_applied_pending(intent: &HostSessionTransitionIntentV2) -> bool {
+    matches!(
+        (&intent.transition_input_ref, &intent.input_handoff),
+        (None, HostSessionTransitionInputHandoffV1::NotApplicable)
+            | (
+                Some(_),
+                HostSessionTransitionInputHandoffV1::Pending { .. }
+                    | HostSessionTransitionInputHandoffV1::Accepted { .. }
+            )
+    )
+}
+
+fn v2_start_input_is_terminal(intent: &HostSessionTransitionIntentV2) -> bool {
+    matches!(
+        (&intent.transition_input_ref, &intent.input_handoff),
+        (None, HostSessionTransitionInputHandoffV1::NotApplicable)
+            | (
+                Some(_),
+                HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance { .. }
+            )
+    )
+}
+
+fn authority_origin_matches_v2(
+    authority: &DurableSessionAuthorityV1,
+    intent: &HostSessionTransitionIntentV2,
+) -> bool {
+    matches!(
+        &authority.origin,
+        DurableSessionAuthorityOriginV1::StartIntent {
+            intent_id,
+            issuer_request_id,
+            payload_commitment,
+        } if intent_id == &intent.intent_id
+            && issuer_request_id == &intent.issuer_request_id
+            && payload_commitment == &intent.payload_commitment
+            && authority.orchestration_session_id == intent.orchestration_session_id
+    )
+}
+
+fn tombstone_matches_rejected_v2(
+    tombstone: &SessionIdTombstoneV1,
+    intent: &HostSessionTransitionIntentV2,
+    reason: HostSessionTransitionTerminalRejectionV1,
+    terminal_handoff_ref: &AuthorityObjectRefV1,
+) -> bool {
+    reservation_fields_match_tombstone_v2(tombstone, intent)
+        && tombstone.terminal_handoff_ref == *terminal_handoff_ref
+        && tombstone.terminal_state == StartTombstoneStateV1::Rejected { reason }
+}
+
+fn tombstone_matches_expired_v2(
+    tombstone: &SessionIdTombstoneV1,
+    intent: &HostSessionTransitionIntentV2,
+    terminal_handoff_ref: &AuthorityObjectRefV1,
+) -> bool {
+    reservation_fields_match_tombstone_v2(tombstone, intent)
+        && tombstone.terminal_handoff_ref == *terminal_handoff_ref
+        && tombstone.terminal_state == StartTombstoneStateV1::Expired
+}
+
+fn reservation_fields_match_tombstone_v2(
+    tombstone: &SessionIdTombstoneV1,
+    intent: &HostSessionTransitionIntentV2,
+) -> bool {
+    tombstone.orchestration_session_id == intent.orchestration_session_id
+        && tombstone.intent_id == intent.intent_id
+        && tombstone.issuer_request_id == intent.issuer_request_id
+        && tombstone.payload_commitment == intent.payload_commitment
+}
+
+fn validate_terminal_ref_unity_v2(
+    intent: &HostSessionTransitionIntentV2,
+    namespace: &SessionNamespaceRecordV1,
+) -> Result<(), StoreSchemaError> {
+    let mut canonical: Option<AuthorityObjectRefV1> = None;
+    let mut require_same = |reference: &AuthorityObjectRefV1| {
+        if reference.object_kind != AuthorityObjectKindV1::TerminalHandoff
+            || canonical
+                .as_ref()
+                .is_some_and(|existing| existing != reference)
+        {
+            Err(StoreSchemaError("V2 Start terminal handoff refs disagree"))
+        } else {
+            canonical = Some(reference.clone());
+            Ok(())
+        }
+    };
+    match &intent.state {
+        HostSessionTransitionIntentStateV2::Rejected {
+            terminal_handoff_ref,
+            ..
+        }
+        | HostSessionTransitionIntentStateV2::Expired {
+            terminal_handoff_ref,
+            ..
+        } => require_same(terminal_handoff_ref)?,
+        _ => {}
+    }
+    match &intent.transport_payload_state {
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+            terminal_handoff_ref,
+        }
+        | HostSessionTransitionTransportPayloadStateV1::Released {
+            terminal_handoff_ref,
+            ..
+        } => require_same(terminal_handoff_ref)?,
+        HostSessionTransitionTransportPayloadStateV1::Retained => {}
+    }
+    if let HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance {
+        terminal_handoff_ref,
+        ..
+    } = &intent.input_handoff
+    {
+        require_same(terminal_handoff_ref)?;
+    }
+    if let SessionNamespaceRecordV1::StartTombstone(tombstone) = namespace {
+        require_same(&tombstone.terminal_handoff_ref)?;
+    }
+    Ok(())
 }
 
 impl StateRootV1 {

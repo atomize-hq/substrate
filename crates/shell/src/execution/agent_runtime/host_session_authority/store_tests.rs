@@ -5,18 +5,21 @@ use super::*;
 use crate::execution::agent_runtime::host_session_authority::canonical_json;
 use crate::execution::agent_runtime::host_session_authority::schema::{
     AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
-    HostSessionAuthorityPreconditionV1, HostSessionTransitionCallerKindV1,
-    HostSessionTransitionCallerV1, HostSessionTransitionModeV1, PolicyObjectHashInputV1,
-    WorkspaceBindingV1,
+    DurableSessionAuthorityOriginV1, HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
+    HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
+    PolicyObjectHashInputV1, WorkspaceBindingV1,
 };
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
     AuthorityObjectIndexEntryV1, AuthorityObjectStorageStateV1,
     AuthorityStoreCommitmentAlgorithmV1, AuthorityStoreCommitmentKeyStateV1,
-    AuthorityStoreCommitmentKeyV1, HostSessionTransitionApplicationJournalV1,
-    HostSessionTransitionInputHandoffV1, HostSessionTransitionIntentStateV1,
-    HostSessionTransitionIntentV1, HostSessionTransitionTransportPayloadStateV1,
-    InitialTransitionApplicationJournalV1, IssuerRequestIndexEntryV1, SessionIdReservationV1,
-    SessionNamespaceRecordV1, StateRootV2, VersionedStateRoot,
+    AuthorityStoreCommitmentKeyV1, DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1,
+    HostSessionStartupOwnershipApplicationV1, HostSessionTransitionApplicationJournalV1,
+    HostSessionTransitionApplicationJournalV2, HostSessionTransitionInputHandoffV1,
+    HostSessionTransitionIntentStateV1, HostSessionTransitionIntentStateV2,
+    HostSessionTransitionIntentV1, HostSessionTransitionIntentV2,
+    HostSessionTransitionTransportPayloadStateV1, InitialTransitionApplicationJournalV1,
+    IssuerRequestIndexEntryV1, SessionIdReservationV1, SessionNamespaceRecordV1, StateRootV2,
+    VersionedStateRoot,
 };
 use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
 
@@ -60,6 +63,24 @@ fn placeholder_ref(ref_id: &str, object_kind: AuthorityObjectKindV1) -> Authorit
         object_kind,
         schema_version: 1,
         commitment: placeholder_commitment(),
+    }
+}
+
+fn placeholder_hmac_ref(
+    ref_id: &str,
+    object_kind: AuthorityObjectKindV1,
+    key_id: &str,
+    domain: &str,
+) -> AuthorityObjectRefV1 {
+    AuthorityObjectRefV1 {
+        ref_id: ref_id.into(),
+        object_kind,
+        schema_version: 1,
+        commitment: AuthorityObjectCommitmentV1::StoreHmacSha256 {
+            key_id: key_id.into(),
+            domain: domain.into(),
+            digest_hex: "ab".repeat(32),
+        },
     }
 }
 
@@ -117,6 +138,191 @@ fn placeholder_v1_intent(root: &StateRootV1) -> HostSessionTransitionIntentV1 {
         transport_payload_state: HostSessionTransitionTransportPayloadStateV1::Retained,
         updated_at: timestamp,
     }
+}
+
+fn placeholder_v2_intent(root: &StateRootV2) -> HostSessionTransitionIntentV2 {
+    let timestamp = TimestampV1::parse("2026-07-11T12:49:11.000000000Z").unwrap();
+    HostSessionTransitionIntentV2 {
+        schema_version: 2,
+        intent_id: "intent-v2-start".into(),
+        issuer_request_id: "request-v2-start".into(),
+        intent_revision: 1,
+        mode: HostSessionTransitionModeV1::Start,
+        authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+        orchestration_session_id: "session-v2-start".into(),
+        shell_trace_session_id: "trace-v2-start".into(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::PublicCli,
+            caller_participant_id: None,
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        source_authoritative_participant_id: None,
+        target_authoritative_participant_id: "participant-v2-start".into(),
+        target_participant_lease_token_ref: placeholder_hmac_ref(
+            "ao_81111111111111111111111111111111",
+            AuthorityObjectKindV1::LeaseToken,
+            &root.active_commitment_key_id,
+            "substrate.a1.participant-lease-token.v1",
+        ),
+        run_id: "run-v2-start".into(),
+        resulting_authoritative_lineage: vec!["participant-v2-start".into()],
+        workspace_binding: WorkspaceBindingV1 {
+            workspace_root: root.bootstrap_home.clone(),
+            authority_store_root: root.bootstrap_home.clone(),
+            authority_store_id: root.authority_store_id.clone(),
+        },
+        world_binding: None,
+        descriptor_ref: placeholder_ref(
+            "ao_82222222222222222222222222222222",
+            AuthorityObjectKindV1::AgentDescriptor,
+        ),
+        host_attach_contract_ref: placeholder_ref(
+            "ao_83333333333333333333333333333333",
+            AuthorityObjectKindV1::HostAttachContract,
+        ),
+        resume_handle_ref: None,
+        transition_input_ref: None,
+        post_turn_disposition: None,
+        transport_payload_ref: placeholder_hmac_ref(
+            "ao_84444444444444444444444444444444",
+            AuthorityObjectKindV1::TransitionTransportPayload,
+            &root.active_commitment_key_id,
+            "substrate.a1.raw-transport-payload.v1",
+        ),
+        payload_commitment: placeholder_commitment(),
+        issued_at: timestamp.clone(),
+        expires_at: TimestampV1::parse("2026-07-11T12:54:11.000000000Z").unwrap(),
+        state: HostSessionTransitionIntentStateV2::Issued,
+        input_handoff: HostSessionTransitionInputHandoffV1::NotApplicable,
+        transport_payload_state: HostSessionTransitionTransportPayloadStateV1::Retained,
+        updated_at: timestamp,
+    }
+}
+
+fn v2_with_issued_start(v1: &StateRootV1) -> StateRootV2 {
+    let mut root = StateRootV2::try_from_greenfield_v1(v1).unwrap();
+    let intent = placeholder_v2_intent(&root);
+    root.session_namespace_map.insert(
+        intent.orchestration_session_id.clone(),
+        SessionNamespaceRecordV1::StartReservation(SessionIdReservationV1 {
+            schema_version: 1,
+            orchestration_session_id: intent.orchestration_session_id.clone(),
+            intent_id: intent.intent_id.clone(),
+            issuer_request_id: intent.issuer_request_id.clone(),
+            payload_commitment: intent.payload_commitment.clone(),
+            reserved_at: intent.issued_at.clone(),
+        }),
+    );
+    root.issuer_request_index.insert(
+        intent.issuer_request_id.clone(),
+        IssuerRequestIndexEntryV1 {
+            schema_version: 1,
+            issuer_request_id: intent.issuer_request_id.clone(),
+            orchestration_session_id: intent.orchestration_session_id.clone(),
+            intent_id: intent.intent_id.clone(),
+            payload_commitment: intent.payload_commitment.clone(),
+        },
+    );
+    root.object_index.insert(
+        intent.transport_payload_ref.ref_id.clone(),
+        AuthorityObjectIndexEntryV1 {
+            schema_version: 1,
+            ref_id: intent.transport_payload_ref.ref_id.clone(),
+            object_kind: AuthorityObjectKindV1::TransitionTransportPayload,
+            object_schema_version: 1,
+            byte_length: 1,
+            storage_state: AuthorityObjectStorageStateV1::Present,
+        },
+    );
+    root.transition_intent_map
+        .insert(intent.intent_id.clone(), intent);
+    root
+}
+
+fn apply_placeholder_v2_start(root: &mut StateRootV2) {
+    let mut intent = root.transition_intent_map["intent-v2-start"].clone();
+    let application_result_ref = placeholder_ref(
+        "ao_85555555555555555555555555555555",
+        AuthorityObjectKindV1::ApplicationResult,
+    );
+    let applied_at = TimestampV1::parse("2026-07-11T12:50:11.000000000Z").unwrap();
+    intent.intent_revision = 3;
+    intent.state = HostSessionTransitionIntentStateV2::Applied {
+        claim_id: "claim-v2-start".into(),
+        claimant_attempt_id: "attempt-v2-start".into(),
+        authority_revision_before: None,
+        authority_revision_after: 1,
+        active_authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
+        resulting_posture: HostSessionPostureV1::ActiveAttached,
+        authority_record_commitment: placeholder_commitment(),
+        application_result_ref: application_result_ref.clone(),
+        startup_ownership: Box::new(HostSessionStartupOwnershipApplicationV1::Pending {
+            expected_run_id: intent.run_id.clone(),
+            expected_authority_revision: 1,
+            expected_active_authoritative_participant_id: intent
+                .target_authoritative_participant_id
+                .clone(),
+        }),
+        post_turn: Box::new(HostSessionPostTurnApplicationV1::NotApplicable),
+        applied_at: applied_at.clone(),
+    };
+    root.session_namespace_map.insert(
+        intent.orchestration_session_id.clone(),
+        SessionNamespaceRecordV1::Authority(Box::new(DurableSessionAuthorityV1 {
+            schema_version: 1,
+            orchestration_session_id: intent.orchestration_session_id.clone(),
+            shell_trace_session_id: intent.shell_trace_session_id.clone(),
+            authority_revision: 1,
+            origin: DurableSessionAuthorityOriginV1::StartIntent {
+                intent_id: intent.intent_id.clone(),
+                issuer_request_id: intent.issuer_request_id.clone(),
+                payload_commitment: intent.payload_commitment.clone(),
+            },
+            authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
+            active_authoritative_participant_id: Some(
+                intent.target_authoritative_participant_id.clone(),
+            ),
+            workspace_binding: intent.workspace_binding.clone(),
+            world_binding: intent.world_binding.clone(),
+            host_attach_contract_ref: Some(intent.host_attach_contract_ref.clone()),
+            retained_worker_refs: Vec::new(),
+            internal_resume_handle_refs: Vec::new(),
+            lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+            current_policy_ref: None,
+            current_policy_revision: None,
+            updated_at: applied_at.clone(),
+        })),
+    );
+    root.application_journal.insert(
+        intent.intent_id.clone(),
+        HostSessionTransitionApplicationJournalV2 {
+            schema_version: 2,
+            intent_id: intent.intent_id.clone(),
+            initial_application: InitialTransitionApplicationJournalV1 {
+                authority_revision_before: None,
+                authority_revision_after: 1,
+                authority_record_commitment: placeholder_commitment(),
+                application_result_ref: application_result_ref.clone(),
+                applied_at,
+            },
+            startup_terminal_application: None,
+            post_turn_application: None,
+        },
+    );
+    root.object_index.insert(
+        application_result_ref.ref_id.clone(),
+        AuthorityObjectIndexEntryV1 {
+            schema_version: 1,
+            ref_id: application_result_ref.ref_id.clone(),
+            object_kind: AuthorityObjectKindV1::ApplicationResult,
+            object_schema_version: 1,
+            byte_length: 1,
+            storage_state: AuthorityObjectStorageStateV1::Present,
+        },
+    );
+    root.transition_intent_map
+        .insert(intent.intent_id.clone(), intent);
 }
 
 #[test]
@@ -237,6 +443,224 @@ fn greenfield_v1_to_v2_conversion_rejects_each_occupied_semantic_map() {
         },
     );
     assert!(StateRootV2::try_from_greenfield_v1(&occupied).is_err());
+}
+
+#[test]
+fn strict_v2_accepts_only_start_and_matching_versioned_relations() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x12), None).unwrap();
+    let issued = v2_with_issued_start(&v1);
+    issued.validate().unwrap();
+
+    let mut non_start = issued.clone();
+    non_start
+        .transition_intent_map
+        .get_mut("intent-v2-start")
+        .unwrap()
+        .mode = HostSessionTransitionModeV1::Attach;
+    assert!(non_start.validate().is_err());
+
+    let mut wrong_member_version = issued.clone();
+    wrong_member_version
+        .transition_intent_map
+        .get_mut("intent-v2-start")
+        .unwrap()
+        .schema_version = 1;
+    assert!(wrong_member_version.validate().is_err());
+
+    let bytes = canonical_json::to_vec(&issued).unwrap();
+    let mut syntax: serde_json::Value = canonical_json::from_slice(&bytes).unwrap();
+    syntax["transition_intent_map"]["intent-v2-start"]["schema_version"] = serde_json::json!(1);
+    assert!(VersionedStateRoot::decode(&canonical_json::to_vec(&syntax).unwrap()).is_ok());
+    let VersionedStateRoot::V2(decoded) =
+        VersionedStateRoot::decode(&canonical_json::to_vec(&syntax).unwrap()).unwrap()
+    else {
+        panic!("root discriminator must remain V2")
+    };
+    assert!(decoded.validate().is_err());
+}
+
+#[test]
+fn strict_v2_applied_start_requires_claimant_pending_startup_and_no_post_turn() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x13), None).unwrap();
+    let mut applied = v2_with_issued_start(&v1);
+    apply_placeholder_v2_start(&mut applied);
+    applied.validate().unwrap();
+
+    let mut mismatched_startup = applied.clone();
+    let HostSessionTransitionIntentStateV2::Applied {
+        startup_ownership, ..
+    } = &mut mismatched_startup
+        .transition_intent_map
+        .get_mut("intent-v2-start")
+        .unwrap()
+        .state
+    else {
+        panic!("fixture must remain applied")
+    };
+    **startup_ownership = HostSessionStartupOwnershipApplicationV1::Pending {
+        expected_run_id: "substituted-run".into(),
+        expected_authority_revision: 1,
+        expected_active_authoritative_participant_id: "participant-v2-start".into(),
+    };
+    assert!(mismatched_startup.validate().is_err());
+
+    let mut post_turn = applied.clone();
+    let HostSessionTransitionIntentStateV2::Applied {
+        post_turn: state, ..
+    } = &mut post_turn
+        .transition_intent_map
+        .get_mut("intent-v2-start")
+        .unwrap()
+        .state
+    else {
+        panic!("fixture must remain applied")
+    };
+    **state = HostSessionPostTurnApplicationV1::Pending {
+        expected_run_id: "run-v2-start".into(),
+        expected_authority_revision: 1,
+    };
+    assert!(post_turn.validate().is_err());
+
+    let mut premature_release = applied.clone();
+    let terminal = placeholder_ref(
+        "ao_86666666666666666666666666666666",
+        AuthorityObjectKindV1::TerminalHandoff,
+    );
+    let intent = premature_release
+        .transition_intent_map
+        .get_mut("intent-v2-start")
+        .unwrap();
+    let transport_ref_id = intent.transport_payload_ref.ref_id.clone();
+    intent.transport_payload_state =
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+            terminal_handoff_ref: terminal.clone(),
+        };
+    premature_release
+        .object_index
+        .get_mut(&transport_ref_id)
+        .unwrap()
+        .storage_state = AuthorityObjectStorageStateV1::ReleaseEligible {
+        terminal_handoff_ref: terminal,
+    };
+    assert!(premature_release.validate().is_err());
+
+    let mut syntax: serde_json::Value =
+        canonical_json::from_slice(&canonical_json::to_vec(&applied).unwrap()).unwrap();
+    syntax["transition_intent_map"]["intent-v2-start"]["state"]["value"]
+        .as_object_mut()
+        .unwrap()
+        .remove("claimant_attempt_id");
+    assert!(VersionedStateRoot::decode(&canonical_json::to_vec(&syntax).unwrap()).is_err());
+}
+
+#[test]
+fn strict_v2_reachability_dispatches_through_v2_start_state() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x14), None).unwrap();
+    let issued = v2_with_issued_start(&v1);
+    let issued_refs = platform::reachable_v2_ref_ids_test(&issued).unwrap();
+    assert_eq!(issued_refs.len(), 4);
+    assert!(!issued_refs.contains(&"ao_85555555555555555555555555555555".to_string()));
+
+    let mut applied = issued;
+    apply_placeholder_v2_start(&mut applied);
+    let applied_refs = platform::reachable_v2_ref_ids_test(&applied).unwrap();
+    assert_eq!(applied_refs.len(), 5);
+    assert!(applied_refs.contains(&"ao_85555555555555555555555555555555".to_string()));
+}
+
+#[test]
+fn strict_v2_key_lifecycle_preserves_root_version_and_semantic_maps() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x15), None).unwrap();
+    let old_key_id = v1.active_commitment_key_id.clone();
+    let RootUpgradeOutcomeV1::Upgraded(v2) =
+        platform::upgrade_greenfield_root_test(root.path(), [0x71; 16], None).unwrap()
+    else {
+        panic!("fixture must publish strict V2")
+    };
+    let VersionedStateRoot::V2(rotated) =
+        platform::rotate_commitment_key_versioned_test(root.path(), material(0x16), None).unwrap()
+    else {
+        panic!("rotation must preserve V2")
+    };
+    assert_eq!(rotated.schema_version, 2);
+    assert_eq!(rotated.root_revision, v2.root_revision + 1);
+    assert_eq!(rotated.session_namespace_map, v2.session_namespace_map);
+    assert_eq!(rotated.transition_intent_map, v2.transition_intent_map);
+    assert_eq!(rotated.application_journal, v2.application_journal);
+
+    let VersionedStateRoot::V2(retired) =
+        platform::retire_commitment_key_versioned_test(root.path(), &old_key_id, [0x72; 16], None)
+            .unwrap()
+    else {
+        panic!("retirement must preserve V2")
+    };
+    assert_eq!(retired.schema_version, 2);
+    assert_eq!(retired.root_revision, rotated.root_revision + 1);
+    assert_eq!(
+        retired.commitment_key_registry[&old_key_id].state,
+        AuthorityStoreCommitmentKeyStateV1::Retired
+    );
+    assert_eq!(retired.session_namespace_map, v2.session_namespace_map);
+    assert_eq!(retired.transition_intent_map, v2.transition_intent_map);
+    assert_eq!(retired.application_journal, v2.application_journal);
+}
+
+#[test]
+fn strict_v2_rejects_v1_only_key_lifecycle_without_mutation() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x17), None).unwrap();
+    let old_key_id = v1.active_commitment_key_id.clone();
+    let RootUpgradeOutcomeV1::Upgraded(v2) =
+        platform::upgrade_greenfield_root_test(root.path(), [0x73; 16], None).unwrap()
+    else {
+        panic!("fixture must publish strict V2")
+    };
+    let before_root = fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap();
+    let before_keys = fs::read_dir(root.path().join("authority-v1/keys"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+
+    let rotation_error = rotate_commitment_key(root.path(), v2.root_revision).unwrap_err();
+    assert_eq!(
+        rotation_error.to_string(),
+        "V1 key rotation caller encountered StateRootV2"
+    );
+    let retirement_error =
+        retire_commitment_key(root.path(), &old_key_id, v2.root_revision).unwrap_err();
+    assert_eq!(
+        retirement_error.to_string(),
+        "V1 key retirement caller encountered StateRootV2"
+    );
+    assert_eq!(
+        fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        before_root
+    );
+    assert_eq!(
+        fs::read_dir(root.path().join("authority-v1/keys"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>(),
+        before_keys
+    );
+}
+
+#[test]
+fn strict_v2_applied_start_accepts_monotonic_revision_after_reclaim() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x18), None).unwrap();
+    let mut v2 = v2_with_issued_start(&v1);
+    apply_placeholder_v2_start(&mut v2);
+    v2.transition_intent_map
+        .get_mut("intent-v2-start")
+        .unwrap()
+        .intent_revision = 4;
+
+    v2.validate().unwrap();
 }
 
 #[test]
@@ -1372,7 +1796,9 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
     let mismatched_context = ObjectVerificationContextV1 {
         intent_id: intent_id.into(),
         run_id: run_id.into(),
-        parent_intent: Some(Box::new(parent.clone())),
+        parent_intent: Some(VersionedObjectVerificationParentIntentV1::V1(Box::new(
+            parent.clone(),
+        ))),
     };
     assert!(platform::publish_object_test(
         root.path(),
@@ -1447,7 +1873,9 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
     let exact_context = ObjectVerificationContextV1 {
         intent_id: intent_id.into(),
         run_id: run_id.into(),
-        parent_intent: Some(Box::new(candidate.transition_intent_map[intent_id].clone())),
+        parent_intent: Some(VersionedObjectVerificationParentIntentV1::V1(Box::new(
+            candidate.transition_intent_map[intent_id].clone(),
+        ))),
     };
     for bad_context in [
         ObjectVerificationContextV1 {
@@ -1608,7 +2036,9 @@ fn typed_transport_and_nested_object_graphs_must_match_their_parent() {
     let valid_context = ObjectVerificationContextV1 {
         intent_id: intent_id.into(),
         run_id: run_id.into(),
-        parent_intent: Some(Box::new(candidate.transition_intent_map[intent_id].clone())),
+        parent_intent: Some(VersionedObjectVerificationParentIntentV1::V1(Box::new(
+            candidate.transition_intent_map[intent_id].clone(),
+        ))),
     };
     platform::publish_object_test(
         root.path(),

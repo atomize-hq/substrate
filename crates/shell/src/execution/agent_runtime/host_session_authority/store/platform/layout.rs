@@ -230,6 +230,17 @@ impl<'a> StoreLayout<'a> {
         self.validate_existing_objects(root, false)
     }
 
+    pub(super) fn reconcile_after_preflight_v2(
+        &self,
+        root: &StateRootV2,
+    ) -> Result<(), StoreError> {
+        self.reconcile_temps()?;
+        self.remove_matching_marker_v2(root)?;
+        self.reconcile_key_files_v2(root)?;
+        self.reconcile_released_objects_v2(root)?;
+        self.validate_existing_objects_v2(root, false)
+    }
+
     pub(super) fn validate_closed_layout(&self) -> Result<(), StoreError> {
         for entry in self
             .authority
@@ -488,6 +499,40 @@ impl<'a> StoreLayout<'a> {
         Ok(root)
     }
 
+    pub(super) fn read_existing_versioned_without_reconciliation(
+        &self,
+        bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
+    ) -> Result<VersionedStateRoot, StoreError> {
+        let file = self
+            .authority
+            .open_file(ROOT_FILE)
+            .map_err(|_| StoreError("open versioned state root"))?;
+        let root = VersionedStateRoot::decode(
+            &file
+                .read_all()
+                .map_err(|_| StoreError("read versioned state root"))?,
+        )
+        .map_err(|_| StoreError("decode versioned state root"))?;
+        root.validate()
+            .map_err(|_| StoreError("validate versioned state root"))?;
+        if root.bootstrap_home() != bootstrap_home {
+            return Err(StoreError("versioned state root home mismatch"));
+        }
+        match &root {
+            VersionedStateRoot::V1(root) => {
+                self.validate_existing_keys(root)?;
+                self.validate_existing_objects(root, true)?;
+                self.validate_reachable_objects(root)?;
+            }
+            VersionedStateRoot::V2(root) => {
+                self.validate_existing_keys_v2(root)?;
+                self.validate_existing_objects_v2(root, true)?;
+                self.validate_reachable_objects_v2(root)?;
+            }
+        }
+        Ok(root)
+    }
+
     pub(super) fn read_greenfield_upgrade_root(
         &self,
         bootstrap_home: &crate::execution::agent_runtime::host_session_authority::schema::CanonicalDirectoryV1,
@@ -627,10 +672,6 @@ impl<'a> StoreLayout<'a> {
             self.keys
                 .revalidate_entry(entry)
                 .map_err(|_| StoreError("commitment key changed during validation"))?;
-            let record = root
-                .commitment_key_registry
-                .get(key_id)
-                .ok_or(StoreError("V2 root has an unregistered commitment key"))?;
             let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
                 &self
                     .keys
@@ -640,13 +681,21 @@ impl<'a> StoreLayout<'a> {
                     .map_err(|_| StoreError("read registered V2 commitment key"))?,
             )
             .map_err(|_| StoreError("decode registered V2 commitment key"))?;
-            if record.algorithm != AuthorityStoreCommitmentAlgorithmV1::HmacSha256
-                || envelope.authority_store_id != root.authority_store_id
-                || envelope.authority_store_id != record.authority_store_id
-                || envelope.key_id != record.key_id
-                || envelope.created_at != record.created_at
+            if let Some(record) = root.commitment_key_registry.get(key_id) {
+                if record.algorithm != AuthorityStoreCommitmentAlgorithmV1::HmacSha256
+                    || envelope.authority_store_id != root.authority_store_id
+                    || envelope.authority_store_id != record.authority_store_id
+                    || envelope.key_id != record.key_id
+                    || envelope.created_at != record.created_at
+                {
+                    return Err(StoreError("registered V2 commitment key identity mismatch"));
+                }
+            } else if envelope.authority_store_id != root.authority_store_id
+                || envelope.key_id != key_id
             {
-                return Err(StoreError("registered V2 commitment key identity mismatch"));
+                return Err(StoreError(
+                    "unregistered V2 commitment key identity mismatch",
+                ));
             }
         }
         for record in root.commitment_key_registry.values() {
@@ -666,6 +715,14 @@ impl<'a> StoreLayout<'a> {
         self.validate_existing_keys(root)?;
         self.validate_existing_objects(root, false)?;
         self.validate_reachable_objects(root)
+    }
+
+    pub(super) fn validate_root_candidate_v2(&self, root: &StateRootV2) -> Result<(), StoreError> {
+        root.validate()
+            .map_err(|_| StoreError("validate proposed V2 state root"))?;
+        self.validate_existing_keys_v2(root)?;
+        self.validate_existing_objects_v2(root, false)?;
+        self.validate_reachable_objects_v2(root)
     }
 
     pub(super) fn validate_existing_keys(&self, root: &StateRootV1) -> Result<(), StoreError> {
@@ -717,6 +774,17 @@ impl<'a> StoreLayout<'a> {
     }
 
     pub(super) fn reconcile_key_files(&self, root: &StateRootV1) -> Result<(), StoreError> {
+        self.reconcile_key_registry(&root.commitment_key_registry)
+    }
+
+    pub(super) fn reconcile_key_files_v2(&self, root: &StateRootV2) -> Result<(), StoreError> {
+        self.reconcile_key_registry(&root.commitment_key_registry)
+    }
+
+    fn reconcile_key_registry(
+        &self,
+        registry: &std::collections::BTreeMap<String, AuthorityStoreCommitmentKeyV1>,
+    ) -> Result<(), StoreError> {
         for entry in self
             .keys
             .entries()
@@ -726,7 +794,7 @@ impl<'a> StoreLayout<'a> {
                 .name
                 .strip_suffix(".key")
                 .ok_or(StoreError("commitment key filename is invalid"))?;
-            let remove = match root.commitment_key_registry.get(key_id) {
+            let remove = match registry.get(key_id) {
                 None => true,
                 Some(record) => record.state == AuthorityStoreCommitmentKeyStateV1::Retired,
             };
@@ -768,6 +836,22 @@ impl<'a> StoreLayout<'a> {
     pub(super) fn validate_existing_objects(
         &self,
         root: &StateRootV1,
+        allow_released_copy: bool,
+    ) -> Result<(), StoreError> {
+        self.validate_existing_object_index(&root.object_index, allow_released_copy)
+    }
+
+    pub(super) fn validate_existing_objects_v2(
+        &self,
+        root: &StateRootV2,
+        allow_released_copy: bool,
+    ) -> Result<(), StoreError> {
+        self.validate_existing_object_index(&root.object_index, allow_released_copy)
+    }
+
+    fn validate_existing_object_index(
+        &self,
+        object_index: &std::collections::BTreeMap<String, AuthorityObjectIndexEntryV1>,
         allow_released_copy: bool,
     ) -> Result<(), StoreError> {
         let mut present = std::collections::BTreeSet::new();
@@ -825,7 +909,7 @@ impl<'a> StoreLayout<'a> {
                     if !present.insert(ref_id.to_string()) {
                         return Err(StoreError("typed object ref is duplicated"));
                     }
-                    if let Some(index) = root.object_index.get(ref_id) {
+                    if let Some(index) = object_index.get(ref_id) {
                         let released = matches!(
                             index.storage_state,
                             AuthorityObjectStorageStateV1::Released { .. }
@@ -841,7 +925,7 @@ impl<'a> StoreLayout<'a> {
                 }
             }
         }
-        for (ref_id, index) in &root.object_index {
+        for (ref_id, index) in object_index {
             let must_exist = !matches!(
                 index.storage_state,
                 AuthorityObjectStorageStateV1::Released { .. }
@@ -856,7 +940,21 @@ impl<'a> StoreLayout<'a> {
     }
 
     pub(super) fn reconcile_released_objects(&self, root: &StateRootV1) -> Result<(), StoreError> {
-        for (ref_id, index) in &root.object_index {
+        self.reconcile_released_object_index(&root.object_index)
+    }
+
+    pub(super) fn reconcile_released_objects_v2(
+        &self,
+        root: &StateRootV2,
+    ) -> Result<(), StoreError> {
+        self.reconcile_released_object_index(&root.object_index)
+    }
+
+    fn reconcile_released_object_index(
+        &self,
+        object_index: &std::collections::BTreeMap<String, AuthorityObjectIndexEntryV1>,
+    ) -> Result<(), StoreError> {
+        for (ref_id, index) in object_index {
             if !matches!(
                 index.storage_state,
                 AuthorityObjectStorageStateV1::Released { .. }
@@ -1023,6 +1121,154 @@ impl<'a> StoreLayout<'a> {
             &retained_workers,
             &terminal_handoffs,
         )?;
+        Ok(())
+    }
+
+    pub(super) fn validate_reachable_objects_v2(
+        &self,
+        root: &StateRootV2,
+    ) -> Result<(), StoreError> {
+        let mut reachable = collect_reachable_objects_v2(root)?;
+        let mut pending = reachable.keys().cloned().collect::<Vec<_>>();
+        let mut processed = std::collections::BTreeSet::new();
+        let mut attach_contracts = std::collections::BTreeMap::new();
+        let mut descriptors = std::collections::BTreeMap::new();
+        let mut terminal_handoffs = std::collections::BTreeMap::new();
+        while let Some(ref_id) = pending.pop() {
+            if !processed.insert(ref_id.clone()) {
+                continue;
+            }
+            let object = reachable
+                .get(&ref_id)
+                .cloned()
+                .ok_or(StoreError("V2 reachable object disappeared"))?;
+            let index = root
+                .object_index
+                .get(&ref_id)
+                .ok_or(StoreError("V2 parent ref is absent from object index"))?;
+            if index.object_kind != object.reference.object_kind
+                || index.object_schema_version != object.reference.schema_version
+            {
+                return Err(StoreError("V2 parent ref and object index disagree"));
+            }
+            if matches!(
+                index.storage_state,
+                AuthorityObjectStorageStateV1::Released { .. }
+            ) {
+                continue;
+            }
+            let bytes = self.read_object_bytes(&object.reference)?;
+            verify_object_bytes(
+                self,
+                root,
+                &object.reference,
+                &bytes,
+                object.context.as_ref(),
+                true,
+            )
+            .map_err(|_| StoreError("V2 parent-owned object commitment mismatch"))?;
+            let before = reachable.len();
+            match object.reference.object_kind {
+                AuthorityObjectKindV1::HostAttachContract => {
+                    let value: HostAttachContractHashInputV1 =
+                        canonical_json::from_slice(&bytes)
+                            .map_err(|_| StoreError("decode V2 host attach contract graph"))?;
+                    add_expected_ref(
+                        &mut reachable,
+                        &value.contract.descriptor_ref,
+                        AuthorityObjectKindV1::AgentDescriptor,
+                        None,
+                    )?;
+                    add_expected_ref(
+                        &mut reachable,
+                        &value.contract.policy_ref,
+                        AuthorityObjectKindV1::Policy,
+                        None,
+                    )?;
+                    if value.contract.continuity_resume_handle_ref.is_some() {
+                        return Err(StoreError("A1.2a Start attach contract has a resume ref"));
+                    }
+                    attach_contracts.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::AgentDescriptor => {
+                    let value: AgentDescriptorHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V2 agent descriptor graph"))?;
+                    descriptors.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::TerminalHandoff => {
+                    let value: TerminalHandoffHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V2 terminal handoff graph"))?;
+                    terminal_handoffs.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::RetainedWorker | AuthorityObjectKindV1::ResumeHandle => {
+                    return Err(StoreError(
+                        "A1.2a V2 cannot reach retained or resume objects",
+                    ));
+                }
+                _ => {}
+            }
+            if reachable.len() > before {
+                pending.extend(
+                    reachable
+                        .keys()
+                        .filter(|key| !processed.contains(*key))
+                        .cloned(),
+                );
+            }
+        }
+        if reachable.len() != root.object_index.len() {
+            return Err(StoreError("V2 object index and parent reachability differ"));
+        }
+        for (ref_id, attach) in &attach_contracts {
+            let descriptor = descriptors
+                .get(&attach.contract.descriptor_ref.ref_id)
+                .ok_or(StoreError("V2 attach descriptor is unreachable"))?;
+            if descriptor.descriptor.backend_id != attach.contract.backend_id
+                || descriptor.descriptor.protocol != attach.contract.protocol
+                || descriptor.descriptor.execution_scope != attach.contract.execution_scope
+            {
+                return Err(StoreError("V2 attach contract and descriptor disagree"));
+            }
+            for intent in root
+                .transition_intent_map
+                .values()
+                .filter(|intent| intent.host_attach_contract_ref.ref_id == *ref_id)
+            {
+                if attach.contract.descriptor_ref != intent.descriptor_ref
+                    || attach.contract.continuity_resume_handle_ref.is_some()
+                {
+                    return Err(StoreError("V2 attach contract and Start intent disagree"));
+                }
+            }
+        }
+        for intent in root.transition_intent_map.values() {
+            let terminal_ref = match &intent.state {
+                HostSessionTransitionIntentStateV2::Rejected {
+                    terminal_handoff_ref,
+                    ..
+                }
+                | HostSessionTransitionIntentStateV2::Expired {
+                    terminal_handoff_ref,
+                    ..
+                } => Some(terminal_handoff_ref),
+                _ => match &intent.transport_payload_state {
+                    HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+                        terminal_handoff_ref,
+                    }
+                    | HostSessionTransitionTransportPayloadStateV1::Released {
+                        terminal_handoff_ref,
+                        ..
+                    } => Some(terminal_handoff_ref),
+                    HostSessionTransitionTransportPayloadStateV1::Retained => None,
+                },
+            };
+            if let Some(reference) = terminal_ref {
+                let terminal = terminal_handoffs
+                    .get(&reference.ref_id)
+                    .ok_or(StoreError("V2 terminal handoff is unreachable"))?;
+                validate_terminal_handoff_v2(intent, terminal)?;
+            }
+        }
         Ok(())
     }
 
@@ -1399,6 +1645,50 @@ fn validate_terminal_handoff(
         || terminal.post_turn_application_result_ref.as_ref() != post_turn_application_result_ref
     {
         Err(StoreError("terminal handoff and intent graph disagree"))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_terminal_handoff_v2(
+    intent: &HostSessionTransitionIntentV2,
+    terminal: &TerminalHandoffHashInputV1,
+) -> Result<(), StoreError> {
+    let (state, application_result_ref) = match &intent.state {
+        HostSessionTransitionIntentStateV2::Applied {
+            application_result_ref,
+            ..
+        } => (
+            TerminalHandoffStateV1::Applied,
+            Some(application_result_ref),
+        ),
+        HostSessionTransitionIntentStateV2::Rejected { reason, .. } => {
+            (TerminalHandoffStateV1::Rejected { reason: *reason }, None)
+        }
+        HostSessionTransitionIntentStateV2::Expired { .. } => {
+            (TerminalHandoffStateV1::Expired, None)
+        }
+        HostSessionTransitionIntentStateV2::Issued
+        | HostSessionTransitionIntentStateV2::Claimed { .. } => {
+            return Err(StoreError("nonterminal V2 Start has a terminal handoff"))
+        }
+    };
+    let input_acceptance_ref = match &intent.input_handoff {
+        HostSessionTransitionInputHandoffV1::Accepted { acceptance_ref, .. } => {
+            Some(acceptance_ref)
+        }
+        _ => None,
+    };
+    if terminal.intent_id != intent.intent_id
+        || terminal.run_id != intent.run_id
+        || terminal.payload_commitment != intent.payload_commitment
+        || terminal.terminal_state != state
+        || terminal.application_result_ref.as_ref() != application_result_ref
+        || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+        || terminal.post_turn_completion_ref.is_some()
+        || terminal.post_turn_application_result_ref.is_some()
+    {
+        Err(StoreError("V2 terminal handoff and Start intent disagree"))
     } else {
         Ok(())
     }
