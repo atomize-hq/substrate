@@ -14,8 +14,9 @@ use super::schema::{
     HostAttachCapabilitiesV1, HostAttachContractHashInputV1, HostAttachContractV1,
     HostAttachLaunchKnobsV1, HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
     HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
-    HostSessionTransitionPayloadHashInputV1, PolicyObjectHashInputV1, TimestampV1,
-    TransitionTransportPayloadObjectV1, WorkspaceBindingV1, WorldBindingV1,
+    HostSessionTransitionPayloadHashInputV1, PolicyObjectHashInputV1, TerminalHandoffHashInputV1,
+    TerminalHandoffStateV1, TimestampV1, TransitionTransportPayloadObjectV1, WorkspaceBindingV1,
+    WorldBindingV1,
 };
 use super::store::{
     self, GeneratedObjectV1, ObjectVerificationContextV1, VersionedObjectVerificationParentIntentV1,
@@ -27,7 +28,8 @@ use super::store_schema::{
     HostSessionTransitionIntentStateV2, HostSessionTransitionIntentV2,
     HostSessionTransitionTransportPayloadStateV1, InitialTransitionApplicationJournalV1,
     IssuerRequestIndexEntryV1, RetainedWorkerAuthorityRegistrationRequestStateV1,
-    SessionIdReservationV1, SessionNamespaceRecordV1, StateRootV2,
+    SessionIdReservationV1, SessionIdTombstoneV1, SessionNamespaceRecordV1, StartTombstoneStateV1,
+    StateRootV2,
 };
 use super::trusted_fs::TrustedWorkspaceRoot;
 
@@ -112,6 +114,26 @@ pub(crate) struct ApplyHostSessionTransitionRequestV1 {
 pub(crate) enum TransitionApplicationOutcomeV1 {
     Applied(HostSessionTransitionIntentV2),
     Joined(HostSessionTransitionIntentV2),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExpireHostSessionTransitionRequestV1 {
+    pub(crate) intent_id: String,
+    pub(crate) issuer_request_id: String,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) expected_intent_revision: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum TransitionTerminalOutcomeV1 {
+    Expired(HostSessionTransitionIntentV2),
+    Joined(HostSessionTransitionIntentV2),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExpiryCrashPointV1 {
+    TerminalPublished,
+    RootCommitted,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -850,6 +872,166 @@ impl HostSessionAuthority {
         ))
     }
 
+    pub(crate) fn expire_start(
+        &self,
+        request: &ExpireHostSessionTransitionRequestV1,
+    ) -> Result<TransitionTerminalOutcomeV1, TransitionProtocolError> {
+        self.expire_start_inner(request, now_timestamp()?, None)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn expire_start_at(
+        &self,
+        request: &ExpireHostSessionTransitionRequestV1,
+        expired_at: TimestampV1,
+    ) -> Result<TransitionTerminalOutcomeV1, TransitionProtocolError> {
+        self.expire_start_inner(request, expired_at, None)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn expire_start_at_with_crash_point(
+        &self,
+        request: &ExpireHostSessionTransitionRequestV1,
+        expired_at: TimestampV1,
+        crash_point: ExpiryCrashPointV1,
+    ) -> Result<TransitionTerminalOutcomeV1, TransitionProtocolError> {
+        self.expire_start_inner(request, expired_at, Some(crash_point))
+    }
+
+    fn expire_start_inner(
+        &self,
+        request: &ExpireHostSessionTransitionRequestV1,
+        expired_at: TimestampV1,
+        crash_point: Option<ExpiryCrashPointV1>,
+    ) -> Result<TransitionTerminalOutcomeV1, TransitionProtocolError> {
+        let current = self.read_a12a_root()?;
+        let intent = exact_transition_attempt(
+            &current,
+            &request.intent_id,
+            &request.issuer_request_id,
+            &request.payload_commitment,
+            "expiry",
+        )?;
+        let workspace = TrustedWorkspaceRoot::open_exact(&intent.workspace_binding.workspace_root)
+            .map_err(protocol_error)?;
+        workspace.revalidate().map_err(protocol_error)?;
+        if matches!(
+            intent.state,
+            HostSessionTransitionIntentStateV2::Expired { .. }
+        ) {
+            verify_terminal_start(self, &current, &intent)?;
+            workspace.revalidate().map_err(protocol_error)?;
+            return Ok(TransitionTerminalOutcomeV1::Joined(intent));
+        }
+        if request.expected_intent_revision != intent.intent_revision {
+            return Err(error("transition expiry intent revision is stale"));
+        }
+        if expired_at.as_str() < intent.expires_at.as_str() {
+            return Err(error("transition intent has not reached its fixed expiry"));
+        }
+        if expired_at.as_str() < intent.updated_at.as_str() {
+            return Err(error(
+                "transition expiry time regresses durable intent time",
+            ));
+        }
+        if !matches!(
+            intent.state,
+            HostSessionTransitionIntentStateV2::Issued
+                | HostSessionTransitionIntentStateV2::Claimed { .. }
+        ) || current.application_journal.contains_key(&intent.intent_id)
+        {
+            return Err(error("transition intent cannot be expired"));
+        }
+        verify_start_reservation(&current, &intent)?;
+        verify_start_intent_objects(self, &current, &intent)?;
+
+        let terminal_value = TerminalHandoffHashInputV1 {
+            schema_version: 1,
+            intent_id: intent.intent_id.clone(),
+            run_id: intent.run_id.clone(),
+            payload_commitment: intent.payload_commitment.clone(),
+            terminal_state: TerminalHandoffStateV1::Expired,
+            application_result_ref: None,
+            input_acceptance_ref: None,
+            post_turn_completion_ref: None,
+            post_turn_application_result_ref: None,
+            recorded_at: expired_at.clone(),
+        };
+        let terminal_bytes = canonical_object_bytes(
+            AuthorityObjectKindV1::TerminalHandoff,
+            CanonicalObjectHashInputV1::TerminalHandoff(&terminal_value),
+        )
+        .map_err(protocol_error)?;
+        let terminal = self.prepare_generated_start_object(
+            &current,
+            AuthorityObjectKindV1::TerminalHandoff,
+            &terminal_bytes,
+            None,
+        )?;
+        stop_expiry_at(crash_point, ExpiryCrashPointV1::TerminalPublished)?;
+
+        let next_intent_revision = next_revision(intent.intent_revision, "transition intent")?;
+        let mut proposed = current.clone();
+        proposed.root_revision = next_revision(current.root_revision, "authority root")?;
+        let next = proposed
+            .transition_intent_map
+            .get_mut(&intent.intent_id)
+            .ok_or_else(|| error("transition intent disappeared during expiry"))?;
+        next.intent_revision = next_intent_revision;
+        next.state = HostSessionTransitionIntentStateV2::Expired {
+            terminal_handoff_ref: terminal.reference.clone(),
+            expired_at: expired_at.clone(),
+        };
+        if let HostSessionTransitionInputHandoffV1::Pending { input_ref, run_id } =
+            &next.input_handoff
+        {
+            next.input_handoff = HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance {
+                input_ref: input_ref.clone(),
+                run_id: run_id.clone(),
+                terminal_handoff_ref: terminal.reference.clone(),
+                terminal_at: expired_at.clone(),
+            };
+        }
+        next.updated_at = expired_at.clone();
+        proposed.session_namespace_map.insert(
+            intent.orchestration_session_id.clone(),
+            SessionNamespaceRecordV1::StartTombstone(SessionIdTombstoneV1 {
+                schema_version: 1,
+                orchestration_session_id: intent.orchestration_session_id.clone(),
+                intent_id: intent.intent_id.clone(),
+                issuer_request_id: intent.issuer_request_id.clone(),
+                payload_commitment: intent.payload_commitment.clone(),
+                terminal_state: StartTombstoneStateV1::Expired,
+                terminal_handoff_ref: terminal.reference.clone(),
+                tombstoned_at: expired_at,
+            }),
+        );
+        insert_present_index(
+            &mut proposed,
+            &terminal.reference,
+            AuthorityObjectKindV1::TerminalHandoff,
+            terminal.byte_length,
+        )?;
+        proposed.validate().map_err(protocol_error)?;
+        workspace.revalidate().map_err(protocol_error)?;
+        store::commit_v2_root_exact_current_opened(
+            self.trusted_root(),
+            &current,
+            &proposed,
+            || {
+                workspace
+                    .revalidate()
+                    .map_err(|_| store::BootstrapError::transition_guard())
+            },
+        )
+        .map_err(protocol_error)?;
+        stop_expiry_at(crash_point, ExpiryCrashPointV1::RootCommitted)?;
+        workspace.revalidate().map_err(protocol_error)?;
+        Ok(TransitionTerminalOutcomeV1::Expired(
+            proposed.transition_intent_map[&request.intent_id].clone(),
+        ))
+    }
+
     pub(crate) fn read_a12a_root(&self) -> Result<StateRootV2, TransitionProtocolError> {
         store::read_opened_root_v2(self.trusted_root()).map_err(protocol_error)
     }
@@ -1092,7 +1274,7 @@ fn verify_start_intent_objects(
     Ok(())
 }
 
-fn verify_applied_start(
+pub(super) fn verify_applied_start(
     authority: &HostSessionAuthority,
     root: &StateRootV2,
     intent: &HostSessionTransitionIntentV2,
@@ -1415,6 +1597,12 @@ fn verify_joined_objects(
     request: &IssueHostSessionTransitionRequestV1,
     intent: &HostSessionTransitionIntentV2,
 ) -> Result<(), TransitionProtocolError> {
+    if matches!(
+        intent.state,
+        HostSessionTransitionIntentStateV2::Expired { .. }
+    ) {
+        verify_terminal_start(authority, root, intent)?;
+    }
     let context = ObjectVerificationContextV1 {
         intent_id: intent.intent_id.clone(),
         run_id: intent.run_id.clone(),
@@ -1512,6 +1700,45 @@ fn verify_joined_objects(
         ));
     }
     Ok(())
+}
+
+fn verify_terminal_start(
+    authority: &HostSessionAuthority,
+    root: &StateRootV2,
+    intent: &HostSessionTransitionIntentV2,
+) -> Result<(), TransitionProtocolError> {
+    let (terminal_handoff_ref, recorded_at) = match &intent.state {
+        HostSessionTransitionIntentStateV2::Expired {
+            terminal_handoff_ref,
+            expired_at,
+        } => (terminal_handoff_ref, expired_at),
+        _ => return Err(error("Start transition is not expired")),
+    };
+    let bytes = store::read_typed_object_v2_opened(
+        authority.trusted_root(),
+        root.root_revision,
+        terminal_handoff_ref,
+        None,
+    )
+    .map_err(protocol_error)?;
+    let terminal: TerminalHandoffHashInputV1 =
+        canonical_json::from_slice(&bytes).map_err(protocol_error)?;
+    let expected = TerminalHandoffHashInputV1 {
+        schema_version: 1,
+        intent_id: intent.intent_id.clone(),
+        run_id: intent.run_id.clone(),
+        payload_commitment: intent.payload_commitment.clone(),
+        terminal_state: TerminalHandoffStateV1::Expired,
+        application_result_ref: None,
+        input_acceptance_ref: None,
+        post_turn_completion_ref: None,
+        post_turn_application_result_ref: None,
+        recorded_at: recorded_at.clone(),
+    };
+    if terminal != expected {
+        return Err(error("expired Start terminal handoff conflicts"));
+    }
+    verify_start_intent_objects(authority, root, intent)
 }
 
 fn validate_new_start_request(
@@ -1781,6 +2008,17 @@ fn stop_application_at(
 ) -> Result<(), TransitionProtocolError> {
     if actual == Some(expected) {
         Err(error("injected Start application interruption"))
+    } else {
+        Ok(())
+    }
+}
+
+fn stop_expiry_at(
+    actual: Option<ExpiryCrashPointV1>,
+    expected: ExpiryCrashPointV1,
+) -> Result<(), TransitionProtocolError> {
+    if actual == Some(expected) {
+        Err(error("injected Start expiry interruption"))
     } else {
         Ok(())
     }

@@ -2,7 +2,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use super::facade::HostSessionAuthority;
+use super::facade::{AuthorityParticipantRoleV1, HostSessionAuthority};
 use super::schema::{
     AgentDescriptorV1, AgentExecutionScopeV1, AuthoritativeLineageHashInputV1,
     AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
@@ -13,16 +13,18 @@ use super::schema::{
 };
 use super::store_schema::{
     DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1,
-    HostSessionStartupOwnershipApplicationV1, HostSessionTransitionIntentStateV2,
+    HostSessionStartupOwnershipApplicationV1, HostSessionTransitionInputHandoffV1,
+    HostSessionTransitionIntentStateV2, HostSessionTransitionTransportPayloadStateV1,
     RetainedWorkerAuthorityRegistrationRequestStateV1,
     RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
-    SessionNamespaceRecordV1,
+    SessionNamespaceRecordV1, StartTombstoneStateV1,
 };
 use super::transition::{
     ApplicationCrashPointV1, ApplyHostSessionTransitionRequestV1,
-    ClaimHostSessionTransitionRequestV1, IssueCrashPointV1, IssueHostSessionTransitionRequestV1,
-    StartContractMaterialV1, TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1,
-    TransitionIssueOutcomeV1,
+    ClaimHostSessionTransitionRequestV1, ExpireHostSessionTransitionRequestV1, ExpiryCrashPointV1,
+    IssueCrashPointV1, IssueHostSessionTransitionRequestV1, StartContractMaterialV1,
+    TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
+    TransitionTerminalOutcomeV1,
 };
 
 fn timestamp(value: &str) -> TimestampV1 {
@@ -736,4 +738,260 @@ fn start_application_crash_windows_reconcile_without_duplicate_birth() {
                 if value.authority_revision == 1
         ));
     }
+}
+
+#[test]
+fn start_expiry_atomically_terminalizes_input_and_burns_the_namespace() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.transition_input = Some(b"initial prompt".to_vec());
+    let issued_at = timestamp("2026-07-14T12:00:00.000000000Z");
+    let TransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_start_at(&request, issued_at.clone(), 300)
+        .unwrap()
+    else {
+        panic!("first issuance must commit")
+    };
+    let expiry = ExpireHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+    };
+    let before = authority.read_a12a_root().unwrap();
+    assert!(authority
+        .expire_start_at(&expiry, timestamp("2026-07-14T12:04:59.999999999Z"))
+        .is_err());
+    assert_eq!(authority.read_a12a_root().unwrap(), before);
+
+    let TransitionTerminalOutcomeV1::Expired(expired) = authority
+        .expire_start_at(&expiry, timestamp("2026-07-14T12:05:00.000000000Z"))
+        .unwrap()
+    else {
+        panic!("fixed expiry must commit terminal Start truth")
+    };
+    let terminal_ref = match &expired.state {
+        HostSessionTransitionIntentStateV2::Expired {
+            terminal_handoff_ref,
+            expired_at,
+        } if expired_at.as_str() == "2026-07-14T12:05:00.000000000Z" => {
+            terminal_handoff_ref.clone()
+        }
+        state => panic!("unexpected terminal state: {state:?}"),
+    };
+    assert!(matches!(
+        expired.input_handoff,
+        HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance {
+            ref terminal_handoff_ref,
+            ..
+        } if terminal_handoff_ref == &terminal_ref
+    ));
+    assert_eq!(
+        expired.transport_payload_state,
+        HostSessionTransitionTransportPayloadStateV1::Retained
+    );
+    let terminal = authority.read_a12a_root().unwrap();
+    assert!(terminal.application_journal.is_empty());
+    assert!(matches!(
+        terminal.session_namespace_map[&request.orchestration_session_id],
+        SessionNamespaceRecordV1::StartTombstone(ref tombstone)
+            if tombstone.intent_id == request.intent_id
+                && tombstone.terminal_state == StartTombstoneStateV1::Expired
+                && tombstone.terminal_handoff_ref == terminal_ref
+    ));
+
+    assert!(matches!(
+        authority
+            .expire_start_at(&expiry, timestamp("2026-07-14T12:06:00.000000000Z"))
+            .unwrap(),
+        TransitionTerminalOutcomeV1::Joined(ref joined) if joined == &expired
+    ));
+    assert_eq!(authority.read_a12a_root().unwrap(), terminal);
+    assert!(matches!(
+        authority
+            .issue_start_at(&request, issued_at, 300)
+            .unwrap(),
+        TransitionIssueOutcomeV1::Joined(ref joined) if joined == &expired
+    ));
+    assert_eq!(authority.read_a12a_root().unwrap(), terminal);
+}
+
+#[test]
+fn claimed_start_expires_only_at_fixed_intent_expiry_and_conflicts_do_not_mutate() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let TransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300)
+        .unwrap()
+    else {
+        panic!("first issuance must commit")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-expiry-1".into(),
+        claimant_attempt_id: "attempt-expiry-1".into(),
+    };
+    let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_start_at(&claim, timestamp("2026-07-14T12:01:00.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("claim must commit")
+    };
+    let expiry = ExpireHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+    };
+    let claimed_root = authority.read_a12a_root().unwrap();
+    let mut conflict = expiry.clone();
+    conflict.payload_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into(),
+    };
+    assert!(authority
+        .expire_start_at(&conflict, timestamp("2026-07-14T12:05:00.000000000Z"))
+        .is_err());
+    assert_eq!(authority.read_a12a_root().unwrap(), claimed_root);
+    assert!(matches!(
+        authority
+            .expire_start_at(&expiry, timestamp("2026-07-14T12:05:00.000000000Z"))
+            .unwrap(),
+        TransitionTerminalOutcomeV1::Expired(_)
+    ));
+}
+
+#[test]
+fn start_expiry_crash_windows_reconcile_to_one_terminal_root() {
+    for crash_point in [
+        ExpiryCrashPointV1::TerminalPublished,
+        ExpiryCrashPointV1::RootCommitted,
+    ] {
+        let (_parent, authority, binding) = authority();
+        let home = binding.authority_store_root.physical_path.clone();
+        let request = start_request(binding);
+        let TransitionIssueOutcomeV1::Issued(issued) = authority
+            .issue_start_at(&request, timestamp("2026-07-14T12:00:00.000000000Z"), 300)
+            .unwrap()
+        else {
+            panic!("first issuance must commit")
+        };
+        let expiry = ExpireHostSessionTransitionRequestV1 {
+            intent_id: issued.intent_id.clone(),
+            issuer_request_id: issued.issuer_request_id.clone(),
+            payload_commitment: issued.payload_commitment.clone(),
+            expected_intent_revision: issued.intent_revision,
+        };
+        let issued_root = authority.read_a12a_root().unwrap();
+        assert!(authority
+            .expire_start_at_with_crash_point(
+                &expiry,
+                timestamp("2026-07-14T12:05:00.000000000Z"),
+                crash_point,
+            )
+            .is_err());
+        drop(authority);
+        let reopened = HostSessionAuthority::open(Path::new(&home)).unwrap();
+        let observed = reopened.read_a12a_root().unwrap();
+        match crash_point {
+            ExpiryCrashPointV1::TerminalPublished => assert_eq!(observed, issued_root),
+            ExpiryCrashPointV1::RootCommitted => assert!(matches!(
+                observed.transition_intent_map[&request.intent_id].state,
+                HostSessionTransitionIntentStateV2::Expired { .. }
+            )),
+        }
+        assert!(matches!(
+            reopened
+                .expire_start_at(&expiry, timestamp("2026-07-14T12:06:00.000000000Z"))
+                .unwrap(),
+            TransitionTerminalOutcomeV1::Expired(_) | TransitionTerminalOutcomeV1::Joined(_)
+        ));
+        let final_root = reopened.read_a12a_root().unwrap();
+        assert!(matches!(
+            final_root.session_namespace_map[&request.orchestration_session_id],
+            SessionNamespaceRecordV1::StartTombstone(_)
+        ));
+        assert_eq!(
+            final_root
+                .object_index
+                .values()
+                .filter(|entry| entry.object_kind == AuthorityObjectKindV1::TerminalHandoff)
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn typed_current_authority_read_joins_applied_descriptor_and_bound_store() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding.clone());
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-current-1".into(),
+        world_generation: 7,
+    });
+    let application = issue_and_claim_start(&authority, &request);
+    assert!(authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .is_err());
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+
+    let resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(
+        resolved.authority.orchestration_session_id,
+        request.orchestration_session_id
+    );
+    assert_eq!(resolved.authority.authority_revision, 1);
+    assert_eq!(
+        resolved.authority.authoritative_participant_lineage,
+        request.resulting_authoritative_lineage
+    );
+    assert_eq!(
+        resolved.authority.workspace_binding,
+        request.workspace_binding
+    );
+    assert_eq!(resolved.authority.world_binding, request.world_binding);
+    assert_eq!(
+        resolved.caller.participant_id,
+        request.target_authoritative_participant_id
+    );
+    assert_eq!(
+        resolved.caller.role,
+        AuthorityParticipantRoleV1::Orchestrator
+    );
+    assert_eq!(
+        resolved.caller.descriptor,
+        request.start_contract.descriptor
+    );
+    assert_eq!(
+        resolved.host_attach_contract.policy_ref,
+        resolved.authority.current_policy_ref.clone().unwrap()
+    );
+    assert_eq!(resolved.current_policy, request.start_contract.policy);
+    assert_eq!(
+        resolved.bound_state_store.bootstrap_home_identity(),
+        &binding.authority_store_root
+    );
+
+    let observation = resolved.observation.clone();
+    let exact = authority
+        .resolve_current_exact(&request.orchestration_session_id, Some(&observation))
+        .unwrap();
+    assert_eq!(exact.observation, observation);
+    let mut stale = observation;
+    stale.authority_revision += 1;
+    assert!(authority
+        .resolve_current_exact(&request.orchestration_session_id, Some(&stale))
+        .is_err());
 }

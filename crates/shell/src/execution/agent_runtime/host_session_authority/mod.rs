@@ -26,8 +26,14 @@ pub(crate) mod trusted_fs;
 #[allow(dead_code)]
 pub(crate) mod validation;
 
+#[allow(
+    unused_imports,
+    reason = "A1.2a lands the bounded read contract before A1.2a-S adopts it"
+)]
 pub(crate) use facade::{
-    AuthorityObservationV1, HostSessionAuthority, OpenedBootstrapHomeV1, ResolvedSessionAuthorityV1,
+    AuthorityObservationV1, AuthorityParticipantRoleV1, HostSessionAuthority,
+    OpenedBootstrapHomeV1, ResolvedAuthorityCallerV1, ResolvedCurrentAuthorityV1,
+    ResolvedSessionAuthorityV1,
 };
 
 #[cfg(test)]

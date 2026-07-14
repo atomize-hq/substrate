@@ -4,16 +4,25 @@ use std::fmt;
 #[cfg(test)]
 use std::path::Path;
 
+use super::canonical_json;
 use super::hash::canonical_sha256;
 use super::schema::{
-    AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectRefV1,
-    CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
+    AgentDescriptorHashInputV1, AgentDescriptorV1, AuthoritativeLineageHashInputV1,
+    AuthorityObjectCommitmentV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
+    DurableSessionAuthorityHashInputV1, DurableSessionAuthorityOriginV1,
+    HostAttachContractHashInputV1, HostAttachContractV1, HostSessionPostureV1,
+    PolicyObjectHashInputV1,
 };
 use super::store::{
     self, BootstrapClassificationV1, ExpectedRevisionsV1, ObjectPublicationOutcomeV1,
     ObjectVerificationContextV1, TransactionCommitOutcomeV1,
 };
-use super::store_schema::{DurableSessionAuthorityV1, SessionNamespaceRecordV1, StateRootV1};
+use super::store_schema::{
+    DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1,
+    HostSessionStartupOwnershipApplicationV1, HostSessionTransitionIntentStateV2,
+    SessionNamespaceRecordV1, StateRootV1,
+};
+use super::transition::{verify_applied_start, ApplyHostSessionTransitionRequestV1};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use super::trusted_fs::EntryKind;
 use super::trusted_fs::TrustedAuthorityRoot;
@@ -42,6 +51,29 @@ pub(crate) struct ResolvedSessionAuthorityV1 {
     pub(crate) authoritative_lineage_commitment: AuthorityObjectCommitmentV1,
     authority_store_id: String,
     bootstrap_home: CanonicalDirectoryV1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AuthorityParticipantRoleV1 {
+    Orchestrator,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ResolvedAuthorityCallerV1 {
+    pub(crate) participant_id: String,
+    pub(crate) role: AuthorityParticipantRoleV1,
+    pub(crate) descriptor_ref: AuthorityObjectRefV1,
+    pub(crate) descriptor: AgentDescriptorV1,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedCurrentAuthorityV1 {
+    pub(crate) observation: AuthorityObservationV1,
+    pub(crate) authority: DurableSessionAuthorityV1,
+    pub(crate) caller: ResolvedAuthorityCallerV1,
+    pub(crate) host_attach_contract: HostAttachContractV1,
+    pub(crate) current_policy: PolicyObjectHashInputV1,
+    pub(crate) bound_state_store: super::super::state_store::BoundAgentRuntimeStateStore,
 }
 
 impl ResolvedSessionAuthorityV1 {
@@ -339,6 +371,213 @@ impl HostSessionAuthority {
             ));
         }
         Ok(resolved)
+    }
+
+    pub(crate) fn resolve_current_exact(
+        &self,
+        orchestration_session_id: &str,
+        expected: Option<&AuthorityObservationV1>,
+    ) -> Result<ResolvedCurrentAuthorityV1, AuthorityFacadeError> {
+        if orchestration_session_id.is_empty() {
+            return Err(AuthorityFacadeError(
+                "orchestration session ID must be exact and non-empty".into(),
+            ));
+        }
+        let root = store::read_opened_root_v2(&self.root).map_err(store_error)?;
+        let Some(SessionNamespaceRecordV1::Authority(authority)) =
+            root.session_namespace_map.get(orchestration_session_id)
+        else {
+            return Err(AuthorityFacadeError(
+                "exact V2 session namespace record is not current durable authority".into(),
+            ));
+        };
+        let authority = authority.as_ref().clone();
+        let DurableSessionAuthorityOriginV1::StartIntent {
+            intent_id,
+            issuer_request_id,
+            payload_commitment,
+        } = &authority.origin;
+        let intent = root
+            .transition_intent_map
+            .get(intent_id)
+            .ok_or_else(|| AuthorityFacadeError("current authority has no Start intent".into()))?;
+        if intent.issuer_request_id != *issuer_request_id
+            || intent.payload_commitment != *payload_commitment
+            || intent.orchestration_session_id != orchestration_session_id
+        {
+            return Err(AuthorityFacadeError(
+                "current authority origin conflicts with its Start intent".into(),
+            ));
+        }
+        let (claim_id, authority_revision_after, active_authoritative_participant_id) =
+            match &intent.state {
+                HostSessionTransitionIntentStateV2::Applied {
+                    claim_id,
+                    authority_revision_before: None,
+                    authority_revision_after,
+                    active_authoritative_participant_id,
+                    resulting_posture: HostSessionPostureV1::ActiveAttached,
+                    startup_ownership,
+                    post_turn,
+                    ..
+                } if matches!(
+                    startup_ownership.as_ref(),
+                    HostSessionStartupOwnershipApplicationV1::Pending {
+                        expected_run_id,
+                        expected_authority_revision,
+                        expected_active_authoritative_participant_id,
+                    } if expected_run_id == &intent.run_id
+                        && expected_authority_revision == authority_revision_after
+                        && expected_active_authoritative_participant_id
+                            == active_authoritative_participant_id
+                ) && post_turn.as_ref()
+                    == &HostSessionPostTurnApplicationV1::NotApplicable =>
+                {
+                    (
+                        claim_id,
+                        *authority_revision_after,
+                        active_authoritative_participant_id,
+                    )
+                }
+                _ => {
+                    return Err(AuthorityFacadeError(
+                        "current authority is not a complete applied A1.2a Start".into(),
+                    ))
+                }
+            };
+        if authority_revision_after != 1
+            || active_authoritative_participant_id != &intent.target_authoritative_participant_id
+        {
+            return Err(AuthorityFacadeError(
+                "applied Start authority identity is inconsistent".into(),
+            ));
+        }
+        let expected_claim_revision = intent
+            .intent_revision
+            .checked_sub(1)
+            .ok_or_else(|| AuthorityFacadeError("applied Start revision underflow".into()))?;
+        verify_applied_start(
+            self,
+            &root,
+            intent,
+            &ApplyHostSessionTransitionRequestV1 {
+                intent_id: intent.intent_id.clone(),
+                issuer_request_id: intent.issuer_request_id.clone(),
+                payload_commitment: intent.payload_commitment.clone(),
+                expected_intent_revision: expected_claim_revision,
+                claim_id: claim_id.clone(),
+                expected_claim_revision,
+            },
+        )
+        .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+
+        let descriptor_bytes = store::read_typed_object_v2_opened(
+            &self.root,
+            root.root_revision,
+            &intent.descriptor_ref,
+            None,
+        )
+        .map_err(store_error)?;
+        let descriptor: AgentDescriptorHashInputV1 = canonical_json::from_slice(&descriptor_bytes)
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        let attach_bytes = store::read_typed_object_v2_opened(
+            &self.root,
+            root.root_revision,
+            &intent.host_attach_contract_ref,
+            None,
+        )
+        .map_err(store_error)?;
+        let attach: HostAttachContractHashInputV1 = canonical_json::from_slice(&attach_bytes)
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        let policy_bytes = store::read_typed_object_v2_opened(
+            &self.root,
+            root.root_revision,
+            &attach.contract.policy_ref,
+            None,
+        )
+        .map_err(store_error)?;
+        let policy: PolicyObjectHashInputV1 = canonical_json::from_slice(&policy_bytes)
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        if descriptor.schema_version != 1
+            || descriptor.descriptor.schema_version != 1
+            || attach.schema_version != 1
+            || attach.contract.schema_version != 1
+            || policy.schema_version != 1
+            || attach.contract.descriptor_ref != intent.descriptor_ref
+            || attach.contract.backend_id != descriptor.descriptor.backend_id
+            || attach.contract.execution_scope != descriptor.descriptor.execution_scope
+            || attach.contract.protocol != descriptor.descriptor.protocol
+            || (descriptor.descriptor.execution_scope == super::schema::AgentExecutionScopeV1::Host
+                && authority.world_binding.is_some())
+            || (descriptor.descriptor.execution_scope
+                == super::schema::AgentExecutionScopeV1::World
+                && authority.world_binding.is_none())
+            || authority.host_attach_contract_ref.as_ref() != Some(&intent.host_attach_contract_ref)
+            || authority.current_policy_ref.as_ref() != Some(&attach.contract.policy_ref)
+            || authority.current_policy_revision.as_ref() != Some(&policy.policy_revision)
+        {
+            return Err(AuthorityFacadeError(
+                "applied Start descriptor, attach contract, or policy truth is inconsistent".into(),
+            ));
+        }
+
+        let authority_record_commitment = canonical_commitment(&authority_hash_input(&authority))?;
+        let authoritative_lineage_commitment =
+            canonical_commitment(&AuthoritativeLineageHashInputV1 {
+                schema_version: 1,
+                orchestration_session_id: authority.orchestration_session_id.clone(),
+                participant_ids: authority.authoritative_participant_lineage.clone(),
+            })?;
+        let observation = AuthorityObservationV1 {
+            authority_store_id: root.authority_store_id.clone(),
+            bootstrap_home: root.bootstrap_home.clone(),
+            orchestration_session_id: authority.orchestration_session_id.clone(),
+            root_revision: root.root_revision,
+            authority_revision: authority.authority_revision,
+            authority_record_commitment,
+            authoritative_lineage_commitment,
+        };
+        if expected.is_some_and(|value| value != &observation) {
+            return Err(AuthorityFacadeError(
+                "stale or mismatched exact current-authority observation".into(),
+            ));
+        }
+        let active_participant_id = authority
+            .active_authoritative_participant_id
+            .clone()
+            .ok_or_else(|| AuthorityFacadeError("current authority has no active caller".into()))?;
+        if active_participant_id != intent.target_authoritative_participant_id
+            || !authority
+                .authoritative_participant_lineage
+                .contains(&active_participant_id)
+        {
+            return Err(AuthorityFacadeError(
+                "current authority caller is not the applied Start orchestrator".into(),
+            ));
+        }
+        let bound_state_store =
+            super::super::state_store::AgentRuntimeStateStore::for_bootstrap_home(
+                &self.bootstrap_home(),
+            )
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        if bound_state_store.bootstrap_home_identity() != &root.bootstrap_home {
+            return Err(AuthorityFacadeError(
+                "bound StateStore does not match current authority bootstrap home".into(),
+            ));
+        }
+        Ok(ResolvedCurrentAuthorityV1 {
+            observation,
+            authority,
+            caller: ResolvedAuthorityCallerV1 {
+                participant_id: active_participant_id,
+                role: AuthorityParticipantRoleV1::Orchestrator,
+                descriptor_ref: intent.descriptor_ref.clone(),
+                descriptor: descriptor.descriptor,
+            },
+            host_attach_contract: attach.contract,
+            current_policy: policy,
+            bound_state_store,
+        })
     }
 }
 
