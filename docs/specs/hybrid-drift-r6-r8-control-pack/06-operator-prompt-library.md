@@ -303,16 +303,18 @@ result, current phase status, and the next eligible interaction.
 
 ## Current First Invocation
 
-Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW
-CLEAN`. `R6-GAP-WPB-EMPTY-AUTHORITY` remains the sole concrete active phase, and its active packet
-is now `R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate authority-only reconciliation is committed
-and fresh-review-clean, its default invocation uses Prompt 1 with:
+Final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh
+independent built-in `default` `REVIEW CLEAN`. The authority transition in this review series is
+landed, marks aggregate `R6-GAP-*` complete, and makes `R6-REPLAY` the sole concrete active phase
+with active packet `none`. After that transition receives fresh independent `REVIEW CLEAN`, its
+default invocation uses Prompt 1 with:
 
 ```text
-PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY
-ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY
+PHASE_ID: R6-REPLAY
+ACTIVE_PACKET: none
 ```
 
-The session must re-check that status from live repo truth, then reconfirm exact `CTX-R6-15` as its
-sole next execution action before selecting a route; `R6-REPLAY` remains `BLOCKED`, and this example
+The session must re-check that status from live repo truth and execute only the selected replay
+phase. The current transition does not itself authorize replay before fresh transition review, does
+not assign terminal scorer dispositions, and does not start `R6-CLOSE`, R7, or R8 work. This example
 is not a permanent status override.

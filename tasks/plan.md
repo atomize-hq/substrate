@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: `R6-GAP-WPB-EMPTY-AUTHORITY`; exact `CTX-R6-15` witness reconfirmation gate)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition landed; fresh transition review pending before replay execution)**
 
 ## Dependency Order
 
@@ -23,14 +23,13 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: `R6-GAP-WP
    `R6-GAP-DET-OPAQUE-PARENT`, landed its bounded scorer fix and focused/family/checkpoint proof.
 6. **COMPLETE through final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent
    `REVIEW CLEAN`:** `R6-GAP-TGG-TRUTH-PATH-ACTION` landed its bounded Option-A fix and proof.
-7. **ACTIVE / PACKET DOCS REVIEW CLEAN:** transition series `2937dbe5a` + `91f55f6bf` and
-   packet-doc series `8734f4dbe` + `334e7c6ac` each received fresh independent built-in `default`
-   `REVIEW CLEAN`. Active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate
-   authority-only reconciliation is committed and fresh-review-clean, reconfirm the exact
-   `CTX-R6-15` witness before selecting the already-authorized production-fix or eligible no-code
-   route. Do not begin either route first.
-8. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence after all named
-   gaps are complete.
+7. **COMPLETE through fresh review-clean `6b42e5476` + `e65df2561` + `cd4e24119`:** the final named
+   gap, `R6-GAP-WPB-EMPTY-AUTHORITY`, landed its bounded scorer fix, focused/family/checkpoint/full
+   proof, receipt corrections, and fresh independent `REVIEW CLEAN`.
+8. **ACTIVE / TRANSITION REVIEW PENDING:** the authority transition in this review series is landed,
+   marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active packet `none`.
+   Obtain fresh transition `REVIEW CLEAN`, then run bounded replay evidence in a later phase; do not
+   start replay in this transition.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
@@ -56,8 +55,8 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: `R6-GAP-WP
   `git diff --cached --check`, and inspect the complete `git diff --cached` before committing.
 - Preserve unrelated worktree changes.
 
-Transition series `2937dbe5a` + `91f55f6bf` and packet-doc series `8734f4dbe` + `334e7c6ac` are
-fresh independent built-in `default` `REVIEW CLEAN`. The active packet is
-`R6-GAP-WPB-EMPTY-AUTHORITY`. Exact `CTX-R6-15` witness reconfirmation is the sole next execution
-action after the current authority-only reconciliation is committed and fresh-review-clean. No
-production change or no-code receipt is authorized first. `R6-REPLAY` remains blocked.
+All three named gaps are complete. Final implementation/review-fix series `6b42e5476` +
+`e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`. The authority
+transition in this review series is landed, activates only `R6-REPLAY` with active packet `none`,
+and awaits fresh transition review. No replay command, terminal scorer disposition, R6 close, or
+R7/R8 work is authorized before that review is clean.

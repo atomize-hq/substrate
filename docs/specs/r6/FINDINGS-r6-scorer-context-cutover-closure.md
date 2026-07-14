@@ -1,6 +1,6 @@
 # Findings: R6 Scorer-Context Cutover Closure
 
-**Date:** 2026-07-12; control and first-two-gap disposition updated 2026-07-14
+**Date:** 2026-07-12; control and all-gap disposition updated 2026-07-14
 
 **Status:** PARTIAL / CLOSURE AUDIT REQUIRED
 
@@ -19,9 +19,10 @@ proven focused and completing the first named gap. `R6-GAP-TGG-TRUTH-PATH-ACTION
 its Option-A implementation/proof series and final proof-receipt series `fee9c2b16` + `6674a8316`
 received fresh independent built-in `default` `REVIEW CLEAN`. Authority-only transition series
 `2937dbe5a` + `91f55f6bf` also received fresh independent built-in `default` `REVIEW CLEAN`. R6
-remains **PARTIAL**; only `R6-GAP-WPB-EMPTY-AUTHORITY` is active. Its packet-doc series
-`8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`, active
-packet is `R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` remains blocked.
+remains **PARTIAL**, but all three named gaps are complete. Final gap implementation/review-fix
+series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default`
+`REVIEW CLEAN`. The authority transition in this review series is landed, makes `R6-REPLAY` the
+sole active phase with active packet `none`, and awaits fresh transition review before replay begins.
 R7 remains useful, design-ready draft work, but it is **not implementation-ready**.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
@@ -45,7 +46,7 @@ owns and behavior-level tests prove that match. Transitive availability alone is
 | `dead_end_thrash` | Distinguish active repeated failure/verification with no frontier movement from expected churn that advances or cleanly recovers. | Repetition history, recovery-active bits, `SessionProgress`, command observations for confidence. | Typed attempts and outcomes feed progress; turn context feeds archetype; archetype selects progress dimension; objective changes can bound comparable history. | **Indirect, relevant.** Failure/verification classification and frontier signals depend on it. | **Indirect, relevant.** | **Indirect, relevant.** | **Direct, required.** | **Boundary only.** | **Not applicable.** | **Indirect, relevant.** The exact opaque-parent control preserves `ParentVisibleOrchestration` without attributing child misconduct. | Production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh `REVIEW CLEAN`. `CTX-R6-04` is `0 / Low / Cleared`, unflagged, empty evidence; the partial/mixed parent-visible regression is `0 / Medium / Cleared`, unflagged, empty evidence; and `CTX-R6-03` remains `30 / Medium / Active`, flagged. All `21` matching family tests and all `167` matching checkpoints passed; format/check passed. Frozen real-rollout derivatives remain invariance evidence only. | `R6-GAP-DET-OPAQUE-PARENT` complete; integrated replay proof remains bounded and incomplete. | **Focused gap proven / terminal disposition pending R6-CLOSE** |
 | `semantic_goal_drift` | Detect an unsanctioned target pivot relative to kickoff or prior checkpoint while suppressing legitimate narrowing, role shifts, replans, and unsupported delegated-parent claims. | Current structured objective, kickoff anchor, previous structured objective/checkpoint, stable target anchors, sanctioned-replan bit, delegation topology/visibility. | Structured extraction and checkpoint history supply the compared goals. | **Not applicable.** Outcome success does not establish target continuity. | **Not applicable.** | **Not applicable.** | **Not applicable.** | **Direct, required.** | **Not applicable.** | **Direct, required for the bounded opaque-parent guard.** | 56 focused scorer/state tests cover sanctioned replans, opaque/partial delegation, and internal `Fire` / `Suppress` / `NoClaim` routing. Separately, the bounded corpus-shape test proves fixture integrity only. The live analyzer-path acceptance test exercises only its 18 allowlisted pivot, narrowing, progression, and role-shift fixtures; it does not prove replan, delegation, or internal routing. The R6-3.X.2D corpus closeout recorded 110/110 sessions analyzable with 0 emitted fires after remediation. | No new failing witness. Progress or archetype would not make target-continuity reasoning more honest. | **Cutover complete** |
 | `truth_grounding_gap` | Detect write/verification action taken without first reading declared truth artifacts; preserve and recover history honestly. | Task-frame truth paths, interval command observations and event order, previous truth-gap score. | Working-set/task-frame extraction supplies the truth paths. | **Not applicable by design:** success/failure does not prove that required truth was read. | **Not applicable by design:** ordering is event-based, not turn-count based. | **Fit-for-purpose for archetype:** equivalent actions scored equally across planning and implementation frames. | **Not applicable:** later progress cannot retroactively establish prior grounding. | **Indirect boundary/source only.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Option-A internal path-scoped provenance now preserves action-before-read, historical-only non-grounding, same-path cross-checkpoint carry, path isolation, declaration pruning, session/trajectory isolation, multi-checkpoint carry, and non-consuming reads. Packet-locked controls passed `9 / 9`; the full family passed `22 / 22`; matching checkpoints passed `35` unit + `131` integration plus matching export/provenance tests; exact dead-end regressions and static gates remained green. Final proof-receipt series `fee9c2b16` + `6674a8316` received fresh `REVIEW CLEAN`. | `R6-GAP-TGG-TRUTH-PATH-ACTION` complete; terminal scorer disposition remains pending `R6-CLOSE`. | **Bounded gap complete / terminal disposition pending R6-CLOSE** |
-| `wrong_plan_branch` | Detect write/verification paths outside the task frame's expected truth/working-set scope and clear after a return in scope. | Truth-artifact paths, working-set paths, interval command paths and write/verification classification. | Objective/working-set extraction supplies expected paths; checkpoint boundaries isolate the current interval. | **Not applicable:** command outcome does not change path scope. | **Not applicable:** path scope is event-local. | **Not applicable:** exploration is already ignored unless it writes or verifies. | **Not applicable:** healthy progress cannot excuse mutation outside the authorized branch. | **Relevant through sanctioned continuity; the sanctioned-replan control passed.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Read-only exploration, sanctioned replan/path pivot, and opaque-parent controls passed. `wrong_plan_branch_makes_no_claim_for_path_action_without_authority` preserved the sole family red at witness `59f098b35`: actual `60 / Low / Active`, flagged, with command-action evidence, versus the separate locked target `0 / Low / Cleared`, unflagged, with empty evidence. | Packet-doc series `8734f4dbe` + `334e7c6ac` is fresh independent built-in `default` `REVIEW CLEAN`; `R6-GAP-WPB-EMPTY-AUTHORITY` remains active with active packet `R6-GAP-WPB-EMPTY-AUTHORITY`, and exact witness reconfirmation is next after the authority-only reconciliation is review-clean. | **Preserved red / active named gap / packet docs review clean** |
+| `wrong_plan_branch` | Detect write/verification paths outside the task frame's expected truth/working-set scope and clear after a return in scope. | Truth-artifact paths, working-set paths, interval command paths and write/verification classification. | Objective/working-set extraction supplies expected paths; checkpoint boundaries isolate the current interval. | **Not applicable:** command outcome does not change path scope. | **Not applicable:** path scope is event-local. | **Not applicable:** exploration is already ignored unless it writes or verifies. | **Not applicable:** healthy progress cannot excuse mutation outside the authorized branch. | **Relevant through sanctioned continuity; the sanctioned-replan control passed.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Read-only exploration, sanctioned replan/path pivot, opaque-parent, and empty-authority controls pass. Historical witness `59f098b35` remains the preserved red receipt; after production fix `6b42e5476`, exact `CTX-R6-15` is `0 / Low / Cleared`, unflagged, with empty evidence, four protected controls pass, family is `6 / 6`, and checkpoint/full-analyzer/static walls are green. | Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`; `R6-GAP-WPB-EMPTY-AUTHORITY` is complete. | **Bounded gap complete / terminal disposition pending `R6-CLOSE`** |
 | `scoring/mod.rs` | Deterministically build shared scorer inputs, invoke all material scorers, and order results. It is dispatcher infrastructure, not a fifth scorer. | `CheckpointAnalysis`, previous truth score, kickoff anchor. | Builds `SessionProgress` once and supplies it only to `dead_end_thrash`. | Applicable only through scorer-specific routing. | Same. | Same. | Same. | Same. | Same. | Same. | Source inspection proves the explicit four-class `sort_by_key` order. The full analyzer suite proves the score records travel through the live path, but no focused behavioral assertion proves their exact order. | Exact ordering is source-proven, not behavior-tested. Add a focused assertion only if exact order is retained as a closure contract; do not force a common mega-context argument into every scorer. | **Fit-for-purpose exception** |
 
 No scorer is currently a justified merge/deprecation candidate. `truth_grounding_gap` asks whether
@@ -103,18 +104,19 @@ independent `REVIEW CLEAN`; no terminal scorer disposition is assigned before `R
 ### `wrong_plan_branch`
 
 The controls confirm that read-only exploration stays quiet, sanctioned replans update the expected
-scope for the bounded write case, and opaque parent orchestration without attributable child action
-stays clear. The remaining behavior gap is the empty-authority path-bearing action: current behavior
-claims `60 / Low / Active` with action evidence instead of the locked `0 / Low / Cleared` no-claim.
-That preserved `CTX-R6-15` witness owns `R6-GAP-WPB-EMPTY-AUTHORITY`. Review-clean transition
-series `2937dbe5a` + `91f55f6bf` activated only that phase. Its canonical
+scope for the bounded write case, opaque parent orchestration without attributable child action stays
+clear, and empty authority makes no claim. Historical `CTX-R6-15` witness `59f098b35` remains the
+preserved red receipt. Production commit `6b42e5476` makes command observations no-claim when the
+effective-authority set is empty; exact target is now `0 / Low / Cleared`, unflagged, with empty
+evidence. Its canonical
 [`SPEC`](R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-spec.md),
 [`PLAN`](R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-plan.md), and
 [`TASKS`](R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-tasks.md) landed in packet-doc
 series `8734f4dbe` + `334e7c6ac` and received fresh independent built-in `default` `REVIEW CLEAN`.
-Active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate authority-only reconciliation is
-committed and fresh-review-clean, exact `CTX-R6-15` witness reconfirmation is the sole next execution
-action; no production/no-code receipt begins first.
+Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` also received fresh
+independent built-in `default` `REVIEW CLEAN`, completing the named gap. The authority transition in
+this review series is landed, activates only `R6-REPLAY` with active packet `none`, and awaits fresh
+transition review before replay execution.
 
 ## Broad R6 Acceptance-Claim Audit
 
@@ -137,15 +139,14 @@ The three distinct routes must execute sequentially in matrix order:
    series through `d13f0a71c` is fresh `REVIEW CLEAN` with focused/family/checkpoint proof green.
 2. **COMPLETE:** `R6-GAP-TGG-TRUTH-PATH-ACTION` for `CTX-R6-12`; final proof-receipt series
    `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`.
-3. **ACTIVE; packet docs review clean; active packet `R6-GAP-WPB-EMPTY-AUTHORITY`:**
-   `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15` at witness `59f098b35`; packet-doc series
-   `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`.
+3. **COMPLETE:** `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15` at witness `59f098b35`;
+   implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh
+   independent built-in `default` `REVIEW CLEAN` with exact, protected, family, checkpoint,
+   full-analyzer, and static proof green.
 
-Transition series `2937dbe5a` + `91f55f6bf` and packet-doc series `8734f4dbe` + `334e7c6ac` each
-received fresh independent built-in `default` `REVIEW CLEAN`. After the separate authority-only
-reconciliation is committed and fresh-review-clean, the sole next execution action is exact
-`CTX-R6-15` witness reconfirmation. Do not begin production/no-code proof first. `R6-REPLAY` remains
-blocked.
+All three named gap routes are complete. The authority transition in this review series is landed,
+marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active packet `none`.
+Fresh transition review is pending; do not start replay before it is clean.
 
 ## Verification Run For This Audit
 
@@ -180,13 +181,13 @@ code changed.
 
 ## Final R6 Status And R7 Promotion Gate
 
-**R6 status: PARTIAL with `R6-GAP-DET-OPAQUE-PARENT` and
-`R6-GAP-TGG-TRUTH-PATH-ACTION` complete, and `R6-GAP-WPB-EMPTY-AUTHORITY` the sole active phase at
-its exact witness-reconfirmation gate with active packet `R6-GAP-WPB-EMPTY-AUTHORITY`.** Packet-doc
-series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`. The
-landed R6 packet history and completed `R6-C.1-CONTROLS` remain intact; commit `99efda8f9` is not closure authority.
-`R6-REPLAY` remains blocked. No terminal `truth_grounding_gap` disposition, replay close, R6 close,
-or successor implementation is claimed.
+**R6 status: PARTIAL with all three named gaps complete and `R6-REPLAY` the sole active phase with
+active packet `none`.** Final gap implementation/review-fix series `6b42e5476` + `e65df2561` +
+`cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`. The authority transition
+in this review series is landed and awaits fresh transition review before replay begins. The landed
+R6 packet history and completed `R6-C.1-CONTROLS` remain intact; commit `99efda8f9` is not closure
+authority. No terminal `truth_grounding_gap` or `wrong_plan_branch` disposition, replay close, R6
+close, or successor implementation is claimed.
 
 R7 may be promoted from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready only when:
 

@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-GAP-WPB-EMPTY-AUTHORITY — ACTIVE; active packet R6-GAP-WPB-EMPTY-AUTHORITY; exact CTX-R6-15 witness reconfirmation gate`
+**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; authority transition landed; fresh transition review pending before replay execution`
 
-**Last repo-truth verification:** packet-doc series `8734f4dbe` + `334e7c6ac`, fresh independent built-in `default` `REVIEW CLEAN`
+**Last repo-truth verification:** final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119`, fresh independent built-in `default` `REVIEW CLEAN`; authority transition in this review series landed and pending fresh review
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -18,10 +18,12 @@ its implementation/proof and final proof-receipt series received fresh independe
 `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` received fresh independent
 built-in `default` `REVIEW CLEAN` and activated only `R6-GAP-WPB-EMPTY-AUTHORITY`. Its canonical
 packet docs landed in series `8734f4dbe` + `334e7c6ac` and received fresh independent built-in
-`default` `REVIEW CLEAN`; active packet is now `R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate
-authority-only reconciliation is committed and fresh-review-clean, exact `CTX-R6-15` witness
-reconfirmation is the sole next execution action. `R6-REPLAY` remains blocked, and no production or
-no-code receipt, replay, R6 closeout, or R7/R8 work is authorized first.
+`default` `REVIEW CLEAN`. Its implementation/review-fix series `6b42e5476` + `e65df2561` +
+`cd4e24119` then received fresh independent built-in `default` `REVIEW CLEAN`, completing the final
+named gap with exact, protected, family, checkpoint, full-analyzer, and static proof green. The
+authority transition in this review series is landed, marks aggregate `R6-GAP-*` complete, and
+activates only `R6-REPLAY` with active packet `none`. Fresh transition review is pending; no replay,
+R6 closeout, terminal scorer disposition, or R7/R8 work is authorized before that review is clean.
 
 ## Purpose
 

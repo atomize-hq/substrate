@@ -18,25 +18,23 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R6-C.0A` | COMPLETE | Pass 1 authority remediation | Fresh review findings recorded in `01` and `05` | Canonical finding/root/R6/R7 gates and proof wording agree at `d3dcda785`; fresh review is clean. |
 | `R6-C.1-SPEC` | COMPLETE | R6-C.1 SPEC/PLAN/TASKS | `R6-C.0A` complete | Expanded control matrix, expected decisions, files, commands, and stop rules landed and received fresh `REVIEW CLEAN` at `ea19b39a7`. |
 | `R6-C.1-CONTROLS` | COMPLETE | Acceptance controls only | SATISFIED — R6-C.1 docs landed and received fresh `REVIEW CLEAN` at `ea19b39a7` | SATISFIED — all thirteen controls have deterministic results (`10 PASS / 3 preserved RED`) and the controls wall is recorded at `5618f7864`. |
-| [`R6-GAP-*`](05-proof-decision-regression-ledger.md#named-r6-gap-status-subledger) | ACTIVE | One bounded scorer-specific gap phase per proven red | SATISFIED — the named-gap subledger contains exactly one concrete active route and two ordered blocked successors | Each named witness passes or receives a review-clean no-code receipt, controls remain green, and every named transition is review-clean. |
-| `R6-REPLAY` | BLOCKED | Bounded real-rollout/replay closeout | Controls and conditional fixes complete | Integrated advancing and true-stall witnesses plus frozen invariance evidence are documented. |
+| [`R6-GAP-*`](05-proof-decision-regression-ledger.md#named-r6-gap-status-subledger) | COMPLETE | One bounded scorer-specific gap phase per proven red | SATISFIED — the named-gap subledger instantiated all three preserved reds sequentially | SATISFIED — every named witness has review-clean focused proof and the final authority transition is landed. |
+| `R6-REPLAY` | ACTIVE | Bounded real-rollout/replay closeout | SATISFIED — controls and all conditional fixes complete; authority transition landed and fresh transition review pending | Integrated advancing and true-stall witnesses plus frozen invariance evidence are documented. |
 | `R6-CLOSE` | BLOCKED | R6 `CLOSED` authority reconciliation | Replay closeout green; no ordinary gap open | Every scorer has a terminal disposition and all root/R6/R7 status docs agree. |
 | `R7-PROMOTE` | BLOCKED | Promote preserved R7 drafts to implementation-ready | R6 finding says `CLOSED` | R7 MAP/SPEC/PLAN/TASKS and root mirrors agree; implementation has not yet started. |
 | `R7-0..R7-6` | BLOCKED | Bounded direct-child delegated-session support | R7 promoted | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
-`PACK-0`, `R6-C.0A`, `R6-C.1-SPEC`, and `R6-C.1-CONTROLS` are complete. The generic `R6-GAP-*`
-row is aggregate `ACTIVE` because review-clean transition series `2937dbe5a` + `91f55f6bf` leaves
-exactly one concrete named phase active: `R6-GAP-WPB-EMPTY-AUTHORITY`. Its active packet is now
-`R6-GAP-WPB-EMPTY-AUTHORITY` after packet-doc series `8734f4dbe` + `334e7c6ac` received fresh
-independent built-in `default` `REVIEW CLEAN`. `R6-GAP-DET-OPAQUE-PARENT` is `COMPLETE` after production
-series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh `REVIEW CLEAN`, and
-`R6-GAP-TGG-TRUTH-PATH-ACTION` is `COMPLETE` after final proof-receipt series `fee9c2b16` +
-`6674a8316` received fresh `REVIEW CLEAN`. `R6-REPLAY` remains `BLOCKED`. After the separate
-authority-only reconciliation is committed and fresh-review-clean, the active route authorizes exact
-`CTX-R6-15` witness reconfirmation as the sole next execution action. No production/no-code receipt,
-replay, R6 closeout, or R7/R8 work is authorized first.
+`PACK-0`, `R6-C.0A`, `R6-C.1-SPEC`, `R6-C.1-CONTROLS`, and aggregate `R6-GAP-*` are complete.
+`R6-GAP-DET-OPAQUE-PARENT` and `R6-GAP-TGG-TRUTH-PATH-ACTION` remain complete at their recorded
+review-clean series. Final route `R6-GAP-WPB-EMPTY-AUTHORITY` is complete after
+implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh
+independent built-in `default` `REVIEW CLEAN` with exact, protected, family, checkpoint,
+full-analyzer, and static proof green. The authority transition in this review series is landed and
+activates exactly one concrete phase: `R6-REPLAY`, with active packet `none`. Fresh transition review
+is pending; no replay, R6 closeout, terminal scorer disposition, or R7/R8 work is authorized before
+that review is clean.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

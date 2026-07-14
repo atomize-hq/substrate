@@ -349,17 +349,17 @@ code changed. In matrix order the preserved routes are:
 2. `R6-GAP-TGG-TRUTH-PATH-ACTION` for `CTX-R6-12` — **COMPLETE** after its final proof-receipt
    series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`;
    and
-3. `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15`, witness `59f098b35` — **ACTIVE**, with active
-   packet `R6-GAP-WPB-EMPTY-AUTHORITY`; its packet-doc series `8734f4dbe` + `334e7c6ac` received
-   fresh independent built-in `default` `REVIEW CLEAN`.
+3. `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15`, witness `59f098b35` — **COMPLETE** after
+   implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh
+   independent built-in `default` `REVIEW CLEAN`; exact target is `0 / Low / Cleared`, unflagged,
+   with empty evidence, and its protected/family/checkpoint/full-analyzer/static walls are green.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED** and `R6-REPLAY` remains blocked. The sole next
-execution action, after the separate authority-only reconciliation is committed and
-fresh-review-clean, is exact `CTX-R6-15` witness reconfirmation. The historical witness remains
-`60 / Low / Active`, flagged, with command-action evidence; the separate locked target remains
-`0 / Low / Cleared`, unflagged, with empty evidence. Do not begin a production/no-code proof path
-first. No terminal `truth_grounding_gap` or `wrong_plan_branch` disposition, replay close, or R6
-close is claimed.
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**, but all named gaps are complete. The authority
+transition in this review series is landed, makes `R6-REPLAY` the sole active phase with active
+packet `none`, and awaits fresh transition review before replay begins. The historical witness
+remains `60 / Low / Active`, flagged, with command-action evidence; the proven current target is
+`0 / Low / Cleared`, unflagged, with empty evidence. No terminal `truth_grounding_gap` or
+`wrong_plan_branch` disposition, replay close, or R6 close is claimed.
 
 ## Non-Goals For This Rescope
 

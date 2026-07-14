@@ -1,9 +1,9 @@
 # R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE WITH PACKET DOCS REVIEW CLEAN** on 2026-07-14. Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`; active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`, and exact `CTX-R6-15` witness reconfirmation is the sole next execution action after the separate authority-only reconciliation is committed and fresh-review-clean.
-All synthetic controls are complete in the TASKS ledger. The first two preserved reds, `CTX-R6-04`
-and `CTX-R6-12`, and their named gap phases are complete; only `CTX-R6-15` remains open through
-`R6-GAP-WPB-EMPTY-AUTHORITY`.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY COMPLETE; R6-REPLAY ACTIVE** on 2026-07-14. Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`; the authority transition in this review series is landed, activates only `R6-REPLAY` with active packet `none`, and awaits fresh transition review before replay execution begins.
+All synthetic controls are complete in the TASKS ledger. The three preserved reds, `CTX-R6-04`,
+`CTX-R6-12`, and `CTX-R6-15`, and their named-gap phases are complete. Their focused dispositions do
+not assign terminal scorer categories; those remain reserved for `R6-CLOSE` after replay.
 
 Authority order: the corrected
 [`R6` closure finding](../FINDINGS-r6-scorer-context-cutover-closure.md) owns the scorer applicability

@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: `R6-GAP-WPB-EMPTY-AUTHORITY`; exact `CTX-R6-15` witness reconfirmation gate)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition landed; fresh transition review pending before replay execution)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -39,10 +39,11 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: `R6-GAP-WP
   [`TASKS`](../docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-tasks.md);
   packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default`
   `REVIEW CLEAN`.
-- [ ] **Next eligible execution action:** after the separate authority-only packet-gate
-  reconciliation is committed and fresh-review-clean, reconfirm exact `CTX-R6-15` with
-  `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_makes_no_claim_for_path_action_without_authority -- --exact --nocapture`.
-- [ ] Resolve active `R6-GAP-WPB-EMPTY-AUTHORITY`; keep `R6-REPLAY` `BLOCKED`.
+- [x] Resolve `R6-GAP-WPB-EMPTY-AUTHORITY`; implementation/review-fix series `6b42e5476` +
+  `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN` with exact,
+  protected, family, checkpoint, full-analyzer, and static proof green.
+- [ ] **Next eligible interaction:** fresh independent review of the landed authority transition.
+  Only after that review is clean may Prompt 1 start `R6-REPLAY` with active packet `none`.
 - [ ] Re-run focused scorer tests, full analyzer tests, and the bounded replay wall.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.

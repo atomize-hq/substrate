@@ -93,16 +93,19 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The next open gap is no longer archetype identification, first-cut progress export, `R5.75`, the
-R6 acceptance-control matrix, or the opaque-parent confidence seam. `R6-C.1-CONTROLS` completed at
+The active follow-on is now `R6-REPLAY`; the open work is no longer archetype identification,
+first-cut progress export, `R5.75`, the R6 acceptance-control matrix, or a named scorer gap.
+`R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
 `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`. `R6-GAP-TGG-TRUTH-PATH-ACTION`
 is complete after its final proof-receipt series `fee9c2b16` + `6674a8316` received fresh
 built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` then received fresh
-independent built-in `default` `REVIEW CLEAN`, making only `R6-GAP-WPB-EMPTY-AUTHORITY` active.
-Its packet-doc series `8734f4dbe` + `334e7c6ac` also received fresh independent built-in `default`
-`REVIEW CLEAN`; active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`, while `R6-REPLAY` remains blocked.
+independent built-in `default` `REVIEW CLEAN`, making only `R6-GAP-WPB-EMPTY-AUTHORITY` active at
+that boundary. Its implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` now
+also received fresh independent built-in `default` `REVIEW CLEAN`, completing the final named gap.
+The authority transition in this review series is landed, marks aggregate `R6-GAP-*` complete, and
+activates only `R6-REPLAY` with active packet `none`; fresh transition review is pending before replay.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -114,9 +117,8 @@ control.” The current honest sequence is:
 2. keep `R6-C.1-CONTROLS` complete with its actual `10 PASS / 3 preserved RED` disposition
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
-5. after the separate authority-only reconciliation is committed and fresh-review-clean, the current
-   eligible execution action is to reconfirm exact `CTX-R6-15` before selecting either authorized route
-6. run bounded R6 replay/closeout only after all named gaps complete
+5. obtain fresh independent review of the landed final gap-to-replay authority transition
+6. after that review is clean, run bounded `R6-REPLAY` in a later phase; all named gaps are complete
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
@@ -756,13 +758,12 @@ informs archetype/progress construction but does not independently change `dead_
 the relevant derived progress is equal. The three preserved reds route, in order, to complete
 `R6-GAP-DET-OPAQUE-PARENT` (`CTX-R6-04`, `87409b39a`; production series through fresh
 review-clean `d13f0a71c`), complete `R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`, final
-proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and active packet-docs-review-clean
-`R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`). The frozen dead-end corpus still proves
-invariance rather than comparative integrated improvement. R6 remains partial; transition series
-`2937dbe5a` + `91f55f6bf` and packet-doc series `8734f4dbe` + `334e7c6ac` each received fresh
-independent built-in `default` `REVIEW CLEAN`. Active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`.
-After the separate authority-only reconciliation is committed and fresh-review-clean, exact
-`CTX-R6-15` witness reconfirmation is the sole next execution action; `R6-REPLAY` remains blocked.
+proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and complete
+`R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`; implementation/review-fix series
+`6b42e5476` + `e65df2561` + `cd4e24119` fresh independent `REVIEW CLEAN`). The frozen dead-end
+corpus still proves invariance rather than comparative integrated improvement. R6 remains partial.
+The authority transition in this review series is landed, marks aggregate `R6-GAP-*` complete, and
+activates only `R6-REPLAY` with active packet `none`; fresh transition review is pending before replay.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -854,11 +855,11 @@ The next honest work target is:
   a terminal scorer disposition or replay/close claim
 - keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete after its implementation/proof and final
   proof-receipt series received fresh `REVIEW CLEAN`
-- keep the canonical `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs review-clean at series `8734f4dbe` +
-  `334e7c6ac`, with active packet `R6-GAP-WPB-EMPTY-AUTHORITY`
-- **next eligible execution action:** after the separate authority-only reconciliation is committed
-  and fresh-review-clean, reconfirm exact `CTX-R6-15`; no production/no-code proof begins first
-- keep `R6-REPLAY` blocked until the remaining named-gap and replay entry gates complete
+- keep `R6-GAP-WPB-EMPTY-AUTHORITY` complete after implementation/review-fix series `6b42e5476` +
+  `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
+- **next eligible interaction:** fresh independent review of the landed authority transition
+- keep `R6-REPLAY` as the sole active phase with active packet `none`; do not execute it until the
+  transition review is clean
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed
