@@ -155,8 +155,9 @@ strict greenfield-only V1-to-V2 root upgrade, reservation/issuance/application, 
 birth, exact retry, and the typed read surface required to resolve that already-current authority.
 It has no Attach/Resume, obligation, correlation-supply, or public-consumer adoption.
 A1.2a-WB is the exact bounded prerequisite now inserted before A1.2a-S. It corrects only the Start
-validator so Host runtime placement accepts either no session world binding or an exact session
-world binding, while World placement still requires an exact binding. It does not change a schema,
+write/read matrix so issuance, application/persistence, and exact current-authority resolution all
+accept Host runtime placement with either no session world binding or an exact session world
+binding, while World placement still requires an exact binding. It does not change a schema,
 canonical JSON bytes, golden vectors, persisted objects, or participant placement. A1.2a-S depends
 on review-clean A1.2a-WB and then adopts only the ordinary internal greenfield host Start path: a
 distinct identity-free proposal is applied after the real dormant-launch adapter has the optional

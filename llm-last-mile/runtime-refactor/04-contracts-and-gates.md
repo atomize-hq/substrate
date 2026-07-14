@@ -1654,7 +1654,8 @@ available world-substrate truth. These dimensions are independent and are not bi
 host-executing orchestrator may own a world-backed durable session; a world-executing runtime must
 have an exact world binding.
 
-The Start validator freezes this complete matrix:
+Start issuance validation, application/persistence, and exact current-authority resolution freeze
+this complete matrix:
 
 | Descriptor and launch scope | Session world binding | Result |
 |---|---|---|
@@ -1675,6 +1676,12 @@ A1.2a-WB changes validation semantics only. It adds no field or version, changes
 byte or golden vector, creates no V3/migration/compatibility bridge, and rewrites no persisted
 object. World filesystem, network, caging, policy, capability, and enforcement semantics remain
 unchanged.
+
+The implementation boundary is exactly `transition.rs`, colocated `transition_tests.rs`, and
+`facade.rs::HostSessionAuthority::resolve_current_exact`. The reader must return the exact persisted
+binding unchanged and may not reject an authority already accepted and persisted under the matrix
+through the obsolete `Host + Some` rule. All other facade behavior is outside scope, and A1.2a-S
+remains blocked until this write/read boundary is review-clean.
 
 ## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
@@ -2748,9 +2755,12 @@ The minimal prerequisite contract is:
    consumption, correlation supply to world work, or public consumer adoption.
 2. **A1.2a-WB — Host/world-binding validation correction:** preserve exact descriptor/launch-scope
    equality, accept `Host + None`, `Host + Some(exact)`, and `World + Some(exact)`, and reject
-   `World + None` or any malformed binding without mutation. Exact present binding is session
+   `World + None` or any malformed binding without mutation during Start issuance. Application
+   persists the exact accepted binding, and `HostSessionAuthority::resolve_current_exact` enforces
+   the identical matrix and returns that binding unchanged. Exact present binding is session
    authority, never host-participant placement. The packet changes no schema, canonical bytes,
-   fixtures, migration, compatibility path, or already-persisted object.
+   fixtures, migration, compatibility path, or already-persisted object; all other facade behavior
+   remains outside scope.
 3. **A1.2a-S — bounded internal Start adoption prerequisite:** make
    `prepare_host_orchestrator_runtime_from_resolved` construct only an unpersisted
    `GreenfieldHostStartProposalV1` carrying exact store/home/workspace/descriptor/policy/shell

@@ -81,14 +81,16 @@ snapshot publication/orphan staleness, terminal exact retry, and payload deletio
 
 A1.2a-WB is a bounded correction under existing gates, not a new gate. `RG-AUTH-01` and
 `RG-AUTH-03` own exact session-binding preservation, Start request equality, exact retry, and
-zero-mutation rejection. `RG-BASE-02` owns preservation of exact world binding without generic
-synthesis or participant-placement leakage. `RG-DIFF-01` owns the broad before/after differential.
-Their combined matrix requires `Host + None`, `Host + Some(exact)`, and `World + Some(exact)` to
-apply or exact-join; `World + None`, descriptor/launch mismatch, malformed binding, and changed
-world ID or generation fail closed without mutation. Applied `Host + Some` keeps the descriptor and
-launch scope `Host`, persists the exact binding only on durable session authority, and leaves the
-host participant manifest without world placement fields. No schema/version/migration/golden-vector
-gate is implicated because no shape or canonical byte changes.
+zero-mutation rejection through Start issuance, application/persistence, and exact
+current-authority resolution. `RG-BASE-02` owns preservation and exact readback of world binding
+without generic synthesis or participant-placement leakage. `RG-DIFF-01` owns the broad
+before/after differential. Their combined matrix requires `Host + None`, `Host + Some(exact)`, and
+`World + Some(exact)` to apply, exact-join, and resolve; `World + None`, descriptor/launch mismatch,
+malformed binding, changed world ID or generation, and corrupt/substituted persisted combinations
+fail closed without mutation. Applied and resolved `Host + Some` keeps the descriptor and launch
+scope `Host`, returns the exact binding only from durable session authority, and leaves the host
+participant manifest without world placement fields. No schema/version/migration/golden-vector gate
+is implicated because no shape or canonical byte changes.
 
 ## A0 closeout evidence
 
@@ -299,11 +301,13 @@ The exact shell-library baseline at that commit is `876 passed / 171 failed / 0 
 failures are the inherited legacy-writer/preflight set. A1.2a-S has no edits or commits.
 
 The newly bounded prerequisite order is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0**.
-A1.2a-WB owns only the Host/world-binding validator correction in `transition.rs` and its colocated
-`transition_tests.rs`. It does not change schemas, canonical JSON bytes, golden vectors, V1/V2
-fixtures, migrations, compatibility behavior, already-persisted objects, authority fields, or
-world capability/policy enforcement. A1.2a-S may begin only after A1.2a-WB is documentation-clean,
-implementation-clean, independently reviewed, and published.
+A1.2a-WB owns only the Host/world-binding write/read correction in `transition.rs`, its colocated
+`transition_tests.rs`, and `facade.rs::HostSessionAuthority::resolve_current_exact`. The reader must
+accept and return the exact authority persisted under the same four-case matrix; all other facade
+behavior remains outside scope. The packet does not change schemas, canonical JSON bytes, golden
+vectors, V1/V2 fixtures, migrations, compatibility behavior, already-persisted objects, authority
+fields, or world capability/policy enforcement. A1.2a-S may begin only after A1.2a-WB is
+documentation-clean, implementation-clean, independently reviewed, and published.
 
 ## B0 closeout evidence
 
@@ -503,10 +507,11 @@ may close the joint packet. `PassToFail`, `FailToChangedFailure`, `Removed`,
 must preserve its normalized signature.
 
 This docs-only correction records landed A1.2a and authorizes only the subsequently reviewed
-A1.2a-WB two-file implementation. It does not authorize A1.2a-S, B1/B2.1-R0, B3.2a, B1/B2.1-0,
-runtime-WIP restoration, or any later implementation. The exact next packet after independent clean
-documentation review is A1.2a-WB; it must be implemented from its bounded contract rather than by
-restoring the broad A1.2 checkpoint.
+A1.2a-WB implementation in `transition.rs`, `transition_tests.rs`, and the exact
+`facade.rs::HostSessionAuthority::resolve_current_exact` boundary. It does not authorize any other
+facade behavior, A1.2a-S, B1/B2.1-R0, B3.2a, B1/B2.1-0, runtime-WIP restoration, or later
+implementation. The exact next packet after independent clean documentation review is A1.2a-WB; it
+must be implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
 
 ## Baseline behaviors that all tracks preserve
 
