@@ -408,7 +408,7 @@ pub(crate) struct WorldDispatchRequestV1 {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) struct ValidatedWorldDispatchRequestV1 {
     pub request_id: String,
     pub idempotency_key: String,

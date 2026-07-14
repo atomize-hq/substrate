@@ -2,6 +2,176 @@ use super::super::LegacyStateStoreDirectoryEntryV1;
 use super::legacy::ObservedLegacyDirectory;
 use super::*;
 use std::collections::BTreeMap;
+use std::sync::Arc;
+
+const WORLD_WORK_RECEIPT_REGISTRY_FILE: &str = "world-work-receipt-registry-v1.json";
+const WORLD_WORK_RECEIPT_REGISTRY_PREFIX: &str = "world-work-receipt-registry-v1";
+const WORLD_WORK_RECEIPT_REGISTRY_TEMP_PREFIX: &str = "world-work-receipt-registry-v1--";
+const WORLD_WORK_RECEIPT_REGISTRY_TEMP_SUFFIX: &str = ".tmp";
+const WORLD_WORK_EXECUTION_SUPERVISOR_FILE: &str = "world-work-execution-supervisor-v1.json";
+const WORLD_WORK_EXECUTION_SUPERVISOR_PREFIX: &str = "world-work-execution-supervisor-v1";
+const WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_PREFIX: &str = "world-work-execution-supervisor-v1--";
+const WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_SUFFIX: &str = ".tmp";
+
+struct WorldWorkReceiptRegistryStorageInnerV1 {
+    root: TrustedAuthorityRoot,
+    authority_store_id: String,
+}
+
+#[derive(Clone)]
+pub(crate) struct WorldWorkReceiptRegistryStorageV1 {
+    inner: Arc<WorldWorkReceiptRegistryStorageInnerV1>,
+}
+
+impl std::fmt::Debug for WorldWorkReceiptRegistryStorageV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("WorldWorkReceiptRegistryStorageV1")
+            .field("bootstrap_home", self.inner.root.identity())
+            .field("authority_store_id", &self.inner.authority_store_id)
+            .finish()
+    }
+}
+
+pub(crate) struct WorldWorkReceiptRegistryTransactionV1<'storage> {
+    root: &'storage TrustedAuthorityRoot,
+    authority_store_id: &'storage str,
+    locked_root: StateRootV1,
+    authority_entry: DirectoryEntry,
+    authority: TrustedDirectory,
+    lock_entry: DirectoryEntry,
+    lock_directory: TrustedDirectory,
+    root_lock_entry: DirectoryEntry,
+    _root_lock_file: TrustedFile,
+    run_entry: DirectoryEntry,
+    run: TrustedDirectory,
+    agent_hub_entry: DirectoryEntry,
+    agent_hub: TrustedDirectory,
+    _lock: TrustedOwnedFileLock,
+}
+
+struct WorldWorkExecutionSupervisorStorageInnerV1 {
+    root: TrustedAuthorityRoot,
+    authority_store_id: String,
+}
+
+#[derive(Clone)]
+pub(crate) struct WorldWorkExecutionSupervisorStorageV1 {
+    inner: Arc<WorldWorkExecutionSupervisorStorageInnerV1>,
+}
+
+impl std::fmt::Debug for WorldWorkExecutionSupervisorStorageV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("WorldWorkExecutionSupervisorStorageV1")
+            .field("bootstrap_home", self.inner.root.identity())
+            .field("authority_store_id", &self.inner.authority_store_id)
+            .finish()
+    }
+}
+
+pub(crate) struct WorldWorkExecutionSupervisorTransactionV1<'storage> {
+    root: &'storage TrustedAuthorityRoot,
+    authority_store_id: &'storage str,
+    locked_root: StateRootV1,
+    authority_entry: DirectoryEntry,
+    authority: TrustedDirectory,
+    lock_entry: DirectoryEntry,
+    lock_directory: TrustedDirectory,
+    root_lock_entry: DirectoryEntry,
+    _root_lock_file: TrustedFile,
+    run_entry: DirectoryEntry,
+    run: TrustedDirectory,
+    agent_hub_entry: DirectoryEntry,
+    agent_hub: TrustedDirectory,
+    _lock: TrustedOwnedFileLock,
+}
+
+impl WorldWorkReceiptRegistryStorageV1 {
+    pub(crate) fn bind(
+        path: &std::path::Path,
+        expected_root: &CanonicalDirectoryV1,
+        expected_authority_store_id: &str,
+    ) -> Result<Self, BootstrapError> {
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open trusted B1 receipt authority root"))?;
+        if root.identity() != expected_root {
+            return Err(BootstrapError(
+                "B1 receipt authority root differs from expected identity",
+            ));
+        }
+        with_opened_existing_semantic_preflight(&root, |transaction| {
+            if transaction.root.authority_store_id != expected_authority_store_id
+                || transaction.root.bootstrap_home != *expected_root
+            {
+                return Err(BootstrapError(
+                    "B1 receipt authority store identity mismatch",
+                ));
+            }
+            Ok(())
+        })?;
+        root.revalidate()
+            .map_err(|_| BootstrapError("revalidate bound B1 receipt authority root"))?;
+        Ok(Self {
+            inner: Arc::new(WorldWorkReceiptRegistryStorageInnerV1 {
+                root,
+                authority_store_id: expected_authority_store_id.to_string(),
+            }),
+        })
+    }
+
+    pub(crate) fn begin_transaction(
+        &self,
+    ) -> Result<WorldWorkReceiptRegistryTransactionV1<'_>, BootstrapError> {
+        begin_world_work_receipt_registry_transaction(
+            &self.inner.root,
+            &self.inner.authority_store_id,
+        )
+    }
+}
+
+impl WorldWorkExecutionSupervisorStorageV1 {
+    pub(crate) fn bind(
+        path: &std::path::Path,
+        expected_root: &CanonicalDirectoryV1,
+        expected_authority_store_id: &str,
+    ) -> Result<Self, BootstrapError> {
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open trusted B2.1 supervisor authority root"))?;
+        if root.identity() != expected_root {
+            return Err(BootstrapError(
+                "B2.1 supervisor authority root differs from expected identity",
+            ));
+        }
+        with_opened_existing_semantic_preflight(&root, |transaction| {
+            if transaction.root.authority_store_id != expected_authority_store_id
+                || transaction.root.bootstrap_home != *expected_root
+            {
+                return Err(BootstrapError(
+                    "B2.1 supervisor authority store identity mismatch",
+                ));
+            }
+            Ok(())
+        })?;
+        root.revalidate()
+            .map_err(|_| BootstrapError("revalidate bound B2.1 supervisor authority root"))?;
+        Ok(Self {
+            inner: Arc::new(WorldWorkExecutionSupervisorStorageInnerV1 {
+                root,
+                authority_store_id: expected_authority_store_id.to_string(),
+            }),
+        })
+    }
+
+    pub(crate) fn begin_transaction(
+        &self,
+    ) -> Result<WorldWorkExecutionSupervisorTransactionV1<'_>, BootstrapError> {
+        begin_world_work_execution_supervisor_transaction(
+            &self.inner.root,
+            &self.inner.authority_store_id,
+        )
+    }
+}
 
 pub(crate) struct LegacyStateStoreTransactionV1 {
     root: TrustedAuthorityRoot,
@@ -744,6 +914,898 @@ impl LegacyStateStoreTransactionV1 {
             |parent, _| operation(parent, target),
         )
     }
+}
+
+impl WorldWorkReceiptRegistryTransactionV1<'_> {
+    pub(crate) fn read_registry(&mut self) -> Result<Option<Vec<u8>>, BootstrapError> {
+        self.verify_scope()?;
+        validate_world_work_receipt_registry_namespace(&self.agent_hub)?;
+        let bytes = read_world_work_receipt_registry(&self.agent_hub)?;
+        self.verify_scope()?;
+        Ok(bytes)
+    }
+
+    pub(crate) fn replace_registry(&mut self, bytes: &[u8]) -> Result<(), BootstrapError> {
+        use rand::RngCore as _;
+
+        self.verify_scope()?;
+        validate_world_work_receipt_registry_namespace(&self.agent_hub)?;
+        let mut nonce_bytes = [0_u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+        let temp_name = format!(
+            "{WORLD_WORK_RECEIPT_REGISTRY_TEMP_PREFIX}{}{WORLD_WORK_RECEIPT_REGISTRY_TEMP_SUFFIX}",
+            nonce(nonce_bytes)
+        );
+        let mut temp = self
+            .agent_hub
+            .create_file(&temp_name)
+            .map_err(|_| BootstrapError("create B1 receipt-registry temp"))?;
+        temp.write_all(bytes)
+            .map_err(|_| BootstrapError("write B1 receipt-registry temp"))?;
+        temp.sync()
+            .map_err(|_| BootstrapError("sync B1 receipt-registry temp"))?;
+        self.verify_scope()?;
+        self.agent_hub
+            .rename_replace(
+                &temp_name,
+                temp,
+                &self.agent_hub,
+                WORLD_WORK_RECEIPT_REGISTRY_FILE,
+            )
+            .map_err(|_| BootstrapError("publish B1 receipt registry"))?;
+        self.agent_hub
+            .sync()
+            .and_then(|()| self.run.sync())
+            .and_then(|()| self.root.directory().sync())
+            .map_err(|_| BootstrapError("sync B1 receipt-registry publication path"))?;
+        let published = read_world_work_receipt_registry(&self.agent_hub)?
+            .ok_or(BootstrapError("published B1 receipt registry is absent"))?;
+        if published != bytes {
+            return Err(BootstrapError(
+                "published B1 receipt-registry bytes changed",
+            ));
+        }
+        self.verify_scope()
+    }
+
+    pub(crate) fn finish(self) -> Result<(), BootstrapError> {
+        self.verify_scope()?;
+        validate_world_work_receipt_registry_namespace(&self.agent_hub)?;
+        self.agent_hub
+            .sync()
+            .and_then(|()| self.run.sync())
+            .and_then(|()| self.root.directory().sync())
+            .map_err(|_| BootstrapError("sync B1 receipt-registry transaction"))?;
+        self.verify_scope()
+    }
+
+    fn verify_scope(&self) -> Result<(), BootstrapError> {
+        self.verify_named_root_lock_scope()?;
+        let layout = StoreLayout::open(self.root.directory())
+            .map_err(|_| BootstrapError("open B1 receipt authority layout"))?;
+        let observed = layout
+            .semantic_preflight(self.root.identity())
+            .map_err(|_| BootstrapError("preflight B1 receipt authority store"))?;
+        if observed.classification != BootstrapClassificationV1::ValidExisting {
+            return Err(BootstrapError(
+                "B1 receipt authority store is not valid existing state",
+            ));
+        }
+        let current = observed.root.ok_or(BootstrapError(
+            "B1 receipt authority preflight omitted current root",
+        ))?;
+        if current != self.locked_root
+            || current.authority_store_id != self.authority_store_id
+            || current.bootstrap_home != *self.root.identity()
+        {
+            return Err(BootstrapError(
+                "B1 receipt authority scope changed during transaction",
+            ));
+        }
+        self.root
+            .directory()
+            .revalidate_entry(&self.run_entry)
+            .and_then(|()| {
+                self.root
+                    .directory()
+                    .open_controlled_directory_entry(&self.run_entry)
+                    .map(drop)
+            })
+            .map_err(|_| BootstrapError("B1 receipt run directory changed identity"))?;
+        self.run
+            .revalidate_entry(&self.agent_hub_entry)
+            .and_then(|()| {
+                self.run
+                    .open_controlled_directory_entry(&self.agent_hub_entry)
+                    .map(drop)
+            })
+            .map_err(|_| BootstrapError("B1 receipt agent-hub directory changed identity"))?;
+        self.verify_named_root_lock_scope()
+    }
+
+    fn verify_named_root_lock_scope(&self) -> Result<(), BootstrapError> {
+        revalidate_world_work_receipt_root_lock_scope(
+            self.root,
+            &self.authority_entry,
+            &self.authority,
+            &self.lock_entry,
+            &self.lock_directory,
+            &self.root_lock_entry,
+        )
+    }
+}
+
+impl WorldWorkExecutionSupervisorTransactionV1<'_> {
+    pub(crate) fn read_supervisor(&mut self) -> Result<Option<Vec<u8>>, BootstrapError> {
+        self.verify_scope()?;
+        validate_world_work_execution_supervisor_namespace(&self.agent_hub)?;
+        let bytes = read_world_work_execution_supervisor(&self.agent_hub)?;
+        self.verify_scope()?;
+        Ok(bytes)
+    }
+
+    pub(crate) fn replace_supervisor(&mut self, bytes: &[u8]) -> Result<(), BootstrapError> {
+        use rand::RngCore as _;
+
+        self.verify_scope()?;
+        validate_world_work_execution_supervisor_namespace(&self.agent_hub)?;
+        let mut nonce_bytes = [0_u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+        let temp_name = format!(
+            "{WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_PREFIX}{}{WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_SUFFIX}",
+            nonce(nonce_bytes)
+        );
+        let mut temp = self
+            .agent_hub
+            .create_file(&temp_name)
+            .map_err(|_| BootstrapError("create B2.1 supervisor temp"))?;
+        temp.write_all(bytes)
+            .map_err(|_| BootstrapError("write B2.1 supervisor temp"))?;
+        temp.sync()
+            .map_err(|_| BootstrapError("sync B2.1 supervisor temp"))?;
+        self.verify_scope()?;
+        self.agent_hub
+            .rename_replace(
+                &temp_name,
+                temp,
+                &self.agent_hub,
+                WORLD_WORK_EXECUTION_SUPERVISOR_FILE,
+            )
+            .map_err(|_| BootstrapError("publish B2.1 supervisor state"))?;
+        self.agent_hub
+            .sync()
+            .and_then(|()| self.run.sync())
+            .and_then(|()| self.root.directory().sync())
+            .map_err(|_| BootstrapError("sync B2.1 supervisor publication path"))?;
+        let published = read_world_work_execution_supervisor(&self.agent_hub)?
+            .ok_or(BootstrapError("published B2.1 supervisor state is absent"))?;
+        if published != bytes {
+            return Err(BootstrapError("published B2.1 supervisor bytes changed"));
+        }
+        self.verify_scope()
+    }
+
+    pub(crate) fn finish(self) -> Result<(), BootstrapError> {
+        self.verify_scope()?;
+        validate_world_work_execution_supervisor_namespace(&self.agent_hub)?;
+        self.agent_hub
+            .sync()
+            .and_then(|()| self.run.sync())
+            .and_then(|()| self.root.directory().sync())
+            .map_err(|_| BootstrapError("sync B2.1 supervisor transaction"))?;
+        self.verify_scope()
+    }
+
+    fn verify_scope(&self) -> Result<(), BootstrapError> {
+        self.verify_named_root_lock_scope()?;
+        let layout = StoreLayout::open(self.root.directory())
+            .map_err(|_| BootstrapError("reopen B2.1 supervisor authority layout"))?;
+        layout
+            .validate_closed_layout()
+            .map_err(|_| BootstrapError("revalidate B2.1 supervisor authority layout"))?;
+        let observed = layout
+            .semantic_preflight(self.root.identity())
+            .map_err(|_| BootstrapError("revalidate B2.1 supervisor authority store"))?;
+        if observed.classification != BootstrapClassificationV1::ValidExisting
+            || observed.root.as_ref() != Some(&self.locked_root)
+            || self.locked_root.bootstrap_home != *self.root.identity()
+            || self.locked_root.authority_store_id != self.authority_store_id
+        {
+            return Err(BootstrapError("B2.1 supervisor authority scope changed"));
+        }
+        self.root
+            .directory()
+            .revalidate_entry(&self.run_entry)
+            .and_then(|()| {
+                self.root
+                    .directory()
+                    .open_controlled_directory_entry(&self.run_entry)
+                    .map(drop)
+            })
+            .map_err(|_| BootstrapError("B2.1 supervisor run directory changed identity"))?;
+        self.run
+            .revalidate_entry(&self.agent_hub_entry)
+            .and_then(|()| {
+                self.run
+                    .open_controlled_directory_entry(&self.agent_hub_entry)
+                    .map(drop)
+            })
+            .map_err(|_| BootstrapError("B2.1 supervisor agent-hub directory changed identity"))?;
+        self.verify_named_root_lock_scope()
+    }
+
+    fn verify_named_root_lock_scope(&self) -> Result<(), BootstrapError> {
+        revalidate_world_work_execution_supervisor_root_lock_scope(
+            self.root,
+            &self.authority_entry,
+            &self.authority,
+            &self.lock_entry,
+            &self.lock_directory,
+            &self.root_lock_entry,
+        )
+    }
+}
+
+fn begin_world_work_receipt_registry_transaction<'storage>(
+    root: &'storage TrustedAuthorityRoot,
+    expected_authority_store_id: &'storage str,
+) -> Result<WorldWorkReceiptRegistryTransactionV1<'storage>, BootstrapError> {
+    root.revalidate()
+        .map_err(|_| BootstrapError("revalidate B1 receipt authority root"))?;
+    let (authority_entry, authority) =
+        open_existing_world_work_receipt_directory(root.directory(), AUTHORITY_DIRECTORY)?;
+    let (lock_entry, lock_directory) =
+        open_existing_world_work_receipt_directory(&authority, "lock")?;
+    let root_lock_entry = lock_directory
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B1 receipt root-lock directory"))?
+        .into_iter()
+        .find(|entry| entry.name == ROOT_LOCK_FILE && entry.kind == EntryKind::RegularFile)
+        .ok_or(BootstrapError(
+            "B1 receipt root lock was not safely enumerated",
+        ))?;
+    let root_lock_file = lock_directory
+        .open_file_entry(&root_lock_entry)
+        .map_err(|_| BootstrapError("retain exact B1 receipt root lock"))?;
+    let lock = root_lock_file
+        .lock_exclusive_owned()
+        .map_err(|_| BootstrapError("lock exact B1 receipt root lock"))?;
+    revalidate_world_work_receipt_root_lock_scope(
+        root,
+        &authority_entry,
+        &authority,
+        &lock_entry,
+        &lock_directory,
+        &root_lock_entry,
+    )?;
+
+    let layout = StoreLayout::open(root.directory())
+        .map_err(|_| BootstrapError("open locked B1 receipt authority layout"))?;
+    layout
+        .validate_temps()
+        .map_err(|_| BootstrapError("validate B1 receipt authority temps"))?;
+    layout
+        .reconcile_temps()
+        .map_err(|_| BootstrapError("reconcile B1 receipt authority temps"))?;
+    layout
+        .validate_closed_layout()
+        .map_err(|_| BootstrapError("validate B1 receipt authority layout"))?;
+    let observed = layout
+        .semantic_preflight(root.identity())
+        .map_err(|_| BootstrapError("preflight B1 receipt authority store"))?;
+    if observed.classification != BootstrapClassificationV1::ValidExisting {
+        return Err(BootstrapError(
+            "B1 receipt authority store is not valid existing state",
+        ));
+    }
+    let locked_root = observed.root.ok_or(BootstrapError(
+        "B1 receipt authority preflight omitted current root",
+    ))?;
+    if locked_root.bootstrap_home != *root.identity()
+        || locked_root.authority_store_id != expected_authority_store_id
+    {
+        return Err(BootstrapError("B1 receipt authority scope mismatch"));
+    }
+    layout
+        .reconcile_after_preflight(&locked_root)
+        .map_err(|_| BootstrapError("reconcile B1 receipt authority store"))?;
+    let reconciled = layout
+        .semantic_preflight(root.identity())
+        .map_err(|_| BootstrapError("revalidate reconciled B1 authority store"))?;
+    if reconciled.classification != BootstrapClassificationV1::ValidExisting
+        || reconciled.root.as_ref() != Some(&locked_root)
+    {
+        return Err(BootstrapError(
+            "B1 receipt authority changed during canonical preflight",
+        ));
+    }
+    revalidate_world_work_receipt_root_lock_scope(
+        root,
+        &authority_entry,
+        &authority,
+        &lock_entry,
+        &lock_directory,
+        &root_lock_entry,
+    )?;
+    let (run_entry, run) = open_or_create_world_work_receipt_directory(root.directory(), "run")?;
+    let (agent_hub_entry, agent_hub) =
+        open_or_create_world_work_receipt_directory(&run, "agent-hub")?;
+    reconcile_world_work_receipt_registry_namespace(&agent_hub)?;
+    let transaction = WorldWorkReceiptRegistryTransactionV1 {
+        root,
+        authority_store_id: expected_authority_store_id,
+        locked_root,
+        authority_entry,
+        authority,
+        lock_entry,
+        lock_directory,
+        root_lock_entry,
+        _root_lock_file: root_lock_file,
+        run_entry,
+        run,
+        agent_hub_entry,
+        agent_hub,
+        _lock: lock,
+    };
+    transaction.verify_scope()?;
+    Ok(transaction)
+}
+
+fn begin_world_work_execution_supervisor_transaction<'storage>(
+    root: &'storage TrustedAuthorityRoot,
+    expected_authority_store_id: &'storage str,
+) -> Result<WorldWorkExecutionSupervisorTransactionV1<'storage>, BootstrapError> {
+    root.revalidate()
+        .map_err(|_| BootstrapError("revalidate B2.1 supervisor authority root"))?;
+    let (authority_entry, authority) = open_existing_world_work_execution_supervisor_directory(
+        root.directory(),
+        AUTHORITY_DIRECTORY,
+    )?;
+    let (lock_entry, lock_directory) =
+        open_existing_world_work_execution_supervisor_directory(&authority, "lock")?;
+    let root_lock_entry = lock_directory
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B2.1 supervisor root-lock directory"))?
+        .into_iter()
+        .find(|entry| entry.name == ROOT_LOCK_FILE && entry.kind == EntryKind::RegularFile)
+        .ok_or(BootstrapError(
+            "B2.1 supervisor root lock was not safely enumerated",
+        ))?;
+    let root_lock_file = lock_directory
+        .open_file_entry(&root_lock_entry)
+        .map_err(|_| BootstrapError("retain exact B2.1 supervisor root lock"))?;
+    let lock = root_lock_file
+        .lock_exclusive_owned()
+        .map_err(|_| BootstrapError("lock exact B2.1 supervisor root lock"))?;
+    revalidate_world_work_execution_supervisor_root_lock_scope(
+        root,
+        &authority_entry,
+        &authority,
+        &lock_entry,
+        &lock_directory,
+        &root_lock_entry,
+    )?;
+
+    let layout = StoreLayout::open(root.directory())
+        .map_err(|_| BootstrapError("open locked B2.1 supervisor authority layout"))?;
+    layout
+        .validate_temps()
+        .map_err(|_| BootstrapError("validate B2.1 supervisor authority temps"))?;
+    layout
+        .reconcile_temps()
+        .map_err(|_| BootstrapError("reconcile B2.1 supervisor authority temps"))?;
+    layout
+        .validate_closed_layout()
+        .map_err(|_| BootstrapError("validate B2.1 supervisor authority layout"))?;
+    let observed = layout
+        .semantic_preflight(root.identity())
+        .map_err(|_| BootstrapError("preflight B2.1 supervisor authority store"))?;
+    if observed.classification != BootstrapClassificationV1::ValidExisting {
+        return Err(BootstrapError(
+            "B2.1 supervisor authority store is not valid existing state",
+        ));
+    }
+    let locked_root = observed.root.ok_or(BootstrapError(
+        "B2.1 supervisor authority preflight omitted current root",
+    ))?;
+    if locked_root.bootstrap_home != *root.identity()
+        || locked_root.authority_store_id != expected_authority_store_id
+    {
+        return Err(BootstrapError("B2.1 supervisor authority scope mismatch"));
+    }
+    layout
+        .reconcile_after_preflight(&locked_root)
+        .map_err(|_| BootstrapError("reconcile B2.1 supervisor authority store"))?;
+    let reconciled = layout
+        .semantic_preflight(root.identity())
+        .map_err(|_| BootstrapError("revalidate reconciled B2.1 supervisor authority store"))?;
+    if reconciled.classification != BootstrapClassificationV1::ValidExisting
+        || reconciled.root.as_ref() != Some(&locked_root)
+    {
+        return Err(BootstrapError(
+            "B2.1 supervisor authority changed during canonical preflight",
+        ));
+    }
+    revalidate_world_work_execution_supervisor_root_lock_scope(
+        root,
+        &authority_entry,
+        &authority,
+        &lock_entry,
+        &lock_directory,
+        &root_lock_entry,
+    )?;
+    let (run_entry, run) =
+        open_or_create_world_work_execution_supervisor_directory(root.directory(), "run")?;
+    let (agent_hub_entry, agent_hub) =
+        open_or_create_world_work_execution_supervisor_directory(&run, "agent-hub")?;
+    reconcile_world_work_execution_supervisor_namespace(&agent_hub)?;
+    let transaction = WorldWorkExecutionSupervisorTransactionV1 {
+        root,
+        authority_store_id: expected_authority_store_id,
+        locked_root,
+        authority_entry,
+        authority,
+        lock_entry,
+        lock_directory,
+        root_lock_entry,
+        _root_lock_file: root_lock_file,
+        run_entry,
+        run,
+        agent_hub_entry,
+        agent_hub,
+        _lock: lock,
+    };
+    transaction.verify_scope()?;
+    Ok(transaction)
+}
+
+fn open_existing_world_work_execution_supervisor_directory(
+    parent: &TrustedDirectory,
+    name: &str,
+) -> Result<(DirectoryEntry, TrustedDirectory), BootstrapError> {
+    let entry = parent
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B2.1 supervisor authority directory"))?
+        .into_iter()
+        .find(|entry| entry.name == name && entry.kind == EntryKind::Directory)
+        .ok_or(BootstrapError(
+            "B2.1 supervisor authority directory was not safely enumerated",
+        ))?;
+    parent
+        .revalidate_entry(&entry)
+        .map_err(|_| BootstrapError("revalidate B2.1 supervisor authority directory"))?;
+    let directory = parent
+        .open_controlled_directory_entry(&entry)
+        .map_err(|_| BootstrapError("retain B2.1 supervisor authority directory"))?;
+    Ok((entry, directory))
+}
+
+fn revalidate_world_work_execution_supervisor_root_lock_scope(
+    root: &TrustedAuthorityRoot,
+    authority_entry: &DirectoryEntry,
+    authority: &TrustedDirectory,
+    lock_entry: &DirectoryEntry,
+    lock_directory: &TrustedDirectory,
+    root_lock_entry: &DirectoryEntry,
+) -> Result<(), BootstrapError> {
+    root.revalidate()
+        .map_err(|_| BootstrapError("B2.1 supervisor authority root was rebound or replaced"))?;
+    root.directory()
+        .revalidate_entry(authority_entry)
+        .and_then(|()| {
+            root.directory()
+                .open_controlled_directory_entry(authority_entry)
+                .map(drop)
+        })
+        .map_err(|_| BootstrapError("B2.1 supervisor authority directory changed identity"))?;
+    authority
+        .revalidate_entry(lock_entry)
+        .and_then(|()| {
+            authority
+                .open_controlled_directory_entry(lock_entry)
+                .map(drop)
+        })
+        .map_err(|_| BootstrapError("B2.1 supervisor lock directory changed identity"))?;
+    lock_directory
+        .revalidate_entry(root_lock_entry)
+        .and_then(|()| lock_directory.open_file_entry(root_lock_entry).map(drop))
+        .map_err(|_| BootstrapError("B2.1 supervisor root lock changed identity"))
+}
+
+fn open_or_create_world_work_execution_supervisor_directory(
+    parent: &TrustedDirectory,
+    name: &str,
+) -> Result<(DirectoryEntry, TrustedDirectory), BootstrapError> {
+    match parent
+        .entry_kind(name)
+        .map_err(|_| BootstrapError("inspect B2.1 supervisor directory"))?
+    {
+        None => {
+            parent
+                .create_directory(name)
+                .map_err(|_| BootstrapError("create B2.1 supervisor directory"))?;
+        }
+        Some(EntryKind::Directory) => {}
+        Some(EntryKind::RegularFile | EntryKind::Symlink | EntryKind::Other) => {
+            return Err(BootstrapError("B2.1 supervisor directory is unsafe"));
+        }
+    }
+    let entry = parent
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B2.1 supervisor parent"))?
+        .into_iter()
+        .find(|entry| entry.name == name && entry.kind == EntryKind::Directory)
+        .ok_or(BootstrapError(
+            "B2.1 supervisor directory was not safely enumerated",
+        ))?;
+    parent
+        .revalidate_entry(&entry)
+        .map_err(|_| BootstrapError("revalidate B2.1 supervisor directory"))?;
+    let directory = parent
+        .open_controlled_directory_entry(&entry)
+        .map_err(|_| BootstrapError("retain B2.1 supervisor directory"))?;
+    Ok((entry, directory))
+}
+
+fn open_existing_world_work_receipt_directory(
+    parent: &TrustedDirectory,
+    name: &str,
+) -> Result<(DirectoryEntry, TrustedDirectory), BootstrapError> {
+    let entry = parent
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B1 receipt authority directory"))?
+        .into_iter()
+        .find(|entry| entry.name == name && entry.kind == EntryKind::Directory)
+        .ok_or(BootstrapError(
+            "B1 receipt authority directory was not safely enumerated",
+        ))?;
+    parent
+        .revalidate_entry(&entry)
+        .map_err(|_| BootstrapError("revalidate B1 receipt authority directory"))?;
+    let directory = parent
+        .open_controlled_directory_entry(&entry)
+        .map_err(|_| BootstrapError("retain B1 receipt authority directory"))?;
+    Ok((entry, directory))
+}
+
+fn revalidate_world_work_receipt_root_lock_scope(
+    root: &TrustedAuthorityRoot,
+    authority_entry: &DirectoryEntry,
+    authority: &TrustedDirectory,
+    lock_entry: &DirectoryEntry,
+    lock_directory: &TrustedDirectory,
+    root_lock_entry: &DirectoryEntry,
+) -> Result<(), BootstrapError> {
+    root.revalidate()
+        .map_err(|_| BootstrapError("B1 receipt authority root was rebound or replaced"))?;
+    root.directory()
+        .revalidate_entry(authority_entry)
+        .and_then(|()| {
+            root.directory()
+                .open_controlled_directory_entry(authority_entry)
+                .map(drop)
+        })
+        .map_err(|_| BootstrapError("B1 receipt authority directory changed identity"))?;
+    authority
+        .revalidate_entry(lock_entry)
+        .and_then(|()| {
+            authority
+                .open_controlled_directory_entry(lock_entry)
+                .map(drop)
+        })
+        .map_err(|_| BootstrapError("B1 receipt lock directory changed identity"))?;
+    lock_directory
+        .revalidate_entry(root_lock_entry)
+        .and_then(|()| lock_directory.open_file_entry(root_lock_entry).map(drop))
+        .map_err(|_| BootstrapError("B1 receipt root lock changed identity"))
+}
+
+fn open_or_create_world_work_receipt_directory(
+    parent: &TrustedDirectory,
+    name: &str,
+) -> Result<(DirectoryEntry, TrustedDirectory), BootstrapError> {
+    match parent
+        .entry_kind(name)
+        .map_err(|_| BootstrapError("inspect B1 receipt-registry directory"))?
+    {
+        None => {
+            parent
+                .create_directory(name)
+                .map_err(|_| BootstrapError("create B1 receipt-registry directory"))?;
+        }
+        Some(EntryKind::Directory) => {}
+        Some(EntryKind::RegularFile | EntryKind::Symlink | EntryKind::Other) => {
+            return Err(BootstrapError("B1 receipt-registry directory is unsafe"));
+        }
+    }
+    let entry = parent
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B1 receipt-registry parent"))?
+        .into_iter()
+        .find(|entry| entry.name == name && entry.kind == EntryKind::Directory)
+        .ok_or(BootstrapError(
+            "B1 receipt-registry directory was not safely enumerated",
+        ))?;
+    parent
+        .revalidate_entry(&entry)
+        .map_err(|_| BootstrapError("revalidate B1 receipt-registry directory"))?;
+    let directory = parent
+        .open_controlled_directory_entry(&entry)
+        .map_err(|_| BootstrapError("retain B1 receipt-registry directory"))?;
+    Ok((entry, directory))
+}
+
+fn reconcile_world_work_receipt_registry_namespace(
+    agent_hub: &TrustedDirectory,
+) -> Result<(), BootstrapError> {
+    let entries = agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B1 receipt-registry namespace"))?;
+    let receipt_entries = entries
+        .iter()
+        .filter(|entry| entry.name.starts_with(WORLD_WORK_RECEIPT_REGISTRY_PREFIX))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut temps = Vec::new();
+    for entry in &receipt_entries {
+        if entry.name == WORLD_WORK_RECEIPT_REGISTRY_FILE {
+            validate_world_work_receipt_registry_entry(agent_hub, entry)?;
+            continue;
+        }
+        if entry.kind != EntryKind::RegularFile
+            || !is_world_work_receipt_registry_temp_name(&entry.name)
+        {
+            return Err(BootstrapError(
+                "B1 receipt-registry namespace contains an unsafe entry",
+            ));
+        }
+        agent_hub
+            .open_file_entry(entry)
+            .and_then(|file| file.sync())
+            .and_then(|()| agent_hub.revalidate_entry(entry))
+            .map_err(|_| BootstrapError("revalidate B1 receipt-registry temp"))?;
+        temps.push(entry.clone());
+    }
+    let revalidated_entries = agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("re-enumerate B1 receipt-registry namespace"))?
+        .into_iter()
+        .filter(|entry| entry.name.starts_with(WORLD_WORK_RECEIPT_REGISTRY_PREFIX))
+        .collect::<Vec<_>>();
+    if revalidated_entries != receipt_entries {
+        return Err(BootstrapError(
+            "B1 receipt-registry namespace changed before reconciliation",
+        ));
+    }
+    for entry in temps {
+        agent_hub
+            .revalidate_entry(&entry)
+            .and_then(|()| agent_hub.open_file_entry(&entry).map(drop))
+            .map_err(|_| BootstrapError("revalidate B1 receipt-registry temp for removal"))?;
+        agent_hub
+            .unlink_file(&entry.name)
+            .map_err(|_| BootstrapError("remove interrupted B1 receipt-registry temp"))?;
+        if agent_hub
+            .entry_kind(&entry.name)
+            .map_err(|_| BootstrapError("revalidate removed B1 receipt-registry temp"))?
+            .is_some()
+        {
+            return Err(BootstrapError(
+                "B1 receipt-registry temp reappeared during reconciliation",
+            ));
+        }
+    }
+    validate_world_work_receipt_registry_namespace(agent_hub)
+}
+
+fn validate_world_work_receipt_registry_namespace(
+    agent_hub: &TrustedDirectory,
+) -> Result<(), BootstrapError> {
+    for entry in agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("validate B1 receipt-registry namespace"))?
+    {
+        if entry.name == WORLD_WORK_RECEIPT_REGISTRY_FILE {
+            validate_world_work_receipt_registry_entry(agent_hub, &entry)?;
+        } else if entry.name.starts_with(WORLD_WORK_RECEIPT_REGISTRY_PREFIX) {
+            return Err(BootstrapError(
+                "B1 receipt-registry namespace contains an uncommitted entry",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_world_work_receipt_registry_entry(
+    agent_hub: &TrustedDirectory,
+    entry: &DirectoryEntry,
+) -> Result<(), BootstrapError> {
+    if entry.kind != EntryKind::RegularFile {
+        return Err(BootstrapError("B1 receipt registry is not a regular file"));
+    }
+    agent_hub
+        .open_file_entry(entry)
+        .and_then(|file| file.sync())
+        .and_then(|()| agent_hub.revalidate_entry(entry))
+        .map_err(|_| BootstrapError("B1 receipt registry changed identity"))
+}
+
+fn read_world_work_receipt_registry(
+    agent_hub: &TrustedDirectory,
+) -> Result<Option<Vec<u8>>, BootstrapError> {
+    let entry = agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B1 receipt registry"))?
+        .into_iter()
+        .find(|entry| entry.name == WORLD_WORK_RECEIPT_REGISTRY_FILE);
+    let Some(entry) = entry else {
+        return Ok(None);
+    };
+    validate_world_work_receipt_registry_entry(agent_hub, &entry)?;
+    let bytes = agent_hub
+        .open_file_entry(&entry)
+        .and_then(|file| file.read_all())
+        .map_err(|_| BootstrapError("read B1 receipt registry"))?;
+    agent_hub
+        .revalidate_entry(&entry)
+        .map_err(|_| BootstrapError("revalidate read B1 receipt registry"))?;
+    Ok(Some(bytes))
+}
+
+fn is_world_work_receipt_registry_temp_name(name: &str) -> bool {
+    let Some(hex) = name
+        .strip_prefix(WORLD_WORK_RECEIPT_REGISTRY_TEMP_PREFIX)
+        .and_then(|value| value.strip_suffix(WORLD_WORK_RECEIPT_REGISTRY_TEMP_SUFFIX))
+    else {
+        return false;
+    };
+    hex.len() == 32
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn reconcile_world_work_execution_supervisor_namespace(
+    agent_hub: &TrustedDirectory,
+) -> Result<(), BootstrapError> {
+    let entries = agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B2.1 supervisor namespace"))?;
+    let supervisor_entries = entries
+        .iter()
+        .filter(|entry| {
+            entry
+                .name
+                .starts_with(WORLD_WORK_EXECUTION_SUPERVISOR_PREFIX)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut temps = Vec::new();
+    for entry in &supervisor_entries {
+        if entry.name == WORLD_WORK_EXECUTION_SUPERVISOR_FILE {
+            validate_world_work_execution_supervisor_entry(agent_hub, entry)?;
+            continue;
+        }
+        if entry.kind != EntryKind::RegularFile
+            || !is_world_work_execution_supervisor_temp_name(&entry.name)
+        {
+            return Err(BootstrapError(
+                "B2.1 supervisor namespace contains an unsafe entry",
+            ));
+        }
+        agent_hub
+            .open_file_entry(entry)
+            .and_then(|file| file.sync())
+            .and_then(|()| agent_hub.revalidate_entry(entry))
+            .map_err(|_| BootstrapError("revalidate B2.1 supervisor temp"))?;
+        temps.push(entry.clone());
+    }
+    let revalidated_entries = agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("re-enumerate B2.1 supervisor namespace"))?
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .name
+                .starts_with(WORLD_WORK_EXECUTION_SUPERVISOR_PREFIX)
+        })
+        .collect::<Vec<_>>();
+    if revalidated_entries != supervisor_entries {
+        return Err(BootstrapError(
+            "B2.1 supervisor namespace changed before reconciliation",
+        ));
+    }
+    for entry in temps {
+        agent_hub
+            .revalidate_entry(&entry)
+            .and_then(|()| agent_hub.open_file_entry(&entry).map(drop))
+            .map_err(|_| BootstrapError("revalidate B2.1 supervisor temp for removal"))?;
+        agent_hub
+            .unlink_file(&entry.name)
+            .map_err(|_| BootstrapError("remove interrupted B2.1 supervisor temp"))?;
+        if agent_hub
+            .entry_kind(&entry.name)
+            .map_err(|_| BootstrapError("revalidate removed B2.1 supervisor temp"))?
+            .is_some()
+        {
+            return Err(BootstrapError(
+                "B2.1 supervisor temp reappeared during reconciliation",
+            ));
+        }
+    }
+    validate_world_work_execution_supervisor_namespace(agent_hub)
+}
+
+fn validate_world_work_execution_supervisor_namespace(
+    agent_hub: &TrustedDirectory,
+) -> Result<(), BootstrapError> {
+    for entry in agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("validate B2.1 supervisor namespace"))?
+    {
+        if entry.name == WORLD_WORK_EXECUTION_SUPERVISOR_FILE {
+            validate_world_work_execution_supervisor_entry(agent_hub, &entry)?;
+        } else if entry
+            .name
+            .starts_with(WORLD_WORK_EXECUTION_SUPERVISOR_PREFIX)
+        {
+            return Err(BootstrapError(
+                "B2.1 supervisor namespace contains an uncommitted entry",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_world_work_execution_supervisor_entry(
+    agent_hub: &TrustedDirectory,
+    entry: &DirectoryEntry,
+) -> Result<(), BootstrapError> {
+    if entry.kind != EntryKind::RegularFile {
+        return Err(BootstrapError(
+            "B2.1 supervisor state is not a regular file",
+        ));
+    }
+    agent_hub
+        .open_file_entry(entry)
+        .and_then(|file| file.sync())
+        .and_then(|()| agent_hub.revalidate_entry(entry))
+        .map_err(|_| BootstrapError("B2.1 supervisor state changed identity"))
+}
+
+fn read_world_work_execution_supervisor(
+    agent_hub: &TrustedDirectory,
+) -> Result<Option<Vec<u8>>, BootstrapError> {
+    let entry = agent_hub
+        .entries()
+        .map_err(|_| BootstrapError("enumerate B2.1 supervisor state"))?
+        .into_iter()
+        .find(|entry| entry.name == WORLD_WORK_EXECUTION_SUPERVISOR_FILE);
+    let Some(entry) = entry else {
+        return Ok(None);
+    };
+    validate_world_work_execution_supervisor_entry(agent_hub, &entry)?;
+    let bytes = agent_hub
+        .open_file_entry(&entry)
+        .and_then(|file| file.read_all())
+        .map_err(|_| BootstrapError("read B2.1 supervisor state"))?;
+    agent_hub
+        .revalidate_entry(&entry)
+        .map_err(|_| BootstrapError("revalidate read B2.1 supervisor state"))?;
+    Ok(Some(bytes))
+}
+
+fn is_world_work_execution_supervisor_temp_name(name: &str) -> bool {
+    let Some(hex) = name
+        .strip_prefix(WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_PREFIX)
+        .and_then(|value| value.strip_suffix(WORLD_WORK_EXECUTION_SUPERVISOR_TEMP_SUFFIX))
+    else {
+        return false;
+    };
+    hex.len() == 32
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 pub(super) fn with_semantic_preflight<T>(

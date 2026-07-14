@@ -12,10 +12,10 @@ use hyper::{body::Bytes, Method, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use transport_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, MemberTurnSubmitRequestV1,
-    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1,
-    WorldFsReadRequestV1, WorldFsReadResponseV1,
+    ExecuteStreamReplayRequestV1, GatewayLifecycleRequestV1, GatewayLifecycleResponseV1,
+    MemberTurnSubmitRequestV1, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
+    PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
+    PendingDiffRequestV1, WorldDoctorReportV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
 
 pub mod retry;
@@ -127,6 +127,29 @@ impl AgentClient {
             .context("Failed to read error body")?
             .to_bytes();
 
+        Err(Self::map_http_error(status, &body_bytes))
+    }
+
+    /// Replay one accepted execution from the exact durable host cursor and continue live frames.
+    pub async fn replay_execute_stream(
+        &self,
+        request: ExecuteStreamReplayRequestV1,
+    ) -> Result<Response<hyper::body::Incoming>> {
+        request.validate().map_err(anyhow::Error::msg)?;
+        let response = self
+            .post("/v1/execute/stream/replay", &request)
+            .await
+            .context("Failed to initiate streaming execute replay")?;
+        if response.status().is_success() {
+            return Ok(response);
+        }
+        let status = response.status();
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to read replay error body")?
+            .to_bytes();
         Err(Self::map_http_error(status, &body_bytes))
     }
 

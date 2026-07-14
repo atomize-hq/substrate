@@ -22,8 +22,12 @@ use crate::execution::config_model::AgentExecutionScope;
 
 #[cfg(any(target_os = "linux", test))]
 use super::dispatch_contract::{
-    ApprovalResponseDecisionV1, RetainedWorkerInspectSnapshotV1,
-    WorkerContinueApprovalResponsePayloadV1, WorkerContinueClarificationResponsePayloadV1,
+    ApprovalResponseDecisionV1, ControlDirectiveKindV1, RetainedWorkerInspectSnapshotV1,
+    TaskPayloadV1, ValidatedWorldDispatchRequestV1, WorkerContinueApprovalResponsePayloadV1,
+    WorkerContinueClarificationResponsePayloadV1, WorkerContinueControlDirectivePayloadV1,
+    WorkerContinueForkCommandPayloadV1, WorkerContinuePayloadV1,
+    WorkerContinueProgressAckPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
+    WorldDispatchPayloadV1,
 };
 #[cfg(any(target_os = "linux", test))]
 use super::obligation_ledger::ApprovalObligationCloseoutDisposition;
@@ -932,6 +936,1633 @@ enum ParticipantRecordSource {
     Legacy,
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldWorkProposalFamilyV1 {
+    EphemeralTask,
+    RetainedTurn,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub(crate) enum ProposedWorldWorkIdentityV1 {
+    EphemeralTask,
+    RetainedTurn {
+        active_run_id: String,
+        message_id: String,
+        target_participant_id: String,
+    },
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "durable submission identity mirrors the frozen B1 typed schema"
+)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub(crate) enum WorldWorkSubmissionIdentityV1 {
+    EphemeralTask {
+        validated_dispatch_request: ValidatedWorldDispatchRequestV1,
+        member_dispatch_request: transport_api_types::MemberDispatchRequestV1,
+        canonical_execute_request_sha256: String,
+    },
+    RetainedTurn {
+        validated_dispatch_request: ValidatedWorldDispatchRequestV1,
+        canonical_member_turn_submit_request_sha256: String,
+    },
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorldWorkAcceptanceProposalV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) acceptance_context: transport_api_types::WorldWorkAcceptanceContextV1,
+    pub(crate) authority_store_id: String,
+    pub(crate) authority_revision_observed: u64,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) caller_backend_id: String,
+    pub(crate) target_backend_id: String,
+    pub(crate) world_id: String,
+    pub(crate) world_generation: u64,
+    pub(crate) proposed_work: ProposedWorldWorkIdentityV1,
+    pub(crate) submission_identity: WorldWorkSubmissionIdentityV1,
+    pub(crate) current_policy_snapshot_ref:
+        super::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(crate) current_policy_snapshot_hash: String,
+    pub(crate) current_policy_revision: String,
+    pub(crate) created_at: DateTime<Utc>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl WorldWorkAcceptanceProposalV1 {
+    pub(crate) fn validate(&self) -> Result<()> {
+        use super::host_session_authority::schema::AuthorityObjectKindV1;
+
+        if self.schema_version != 1 {
+            anyhow::bail!(
+                "unsupported world work acceptance proposal schema version {}",
+                self.schema_version
+            );
+        }
+        self.acceptance_context
+            .validate()
+            .map_err(anyhow::Error::msg)?;
+        validate_world_work_required("authority_store_id", &self.authority_store_id)?;
+        validate_world_work_required("orchestration_session_id", &self.orchestration_session_id)?;
+        validate_world_work_required("caller_participant_id", &self.caller_participant_id)?;
+        validate_world_work_required("caller_backend_id", &self.caller_backend_id)?;
+        validate_world_work_required("target_backend_id", &self.target_backend_id)?;
+        validate_world_work_required("world_id", &self.world_id)?;
+        validate_world_work_required("current_policy_revision", &self.current_policy_revision)?;
+        validate_world_work_digest(
+            "current_policy_snapshot_hash",
+            &self.current_policy_snapshot_hash,
+        )?;
+        if self.authority_revision_observed == 0 {
+            anyhow::bail!("authority_revision_observed must be positive");
+        }
+        if self.current_policy_snapshot_ref.object_kind != AuthorityObjectKindV1::Policy {
+            anyhow::bail!("current_policy_snapshot_ref must name a Policy object");
+        }
+        validate_world_work_policy_ref(&self.current_policy_snapshot_ref)?;
+        if self.acceptance_context.request_id != self.request_id()
+            || self.acceptance_context.caller_backend_id != self.caller_backend_id
+        {
+            anyhow::bail!("acceptance context does not match proposal request/caller backend");
+        }
+        if let Some(correlation) = self.acceptance_context.host_transition_correlation.as_ref() {
+            if correlation.authority_store_id != self.authority_store_id
+                || correlation.orchestration_session_id != self.orchestration_session_id
+                || correlation.authoritative_participant_id != self.caller_participant_id
+                || correlation.authority_revision_observed != self.authority_revision_observed
+            {
+                anyhow::bail!("host transition correlation does not match proposal scope");
+            }
+        }
+        self.validate_submission_identity()
+    }
+
+    pub(crate) fn request_id(&self) -> &str {
+        &self.acceptance_context.request_id
+    }
+
+    fn family(&self) -> WorldWorkProposalFamilyV1 {
+        match &self.proposed_work {
+            ProposedWorldWorkIdentityV1::EphemeralTask => WorldWorkProposalFamilyV1::EphemeralTask,
+            ProposedWorldWorkIdentityV1::RetainedTurn { .. } => {
+                WorldWorkProposalFamilyV1::RetainedTurn
+            }
+        }
+    }
+
+    fn accepts_work_identity(&self, work_identity: &AcceptedWorldWorkIdentityV1) -> bool {
+        match (&self.proposed_work, work_identity) {
+            (
+                ProposedWorldWorkIdentityV1::EphemeralTask,
+                AcceptedWorldWorkIdentityV1::EphemeralTask { .. },
+            ) => true,
+            (
+                ProposedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id,
+                    message_id,
+                    target_participant_id,
+                },
+                AcceptedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id: accepted_active_run_id,
+                    message_id: accepted_message_id,
+                    target_participant_id: accepted_target_participant_id,
+                },
+            ) => {
+                active_run_id == accepted_active_run_id
+                    && message_id == accepted_message_id
+                    && target_participant_id == accepted_target_participant_id
+            }
+            _ => false,
+        }
+    }
+
+    fn validate_dispatch_scope(&self, request: &ValidatedWorldDispatchRequestV1) -> Result<()> {
+        if request.request_id != self.request_id()
+            || request.orchestration_session_id != self.orchestration_session_id
+            || request.caller_participant_id != self.caller_participant_id
+            || request.target_backend_id != self.target_backend_id
+            || request.world_id != self.world_id
+            || request.world_generation != self.world_generation
+        {
+            anyhow::bail!("validated dispatch request does not match proposal scope");
+        }
+        Ok(())
+    }
+
+    fn validate_submission_identity(&self) -> Result<()> {
+        match (&self.proposed_work, &self.submission_identity) {
+            (
+                ProposedWorldWorkIdentityV1::EphemeralTask,
+                WorldWorkSubmissionIdentityV1::EphemeralTask {
+                    validated_dispatch_request,
+                    member_dispatch_request,
+                    canonical_execute_request_sha256,
+                },
+            ) => {
+                self.validate_dispatch_scope(validated_dispatch_request)?;
+                if validated_dispatch_request.action != WorldDispatchActionV1::RunWorldTask
+                    || validated_dispatch_request.mode != WorldDispatchModeV1::Ephemeral
+                {
+                    anyhow::bail!("ephemeral proposal requires run_world_task/ephemeral dispatch");
+                }
+                member_dispatch_request
+                    .validate()
+                    .map_err(anyhow::Error::msg)?;
+                if member_dispatch_request.orchestration_session_id != self.orchestration_session_id
+                    || member_dispatch_request.orchestrator_participant_id
+                        != self.caller_participant_id
+                    || member_dispatch_request.backend_id != self.target_backend_id
+                    || member_dispatch_request.run_id != self.request_id()
+                    || member_dispatch_request.world_id != self.world_id
+                    || member_dispatch_request.world_generation != self.world_generation
+                    || !valid_world_work_uuid_v7(&member_dispatch_request.participant_id, "awm_")
+                    || self.acceptance_context.message_id.is_some()
+                {
+                    anyhow::bail!("ephemeral member dispatch does not match proposal scope");
+                }
+                validate_world_work_digest(
+                    "canonical_execute_request_sha256",
+                    canonical_execute_request_sha256,
+                )
+            }
+            (
+                ProposedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id,
+                    message_id,
+                    target_participant_id,
+                },
+                WorldWorkSubmissionIdentityV1::RetainedTurn {
+                    validated_dispatch_request,
+                    canonical_member_turn_submit_request_sha256,
+                },
+            ) => {
+                self.validate_dispatch_scope(validated_dispatch_request)?;
+                if validated_dispatch_request.action != WorldDispatchActionV1::ContinueWorldWorker
+                    || validated_dispatch_request.mode != WorldDispatchModeV1::Retained
+                    || validated_dispatch_request.target_participant_id.as_deref()
+                        != Some(target_participant_id)
+                    || active_run_id != self.request_id()
+                    || self.acceptance_context.message_id.as_deref() != Some(message_id)
+                {
+                    anyhow::bail!("retained submission identity does not match proposal scope");
+                }
+                validate_world_work_digest(
+                    "canonical_member_turn_submit_request_sha256",
+                    canonical_member_turn_submit_request_sha256,
+                )
+            }
+            _ => anyhow::bail!("proposal work family does not match submission identity"),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub(crate) enum AcceptedWorldWorkIdentityV1 {
+    EphemeralTask {
+        task_run_id: String,
+    },
+    RetainedTurn {
+        active_run_id: String,
+        message_id: String,
+        target_participant_id: String,
+    },
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RuntimeAcceptanceAcknowledgementKindV1 {
+    SubmissionAccepted,
+    StartFrame,
+    RegisteredFrame,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RuntimeAcceptanceEvidenceV1 {
+    pub(crate) acknowledgement_kind: RuntimeAcceptanceAcknowledgementKindV1,
+    pub(crate) acceptance_record_id: String,
+    pub(crate) stream_id: String,
+    pub(crate) frame_sequence: u64,
+    pub(crate) runtime_submission_id: Option<String>,
+    pub(crate) task_run_id: Option<String>,
+    pub(crate) active_run_id: Option<String>,
+    pub(crate) message_id: Option<String>,
+    pub(crate) retained_participant_id: Option<String>,
+    pub(crate) observed_at: DateTime<Utc>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WorldWorkAcceptanceRecordV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) acceptance_record_id: String,
+    pub(crate) request_id: String,
+    pub(crate) authority_store_id: String,
+    pub(crate) authority_revision_observed: u64,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) caller_backend_id: String,
+    pub(crate) target_backend_id: String,
+    pub(crate) world_id: String,
+    pub(crate) world_generation: u64,
+    pub(crate) work_identity: AcceptedWorldWorkIdentityV1,
+    pub(crate) host_transition_correlation:
+        Option<substrate_common::HostTransitionWorkCorrelationV1>,
+    pub(crate) current_policy_snapshot_ref:
+        super::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(crate) current_policy_snapshot_hash: String,
+    pub(crate) current_policy_revision: String,
+    pub(crate) runtime_acceptance: RuntimeAcceptanceEvidenceV1,
+    pub(crate) accepted_at: DateTime<Utc>,
+    pub(crate) record_revision: u64,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct PersistedWorldWorkAcceptanceV1(WorldWorkAcceptanceRecordV1);
+
+#[cfg(any(target_os = "linux", test))]
+impl PersistedWorldWorkAcceptanceV1 {
+    pub(super) fn record(&self) -> &WorldWorkAcceptanceRecordV1 {
+        &self.0
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl WorldWorkAcceptanceRecordV1 {
+    pub(super) fn validate(&self) -> Result<()> {
+        use super::host_session_authority::schema::AuthorityObjectKindV1;
+
+        if self.schema_version != 1 || self.record_revision != 1 {
+            anyhow::bail!("acceptance record must use schema/revision 1");
+        }
+        if !valid_world_work_uuid_v7(&self.acceptance_record_id, "wwa_") {
+            anyhow::bail!("acceptance_record_id must be a wwa-prefixed UUIDv7");
+        }
+        validate_world_work_required("request_id", &self.request_id)?;
+        validate_world_work_required("authority_store_id", &self.authority_store_id)?;
+        validate_world_work_required("orchestration_session_id", &self.orchestration_session_id)?;
+        validate_world_work_required("caller_participant_id", &self.caller_participant_id)?;
+        validate_world_work_required("caller_backend_id", &self.caller_backend_id)?;
+        validate_world_work_required("target_backend_id", &self.target_backend_id)?;
+        validate_world_work_required("world_id", &self.world_id)?;
+        validate_world_work_required("current_policy_revision", &self.current_policy_revision)?;
+        validate_world_work_digest(
+            "current_policy_snapshot_hash",
+            &self.current_policy_snapshot_hash,
+        )?;
+        if self.current_policy_snapshot_ref.object_kind != AuthorityObjectKindV1::Policy {
+            anyhow::bail!("current_policy_snapshot_ref must name a Policy object");
+        }
+        validate_world_work_policy_ref(&self.current_policy_snapshot_ref)?;
+        if self.authority_revision_observed == 0
+            || self.runtime_acceptance.frame_sequence == 0
+            || self.runtime_acceptance.stream_id.trim().is_empty()
+            || self.runtime_acceptance.acceptance_record_id != self.acceptance_record_id
+        {
+            anyhow::bail!("acceptance record contains invalid authority/runtime evidence");
+        }
+        if self.runtime_acceptance.acknowledgement_kind
+            != RuntimeAcceptanceAcknowledgementKindV1::StartFrame
+            || self.runtime_acceptance.frame_sequence != 1
+        {
+            anyhow::bail!("B1 production acceptance requires first Start frame");
+        }
+        match &self.work_identity {
+            AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => {
+                validate_world_work_required("task_run_id", task_run_id)?;
+                if self.runtime_acceptance.task_run_id.as_deref() != Some(task_run_id)
+                    || self.runtime_acceptance.runtime_submission_id.as_deref() != Some(task_run_id)
+                    || self.runtime_acceptance.active_run_id.is_some()
+                    || self.runtime_acceptance.message_id.is_some()
+                    || self.runtime_acceptance.retained_participant_id.is_some()
+                {
+                    anyhow::bail!("task acceptance evidence does not match task identity");
+                }
+            }
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id,
+                message_id,
+                target_participant_id,
+            } => {
+                validate_world_work_required("active_run_id", active_run_id)?;
+                if !valid_world_work_uuid_v7(message_id, "wwm_") {
+                    anyhow::bail!("retained message_id must be a wwm-prefixed UUIDv7");
+                }
+                validate_world_work_required("target_participant_id", target_participant_id)?;
+                let runtime_submission_id = self
+                    .runtime_acceptance
+                    .runtime_submission_id
+                    .as_deref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "retained acceptance evidence omitted runtime submission identity"
+                        )
+                    })?;
+                validate_world_work_required("runtime_submission_id", runtime_submission_id)?;
+                if self.runtime_acceptance.active_run_id.as_deref() != Some(active_run_id)
+                    || self.runtime_acceptance.message_id.as_deref() != Some(message_id)
+                    || self.runtime_acceptance.retained_participant_id.as_deref()
+                        != Some(target_participant_id)
+                    || self.runtime_acceptance.task_run_id.is_some()
+                {
+                    anyhow::bail!("retained acceptance evidence does not match turn identity");
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorldWorkReceiptRegistrySessionStateV1 {
+    schema_version: u32,
+    proposals_by_request_id: BTreeMap<String, WorldWorkAcceptanceProposalV1>,
+    records_by_acceptance_record_id: BTreeMap<String, WorldWorkAcceptanceRecordV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl Default for WorldWorkReceiptRegistrySessionStateV1 {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            proposals_by_request_id: BTreeMap::new(),
+            records_by_acceptance_record_id: BTreeMap::new(),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl WorldWorkReceiptRegistrySessionStateV1 {
+    fn validate(&self, session_id: &str, authority_store_id: &str) -> Result<()> {
+        if self.schema_version != 1 {
+            anyhow::bail!("unsupported world work receipt registry session schema version");
+        }
+        for (request_id, proposal) in &self.proposals_by_request_id {
+            proposal.validate()?;
+            if request_id != proposal.request_id()
+                || proposal.orchestration_session_id != session_id
+                || proposal.authority_store_id != authority_store_id
+            {
+                anyhow::bail!("world work proposal registry key/store/session scope mismatch");
+            }
+        }
+        for (acceptance_id, record) in &self.records_by_acceptance_record_id {
+            record.validate()?;
+            if acceptance_id != &record.acceptance_record_id
+                || record.orchestration_session_id != session_id
+                || record.authority_store_id != authority_store_id
+            {
+                anyhow::bail!("world work acceptance registry key/store/session scope mismatch");
+            }
+            let matching_proposals = self
+                .proposals_by_request_id
+                .values()
+                .filter(|proposal| {
+                    proposal.acceptance_context.proposed_acceptance_record_id == *acceptance_id
+                })
+                .collect::<Vec<_>>();
+            if matching_proposals.len() != 1 {
+                anyhow::bail!("accepted world work must retain one exact proposal");
+            }
+            validate_acceptance_record_matches_proposal(record, matching_proposals[0])?;
+        }
+        let unique_work_identities = self
+            .records_by_acceptance_record_id
+            .values()
+            .map(|record| &record.work_identity)
+            .collect::<BTreeSet<_>>();
+        if unique_work_identities.len() != self.records_by_acceptance_record_id.len() {
+            anyhow::bail!("world work identity is not unique within session registry");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorldWorkReceiptRegistryStateV1 {
+    schema_version: u32,
+    sessions_by_id: BTreeMap<String, WorldWorkReceiptRegistrySessionStateV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl Default for WorldWorkReceiptRegistryStateV1 {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            sessions_by_id: BTreeMap::new(),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl WorldWorkReceiptRegistryStateV1 {
+    fn validate(&self, authority_store_id: &str) -> Result<()> {
+        if self.schema_version != 1 {
+            anyhow::bail!("unsupported world work receipt registry schema version");
+        }
+        validate_world_work_required("authority_store_id", authority_store_id)?;
+
+        let mut proposal_acceptance_owners = BTreeMap::<String, (String, String)>::new();
+        let mut retained_message_owners = BTreeMap::<String, (String, String)>::new();
+        let mut record_acceptance_ids = BTreeSet::new();
+        for (session_id, session) in &self.sessions_by_id {
+            validate_world_work_required("orchestration_session_id", session_id)?;
+            session.validate(session_id, authority_store_id)?;
+            for (request_id, proposal) in &session.proposals_by_request_id {
+                let acceptance_id = proposal
+                    .acceptance_context
+                    .proposed_acceptance_record_id
+                    .clone();
+                if proposal_acceptance_owners
+                    .insert(acceptance_id, (session_id.clone(), request_id.clone()))
+                    .is_some()
+                {
+                    anyhow::bail!(
+                        "world work proposal acceptance-record identity is not store-wide unique"
+                    );
+                }
+                if let Some(message_id) = proposal.acceptance_context.message_id.as_ref() {
+                    if retained_message_owners
+                        .insert(message_id.clone(), (session_id.clone(), request_id.clone()))
+                        .is_some()
+                    {
+                        anyhow::bail!(
+                            "retained world work message identity is not store-wide unique"
+                        );
+                    }
+                }
+            }
+            for acceptance_id in session.records_by_acceptance_record_id.keys() {
+                if !record_acceptance_ids.insert(acceptance_id.clone()) {
+                    anyhow::bail!("world work acceptance-record identity is not store-wide unique");
+                }
+                if proposal_acceptance_owners
+                    .get(acceptance_id)
+                    .is_none_or(|(owner_session, _)| owner_session != session_id)
+                {
+                    anyhow::bail!(
+                        "accepted world work does not join its exact store-wide proposal"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum CanonicalWorldDispatchActionV1 {
+    RunWorldTask,
+    SpawnWorldWorker,
+    ForkWorldWorker,
+    ContinueWorldWorker,
+    InspectWorldWorker,
+    CancelWorldWork,
+    StopWorldWorker,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<WorldDispatchActionV1> for CanonicalWorldDispatchActionV1 {
+    fn from(value: WorldDispatchActionV1) -> Self {
+        match value {
+            WorldDispatchActionV1::RunWorldTask => Self::RunWorldTask,
+            WorldDispatchActionV1::SpawnWorldWorker => Self::SpawnWorldWorker,
+            WorldDispatchActionV1::ForkWorldWorker => Self::ForkWorldWorker,
+            WorldDispatchActionV1::ContinueWorldWorker => Self::ContinueWorldWorker,
+            WorldDispatchActionV1::InspectWorldWorker => Self::InspectWorldWorker,
+            WorldDispatchActionV1::CancelWorldWork => Self::CancelWorldWork,
+            WorldDispatchActionV1::StopWorldWorker => Self::StopWorldWorker,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalWorldDispatchActionV1> for WorldDispatchActionV1 {
+    fn from(value: CanonicalWorldDispatchActionV1) -> Self {
+        match value {
+            CanonicalWorldDispatchActionV1::RunWorldTask => Self::RunWorldTask,
+            CanonicalWorldDispatchActionV1::SpawnWorldWorker => Self::SpawnWorldWorker,
+            CanonicalWorldDispatchActionV1::ForkWorldWorker => Self::ForkWorldWorker,
+            CanonicalWorldDispatchActionV1::ContinueWorldWorker => Self::ContinueWorldWorker,
+            CanonicalWorldDispatchActionV1::InspectWorldWorker => Self::InspectWorldWorker,
+            CanonicalWorldDispatchActionV1::CancelWorldWork => Self::CancelWorldWork,
+            CanonicalWorldDispatchActionV1::StopWorldWorker => Self::StopWorldWorker,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum CanonicalWorldDispatchModeV1 {
+    Ephemeral,
+    Retained,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<WorldDispatchModeV1> for CanonicalWorldDispatchModeV1 {
+    fn from(value: WorldDispatchModeV1) -> Self {
+        match value {
+            WorldDispatchModeV1::Ephemeral => Self::Ephemeral,
+            WorldDispatchModeV1::Retained => Self::Retained,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalWorldDispatchModeV1> for WorldDispatchModeV1 {
+    fn from(value: CanonicalWorldDispatchModeV1) -> Self {
+        match value {
+            CanonicalWorldDispatchModeV1::Ephemeral => Self::Ephemeral,
+            CanonicalWorldDispatchModeV1::Retained => Self::Retained,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalTaskPayloadV1 {
+    prompt: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorkerContinuePayloadV1 {
+    prompt: String,
+    thread_id: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum CanonicalApprovalResponseDecisionV1 {
+    Approve,
+    Deny,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<ApprovalResponseDecisionV1> for CanonicalApprovalResponseDecisionV1 {
+    fn from(value: ApprovalResponseDecisionV1) -> Self {
+        match value {
+            ApprovalResponseDecisionV1::Approve => Self::Approve,
+            ApprovalResponseDecisionV1::Deny => Self::Deny,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalApprovalResponseDecisionV1> for ApprovalResponseDecisionV1 {
+    fn from(value: CanonicalApprovalResponseDecisionV1) -> Self {
+        match value {
+            CanonicalApprovalResponseDecisionV1::Approve => Self::Approve,
+            CanonicalApprovalResponseDecisionV1::Deny => Self::Deny,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorkerContinueApprovalResponsePayloadV1 {
+    approval_obligation_id: String,
+    decision: CanonicalApprovalResponseDecisionV1,
+    thread_id: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorkerContinueClarificationResponsePayloadV1 {
+    follow_up_obligation_id: String,
+    clarification_text: String,
+    thread_id: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorkerContinueForkCommandPayloadV1 {
+    child_prompt: String,
+    fork_reason: Option<String>,
+    fork_strategy: Option<String>,
+    thread_id: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorkerContinueProgressAckPayloadV1 {
+    thread_id: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum CanonicalControlDirectiveKindV1 {
+    Pause,
+    ReduceScope,
+    Summarize,
+    Checkpoint,
+    PrepareHandoff,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<ControlDirectiveKindV1> for CanonicalControlDirectiveKindV1 {
+    fn from(value: ControlDirectiveKindV1) -> Self {
+        match value {
+            ControlDirectiveKindV1::Pause => Self::Pause,
+            ControlDirectiveKindV1::ReduceScope => Self::ReduceScope,
+            ControlDirectiveKindV1::Summarize => Self::Summarize,
+            ControlDirectiveKindV1::Checkpoint => Self::Checkpoint,
+            ControlDirectiveKindV1::PrepareHandoff => Self::PrepareHandoff,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalControlDirectiveKindV1> for ControlDirectiveKindV1 {
+    fn from(value: CanonicalControlDirectiveKindV1) -> Self {
+        match value {
+            CanonicalControlDirectiveKindV1::Pause => Self::Pause,
+            CanonicalControlDirectiveKindV1::ReduceScope => Self::ReduceScope,
+            CanonicalControlDirectiveKindV1::Summarize => Self::Summarize,
+            CanonicalControlDirectiveKindV1::Checkpoint => Self::Checkpoint,
+            CanonicalControlDirectiveKindV1::PrepareHandoff => Self::PrepareHandoff,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorkerContinueControlDirectivePayloadV1 {
+    directive_kind: CanonicalControlDirectiveKindV1,
+    directive_text: Option<String>,
+    thread_id: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+enum CanonicalWorldDispatchPayloadV1 {
+    Task(CanonicalTaskPayloadV1),
+    WorkerContinue(CanonicalWorkerContinuePayloadV1),
+    WorkerContinueApprovalResponse(CanonicalWorkerContinueApprovalResponsePayloadV1),
+    WorkerContinueClarificationResponse(CanonicalWorkerContinueClarificationResponsePayloadV1),
+    WorkerContinueForkCommand(CanonicalWorkerContinueForkCommandPayloadV1),
+    WorkerContinueProgressAck(CanonicalWorkerContinueProgressAckPayloadV1),
+    WorkerContinueControlDirective(CanonicalWorkerContinueControlDirectivePayloadV1),
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<&WorldDispatchPayloadV1> for CanonicalWorldDispatchPayloadV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &WorldDispatchPayloadV1) -> Result<Self> {
+        match value {
+            WorldDispatchPayloadV1::Task(value) => Ok(Self::Task(CanonicalTaskPayloadV1 {
+                prompt: value.prompt.clone(),
+            })),
+            WorldDispatchPayloadV1::WorkerContinue(value) => {
+                Ok(Self::WorkerContinue(CanonicalWorkerContinuePayloadV1 {
+                    prompt: value.prompt.clone(),
+                    thread_id: value.thread_id.clone(),
+                }))
+            }
+            WorldDispatchPayloadV1::WorkerContinueApprovalResponse(value) => {
+                Ok(Self::WorkerContinueApprovalResponse(
+                    CanonicalWorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: value.approval_obligation_id.clone(),
+                        decision: value.decision.into(),
+                        thread_id: value.thread_id.clone(),
+                    },
+                ))
+            }
+            WorldDispatchPayloadV1::WorkerContinueClarificationResponse(value) => {
+                Ok(Self::WorkerContinueClarificationResponse(
+                    CanonicalWorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: value.follow_up_obligation_id.clone(),
+                        clarification_text: value.clarification_text.clone(),
+                        thread_id: value.thread_id.clone(),
+                    },
+                ))
+            }
+            WorldDispatchPayloadV1::WorkerContinueForkCommand(value) => Ok(
+                Self::WorkerContinueForkCommand(CanonicalWorkerContinueForkCommandPayloadV1 {
+                    child_prompt: value.child_prompt.clone(),
+                    fork_reason: value.fork_reason.clone(),
+                    fork_strategy: value.fork_strategy.clone(),
+                    thread_id: value.thread_id.clone(),
+                }),
+            ),
+            WorldDispatchPayloadV1::WorkerContinueProgressAck(value) => Ok(
+                Self::WorkerContinueProgressAck(CanonicalWorkerContinueProgressAckPayloadV1 {
+                    thread_id: value.thread_id.clone(),
+                }),
+            ),
+            WorldDispatchPayloadV1::WorkerContinueControlDirective(value) => {
+                Ok(Self::WorkerContinueControlDirective(
+                    CanonicalWorkerContinueControlDirectivePayloadV1 {
+                        directive_kind: value.directive_kind.into(),
+                        directive_text: value.directive_text.clone(),
+                        thread_id: value.thread_id.clone(),
+                    },
+                ))
+            }
+            _ => {
+                anyhow::bail!("B1 canonical receipt proposal contains unsupported dispatch payload")
+            }
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalWorldDispatchPayloadV1> for WorldDispatchPayloadV1 {
+    fn from(value: CanonicalWorldDispatchPayloadV1) -> Self {
+        match value {
+            CanonicalWorldDispatchPayloadV1::Task(value) => Self::Task(TaskPayloadV1 {
+                prompt: value.prompt,
+            }),
+            CanonicalWorldDispatchPayloadV1::WorkerContinue(value) => {
+                Self::WorkerContinue(WorkerContinuePayloadV1 {
+                    prompt: value.prompt,
+                    thread_id: value.thread_id,
+                })
+            }
+            CanonicalWorldDispatchPayloadV1::WorkerContinueApprovalResponse(value) => {
+                Self::WorkerContinueApprovalResponse(WorkerContinueApprovalResponsePayloadV1 {
+                    approval_obligation_id: value.approval_obligation_id,
+                    decision: value.decision.into(),
+                    thread_id: value.thread_id,
+                })
+            }
+            CanonicalWorldDispatchPayloadV1::WorkerContinueClarificationResponse(value) => {
+                Self::WorkerContinueClarificationResponse(
+                    WorkerContinueClarificationResponsePayloadV1 {
+                        follow_up_obligation_id: value.follow_up_obligation_id,
+                        clarification_text: value.clarification_text,
+                        thread_id: value.thread_id,
+                    },
+                )
+            }
+            CanonicalWorldDispatchPayloadV1::WorkerContinueForkCommand(value) => {
+                Self::WorkerContinueForkCommand(WorkerContinueForkCommandPayloadV1 {
+                    child_prompt: value.child_prompt,
+                    fork_reason: value.fork_reason,
+                    fork_strategy: value.fork_strategy,
+                    thread_id: value.thread_id,
+                })
+            }
+            CanonicalWorldDispatchPayloadV1::WorkerContinueProgressAck(value) => {
+                Self::WorkerContinueProgressAck(WorkerContinueProgressAckPayloadV1 {
+                    thread_id: value.thread_id,
+                })
+            }
+            CanonicalWorldDispatchPayloadV1::WorkerContinueControlDirective(value) => {
+                Self::WorkerContinueControlDirective(WorkerContinueControlDirectivePayloadV1 {
+                    directive_kind: value.directive_kind.into(),
+                    directive_text: value.directive_text,
+                    thread_id: value.thread_id,
+                })
+            }
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalValidatedWorldDispatchRequestV1 {
+    request_id: String,
+    idempotency_key: String,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    action: CanonicalWorldDispatchActionV1,
+    mode: CanonicalWorldDispatchModeV1,
+    target_backend_id: String,
+    target_participant_id: Option<String>,
+    task_run_id: Option<String>,
+    world_id: String,
+    world_generation: u64,
+    payload: CanonicalWorldDispatchPayloadV1,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<&ValidatedWorldDispatchRequestV1> for CanonicalValidatedWorldDispatchRequestV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ValidatedWorldDispatchRequestV1) -> Result<Self> {
+        Ok(Self {
+            request_id: value.request_id.clone(),
+            idempotency_key: value.idempotency_key.clone(),
+            orchestration_session_id: value.orchestration_session_id.clone(),
+            caller_participant_id: value.caller_participant_id.clone(),
+            action: value.action.into(),
+            mode: value.mode.into(),
+            target_backend_id: value.target_backend_id.clone(),
+            target_participant_id: value.target_participant_id.clone(),
+            task_run_id: value.task_run_id.clone(),
+            world_id: value.world_id.clone(),
+            world_generation: value.world_generation,
+            payload: CanonicalWorldDispatchPayloadV1::try_from(&value.payload)?,
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<CanonicalValidatedWorldDispatchRequestV1> for ValidatedWorldDispatchRequestV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CanonicalValidatedWorldDispatchRequestV1) -> Result<Self> {
+        super::dispatch_contract::WorldDispatchRequestV1 {
+            request_id: Some(value.request_id),
+            idempotency_key: Some(value.idempotency_key),
+            orchestration_session_id: Some(value.orchestration_session_id),
+            caller_participant_id: Some(value.caller_participant_id),
+            action: value.action.into(),
+            mode: value.mode.into(),
+            target_backend_id: Some(value.target_backend_id),
+            task_run_id: value.task_run_id,
+            target_participant_id: value.target_participant_id,
+            world_id: Some(value.world_id),
+            world_generation: Some(value.world_generation),
+            payload: value.payload.into(),
+        }
+        .validate()
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum CanonicalMemberRuntimeBackendKindV1 {
+    Codex,
+    ClaudeCode,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<transport_api_types::MemberRuntimeBackendKindV1> for CanonicalMemberRuntimeBackendKindV1 {
+    fn from(value: transport_api_types::MemberRuntimeBackendKindV1) -> Self {
+        match value {
+            transport_api_types::MemberRuntimeBackendKindV1::Codex => Self::Codex,
+            transport_api_types::MemberRuntimeBackendKindV1::ClaudeCode => Self::ClaudeCode,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalMemberRuntimeBackendKindV1> for transport_api_types::MemberRuntimeBackendKindV1 {
+    fn from(value: CanonicalMemberRuntimeBackendKindV1) -> Self {
+        match value {
+            CanonicalMemberRuntimeBackendKindV1::Codex => Self::Codex,
+            CanonicalMemberRuntimeBackendKindV1::ClaudeCode => Self::ClaudeCode,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalResolvedMemberRuntimeDescriptorV1 {
+    backend_kind: CanonicalMemberRuntimeBackendKindV1,
+    binary_path: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalMemberDispatchRequestV1 {
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    parent_participant_id: Option<String>,
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    protocol: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+    initial_prompt: Option<String>,
+    resolved_runtime: CanonicalResolvedMemberRuntimeDescriptorV1,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<&transport_api_types::MemberDispatchRequestV1> for CanonicalMemberDispatchRequestV1 {
+    fn from(value: &transport_api_types::MemberDispatchRequestV1) -> Self {
+        Self {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id.clone(),
+            participant_id: value.participant_id.clone(),
+            orchestrator_participant_id: value.orchestrator_participant_id.clone(),
+            parent_participant_id: value.parent_participant_id.clone(),
+            resumed_from_participant_id: value.resumed_from_participant_id.clone(),
+            backend_id: value.backend_id.clone(),
+            protocol: value.protocol.clone(),
+            run_id: value.run_id.clone(),
+            world_id: value.world_id.clone(),
+            world_generation: value.world_generation,
+            initial_prompt: value.initial_prompt.clone(),
+            resolved_runtime: CanonicalResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: value.resolved_runtime.backend_kind.into(),
+                binary_path: value.resolved_runtime.binary_path.clone(),
+            },
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<CanonicalMemberDispatchRequestV1> for transport_api_types::MemberDispatchRequestV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CanonicalMemberDispatchRequestV1) -> Result<Self> {
+        let request = Self {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            parent_participant_id: value.parent_participant_id,
+            resumed_from_participant_id: value.resumed_from_participant_id,
+            backend_id: value.backend_id,
+            protocol: value.protocol,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            initial_prompt: value.initial_prompt,
+            resolved_runtime: transport_api_types::ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: value.resolved_runtime.backend_kind.into(),
+                binary_path: value.resolved_runtime.binary_path,
+            },
+        };
+        request.validate().map_err(anyhow::Error::msg)?;
+        Ok(request)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorldWorkAcceptanceContextV1 {
+    schema_version: u32,
+    proposed_acceptance_record_id: String,
+    request_id: String,
+    message_id: Option<String>,
+    caller_backend_id: String,
+    host_transition_correlation: Option<substrate_common::HostTransitionWorkCorrelationV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<&transport_api_types::WorldWorkAcceptanceContextV1>
+    for CanonicalWorldWorkAcceptanceContextV1
+{
+    fn from(value: &transport_api_types::WorldWorkAcceptanceContextV1) -> Self {
+        Self {
+            schema_version: value.schema_version,
+            proposed_acceptance_record_id: value.proposed_acceptance_record_id.clone(),
+            request_id: value.request_id.clone(),
+            message_id: value.message_id.clone(),
+            caller_backend_id: value.caller_backend_id.clone(),
+            host_transition_correlation: value.host_transition_correlation.clone(),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<CanonicalWorldWorkAcceptanceContextV1>
+    for transport_api_types::WorldWorkAcceptanceContextV1
+{
+    type Error = anyhow::Error;
+
+    fn try_from(value: CanonicalWorldWorkAcceptanceContextV1) -> Result<Self> {
+        let context = Self {
+            schema_version: value.schema_version,
+            proposed_acceptance_record_id: value.proposed_acceptance_record_id,
+            request_id: value.request_id,
+            message_id: value.message_id,
+            caller_backend_id: value.caller_backend_id,
+            host_transition_correlation: value.host_transition_correlation,
+        };
+        context.validate().map_err(anyhow::Error::msg)?;
+        Ok(context)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+enum CanonicalWorldWorkSubmissionIdentityV1 {
+    EphemeralTask {
+        validated_dispatch_request: CanonicalValidatedWorldDispatchRequestV1,
+        member_dispatch_request: Box<CanonicalMemberDispatchRequestV1>,
+        canonical_execute_request_sha256: String,
+    },
+    RetainedTurn {
+        validated_dispatch_request: CanonicalValidatedWorldDispatchRequestV1,
+        canonical_member_turn_submit_request_sha256: String,
+    },
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<&WorldWorkSubmissionIdentityV1> for CanonicalWorldWorkSubmissionIdentityV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &WorldWorkSubmissionIdentityV1) -> Result<Self> {
+        match value {
+            WorldWorkSubmissionIdentityV1::EphemeralTask {
+                validated_dispatch_request,
+                member_dispatch_request,
+                canonical_execute_request_sha256,
+            } => Ok(Self::EphemeralTask {
+                validated_dispatch_request: CanonicalValidatedWorldDispatchRequestV1::try_from(
+                    validated_dispatch_request,
+                )?,
+                member_dispatch_request: Box::new(member_dispatch_request.into()),
+                canonical_execute_request_sha256: canonical_execute_request_sha256.clone(),
+            }),
+            WorldWorkSubmissionIdentityV1::RetainedTurn {
+                validated_dispatch_request,
+                canonical_member_turn_submit_request_sha256,
+            } => Ok(Self::RetainedTurn {
+                validated_dispatch_request: CanonicalValidatedWorldDispatchRequestV1::try_from(
+                    validated_dispatch_request,
+                )?,
+                canonical_member_turn_submit_request_sha256:
+                    canonical_member_turn_submit_request_sha256.clone(),
+            }),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<CanonicalWorldWorkSubmissionIdentityV1> for WorldWorkSubmissionIdentityV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CanonicalWorldWorkSubmissionIdentityV1) -> Result<Self> {
+        match value {
+            CanonicalWorldWorkSubmissionIdentityV1::EphemeralTask {
+                validated_dispatch_request,
+                member_dispatch_request,
+                canonical_execute_request_sha256,
+            } => Ok(Self::EphemeralTask {
+                validated_dispatch_request: validated_dispatch_request.try_into()?,
+                member_dispatch_request: (*member_dispatch_request).try_into()?,
+                canonical_execute_request_sha256,
+            }),
+            CanonicalWorldWorkSubmissionIdentityV1::RetainedTurn {
+                validated_dispatch_request,
+                canonical_member_turn_submit_request_sha256,
+            } => Ok(Self::RetainedTurn {
+                validated_dispatch_request: validated_dispatch_request.try_into()?,
+                canonical_member_turn_submit_request_sha256,
+            }),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorldWorkAcceptanceProposalV1 {
+    schema_version: u32,
+    acceptance_context: CanonicalWorldWorkAcceptanceContextV1,
+    authority_store_id: String,
+    authority_revision_observed: u64,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    proposed_work: ProposedWorldWorkIdentityV1,
+    submission_identity: CanonicalWorldWorkSubmissionIdentityV1,
+    current_policy_snapshot_ref: super::host_session_authority::schema::AuthorityObjectRefV1,
+    current_policy_snapshot_hash: String,
+    current_policy_revision: String,
+    created_at: DateTime<Utc>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<&WorldWorkAcceptanceProposalV1> for CanonicalWorldWorkAcceptanceProposalV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &WorldWorkAcceptanceProposalV1) -> Result<Self> {
+        value.validate()?;
+        Ok(Self {
+            schema_version: value.schema_version,
+            acceptance_context: (&value.acceptance_context).into(),
+            authority_store_id: value.authority_store_id.clone(),
+            authority_revision_observed: value.authority_revision_observed,
+            orchestration_session_id: value.orchestration_session_id.clone(),
+            caller_participant_id: value.caller_participant_id.clone(),
+            caller_backend_id: value.caller_backend_id.clone(),
+            target_backend_id: value.target_backend_id.clone(),
+            world_id: value.world_id.clone(),
+            world_generation: value.world_generation,
+            proposed_work: value.proposed_work.clone(),
+            submission_identity: CanonicalWorldWorkSubmissionIdentityV1::try_from(
+                &value.submission_identity,
+            )?,
+            current_policy_snapshot_ref: value.current_policy_snapshot_ref.clone(),
+            current_policy_snapshot_hash: value.current_policy_snapshot_hash.clone(),
+            current_policy_revision: value.current_policy_revision.clone(),
+            created_at: value.created_at,
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<CanonicalWorldWorkAcceptanceProposalV1> for WorldWorkAcceptanceProposalV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CanonicalWorldWorkAcceptanceProposalV1) -> Result<Self> {
+        let proposal = Self {
+            schema_version: value.schema_version,
+            acceptance_context: value.acceptance_context.try_into()?,
+            authority_store_id: value.authority_store_id,
+            authority_revision_observed: value.authority_revision_observed,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            caller_backend_id: value.caller_backend_id,
+            target_backend_id: value.target_backend_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            proposed_work: value.proposed_work,
+            submission_identity: value.submission_identity.try_into()?,
+            current_policy_snapshot_ref: value.current_policy_snapshot_ref,
+            current_policy_snapshot_hash: value.current_policy_snapshot_hash,
+            current_policy_revision: value.current_policy_revision,
+            created_at: value.created_at,
+        };
+        proposal.validate()?;
+        Ok(proposal)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum CanonicalRuntimeAcceptanceAcknowledgementKindV1 {
+    SubmissionAccepted,
+    StartFrame,
+    RegisteredFrame,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<RuntimeAcceptanceAcknowledgementKindV1>
+    for CanonicalRuntimeAcceptanceAcknowledgementKindV1
+{
+    fn from(value: RuntimeAcceptanceAcknowledgementKindV1) -> Self {
+        match value {
+            RuntimeAcceptanceAcknowledgementKindV1::SubmissionAccepted => Self::SubmissionAccepted,
+            RuntimeAcceptanceAcknowledgementKindV1::StartFrame => Self::StartFrame,
+            RuntimeAcceptanceAcknowledgementKindV1::RegisteredFrame => Self::RegisteredFrame,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalRuntimeAcceptanceAcknowledgementKindV1>
+    for RuntimeAcceptanceAcknowledgementKindV1
+{
+    fn from(value: CanonicalRuntimeAcceptanceAcknowledgementKindV1) -> Self {
+        match value {
+            CanonicalRuntimeAcceptanceAcknowledgementKindV1::SubmissionAccepted => {
+                Self::SubmissionAccepted
+            }
+            CanonicalRuntimeAcceptanceAcknowledgementKindV1::StartFrame => Self::StartFrame,
+            CanonicalRuntimeAcceptanceAcknowledgementKindV1::RegisteredFrame => {
+                Self::RegisteredFrame
+            }
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalRuntimeAcceptanceEvidenceV1 {
+    acknowledgement_kind: CanonicalRuntimeAcceptanceAcknowledgementKindV1,
+    acceptance_record_id: String,
+    stream_id: String,
+    frame_sequence: u64,
+    runtime_submission_id: Option<String>,
+    task_run_id: Option<String>,
+    active_run_id: Option<String>,
+    message_id: Option<String>,
+    retained_participant_id: Option<String>,
+    observed_at: DateTime<Utc>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<&RuntimeAcceptanceEvidenceV1> for CanonicalRuntimeAcceptanceEvidenceV1 {
+    fn from(value: &RuntimeAcceptanceEvidenceV1) -> Self {
+        Self {
+            acknowledgement_kind: value.acknowledgement_kind.into(),
+            acceptance_record_id: value.acceptance_record_id.clone(),
+            stream_id: value.stream_id.clone(),
+            frame_sequence: value.frame_sequence,
+            runtime_submission_id: value.runtime_submission_id.clone(),
+            task_run_id: value.task_run_id.clone(),
+            active_run_id: value.active_run_id.clone(),
+            message_id: value.message_id.clone(),
+            retained_participant_id: value.retained_participant_id.clone(),
+            observed_at: value.observed_at,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<CanonicalRuntimeAcceptanceEvidenceV1> for RuntimeAcceptanceEvidenceV1 {
+    fn from(value: CanonicalRuntimeAcceptanceEvidenceV1) -> Self {
+        Self {
+            acknowledgement_kind: value.acknowledgement_kind.into(),
+            acceptance_record_id: value.acceptance_record_id,
+            stream_id: value.stream_id,
+            frame_sequence: value.frame_sequence,
+            runtime_submission_id: value.runtime_submission_id,
+            task_run_id: value.task_run_id,
+            active_run_id: value.active_run_id,
+            message_id: value.message_id,
+            retained_participant_id: value.retained_participant_id,
+            observed_at: value.observed_at,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorldWorkAcceptanceRecordV1 {
+    schema_version: u32,
+    acceptance_record_id: String,
+    request_id: String,
+    authority_store_id: String,
+    authority_revision_observed: u64,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    caller_backend_id: String,
+    target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
+    work_identity: AcceptedWorldWorkIdentityV1,
+    host_transition_correlation: Option<substrate_common::HostTransitionWorkCorrelationV1>,
+    current_policy_snapshot_ref: super::host_session_authority::schema::AuthorityObjectRefV1,
+    current_policy_snapshot_hash: String,
+    current_policy_revision: String,
+    runtime_acceptance: CanonicalRuntimeAcceptanceEvidenceV1,
+    accepted_at: DateTime<Utc>,
+    record_revision: u64,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl From<&WorldWorkAcceptanceRecordV1> for CanonicalWorldWorkAcceptanceRecordV1 {
+    fn from(value: &WorldWorkAcceptanceRecordV1) -> Self {
+        Self {
+            schema_version: value.schema_version,
+            acceptance_record_id: value.acceptance_record_id.clone(),
+            request_id: value.request_id.clone(),
+            authority_store_id: value.authority_store_id.clone(),
+            authority_revision_observed: value.authority_revision_observed,
+            orchestration_session_id: value.orchestration_session_id.clone(),
+            caller_participant_id: value.caller_participant_id.clone(),
+            caller_backend_id: value.caller_backend_id.clone(),
+            target_backend_id: value.target_backend_id.clone(),
+            world_id: value.world_id.clone(),
+            world_generation: value.world_generation,
+            work_identity: value.work_identity.clone(),
+            host_transition_correlation: value.host_transition_correlation.clone(),
+            current_policy_snapshot_ref: value.current_policy_snapshot_ref.clone(),
+            current_policy_snapshot_hash: value.current_policy_snapshot_hash.clone(),
+            current_policy_revision: value.current_policy_revision.clone(),
+            runtime_acceptance: (&value.runtime_acceptance).into(),
+            accepted_at: value.accepted_at,
+            record_revision: value.record_revision,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<CanonicalWorldWorkAcceptanceRecordV1> for WorldWorkAcceptanceRecordV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CanonicalWorldWorkAcceptanceRecordV1) -> Result<Self> {
+        let record = Self {
+            schema_version: value.schema_version,
+            acceptance_record_id: value.acceptance_record_id,
+            request_id: value.request_id,
+            authority_store_id: value.authority_store_id,
+            authority_revision_observed: value.authority_revision_observed,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            caller_backend_id: value.caller_backend_id,
+            target_backend_id: value.target_backend_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            work_identity: value.work_identity,
+            host_transition_correlation: value.host_transition_correlation,
+            current_policy_snapshot_ref: value.current_policy_snapshot_ref,
+            current_policy_snapshot_hash: value.current_policy_snapshot_hash,
+            current_policy_revision: value.current_policy_revision,
+            runtime_acceptance: value.runtime_acceptance.into(),
+            accepted_at: value.accepted_at,
+            record_revision: value.record_revision,
+        };
+        record.validate()?;
+        Ok(record)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorldWorkReceiptRegistrySessionStateV1 {
+    schema_version: u32,
+    proposals_by_request_id: BTreeMap<String, CanonicalWorldWorkAcceptanceProposalV1>,
+    records_by_acceptance_record_id: BTreeMap<String, CanonicalWorldWorkAcceptanceRecordV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalWorldWorkReceiptRegistryStateV1 {
+    schema_version: u32,
+    sessions_by_id: BTreeMap<String, CanonicalWorldWorkReceiptRegistrySessionStateV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<&WorldWorkReceiptRegistryStateV1> for CanonicalWorldWorkReceiptRegistryStateV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &WorldWorkReceiptRegistryStateV1) -> Result<Self> {
+        let mut sessions_by_id = BTreeMap::new();
+        for (session_id, session) in &value.sessions_by_id {
+            let mut proposals_by_request_id = BTreeMap::new();
+            for (request_id, proposal) in &session.proposals_by_request_id {
+                proposals_by_request_id.insert(
+                    request_id.clone(),
+                    CanonicalWorldWorkAcceptanceProposalV1::try_from(proposal)?,
+                );
+            }
+            let records_by_acceptance_record_id = session
+                .records_by_acceptance_record_id
+                .iter()
+                .map(|(acceptance_id, record)| {
+                    (
+                        acceptance_id.clone(),
+                        CanonicalWorldWorkAcceptanceRecordV1::from(record),
+                    )
+                })
+                .collect();
+            sessions_by_id.insert(
+                session_id.clone(),
+                CanonicalWorldWorkReceiptRegistrySessionStateV1 {
+                    schema_version: session.schema_version,
+                    proposals_by_request_id,
+                    records_by_acceptance_record_id,
+                },
+            );
+        }
+        Ok(Self {
+            schema_version: value.schema_version,
+            sessions_by_id,
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl TryFrom<CanonicalWorldWorkReceiptRegistryStateV1> for WorldWorkReceiptRegistryStateV1 {
+    type Error = anyhow::Error;
+
+    fn try_from(value: CanonicalWorldWorkReceiptRegistryStateV1) -> Result<Self> {
+        let mut sessions_by_id = BTreeMap::new();
+        for (session_id, session) in value.sessions_by_id {
+            let mut proposals_by_request_id = BTreeMap::new();
+            for (request_id, proposal) in session.proposals_by_request_id {
+                proposals_by_request_id.insert(request_id, proposal.try_into()?);
+            }
+            let mut records_by_acceptance_record_id = BTreeMap::new();
+            for (acceptance_id, record) in session.records_by_acceptance_record_id {
+                records_by_acceptance_record_id.insert(acceptance_id, record.try_into()?);
+            }
+            sessions_by_id.insert(
+                session_id,
+                WorldWorkReceiptRegistrySessionStateV1 {
+                    schema_version: session.schema_version,
+                    proposals_by_request_id,
+                    records_by_acceptance_record_id,
+                },
+            );
+        }
+        Ok(Self {
+            schema_version: value.schema_version,
+            sessions_by_id,
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct WorldWorkProposalAllocationV1 {
+    pub(crate) acceptance_record_id: String,
+    pub(crate) message_id: Option<String>,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) existing_proposal: Option<WorldWorkAcceptanceProposalV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "reservation outcome returns the exact durable B1 proposal or record"
+)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum WorldWorkProposalReservationOutcomeV1 {
+    Proposed(WorldWorkAcceptanceProposalV1),
+    Accepted(WorldWorkAcceptanceRecordV1),
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn validate_world_work_required(field: &str, value: &str) -> Result<()> {
+    if value.is_empty() || value.trim() != value {
+        anyhow::bail!("world work {field} must be non-empty and trimmed");
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn validate_world_work_digest(field: &str, value: &str) -> Result<()> {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        anyhow::bail!("world work {field} must be 64 lowercase hexadecimal characters");
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn validate_world_work_policy_ref(
+    reference: &super::host_session_authority::schema::AuthorityObjectRefV1,
+) -> Result<()> {
+    use super::host_session_authority::schema::AuthorityObjectCommitmentV1;
+
+    if reference.schema_version != 1 {
+        anyhow::bail!("current_policy_snapshot_ref must use schema version 1");
+    }
+    validate_world_work_required("current_policy_snapshot_ref.ref_id", &reference.ref_id)?;
+    match &reference.commitment {
+        AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => {
+            validate_world_work_digest("current_policy_snapshot_ref.digest_hex", digest_hex)
+        }
+        AuthorityObjectCommitmentV1::StoreHmacSha256 {
+            key_id,
+            domain,
+            digest_hex,
+        } => {
+            validate_world_work_required("current_policy_snapshot_ref.key_id", key_id)?;
+            validate_world_work_required("current_policy_snapshot_ref.domain", domain)?;
+            validate_world_work_digest("current_policy_snapshot_ref.digest_hex", digest_hex)
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn valid_world_work_uuid_v7(value: &str, prefix: &str) -> bool {
+    let Some(uuid) = value.strip_prefix(prefix) else {
+        return false;
+    };
+    let bytes = uuid.as_bytes();
+    let hyphens = [8usize, 13, 18, 23];
+    bytes.len() == 36
+        && hyphens.iter().all(|index| bytes[*index] == b'-')
+        && bytes.iter().enumerate().all(|(index, byte)| {
+            hyphens.contains(&index) || byte.is_ascii_digit() || (b'a'..=b'f').contains(byte)
+        })
+        && bytes[14] == b'7'
+        && matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn validate_acceptance_record_matches_proposal(
+    record: &WorldWorkAcceptanceRecordV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<()> {
+    record.validate()?;
+    proposal.validate()?;
+    if record.acceptance_record_id != proposal.acceptance_context.proposed_acceptance_record_id
+        || record.request_id != proposal.request_id()
+        || record.authority_store_id != proposal.authority_store_id
+        || record.authority_revision_observed != proposal.authority_revision_observed
+        || record.orchestration_session_id != proposal.orchestration_session_id
+        || record.caller_participant_id != proposal.caller_participant_id
+        || record.caller_backend_id != proposal.caller_backend_id
+        || record.target_backend_id != proposal.target_backend_id
+        || record.world_id != proposal.world_id
+        || record.world_generation != proposal.world_generation
+        || !proposal.accepts_work_identity(&record.work_identity)
+        || record.host_transition_correlation
+            != proposal.acceptance_context.host_transition_correlation
+        || record.current_policy_snapshot_ref != proposal.current_policy_snapshot_ref
+        || record.current_policy_snapshot_hash != proposal.current_policy_snapshot_hash
+        || record.current_policy_revision != proposal.current_policy_revision
+    {
+        anyhow::bail!("acceptance record does not exactly match its durable proposal");
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn acceptance_records_are_exact_retries(
+    existing: &WorldWorkAcceptanceRecordV1,
+    candidate: &WorldWorkAcceptanceRecordV1,
+) -> bool {
+    let mut normalized_existing = existing.clone();
+    let normalized_candidate = candidate.clone();
+    normalized_existing.accepted_at = normalized_candidate.accepted_at;
+    normalized_existing.runtime_acceptance.observed_at =
+        normalized_candidate.runtime_acceptance.observed_at;
+    normalized_existing == normalized_candidate
+}
+
 #[derive(Clone, Debug)]
 struct ResolvedAuthoritativeSessionControl {
     session: OrchestrationSessionRecord,
@@ -971,7 +2602,10 @@ impl ActiveEphemeralWorldTaskRecord {
     }
 }
 
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+#[allow(
+    dead_code,
+    reason = "B2.1-2 replaces legacy guard-backed compatibility routing after the durable claim handoff"
+)]
 #[derive(Clone, Debug)]
 pub(crate) struct ActiveEphemeralWorldTaskGuard {
     store: AgentRuntimeStateStore,
@@ -996,6 +2630,124 @@ pub(crate) struct AgentRuntimeStateStore {
 #[derive(Clone, Debug)]
 pub(crate) struct BoundAgentRuntimeStateStore {
     store: AgentRuntimeStateStore,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct WorldWorkReceiptRegistry {
+    storage: super::host_session_authority::store::WorldWorkReceiptRegistryStorageV1,
+    authority_store_id: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedWorldWorkRegistryAuthorityV1 {
+    pub(crate) receipt_registry: WorldWorkReceiptRegistry,
+    pub(crate) execution_supervisor:
+        super::world_work_execution_supervisor::WorldWorkExecutionSupervisor,
+    pub(crate) authority_store_id: String,
+    pub(crate) authority_revision_observed: u64,
+    pub(crate) current_policy_snapshot_ref:
+        super::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(crate) current_policy_revision: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct WorldWorkRecoveryAuthorityV1 {
+    pub(crate) receipt_registry: WorldWorkReceiptRegistry,
+    pub(crate) execution_supervisor:
+        super::world_work_execution_supervisor::WorldWorkExecutionSupervisor,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ResolvedWorldWorkRegistryAuthorityV1 {
+    pub(crate) fn resolve_active_ephemeral_observation(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        expected_target_backend_id: Option<&str>,
+        world_id: &str,
+        world_generation: u64,
+        task_run_id: &str,
+    ) -> Result<super::world_work_execution_supervisor::WorldWorkExecutionObservationV1> {
+        let work_identity = AcceptedWorldWorkIdentityV1::EphemeralTask {
+            task_run_id: task_run_id.to_string(),
+        };
+        let record = self
+            .receipt_registry
+            .inspect_world_work_acceptance_by_work_identity(
+                &self.authority_store_id,
+                orchestration_session_id,
+                &work_identity,
+            )?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+                    orchestration_session_id,
+                    task_run_id
+                )
+            })?;
+        if record.caller_participant_id != caller_participant_id {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
+                orchestration_session_id,
+                task_run_id,
+                caller_participant_id
+            );
+        }
+        if let Some(target_backend_id) = expected_target_backend_id {
+            if record.target_backend_id != target_backend_id {
+                anyhow::bail!(
+                    "backend_mismatch: orchestration session {} active ephemeral task {} backend is {} not {}",
+                    orchestration_session_id,
+                    task_run_id,
+                    record.target_backend_id,
+                    target_backend_id
+                );
+            }
+        }
+        if record.world_id != world_id || record.world_generation != world_generation {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
+                orchestration_session_id,
+                task_run_id
+            );
+        }
+        let observation = self
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&record.acceptance_record_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "active_task_observation_unavailable: orchestration session {} accepted ephemeral task {} has no exact supervisor claim",
+                    orchestration_session_id,
+                    task_run_id
+                )
+            })?;
+        if observation.terminal.is_some() {
+            anyhow::bail!(
+                "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+                orchestration_session_id,
+                task_run_id
+            );
+        }
+        if !observation.claim.matches_acceptance(&record)
+            || observation.claim.authority_store_id != self.authority_store_id
+            || observation.claim.orchestration_session_id != orchestration_session_id
+            || observation.claim.caller_participant_id != caller_participant_id
+            || observation.claim.target_backend_id != record.target_backend_id
+            || observation.claim.world_id != world_id
+            || observation.claim.world_generation != world_generation
+            || observation.claim.work_identity != work_identity
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} active ephemeral task {} has conflicting receipt/supervisor truth",
+                orchestration_session_id,
+                task_run_id
+            );
+        }
+        Ok(observation)
+    }
 }
 
 #[allow(dead_code)]
@@ -1125,6 +2877,364 @@ impl BoundAgentRuntimeStateStore {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+impl WorldWorkReceiptRegistry {
+    fn bind(
+        substrate_home: &Path,
+        expected_root: &super::host_session_authority::schema::CanonicalDirectoryV1,
+        expected_authority_store_id: &str,
+    ) -> Result<Self> {
+        validate_world_work_required("authority_store_id", expected_authority_store_id)?;
+        let storage =
+            super::host_session_authority::store::bind_world_work_receipt_registry_storage(
+                substrate_home,
+                expected_root,
+                expected_authority_store_id,
+            )
+            .context("bind activated-authority receipt-registry storage")?;
+        Ok(Self {
+            storage,
+            authority_store_id: expected_authority_store_id.to_string(),
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn bind_for_test(
+        substrate_home: &Path,
+        expected_root: &super::host_session_authority::schema::CanonicalDirectoryV1,
+        expected_authority_store_id: &str,
+    ) -> Result<Self> {
+        Self::bind(substrate_home, expected_root, expected_authority_store_id)
+    }
+
+    fn with_state<T>(
+        &self,
+        operation: impl FnOnce(&mut WorldWorkReceiptRegistryStateV1) -> Result<(T, bool)>,
+    ) -> Result<T> {
+        let mut transaction = self
+            .storage
+            .begin_transaction()
+            .context("begin activated-authority receipt-registry transaction")?;
+        let outcome = (|| {
+            let mut state = match transaction
+                .read_registry()
+                .context("read canonical world work receipt registry")?
+            {
+                Some(bytes) => {
+                    let canonical: CanonicalWorldWorkReceiptRegistryStateV1 =
+                        super::host_session_authority::canonical_json::from_slice(&bytes)
+                            .context("decode canonical world work receipt registry")?;
+                    canonical
+                        .try_into()
+                        .context("project canonical world work receipt registry")?
+                }
+                None => WorldWorkReceiptRegistryStateV1::default(),
+            };
+            state.validate(&self.authority_store_id)?;
+            let (value, changed) = operation(&mut state)?;
+            state.validate(&self.authority_store_id)?;
+            if changed {
+                let canonical = CanonicalWorldWorkReceiptRegistryStateV1::try_from(&state)
+                    .context("project world work receipt registry for canonical persistence")?;
+                let bytes = super::host_session_authority::canonical_json::to_vec(&canonical)
+                    .context("encode canonical world work receipt registry")?;
+                transaction
+                    .replace_registry(&bytes)
+                    .context("publish canonical world work receipt registry")?;
+            }
+            Ok(value)
+        })();
+        let finish = transaction
+            .finish()
+            .context("finish activated-authority receipt-registry transaction");
+        match outcome {
+            Ok(value) => finish.map(|()| value),
+            Err(error) => {
+                let _ = finish;
+                Err(error)
+            }
+        }
+    }
+
+    pub(crate) fn prepare_world_work_acceptance_proposal<F>(
+        &self,
+        orchestration_session_id: &str,
+        request_id: &str,
+        family: WorldWorkProposalFamilyV1,
+        build: F,
+    ) -> Result<WorldWorkProposalReservationOutcomeV1>
+    where
+        F: FnOnce(WorldWorkProposalAllocationV1) -> Result<WorldWorkAcceptanceProposalV1>,
+    {
+        self.prepare_world_work_acceptance_proposal_with_identity_allocator(
+            orchestration_session_id,
+            request_id,
+            family,
+            || {
+                (
+                    format!("wwa_{}", Uuid::now_v7()),
+                    (family == WorldWorkProposalFamilyV1::RetainedTurn)
+                        .then(|| format!("wwm_{}", Uuid::now_v7())),
+                    Utc::now(),
+                )
+            },
+            build,
+        )
+    }
+
+    fn prepare_world_work_acceptance_proposal_with_identity_allocator<F, A>(
+        &self,
+        orchestration_session_id: &str,
+        request_id: &str,
+        family: WorldWorkProposalFamilyV1,
+        allocate_identity: A,
+        build: F,
+    ) -> Result<WorldWorkProposalReservationOutcomeV1>
+    where
+        F: FnOnce(WorldWorkProposalAllocationV1) -> Result<WorldWorkAcceptanceProposalV1>,
+        A: FnOnce() -> (String, Option<String>, DateTime<Utc>),
+    {
+        validate_world_work_required("orchestration_session_id", orchestration_session_id)?;
+        validate_world_work_required("request_id", request_id)?;
+        self.with_state(|state| {
+            let existing_proposal = state
+                .sessions_by_id
+                .get(orchestration_session_id)
+                .and_then(|session| session.proposals_by_request_id.get(request_id))
+                .cloned();
+            if existing_proposal
+                .as_ref()
+                .is_some_and(|existing| existing.family() != family)
+            {
+                anyhow::bail!("conflicting reuse of world work proposal request identity");
+            }
+
+            let allocation = match existing_proposal.as_ref() {
+                Some(existing) => WorldWorkProposalAllocationV1 {
+                    acceptance_record_id: existing
+                        .acceptance_context
+                        .proposed_acceptance_record_id
+                        .clone(),
+                    message_id: existing.acceptance_context.message_id.clone(),
+                    created_at: existing.created_at,
+                    existing_proposal: Some(existing.clone()),
+                },
+                None => {
+                    let (acceptance_record_id, message_id, created_at) = allocate_identity();
+                    WorldWorkProposalAllocationV1 {
+                        acceptance_record_id,
+                        message_id,
+                        created_at,
+                        existing_proposal: None,
+                    }
+                }
+            };
+            let built = build(allocation.clone())?;
+            built.validate()?;
+            if built.authority_store_id != self.authority_store_id
+                || built.request_id() != request_id
+                || built.orchestration_session_id != orchestration_session_id
+                || built.family() != family
+                || built.acceptance_context.proposed_acceptance_record_id
+                    != allocation.acceptance_record_id
+                || built.acceptance_context.message_id != allocation.message_id
+                || built.created_at != allocation.created_at
+            {
+                anyhow::bail!(
+                    "world work proposal builder changed its reserved store/scope/identity"
+                );
+            }
+
+            if let Some(existing) = existing_proposal {
+                if existing != built {
+                    anyhow::bail!("conflicting exact retry for world work proposal");
+                }
+                let matching_record =
+                    state
+                        .sessions_by_id
+                        .get(orchestration_session_id)
+                        .and_then(|session| {
+                            session
+                                .records_by_acceptance_record_id
+                                .get(&existing.acceptance_context.proposed_acceptance_record_id)
+                        });
+                if let Some(record) = matching_record {
+                    validate_acceptance_record_matches_proposal(record, &existing)?;
+                    return Ok((
+                        WorldWorkProposalReservationOutcomeV1::Accepted(record.clone()),
+                        false,
+                    ));
+                }
+                return Ok((
+                    WorldWorkProposalReservationOutcomeV1::Proposed(existing),
+                    false,
+                ));
+            }
+
+            let proposed_acceptance_record_id =
+                &built.acceptance_context.proposed_acceptance_record_id;
+            let proposed_message_id = built.acceptance_context.message_id.as_deref();
+            if state.sessions_by_id.values().any(|session| {
+                session.proposals_by_request_id.values().any(|proposal| {
+                    proposal.acceptance_context.proposed_acceptance_record_id
+                        == *proposed_acceptance_record_id
+                        || proposed_message_id.is_some_and(|message_id| {
+                            proposal.acceptance_context.message_id.as_deref() == Some(message_id)
+                        })
+                }) || session
+                    .records_by_acceptance_record_id
+                    .contains_key(proposed_acceptance_record_id)
+            }) {
+                anyhow::bail!("world work proposal identity collision");
+            }
+            let session = state
+                .sessions_by_id
+                .entry(orchestration_session_id.to_string())
+                .or_default();
+            if session
+                .proposals_by_request_id
+                .insert(request_id.to_string(), built.clone())
+                .is_some()
+            {
+                anyhow::bail!("world work proposal request identity changed during reservation");
+            }
+            Ok((WorldWorkProposalReservationOutcomeV1::Proposed(built), true))
+        })
+    }
+
+    pub(crate) fn persist_world_work_acceptance(
+        &self,
+        record: WorldWorkAcceptanceRecordV1,
+    ) -> Result<WorldWorkAcceptanceRecordV1> {
+        record.validate()?;
+        if record.authority_store_id != self.authority_store_id {
+            anyhow::bail!("acceptance record does not match bound authority store");
+        }
+        self.with_state(|state| {
+            let session = state
+                .sessions_by_id
+                .get_mut(&record.orchestration_session_id)
+                .ok_or_else(|| anyhow::anyhow!("acceptance requires one exact durable proposal"))?;
+            let proposal = session
+                .proposals_by_request_id
+                .values()
+                .find(|proposal| {
+                    proposal.acceptance_context.proposed_acceptance_record_id
+                        == record.acceptance_record_id
+                })
+                .ok_or_else(|| anyhow::anyhow!("acceptance requires one exact durable proposal"))?;
+            validate_acceptance_record_matches_proposal(&record, proposal)?;
+
+            if let Some(existing) = session
+                .records_by_acceptance_record_id
+                .get(&record.acceptance_record_id)
+            {
+                validate_acceptance_record_matches_proposal(existing, proposal)?;
+                if acceptance_records_are_exact_retries(existing, &record) {
+                    return Ok((existing.clone(), false));
+                }
+                anyhow::bail!("conflicting reuse of acceptance-record identity");
+            }
+            if session
+                .records_by_acceptance_record_id
+                .values()
+                .any(|existing| existing.work_identity == record.work_identity)
+            {
+                anyhow::bail!("runtime work identity already has another acceptance record");
+            }
+            if session
+                .records_by_acceptance_record_id
+                .insert(record.acceptance_record_id.clone(), record.clone())
+                .is_some()
+            {
+                anyhow::bail!("acceptance-record identity changed during persistence");
+            }
+            Ok((record, true))
+        })
+    }
+
+    pub(crate) fn persist_world_work_acceptance_for_supervision(
+        &self,
+        record: WorldWorkAcceptanceRecordV1,
+    ) -> Result<PersistedWorldWorkAcceptanceV1> {
+        self.persist_world_work_acceptance(record)
+            .map(PersistedWorldWorkAcceptanceV1)
+    }
+
+    pub(crate) fn persisted_acceptances_for_recovery(
+        &self,
+    ) -> Result<Vec<PersistedWorldWorkAcceptanceV1>> {
+        self.with_state(|state| {
+            let acceptances = state
+                .sessions_by_id
+                .values()
+                .flat_map(|session| session.records_by_acceptance_record_id.values())
+                .cloned()
+                .map(PersistedWorldWorkAcceptanceV1)
+                .collect();
+            Ok((acceptances, false))
+        })
+    }
+
+    #[allow(
+        dead_code,
+        reason = "B1 owns exact acceptance inspection before a later packet exposes its caller"
+    )]
+    pub(crate) fn inspect_world_work_acceptance_by_id(
+        &self,
+        authority_store_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Option<WorldWorkAcceptanceRecordV1>> {
+        if authority_store_id != self.authority_store_id {
+            return Ok(None);
+        }
+        self.with_state(|state| {
+            Ok((
+                state
+                    .sessions_by_id
+                    .values()
+                    .find_map(|session| {
+                        session
+                            .records_by_acceptance_record_id
+                            .get(acceptance_record_id)
+                    })
+                    .cloned(),
+                false,
+            ))
+        })
+    }
+
+    #[allow(
+        dead_code,
+        reason = "B1 owns exact work-identity inspection before a later packet exposes its caller"
+    )]
+    pub(crate) fn inspect_world_work_acceptance_by_work_identity(
+        &self,
+        authority_store_id: &str,
+        orchestration_session_id: &str,
+        work_identity: &AcceptedWorldWorkIdentityV1,
+    ) -> Result<Option<WorldWorkAcceptanceRecordV1>> {
+        if authority_store_id != self.authority_store_id {
+            return Ok(None);
+        }
+        self.with_state(|state| {
+            Ok((
+                state
+                    .sessions_by_id
+                    .get(orchestration_session_id)
+                    .and_then(|session| {
+                        session
+                            .records_by_acceptance_record_id
+                            .values()
+                            .find(|record| &record.work_identity == work_identity)
+                    })
+                    .cloned(),
+                false,
+            ))
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ResolvedPublicSessionAuthority {
     session: OrchestrationSessionRecord,
@@ -1158,6 +3268,130 @@ impl AgentRuntimeStateStore {
                 bootstrap_home: Some(identity),
             },
         })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn resolve_world_work_registry_authority(
+        &self,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        world_id: &str,
+        world_generation: u64,
+    ) -> Result<ResolvedWorldWorkRegistryAuthorityV1> {
+        use super::host_session_authority::{
+            facade::HostSessionAuthority, schema::AuthorityObjectKindV1,
+            trusted_fs::TrustedAuthorityRoot,
+        };
+
+        let trusted_root = TrustedAuthorityRoot::open(&self.substrate_home)
+            .context("open exact B1 authority root")?;
+        let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let resolved = authority
+            .resolve_exact(orchestration_session_id, None)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let observation = resolved.observation();
+        if resolved.authority.orchestration_session_id != orchestration_session_id
+            || resolved
+                .authority
+                .active_authoritative_participant_id
+                .as_deref()
+                != Some(caller_participant_id)
+            || !resolved
+                .authority
+                .authoritative_participant_lineage
+                .iter()
+                .any(|participant_id| participant_id == caller_participant_id)
+            || resolved.authority.workspace_binding.authority_store_id
+                != observation.authority_store_id
+        {
+            anyhow::bail!("B1 authority session/caller/store scope mismatch");
+        }
+        let world_binding = resolved
+            .authority
+            .world_binding
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("B1 authority omits exact world binding"))?;
+        if world_binding.world_id != world_id || world_binding.world_generation != world_generation
+        {
+            anyhow::bail!("B1 authority world binding mismatch");
+        }
+        let current_policy_snapshot_ref = resolved
+            .authority
+            .current_policy_ref
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("B1 authority omits current policy reference"))?;
+        if current_policy_snapshot_ref.object_kind != AuthorityObjectKindV1::Policy {
+            anyhow::bail!("B1 authority current policy reference is not a Policy object");
+        }
+        let current_policy_revision = resolved
+            .authority
+            .current_policy_revision
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("B1 authority omits current policy revision"))?;
+        let receipt_registry = WorldWorkReceiptRegistry::bind(
+            &self.substrate_home,
+            &observation.bootstrap_home,
+            &observation.authority_store_id,
+        )?;
+        let execution_supervisor =
+            super::world_work_execution_supervisor::WorldWorkExecutionSupervisor::bind(
+                &self.substrate_home,
+                &observation.bootstrap_home,
+                &observation.authority_store_id,
+            )?;
+        Ok(ResolvedWorldWorkRegistryAuthorityV1 {
+            receipt_registry,
+            execution_supervisor,
+            authority_store_id: observation.authority_store_id,
+            authority_revision_observed: observation.authority_revision,
+            current_policy_snapshot_ref,
+            current_policy_revision,
+        })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn bind_world_work_recovery_authority(
+        &self,
+    ) -> Result<Option<WorldWorkRecoveryAuthorityV1>> {
+        use super::host_session_authority::{
+            facade::HostSessionAuthority, store::BootstrapClassificationV1,
+            trusted_fs::TrustedAuthorityRoot,
+        };
+
+        let trusted_root = TrustedAuthorityRoot::open(&self.substrate_home)
+            .context("open B2.1 recovery authority root")?;
+        let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        match authority.classify() {
+            BootstrapClassificationV1::FreshAbsent
+            | BootstrapClassificationV1::UnsupportedLegacyState => return Ok(None),
+            BootstrapClassificationV1::InitializationPending => {
+                anyhow::bail!("B2.1 recovery authority initialization is incomplete")
+            }
+            BootstrapClassificationV1::CorruptOrUnsupported => {
+                anyhow::bail!("B2.1 recovery authority is corrupt or unsupported")
+            }
+            BootstrapClassificationV1::ValidExisting => {}
+        }
+        let root = authority
+            .read_root()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let receipt_registry = WorldWorkReceiptRegistry::bind(
+            &self.substrate_home,
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )?;
+        let execution_supervisor =
+            super::world_work_execution_supervisor::WorldWorkExecutionSupervisor::bind(
+                &self.substrate_home,
+                &root.bootstrap_home,
+                &root.authority_store_id,
+            )?;
+        Ok(Some(WorldWorkRecoveryAuthorityV1 {
+            receipt_registry,
+            execution_supervisor,
+        }))
     }
 
     fn with_legacy_snapshot_transaction<T>(
@@ -1915,7 +4149,10 @@ impl AgentRuntimeStateStore {
             .collect())
     }
 
-    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    #[allow(
+        dead_code,
+        reason = "B2.1-2 migrates compatibility routing while activated-store rejection remains covered"
+    )]
     pub(crate) fn register_active_ephemeral_world_task(
         &self,
         record: ActiveEphemeralWorldTaskRecord,
@@ -2063,7 +4300,10 @@ impl AgentRuntimeStateStore {
         Ok(records)
     }
 
-    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    #[allow(
+        dead_code,
+        reason = "B2.1-2 removes guard-drop ownership after compatibility routing moves to supervisor truth"
+    )]
     fn remove_active_ephemeral_world_task(
         &self,
         orchestration_session_id: &str,
@@ -6884,7 +9124,13 @@ mod tests {
 
     use super::*;
     use crate::execution::agent_runtime::{
+        dispatch_contract::{
+            TaskPayloadV1, WorkerContinuePayloadV1, WorldDispatchPayloadV1, WorldDispatchRequestV1,
+        },
         host_inbox::HostInboxMaterializationState,
+        host_session_authority::schema::{
+            AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
+        },
         mapping::AgentRuntimeBackendKind,
         session::{AgentRuntimeForkParticipantInit, AgentRuntimeSessionState},
         validator::RuntimeSelectionDescriptor,
@@ -6985,6 +9231,1558 @@ mod tests {
         let mut parent = active_parent(participant);
         parent.mark_parked_resumable("owner detached cleanly");
         parent
+    }
+
+    fn with_bound_world_work_store<T>(f: impl FnOnce(WorldWorkReceiptRegistry, &Path) -> T) -> T {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe world-work test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("create world-work test tempdir");
+        #[cfg(unix)]
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure world-work test root");
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(temp.path())
+            .expect("open world-work authority facade");
+        let root = authority
+            .bootstrap()
+            .expect("activate world-work authority store");
+        let store = WorldWorkReceiptRegistry::bind(
+            temp.path(),
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )
+        .expect("bind activated world-work receipt registry");
+        f(store, temp.path())
+    }
+
+    fn reopen_bound_world_work_store(root_path: &Path) -> WorldWorkReceiptRegistry {
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root_path)
+            .expect("reopen activated world-work authority");
+        let root = authority
+            .read_root()
+            .expect("read activated world-work authority root");
+        WorldWorkReceiptRegistry::bind(root_path, &root.bootstrap_home, &root.authority_store_id)
+            .expect("rebind activated world-work receipt registry")
+    }
+
+    fn test_policy_ref() -> AuthorityObjectRefV1 {
+        AuthorityObjectRefV1 {
+            ref_id: "policy-ref-b1".to_string(),
+            object_kind: AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "a".repeat(64),
+            },
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_registry_reserves_on_genuinely_activated_authority_store() {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe activated registry test parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("create activated registry test root");
+        #[cfg(unix)]
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure activated registry test root");
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(temp.path())
+            .expect("open activated registry authority");
+        let root = authority.bootstrap().expect("activate registry authority");
+        let store = WorldWorkReceiptRegistry::bind(
+            temp.path(),
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )
+        .expect("bind receipt registry to activated authority");
+
+        let outcome = store
+            .prepare_world_work_acceptance_proposal(
+                "sess-b1",
+                "task-activated-store-b1",
+                WorldWorkProposalFamilyV1::EphemeralTask,
+                |allocation| {
+                    test_ephemeral_proposal(
+                        allocation,
+                        "task-activated-store-b1",
+                        &root.authority_store_id,
+                    )
+                },
+            )
+            .expect("activated authority store must admit the bounded receipt registry");
+        assert!(matches!(
+            outcome,
+            WorldWorkProposalReservationOutcomeV1::Proposed(_)
+        ));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_registry_persists_exact_canonical_v1_bytes_and_rejects_unknown_fields() {
+        with_bound_world_work_store(|store, _| {
+            let request_id = "task-canonical-registry-b1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve canonical registry proposal")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            store
+                .persist_world_work_acceptance(test_acceptance_record(
+                    &proposal,
+                    "stream-canonical-registry-b1",
+                ))
+                .expect("persist canonical registry acceptance");
+
+            let mut transaction = store
+                .storage
+                .begin_transaction()
+                .expect("begin canonical registry inspection");
+            let bytes = transaction
+                .read_registry()
+                .expect("read canonical registry bytes")
+                .expect("canonical registry exists");
+            transaction
+                .finish()
+                .expect("finish canonical registry inspection");
+            let text = std::str::from_utf8(&bytes).expect("registry is UTF-8");
+            assert!(text.contains("\"action\":{\"kind\":\"RunWorldTask\"}"));
+            assert!(text.contains("\"acknowledgement_kind\":{\"kind\":\"StartFrame\"}"));
+            assert!(text.contains("\"message_id\":null"));
+            assert!(text.contains("\"host_transition_correlation\":null"));
+
+            let canonical: CanonicalWorldWorkReceiptRegistryStateV1 =
+                crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
+                    &bytes,
+                )
+                .expect("canonical registry round trips exactly");
+            let projected: WorldWorkReceiptRegistryStateV1 = canonical
+                .try_into()
+                .expect("canonical registry projects to receipt semantics");
+            projected
+                .validate(&store.authority_store_id)
+                .expect("projected registry validates exact store scope");
+
+            let mut unknown = b"{\"future_field\":true,".to_vec();
+            unknown.extend_from_slice(&bytes[1..]);
+            assert!(crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice::<CanonicalWorldWorkReceiptRegistryStateV1>(&unknown).is_err());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_registry_round_trips_every_retained_turn_payload_on_activated_store() {
+        with_bound_world_work_store(|store, root| {
+            let cases = [
+                (
+                    "approval-response",
+                    WorldDispatchPayloadV1::WorkerContinueApprovalResponse(
+                        WorkerContinueApprovalResponsePayloadV1 {
+                            approval_obligation_id: "approval-b1".to_string(),
+                            decision: ApprovalResponseDecisionV1::Approve,
+                            thread_id: Some("thread-approval-b1".to_string()),
+                        },
+                    ),
+                ),
+                (
+                    "clarification-response",
+                    WorldDispatchPayloadV1::WorkerContinueClarificationResponse(
+                        WorkerContinueClarificationResponsePayloadV1 {
+                            follow_up_obligation_id: "follow-up-b1".to_string(),
+                            clarification_text: "Use the exact retained context.".to_string(),
+                            thread_id: None,
+                        },
+                    ),
+                ),
+                (
+                    "fork-command",
+                    WorldDispatchPayloadV1::WorkerContinueForkCommand(
+                        WorkerContinueForkCommandPayloadV1 {
+                            child_prompt: "Inspect the bounded receipt proof.".to_string(),
+                            fork_reason: Some("specialize:receipt_proof".to_string()),
+                            fork_strategy: Some("parallelize_investigation".to_string()),
+                            thread_id: Some("thread-fork-b1".to_string()),
+                        },
+                    ),
+                ),
+                (
+                    "progress-ack",
+                    WorldDispatchPayloadV1::WorkerContinueProgressAck(
+                        WorkerContinueProgressAckPayloadV1 { thread_id: None },
+                    ),
+                ),
+                (
+                    "control-directive",
+                    WorldDispatchPayloadV1::WorkerContinueControlDirective(
+                        WorkerContinueControlDirectivePayloadV1 {
+                            directive_kind: ControlDirectiveKindV1::Checkpoint,
+                            directive_text: Some("artifact:current_state".to_string()),
+                            thread_id: Some("thread-control-b1".to_string()),
+                        },
+                    ),
+                ),
+            ];
+
+            for (label, payload) in cases {
+                let request_id = format!("retained-{label}-b1");
+                let proposal = match store
+                    .prepare_world_work_acceptance_proposal(
+                        "sess-b1",
+                        &request_id,
+                        WorldWorkProposalFamilyV1::RetainedTurn,
+                        |allocation| {
+                            test_retained_proposal_with_payload(
+                                allocation,
+                                &request_id,
+                                &store.authority_store_id,
+                                payload.clone(),
+                            )
+                        },
+                    )
+                    .unwrap_or_else(|error| panic!("reserve {label} proposal: {error:#}"))
+                {
+                    WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                    WorldWorkProposalReservationOutcomeV1::Accepted(_) => {
+                        panic!("fresh {label} proposal cannot already be accepted")
+                    }
+                };
+                let exact_retry = store
+                    .prepare_world_work_acceptance_proposal(
+                        "sess-b1",
+                        &request_id,
+                        WorldWorkProposalFamilyV1::RetainedTurn,
+                        |allocation| {
+                            test_retained_proposal_with_payload(
+                                allocation,
+                                &request_id,
+                                &store.authority_store_id,
+                                payload.clone(),
+                            )
+                        },
+                    )
+                    .unwrap_or_else(|error| panic!("join {label} exact retry: {error:#}"));
+                assert_eq!(
+                    exact_retry,
+                    WorldWorkProposalReservationOutcomeV1::Proposed(proposal.clone()),
+                    "{label} exact retry must retain one proposal"
+                );
+
+                let reopened = reopen_bound_world_work_store(root);
+                let reopened_retry = reopened
+                    .prepare_world_work_acceptance_proposal(
+                        "sess-b1",
+                        &request_id,
+                        WorldWorkProposalFamilyV1::RetainedTurn,
+                        |allocation| {
+                            test_retained_proposal_with_payload(
+                                allocation,
+                                &request_id,
+                                &reopened.authority_store_id,
+                                payload.clone(),
+                            )
+                        },
+                    )
+                    .unwrap_or_else(|error| panic!("join reopened {label} retry: {error:#}"));
+                assert_eq!(
+                    reopened_retry,
+                    WorldWorkProposalReservationOutcomeV1::Proposed(proposal),
+                    "{label} must round trip through activated-store persistence"
+                );
+            }
+
+            let mut transaction = store
+                .storage
+                .begin_transaction()
+                .expect("begin retained payload registry inspection");
+            let bytes = transaction
+                .read_registry()
+                .expect("read retained payload registry")
+                .expect("retained payload registry exists");
+            transaction
+                .finish()
+                .expect("finish retained payload registry inspection");
+            let canonical: CanonicalWorldWorkReceiptRegistryStateV1 =
+                crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
+                    &bytes,
+                )
+                .expect("all retained payload variants use canonical receipt encoding");
+            let projected: WorldWorkReceiptRegistryStateV1 = canonical
+                .try_into()
+                .expect("all retained payload variants project losslessly");
+            projected
+                .validate(&store.authority_store_id)
+                .expect("all projected retained payload proposals retain exact scope");
+        });
+    }
+
+    fn test_ephemeral_proposal(
+        allocation: WorldWorkProposalAllocationV1,
+        request_id: &str,
+        authority_store_id: &str,
+    ) -> Result<WorldWorkAcceptanceProposalV1> {
+        let acceptance_context = transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: allocation.acceptance_record_id,
+            request_id: request_id.to_string(),
+            message_id: None,
+            caller_backend_id: "cli:codex".to_string(),
+            host_transition_correlation: None,
+        };
+        let validated_dispatch_request = WorldDispatchRequestV1 {
+            request_id: Some(request_id.to_string()),
+            idempotency_key: Some("idem-b1-task".to_string()),
+            orchestration_session_id: Some("sess-b1".to_string()),
+            caller_participant_id: Some("orch-b1".to_string()),
+            action: WorldDispatchActionV1::RunWorldTask,
+            mode: WorldDispatchModeV1::Ephemeral,
+            target_backend_id: Some("cli:codex-world".to_string()),
+            task_run_id: None,
+            target_participant_id: None,
+            world_id: Some("world-b1".to_string()),
+            world_generation: Some(7),
+            payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                prompt: "perform the bounded task".to_string(),
+            }),
+        }
+        .validate()?;
+        let member_dispatch_request = transport_api_types::MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "sess-b1".to_string(),
+            participant_id: "awm_018f0f2e-7b4c-7aa1-8c22-123456789abc".to_string(),
+            orchestrator_participant_id: "orch-b1".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex-world".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: request_id.to_string(),
+            world_id: "world-b1".to_string(),
+            world_generation: 7,
+            initial_prompt: Some("perform the bounded task".to_string()),
+            resolved_runtime: transport_api_types::ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: transport_api_types::MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/usr/bin/codex".to_string(),
+            },
+        };
+        Ok(WorldWorkAcceptanceProposalV1 {
+            schema_version: 1,
+            acceptance_context,
+            authority_store_id: authority_store_id.to_string(),
+            authority_revision_observed: 11,
+            orchestration_session_id: "sess-b1".to_string(),
+            caller_participant_id: "orch-b1".to_string(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: "cli:codex-world".to_string(),
+            world_id: "world-b1".to_string(),
+            world_generation: 7,
+            proposed_work: ProposedWorldWorkIdentityV1::EphemeralTask,
+            submission_identity: WorldWorkSubmissionIdentityV1::EphemeralTask {
+                validated_dispatch_request,
+                member_dispatch_request,
+                canonical_execute_request_sha256: "b".repeat(64),
+            },
+            current_policy_snapshot_ref: test_policy_ref(),
+            current_policy_snapshot_hash: "c".repeat(64),
+            current_policy_revision: "policy-revision-b1".to_string(),
+            created_at: allocation.created_at,
+        })
+    }
+
+    fn test_retained_proposal(
+        allocation: WorldWorkProposalAllocationV1,
+        request_id: &str,
+        authority_store_id: &str,
+    ) -> Result<WorldWorkAcceptanceProposalV1> {
+        test_retained_proposal_with_payload(
+            allocation,
+            request_id,
+            authority_store_id,
+            WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                prompt: "continue the bounded turn".to_string(),
+                thread_id: Some("thread-b1".to_string()),
+            }),
+        )
+    }
+
+    fn test_retained_proposal_with_payload(
+        allocation: WorldWorkProposalAllocationV1,
+        request_id: &str,
+        authority_store_id: &str,
+        payload: WorldDispatchPayloadV1,
+    ) -> Result<WorldWorkAcceptanceProposalV1> {
+        let message_id = allocation
+            .message_id
+            .clone()
+            .expect("retained allocation includes message identity");
+        let acceptance_context = transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: allocation.acceptance_record_id,
+            request_id: request_id.to_string(),
+            message_id: Some(message_id.clone()),
+            caller_backend_id: "cli:codex".to_string(),
+            host_transition_correlation: None,
+        };
+        let validated_dispatch_request = WorldDispatchRequestV1 {
+            request_id: Some(request_id.to_string()),
+            idempotency_key: Some("idem-b1-turn".to_string()),
+            orchestration_session_id: Some("sess-b1".to_string()),
+            caller_participant_id: Some("orch-b1".to_string()),
+            action: WorldDispatchActionV1::ContinueWorldWorker,
+            mode: WorldDispatchModeV1::Retained,
+            target_backend_id: Some("cli:codex-world".to_string()),
+            task_run_id: None,
+            target_participant_id: Some("member-b1".to_string()),
+            world_id: Some("world-b1".to_string()),
+            world_generation: Some(7),
+            payload,
+        }
+        .validate()?;
+        Ok(WorldWorkAcceptanceProposalV1 {
+            schema_version: 1,
+            acceptance_context,
+            authority_store_id: authority_store_id.to_string(),
+            authority_revision_observed: 11,
+            orchestration_session_id: "sess-b1".to_string(),
+            caller_participant_id: "orch-b1".to_string(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: "cli:codex-world".to_string(),
+            world_id: "world-b1".to_string(),
+            world_generation: 7,
+            proposed_work: ProposedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: request_id.to_string(),
+                message_id,
+                target_participant_id: "member-b1".to_string(),
+            },
+            submission_identity: WorldWorkSubmissionIdentityV1::RetainedTurn {
+                validated_dispatch_request,
+                canonical_member_turn_submit_request_sha256: "d".repeat(64),
+            },
+            current_policy_snapshot_ref: test_policy_ref(),
+            current_policy_snapshot_hash: "c".repeat(64),
+            current_policy_revision: "policy-revision-b1".to_string(),
+            created_at: allocation.created_at,
+        })
+    }
+
+    fn test_acceptance_record(
+        proposal: &WorldWorkAcceptanceProposalV1,
+        stream_id: &str,
+    ) -> WorldWorkAcceptanceRecordV1 {
+        let work_identity = match &proposal.proposed_work {
+            ProposedWorldWorkIdentityV1::EphemeralTask => {
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: format!("spn-{stream_id}"),
+                }
+            }
+            ProposedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id,
+                message_id,
+                target_participant_id,
+            } => AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: active_run_id.clone(),
+                message_id: message_id.clone(),
+                target_participant_id: target_participant_id.clone(),
+            },
+        };
+        let (
+            runtime_submission_id,
+            task_run_id,
+            active_run_id,
+            message_id,
+            retained_participant_id,
+        ) = match &work_identity {
+            AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => (
+                Some(task_run_id.clone()),
+                Some(task_run_id.clone()),
+                None,
+                None,
+                None,
+            ),
+            AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id,
+                message_id,
+                target_participant_id,
+            } => (
+                Some(format!("runtime-{active_run_id}")),
+                None,
+                Some(active_run_id.clone()),
+                Some(message_id.clone()),
+                Some(target_participant_id.clone()),
+            ),
+        };
+        let accepted_at = Utc::now();
+        WorldWorkAcceptanceRecordV1 {
+            schema_version: 1,
+            acceptance_record_id: proposal
+                .acceptance_context
+                .proposed_acceptance_record_id
+                .clone(),
+            request_id: proposal.request_id().to_string(),
+            authority_store_id: proposal.authority_store_id.clone(),
+            authority_revision_observed: proposal.authority_revision_observed,
+            orchestration_session_id: proposal.orchestration_session_id.clone(),
+            caller_participant_id: proposal.caller_participant_id.clone(),
+            caller_backend_id: proposal.caller_backend_id.clone(),
+            target_backend_id: proposal.target_backend_id.clone(),
+            world_id: proposal.world_id.clone(),
+            world_generation: proposal.world_generation,
+            work_identity,
+            host_transition_correlation: proposal
+                .acceptance_context
+                .host_transition_correlation
+                .clone(),
+            current_policy_snapshot_ref: proposal.current_policy_snapshot_ref.clone(),
+            current_policy_snapshot_hash: proposal.current_policy_snapshot_hash.clone(),
+            current_policy_revision: proposal.current_policy_revision.clone(),
+            runtime_acceptance: RuntimeAcceptanceEvidenceV1 {
+                acknowledgement_kind: RuntimeAcceptanceAcknowledgementKindV1::StartFrame,
+                acceptance_record_id: proposal
+                    .acceptance_context
+                    .proposed_acceptance_record_id
+                    .clone(),
+                stream_id: stream_id.to_string(),
+                frame_sequence: 1,
+                runtime_submission_id,
+                task_run_id,
+                active_run_id,
+                message_id,
+                retained_participant_id,
+                observed_at: accepted_at,
+            },
+            accepted_at,
+            record_revision: 1,
+        }
+    }
+
+    fn assert_world_work_acceptance_mismatch_rejected(
+        store: &WorldWorkReceiptRegistry,
+        proposal: &WorldWorkAcceptanceProposalV1,
+        label: &str,
+        mutate: impl FnOnce(&mut WorldWorkAcceptanceRecordV1),
+    ) {
+        let mut candidate = test_acceptance_record(proposal, "stream-mismatch-matrix-b1");
+        mutate(&mut candidate);
+        let error = store
+            .persist_world_work_acceptance(candidate)
+            .expect_err(label);
+        assert!(!error.to_string().is_empty(), "{label}");
+        assert_eq!(
+            store
+                .inspect_world_work_acceptance_by_id(
+                    &proposal.authority_store_id,
+                    &proposal.acceptance_context.proposed_acceptance_record_id,
+                )
+                .expect("inspect after rejected mismatch"),
+            None,
+            "{label} must not mutate accepted state"
+        );
+    }
+
+    fn rebind_world_work_session(
+        proposal: &WorldWorkAcceptanceProposalV1,
+        record: &WorldWorkAcceptanceRecordV1,
+        session_id: &str,
+    ) -> (WorldWorkAcceptanceProposalV1, WorldWorkAcceptanceRecordV1) {
+        let mut rebound_proposal = proposal.clone();
+        rebound_proposal.orchestration_session_id = session_id.to_string();
+        match &mut rebound_proposal.submission_identity {
+            WorldWorkSubmissionIdentityV1::EphemeralTask {
+                validated_dispatch_request,
+                member_dispatch_request,
+                ..
+            } => {
+                validated_dispatch_request.orchestration_session_id = session_id.to_string();
+                member_dispatch_request.orchestration_session_id = session_id.to_string();
+            }
+            WorldWorkSubmissionIdentityV1::RetainedTurn {
+                validated_dispatch_request,
+                ..
+            } => {
+                validated_dispatch_request.orchestration_session_id = session_id.to_string();
+            }
+        }
+        let mut rebound_record = record.clone();
+        rebound_record.orchestration_session_id = session_id.to_string();
+        (rebound_proposal, rebound_record)
+    }
+
+    #[test]
+    fn world_work_durable_tagged_identities_reject_unknown_v1_members() {
+        let allocation = WorldWorkProposalAllocationV1 {
+            acceptance_record_id: "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc".to_string(),
+            message_id: None,
+            created_at: Utc::now(),
+            existing_proposal: None,
+        };
+        let proposal =
+            test_ephemeral_proposal(allocation, "task-tagged-enum-b1", "authority-store-b1")
+                .expect("build tagged-enum proposal");
+
+        let mut proposed = serde_json::to_value(ProposedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id: "active-b1".to_string(),
+            message_id: "wwm_018f0f2e-7b4c-7aa1-8c22-123456789abd".to_string(),
+            target_participant_id: "member-b1".to_string(),
+        })
+        .expect("shape proposed identity");
+        proposed["value"]["future_scope"] = Value::Bool(true);
+        assert!(serde_json::from_value::<ProposedWorldWorkIdentityV1>(proposed).is_err());
+
+        let mut submission =
+            serde_json::to_value(&proposal.submission_identity).expect("shape submission identity");
+        submission["value"]["future_commitment"] = Value::String("not-v1".to_string());
+        assert!(serde_json::from_value::<WorldWorkSubmissionIdentityV1>(submission).is_err());
+
+        let mut accepted = serde_json::to_value(AcceptedWorldWorkIdentityV1::EphemeralTask {
+            task_run_id: "spn-b1".to_string(),
+        })
+        .expect("shape accepted identity");
+        accepted["value"]["terminal_state"] = Value::String("completed".to_string());
+        assert!(serde_json::from_value::<AcceptedWorldWorkIdentityV1>(accepted).is_err());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_proposal_identity_collision_and_family_reuse_fail_before_mutation() {
+        with_bound_world_work_store(|store, _| {
+            let acceptance_id = "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc".to_string();
+            let created_at = Utc::now();
+            let first_request_id = "task-collision-first-b1";
+            let first = store
+                .prepare_world_work_acceptance_proposal_with_identity_allocator(
+                    "sess-b1",
+                    first_request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    || (acceptance_id.clone(), None, created_at),
+                    |allocation| {
+                        test_ephemeral_proposal(
+                            allocation,
+                            first_request_id,
+                            &store.authority_store_id,
+                        )
+                    },
+                )
+                .expect("reserve deterministic first identity");
+            assert!(matches!(
+                first,
+                WorldWorkProposalReservationOutcomeV1::Proposed(_)
+            ));
+
+            let second_request_id = "task-collision-second-b1";
+            let collision = store
+                .prepare_world_work_acceptance_proposal_with_identity_allocator(
+                    "sess-b1",
+                    second_request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    || (acceptance_id.clone(), None, Utc::now()),
+                    |allocation| {
+                        test_ephemeral_proposal(
+                            allocation,
+                            second_request_id,
+                            &store.authority_store_id,
+                        )
+                    },
+                )
+                .expect_err("duplicate proposed acceptance ID must fail");
+            assert!(collision.to_string().contains("identity collision"));
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_id(&store.authority_store_id, &acceptance_id,)
+                    .expect("inspect collision proposal"),
+                None
+            );
+
+            let family_conflict = store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    first_request_id,
+                    WorldWorkProposalFamilyV1::RetainedTurn,
+                    |_| anyhow::bail!("conflicting family builder must not run"),
+                )
+                .expect_err("same request cannot change work family");
+            assert!(family_conflict.to_string().contains("conflicting reuse"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_message_identity_is_unique_across_registry_sessions() {
+        with_bound_world_work_store(|store, _| {
+            let message_id = "wwm_018f0f2e-7b4c-7aa1-8c22-123456789abe".to_string();
+            let first_request_id = "active-message-first-b1";
+            store
+                .prepare_world_work_acceptance_proposal_with_identity_allocator(
+                    "sess-b1",
+                    first_request_id,
+                    WorldWorkProposalFamilyV1::RetainedTurn,
+                    || {
+                        (
+                            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc".to_string(),
+                            Some(message_id.clone()),
+                            Utc::now(),
+                        )
+                    },
+                    |allocation| {
+                        test_retained_proposal(
+                            allocation,
+                            first_request_id,
+                            &store.authority_store_id,
+                        )
+                    },
+                )
+                .expect("reserve first retained message");
+
+            let second_request_id = "active-message-second-b1";
+            let error = store
+                .prepare_world_work_acceptance_proposal_with_identity_allocator(
+                    "sess-b2",
+                    second_request_id,
+                    WorldWorkProposalFamilyV1::RetainedTurn,
+                    || {
+                        (
+                            "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abd".to_string(),
+                            Some(message_id.clone()),
+                            Utc::now(),
+                        )
+                    },
+                    |allocation| {
+                        let mut proposal = test_retained_proposal(
+                            allocation,
+                            second_request_id,
+                            &store.authority_store_id,
+                        )?;
+                        proposal.orchestration_session_id = "sess-b2".to_string();
+                        let WorldWorkSubmissionIdentityV1::RetainedTurn {
+                            validated_dispatch_request,
+                            ..
+                        } = &mut proposal.submission_identity
+                        else {
+                            unreachable!()
+                        };
+                        validated_dispatch_request.orchestration_session_id = "sess-b2".to_string();
+                        Ok(proposal)
+                    },
+                )
+                .expect_err("duplicate retained message across sessions must fail closed");
+            assert!(error.to_string().contains("identity collision"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_proposal_survives_restart_without_becoming_accepted() {
+        with_bound_world_work_store(|store, root| {
+            let request_id = "task-proposal-restart-b1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve proposal before restart")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            drop(store);
+
+            let restarted = reopen_bound_world_work_store(root);
+            assert_eq!(
+                restarted
+                    .prepare_world_work_acceptance_proposal(
+                        "sess-b1",
+                        request_id,
+                        WorldWorkProposalFamilyV1::EphemeralTask,
+                        |allocation| {
+                            test_ephemeral_proposal(
+                                allocation,
+                                request_id,
+                                &restarted.authority_store_id,
+                            )
+                        },
+                    )
+                    .expect("join proposal after restart"),
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal.clone())
+            );
+            assert_eq!(
+                restarted
+                    .inspect_world_work_acceptance_by_id(
+                        &restarted.authority_store_id,
+                        &proposal.acceptance_context.proposed_acceptance_record_id,
+                    )
+                    .expect("proposal remains unaccepted after restart"),
+                None
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_acceptance_mismatch_matrix_fails_without_mutation() {
+        with_bound_world_work_store(|store, _| {
+            let request_id = "task-mismatch-matrix-b1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve mismatch-matrix proposal")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "request mismatch",
+                |record| record.request_id = "other-request".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "store mismatch",
+                |record| record.authority_store_id = "other-store".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "session mismatch",
+                |record| record.orchestration_session_id = "other-session".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "caller mismatch",
+                |record| record.caller_participant_id = "other-caller".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "caller backend mismatch",
+                |record| record.caller_backend_id = "cli:other".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "target backend mismatch",
+                |record| record.target_backend_id = "cli:other-world".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "world mismatch",
+                |record| record.world_id = "other-world".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "world generation mismatch",
+                |record| record.world_generation += 1,
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "policy reference mismatch",
+                |record| record.current_policy_snapshot_ref.ref_id = "other-policy".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "policy hash mismatch",
+                |record| record.current_policy_snapshot_hash = "d".repeat(64),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "policy revision mismatch",
+                |record| record.current_policy_revision = "other-policy-revision".to_string(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "correlation mismatch",
+                |record| {
+                    record.host_transition_correlation =
+                        Some(substrate_common::HostTransitionWorkCorrelationV1 {
+                            schema_version: 1,
+                            authority_store_id: "authority-store-b1".to_string(),
+                            orchestration_session_id: "sess-b1".to_string(),
+                            authoritative_participant_id: "orch-b1".to_string(),
+                            transition_intent_id: "intent-b1".to_string(),
+                            transition_intent_revision_observed: 1,
+                            transition_run_id: "transition-run-b1".to_string(),
+                            transition_payload_commitment:
+                                substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                                    digest_hex: "e".repeat(64),
+                                },
+                            authority_revision_observed: 11,
+                        });
+                },
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "acceptance evidence ID mismatch",
+                |record| {
+                    record.runtime_acceptance.acceptance_record_id =
+                        "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abe".to_string();
+                },
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "stream mismatch",
+                |record| record.runtime_acceptance.stream_id.clear(),
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "frame mismatch",
+                |record| record.runtime_acceptance.frame_sequence = 2,
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "acknowledgement kind mismatch",
+                |record| {
+                    record.runtime_acceptance.acknowledgement_kind =
+                        RuntimeAcceptanceAcknowledgementKindV1::RegisteredFrame;
+                },
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "task evidence mismatch",
+                |record| {
+                    record.runtime_acceptance.task_run_id = Some("other-task".to_string());
+                },
+            );
+            assert_world_work_acceptance_mismatch_rejected(
+                &store,
+                &proposal,
+                "runtime submission mismatch",
+                |record| {
+                    record.runtime_acceptance.runtime_submission_id =
+                        Some("other-submission".to_string());
+                },
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_identity_uniqueness_and_inspection_fail_closed_across_restart_and_corruption() {
+        with_bound_world_work_store(|store, root| {
+            let first_request_id = "task-work-identity-first-b1";
+            let first_proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    first_request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(
+                            allocation,
+                            first_request_id,
+                            &store.authority_store_id,
+                        )
+                    },
+                )
+                .expect("reserve first work identity")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            let second_request_id = "task-work-identity-second-b1";
+            let second_proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    second_request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(
+                            allocation,
+                            second_request_id,
+                            &store.authority_store_id,
+                        )
+                    },
+                )
+                .expect("reserve second work identity")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            let winner = store
+                .persist_world_work_acceptance(test_acceptance_record(
+                    &first_proposal,
+                    "shared-work-identity-b1",
+                ))
+                .expect("persist first work identity");
+            assert!(store
+                .persist_world_work_acceptance(test_acceptance_record(
+                    &second_proposal,
+                    "shared-work-identity-b1",
+                ))
+                .is_err());
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_id(
+                        &store.authority_store_id,
+                        &second_proposal
+                            .acceptance_context
+                            .proposed_acceptance_record_id,
+                    )
+                    .expect("inspect losing acceptance ID"),
+                None
+            );
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_id(
+                        "wrong-store",
+                        &winner.acceptance_record_id,
+                    )
+                    .expect("wrong store inspection"),
+                None
+            );
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_id(
+                        &store.authority_store_id,
+                        "wwa_018f0f2e-7b4c-7aa1-8c22-123456789aba",
+                    )
+                    .expect("missing acceptance inspection"),
+                None
+            );
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_work_identity(
+                        &store.authority_store_id,
+                        "stale-session",
+                        &winner.work_identity,
+                    )
+                    .expect("stale session inspection"),
+                None
+            );
+
+            drop(store);
+            let restarted = reopen_bound_world_work_store(root);
+            assert_eq!(
+                restarted
+                    .inspect_world_work_acceptance_by_work_identity(
+                        &restarted.authority_store_id,
+                        "sess-b1",
+                        &winner.work_identity,
+                    )
+                    .expect("inspect work after restart"),
+                Some(winner.clone())
+            );
+
+            let (duplicate_proposal, duplicate_record) =
+                rebind_world_work_session(&first_proposal, &winner, "sess-b1-corrupt");
+            let duplicate_session = WorldWorkReceiptRegistrySessionStateV1 {
+                schema_version: 1,
+                proposals_by_request_id: BTreeMap::from([(
+                    duplicate_proposal.request_id().to_string(),
+                    duplicate_proposal,
+                )]),
+                records_by_acceptance_record_id: BTreeMap::from([(
+                    duplicate_record.acceptance_record_id.clone(),
+                    duplicate_record,
+                )]),
+            };
+            let mut transaction = restarted
+                .storage
+                .begin_transaction()
+                .expect("begin malformed-registry injection transaction");
+            let bytes = transaction
+                .read_registry()
+                .expect("read registry for malformed injection")
+                .expect("accepted registry exists before malformed injection");
+            let canonical: CanonicalWorldWorkReceiptRegistryStateV1 =
+                crate::execution::agent_runtime::host_session_authority::canonical_json::from_slice(
+                    &bytes,
+                )
+                .expect("decode canonical registry for malformed injection");
+            let mut duplicate_state: WorldWorkReceiptRegistryStateV1 = canonical
+                .try_into()
+                .expect("project registry for malformed injection");
+            duplicate_state
+                .sessions_by_id
+                .insert("sess-b1-corrupt".to_string(), duplicate_session);
+            let canonical = CanonicalWorldWorkReceiptRegistryStateV1::try_from(&duplicate_state)
+                .expect("project deliberately malformed registry");
+            let bytes =
+                crate::execution::agent_runtime::host_session_authority::canonical_json::to_vec(
+                    &canonical,
+                )
+                .expect("encode deliberately malformed registry");
+            transaction
+                .replace_registry(&bytes)
+                .expect("inject separately valid duplicate registry for ambiguity proof");
+            transaction
+                .finish()
+                .expect("finish malformed-registry injection transaction");
+            assert!(restarted
+                .inspect_world_work_acceptance_by_id(
+                    &restarted.authority_store_id,
+                    &winner.acceptance_record_id,
+                )
+                .is_err());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persisted_acceptance_token_enters_matching_durable_supervisor() {
+        with_bound_world_work_store(|store, root_path| {
+            let request_id = "task-supervisor-handoff-b2-1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve supervisor handoff proposal")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            let persisted = store
+                .persist_world_work_acceptance_for_supervision(test_acceptance_record(
+                    &proposal,
+                    "stream-supervisor-handoff-b2-1",
+                ))
+                .expect("persist exact acknowledgement for supervision");
+
+            let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root_path)
+                .expect("reopen supervisor handoff authority");
+            let root = authority
+                .read_root()
+                .expect("read supervisor handoff authority root");
+            let supervisor =
+                super::super::world_work_execution_supervisor::WorldWorkExecutionSupervisor::bind(
+                    root_path,
+                    &root.bootstrap_home,
+                    &root.authority_store_id,
+                )
+                .expect("bind matching execution supervisor");
+            let claim = supervisor
+                .claim_persisted_world_work(&persisted)
+                .expect("claim exact persisted acceptance");
+
+            assert_eq!(claim.authority_store_id, root.authority_store_id);
+            assert_eq!(
+                claim.acceptance_record_id,
+                persisted.record().acceptance_record_id
+            );
+            assert_eq!(claim.work_identity, persisted.record().work_identity);
+            assert_eq!(
+                claim.stream_id,
+                persisted.record().runtime_acceptance.stream_id
+            );
+            assert_eq!(claim.acceptance_frame_sequence, 1);
+            assert_eq!(claim.observer_epoch, 1);
+            assert_eq!(
+                supervisor
+                    .inspect_claim_by_acceptance_id(&claim.acceptance_record_id)
+                    .expect("inspect durable supervisor handoff"),
+                Some(claim)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_proposal_remains_unaccepted_until_exact_runtime_acknowledgement_is_persisted() {
+        with_bound_world_work_store(|store, _| {
+            let request_id = "task-request-b1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve task proposal")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => {
+                    panic!("fresh proposal cannot already be accepted")
+                }
+            };
+
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_id(
+                        &store.authority_store_id,
+                        &proposal.acceptance_context.proposed_acceptance_record_id,
+                    )
+                    .expect("inspect proposal-only identity"),
+                None
+            );
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_work_identity(
+                        &store.authority_store_id,
+                        "sess-b1",
+                        &AcceptedWorldWorkIdentityV1::EphemeralTask {
+                            task_run_id: "spn-not-acknowledged".to_string(),
+                        },
+                    )
+                    .expect("inspect proposal-only work"),
+                None
+            );
+
+            let persisted = store
+                .persist_world_work_acceptance(test_acceptance_record(&proposal, "stream-task-b1"))
+                .expect("persist exact task acknowledgement");
+            assert_eq!(persisted.record_revision, 1);
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_id(
+                        &store.authority_store_id,
+                        &persisted.acceptance_record_id,
+                    )
+                    .expect("inspect accepted task"),
+                Some(persisted.clone())
+            );
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_work_identity(
+                        &store.authority_store_id,
+                        "sess-b1",
+                        &persisted.work_identity,
+                    )
+                    .expect("inspect accepted task by work"),
+                Some(persisted)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn world_work_exact_retry_joins_and_conflicting_retry_preserves_the_winner() {
+        with_bound_world_work_store(|store, root| {
+            let request_id = "task-request-retry-b1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve first task proposal")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            let retried = store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("join unaccepted exact retry");
+            assert_eq!(
+                retried,
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal.clone())
+            );
+
+            let winner = store
+                .persist_world_work_acceptance(test_acceptance_record(
+                    &proposal,
+                    "stream-retry-winner-b1",
+                ))
+                .expect("persist retry winner");
+            let accepted_retry = store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("join accepted exact retry");
+            assert_eq!(
+                accepted_retry,
+                WorldWorkProposalReservationOutcomeV1::Accepted(winner.clone())
+            );
+
+            let conflict = store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        let mut changed = test_ephemeral_proposal(
+                            allocation,
+                            request_id,
+                            &store.authority_store_id,
+                        )?;
+                        if let WorldWorkSubmissionIdentityV1::EphemeralTask {
+                            canonical_execute_request_sha256,
+                            ..
+                        } = &mut changed.submission_identity
+                        {
+                            *canonical_execute_request_sha256 = "e".repeat(64);
+                        }
+                        Ok(changed)
+                    },
+                )
+                .expect_err("conflicting retry must fail closed");
+            assert!(conflict.to_string().contains("conflicting exact retry"));
+
+            drop(store);
+            let restarted = reopen_bound_world_work_store(root);
+            assert_eq!(
+                restarted
+                    .inspect_world_work_acceptance_by_id(
+                        &restarted.authority_store_id,
+                        &winner.acceptance_record_id,
+                    )
+                    .expect("inspect winner after restart"),
+                Some(winner)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn concurrent_world_work_exact_retries_converge_on_one_immutable_acceptance_record() {
+        with_bound_world_work_store(|store, _| {
+            let store = Arc::new(store.clone());
+            let barrier = Arc::new(Barrier::new(2));
+            let mut threads = Vec::new();
+            for _ in 0..2 {
+                let store = Arc::clone(&store);
+                let barrier = Arc::clone(&barrier);
+                threads.push(std::thread::spawn(move || {
+                    let request_id = "task-request-concurrent-b1";
+                    let proposal = match store
+                        .prepare_world_work_acceptance_proposal(
+                            "sess-b1",
+                            request_id,
+                            WorldWorkProposalFamilyV1::EphemeralTask,
+                            |allocation| {
+                                test_ephemeral_proposal(
+                                    allocation,
+                                    request_id,
+                                    &store.authority_store_id,
+                                )
+                            },
+                        )
+                        .expect("reserve concurrent exact proposal")
+                    {
+                        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                        WorldWorkProposalReservationOutcomeV1::Accepted(_) => {
+                            panic!("barrier prevents pre-persist acceptance")
+                        }
+                    };
+                    barrier.wait();
+                    store
+                        .persist_world_work_acceptance(test_acceptance_record(
+                            &proposal,
+                            "stream-concurrent-b1",
+                        ))
+                        .expect("concurrent exact acknowledgement joins")
+                }));
+            }
+            let left = threads.remove(0).join().expect("join first exact retry");
+            let right = threads.remove(0).join().expect("join second exact retry");
+            assert_eq!(left, right);
+            assert_eq!(left.record_revision, 1);
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_work_identity(
+                        &store.authority_store_id,
+                        "sess-b1",
+                        &left.work_identity,
+                    )
+                    .expect("inspect concurrent winner"),
+                Some(left)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn concurrent_world_work_conflicting_acknowledgements_have_one_winner_without_torn_state() {
+        with_bound_world_work_store(|store, _| {
+            let request_id = "task-request-conflict-b1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::EphemeralTask,
+                    |allocation| {
+                        test_ephemeral_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve conflicting acknowledgement proposal")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            let store = Arc::new(store.clone());
+            let barrier = Arc::new(Barrier::new(2));
+            let mut threads = Vec::new();
+            for stream_id in ["stream-conflict-a", "stream-conflict-b"] {
+                let store = Arc::clone(&store);
+                let barrier = Arc::clone(&barrier);
+                let proposal = proposal.clone();
+                threads.push(std::thread::spawn(move || {
+                    let candidate = test_acceptance_record(&proposal, stream_id);
+                    barrier.wait();
+                    store.persist_world_work_acceptance(candidate)
+                }));
+            }
+            let results = threads
+                .into_iter()
+                .map(|thread| thread.join().expect("join conflicting acknowledgement"))
+                .collect::<Vec<_>>();
+            assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+            assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+            let winner = results
+                .into_iter()
+                .find_map(Result::ok)
+                .expect("one acknowledgement wins");
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_id(
+                        &store.authority_store_id,
+                        &winner.acceptance_record_id,
+                    )
+                    .expect("inspect conflicting acknowledgement winner"),
+                Some(winner)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_world_work_requires_exact_message_target_and_start_evidence() {
+        with_bound_world_work_store(|store, root| {
+            let request_id = "active-run-b1";
+            let proposal = match store
+                .prepare_world_work_acceptance_proposal(
+                    "sess-b1",
+                    request_id,
+                    WorldWorkProposalFamilyV1::RetainedTurn,
+                    |allocation| {
+                        test_retained_proposal(allocation, request_id, &store.authority_store_id)
+                    },
+                )
+                .expect("reserve retained proposal")
+            {
+                WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+                WorldWorkProposalReservationOutcomeV1::Accepted(_) => unreachable!(),
+            };
+            let mut mismatched = test_acceptance_record(&proposal, "stream-retained-b1");
+            let other_message_id = "wwm_018f0f2e-7b4c-7aa1-8c22-123456789aba".to_string();
+            if let AcceptedWorldWorkIdentityV1::RetainedTurn { message_id, .. } =
+                &mut mismatched.work_identity
+            {
+                *message_id = other_message_id.clone();
+            }
+            mismatched.runtime_acceptance.message_id = Some(other_message_id);
+            assert!(store.persist_world_work_acceptance(mismatched).is_err());
+            let mut mismatched = test_acceptance_record(&proposal, "stream-retained-b1");
+            if let AcceptedWorldWorkIdentityV1::RetainedTurn { active_run_id, .. } =
+                &mut mismatched.work_identity
+            {
+                *active_run_id = "other-active-run".to_string();
+            }
+            mismatched.runtime_acceptance.active_run_id = Some("other-active-run".to_string());
+            assert!(store.persist_world_work_acceptance(mismatched).is_err());
+            let mut mismatched = test_acceptance_record(&proposal, "stream-retained-b1");
+            if let AcceptedWorldWorkIdentityV1::RetainedTurn {
+                target_participant_id,
+                ..
+            } = &mut mismatched.work_identity
+            {
+                *target_participant_id = "other-member".to_string();
+            }
+            mismatched.runtime_acceptance.retained_participant_id =
+                Some("other-member".to_string());
+            assert!(store.persist_world_work_acceptance(mismatched).is_err());
+            let mut mismatched = test_acceptance_record(&proposal, "stream-retained-b1");
+            mismatched.runtime_acceptance.runtime_submission_id = Some(String::new());
+            assert!(store.persist_world_work_acceptance(mismatched).is_err());
+            let mut mismatched = test_acceptance_record(&proposal, "stream-retained-b1");
+            mismatched.runtime_acceptance.runtime_submission_id = Some(" ".to_string());
+            assert!(store.persist_world_work_acceptance(mismatched).is_err());
+            let mut mismatched = test_acceptance_record(&proposal, "stream-retained-b1");
+            mismatched.runtime_acceptance.task_run_id = Some("task-alias".to_string());
+            assert!(store.persist_world_work_acceptance(mismatched).is_err());
+            assert_eq!(
+                store
+                    .inspect_world_work_acceptance_by_work_identity(
+                        &store.authority_store_id,
+                        "sess-b1",
+                        &test_acceptance_record(&proposal, "stream-retained-b1").work_identity,
+                    )
+                    .expect("inspect after retained mismatch"),
+                None
+            );
+            let reopened = reopen_bound_world_work_store(root);
+            assert_eq!(
+                reopened
+                    .inspect_world_work_acceptance_by_id(
+                        &reopened.authority_store_id,
+                        &proposal.acceptance_context.proposed_acceptance_record_id,
+                    )
+                    .expect("inspect after reopening rejected retained evidence"),
+                None,
+                "blank runtime submission evidence must not mutate durable accepted state"
+            );
+            let accepted = store
+                .persist_world_work_acceptance(test_acceptance_record(
+                    &proposal,
+                    "stream-retained-b1",
+                ))
+                .expect("persist exact retained Start evidence");
+            assert!(matches!(
+                &accepted.work_identity,
+                AcceptedWorldWorkIdentityV1::RetainedTurn { .. }
+            ));
+            assert_ne!(
+                accepted.work_identity,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: request_id.to_string(),
+                },
+                "task and retained discriminants must never alias"
+            );
+        });
     }
 
     fn pending_inbox_item(

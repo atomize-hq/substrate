@@ -15,13 +15,17 @@ use std::{fs::OpenOptions, io::Write};
 use anyhow::Context;
 use anyhow::Result;
 #[cfg(target_os = "linux")]
+use chrono::Utc;
+#[cfg(target_os = "linux")]
 use gethostname::gethostname;
+#[cfg(target_os = "linux")]
+use serde::Serialize;
+#[cfg(target_os = "linux")]
+use sha2::{Digest, Sha256};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
 use tokio::sync::mpsc::UnboundedSender;
-#[cfg(target_os = "linux")]
-use tokio::sync::watch;
 #[cfg(target_os = "linux")]
 use tracing::{info, warn};
 #[cfg(target_os = "linux")]
@@ -47,14 +51,24 @@ use crate::execution::agent_runtime::dispatch_contract::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+#[cfg(all(target_os = "linux", test))]
+use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
-    ActiveEphemeralWorldTaskGuard, ActiveEphemeralWorldTaskRecord,
-    PreparedInternalApprovalResponseObligationCloseout,
-    PreparedInternalClarificationResponseObligationCloseout,
+    AcceptedWorldWorkIdentityV1, PreparedInternalApprovalResponseObligationCloseout,
+    PreparedInternalClarificationResponseObligationCloseout, ProposedWorldWorkIdentityV1,
+    RuntimeAcceptanceAcknowledgementKindV1, RuntimeAcceptanceEvidenceV1,
+    WorldWorkAcceptanceProposalV1, WorldWorkAcceptanceRecordV1, WorldWorkProposalAllocationV1,
+    WorldWorkProposalFamilyV1, WorldWorkProposalReservationOutcomeV1, WorldWorkReceiptRegistry,
+    WorldWorkSubmissionIdentityV1,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::world_work_execution_supervisor::{
+    WorldWorkExecutionObservationV1, WorldWorkExecutionSupervisor, WorldWorkInterruptionReasonV1,
+    WorldWorkJournalAppendOutcomeV1, WorldWorkRecoveryAttemptV1,
+};
 #[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::WorldTaskTerminalStateV1;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -212,177 +226,37 @@ fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurren
 }
 
 #[cfg(target_os = "linux")]
-#[derive(Clone)]
-struct ActiveEphemeralTerminalWaitEntry {
-    waiter_count: usize,
-    state_tx: watch::Sender<Option<WorldTaskTerminalStateV1>>,
-}
-
-#[cfg(target_os = "linux")]
-impl Default for ActiveEphemeralTerminalWaitEntry {
-    fn default() -> Self {
-        let (state_tx, _state_rx) = watch::channel(None);
-        Self {
-            waiter_count: 0,
-            state_tx,
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Default)]
-struct ActiveEphemeralTerminalWaitTracker {
-    by_task: BTreeMap<String, ActiveEphemeralTerminalWaitEntry>,
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Debug)]
-struct ActiveEphemeralTerminalWaitRegistrationGuard {
-    orchestration_session_id: String,
-    task_run_id: String,
-    armed: bool,
-}
-
-#[cfg(target_os = "linux")]
-impl ActiveEphemeralTerminalWaitRegistrationGuard {
-    fn new(orchestration_session_id: &str, task_run_id: &str) -> Self {
-        register_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-        Self {
-            orchestration_session_id: orchestration_session_id.to_string(),
-            task_run_id: task_run_id.to_string(),
-            armed: true,
-        }
-    }
-
-    fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for ActiveEphemeralTerminalWaitRegistrationGuard {
-    fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        release_active_ephemeral_terminal_wait(&self.orchestration_session_id, &self.task_run_id);
-    }
-}
-
-#[cfg(target_os = "linux")]
 const ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg(target_os = "linux")]
-fn active_ephemeral_terminal_wait_tracker() -> &'static Mutex<ActiveEphemeralTerminalWaitTracker> {
-    static TRACKER: LazyLock<Mutex<ActiveEphemeralTerminalWaitTracker>> =
-        LazyLock::new(|| Mutex::new(ActiveEphemeralTerminalWaitTracker::default()));
-    &TRACKER
-}
-
-#[cfg(target_os = "linux")]
-fn active_ephemeral_terminal_wait_key(orchestration_session_id: &str, task_run_id: &str) -> String {
-    format!("{orchestration_session_id}:{task_run_id}")
-}
-
-#[cfg(target_os = "linux")]
-fn register_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
-    let mut tracker = active_ephemeral_terminal_wait_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let entry = tracker
-        .by_task
-        .entry(active_ephemeral_terminal_wait_key(
-            orchestration_session_id,
-            task_run_id,
-        ))
-        .or_default();
-    entry.waiter_count = entry.waiter_count.saturating_add(1);
-}
-
-#[cfg(target_os = "linux")]
-fn release_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
-    let key = active_ephemeral_terminal_wait_key(orchestration_session_id, task_run_id);
-    let mut tracker = active_ephemeral_terminal_wait_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let remove_entry = match tracker.by_task.get_mut(&key) {
-        Some(entry) => {
-            entry.waiter_count = entry.waiter_count.saturating_sub(1);
-            entry.waiter_count == 0
-        }
-        None => false,
-    };
-    if remove_entry {
-        tracker.by_task.remove(&key);
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn publish_active_ephemeral_terminal_truth(
-    orchestration_session_id: &str,
-    task_run_id: &str,
-    terminal_state: WorldTaskTerminalStateV1,
-) {
-    let mut tracker = active_ephemeral_terminal_wait_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let Some(entry) = tracker.by_task.get_mut(&active_ephemeral_terminal_wait_key(
-        orchestration_session_id,
-        task_run_id,
-    )) else {
-        return;
-    };
-    entry.state_tx.send_replace(Some(terminal_state));
-}
-
-#[cfg(target_os = "linux")]
-async fn wait_for_active_ephemeral_terminal_truth(
+async fn wait_for_supervised_ephemeral_terminal_truth(
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    acceptance_record_id: &str,
     orchestration_session_id: &str,
     task_run_id: &str,
 ) -> Result<WorldTaskTerminalStateV1> {
-    let mut state_rx = {
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(entry) = tracker.by_task.get(&active_ephemeral_terminal_wait_key(
-            orchestration_session_id,
-            task_run_id,
-        )) else {
-            anyhow::bail!(
-                "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
-                task_run_id,
-                orchestration_session_id
-            );
-        };
-        entry.state_tx.subscribe()
-    };
+    let deadline = Instant::now() + ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT;
     loop {
-        if let Some(terminal_state) = *state_rx.borrow() {
-            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-            return Ok(terminal_state);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(acceptance_record_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its exact supervisor claim",
+                    task_run_id,
+                    orchestration_session_id
+                )
+            })?;
+        if let Some(terminal) = observation.terminal {
+            return Ok(world_task_terminal_state_from_exit_code(terminal.exit_code));
         }
-
-        let changed = tokio::time::timeout(
-            ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT,
-            state_rx.changed(),
-        )
-        .await
-        .map_err(|_| {
-            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-            anyhow::anyhow!(
-                "cancel_closeout_timeout: active ephemeral task {} in orchestration session {} did not surface terminal truth after execute cancel delivery",
-                task_run_id,
-                orchestration_session_id
-            )
-        })?;
-        if changed.is_err() {
-            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
+        if Instant::now() >= deadline {
             anyhow::bail!(
-                "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
+                "cancel_closeout_timeout: active ephemeral task {} in orchestration session {} did not surface exact durable terminal truth after execute cancel delivery",
                 task_run_id,
                 orchestration_session_id
             );
         }
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
 }
 
@@ -393,64 +267,6 @@ fn active_ephemeral_terminal_state_label(state: WorldTaskTerminalStateV1) -> &'s
         WorldTaskTerminalStateV1::Failed => "failed",
         WorldTaskTerminalStateV1::Cancelled => "cancelled",
         WorldTaskTerminalStateV1::NeedsRetainedFollowup => "needs_retained_followup",
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn publish_active_ephemeral_terminal_truth_if_registered(
-    orchestration_session_id: &str,
-    task_run_id: Option<&str>,
-    terminal_state: WorldTaskTerminalStateV1,
-) {
-    let Some(task_run_id) = task_run_id.filter(|task_run_id| !task_run_id.trim().is_empty()) else {
-        return;
-    };
-    publish_active_ephemeral_terminal_truth(orchestration_session_id, task_run_id, terminal_state);
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Debug)]
-struct ActiveEphemeralTerminalTruthGuard {
-    orchestration_session_id: String,
-    task_run_id: Option<String>,
-    published: bool,
-}
-
-#[cfg(target_os = "linux")]
-impl ActiveEphemeralTerminalTruthGuard {
-    fn new(orchestration_session_id: &str) -> Self {
-        Self {
-            orchestration_session_id: orchestration_session_id.to_string(),
-            task_run_id: None,
-            published: false,
-        }
-    }
-
-    fn register_task_run_id(&mut self, task_run_id: String) {
-        self.task_run_id = Some(task_run_id);
-    }
-
-    fn publish(&mut self, terminal_state: WorldTaskTerminalStateV1) {
-        publish_active_ephemeral_terminal_truth_if_registered(
-            &self.orchestration_session_id,
-            self.task_run_id.as_deref(),
-            terminal_state,
-        );
-        self.published = self.task_run_id.is_some();
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for ActiveEphemeralTerminalTruthGuard {
-    fn drop(&mut self) {
-        if self.published {
-            return;
-        }
-        publish_active_ephemeral_terminal_truth_if_registered(
-            &self.orchestration_session_id,
-            self.task_run_id.as_deref(),
-            WorldTaskTerminalStateV1::Failed,
-        );
     }
 }
 
@@ -831,11 +647,6 @@ async fn cancel_world_work(
             }
             WorldDispatchModeV1::Ephemeral => {
                 let resolved = resolve_active_ephemeral_inspect_target(&prepared)?;
-                let mut terminal_wait_registration =
-                    ActiveEphemeralTerminalWaitRegistrationGuard::new(
-                        &resolved.session.orchestration_session_id,
-                        &resolved.task_run_id,
-                    );
                 let client = connect_world_agent_client().context(
                     "failed to connect active ephemeral cancel_world_work to /v1/execute/cancel",
                 )?;
@@ -855,8 +666,9 @@ async fn cancel_world_work(
                         resolved.task_run_id
                     );
                 }
-                terminal_wait_registration.disarm();
-                let terminal_state = match wait_for_active_ephemeral_terminal_truth(
+                let terminal_state = match wait_for_supervised_ephemeral_terminal_truth(
+                    &resolved.execution_supervisor,
+                    &resolved.acceptance_record_id,
                     &resolved.session.orchestration_session_id,
                     &resolved.task_run_id,
                 )
@@ -996,6 +808,8 @@ struct RunWorldTaskStreamResult {
 #[derive(Clone, Debug)]
 struct ResolvedActiveEphemeralInspectTarget {
     task_run_id: String,
+    acceptance_record_id: String,
+    execution_supervisor: WorldWorkExecutionSupervisor,
     session: OrchestrationSessionRecord,
     caller_participant: AgentRuntimeParticipantRecord,
     target_backend_id: String,
@@ -1041,54 +855,29 @@ fn resolve_active_ephemeral_inspect_target(
             prepared.session.orchestration_session_id
         )
     })?;
-    let record = prepared
-        .store
-        .load_active_ephemeral_world_task(&prepared.session.orchestration_session_id, task_run_id)?
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
-                prepared.session.orchestration_session_id,
-                task_run_id
-            )
-        })?;
-
-    if record.orchestration_session_id != prepared.session.orchestration_session_id {
-        anyhow::bail!(
-            "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
-            prepared.session.orchestration_session_id,
-            task_run_id
-        );
-    }
-    if record.caller_participant_id != prepared.caller_participant.participant_id() {
-        anyhow::bail!(
-            "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
-            prepared.session.orchestration_session_id,
-            task_run_id,
-            prepared.caller_participant.participant_id()
-        );
-    }
-    if record.target_backend_id != prepared.request.target_backend_id {
-        anyhow::bail!(
-            "backend_mismatch: orchestration session {} active ephemeral task {} backend is {} not {}",
-            prepared.session.orchestration_session_id,
-            task_run_id,
-            record.target_backend_id,
-            prepared.request.target_backend_id
-        );
-    }
-    if record.world_id != world_id || record.world_generation != world_generation {
-        anyhow::bail!(
-            "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
-            prepared.session.orchestration_session_id,
-            task_run_id
-        );
-    }
+    let registry_authority = prepared.store.resolve_world_work_registry_authority(
+        &prepared.session.orchestration_session_id,
+        prepared.caller_participant.participant_id(),
+        &world_id,
+        world_generation,
+    )?;
+    let observation = registry_authority.resolve_active_ephemeral_observation(
+        &prepared.session.orchestration_session_id,
+        prepared.caller_participant.participant_id(),
+        Some(&prepared.request.target_backend_id),
+        &world_id,
+        world_generation,
+        task_run_id,
+    )?;
+    let claim = observation.claim;
 
     Ok(ResolvedActiveEphemeralInspectTarget {
         task_run_id: task_run_id.to_string(),
+        acceptance_record_id: claim.acceptance_record_id,
+        execution_supervisor: registry_authority.execution_supervisor,
         session: prepared.session.clone(),
         caller_participant: prepared.caller_participant.clone(),
-        target_backend_id: record.target_backend_id,
+        target_backend_id: claim.target_backend_id,
     })
 }
 
@@ -1151,6 +940,234 @@ pub(crate) struct PreparedForkWorldWorkerBootstrap {
 }
 
 #[cfg(target_os = "linux")]
+struct PreparedTaskAcceptanceSubmission {
+    receipt_registry: WorldWorkReceiptRegistry,
+    execution_supervisor: WorldWorkExecutionSupervisor,
+    proposal: WorldWorkAcceptanceProposalV1,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+}
+
+#[cfg(target_os = "linux")]
+struct PreparedRetainedAcceptanceSubmission {
+    receipt_registry: WorldWorkReceiptRegistry,
+    execution_supervisor: WorldWorkExecutionSupervisor,
+    proposal: WorldWorkAcceptanceProposalV1,
+    submit_request: transport_api_types::MemberTurnSubmitRequestV1,
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_task_acceptance_submission(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    workspace_root: &Path,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> Result<PreparedTaskAcceptanceSubmission> {
+    let resolved_policy =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
+            .context("resolve B1 task submission policy snapshot")?;
+    let registry_authority = prepared.store.resolve_world_work_registry_authority(
+        &prepared.request.orchestration_session_id,
+        &prepared.request.caller_participant_id,
+        &prepared.request.world_id,
+        prepared.request.world_generation,
+    )?;
+    let caller_backend_id = prepared.caller_participant.handle.backend_id.clone();
+    let request_id = prepared.request.request_id.clone();
+    let proposal_outcome = registry_authority
+        .receipt_registry
+        .prepare_world_work_acceptance_proposal(
+            &prepared.request.orchestration_session_id,
+            &request_id,
+            WorldWorkProposalFamilyV1::EphemeralTask,
+            |allocation| {
+                let transport_request = task_transport_request_from_allocation(
+                    &allocation,
+                    &prepared.request,
+                    descriptor,
+                )?;
+                let acceptance_context =
+                    world_work_acceptance_context(&allocation, &request_id, &caller_backend_id);
+                let (_, execute_request, _) =
+                    build_agent_client_and_member_dispatch_request_for_cwd(
+                        &transport_request,
+                        workspace_root,
+                        Some(acceptance_context.clone()),
+                    )?;
+                ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
+                let member_dispatch_request =
+                    execute_request.member_dispatch.clone().ok_or_else(|| {
+                        anyhow::anyhow!("B1 task ExecuteRequest omitted member dispatch")
+                    })?;
+                let digest =
+                    canonical_world_work_submission_sha256(&prepared.request, &execute_request)?;
+                Ok(WorldWorkAcceptanceProposalV1 {
+                    schema_version: 1,
+                    acceptance_context,
+                    authority_store_id: registry_authority.authority_store_id.clone(),
+                    authority_revision_observed: registry_authority.authority_revision_observed,
+                    orchestration_session_id: prepared.request.orchestration_session_id.clone(),
+                    caller_participant_id: prepared.request.caller_participant_id.clone(),
+                    caller_backend_id: caller_backend_id.clone(),
+                    target_backend_id: prepared.request.target_backend_id.clone(),
+                    world_id: prepared.request.world_id.clone(),
+                    world_generation: prepared.request.world_generation,
+                    proposed_work: ProposedWorldWorkIdentityV1::EphemeralTask,
+                    submission_identity: WorldWorkSubmissionIdentityV1::EphemeralTask {
+                        validated_dispatch_request: prepared.request.clone(),
+                        member_dispatch_request,
+                        canonical_execute_request_sha256: digest,
+                    },
+                    current_policy_snapshot_ref: registry_authority
+                        .current_policy_snapshot_ref
+                        .clone(),
+                    current_policy_snapshot_hash: resolved_policy.snapshot_hash.clone(),
+                    current_policy_revision: registry_authority.current_policy_revision.clone(),
+                    created_at: allocation.created_at,
+                })
+            },
+        )?;
+    let proposal = match proposal_outcome {
+        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+        WorldWorkProposalReservationOutcomeV1::Accepted(record) => {
+            anyhow::bail!(
+                "world work request already joined acceptance record {}; foreground observation remains owned by the original blocking call",
+                record.acceptance_record_id
+            )
+        }
+    };
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        member_dispatch_request,
+        canonical_execute_request_sha256,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 task proposal changed submission family");
+    };
+    let transport_request = member_dispatch_transport_request_from_typed(member_dispatch_request);
+    let (client, execute_request, _) = build_agent_client_and_member_dispatch_request_for_cwd(
+        &transport_request,
+        workspace_root,
+        Some(proposal.acceptance_context.clone()),
+    )?;
+    ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
+    let digest = canonical_world_work_submission_sha256(&prepared.request, &execute_request)?;
+    if &digest != canonical_execute_request_sha256
+        || execute_request.member_dispatch.as_ref() != Some(member_dispatch_request)
+    {
+        anyhow::bail!("B1 task proposal reconstruction conflict before transport");
+    }
+    Ok(PreparedTaskAcceptanceSubmission {
+        receipt_registry: registry_authority.receipt_registry,
+        execution_supervisor: registry_authority.execution_supervisor,
+        proposal,
+        client,
+        execute_request,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_retained_acceptance_submission(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    workspace_root: &Path,
+) -> Result<PreparedRetainedAcceptanceSubmission> {
+    let resolved_policy =
+        crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
+            .context("resolve B1 retained submission policy snapshot")?;
+    let registry_authority = prepared.store.resolve_world_work_registry_authority(
+        &prepared.request.orchestration_session_id,
+        &prepared.request.caller_participant_id,
+        &prepared.request.world_id,
+        prepared.request.world_generation,
+    )?;
+    let caller_backend_id = prepared.caller_participant.handle.backend_id.clone();
+    let request_id = prepared.request.request_id.clone();
+    let target_participant_id = prepared
+        .request
+        .target_participant_id
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("retained B1 submission requires exact target"))?;
+    let proposal_outcome = registry_authority
+        .receipt_registry
+        .prepare_world_work_acceptance_proposal(
+            &prepared.request.orchestration_session_id,
+            &request_id,
+            WorldWorkProposalFamilyV1::RetainedTurn,
+            |allocation| {
+                let acceptance_context =
+                    world_work_acceptance_context(&allocation, &request_id, &caller_backend_id);
+                let submit_request =
+                    build_continue_world_worker_submit_request_with_acceptance_context(
+                        prepared,
+                        acceptance_context.clone(),
+                    )?;
+                let message_id = acceptance_context
+                    .message_id
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("retained B1 allocation omitted message ID"))?;
+                let digest =
+                    canonical_world_work_submission_sha256(&prepared.request, &submit_request)?;
+                Ok(WorldWorkAcceptanceProposalV1 {
+                    schema_version: 1,
+                    acceptance_context,
+                    authority_store_id: registry_authority.authority_store_id.clone(),
+                    authority_revision_observed: registry_authority.authority_revision_observed,
+                    orchestration_session_id: prepared.request.orchestration_session_id.clone(),
+                    caller_participant_id: prepared.request.caller_participant_id.clone(),
+                    caller_backend_id: caller_backend_id.clone(),
+                    target_backend_id: prepared.request.target_backend_id.clone(),
+                    world_id: prepared.request.world_id.clone(),
+                    world_generation: prepared.request.world_generation,
+                    proposed_work: ProposedWorldWorkIdentityV1::RetainedTurn {
+                        active_run_id: request_id.clone(),
+                        message_id,
+                        target_participant_id: target_participant_id.clone(),
+                    },
+                    submission_identity: WorldWorkSubmissionIdentityV1::RetainedTurn {
+                        validated_dispatch_request: prepared.request.clone(),
+                        canonical_member_turn_submit_request_sha256: digest,
+                    },
+                    current_policy_snapshot_ref: registry_authority
+                        .current_policy_snapshot_ref
+                        .clone(),
+                    current_policy_snapshot_hash: resolved_policy.snapshot_hash.clone(),
+                    current_policy_revision: registry_authority.current_policy_revision.clone(),
+                    created_at: allocation.created_at,
+                })
+            },
+        )?;
+    let proposal = match proposal_outcome {
+        WorldWorkProposalReservationOutcomeV1::Proposed(proposal) => proposal,
+        WorldWorkProposalReservationOutcomeV1::Accepted(record) => {
+            anyhow::bail!(
+                "world work request already joined acceptance record {}; foreground observation remains owned by the original blocking call",
+                record.acceptance_record_id
+            )
+        }
+    };
+    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+        canonical_member_turn_submit_request_sha256,
+        ..
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 retained proposal changed submission family");
+    };
+    let submit_request = build_continue_world_worker_submit_request_with_acceptance_context(
+        prepared,
+        proposal.acceptance_context.clone(),
+    )?;
+    let digest = canonical_world_work_submission_sha256(&prepared.request, &submit_request)?;
+    if &digest != canonical_member_turn_submit_request_sha256 {
+        anyhow::bail!("B1 retained proposal reconstruction conflict before transport");
+    }
+    Ok(PreparedRetainedAcceptanceSubmission {
+        receipt_registry: registry_authority.receipt_registry,
+        execution_supervisor: registry_authority.execution_supervisor,
+        proposal,
+        submit_request,
+    })
+}
+
+#[cfg(target_os = "linux")]
 async fn run_world_task(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
@@ -1180,27 +1197,15 @@ async fn run_world_task_with_started_task_run_id_tx(
             err.reason
         )
     })?;
-    let active_task_record = ActiveEphemeralWorldTaskRecord {
-        orchestration_session_id: prepared.request.orchestration_session_id.clone(),
-        task_run_id: String::new(),
-        caller_participant_id: prepared.request.caller_participant_id.clone(),
-        target_backend_id: prepared.request.target_backend_id.clone(),
-        world_id: prepared
-            .session
-            .world_id
-            .clone()
-            .unwrap_or_else(|| prepared.request.world_id.clone()),
-        world_generation: prepared
-            .session
-            .world_generation
-            .unwrap_or(prepared.request.world_generation),
-    };
-    let transport_request = build_run_world_task_transport_request(&prepared.request, &descriptor)?;
+    let acceptance_submission =
+        prepare_task_acceptance_submission(&prepared, &workspace_root, &descriptor)?;
     let stream_result = execute_run_world_task_stream(
-        &prepared.store,
-        &workspace_root,
-        &transport_request,
-        active_task_record,
+        &acceptance_submission.receipt_registry,
+        &acceptance_submission.execution_supervisor,
+        acceptance_submission.client,
+        acceptance_submission.execute_request,
+        &acceptance_submission.proposal,
+        &prepared.request.orchestration_session_id,
         started_task_run_id_tx,
     )
     .await?;
@@ -1348,11 +1353,15 @@ async fn continue_world_worker(
     let _fork_command_bootstrap_guard =
         acquire_continue_world_worker_fork_command_bootstrap_guard(&prepared, &base_policy)?;
 
-    let submit_request = build_continue_world_worker_submit_request(&prepared)?;
-    let stream_result = execute_continue_world_worker_stream_for_turn_kind(
+    let acceptance_submission = prepare_retained_acceptance_submission(&prepared, &workspace_root)?;
+    let submit_request = acceptance_submission.submit_request;
+    let stream_result = execute_accepted_continue_world_worker_stream_for_turn_kind(
         &submit_request,
         &base_policy,
         turn_kind,
+        &acceptance_submission.receipt_registry,
+        &acceptance_submission.execution_supervisor,
+        &acceptance_submission.proposal,
     )
     .await?;
     close_continue_world_worker_approval_after_delivery(&prepared, approval_closeout.as_ref())?;
@@ -2986,6 +2995,380 @@ fn validate_authoritative_world_binding_for_steering(
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Serialize)]
+struct WorldWorkSubmissionHashInputV1<'a, T> {
+    domain: &'static str,
+    validated_dispatch_request: &'a ValidatedWorldDispatchRequestV1,
+    transport_request: &'a T,
+}
+
+#[cfg(target_os = "linux")]
+fn append_b1_canonical_json(value: &serde_json::Value, output: &mut Vec<u8>) -> Result<()> {
+    match value {
+        serde_json::Value::Null => output.extend_from_slice(b"null"),
+        serde_json::Value::Bool(value) => {
+            output.extend_from_slice(if *value { b"true" } else { b"false" })
+        }
+        serde_json::Value::Number(value) => output.extend_from_slice(value.to_string().as_bytes()),
+        serde_json::Value::String(value) => {
+            serde_json::to_writer(output, value).context("encode B1 canonical JSON string")?;
+        }
+        serde_json::Value::Array(values) => {
+            output.push(b'[');
+            for (index, value) in values.iter().enumerate() {
+                if index != 0 {
+                    output.push(b',');
+                }
+                append_b1_canonical_json(value, output)?;
+            }
+            output.push(b']');
+        }
+        serde_json::Value::Object(values) => {
+            output.push(b'{');
+            let mut keys = values.keys().collect::<Vec<_>>();
+            keys.sort_unstable();
+            for (index, key) in keys.into_iter().enumerate() {
+                if index != 0 {
+                    output.push(b',');
+                }
+                serde_json::to_writer(&mut *output, key)
+                    .context("encode B1 canonical JSON object key")?;
+                output.push(b':');
+                append_b1_canonical_json(&values[key], output)?;
+            }
+            output.push(b'}');
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn canonical_world_work_submission_sha256<T: Serialize>(
+    request: &ValidatedWorldDispatchRequestV1,
+    transport_request: &T,
+) -> Result<String> {
+    let input = WorldWorkSubmissionHashInputV1 {
+        domain: "substrate.b1.world-work-submission.v1",
+        validated_dispatch_request: request,
+        transport_request,
+    };
+    let value = serde_json::to_value(input).context("shape B1 submission hash input")?;
+    let mut canonical = Vec::new();
+    append_b1_canonical_json(&value, &mut canonical)?;
+    let mut hasher = Sha256::new();
+    hasher.update(canonical);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_exact_submission_policy_snapshot(
+    execute_request: &transport_api_types::ExecuteRequest,
+    resolved_policy: &crate::execution::policy_snapshot::ResolvedPolicySnapshot,
+) -> Result<()> {
+    let request_bytes = serde_json::to_vec(&execute_request.policy_snapshot)
+        .context("serialize submitted PolicySnapshotV3")?;
+    let resolved_bytes = serde_json::to_vec(&resolved_policy.snapshot)
+        .context("serialize resolved PolicySnapshotV3")?;
+    if request_bytes != resolved_bytes {
+        anyhow::bail!("B1 task submission policy snapshot changed before transport");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn member_dispatch_transport_request_from_typed(
+    request: &transport_api_types::MemberDispatchRequestV1,
+) -> MemberDispatchTransportRequest {
+    MemberDispatchTransportRequest {
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        participant_id: request.participant_id.clone(),
+        orchestrator_participant_id: request.orchestrator_participant_id.clone(),
+        parent_participant_id: request.parent_participant_id.clone(),
+        resumed_from_participant_id: request.resumed_from_participant_id.clone(),
+        backend_id: request.backend_id.clone(),
+        protocol: request.protocol.clone(),
+        run_id: request.run_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+        initial_prompt: request.initial_prompt.clone(),
+        backend_kind: request.resolved_runtime.backend_kind,
+        binary_path: request.resolved_runtime.binary_path.clone(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn task_transport_request_from_allocation(
+    allocation: &WorldWorkProposalAllocationV1,
+    request: &ValidatedWorldDispatchRequestV1,
+    descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+) -> Result<MemberDispatchTransportRequest> {
+    let Some(existing) = allocation.existing_proposal.as_ref() else {
+        return build_run_world_task_transport_request(request, descriptor);
+    };
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        member_dispatch_request,
+        ..
+    } = &existing.submission_identity
+    else {
+        anyhow::bail!("stored task proposal has the wrong submission family");
+    };
+    Ok(member_dispatch_transport_request_from_typed(
+        member_dispatch_request,
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn world_work_acceptance_context(
+    allocation: &WorldWorkProposalAllocationV1,
+    request_id: &str,
+    caller_backend_id: &str,
+) -> transport_api_types::WorldWorkAcceptanceContextV1 {
+    transport_api_types::WorldWorkAcceptanceContextV1 {
+        schema_version: 1,
+        proposed_acceptance_record_id: allocation.acceptance_record_id.clone(),
+        request_id: request_id.to_string(),
+        message_id: allocation.message_id.clone(),
+        caller_backend_id: caller_backend_id.to_string(),
+        host_transition_correlation: None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn build_world_work_acceptance_record(
+    proposal: &WorldWorkAcceptanceProposalV1,
+    work_identity: AcceptedWorldWorkIdentityV1,
+    frame_identity: &transport_api_types::RuntimeFrameIdentityV1,
+    runtime_submission_id: String,
+) -> WorldWorkAcceptanceRecordV1 {
+    let accepted_at = Utc::now();
+    let (task_run_id, active_run_id, message_id, retained_participant_id) = match &work_identity {
+        AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => {
+            (Some(task_run_id.clone()), None, None, None)
+        }
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            target_participant_id,
+        } => (
+            None,
+            Some(active_run_id.clone()),
+            Some(message_id.clone()),
+            Some(target_participant_id.clone()),
+        ),
+    };
+    WorldWorkAcceptanceRecordV1 {
+        schema_version: 1,
+        acceptance_record_id: proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone(),
+        request_id: proposal.request_id().to_string(),
+        authority_store_id: proposal.authority_store_id.clone(),
+        authority_revision_observed: proposal.authority_revision_observed,
+        orchestration_session_id: proposal.orchestration_session_id.clone(),
+        caller_participant_id: proposal.caller_participant_id.clone(),
+        caller_backend_id: proposal.caller_backend_id.clone(),
+        target_backend_id: proposal.target_backend_id.clone(),
+        world_id: proposal.world_id.clone(),
+        world_generation: proposal.world_generation,
+        work_identity,
+        host_transition_correlation: proposal
+            .acceptance_context
+            .host_transition_correlation
+            .clone(),
+        current_policy_snapshot_ref: proposal.current_policy_snapshot_ref.clone(),
+        current_policy_snapshot_hash: proposal.current_policy_snapshot_hash.clone(),
+        current_policy_revision: proposal.current_policy_revision.clone(),
+        runtime_acceptance: RuntimeAcceptanceEvidenceV1 {
+            acknowledgement_kind: RuntimeAcceptanceAcknowledgementKindV1::StartFrame,
+            acceptance_record_id: proposal
+                .acceptance_context
+                .proposed_acceptance_record_id
+                .clone(),
+            stream_id: frame_identity.stream_id.clone(),
+            frame_sequence: frame_identity.frame_sequence,
+            runtime_submission_id: Some(runtime_submission_id),
+            task_run_id,
+            active_run_id,
+            message_id,
+            retained_participant_id,
+            observed_at: accepted_at,
+        },
+        accepted_at,
+        record_revision: 1,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_task_submission_against_proposal(
+    execute_request: &transport_api_types::ExecuteRequest,
+    proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<()> {
+    proposal.validate()?;
+    execute_request.validate().map_err(anyhow::Error::msg)?;
+    if execute_request.acceptance_context.as_ref() != Some(&proposal.acceptance_context) {
+        anyhow::bail!("B1 task request context changed before runtime submission");
+    }
+    if proposal.proposed_work != ProposedWorldWorkIdentityV1::EphemeralTask {
+        anyhow::bail!("B1 task submission joined a retained proposal");
+    }
+    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+        validated_dispatch_request,
+        member_dispatch_request,
+        canonical_execute_request_sha256,
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 task proposal changed submission family");
+    };
+    if execute_request.member_dispatch.as_ref() != Some(member_dispatch_request) {
+        anyhow::bail!("B1 task member dispatch changed before runtime submission");
+    }
+    let digest =
+        canonical_world_work_submission_sha256(validated_dispatch_request, execute_request)?;
+    if &digest != canonical_execute_request_sha256 {
+        anyhow::bail!("B1 task request fingerprint changed before runtime submission");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_retained_submission_against_proposal(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<()> {
+    proposal.validate()?;
+    request.validate().map_err(anyhow::Error::msg)?;
+    if request.acceptance_context.as_ref() != Some(&proposal.acceptance_context) {
+        anyhow::bail!("B1 retained request context changed before runtime submission");
+    }
+    let ProposedWorldWorkIdentityV1::RetainedTurn {
+        active_run_id,
+        message_id,
+        target_participant_id,
+    } = &proposal.proposed_work
+    else {
+        anyhow::bail!("B1 retained submission joined a task proposal");
+    };
+    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+        validated_dispatch_request,
+        canonical_member_turn_submit_request_sha256,
+    } = &proposal.submission_identity
+    else {
+        anyhow::bail!("B1 retained proposal changed submission family");
+    };
+    if request.orchestration_session_id != proposal.orchestration_session_id
+        || request.participant_id != *target_participant_id
+        || request.orchestrator_participant_id != proposal.caller_participant_id
+        || request.backend_id != proposal.target_backend_id
+        || request.run_id != *active_run_id
+        || request.world_id != proposal.world_id
+        || request.world_generation != proposal.world_generation
+        || request
+            .acceptance_context
+            .as_ref()
+            .and_then(|context| context.message_id.as_ref())
+            != Some(message_id)
+    {
+        anyhow::bail!("B1 retained request identity changed before runtime submission");
+    }
+    let digest = canonical_world_work_submission_sha256(validated_dispatch_request, request)?;
+    if &digest != canonical_member_turn_submit_request_sha256 {
+        anyhow::bail!("B1 retained request fingerprint changed before runtime submission");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn consume_task_acceptance_acknowledgement<F>(
+    execute_request: &transport_api_types::ExecuteRequest,
+    proposal: &WorldWorkAcceptanceProposalV1,
+    frame: Option<&transport_api_types::ExecuteStreamFrame>,
+    already_accepted: bool,
+    persist: F,
+) -> Result<String>
+where
+    F: FnOnce(WorldWorkAcceptanceRecordV1) -> Result<()>,
+{
+    if already_accepted {
+        anyhow::bail!("run_world_task stream emitted repeated Start frame");
+    }
+    validate_task_submission_against_proposal(execute_request, proposal)?;
+    let Some(transport_api_types::ExecuteStreamFrame::Start {
+        frame_identity,
+        span_id,
+    }) = frame
+    else {
+        anyhow::bail!("run_world_task acceptance requires a preterminal Start frame");
+    };
+    frame_identity.validate().map_err(anyhow::Error::msg)?;
+    if frame_identity.frame_sequence != 1 {
+        anyhow::bail!("run_world_task acceptance requires Start frame sequence 1");
+    }
+    if span_id.is_empty() || span_id.trim() != span_id {
+        anyhow::bail!("run_world_task Start frame omitted exact task_run_id");
+    }
+    persist(build_world_work_acceptance_record(
+        proposal,
+        AcceptedWorldWorkIdentityV1::EphemeralTask {
+            task_run_id: span_id.clone(),
+        },
+        frame_identity,
+        span_id.clone(),
+    ))?;
+    Ok(span_id.clone())
+}
+
+#[cfg(target_os = "linux")]
+fn consume_retained_acceptance_acknowledgement<F>(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    proposal: &WorldWorkAcceptanceProposalV1,
+    frame: Option<&transport_api_types::ExecuteStreamFrame>,
+    already_accepted: bool,
+    persist: F,
+) -> Result<String>
+where
+    F: FnOnce(WorldWorkAcceptanceRecordV1) -> Result<()>,
+{
+    if already_accepted {
+        anyhow::bail!("continue_world_worker stream emitted repeated Start frame");
+    }
+    validate_retained_submission_against_proposal(request, proposal)?;
+    let Some(transport_api_types::ExecuteStreamFrame::Start {
+        frame_identity,
+        span_id,
+    }) = frame
+    else {
+        anyhow::bail!("retained B1 acceptance requires a preterminal Start frame");
+    };
+    frame_identity.validate().map_err(anyhow::Error::msg)?;
+    if frame_identity.frame_sequence != 1 {
+        anyhow::bail!("retained B1 acceptance requires Start frame sequence 1");
+    }
+    if span_id.is_empty() || span_id.trim() != span_id {
+        anyhow::bail!("retained B1 Start frame omitted runtime submission identity");
+    }
+    let ProposedWorldWorkIdentityV1::RetainedTurn {
+        active_run_id,
+        message_id,
+        target_participant_id,
+    } = &proposal.proposed_work
+    else {
+        anyhow::bail!("retained B1 acknowledgement joined task proposal");
+    };
+    persist(build_world_work_acceptance_record(
+        proposal,
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id: active_run_id.clone(),
+            message_id: message_id.clone(),
+            target_participant_id: target_participant_id.clone(),
+        },
+        frame_identity,
+        span_id.clone(),
+    ))?;
+    Ok(span_id.clone())
+}
+
+#[cfg(target_os = "linux")]
 fn build_run_world_task_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
@@ -3147,7 +3530,19 @@ fn build_continue_world_worker_submit_request(
         world_id,
         world_generation,
         prompt,
+        acceptance_context: None,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn build_continue_world_worker_submit_request_with_acceptance_context(
+    prepared: &PreparedOrchestratorWorldDispatch,
+    acceptance_context: transport_api_types::WorldWorkAcceptanceContextV1,
+) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    let mut request = build_continue_world_worker_submit_request(prepared)?;
+    request.acceptance_context = Some(acceptance_context);
+    request.validate().map_err(anyhow::Error::msg)?;
+    Ok(request)
 }
 
 #[cfg(target_os = "linux")]
@@ -3163,22 +3558,180 @@ fn member_runtime_backend_kind(
 }
 
 #[cfg(target_os = "linux")]
-async fn execute_run_world_task_stream(
+pub(crate) fn recover_world_work_execution_observations(
     store: &AgentRuntimeStateStore,
-    workspace_root: &Path,
-    request: &MemberDispatchTransportRequest,
-    mut active_task_record: ActiveEphemeralWorldTaskRecord,
+) -> Result<Vec<tokio::task::JoinHandle<()>>> {
+    let Some(authority) = store.bind_world_work_recovery_authority()? else {
+        return Ok(Vec::new());
+    };
+    let mut observations = None;
+    for _ in 0..16 {
+        let acceptances = authority
+            .receipt_registry
+            .persisted_acceptances_for_recovery()?;
+        match authority
+            .execution_supervisor
+            .recover_persisted_world_work(&acceptances)?
+        {
+            WorldWorkRecoveryAttemptV1::Recovered(recovered) => {
+                observations = Some(recovered);
+                break;
+            }
+            WorldWorkRecoveryAttemptV1::ReceiptSnapshotStale => continue,
+        }
+    }
+    let observations = observations.ok_or_else(|| {
+        anyhow::anyhow!("B2.1 recovery could not obtain a stable receipt/supervisor view")
+    })?;
+    let mut tasks = Vec::with_capacity(observations.len());
+    for observation in observations {
+        let client = match build_agent_client_and_pending_diff_request() {
+            Ok((client, _, _)) => client,
+            Err(_) => {
+                authority.execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ReplayUnavailable,
+                )?;
+                continue;
+            }
+        };
+        let supervisor = authority.execution_supervisor.clone();
+        tasks.push(tokio::spawn(async move {
+            if let Some(reason) =
+                reconcile_recovered_world_work_stream(&supervisor, client, &observation).await
+            {
+                let _ = supervisor.mark_interrupted(&observation.claim, reason);
+            }
+        }));
+    }
+    Ok(tasks)
+}
+
+#[cfg(target_os = "linux")]
+async fn reconcile_recovered_world_work_stream(
+    supervisor: &WorldWorkExecutionSupervisor,
+    client: transport_api_client::AgentClient,
+    observation: &WorldWorkExecutionObservationV1,
+) -> Option<WorldWorkInterruptionReasonV1> {
+    use http_body_util::BodyExt as _;
+
+    let request = transport_api_types::ExecuteStreamReplayRequestV1 {
+        schema_version: 1,
+        acceptance_record_id: observation.claim.acceptance_record_id.clone(),
+        stream_id: observation.claim.stream_id.clone(),
+        after_frame_sequence: observation.durable_frame_cursor.unwrap_or(0),
+    };
+    let response = match client.replay_execute_stream(request).await {
+        Ok(response) => response,
+        Err(_) => return Some(WorldWorkInterruptionReasonV1::ReplayUnavailable),
+    };
+    if supervisor.mark_observing(&observation.claim).is_err() {
+        return Some(WorldWorkInterruptionReasonV1::ObserverFailure);
+    }
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = match frame {
+            Ok(frame) => frame,
+            Err(_) => return Some(WorldWorkInterruptionReasonV1::ObserverFailure),
+        };
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+        while let Some(pos) = buffer.iter().position(|byte| *byte == b'\n') {
+            let line = buffer.drain(..=pos).collect::<Vec<_>>();
+            if line.len() <= 1 {
+                continue;
+            }
+            let runtime_frame = match serde_json::from_slice::<
+                transport_api_types::ExecuteStreamFrame,
+            >(&line[..line.len() - 1])
+            {
+                Ok(frame) => frame,
+                Err(_) => return Some(WorldWorkInterruptionReasonV1::ObserverFailure),
+            };
+            if supervisor
+                .journal_frame(&observation.claim, &runtime_frame, &line)
+                .is_err()
+            {
+                return Some(WorldWorkInterruptionReasonV1::ObserverFailure);
+            }
+            if matches!(
+                runtime_frame,
+                transport_api_types::ExecuteStreamFrame::Exit { .. }
+            ) {
+                return None;
+            }
+        }
+    }
+    if buffer.is_empty() {
+        Some(WorldWorkInterruptionReasonV1::ReplayEndedWithoutTerminal)
+    } else {
+        Some(WorldWorkInterruptionReasonV1::ObserverFailure)
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn execute_run_world_task_stream(
+    receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
+    _orchestration_session_id: &str,
+    started_task_run_id_tx: Option<UnboundedSender<String>>,
+) -> Result<RunWorldTaskStreamResult> {
+    let receipt_registry = receipt_registry.clone();
+    let execution_supervisor = execution_supervisor.clone();
+    let acceptance_proposal = acceptance_proposal.clone();
+    tokio::spawn(async move {
+        let outcome = observe_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &acceptance_proposal,
+            started_task_run_id_tx,
+        )
+        .await;
+        if outcome.is_err() {
+            if let Ok(Some(observation)) = execution_supervisor
+                .inspect_observation_by_acceptance_id(
+                    &acceptance_proposal
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+            {
+                let _ = execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ObserverFailure,
+                );
+            }
+        }
+        outcome
+    })
+    .await
+    .context("run_world_task durable observation task failed")?
+}
+
+#[cfg(target_os = "linux")]
+async fn observe_run_world_task_stream(
+    receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
 ) -> Result<RunWorldTaskStreamResult> {
     use http_body_util::BodyExt as _;
     use substrate_common::agent_events::AgentEventKind;
     use transport_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame};
 
-    let (client, execute_request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root)
-            .context("failed to build member dispatch execute request for run_world_task")?;
+    validate_task_submission_against_proposal(&execute_request, acceptance_proposal)?;
     let response = client
-        .execute_stream(execute_request)
+        .execute_stream(execute_request.clone())
         .await
         .map_err(|err| {
             anyhow::anyhow!("failed to launch run_world_task over world member dispatch: {err:#}")
@@ -3187,11 +3740,10 @@ async fn execute_run_world_task_stream(
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut active_span_id = None::<String>;
-    let mut active_task_guard = None::<ActiveEphemeralWorldTaskGuard>;
-    let mut terminal_truth_guard =
-        ActiveEphemeralTerminalTruthGuard::new(&active_task_record.orchestration_session_id);
+    let mut active_claim = None;
     let mut saw_registered_event = false;
     let mut exit_code = None::<i32>;
+    let mut stream_error = None::<String>;
 
     while let Some(frame) = body.as_mut().frame().await {
         let frame = match frame {
@@ -3223,29 +3775,99 @@ async fn execute_run_world_task_stream(
                     Err(err) => return Err(err),
                 };
 
+            if !matches!(frame, ExecuteStreamFrame::Start { .. }) {
+                let claim = active_claim.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("run_world_task stream emitted a frame before accepted Start")
+                })?;
+                if execution_supervisor.journal_frame(claim, &frame, &line)?
+                    == WorldWorkJournalAppendOutcomeV1::ExactReplay
+                {
+                    continue;
+                }
+            }
+
             match frame {
-                ExecuteStreamFrame::Start { span_id, .. } => {
-                    if active_task_guard.is_none() {
-                        active_task_record.task_run_id = span_id.clone();
-                        active_task_guard = Some(
-                            store
-                                .register_active_ephemeral_world_task(active_task_record.clone())?,
-                        );
+                start_frame @ ExecuteStreamFrame::Start { .. } => {
+                    let ExecuteStreamFrame::Start { span_id, .. } = &start_frame else {
+                        unreachable!("matched Start frame")
+                    };
+                    let existing_observation = match active_claim.as_ref() {
+                        Some(claim) => Some(
+                            execution_supervisor
+                                .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)?
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("B2.1 task observation disappeared after claim")
+                                })?,
+                        ),
+                        None => execution_supervisor.inspect_observation_by_acceptance_id(
+                            &acceptance_proposal
+                                .acceptance_context
+                                .proposed_acceptance_record_id,
+                        )?,
+                    };
+                    if let Some(observation) = existing_observation {
+                        if observation.claim.runtime_submission_id != *span_id {
+                            anyhow::bail!(
+                                "replayed run_world_task Start changed runtime submission identity"
+                            );
+                        }
+                        let claim = observation.claim;
+                        let append_outcome =
+                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                        active_claim = Some(claim);
+                        active_span_id = Some(span_id.clone());
+                        if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                            continue;
+                        }
                         if let Some(started_task_run_id_tx) = started_task_run_id_tx.as_ref() {
                             let _ = started_task_run_id_tx.send(span_id.clone());
                         }
-                        terminal_truth_guard.register_task_run_id(span_id.clone());
+                        continue;
+                    }
+                    let mut claimed = None;
+                    let span_id = consume_task_acceptance_acknowledgement(
+                        &execute_request,
+                        acceptance_proposal,
+                        Some(&start_frame),
+                        active_span_id.is_some(),
+                        |record| {
+                            let accepted = receipt_registry
+                                .persist_world_work_acceptance_for_supervision(record)?;
+                            claimed =
+                                Some(execution_supervisor.claim_persisted_world_work(&accepted)?);
+                            Ok(())
+                        },
+                    )?;
+                    let claim = claimed.ok_or_else(|| {
+                        anyhow::anyhow!("B2.1 task acceptance omitted durable supervisor claim")
+                    })?;
+                    let append_outcome =
+                        execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                    active_claim = Some(claim);
+                    if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                        active_span_id = Some(span_id);
+                        continue;
+                    }
+                    if let Some(started_task_run_id_tx) = started_task_run_id_tx.as_ref() {
+                        let _ = started_task_run_id_tx.send(span_id.clone());
                     }
                     active_span_id = Some(span_id);
                 }
                 ExecuteStreamFrame::Event { event, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!("run_world_task stream emitted Event before accepted Start");
+                    }
                     if event.kind == AgentEventKind::Registered {
                         saw_registered_event = true;
                     }
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "run_world_task stream emitted terminal Exit before accepted Start"
+                        );
+                    }
                     exit_code = Some(exit);
-                    break;
                 }
                 ExecuteStreamFrame::Error { message, .. } => {
                     if saw_registered_event {
@@ -3258,25 +3880,47 @@ async fn execute_run_world_task_stream(
                                 .await;
                         }
                     }
-                    anyhow::bail!(message);
+                    if stream_error.is_none() {
+                        stream_error = Some(message);
+                    }
                 }
-                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
+                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!("run_world_task stream emitted output before accepted Start");
+                    }
+                }
             }
         }
-
-        if exit_code.is_some() {
-            break;
-        }
+    }
+    if !buffer.is_empty() {
+        anyhow::bail!("run_world_task stream ended with an incomplete canonical frame");
     }
 
-    let exit_code = match exit_code {
+    let observed_exit_code = match exit_code {
         Some(exit_code) => exit_code,
+        None if stream_error.is_some() => {
+            anyhow::bail!(stream_error.take().expect("checked stream error"))
+        }
         None => anyhow::bail!("run_world_task stream ended without a terminal exit frame"),
     };
-    terminal_truth_guard.publish(world_task_terminal_state_from_exit_code(exit_code));
+    let claim = active_claim
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("run_world_task stream ended without accepted claim"))?;
+    let terminal = execution_supervisor
+        .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)?
+        .and_then(|observation| observation.terminal)
+        .ok_or_else(|| {
+            anyhow::anyhow!("run_world_task stream ended without durable B0 terminal truth")
+        })?;
+    if terminal.exit_code != observed_exit_code {
+        anyhow::bail!("run_world_task terminal exit changed after durable journaling");
+    }
+    if let Some(message) = stream_error {
+        anyhow::bail!(message);
+    }
 
     Ok(RunWorldTaskStreamResult {
-        exit_code,
+        exit_code: terminal.exit_code,
         saw_registered_event,
         task_run_id: active_span_id,
     })
@@ -3293,7 +3937,7 @@ async fn execute_spawn_world_worker_stream(
     use transport_api_types::ExecuteStreamFrame;
 
     let (client, execute_request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root)
+        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root, None)
             .context("failed to build member dispatch execute request for spawn_world_worker")?;
     let response = client
         .execute_stream(execute_request)
@@ -3401,6 +4045,67 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
     policy: &Policy,
     turn_kind: ContinueWorldWorkerTurnKind,
 ) -> Result<ContinueWorldWorkerStreamResult> {
+    execute_continue_world_worker_stream_for_turn_kind_impl(request, policy, turn_kind, None).await
+}
+
+#[cfg(target_os = "linux")]
+async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    policy: &Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
+) -> Result<ContinueWorldWorkerStreamResult> {
+    validate_retained_submission_against_proposal(request, acceptance_proposal)?;
+    let request = request.clone();
+    let policy = policy.clone();
+    let receipt_registry = receipt_registry.clone();
+    let execution_supervisor = execution_supervisor.clone();
+    let acceptance_proposal = acceptance_proposal.clone();
+    tokio::spawn(async move {
+        let outcome = execute_continue_world_worker_stream_for_turn_kind_impl(
+            &request,
+            &policy,
+            turn_kind,
+            Some((
+                &receipt_registry,
+                &execution_supervisor,
+                &acceptance_proposal,
+            )),
+        )
+        .await;
+        if outcome.is_err() {
+            if let Ok(Some(observation)) = execution_supervisor
+                .inspect_observation_by_acceptance_id(
+                    &acceptance_proposal
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+            {
+                let _ = execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ObserverFailure,
+                );
+            }
+        }
+        outcome
+    })
+    .await
+    .context("accepted continue_world_worker durable observation task failed")?
+}
+
+#[cfg(target_os = "linux")]
+async fn execute_continue_world_worker_stream_for_turn_kind_impl(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    policy: &Policy,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    acceptance: Option<(
+        &WorldWorkReceiptRegistry,
+        &WorldWorkExecutionSupervisor,
+        &WorldWorkAcceptanceProposalV1,
+    )>,
+) -> Result<ContinueWorldWorkerStreamResult> {
     use http_body_util::BodyExt as _;
     use transport_api_types::ExecuteStreamFrame;
 
@@ -3414,7 +4119,9 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut active_span_id = None::<String>;
+    let mut active_claim = None;
     let mut exit_code = None::<i32>;
+    let mut stream_error = None::<String>;
     let mut surfaced_thread_id = None::<String>;
     let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
 
@@ -3454,11 +4161,104 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                     }
                 };
 
+            if !matches!(frame, ExecuteStreamFrame::Start { .. }) {
+                if let Some((_, execution_supervisor, _)) = acceptance {
+                    let claim = active_claim.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "accepted continue_world_worker stream emitted a frame before durable Start claim"
+                        )
+                    })?;
+                    if execution_supervisor.journal_frame(claim, &frame, &line)?
+                        == WorldWorkJournalAppendOutcomeV1::ExactReplay
+                    {
+                        continue;
+                    }
+                }
+            }
+
             match frame {
-                ExecuteStreamFrame::Start { span_id, .. } => {
-                    active_span_id = Some(span_id);
+                start_frame @ ExecuteStreamFrame::Start { .. } => {
+                    if let Some((receipt_registry, execution_supervisor, acceptance_proposal)) =
+                        acceptance
+                    {
+                        let ExecuteStreamFrame::Start { span_id, .. } = &start_frame else {
+                            unreachable!("matched Start frame")
+                        };
+                        let existing_observation = match active_claim.as_ref() {
+                            Some(claim) => Some(
+                                execution_supervisor
+                                    .inspect_observation_by_acceptance_id(
+                                        &claim.acceptance_record_id,
+                                    )?
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!(
+                                            "B2.1 retained observation disappeared after claim"
+                                        )
+                                    })?,
+                            ),
+                            None => execution_supervisor.inspect_observation_by_acceptance_id(
+                                &acceptance_proposal
+                                    .acceptance_context
+                                    .proposed_acceptance_record_id,
+                            )?,
+                        };
+                        if let Some(observation) = existing_observation {
+                            if observation.claim.runtime_submission_id != *span_id {
+                                anyhow::bail!(
+                                    "replayed continue_world_worker Start changed runtime submission identity"
+                                );
+                            }
+                            let claim = observation.claim;
+                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                            active_claim = Some(claim);
+                            active_span_id = Some(span_id.clone());
+                            continue;
+                        }
+                        let mut claimed = None;
+                        let span_id = consume_retained_acceptance_acknowledgement(
+                            request,
+                            acceptance_proposal,
+                            Some(&start_frame),
+                            active_span_id.is_some(),
+                            |record| {
+                                let accepted = receipt_registry
+                                    .persist_world_work_acceptance_for_supervision(record)?;
+                                claimed = Some(
+                                    execution_supervisor.claim_persisted_world_work(&accepted)?,
+                                );
+                                Ok(())
+                            },
+                        )?;
+                        let claim = claimed.ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "B2.1 retained acceptance omitted durable supervisor claim"
+                            )
+                        })?;
+                        let append_outcome =
+                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                        active_claim = Some(claim);
+                        active_span_id = Some(span_id);
+                        if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                            continue;
+                        }
+                    } else {
+                        let ExecuteStreamFrame::Start { span_id, .. } = start_frame else {
+                            unreachable!("matched Start frame")
+                        };
+                        if active_span_id.is_some() {
+                            anyhow::bail!(
+                                "continue_world_worker stream emitted repeated Start frame"
+                            );
+                        }
+                        active_span_id = Some(span_id);
+                    }
                 }
                 ExecuteStreamFrame::Event { event, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted Event before Start acknowledgement"
+                        );
+                    }
                     if surfaced_thread_id.is_none() {
                         surfaced_thread_id = surfaced_thread_id_from_event(&event);
                     }
@@ -3471,6 +4271,12 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                                     active_span_id.as_deref(),
                                 )
                                 .await;
+                                if acceptance.is_some() {
+                                    if stream_error.is_none() {
+                                        stream_error = Some(format!("{err:#}"));
+                                    }
+                                    continue;
+                                }
                                 return Err(err);
                             }
                         };
@@ -3481,6 +4287,12 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                         ) {
                             cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
                                 .await;
+                            if acceptance.is_some() {
+                                if stream_error.is_none() {
+                                    stream_error = Some(format!("{err:#}"));
+                                }
+                                continue;
+                            }
                             return Err(err);
                         }
                         let preserve_existing_live_event =
@@ -3497,29 +4309,64 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
                     }
                 }
                 ExecuteStreamFrame::Exit { exit, .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted terminal Exit before Start acknowledgement"
+                        );
+                    }
                     exit_code = Some(exit);
-                    break;
                 }
                 ExecuteStreamFrame::Error { message, .. } => {
                     cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
-                    anyhow::bail!(message);
+                    if stream_error.is_none() {
+                        stream_error = Some(message);
+                    }
                 }
-                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
+                ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {
+                    if active_span_id.is_none() {
+                        anyhow::bail!(
+                            "continue_world_worker stream emitted output before Start acknowledgement"
+                        );
+                    }
+                }
             }
         }
+    }
+    if !buffer.is_empty() {
+        anyhow::bail!("continue_world_worker stream ended with an incomplete canonical frame");
+    }
 
-        if exit_code.is_some() {
-            break;
+    let observed_exit_code = match exit_code {
+        Some(exit_code) => exit_code,
+        None => {
+            cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+            if let Some(message) = stream_error.take() {
+                anyhow::bail!(message);
+            }
+            anyhow::bail!("continue_world_worker stream ended without a terminal exit frame");
         }
+    };
+    let exit_code = if let (Some((_, execution_supervisor, _)), Some(claim)) =
+        (acceptance, active_claim.as_ref())
+    {
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)?
+            .and_then(|observation| observation.terminal)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "accepted continue_world_worker stream ended without durable B0 terminal truth"
+                )
+            })?;
+        if terminal.exit_code != observed_exit_code {
+            anyhow::bail!("continue_world_worker terminal exit changed after durable journaling");
+        }
+        terminal.exit_code
+    } else {
+        observed_exit_code
+    };
+    if let Some(message) = stream_error {
+        anyhow::bail!(message);
     }
-
-    let exit_code = exit_code.ok_or_else(|| {
-        anyhow::anyhow!("continue_world_worker stream ended without a terminal exit frame")
-    });
-    if exit_code.is_err() {
-        cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
-    }
-    let exit_code = exit_code?;
 
     Ok(ContinueWorldWorkerStreamResult {
         exit_code,
@@ -5152,7 +5999,7 @@ fn agent_runtime_session_state_label(state: &AgentRuntimeSessionState) -> &'stat
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     use crate::execution::agent_inventory::{
@@ -5182,8 +6029,7 @@ mod tests {
     use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchContinuity;
     #[cfg(target_os = "linux")]
     use crate::execution::agent_runtime::tool_invocation_contract::{
-        normalize_cancel_world_work_outcome_v1, normalize_inspect_world_worker_outcome_v1,
-        normalize_stop_world_worker_outcome_v1,
+        normalize_inspect_world_worker_outcome_v1, normalize_stop_world_worker_outcome_v1,
     };
     use crate::execution::agent_runtime::tool_invocation_contract::{
         normalize_run_world_task_receipt_v1, normalize_spawn_world_worker_receipt_v1,
@@ -5216,6 +6062,8 @@ mod tests {
     use std::fs;
     #[cfg(target_os = "linux")]
     use std::io::{BufRead, Write};
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt as _;
     #[cfg(target_os = "linux")]
     use std::path::Path;
     #[cfg(target_os = "linux")]
@@ -5902,26 +6750,6 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    fn sample_ephemeral_inspect_world_dispatch_request(
-        task_run_id: &str,
-    ) -> WorldDispatchRequestV1 {
-        WorldDispatchRequestV1 {
-            request_id: Some("req_inspect_ephemeral".to_string()),
-            idempotency_key: Some("idem_inspect_ephemeral".to_string()),
-            orchestration_session_id: Some("sess_dispatch".to_string()),
-            caller_participant_id: Some("orch_dispatch".to_string()),
-            action: WorldDispatchActionV1::InspectWorldWorker,
-            mode: WorldDispatchModeV1::Ephemeral,
-            target_backend_id: Some("cli:codex-world".to_string()),
-            task_run_id: Some(task_run_id.to_string()),
-            target_participant_id: None,
-            world_id: Some("world-17".to_string()),
-            world_generation: Some(2),
-            payload: WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
-        }
-    }
-
-    #[cfg(target_os = "linux")]
     fn sample_stop_world_dispatch_request() -> WorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_stop".to_string()),
@@ -6006,27 +6834,6 @@ mod tests {
             payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
                 reason: Some("operator requested cancel".to_string()),
                 graceful: Some(true),
-            }),
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    fn sample_ephemeral_cancel_world_dispatch_request(task_run_id: &str) -> WorldDispatchRequestV1 {
-        WorldDispatchRequestV1 {
-            request_id: Some("req_cancel_ephemeral".to_string()),
-            idempotency_key: Some("idem_cancel_ephemeral".to_string()),
-            orchestration_session_id: Some("sess_dispatch".to_string()),
-            caller_participant_id: Some("orch_dispatch".to_string()),
-            action: WorldDispatchActionV1::CancelWorldWork,
-            mode: WorldDispatchModeV1::Ephemeral,
-            target_backend_id: Some("cli:codex-world".to_string()),
-            task_run_id: Some(task_run_id.to_string()),
-            target_participant_id: None,
-            world_id: Some("world-17".to_string()),
-            world_generation: Some(2),
-            payload: WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
-                reason: Some("operator requested cancel".to_string()),
-                graceful: Some(false),
             }),
         }
     }
@@ -6126,6 +6933,7 @@ mod tests {
             world_id: "world-17".to_string(),
             world_generation: 2,
             prompt: "follow up".to_string(),
+            acceptance_context: None,
         }
     }
 
@@ -6258,6 +7066,1630 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn b1_test_policy_ref(
+    ) -> crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1 {
+        use crate::execution::agent_runtime::host_session_authority::schema::{
+            AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
+        };
+
+        AuthorityObjectRefV1 {
+            ref_id: "policy-ref-b1-shell".to_string(),
+            object_kind: AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "a".repeat(64),
+            },
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_task_acceptance_submission() -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::ExecuteRequest,
+    ) {
+        let validated_dispatch_request = sample_request();
+        let acceptance_context = transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc".to_string(),
+            request_id: validated_dispatch_request.request_id.clone(),
+            message_id: None,
+            caller_backend_id: "cli:codex".to_string(),
+            host_transition_correlation: None,
+        };
+        let member_dispatch_request = MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: validated_dispatch_request.orchestration_session_id.clone(),
+            participant_id: "awm_018f0f2e-7b4c-7aa1-8c22-123456789abd".to_string(),
+            orchestrator_participant_id: validated_dispatch_request.caller_participant_id.clone(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: validated_dispatch_request.target_backend_id.clone(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: validated_dispatch_request.request_id.clone(),
+            world_id: validated_dispatch_request.world_id.clone(),
+            world_generation: validated_dispatch_request.world_generation,
+            initial_prompt: Some("hello world".to_string()),
+            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/usr/bin/codex".to_string(),
+            },
+        };
+        let execute_request = ExecuteRequest {
+            profile: None,
+            cmd: String::new(),
+            cwd: Some("/tmp".to_string()),
+            env: None,
+            pty: false,
+            agent_id: "codex-world".to_string(),
+            budget: None,
+            policy_snapshot: minimal_policy_snapshot(),
+            shared_world: None,
+            world_network: None,
+            world_fs_mode: None,
+            member_dispatch: Some(member_dispatch_request.clone()),
+            acceptance_context: Some(acceptance_context.clone()),
+        };
+        let canonical_execute_request_sha256 =
+            canonical_world_work_submission_sha256(&validated_dispatch_request, &execute_request)
+                .expect("hash task submission");
+        let proposal = WorldWorkAcceptanceProposalV1 {
+            schema_version: 1,
+            acceptance_context,
+            authority_store_id: "authority-store-b1".to_string(),
+            authority_revision_observed: 11,
+            orchestration_session_id: validated_dispatch_request.orchestration_session_id.clone(),
+            caller_participant_id: validated_dispatch_request.caller_participant_id.clone(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: validated_dispatch_request.target_backend_id.clone(),
+            world_id: validated_dispatch_request.world_id.clone(),
+            world_generation: validated_dispatch_request.world_generation,
+            proposed_work: ProposedWorldWorkIdentityV1::EphemeralTask,
+            submission_identity: WorldWorkSubmissionIdentityV1::EphemeralTask {
+                validated_dispatch_request,
+                member_dispatch_request,
+                canonical_execute_request_sha256,
+            },
+            current_policy_snapshot_ref: b1_test_policy_ref(),
+            current_policy_snapshot_hash: "b".repeat(64),
+            current_policy_revision: "policy-revision-b1".to_string(),
+            created_at: Utc::now(),
+        };
+        (proposal, execute_request)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_retained_acceptance_submission() -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::MemberTurnSubmitRequestV1,
+    ) {
+        let validated_dispatch_request = sample_continue_request();
+        let message_id = "wwm_018f0f2e-7b4c-7aa1-8c22-123456789abe".to_string();
+        let acceptance_context = transport_api_types::WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abf".to_string(),
+            request_id: validated_dispatch_request.request_id.clone(),
+            message_id: Some(message_id.clone()),
+            caller_backend_id: "cli:codex".to_string(),
+            host_transition_correlation: None,
+        };
+        let mut request = sample_continue_submit_request();
+        request.acceptance_context = Some(acceptance_context.clone());
+        let canonical_member_turn_submit_request_sha256 =
+            canonical_world_work_submission_sha256(&validated_dispatch_request, &request)
+                .expect("hash retained submission");
+        let proposal = WorldWorkAcceptanceProposalV1 {
+            schema_version: 1,
+            acceptance_context,
+            authority_store_id: "authority-store-b1".to_string(),
+            authority_revision_observed: 11,
+            orchestration_session_id: validated_dispatch_request.orchestration_session_id.clone(),
+            caller_participant_id: validated_dispatch_request.caller_participant_id.clone(),
+            caller_backend_id: "cli:codex".to_string(),
+            target_backend_id: validated_dispatch_request.target_backend_id.clone(),
+            world_id: validated_dispatch_request.world_id.clone(),
+            world_generation: validated_dispatch_request.world_generation,
+            proposed_work: ProposedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: request.run_id.clone(),
+                message_id,
+                target_participant_id: request.participant_id.clone(),
+            },
+            submission_identity: WorldWorkSubmissionIdentityV1::RetainedTurn {
+                validated_dispatch_request,
+                canonical_member_turn_submit_request_sha256,
+            },
+            current_policy_snapshot_ref: b1_test_policy_ref(),
+            current_policy_snapshot_hash: "b".repeat(64),
+            current_policy_revision: "policy-revision-b1".to_string(),
+            created_at: Utc::now(),
+        };
+        (proposal, request)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn b21_test_acceptance_stores() -> (
+        TempDir,
+        WorldWorkReceiptRegistry,
+        WorldWorkExecutionSupervisor,
+        String,
+    ) {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create B2.1 acceptance test parent");
+        let root_path =
+            tempfile::tempdir_in(safe_parent).expect("create B2.1 acceptance test root");
+        fs::set_permissions(root_path.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("secure B2.1 acceptance test root");
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root_path.path())
+            .expect("open B2.1 acceptance authority");
+        let root = authority
+            .bootstrap()
+            .expect("activate B2.1 acceptance authority");
+        let receipt_registry = WorldWorkReceiptRegistry::bind_for_test(
+            root_path.path(),
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )
+        .expect("bind B2.1 receipt registry");
+        let execution_supervisor = WorldWorkExecutionSupervisor::bind(
+            root_path.path(),
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )
+        .expect("bind B2.1 execution supervisor");
+        (
+            root_path,
+            receipt_registry,
+            execution_supervisor,
+            root.authority_store_id,
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn seed_b21_ephemeral_observation(
+        task_run_id: &str,
+    ) -> (
+        TempDir,
+        WorldWorkReceiptRegistry,
+        WorldWorkExecutionSupervisor,
+        crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
+    ) {
+        let (root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: task_run_id.to_string(),
+        };
+        let mut claim = None;
+        consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                let accepted =
+                    receipt_registry.persist_world_work_acceptance_for_supervision(record)?;
+                claim = Some(execution_supervisor.claim_persisted_world_work(&accepted)?);
+                Ok(())
+            },
+        )
+        .expect("persist accepted B2.1 test task");
+        let claim = claim.expect("B2.1 test task has durable claim");
+        execution_supervisor
+            .journal_frame(
+                &claim,
+                &start,
+                &start
+                    .canonical_ndjson_bytes()
+                    .expect("canonical B2.1 test Start"),
+            )
+            .expect("journal B2.1 test Start");
+        (root, receipt_registry, execution_supervisor, claim)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn b21_registry_authority_for_test(
+        receipt_registry: WorldWorkReceiptRegistry,
+        execution_supervisor: WorldWorkExecutionSupervisor,
+        authority_store_id: &str,
+    ) -> crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1 {
+        crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1 {
+            receipt_registry,
+            execution_supervisor,
+            authority_store_id: authority_store_id.to_string(),
+            authority_revision_observed: 11,
+            current_policy_snapshot_ref: b1_test_policy_ref(),
+            current_policy_revision: "policy-revision-b1".to_string(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn reserve_b21_task_acceptance(
+        receipt_registry: &WorldWorkReceiptRegistry,
+        authority_store_id: &str,
+    ) -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::ExecuteRequest,
+    ) {
+        let mut request_out = None;
+        let outcome = receipt_registry
+            .prepare_world_work_acceptance_proposal(
+                "sess_dispatch",
+                "req_dispatch",
+                WorldWorkProposalFamilyV1::EphemeralTask,
+                |allocation| {
+                    let (mut proposal, mut request) = sample_task_acceptance_submission();
+                    proposal.acceptance_context.proposed_acceptance_record_id =
+                        allocation.acceptance_record_id;
+                    proposal.acceptance_context.message_id = allocation.message_id;
+                    proposal.authority_store_id = authority_store_id.to_string();
+                    proposal.created_at = allocation.created_at;
+                    request.acceptance_context = Some(proposal.acceptance_context.clone());
+                    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+                        validated_dispatch_request,
+                        canonical_execute_request_sha256,
+                        ..
+                    } = &mut proposal.submission_identity
+                    else {
+                        unreachable!("task test proposal changed family")
+                    };
+                    *canonical_execute_request_sha256 = canonical_world_work_submission_sha256(
+                        validated_dispatch_request,
+                        &request,
+                    )?;
+                    request_out = Some(request);
+                    Ok(proposal)
+                },
+            )
+            .expect("reserve B2.1 task acceptance proposal");
+        let WorldWorkProposalReservationOutcomeV1::Proposed(proposal) = outcome else {
+            panic!("fresh B2.1 task proposal cannot already be accepted")
+        };
+        (
+            proposal,
+            request_out.expect("B2.1 task proposal builder returns transport request"),
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    fn reserve_b21_retained_acceptance(
+        receipt_registry: &WorldWorkReceiptRegistry,
+        authority_store_id: &str,
+    ) -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::MemberTurnSubmitRequestV1,
+    ) {
+        let mut request_out = None;
+        let outcome = receipt_registry
+            .prepare_world_work_acceptance_proposal(
+                "sess_dispatch",
+                "req_continue",
+                WorldWorkProposalFamilyV1::RetainedTurn,
+                |allocation| {
+                    let (mut proposal, mut request) = sample_retained_acceptance_submission();
+                    let message_id = allocation
+                        .message_id
+                        .expect("retained B2.1 allocation includes message ID");
+                    proposal.acceptance_context.proposed_acceptance_record_id =
+                        allocation.acceptance_record_id;
+                    proposal.acceptance_context.message_id = Some(message_id.clone());
+                    proposal.authority_store_id = authority_store_id.to_string();
+                    proposal.created_at = allocation.created_at;
+                    request.acceptance_context = Some(proposal.acceptance_context.clone());
+                    let ProposedWorldWorkIdentityV1::RetainedTurn {
+                        message_id: proposed_message_id,
+                        ..
+                    } = &mut proposal.proposed_work
+                    else {
+                        unreachable!("retained test proposal changed family")
+                    };
+                    *proposed_message_id = message_id;
+                    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+                        validated_dispatch_request,
+                        canonical_member_turn_submit_request_sha256,
+                    } = &mut proposal.submission_identity
+                    else {
+                        unreachable!("retained test submission changed family")
+                    };
+                    *canonical_member_turn_submit_request_sha256 =
+                        canonical_world_work_submission_sha256(
+                            validated_dispatch_request,
+                            &request,
+                        )?;
+                    request_out = Some(request);
+                    Ok(proposal)
+                },
+            )
+            .expect("reserve B2.1 retained acceptance proposal");
+        let WorldWorkProposalReservationOutcomeV1::Proposed(proposal) = outcome else {
+            panic!("fresh B2.1 retained proposal cannot already be accepted")
+        };
+        (
+            proposal,
+            request_out.expect("B2.1 retained proposal builder returns transport request"),
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn wait_for_b21_claim(
+        supervisor: &WorldWorkExecutionSupervisor,
+        acceptance_record_id: &str,
+    ) -> crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1
+    {
+        timeout(Duration::from_secs(3), async {
+            loop {
+                if let Some(claim) = supervisor
+                    .inspect_claim_by_acceptance_id(acceptance_record_id)
+                    .expect("inspect B2.1 claim")
+                {
+                    break claim;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("timed out waiting for durable B2.1 claim")
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn wait_for_b21_terminal(
+        supervisor: &WorldWorkExecutionSupervisor,
+        acceptance_record_id: &str,
+    ) -> crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkTerminalObservationV1
+    {
+        timeout(Duration::from_secs(3), async {
+            loop {
+                if let Some(terminal) = supervisor
+                    .inspect_observation_by_acceptance_id(acceptance_record_id)
+                    .expect("inspect B2.1 terminal observation")
+                    .and_then(|observation| observation.terminal)
+                {
+                    break terminal;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("timed out waiting for durable B2.1 terminal observation")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn b21_test_exit_frame(
+        stream_id: &str,
+        span_id: &str,
+    ) -> transport_api_types::ExecuteStreamFrame {
+        transport_api_types::ExecuteStreamFrame::Exit {
+            frame_identity: transport_api_types::RuntimeFrameIdentityV1 {
+                schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                stream_id: stream_id.to_string(),
+                frame_sequence: 2,
+            },
+            event_identity: test_runtime_event_identity(1),
+            terminal_identity: test_runtime_terminal_identity(1),
+            exit: 0,
+            span_id: span_id.to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn b1_test_terminal_frame() -> transport_api_types::ExecuteStreamFrame {
+        transport_api_types::ExecuteStreamFrame::Exit {
+            frame_identity: test_runtime_frame_identity(1),
+            event_identity: test_runtime_event_identity(1),
+            terminal_identity: test_runtime_terminal_identity(1),
+            exit: 0,
+            span_id: "spn_terminal_only".to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn b1_task_acknowledgement_rejects_nonstart_eof_mismatch_and_repetition_before_persist() {
+        use std::cell::Cell;
+
+        let (proposal, request) = sample_task_acceptance_submission();
+        let persisted = Cell::new(0usize);
+        let error = transport_api_types::ExecuteStreamFrame::Error {
+            frame_identity: test_runtime_frame_identity(1),
+            message: "not accepted".to_string(),
+        };
+        for frame in [Some(&error), Some(&b1_test_terminal_frame()), None] {
+            let result =
+                consume_task_acceptance_acknowledgement(&request, &proposal, frame, false, |_| {
+                    persisted.set(persisted.get() + 1);
+                    Ok(())
+                });
+            assert!(result.is_err());
+            assert_eq!(persisted.get(), 0);
+        }
+
+        let wrong_sequence = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(2),
+            span_id: "spn_task_b1".to_string(),
+        };
+        assert!(consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&wrong_sequence),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 0);
+
+        let mut changed_request = request.clone();
+        changed_request.agent_id = "different-agent".to_string();
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: "spn_task_b1".to_string(),
+        };
+        assert!(consume_task_acceptance_acknowledgement(
+            &changed_request,
+            &proposal,
+            Some(&start),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 0);
+
+        let span_id = consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                assert_eq!(record.runtime_acceptance.frame_sequence, 1);
+                assert_eq!(
+                    record.runtime_acceptance.task_run_id.as_deref(),
+                    Some("spn_task_b1")
+                );
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("valid Start is accepted");
+        assert_eq!(span_id, "spn_task_b1");
+        assert_eq!(persisted.get(), 1);
+        assert!(consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            true,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn b1_retained_acknowledgement_joins_exact_request_and_rejects_terminal_or_drift() {
+        use std::cell::Cell;
+
+        let (proposal, request) = sample_retained_acceptance_submission();
+        let persisted = Cell::new(0usize);
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&b1_test_terminal_frame()),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            None,
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+
+        let error = transport_api_types::ExecuteStreamFrame::Error {
+            frame_identity: test_runtime_frame_identity(1),
+            message: "not accepted".to_string(),
+        };
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&error),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        let wrong_sequence = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(2),
+            span_id: "spn_retained_b1".to_string(),
+        };
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&wrong_sequence),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: "spn_retained_b1".to_string(),
+        };
+        assert!(consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            true,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        let mut changed_target = request.clone();
+        changed_target.participant_id = "ash_other".to_string();
+        assert!(consume_retained_acceptance_acknowledgement(
+            &changed_target,
+            &proposal,
+            Some(&start),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        let mut changed_message = request.clone();
+        changed_message
+            .acceptance_context
+            .as_mut()
+            .expect("acceptance context")
+            .message_id = Some("wwm_018f0f2e-7b4c-7aa1-8c22-123456789aba".to_string());
+        assert!(consume_retained_acceptance_acknowledgement(
+            &changed_message,
+            &proposal,
+            Some(&start),
+            false,
+            |_| {
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .is_err());
+        assert_eq!(persisted.get(), 0);
+
+        consume_retained_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                assert_eq!(
+                    record.runtime_acceptance.active_run_id.as_deref(),
+                    Some("req_continue")
+                );
+                assert_eq!(
+                    record.runtime_acceptance.message_id,
+                    proposal.acceptance_context.message_id
+                );
+                assert_eq!(
+                    record.runtime_acceptance.retained_participant_id.as_deref(),
+                    Some("ash_member")
+                );
+                persisted.set(persisted.get() + 1);
+                Ok(())
+            },
+        )
+        .expect("valid retained Start is accepted");
+        assert_eq!(persisted.get(), 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_ephemeral_production_handoff_claims_before_next_frame_without_legacy_writer() {
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 task socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind B2.1 task world socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_next_tx, allow_next_rx) = tokio::sync::oneshot::channel();
+        let expected_acceptance_record_id = acceptance_record_id.clone();
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept B2.1 task stream");
+            let (header, body) = read_http_request(&mut stream)
+                .await
+                .expect("read B2.1 task stream request");
+            assert!(header
+                .lines()
+                .next()
+                .is_some_and(|line| line.starts_with("POST /v1/execute/stream ")));
+            let submitted: transport_api_types::ExecuteRequest =
+                serde_json::from_slice(&body).expect("decode B2.1 task stream request");
+            assert_eq!(
+                submitted
+                    .acceptance_context
+                    .as_ref()
+                    .map(|context| context.proposed_acceptance_record_id.as_str()),
+                Some(expected_acceptance_record_id.as_str())
+            );
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_task".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx.send(()).expect("signal B2.1 task Start");
+            allow_next_rx
+                .await
+                .expect("durable task claim must precede the next frame");
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_task"),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build B2.1 task client");
+        let execute = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        );
+        let observe_handoff = async {
+            timeout(Duration::from_secs(3), start_sent_rx)
+                .await
+                .expect("timed out waiting for B2.1 task Start")
+                .expect("observe B2.1 task Start");
+            let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+            let observation = execution_supervisor
+                .inspect_observation_by_acceptance_id(&acceptance_record_id)
+                .expect("inspect B2.1 task Start journal")
+                .expect("B2.1 task observation exists");
+            let acceptance = receipt_registry
+                .inspect_world_work_acceptance_by_id(&authority_store_id, &acceptance_record_id)
+                .expect("inspect B2.1 task acceptance")
+                .expect("B2.1 task acceptance is durable before release");
+            assert_eq!(claim.acceptance_record_id, acceptance.acceptance_record_id);
+            assert_eq!(claim.stream_id, "rts_shell_world_dispatch_fixture");
+            assert_eq!(claim.work_identity, acceptance.work_identity);
+            assert_eq!(observation.durable_frame_cursor, Some(1));
+            assert_eq!(observation.journal.len(), 1);
+            assert!(observation.terminal.is_none());
+            assert!(
+                !authority_root
+                    .path()
+                    .join("run/agent-hub/sessions/sess_dispatch/active-ephemeral-tasks")
+                    .exists(),
+                "accepted production task must not create the legacy active-task side table"
+            );
+            allow_next_tx
+                .send(())
+                .expect("release B2.1 task terminal frame");
+        };
+        let (result, ()) = tokio::join!(execute, observe_handoff);
+        let result = result.expect("B2.1 task stream completes after durable handoff");
+        assert_eq!(result.task_run_id.as_deref(), Some("spn_b21_task"));
+        assert_eq!(result.exit_code, 0);
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect B2.1 task terminal journal")
+            .expect("B2.1 task terminal observation exists");
+        assert_eq!(terminal.durable_frame_cursor, Some(2));
+        assert_eq!(terminal.durable_event_cursor, Some(1));
+        assert_eq!(terminal.journal.len(), 2);
+        assert_eq!(
+            terminal.terminal.map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        server.await.expect("join B2.1 task stream server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_retained_production_handoff_claims_before_next_frame() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 retained socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind B2.1 retained world socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_next_tx, allow_next_rx) = tokio::sync::oneshot::channel();
+        let expected_acceptance_record_id = acceptance_record_id.clone();
+        let server = tokio::spawn(async move {
+            let (mut stream, body) = loop {
+                let (mut stream, _addr) = listener
+                    .accept()
+                    .await
+                    .expect("accept B2.1 retained connection");
+                let (header, body) = read_http_request(&mut stream)
+                    .await
+                    .expect("read B2.1 retained request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                break (stream, body);
+            };
+            let submitted: transport_api_types::MemberTurnSubmitRequestV1 =
+                serde_json::from_slice(&body).expect("decode B2.1 retained stream request");
+            assert_eq!(
+                submitted
+                    .acceptance_context
+                    .as_ref()
+                    .map(|context| context.proposed_acceptance_record_id.as_str()),
+                Some(expected_acceptance_record_id.as_str())
+            );
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx.send(()).expect("signal B2.1 retained Start");
+            allow_next_rx
+                .await
+                .expect("durable retained claim must precede the next frame");
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_retained"),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let policy = sample_world_dispatch_policy();
+        let execute = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &submit_request,
+            &policy,
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &receipt_registry,
+            &execution_supervisor,
+            &proposal,
+        );
+        let observe_handoff = async {
+            timeout(Duration::from_secs(3), start_sent_rx)
+                .await
+                .expect("timed out waiting for B2.1 retained Start")
+                .expect("observe B2.1 retained Start");
+            let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+            let observation = loop {
+                let observation = execution_supervisor
+                    .inspect_observation_by_acceptance_id(&acceptance_record_id)
+                    .expect("inspect B2.1 retained Start journal")
+                    .expect("B2.1 retained observation exists");
+                if observation.durable_frame_cursor == Some(1) {
+                    break observation;
+                }
+                tokio::task::yield_now().await;
+            };
+            let acceptance = receipt_registry
+                .inspect_world_work_acceptance_by_id(&authority_store_id, &acceptance_record_id)
+                .expect("inspect B2.1 retained acceptance")
+                .expect("B2.1 retained acceptance is durable before release");
+            assert_eq!(claim.acceptance_record_id, acceptance.acceptance_record_id);
+            assert_eq!(claim.stream_id, "rts_shell_world_dispatch_fixture");
+            assert_eq!(claim.work_identity, acceptance.work_identity);
+            assert_eq!(observation.durable_frame_cursor, Some(1));
+            assert_eq!(observation.journal.len(), 1);
+            assert!(observation.terminal.is_none());
+            allow_next_tx
+                .send(())
+                .expect("release B2.1 retained terminal frame");
+        };
+        let (result, ()) = tokio::join!(execute, observe_handoff);
+        let result = result.expect("B2.1 retained stream completes after durable handoff");
+        assert_eq!(result.exit_code, 0);
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect B2.1 retained terminal journal")
+            .expect("B2.1 retained terminal observation exists");
+        assert_eq!(terminal.durable_frame_cursor, Some(2));
+        assert_eq!(terminal.durable_event_cursor, Some(1));
+        assert_eq!(terminal.journal.len(), 2);
+        assert_eq!(
+            terminal.terminal.map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        server.await.expect("join B2.1 retained stream server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_accepted_retained_policy_error_observes_exact_terminal_before_failing_waiter() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 retained policy-error socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind retained policy-error socket");
+        let cancel_requests = Arc::new(Mutex::new(Vec::<ExecuteCancelRequestV1>::new()));
+        let cancel_requests_for_server = cancel_requests.clone();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let submitted: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body)
+                            .expect("decode retained policy-error request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
+                            span_id: "spn_b21_retained_policy_error".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
+                            event: sample_continue_stream_event_for_run(
+                                &submitted.run_id,
+                                json!({
+                                    "event_class": "approval_request",
+                                    "payload": { "message": "requires approval" }
+                                }),
+                            ),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
+                            exit: 130,
+                            span_id: "spn_b21_retained_policy_error".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("decode retained cancel request");
+                    cancel_requests_for_server
+                        .lock()
+                        .expect("cancel requests mutex poisoned")
+                        .push(parsed);
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"delivered":true}"#,
+                    )
+                    .await;
+                    break;
+                }
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let result = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &submit_request,
+            &Policy::default(),
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &receipt_registry,
+            &execution_supervisor,
+            &proposal,
+        )
+        .await;
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("denied accepted retained event did not fail the foreground waiter"),
+        };
+        assert!(error.to_string().contains("approval_request_not_allowed"));
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect retained policy-error observation")
+            .expect("retained policy-error observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(3));
+        assert_eq!(observation.durable_event_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 3);
+        assert_eq!(
+            observation.terminal.map(|terminal| terminal.exit_code),
+            Some(130)
+        );
+        server.await.expect("join retained policy-error server");
+        let recorded = cancel_requests
+            .lock()
+            .expect("cancel requests mutex poisoned");
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].span_id, "spn_b21_retained_policy_error");
+        assert_eq!(recorded[0].sig, "INT");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_dropping_ephemeral_foreground_waiter_does_not_drop_observation() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 caller-drop socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind B2.1 caller-drop socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener
+                .accept()
+                .await
+                .expect("accept B2.1 caller-drop stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read B2.1 caller-drop request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_caller_drop".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx.send(()).expect("signal caller-drop Start");
+            allow_terminal_rx
+                .await
+                .expect("release caller-drop terminal");
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_caller_drop"),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build B2.1 caller-drop client");
+        let receipt_for_waiter = receipt_registry.clone();
+        let supervisor_for_waiter = execution_supervisor.clone();
+        let foreground_waiter = tokio::spawn(async move {
+            execute_run_world_task_stream(
+                &receipt_for_waiter,
+                &supervisor_for_waiter,
+                client,
+                execute_request,
+                &proposal,
+                "sess_dispatch",
+                None,
+            )
+            .await
+        });
+
+        timeout(Duration::from_secs(3), start_sent_rx)
+            .await
+            .expect("timed out waiting for caller-drop Start")
+            .expect("observe caller-drop Start");
+        let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+        loop {
+            let observation = execution_supervisor
+                .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                .expect("inspect caller-drop Start journal")
+                .expect("caller-drop observation exists");
+            if observation.durable_frame_cursor == Some(1) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        foreground_waiter.abort();
+        match foreground_waiter.await {
+            Err(error) => assert!(error.is_cancelled()),
+            Ok(_) => panic!("foreground waiter was not aborted"),
+        }
+        allow_terminal_tx
+            .send(())
+            .expect("release terminal after caller drop");
+        server.await.expect("join caller-drop stream server");
+
+        let terminal = wait_for_b21_terminal(&execution_supervisor, &acceptance_record_id).await;
+        assert_eq!(terminal.exit_code, 0);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect caller-drop terminal journal")
+            .expect("caller-drop terminal observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 2);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_dropping_retained_foreground_waiter_does_not_drop_observation() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 retained caller-drop socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener =
+            UnixListener::bind(&socket_path).expect("bind B2.1 retained caller-drop socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut stream = loop {
+                let (mut stream, _addr) = listener
+                    .accept()
+                    .await
+                    .expect("accept B2.1 retained caller-drop connection");
+                let (header, _) = read_http_request(&mut stream)
+                    .await
+                    .expect("read B2.1 retained caller-drop request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                break stream;
+            };
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained_caller_drop".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx
+                .send(())
+                .expect("signal retained caller-drop Start");
+            allow_terminal_rx
+                .await
+                .expect("release retained caller-drop terminal");
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame(
+                    "rts_shell_world_dispatch_fixture",
+                    "spn_b21_retained_caller_drop",
+                ),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let policy = sample_world_dispatch_policy();
+        let receipt_for_waiter = receipt_registry.clone();
+        let supervisor_for_waiter = execution_supervisor.clone();
+        let foreground_waiter = tokio::spawn(async move {
+            execute_accepted_continue_world_worker_stream_for_turn_kind(
+                &submit_request,
+                &policy,
+                ContinueWorldWorkerTurnKind::GenericContinue,
+                &receipt_for_waiter,
+                &supervisor_for_waiter,
+                &proposal,
+            )
+            .await
+        });
+
+        timeout(Duration::from_secs(3), start_sent_rx)
+            .await
+            .expect("timed out waiting for retained caller-drop Start")
+            .expect("observe retained caller-drop Start");
+        let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+        loop {
+            let observation = execution_supervisor
+                .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                .expect("inspect retained caller-drop Start journal")
+                .expect("retained caller-drop observation exists");
+            if observation.durable_frame_cursor == Some(1) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        foreground_waiter.abort();
+        match foreground_waiter.await {
+            Err(error) => assert!(error.is_cancelled()),
+            Ok(_) => panic!("retained foreground waiter was not aborted"),
+        }
+        allow_terminal_tx
+            .send(())
+            .expect("release retained terminal after caller drop");
+        server
+            .await
+            .expect("join retained caller-drop stream server");
+
+        let terminal = wait_for_b21_terminal(&execution_supervisor, &acceptance_record_id).await;
+        assert_eq!(terminal.exit_code, 0);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect retained caller-drop terminal journal")
+            .expect("retained caller-drop terminal observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 2);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_production_observer_rejects_post_terminal_frames() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 post-terminal socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind post-terminal socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener
+                .accept()
+                .await
+                .expect("accept post-terminal stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read post-terminal request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_post_terminal".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_post_terminal"),
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Stdout {
+                    frame_identity: test_runtime_frame_identity(3),
+                    chunk_b64: "bGF0ZQ==".to_string(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build post-terminal client");
+        let result = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        )
+        .await;
+        let err = match result {
+            Err(error) => error,
+            Ok(_) => panic!("production observer accepted a post-terminal frame"),
+        };
+        assert!(err.to_string().contains("post-terminal"));
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect exact terminal after post-terminal rejection")
+            .expect("post-terminal rejection preserves durable observation");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert!(observation.terminal.is_some());
+        server.await.expect("join post-terminal server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_production_observer_consumes_exact_replay_as_no_op() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 replay socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind replay socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept replay stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read replay request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_replay".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_replay".to_string(),
+                },
+            )
+            .await;
+            let stdout = transport_api_types::ExecuteStreamFrame::Stdout {
+                frame_identity: test_runtime_frame_identity(2),
+                chunk_b64: "b25jZQ==".to_string(),
+            };
+            write_chunked_frame(&mut stream, &stdout).await;
+            write_chunked_frame(&mut stream, &stdout).await;
+            let event_identity = test_runtime_event_identity(1);
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Exit {
+                    frame_identity: test_runtime_frame_identity(3),
+                    terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                        &event_identity,
+                    ),
+                    event_identity,
+                    exit: 0,
+                    span_id: "spn_b21_replay".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                    process_telemetry: Default::default(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build replay client");
+        let result = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        )
+        .await
+        .expect("exact replay remains a production no-op");
+        assert_eq!(result.exit_code, 0);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect production replay journal")
+            .expect("production replay observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(3));
+        assert_eq!(observation.journal.len(), 3);
+        server.await.expect("join replay server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_production_error_frame_remains_nonterminal_until_exact_exit() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 Error socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind Error socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept Error stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read Error request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_error".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Error {
+                    frame_identity: test_runtime_frame_identity(2),
+                    message: "runtime reported an observation error".to_string(),
+                },
+            )
+            .await;
+            let event_identity = test_runtime_event_identity(1);
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Exit {
+                    frame_identity: test_runtime_frame_identity(3),
+                    terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                        &event_identity,
+                    ),
+                    event_identity,
+                    exit: 0,
+                    span_id: "spn_b21_error".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                    process_telemetry: Default::default(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build Error client");
+        let result = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        )
+        .await;
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("Error frame was not surfaced to the foreground waiter"),
+        };
+        assert!(error.to_string().contains("observation error"));
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect Error/Exit journal")
+            .expect("Error/Exit observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(3));
+        assert_eq!(observation.journal.len(), 3);
+        assert_eq!(
+            observation.terminal.map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        server.await.expect("join Error server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_restart_replay_resumes_after_exact_durable_cursor_and_closes_on_b0_exit() {
+        let (_root, receipt_registry, execution_supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-restart-replay");
+        let acceptances = receipt_registry
+            .persisted_acceptances_for_recovery()
+            .expect("enumerate exact accepted work for recovery");
+        let WorldWorkRecoveryAttemptV1::Recovered(recovered) = execution_supervisor
+            .recover_persisted_world_work(&acceptances)
+            .expect("recover nonterminal observation")
+        else {
+            panic!("stable test receipt snapshot cannot be stale")
+        };
+        let observation = recovered
+            .into_iter()
+            .find(|observation| observation.claim == claim)
+            .expect("recover exact seeded observation");
+        assert_eq!(observation.durable_frame_cursor, Some(1));
+
+        let socket_home = tempdir().expect("restart replay socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind restart replay socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept replay request");
+            let (header, body) = read_http_request(&mut stream)
+                .await
+                .expect("read replay request");
+            assert!(header
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .starts_with("POST /v1/execute/stream/replay "));
+            let request: transport_api_types::ExecuteStreamReplayRequestV1 =
+                serde_json::from_slice(&body).expect("decode replay request body");
+            assert_eq!(request.after_frame_sequence, 1);
+            assert_eq!(request.stream_id, "rts_shell_world_dispatch_fixture");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame(
+                    "rts_shell_world_dispatch_fixture",
+                    "task-run-restart-replay",
+                ),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build restart replay client");
+        assert_eq!(
+            reconcile_recovered_world_work_stream(&execution_supervisor, client, &observation,)
+                .await,
+            None
+        );
+        server.await.expect("join restart replay server");
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect replayed terminal")
+            .expect("replayed observation exists");
+        assert_eq!(terminal.durable_frame_cursor, Some(2));
+        assert!(terminal.interruption.is_none());
+        assert_eq!(terminal.terminal.map(|value| value.exit_code), Some(0));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_restart_eof_and_error_never_fabricate_terminal_truth() {
+        let (_root, receipt_registry, execution_supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-restart-interrupted");
+        let acceptances = receipt_registry
+            .persisted_acceptances_for_recovery()
+            .expect("enumerate interrupted recovery acceptance");
+        let WorldWorkRecoveryAttemptV1::Recovered(mut recovered) = execution_supervisor
+            .recover_persisted_world_work(&acceptances)
+            .expect("recover interrupted observation")
+        else {
+            panic!("stable interrupted test receipt snapshot cannot be stale")
+        };
+        let observation = recovered.pop().expect("one observation requires replay");
+
+        let socket_home = tempdir().expect("interrupted replay socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind interrupted replay socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener
+                .accept()
+                .await
+                .expect("accept interrupted replay request");
+            read_http_request(&mut stream)
+                .await
+                .expect("read interrupted replay request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Error {
+                    frame_identity: test_runtime_frame_identity(2),
+                    message: "producer ended without exact terminal".to_string(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build interrupted replay client");
+        let reason =
+            reconcile_recovered_world_work_stream(&execution_supervisor, client, &observation)
+                .await
+                .expect("missing exact terminal remains interrupted");
+        assert_eq!(
+            reason,
+            WorldWorkInterruptionReasonV1::ReplayEndedWithoutTerminal
+        );
+        execution_supervisor
+            .mark_interrupted(&observation.claim, reason)
+            .expect("persist interrupted recovery state");
+        server.await.expect("join interrupted replay server");
+        let interrupted = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect missing-terminal recovery")
+            .expect("interrupted observation exists");
+        assert_eq!(interrupted.durable_frame_cursor, Some(2));
+        assert_eq!(interrupted.terminal, None);
+        assert_eq!(
+            interrupted.interruption.map(|value| value.kind),
+            Some(WorldWorkInterruptionReasonV1::ReplayEndedWithoutTerminal)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
     const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str =
         "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 
@@ -6331,6 +8763,7 @@ mod tests {
                     binary_path: binary_path.display().to_string(),
                 },
             }),
+            acceptance_context: None,
         }
     }
 
@@ -13016,100 +15449,34 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_returns_authoritative_snapshot_without_mutation(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["inspect_world_worker"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        let session_before = store
-            .load_session("sess_dispatch")
-            .expect("load session before inspect")
-            .expect("authoritative session before inspect");
-        let participant_before = store
-            .load_participant("ash_member")
-            .expect("load participant before inspect")
-            .expect("retained participant before inspect");
-
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-47".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 2,
-            })
-            .expect("register active ephemeral task");
-
-        let outcome = dispatch_real_inspect_world_worker_request_with_request(
-            &store,
-            sample_ephemeral_inspect_world_dispatch_request("task-run-47"),
-        )
-        .await;
-
-        assert_eq!(outcome.request_id, "req_inspect_ephemeral");
-        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
-        assert_eq!(outcome.action, WorldDispatchActionV1::InspectWorldWorker);
-        assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
-        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
-        assert_eq!(outcome.target_participant_id, "task-run-47");
-        assert_eq!(outcome.target_backend_id, "cli:codex-world");
-        assert_eq!(outcome.world_id, "world-17");
-        assert_eq!(outcome.world_generation, 2);
+        let (_root, registry, supervisor, claim) = seed_b21_ephemeral_observation("task-run-47");
+        let authority =
+            b21_registry_authority_for_test(registry, supervisor, &claim.authority_store_id);
+        let before = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect before compatibility read");
+        let observation = authority
+            .resolve_active_ephemeral_observation(
+                &claim.orchestration_session_id,
+                &claim.caller_participant_id,
+                Some(&claim.target_backend_id),
+                &claim.world_id,
+                claim.world_generation,
+                "task-run-47",
+            )
+            .expect("resolve exact active task from receipt/supervisor truth");
+        assert_eq!(observation.claim, claim);
+        assert_eq!(observation.durable_frame_cursor, Some(1));
+        assert!(observation.terminal.is_none());
         assert_eq!(
-            outcome.snapshot.participant_state,
-            AgentRuntimeSessionState::Running
+            authority
+                .execution_supervisor
+                .inspect_observation_by_acceptance_id(&observation.claim.acceptance_record_id)
+                .expect("inspect after compatibility read"),
+            before,
+            "compatibility inspection must not mutate or rotate supervisor truth"
         );
-        assert_eq!(
-            outcome.snapshot.session_state,
-            OrchestrationSessionState::Active
-        );
-        assert_eq!(
-            outcome.snapshot.session_posture,
-            OrchestrationSessionPosture::ActiveAttached
-        );
-        assert!(outcome.snapshot.authoritative_live);
-        assert!(!outcome.snapshot.attention_required);
-        assert_eq!(outcome.snapshot.parent_participant_id, None);
-        assert_eq!(outcome.snapshot.resumed_from_participant_id, None);
-        assert!(
-            outcome.summary.contains("authoritative active snapshot"),
-            "ephemeral inspect should stay explicit about active snapshot truth: {}",
-            outcome.summary
-        );
-        assert!(
-            outcome
-                .summary
-                .contains("without mutating in-flight execution state"),
-            "ephemeral inspect should stay explicit about non-mutation: {}",
-            outcome.summary
-        );
-        let adapter_outcome = normalize_inspect_world_worker_outcome_v1(&outcome)
-            .expect("normalize ephemeral inspect");
-        assert_eq!(adapter_outcome.task_run_id.as_deref(), Some("task-run-47"));
-        assert_eq!(adapter_outcome.participant_id, None);
-        assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
-
-        let session_after = store
-            .load_session("sess_dispatch")
-            .expect("load session after inspect")
-            .expect("authoritative session after inspect");
-        let participant_after = store
-            .load_participant("ash_member")
-            .expect("load participant after inspect")
-            .expect("retained participant after inspect");
-
-        assert_eq!(session_after.session, session_before.session);
-        assert_eq!(session_after.participants, session_before.participants);
-        assert_eq!(participant_after, participant_before);
     }
 
     #[cfg(target_os = "linux")]
@@ -13117,55 +15484,30 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_resolves_exact_session_binding_when_task_run_id_is_reused(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["inspect_world_worker"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        let _other_guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_other".to_string(),
-                task_run_id: "task-run-shared".to_string(),
-                caller_participant_id: "orch_other".to_string(),
-                target_backend_id: "cli:other_world".to_string(),
-                world_id: "world-99".to_string(),
-                world_generation: 99,
-            })
-            .expect("register unrelated active ephemeral task");
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-shared".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 2,
-            })
-            .expect("register authoritative active ephemeral task");
-
-        let outcome = dispatch_real_inspect_world_worker_request_with_request(
-            &store,
-            sample_ephemeral_inspect_world_dispatch_request("task-run-shared"),
-        )
-        .await;
-
-        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
-        assert_eq!(outcome.target_participant_id, "task-run-shared");
-        assert_eq!(outcome.target_backend_id, "cli:codex-world");
-        assert_eq!(outcome.world_id, "world-17");
-        assert_eq!(outcome.world_generation, 2);
-        assert_eq!(
-            outcome.snapshot.participant_state,
-            AgentRuntimeSessionState::Running
-        );
+        let (_root, registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-shared");
+        let authority =
+            b21_registry_authority_for_test(registry, supervisor, &claim.authority_store_id);
+        assert!(authority
+            .resolve_active_ephemeral_observation(
+                "sess_other",
+                &claim.caller_participant_id,
+                Some(&claim.target_backend_id),
+                &claim.world_id,
+                claim.world_generation,
+                "task-run-shared",
+            )
+            .is_err());
+        assert!(authority
+            .resolve_active_ephemeral_observation(
+                &claim.orchestration_session_id,
+                &claim.caller_participant_id,
+                Some(&claim.target_backend_id),
+                &claim.world_id,
+                claim.world_generation,
+                "task-run-shared",
+            )
+            .is_ok());
     }
 
     #[cfg(target_os = "linux")]
@@ -13173,29 +15515,27 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_unknown_task_run_id()
     {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["inspect_world_worker"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_ephemeral_inspect_world_dispatch_request("task-run-missing"),
-        )
-        .await
-        .expect_err("unknown active task must fail closed");
+        let (_root, registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-present");
+        let authority =
+            b21_registry_authority_for_test(registry, supervisor, &claim.authority_store_id);
+        let err = authority
+            .resolve_active_ephemeral_observation(
+                &claim.orchestration_session_id,
+                &claim.caller_participant_id,
+                Some(&claim.target_backend_id),
+                &claim.world_id,
+                claim.world_generation,
+                "task-run-missing",
+            )
+            .expect_err("unknown active task must fail closed");
 
         assert_eq!(
             err.to_string(),
-            "active_task_not_found: orchestration session sess_dispatch has no exact active ephemeral task task-run-missing"
+            format!(
+                "active_task_not_found: orchestration session {} has no exact active ephemeral task task-run-missing",
+                claim.orchestration_session_id
+            )
         );
     }
 
@@ -13203,80 +15543,41 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_stale_linkage() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["inspect_world_worker"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-stale".to_string(),
-                caller_participant_id: "orch_other".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 2,
-            })
-            .expect("register active ephemeral task");
-
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_ephemeral_inspect_world_dispatch_request("task-run-stale"),
-        )
-        .await
-        .expect_err("stale linkage must fail closed");
-
-        assert_eq!(
-            err.to_string(),
-            "stale_linkage: orchestration session sess_dispatch active ephemeral task task-run-stale is not linked to authoritative orchestrator orch_dispatch"
-        );
+        let (_root, registry, supervisor, claim) = seed_b21_ephemeral_observation("task-run-stale");
+        let authority =
+            b21_registry_authority_for_test(registry, supervisor, &claim.authority_store_id);
+        let err = authority
+            .resolve_active_ephemeral_observation(
+                &claim.orchestration_session_id,
+                "orch_other",
+                Some(&claim.target_backend_id),
+                &claim.world_id,
+                claim.world_generation,
+                "task-run-stale",
+            )
+            .expect_err("stale linkage must fail closed");
+        assert!(err.to_string().starts_with("stale_linkage:"));
     }
 
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_backend_mismatch() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["inspect_world_worker"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-backend".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:other_world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 2,
-            })
-            .expect("register active ephemeral task");
-
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_ephemeral_inspect_world_dispatch_request("task-run-backend"),
-        )
-        .await
-        .expect_err("backend drift must fail closed");
-
-        assert_eq!(
-            err.to_string(),
-            "backend_mismatch: orchestration session sess_dispatch active ephemeral task task-run-backend backend is cli:other_world not cli:codex-world"
-        );
+        let (_root, registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-backend");
+        let authority =
+            b21_registry_authority_for_test(registry, supervisor, &claim.authority_store_id);
+        let err = authority
+            .resolve_active_ephemeral_observation(
+                &claim.orchestration_session_id,
+                &claim.caller_participant_id,
+                Some("cli:other_world"),
+                &claim.world_id,
+                claim.world_generation,
+                "task-run-backend",
+            )
+            .expect_err("backend drift must fail closed");
+        assert!(err.to_string().starts_with("backend_mismatch:"));
     }
 
     #[cfg(target_os = "linux")]
@@ -13284,47 +15585,38 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_world_binding_mismatch(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["inspect_world_worker"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-binding".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 3,
-            })
-            .expect("register active ephemeral task");
-
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_ephemeral_inspect_world_dispatch_request("task-run-binding"),
-        )
-        .await
-        .expect_err("world binding drift must fail closed");
-
-        assert_eq!(
-            err.to_string(),
-            "world_binding_mismatch: orchestration session sess_dispatch active ephemeral task task-run-binding no longer matches the authoritative world binding"
-        );
+        let (_root, registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-binding");
+        let authority =
+            b21_registry_authority_for_test(registry, supervisor, &claim.authority_store_id);
+        let err = authority
+            .resolve_active_ephemeral_observation(
+                &claim.orchestration_session_id,
+                &claim.caller_participant_id,
+                Some(&claim.target_backend_id),
+                "world-other",
+                claim.world_generation,
+                "task-run-binding",
+            )
+            .expect_err("world binding drift must fail closed");
+        assert!(err.to_string().starts_with("world_binding_mismatch:"));
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial]
     fn register_active_ephemeral_world_task_rejects_duplicate_task_run_id() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                    .join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe legacy-writer fixture parent");
+        let substrate_home =
+            tempfile::tempdir_in(safe_parent).expect("safe substrate home tempdir");
+        fs::set_permissions(substrate_home.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure legacy-writer fixture root");
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         let _guard = store
@@ -13359,43 +15651,34 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_teardown_removes_routability() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["inspect_world_worker"],
-            &["ephemeral"],
+        let (_root, registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-terminal");
+        let authority = b21_registry_authority_for_test(
+            registry,
+            supervisor.clone(),
+            &claim.authority_store_id,
         );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        {
-            let _guard = store
-                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                    orchestration_session_id: "sess_dispatch".to_string(),
-                    task_run_id: "task-run-terminal".to_string(),
-                    caller_participant_id: "orch_dispatch".to_string(),
-                    target_backend_id: "cli:codex-world".to_string(),
-                    world_id: "world-17".to_string(),
-                    world_generation: 2,
-                })
-                .expect("register active ephemeral task");
-        }
-
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_ephemeral_inspect_world_dispatch_request("task-run-terminal"),
-        )
-        .await
-        .expect_err("terminal active task teardown must remove routability");
-
-        assert_eq!(
-            err.to_string(),
-            "active_task_not_found: orchestration session sess_dispatch has no exact active ephemeral task task-run-terminal"
-        );
+        let terminal = b21_test_exit_frame("rts_shell_world_dispatch_fixture", "task-run-terminal");
+        supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical terminal"),
+            )
+            .expect("journal exact terminal");
+        let err = authority
+            .resolve_active_ephemeral_observation(
+                &claim.orchestration_session_id,
+                &claim.caller_participant_id,
+                Some(&claim.target_backend_id),
+                &claim.world_id,
+                claim.world_generation,
+                "task-run-terminal",
+            )
+            .expect_err("terminal active task must not remain routable");
+        assert!(err.to_string().starts_with("active_task_not_found:"));
     }
 
     #[cfg(target_os = "linux")]
@@ -13628,136 +15911,227 @@ agents:
     #[serial]
     async fn dispatch_contract_cancel_world_work_ephemeral_routes_exact_active_task_over_execute_cancel(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["cancel_world_work"],
-            &["ephemeral"],
+        let (_root, _registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-cancel-live");
+        let socket_home = tempdir().expect("cancel socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind cancel socket");
+        let (cancel_seen_tx, cancel_seen_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept cancel request");
+            let (header, body) = read_http_request(&mut stream)
+                .await
+                .expect("read cancel request");
+            assert!(header
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .starts_with("POST /v1/execute/cancel "));
+            let parsed: ExecuteCancelRequestV1 =
+                serde_json::from_slice(&body).expect("decode exact cancel request");
+            assert_eq!(parsed.span_id, "task-run-cancel-live");
+            assert_eq!(parsed.sig, "TERM");
+            write_http_json(
+                &mut stream,
+                "200 OK",
+                &serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                    schema_version: 1,
+                    delivered: true,
+                })
+                .expect("encode cancel response"),
+            )
+            .await;
+            cancel_seen_tx.send(()).expect("signal cancel delivery");
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let waiter_supervisor = supervisor.clone();
+        let acceptance_record_id = claim.acceptance_record_id.clone();
+        let waiter = tokio::spawn(async move {
+            wait_for_supervised_ephemeral_terminal_truth(
+                &waiter_supervisor,
+                &acceptance_record_id,
+                "sess_dispatch",
+                "task-run-cancel-live",
+            )
+            .await
+        });
+        let delivered = connect_world_agent_client()
+            .expect("connect exact cancel client")
+            .cancel_execute(ExecuteCancelRequestV1 {
+                span_id: "task-run-cancel-live".to_string(),
+                sig: "TERM".to_string(),
+            })
+            .await
+            .expect("deliver exact execute cancel");
+        assert!(delivered.delivered);
+        cancel_seen_rx.await.expect("observe exact cancel delivery");
+        tokio::task::yield_now().await;
+        assert!(
+            !waiter.is_finished(),
+            "cancel remains blocking until exact terminal"
         );
 
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-cancel-live".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 2,
-            })
-            .expect("register active ephemeral task");
-
-        let socket_home = tempdir().expect("socket tempdir");
+        let mut terminal =
+            b21_test_exit_frame("rts_shell_world_dispatch_fixture", "task-run-cancel-live");
+        let transport_api_types::ExecuteStreamFrame::Exit { exit, .. } = &mut terminal else {
+            unreachable!("cancel terminal fixture is Exit")
+        };
+        *exit = 130;
+        supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical cancel terminal"),
+            )
+            .expect("journal exact cancel terminal");
+        assert_eq!(
+            waiter
+                .await
+                .expect("join cancel waiter")
+                .expect("resolve cancel terminal"),
+            WorldTaskTerminalStateV1::Cancelled
+        );
+        server.await.expect("join exact cancel server");
+    }
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_cancel_world_work_ephemeral_retry_reuses_shared_terminal_truth() {
+        let (_root, _registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-cancel-shared");
+        let socket_home = tempdir().expect("retry cancel socket tempdir");
         let socket_path = socket_home.path().join("world.sock");
-        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
-        let (cancel_seen_tx, cancel_seen_rx) = tokio::sync::oneshot::channel();
-        let mut cancel_seen_tx = Some(cancel_seen_tx);
+        let listener = UnixListener::bind(&socket_path).expect("bind retry cancel socket");
         let server = tokio::spawn(async move {
-            while let Ok((mut stream, _addr)) = listener.accept().await {
-                let Some((header, body)) = read_http_request(&mut stream).await else {
-                    continue;
-                };
-                let first_line = header.lines().next().unwrap_or("");
-
-                if first_line.starts_with("GET /v1/capabilities ") {
-                    write_http_json(
-                        &mut stream,
-                        "200 OK",
-                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
-                    )
-                    .await;
-                    continue;
-                }
-
-                if first_line.starts_with("POST /v1/execute/cancel ") {
-                    let parsed: ExecuteCancelRequestV1 =
-                        serde_json::from_slice(&body).expect("execute cancel request");
-                    assert_eq!(parsed.span_id, "task-run-cancel-live");
-                    assert_eq!(parsed.sig, "TERM");
-                    let body =
-                        serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
-                            schema_version: 1,
-                            delivered: true,
-                        })
-                        .expect("serialize execute cancel response");
-                    write_http_json(&mut stream, "200 OK", &body).await;
-                    if let Some(cancel_seen_tx) = cancel_seen_tx.take() {
-                        let _ = cancel_seen_tx.send(());
-                    }
-                    continue;
-                }
-
-                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            for _ in 0..2 {
+                let (mut stream, _addr) = listener.accept().await.expect("accept retry cancel");
+                let (header, body) = read_http_request(&mut stream)
+                    .await
+                    .expect("read retry cancel request");
+                assert!(header
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .starts_with("POST /v1/execute/cancel "));
+                let parsed: ExecuteCancelRequestV1 =
+                    serde_json::from_slice(&body).expect("decode retry cancel request");
+                assert_eq!(parsed.span_id, "task-run-cancel-shared");
+                write_http_json(
+                    &mut stream,
+                    "200 OK",
+                    &serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                        schema_version: 1,
+                        delivered: true,
+                    })
+                    .expect("encode retry cancel response"),
+                )
+                .await;
             }
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        for _ in 0..2 {
+            let delivered = connect_world_agent_client()
+                .expect("connect retry cancel client")
+                .cancel_execute(ExecuteCancelRequestV1 {
+                    span_id: "task-run-cancel-shared".to_string(),
+                    sig: "TERM".to_string(),
+                })
+                .await
+                .expect("deliver retry execute cancel");
+            assert!(delivered.delivered);
+        }
 
-        let prepared = prepare_orchestrator_world_dispatch(
-            &store,
-            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-live"),
-        )
-        .expect("prepare active cancel dispatch request");
-        let dispatch_task = tokio::spawn(dispatch_prepared_orchestrator_world_request(prepared));
-        tokio::time::timeout(Duration::from_secs(3), cancel_seen_rx)
-            .await
-            .expect("timed out waiting for execute cancel delivery")
-            .expect("execute cancel delivery signal");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        assert!(
-            !dispatch_task.is_finished(),
-            "ephemeral cancel must wait for terminal truth before returning cancelled"
-        );
-        publish_active_ephemeral_terminal_truth(
-            "sess_dispatch",
-            "task-run-cancel-live",
-            WorldTaskTerminalStateV1::Cancelled,
-        );
-        let outcome = dispatch_task
-            .await
-            .expect("dispatch join should succeed")
-            .expect("dispatch prepared active cancel request");
+        let mut waiters = Vec::new();
+        for _ in 0..2 {
+            let waiter_supervisor = supervisor.clone();
+            let acceptance_record_id = claim.acceptance_record_id.clone();
+            waiters.push(tokio::spawn(async move {
+                wait_for_supervised_ephemeral_terminal_truth(
+                    &waiter_supervisor,
+                    &acceptance_record_id,
+                    "sess_dispatch",
+                    "task-run-cancel-shared",
+                )
+                .await
+            }));
+        }
+        tokio::task::yield_now().await;
+        assert!(waiters.iter().all(|waiter| !waiter.is_finished()));
 
-        let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
-            panic!("expected cancel_world_work outcome envelope");
+        let mut terminal =
+            b21_test_exit_frame("rts_shell_world_dispatch_fixture", "task-run-cancel-shared");
+        let transport_api_types::ExecuteStreamFrame::Exit { exit, .. } = &mut terminal else {
+            unreachable!("retry cancel terminal fixture is Exit")
         };
-        assert_eq!(outcome.request_id, "req_cancel_ephemeral");
-        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
-        assert_eq!(outcome.action, WorldDispatchActionV1::CancelWorldWork);
-        assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
-        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
-        assert_eq!(outcome.target_participant_id, "task-run-cancel-live");
-        assert_eq!(outcome.target_backend_id, "cli:codex-world");
-        assert_eq!(outcome.world_id, "world-17");
-        assert_eq!(outcome.world_generation, 2);
-        assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
-        assert_eq!(outcome.closeout.participant_state, None);
-        assert_eq!(outcome.closeout.session_state, None);
-        assert!(
-            outcome.summary.contains("/v1/execute/cancel"),
-            "ephemeral cancel summary should stay explicit about the execute-cancel seam: {}",
-            outcome.summary
-        );
-        assert!(
-            outcome
-                .summary
-                .contains("without reopening retained worker lifecycle state"),
-            "ephemeral cancel summary should stay explicit about non-retained closeout: {}",
-            outcome.summary
-        );
-        let adapter_outcome =
-            normalize_cancel_world_work_outcome_v1(&outcome).expect("normalize ephemeral cancel");
-        assert_eq!(
-            adapter_outcome.task_run_id.as_deref(),
-            Some("task-run-cancel-live")
-        );
-        assert_eq!(adapter_outcome.participant_id, None);
-        assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
-
-        server.abort();
+        *exit = 130;
+        supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical shared cancel terminal"),
+            )
+            .expect("journal shared cancel terminal");
+        for waiter in waiters {
+            assert_eq!(
+                waiter
+                    .await
+                    .expect("join retry cancel waiter")
+                    .expect("resolve shared cancel terminal"),
+                WorldTaskTerminalStateV1::Cancelled
+            );
+        }
+        server.await.expect("join retry cancel server");
+    }
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn dispatch_contract_cancel_world_work_ephemeral_fails_closed_when_execute_cancel_is_not_delivered(
+    ) {
+        let (_root, _registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-cancel-race");
+        let socket_home = tempdir().expect("not-delivered cancel socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind not-delivered cancel socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener
+                .accept()
+                .await
+                .expect("accept not-delivered cancel");
+            read_http_request(&mut stream)
+                .await
+                .expect("read not-delivered cancel request");
+            write_http_json(
+                &mut stream,
+                "200 OK",
+                &serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
+                    schema_version: 1,
+                    delivered: false,
+                })
+                .expect("encode not-delivered response"),
+            )
+            .await;
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let delivered = connect_world_agent_client()
+            .expect("connect not-delivered cancel client")
+            .cancel_execute(ExecuteCancelRequestV1 {
+                span_id: "task-run-cancel-race".to_string(),
+                sig: "TERM".to_string(),
+            })
+            .await
+            .expect("receive not-delivered cancel response");
+        assert!(!delivered.delivered);
+        let observation = supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect after not-delivered cancel")
+            .expect("accepted observation survives cancel race");
+        assert!(observation.terminal.is_none());
+        assert_eq!(observation.durable_frame_cursor, Some(1));
+        server.await.expect("join not-delivered cancel server");
     }
 
     #[cfg(target_os = "linux")]
@@ -13765,69 +16139,73 @@ agents:
     #[serial]
     async fn active_ephemeral_terminal_wait_allows_multiple_waiters_to_observe_same_terminal_truth()
     {
-        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-shared");
-        register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-shared");
-        register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-shared");
-
-        let waiter_one = tokio::spawn(wait_for_active_ephemeral_terminal_truth(
-            "sess_dispatch",
-            "task-run-shared",
-        ));
-        let waiter_two = tokio::spawn(wait_for_active_ephemeral_terminal_truth(
-            "sess_dispatch",
-            "task-run-shared",
-        ));
-
-        tokio::task::yield_now().await;
-        publish_active_ephemeral_terminal_truth(
-            "sess_dispatch",
-            "task-run-shared",
-            WorldTaskTerminalStateV1::Cancelled,
-        );
-
-        assert_eq!(
-            waiter_one
+        let (_root, _registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-shared");
+        let mut waiters = Vec::new();
+        for _ in 0..2 {
+            let waiter_supervisor = supervisor.clone();
+            let acceptance_record_id = claim.acceptance_record_id.clone();
+            waiters.push(tokio::spawn(async move {
+                wait_for_supervised_ephemeral_terminal_truth(
+                    &waiter_supervisor,
+                    &acceptance_record_id,
+                    "sess_dispatch",
+                    "task-run-shared",
+                )
                 .await
-                .expect("waiter one should join")
-                .expect("waiter one result"),
-            WorldTaskTerminalStateV1::Cancelled
-        );
-        assert_eq!(
-            waiter_two
-                .await
-                .expect("waiter two should join")
-                .expect("waiter two result"),
-            WorldTaskTerminalStateV1::Cancelled
-        );
-
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert!(
-            !tracker.by_task.contains_key(&key),
-            "all waiters should release the shared terminal wait entry"
-        );
+            }));
+        }
+        let mut terminal =
+            b21_test_exit_frame("rts_shell_world_dispatch_fixture", "task-run-shared");
+        let transport_api_types::ExecuteStreamFrame::Exit { exit, .. } = &mut terminal else {
+            unreachable!("shared terminal fixture is Exit")
+        };
+        *exit = 130;
+        supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical shared terminal"),
+            )
+            .expect("journal shared terminal");
+        for waiter in waiters {
+            assert_eq!(
+                waiter
+                    .await
+                    .expect("join shared waiter")
+                    .expect("resolve shared terminal"),
+                WorldTaskTerminalStateV1::Cancelled
+            );
+        }
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
+    #[tokio::test(flavor = "current_thread")]
     #[serial]
-    fn active_ephemeral_terminal_wait_registration_guard_releases_non_happy_path_registrations() {
-        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-cleanup");
-        {
-            let _guard = ActiveEphemeralTerminalWaitRegistrationGuard::new(
+    async fn active_ephemeral_terminal_wait_registration_guard_releases_non_happy_path_registrations(
+    ) {
+        let (_root, _registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-cleanup");
+        let waiter_supervisor = supervisor.clone();
+        let acceptance_record_id = claim.acceptance_record_id.clone();
+        let waiter = tokio::spawn(async move {
+            wait_for_supervised_ephemeral_terminal_truth(
+                &waiter_supervisor,
+                &acceptance_record_id,
                 "sess_dispatch",
                 "task-run-cleanup",
-            );
-        }
-
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert!(
-            !tracker.by_task.contains_key(&key),
-            "dropping the registration guard must release non-happy-path wait registrations"
-        );
+            )
+            .await
+        });
+        tokio::task::yield_now().await;
+        waiter.abort();
+        assert!(waiter.await.expect_err("waiter is aborted").is_cancelled());
+        assert!(supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect after waiter drop")
+            .is_some());
     }
 
     #[cfg(target_os = "linux")]
@@ -13835,237 +16213,17 @@ agents:
     #[serial]
     async fn active_ephemeral_terminal_truth_guard_publishes_failed_terminal_truth_on_drop_after_start(
     ) {
-        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-stream-failure");
-        register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-stream-failure");
-        {
-            let mut guard = ActiveEphemeralTerminalTruthGuard::new("sess_dispatch");
-            guard.register_task_run_id("task-run-stream-failure".to_string());
-        }
-
-        assert_eq!(
-            wait_for_active_ephemeral_terminal_truth("sess_dispatch", "task-run-stream-failure")
-                .await
-                .expect("terminal truth should be published on drop"),
-            WorldTaskTerminalStateV1::Failed
-        );
-
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let (_root, _registry, supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-stream-failure");
+        let observation = supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect interrupted observation")
+            .expect("accepted observation survives local drop");
+        assert_eq!(observation.durable_frame_cursor, Some(1));
         assert!(
-            !tracker.by_task.contains_key(&key),
-            "published failure truth must still release the wait registration after consumption"
+            observation.terminal.is_none(),
+            "local failure/drop must not fabricate terminal truth"
         );
-    }
-
-    #[cfg(target_os = "linux")]
-    #[tokio::test(flavor = "current_thread")]
-    #[serial]
-    async fn dispatch_contract_cancel_world_work_ephemeral_retry_reuses_shared_terminal_truth() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["cancel_world_work"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-cancel-shared".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 2,
-            })
-            .expect("register active ephemeral task");
-
-        let socket_home = tempdir().expect("socket tempdir");
-        let socket_path = socket_home.path().join("world.sock");
-        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
-        let (cancel_seen_tx, mut cancel_seen_rx) = tokio::sync::mpsc::unbounded_channel();
-        let server = tokio::spawn(async move {
-            while let Ok((mut stream, _addr)) = listener.accept().await {
-                let Some((header, body)) = read_http_request(&mut stream).await else {
-                    continue;
-                };
-                let first_line = header.lines().next().unwrap_or("");
-
-                if first_line.starts_with("GET /v1/capabilities ") {
-                    write_http_json(
-                        &mut stream,
-                        "200 OK",
-                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
-                    )
-                    .await;
-                    continue;
-                }
-
-                if first_line.starts_with("POST /v1/execute/cancel ") {
-                    let parsed: ExecuteCancelRequestV1 =
-                        serde_json::from_slice(&body).expect("execute cancel request");
-                    assert_eq!(parsed.span_id, "task-run-cancel-shared");
-                    assert_eq!(parsed.sig, "TERM");
-                    let body =
-                        serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
-                            schema_version: 1,
-                            delivered: true,
-                        })
-                        .expect("serialize execute cancel response");
-                    write_http_json(&mut stream, "200 OK", &body).await;
-                    let _ = cancel_seen_tx.send(parsed.span_id);
-                    continue;
-                }
-
-                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
-            }
-        });
-        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-
-        let store_for_first = store.clone();
-        let first_cancel = tokio::spawn(async move {
-            dispatch_orchestrator_world_request(
-                &store_for_first,
-                sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared"),
-            )
-            .await
-        });
-
-        cancel_seen_rx
-            .recv()
-            .await
-            .expect("first cancel should reach execute-cancel");
-
-        let mut retry_request =
-            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared");
-        retry_request.request_id = Some("req_cancel_ephemeral_retry".to_string());
-        retry_request.idempotency_key = Some("idem_cancel_ephemeral_retry".to_string());
-        let store_for_retry = store.clone();
-        let retry_cancel = tokio::spawn(async move {
-            dispatch_orchestrator_world_request(&store_for_retry, retry_request).await
-        });
-
-        cancel_seen_rx
-            .recv()
-            .await
-            .expect("retry cancel should reuse execute-cancel while the task is still live");
-
-        publish_active_ephemeral_terminal_truth(
-            "sess_dispatch",
-            "task-run-cancel-shared",
-            WorldTaskTerminalStateV1::Cancelled,
-        );
-
-        for dispatch_task in [first_cancel, retry_cancel] {
-            let outcome = dispatch_task
-                .await
-                .expect("cancel dispatch join should succeed")
-                .expect("cancel dispatch should observe shared terminal truth");
-            let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
-                panic!("expected cancel_world_work outcome envelope");
-            };
-            assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
-            assert_eq!(outcome.target_participant_id, "task-run-cancel-shared");
-        }
-
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert!(
-            !tracker
-                .by_task
-                .contains_key(&active_ephemeral_terminal_wait_key(
-                    "sess_dispatch",
-                    "task-run-cancel-shared",
-                )),
-            "shared cancel closeout tracking must release after both waiters finish"
-        );
-
-        server.abort();
-    }
-
-    #[cfg(target_os = "linux")]
-    #[tokio::test(flavor = "current_thread")]
-    #[serial]
-    async fn dispatch_contract_cancel_world_work_ephemeral_fails_closed_when_execute_cancel_is_not_delivered(
-    ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["cancel_world_work"],
-            &["ephemeral"],
-        );
-
-        let workspace_root = tempdir().expect("workspace root tempdir");
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-cancel-race".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
-                world_generation: 2,
-            })
-            .expect("register active ephemeral task");
-
-        let socket_home = tempdir().expect("socket tempdir");
-        let socket_path = socket_home.path().join("world.sock");
-        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
-        let server = tokio::spawn(async move {
-            while let Ok((mut stream, _addr)) = listener.accept().await {
-                let Some((header, _body)) = read_http_request(&mut stream).await else {
-                    continue;
-                };
-                let first_line = header.lines().next().unwrap_or("");
-
-                if first_line.starts_with("GET /v1/capabilities ") {
-                    write_http_json(
-                        &mut stream,
-                        "200 OK",
-                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
-                    )
-                    .await;
-                    continue;
-                }
-
-                if first_line.starts_with("POST /v1/execute/cancel ") {
-                    let body =
-                        serde_json::to_string(&transport_api_types::ExecuteCancelResponseV1 {
-                            schema_version: 1,
-                            delivered: false,
-                        })
-                        .expect("serialize execute cancel response");
-                    write_http_json(&mut stream, "200 OK", &body).await;
-                    continue;
-                }
-
-                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
-            }
-        });
-        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-race"),
-        )
-        .await
-        .expect_err("late active cancel must fail closed");
-
-        assert_eq!(
-            err.to_string(),
-            "target_already_terminal: orchestration session sess_dispatch active ephemeral task task-run-cancel-race is already terminal or no longer live"
-        );
-
-        server.abort();
     }
 
     #[cfg(target_os = "linux")]

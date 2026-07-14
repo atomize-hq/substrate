@@ -449,6 +449,7 @@ impl MacLimaBackend {
             world_network: Some(world_network),
             world_fs_mode: Some(world_state.fs_mode),
             member_dispatch: req.member_dispatch.as_ref().map(convert_member_dispatch),
+            acceptance_context: None,
         })
     }
 
