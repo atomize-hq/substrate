@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** transition series `2937dbe5a` + `91f55f6bf`, fresh independent built-in `default` `REVIEW CLEAN`
+**Verified against:** packet-doc series `8734f4dbe` + `334e7c6ac`, fresh independent built-in `default` `REVIEW CLEAN`
 
-**Current phase:** `R6-GAP-WPB-EMPTY-AUTHORITY` (**ACTIVE**; active packet: none; docs-only packet-creation gate)
+**Current phase:** `R6-GAP-WPB-EMPTY-AUTHORITY` (**ACTIVE**; active packet: `R6-GAP-WPB-EMPTY-AUTHORITY`; exact `CTX-R6-15` witness reconfirmation gate)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Invoke Prompt 1 with `PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY` and `ACTIVE_PACKET: none`; atomically create and freshly review the three canonical packet docs recorded as non-link `TO CREATE` paths in the named-gap subledger; make no successor implementation change first. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | After the separate authority-only reconciliation is committed and fresh-review-clean, reconfirm exact `CTX-R6-15` with `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_makes_no_claim_for_path_action_without_authority -- --exact --nocapture`; make no production or no-code receipt change first; keep `R6-REPLAY` `BLOCKED`. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
@@ -49,7 +49,7 @@ themselves prove the broader R6 charter closed.
 | `dead_end_thrash` | `CTX-R6-04` proven focused; `R6-GAP-DET-OPAQUE-PARENT` complete after production series through `d13f0a71c` received fresh `REVIEW CLEAN` | TBD at `R6-CLOSE`: **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with justification**. |
 | `semantic_goal_drift` | Cutover complete by design | **Cutover complete**. Revisit only if a new failing behavioral witness appears. |
 | `truth_grounding_gap` | `CTX-R6-12` and the bounded cross-checkpoint provenance controls pass; `R6-GAP-TGG-TRUTH-PATH-ACTION` complete after final proof-receipt series `fee9c2b16` + `6674a8316` received fresh `REVIEW CLEAN` | TBD at `R6-CLOSE`: one of the four exact terminal categories. |
-| `wrong_plan_branch` | Preserved `CTX-R6-15` red; review-clean transition series `2937dbe5a` + `91f55f6bf` activates `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate, with active packet `none` | TBD: one of the four exact terminal categories after its named gap is resolved. |
+| `wrong_plan_branch` | Preserved `CTX-R6-15` red; packet-doc series `8734f4dbe` + `334e7c6ac` is fresh independent built-in `default` `REVIEW CLEAN`; `R6-GAP-WPB-EMPTY-AUTHORITY` remains active with active packet `R6-GAP-WPB-EMPTY-AUTHORITY` | TBD: one of the four exact terminal categories after its named gap is resolved. |
 | `scoring/mod.rs` | Dispatcher infrastructure | **Fit-for-purpose exception** as routing infrastructure; not a fifth scorer. |
 
 ## R6-C.0A Remediation Result

@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE AT DOCS-ONLY GATE** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE WITH PACKET DOCS REVIEW CLEAN** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -10,9 +10,11 @@ preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, r
 The second route is complete after final proof-receipt series `fee9c2b16` + `6674a8316` received
 fresh independent built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf`
 also received fresh independent built-in `default` `REVIEW CLEAN`, completing the second route and
-activating only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate with active packet
-`none`. Prompt 1 packet creation is now eligible; no successor implementation, replay, phase-close,
-or R7/R8 work is authorized first.
+activating only `R6-GAP-WPB-EMPTY-AUTHORITY`. Its packet-doc series `8734f4dbe` + `334e7c6ac`
+received fresh independent built-in `default` `REVIEW CLEAN`; active packet is
+`R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate authority-only reconciliation is committed and
+fresh-review-clean, exact `CTX-R6-15` witness reconfirmation is the sole next execution action; no
+production/no-code receipt, replay, phase-close, or R7/R8 work is authorized first.
 
 ## Required Staged Commit Gate
 
@@ -418,9 +420,12 @@ before that reconciled transition is committed and fresh-review-clean.
     at `59092df2a` and ledger reconciliation at `beed76446`; `R6-GAP-TGG-TRUTH-PATH-ACTION`
     completed its packet-docs gate at `03754a2de` and ledger reconciliation at `a5380c04e`; all four
     gates received fresh `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` then received
-    fresh independent built-in `default` `REVIEW CLEAN`. This generic task remains open because active
-    successor `R6-GAP-WPB-EMPTY-AUTHORITY` has not created its docs; its exact three paths remain
-    non-link `TO CREATE` entries, and Prompt 1 packet creation is the sole next eligible action.
+    fresh independent built-in `default` `REVIEW CLEAN`. Active successor
+    `R6-GAP-WPB-EMPTY-AUTHORITY` then landed packet-doc series `8734f4dbe` + `334e7c6ac`, which
+    received fresh independent built-in `default` `REVIEW CLEAN`. This generic task remains open only
+    because the required packet-gate authority reconciliation is the current uncommitted candidate;
+    exact `CTX-R6-15` witness reconfirmation remains blocked until that candidate is committed and
+    fresh-review-clean.
 
 - [ ] **R6-C.1.5.2 — Execute the review-clean active gap as one distinct phase.**
   - Prerequisite: R6-C.1.5.1 is review-clean for this exact named gap; its SPEC/PLAN/TASKS now exist; the

@@ -1,6 +1,6 @@
 # R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE AT DOCS-ONLY GATE** on 2026-07-14. Transition series `2937dbe5a` + `91f55f6bf` received fresh independent built-in `default` `REVIEW CLEAN`.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-TGG-TRUTH-PATH-ACTION COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY ACTIVE WITH PACKET DOCS REVIEW CLEAN** on 2026-07-14. Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`; active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`, and exact `CTX-R6-15` witness reconfirmation is the sole next execution action after the separate authority-only reconciliation is committed and fresh-review-clean.
 All synthetic controls are complete in the TASKS ledger. The first two preserved reds, `CTX-R6-04`
 and `CTX-R6-12`, and their named gap phases are complete; only `CTX-R6-15` remains open through
 `R6-GAP-WPB-EMPTY-AUTHORITY`.

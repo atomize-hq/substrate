@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate)**
+Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: `R6-GAP-WPB-EMPTY-AUTHORITY`; exact `CTX-R6-15` witness reconfirmation gate)**
 
 ## Dependency Order
 
@@ -23,12 +23,12 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs
    `R6-GAP-DET-OPAQUE-PARENT`, landed its bounded scorer fix and focused/family/checkpoint proof.
 6. **COMPLETE through final proof-receipt series `fee9c2b16` + `6674a8316`, fresh independent
    `REVIEW CLEAN`:** `R6-GAP-TGG-TRUTH-PATH-ACTION` landed its bounded Option-A fix and proof.
-7. **ACTIVE / DOCS-ONLY PACKET-CREATION GATE:** transition series `2937dbe5a` + `91f55f6bf`
-   received fresh independent built-in `default` `REVIEW CLEAN`. Invoke Prompt 1 with
-   `PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY` and `ACTIVE_PACKET: none`, then atomically create and
-   freshly review only the three canonical packet docs recorded as non-link `TO CREATE` paths in the
-   named-gap subledger. Do not begin successor production/no-code proof before that docs gate is
-   review-clean.
+7. **ACTIVE / PACKET DOCS REVIEW CLEAN:** transition series `2937dbe5a` + `91f55f6bf` and
+   packet-doc series `8734f4dbe` + `334e7c6ac` each received fresh independent built-in `default`
+   `REVIEW CLEAN`. Active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate
+   authority-only reconciliation is committed and fresh-review-clean, reconfirm the exact
+   `CTX-R6-15` witness before selecting the already-authorized production-fix or eligible no-code
+   route. Do not begin either route first.
 8. Re-run the focused scorer wall, full analyzer wall, and bounded replay evidence after all named
    gaps are complete.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
@@ -56,7 +56,8 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs
   `git diff --cached --check`, and inspect the complete `git diff --cached` before committing.
 - Preserve unrelated worktree changes.
 
-Transition series `2937dbe5a` + `91f55f6bf` is fresh independent built-in `default` `REVIEW CLEAN`.
-Only Prompt 1 and the `R6-GAP-WPB-EMPTY-AUTHORITY` docs-only packet-creation gate are eligible. No
-successor production code change, witness rerun, or no-code proof receipt is authorized before those
-packet docs are review-clean. `R6-REPLAY` remains blocked.
+Transition series `2937dbe5a` + `91f55f6bf` and packet-doc series `8734f4dbe` + `334e7c6ac` are
+fresh independent built-in `default` `REVIEW CLEAN`. The active packet is
+`R6-GAP-WPB-EMPTY-AUTHORITY`. Exact `CTX-R6-15` witness reconfirmation is the sole next execution
+action after the current authority-only reconciliation is committed and fresh-review-clean. No
+production change or no-code receipt is authorized first. `R6-REPLAY` remains blocked.

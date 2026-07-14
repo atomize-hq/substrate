@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **COMPLETE — IMPLEMENTATION/PROOF AND TRANSITION REVIEW CLEAN**. The operator decisions `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised: boundary series `2067149ce` + `023417c03`, Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier proof/blocker receipt series `a341066a3` + `0da262979`, the one-expression source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` all received fresh independent built-in `default` `REVIEW CLEAN`. Authority-only transition series `2937dbe5a` + `91f55f6bf` also received fresh independent built-in `default` `REVIEW CLEAN`, completing Tasks 3A, 4, and 5. Only `R6-GAP-WPB-EMPTY-AUTHORITY` is active at its docs-only packet-creation gate with active packet `none`; `R6-REPLAY` remains blocked, and no successor packet was created or executed.
+Status: **COMPLETE — IMPLEMENTATION/PROOF AND TRANSITION REVIEW CLEAN**. The operator decisions `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` and `R6-TGG-CLIPPY-SCOPE-01 = A` are fully exercised: boundary series `2067149ce` + `023417c03`, Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805`, earlier proof/blocker receipt series `a341066a3` + `0da262979`, the one-expression source commit `5622ddb73`, and final proof-receipt series `fee9c2b16` + `6674a8316` all received fresh independent built-in `default` `REVIEW CLEAN`. Authority-only transition series `2937dbe5a` + `91f55f6bf` also received fresh independent built-in `default` `REVIEW CLEAN`, completing Tasks 3A, 4, and 5. Only `R6-GAP-WPB-EMPTY-AUTHORITY` is active; its packet-doc series `8734f4dbe` + `334e7c6ac` is fresh independent built-in `default` `REVIEW CLEAN`, active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` remains blocked.
 
 ## Required Gates
 
@@ -159,7 +159,7 @@ Record a separate literal pre-edit command/result for every other existing helpe
 
 - [x] **R6-GAP-TGG-TRUTH-PATH-ACTION.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 2A, 2B, 3A, and 4 committed and review-clean.
-  - Current state: **COMPLETE / FRESH TRANSITION REVIEW CLEAN**. Authority-only transition series `2937dbe5a` + `91f55f6bf` marks this gap complete, activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only packet-creation gate with active packet `none`, and keeps `R6-REPLAY` blocked.
+  - Current state: **COMPLETE / FRESH TRANSITION REVIEW CLEAN**. Authority-only transition series `2937dbe5a` + `91f55f6bf` marks this gap complete and activated only `R6-GAP-WPB-EMPTY-AUTHORITY`. That successor's packet-doc series `8734f4dbe` + `334e7c6ac` is now fresh independent built-in `default` `REVIEW CLEAN`, active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`, and `R6-REPLAY` remains blocked.
   - Exact authority-only manifest:
     - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
     - `SPEC.md`

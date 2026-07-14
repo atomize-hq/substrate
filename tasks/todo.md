@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs-only packet-creation gate)**
+Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: `R6-GAP-WPB-EMPTY-AUTHORITY`; exact `CTX-R6-15` witness reconfirmation gate)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -33,14 +33,16 @@ Current phase: **`R6-GAP-WPB-EMPTY-AUTHORITY` (ACTIVE; active packet: none; docs
   one P2 stale R6-C.1 source-state issue, the fix reconciled it, and a fresh independent built-in
   `default` series reviewer returned `REVIEW CLEAN` with the original `CTX-R6-12` exact control `1 /
   1` green, diff check clean, and all three successor files absent/non-link.
-- [ ] **Next eligible action:** invoke Prompt 1 with `PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY` and
-  `ACTIVE_PACKET: none`, then atomically create and freshly review
-  exactly these three non-link `TO CREATE` paths; they do not yet exist, and no successor execution
-  begins first:
-  - TO CREATE `docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-spec.md`
-  - TO CREATE `docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-plan.md`
-  - TO CREATE `docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-tasks.md`
-- [ ] Resolve active `R6-GAP-WPB-EMPTY-AUTHORITY`; do not activate replay early.
+- [x] Create and freshly review the active packet's canonical
+  [`SPEC`](../docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-spec.md),
+  [`PLAN`](../docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-plan.md), and
+  [`TASKS`](../docs/specs/r6/R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-tasks.md);
+  packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default`
+  `REVIEW CLEAN`.
+- [ ] **Next eligible execution action:** after the separate authority-only packet-gate
+  reconciliation is committed and fresh-review-clean, reconfirm exact `CTX-R6-15` with
+  `cargo test -p agent-drift-analyzer --test wrong_plan_branch wrong_plan_branch_makes_no_claim_for_path_action_without_authority -- --exact --nocapture`.
+- [ ] Resolve active `R6-GAP-WPB-EMPTY-AUTHORITY`; keep `R6-REPLAY` `BLOCKED`.
 - [ ] Re-run focused scorer tests, full analyzer tests, and the bounded replay wall.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.

@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-GAP-WPB-EMPTY-AUTHORITY — ACTIVE at docs-only packet-creation gate; active packet none`
+**Current work phase:** `R6-GAP-WPB-EMPTY-AUTHORITY — ACTIVE; active packet R6-GAP-WPB-EMPTY-AUTHORITY; exact CTX-R6-15 witness reconfirmation gate`
 
-**Last repo-truth verification:** transition series `2937dbe5a` + `91f55f6bf`, fresh independent built-in `default` `REVIEW CLEAN`
+**Last repo-truth verification:** packet-doc series `8734f4dbe` + `334e7c6ac`, fresh independent built-in `default` `REVIEW CLEAN`
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -16,11 +16,12 @@ preserved RED`, with no production change. The named routes are, in matrix order
 family, checkpoint, and format/check proof green. `R6-GAP-TGG-TRUTH-PATH-ACTION` is complete after
 its implementation/proof and final proof-receipt series received fresh independent built-in
 `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` received fresh independent
-built-in `default` `REVIEW CLEAN` and activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only
-packet-creation gate, with active packet `none`; its three canonical paths remain non-link `TO
-CREATE` entries and no packet file exists. Prompt 1 packet creation is now eligible. `R6-REPLAY`
-remains blocked, and no successor implementation, replay, R6 closeout, or R7/R8 work is authorized
-first.
+built-in `default` `REVIEW CLEAN` and activated only `R6-GAP-WPB-EMPTY-AUTHORITY`. Its canonical
+packet docs landed in series `8734f4dbe` + `334e7c6ac` and received fresh independent built-in
+`default` `REVIEW CLEAN`; active packet is now `R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate
+authority-only reconciliation is committed and fresh-review-clean, exact `CTX-R6-15` witness
+reconfirmation is the sole next execution action. `R6-REPLAY` remains blocked, and no production or
+no-code receipt, replay, R6 closeout, or R7/R8 work is authorized first.
 
 ## Purpose
 

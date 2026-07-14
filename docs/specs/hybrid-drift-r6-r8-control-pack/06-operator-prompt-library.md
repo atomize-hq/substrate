@@ -303,14 +303,16 @@ result, current phase status, and the next eligible interaction.
 
 ## Current First Invocation
 
-Review-clean transition series `2937dbe5a` + `91f55f6bf` identifies
-`R6-GAP-WPB-EMPTY-AUTHORITY` as the sole concrete active phase at its docs-only packet-creation gate,
-with active packet `none`. Its default invocation is now eligible and uses Prompt 1 with:
+Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW
+CLEAN`. `R6-GAP-WPB-EMPTY-AUTHORITY` remains the sole concrete active phase, and its active packet
+is now `R6-GAP-WPB-EMPTY-AUTHORITY`. After the separate authority-only reconciliation is committed
+and fresh-review-clean, its default invocation uses Prompt 1 with:
 
 ```text
 PHASE_ID: R6-GAP-WPB-EMPTY-AUTHORITY
-ACTIVE_PACKET: none
+ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY
 ```
 
-The session must re-check that status from live repo truth before acting; this example is not a
-permanent status override.
+The session must re-check that status from live repo truth, then reconfirm exact `CTX-R6-15` as its
+sole next execution action before selecting a route; `R6-REPLAY` remains `BLOCKED`, and this example
+is not a permanent status override.

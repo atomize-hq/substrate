@@ -349,15 +349,17 @@ code changed. In matrix order the preserved routes are:
 2. `R6-GAP-TGG-TRUTH-PATH-ACTION` for `CTX-R6-12` — **COMPLETE** after its final proof-receipt
    series `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`;
    and
-3. `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15`, witness `59f098b35` — **ACTIVE**, docs-only
-   packet-creation gate with active packet `none` after transition series `2937dbe5a` + `91f55f6bf`
-   received fresh independent built-in `default` `REVIEW CLEAN`.
+3. `R6-GAP-WPB-EMPTY-AUTHORITY` for `CTX-R6-15`, witness `59f098b35` — **ACTIVE**, with active
+   packet `R6-GAP-WPB-EMPTY-AUTHORITY`; its packet-doc series `8734f4dbe` + `334e7c6ac` received
+   fresh independent built-in `default` `REVIEW CLEAN`.
 
 R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED** and `R6-REPLAY` remains blocked. The sole next
-authorized action is Prompt 1 followed by atomic creation and fresh review of the three canonical
-`R6-GAP-WPB-EMPTY-AUTHORITY` packet docs recorded as non-link `TO CREATE` paths in the named-gap
-subledger. Those files do not yet exist; do not execute the active gap or begin a production/no-code
-proof path first. No terminal `truth_grounding_gap` disposition, replay close, or R6 close is claimed.
+execution action, after the separate authority-only reconciliation is committed and
+fresh-review-clean, is exact `CTX-R6-15` witness reconfirmation. The historical witness remains
+`60 / Low / Active`, flagged, with command-action evidence; the separate locked target remains
+`0 / Low / Cleared`, unflagged, with empty evidence. Do not begin a production/no-code proof path
+first. No terminal `truth_grounding_gap` or `wrong_plan_branch` disposition, replay close, or R6
+close is claimed.
 
 ## Non-Goals For This Rescope
 

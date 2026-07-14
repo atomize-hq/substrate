@@ -100,8 +100,9 @@ the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change i
 `d13f0a71c` received fresh built-in `default` `REVIEW CLEAN`. `R6-GAP-TGG-TRUTH-PATH-ACTION`
 is complete after its final proof-receipt series `fee9c2b16` + `6674a8316` received fresh
 built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` then received fresh
-independent built-in `default` `REVIEW CLEAN`, making only `R6-GAP-WPB-EMPTY-AUTHORITY` active at
-its docs-only packet-creation gate while `R6-REPLAY` remains blocked.
+independent built-in `default` `REVIEW CLEAN`, making only `R6-GAP-WPB-EMPTY-AUTHORITY` active.
+Its packet-doc series `8734f4dbe` + `334e7c6ac` also received fresh independent built-in `default`
+`REVIEW CLEAN`; active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`, while `R6-REPLAY` remains blocked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -113,8 +114,8 @@ control.” The current honest sequence is:
 2. keep `R6-C.1-CONTROLS` complete with its actual `10 PASS / 3 preserved RED` disposition
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
-5. the current eligible action is to use Prompt 1 to atomically create and freshly review the
-   active `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs before any execution begins
+5. after the separate authority-only reconciliation is committed and fresh-review-clean, the current
+   eligible execution action is to reconfirm exact `CTX-R6-15` before selecting either authorized route
 6. run bounded R6 replay/closeout only after all named gaps complete
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
@@ -755,12 +756,13 @@ informs archetype/progress construction but does not independently change `dead_
 the relevant derived progress is equal. The three preserved reds route, in order, to complete
 `R6-GAP-DET-OPAQUE-PARENT` (`CTX-R6-04`, `87409b39a`; production series through fresh
 review-clean `d13f0a71c`), complete `R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`, final
-proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and active docs-only
+proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and active packet-docs-review-clean
 `R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`). The frozen dead-end corpus still proves
 invariance rather than comparative integrated improvement. R6 remains partial; transition series
-`2937dbe5a` + `91f55f6bf` received fresh independent built-in `default` `REVIEW CLEAN`. Prompt 1
-for `R6-GAP-WPB-EMPTY-AUTHORITY` is eligible, no successor packet work has started, and
-`R6-REPLAY` remains blocked.
+`2937dbe5a` + `91f55f6bf` and packet-doc series `8734f4dbe` + `334e7c6ac` each received fresh
+independent built-in `default` `REVIEW CLEAN`. Active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`.
+After the separate authority-only reconciliation is committed and fresh-review-clean, exact
+`CTX-R6-15` witness reconfirmation is the sole next execution action; `R6-REPLAY` remains blocked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -852,10 +854,10 @@ The next honest work target is:
   a terminal scorer disposition or replay/close claim
 - keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete after its implementation/proof and final
   proof-receipt series received fresh `REVIEW CLEAN`
-- **next eligible action:** use Prompt 1 for `R6-GAP-WPB-EMPTY-AUTHORITY` with active packet `none`,
-  then atomically create and freshly review the three canonical `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs recorded
-  as non-link `TO CREATE` paths in the named-gap subledger; those files do not yet exist, and no
-  production/no-code proof begins first
+- keep the canonical `R6-GAP-WPB-EMPTY-AUTHORITY` packet docs review-clean at series `8734f4dbe` +
+  `334e7c6ac`, with active packet `R6-GAP-WPB-EMPTY-AUTHORITY`
+- **next eligible execution action:** after the separate authority-only reconciliation is committed
+  and fresh-review-clean, reconfirm exact `CTX-R6-15`; no production/no-code proof begins first
 - keep `R6-REPLAY` blocked until the remaining named-gap and replay entry gates complete
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred

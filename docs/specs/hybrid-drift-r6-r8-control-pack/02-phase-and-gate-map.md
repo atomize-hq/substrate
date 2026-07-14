@@ -28,14 +28,15 @@ At most one implementation phase may be active. Docs-only authority repair may p
 
 `PACK-0`, `R6-C.0A`, `R6-C.1-SPEC`, and `R6-C.1-CONTROLS` are complete. The generic `R6-GAP-*`
 row is aggregate `ACTIVE` because review-clean transition series `2937dbe5a` + `91f55f6bf` leaves
-exactly one concrete named phase active: `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only
-packet-creation gate, with active packet `none`. `R6-GAP-DET-OPAQUE-PARENT` is `COMPLETE` after production
+exactly one concrete named phase active: `R6-GAP-WPB-EMPTY-AUTHORITY`. Its active packet is now
+`R6-GAP-WPB-EMPTY-AUTHORITY` after packet-doc series `8734f4dbe` + `334e7c6ac` received fresh
+independent built-in `default` `REVIEW CLEAN`. `R6-GAP-DET-OPAQUE-PARENT` is `COMPLETE` after production
 series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh `REVIEW CLEAN`, and
 `R6-GAP-TGG-TRUTH-PATH-ACTION` is `COMPLETE` after final proof-receipt series `fee9c2b16` +
-`6674a8316` received fresh `REVIEW CLEAN`. `R6-REPLAY` remains `BLOCKED`. The active route now
-authorizes only Prompt 1 followed by atomic creation and fresh review of its three canonical
-non-link `TO CREATE` paths; those files do not yet exist. No successor implementation, witness
-rerun, replay, R6 closeout, or R7/R8 work is authorized first.
+`6674a8316` received fresh `REVIEW CLEAN`. `R6-REPLAY` remains `BLOCKED`. After the separate
+authority-only reconciliation is committed and fresh-review-clean, the active route authorizes exact
+`CTX-R6-15` witness reconfirmation as the sole next execution action. No production/no-code receipt,
+replay, R6 closeout, or R7/R8 work is authorized first.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 
