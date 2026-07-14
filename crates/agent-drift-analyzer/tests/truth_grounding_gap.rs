@@ -257,9 +257,7 @@ fn truth_grounding_gap_is_event_order_invariant_across_turn_shapes() {
     assert!(long_reasons.iter().any(|reason| {
         *reason == "truth artifact hint: docs/specs/agent-drift-analyzer-v0.4-spec.md"
     }));
-    assert!(long_reasons
-        .iter()
-        .any(|reason| *reason == "command family: cargo"));
+    assert!(long_reasons.contains(&"command family: cargo"));
 }
 
 #[test]
@@ -495,6 +493,10 @@ fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_act
         tool_row(4, "sed -n '1,120p' docs/specs/agent-drift-analyzer-v0.4-spec.md"),
         tool_row(
             5,
+            "sed -n '1,120p' crates/agent-drift-analyzer/src/lib.rs",
+        ),
+        tool_row(
+            6,
             "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\n*** End Patch\nPATCH",
         ),
     ];
@@ -641,6 +643,10 @@ fn truth_grounding_gap_does_not_turn_clean_grounding_into_historical_gap_evidenc
         tool_row(4, "sed -n '1,120p' docs/specs/agent-drift-analyzer-v0.4-spec.md"),
         tool_row(
             5,
+            "sed -n '1,120p' crates/agent-drift-analyzer/src/lib.rs",
+        ),
+        tool_row(
+            6,
             "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\n*** End Patch\nPATCH",
         ),
     ];
@@ -751,6 +757,342 @@ fn truth_grounding_gap_carries_clean_read_to_next_checkpoint_truth_path_action()
 }
 
 #[test]
+fn truth_grounding_gap_does_not_ground_path_b_from_path_a_read() {
+    let path_a = "docs/specs/truth-path-a.md";
+    let path_b = "docs/specs/truth-path-b.md";
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            &format!("/goal Update {path_b} using {path_a} and {path_b} as the declared truth artifacts."),
+        ),
+        tool_row(1, &format!("sed -n '1,120p' {path_a}")),
+        row(
+            2,
+            CompactionKind::AssistantMessage,
+            "Path A is grounded; I am moving to the next checkpoint before changing path B.",
+        ),
+        tool_row(
+            3,
+            &format!(
+                "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {path_b}\n*** End Patch\nPATCH"
+            ),
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze path-scoped grounding bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let score = truth_grounding_gap_score(checkpoints.last().expect("path-B action checkpoint"));
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+}
+
+#[test]
+fn truth_grounding_gap_does_not_resurrect_read_after_path_redeclaration() {
+    let path_a = "docs/specs/truth-path-a.md";
+    let path_b = "docs/specs/truth-path-b.md";
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            &format!("/goal Read {path_a} as the declared truth artifact before acting."),
+        ),
+        tool_row(1, &format!("sed -n '1,120p' {path_a}")),
+        row(
+            2,
+            CompactionKind::UserMessage,
+            &format!("/goal Switch the current task frame to {path_b} only."),
+        ),
+        tool_row(3, "pwd"),
+        row(
+            4,
+            CompactionKind::UserMessage,
+            &format!("/goal Re-declare {path_a} and update it without a new read."),
+        ),
+        tool_row(
+            5,
+            &format!(
+                "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {path_a}\n*** End Patch\nPATCH"
+            ),
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze truth-path removal and re-declaration bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert_eq!(checkpoints.len(), 3);
+    assert!(checkpoints[1].task_frame.objective.contains(path_b));
+    assert!(!checkpoints[1].task_frame.objective.contains(path_a));
+    let score = truth_grounding_gap_score(
+        checkpoints
+            .last()
+            .expect("re-declared truth-path action checkpoint"),
+    );
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+}
+
+#[test]
+fn truth_grounding_gap_does_not_carry_read_across_sessions() {
+    let truth_path = "docs/specs/session-local-truth.md";
+    let first_session = rows_in_session(
+        vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                &format!("/goal Read {truth_path} as the declared truth artifact."),
+            ),
+            tool_row(1, &format!("sed -n '1,120p' {truth_path}")),
+        ],
+        "session-alpha",
+    );
+    let second_session = rows_in_session(
+        vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                &format!("/goal Update {truth_path} as the declared truth artifact."),
+            ),
+            tool_row(
+                1,
+                &format!(
+                    "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+                ),
+            ),
+        ],
+        "session-beta",
+    );
+    let rows = first_session
+        .into_iter()
+        .chain(second_session)
+        .collect::<Vec<_>>();
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze bundle-session grounding isolation");
+    let second = result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "session-beta")
+        .expect("second session");
+    let score = truth_grounding_gap_score(
+        second
+            .checkpoints
+            .last()
+            .expect("second-session checkpoint"),
+    );
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+}
+
+#[test]
+fn truth_grounding_gap_does_not_inherit_parent_read_in_child_session() {
+    let truth_path = "docs/specs/parent-child-truth.md";
+    let child_session_id = "019ea333-3333-7333-8333-333333333333";
+    let parent_session = rows_in_session(
+        vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                &format!("/goal Read {truth_path} before delegating the bounded update."),
+            ),
+            tool_row(1, &format!("sed -n '1,120p' {truth_path}")),
+            row(
+                2,
+                CompactionKind::SystemMessage,
+                &format!(
+                    "Child session id {child_session_id} continues in a separate rollout file."
+                ),
+            ),
+        ],
+        "session-parent",
+    );
+    let child_session = rows_in_session(
+        vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                &format!("/goal Update {truth_path} as this child session's declared truth artifact."),
+            ),
+            tool_row(
+                1,
+                &format!(
+                    "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+                ),
+            ),
+        ],
+        child_session_id,
+    );
+    let rows = parent_session
+        .into_iter()
+        .chain(child_session)
+        .collect::<Vec<_>>();
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze parent-child session grounding isolation");
+    let child = result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == child_session_id)
+        .expect("child session");
+    let score =
+        truth_grounding_gap_score(child.checkpoints.last().expect("child-session checkpoint"));
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+}
+
+#[test]
+fn truth_grounding_gap_carries_clean_read_across_multiple_checkpoints() {
+    let truth_path = "docs/specs/multi-checkpoint-truth.md";
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            &format!("/goal Update {truth_path} using that declared truth artifact."),
+        ),
+        tool_row(1, &format!("sed -n '1,120p' {truth_path}")),
+        row(
+            2,
+            CompactionKind::AssistantMessage,
+            "The truth is grounded; I am moving to the next checkpoint.",
+        ),
+        tool_row(3, "pwd"),
+        row(
+            4,
+            CompactionKind::AssistantMessage,
+            "The declared path is unchanged; I am moving to the next checkpoint again.",
+        ),
+        tool_row(
+            5,
+            &format!(
+                "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+            ),
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze multi-checkpoint grounding carry");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert!(checkpoints.len() >= 3);
+    let score = truth_grounding_gap_score(
+        checkpoints
+            .last()
+            .expect("multi-checkpoint truth-path action checkpoint"),
+    );
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false),
+    );
+}
+
+#[test]
+fn truth_grounding_gap_retains_clean_read_after_prior_same_path_action() {
+    let truth_path = "docs/specs/non-consuming-truth.md";
+    let action = format!(
+        "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+    );
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            &format!("/goal Update {truth_path} using that declared truth artifact."),
+        ),
+        tool_row(1, &format!("sed -n '1,120p' {truth_path}")),
+        row(
+            2,
+            CompactionKind::AssistantMessage,
+            "The spec is grounded; I am moving to the next checkpoint for the first action.",
+        ),
+        tool_row(3, &action),
+        row(
+            4,
+            CompactionKind::AssistantMessage,
+            "The first action is complete; I am moving to the next checkpoint for the later action.",
+        ),
+        tool_row(5, &action),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze non-consuming grounding carry");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert!(checkpoints.len() >= 3);
+    let first_action_score = truth_grounding_gap_score(&checkpoints[1]);
+    let later_action_score = truth_grounding_gap_score(
+        checkpoints
+            .last()
+            .expect("later same-path action checkpoint"),
+    );
+    for score in [first_action_score, later_action_score] {
+        assert_eq!(
+            (
+                score.raw_score,
+                score.confidence,
+                score.state,
+                score.flagged,
+            ),
+            (0, Confidence::Medium, DriftState::Cleared, false),
+        );
+    }
+}
+
+#[test]
 fn truth_grounding_gap_downgrades_to_historical_only_after_the_recovery_transition() {
     let rows = vec![
         row(
@@ -770,22 +1112,26 @@ fn truth_grounding_gap_downgrades_to_historical_only_after_the_recovery_transiti
             "I need to re-ground on the spec before editing again.",
         ),
         tool_row(4, "sed -n '1,120p' docs/specs/agent-drift-analyzer-v0.4-spec.md"),
-        row(
+        tool_row(
             5,
+            "sed -n '1,120p' crates/agent-drift-analyzer/src/lib.rs",
+        ),
+        row(
+            6,
             CompactionKind::AssistantMessage,
             "Grounding is back in place. I am continuing with the requested change.",
         ),
         tool_row(
-            6,
+            7,
             "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\n*** End Patch\nPATCH",
         ),
         row(
-            7,
+            8,
             CompactionKind::AssistantMessage,
             "The recovery checkpoint already happened; this is later historical context only.",
         ),
         tool_row(
-            8,
+            9,
             "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/lib.rs\n*** End Patch\nPATCH",
         ),
     ];
@@ -865,4 +1211,22 @@ fn tool_row(event_index: usize, command: &str) -> CompactionRow {
             .to_string(),
     );
     row
+}
+
+fn rows_in_session(mut rows: Vec<CompactionRow>, session_id: &str) -> Vec<CompactionRow> {
+    for row in &mut rows {
+        row.source_file = Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl"));
+        row.session_id = Some(session_id.to_string());
+    }
+    rows
+}
+
+fn truth_grounding_gap_score(
+    checkpoint: &agent_drift_analyzer::Checkpoint,
+) -> &agent_drift_analyzer::DriftScore {
+    checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::TruthGroundingGap)
+        .expect("truth grounding gap score")
 }

@@ -8,52 +8,55 @@ use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX: &str = "historical truth-grounding gap:";
 
+#[derive(Debug, Default)]
+pub(crate) struct TruthGroundingProvenance {
+    grounded_paths: BTreeSet<String>,
+}
+
 pub(crate) fn score_truth_grounding_gap(
     analysis: &CheckpointAnalysis,
     previous_truth_grounding_gap: Option<&DriftScore>,
+    provenance: &mut TruthGroundingProvenance,
 ) -> ScoredDrift {
-    let truth_paths = analysis
-        .current
-        .task_frame
-        .truth_artifacts
-        .iter()
-        .collect::<Vec<_>>();
-    let first_action_index = analysis
+    let truth_paths = declared_truth_paths(analysis);
+    provenance
+        .grounded_paths
+        .retain(|path| truth_paths.contains(path));
+    let mut grounded_reads = Vec::<EvidenceRef>::new();
+    let mut ungrounded_actions = Vec::<EvidenceRef>::new();
+
+    let mut commands = analysis
         .interval
         .command_observations
         .iter()
-        .filter(|command| command.write_like || command.verification_like)
-        .filter_map(first_event_index)
-        .min();
-    let mut grounded_reads = Vec::<EvidenceRef>::new();
-    let mut ungrounded_actions = Vec::<EvidenceRef>::new();
-    let prior_grounding =
-        previous_truth_grounding_gap.is_some_and(|score| !score.flagged && score.raw_score > 0);
-
-    for command in &analysis.interval.command_observations {
-        let touches_truth = command.paths.iter().any(|path| {
-            truth_paths
-                .iter()
-                .any(|truth| path == *truth || path.starts_with(*truth) || truth.starts_with(path))
-        });
-        let before_first_action = first_action_index
-            .zip(first_event_index(command))
-            .map(|(first_action, current)| current < first_action)
-            .unwrap_or(true);
-        if touches_truth && command.read_like && before_first_action {
+        .collect::<Vec<_>>();
+    commands.sort_by_key(|command| first_event_index(command).unwrap_or(usize::MAX));
+    for command in commands {
+        let matching_paths = matching_truth_paths(command, &truth_paths);
+        if command.write_like || command.verification_like {
+            let grounded = if matching_paths.is_empty() {
+                !provenance.grounded_paths.is_empty()
+            } else {
+                matching_paths
+                    .iter()
+                    .all(|path| provenance.grounded_paths.contains(*path))
+            };
+            if !grounded {
+                ungrounded_actions.extend(command.evidence.clone());
+            }
+        }
+        if command.read_like && !matching_paths.is_empty() {
+            provenance
+                .grounded_paths
+                .extend(matching_paths.into_iter().cloned());
             grounded_reads.extend(command.evidence.clone());
-        } else if (command.write_like || command.verification_like)
-            && (!touches_truth || !prior_grounding)
-        {
-            ungrounded_actions.extend(command.evidence.clone());
         }
     }
 
     let historical_evidence = previous_truth_grounding_gap
         .map(historical_truth_grounding_gap_evidence)
         .unwrap_or_default();
-    let active_gap =
-        !truth_paths.is_empty() && grounded_reads.is_empty() && !ungrounded_actions.is_empty();
+    let active_gap = !truth_paths.is_empty() && !ungrounded_actions.is_empty();
     let raw_score = if truth_paths.is_empty() {
         0
     } else if active_gap {
@@ -101,6 +104,35 @@ pub(crate) fn score_truth_grounding_gap(
             DriftStateHint::None
         },
     )
+}
+
+fn declared_truth_paths(analysis: &CheckpointAnalysis) -> BTreeSet<String> {
+    let task_frame = &analysis.current.task_frame;
+    let objective_paths = task_frame
+        .truth_artifacts
+        .iter()
+        .filter(|path| task_frame.objective.contains(path.as_str()))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if objective_paths.is_empty() {
+        task_frame.truth_artifacts.iter().cloned().collect()
+    } else {
+        objective_paths
+    }
+}
+
+fn matching_truth_paths<'a>(
+    command: &CommandObservation,
+    truth_paths: &'a BTreeSet<String>,
+) -> Vec<&'a String> {
+    truth_paths
+        .iter()
+        .filter(|truth| {
+            command.paths.iter().any(|path| {
+                path == *truth || path.starts_with(truth.as_str()) || truth.starts_with(path)
+            })
+        })
+        .collect()
 }
 
 fn historical_truth_grounding_gap_evidence(previous: &DriftScore) -> Vec<EvidenceRef> {

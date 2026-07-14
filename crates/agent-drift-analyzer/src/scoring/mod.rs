@@ -7,7 +7,7 @@ use crate::checkpoint::{
     build_scoring_session_progress, CheckpointAnalysis, DriftClass, DriftScore, StructuredObjective,
 };
 
-pub(crate) use truth_grounding_gap::score_truth_grounding_gap;
+pub(crate) use truth_grounding_gap::{score_truth_grounding_gap, TruthGroundingProvenance};
 pub(crate) use wrong_plan_branch::score_wrong_plan_branch;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,11 +32,16 @@ pub(crate) fn score_session(
     analysis: &CheckpointAnalysis,
     previous_truth_grounding_gap: Option<&DriftScore>,
     kickoff_anchor: Option<&StructuredObjective>,
+    truth_grounding_provenance: &mut TruthGroundingProvenance,
 ) -> Vec<ScoredDrift> {
     let session_progress = build_scoring_session_progress(analysis);
     let mut scores = vec![
         score_wrong_plan_branch(analysis),
-        score_truth_grounding_gap(analysis, previous_truth_grounding_gap),
+        score_truth_grounding_gap(
+            analysis,
+            previous_truth_grounding_gap,
+            truth_grounding_provenance,
+        ),
         dead_end_thrash::score_dead_end_thrash(analysis, &session_progress),
         semantic_goal_drift::score_semantic_goal_drift(analysis, kickoff_anchor),
     ];

@@ -9,7 +9,7 @@ use checkpoint::export_checkpoints;
 use context::{assemble_context, ContextPack};
 use inference::infer_task_frame;
 use input::load_bundle;
-use scoring::score_session;
+use scoring::{score_session, TruthGroundingProvenance};
 
 pub mod checkpoint;
 pub mod cli;
@@ -80,6 +80,7 @@ pub fn analyze_loaded_bundle(
         let mut checkpoints = Vec::new();
         let mut previous_truth_grounding_gap = None;
         let mut previous_checkpoint_scores: Option<Vec<DriftScore>> = None;
+        let mut truth_grounding_provenance = TruthGroundingProvenance::default();
         let analyses_for_session = checkpoint::checkpoint_analyses(session);
         let kickoff_anchor =
             checkpoint::session_kickoff_structured_goal_anchor(&analyses_for_session);
@@ -88,6 +89,7 @@ pub fn analyze_loaded_bundle(
                 analysis,
                 previous_truth_grounding_gap.as_ref(),
                 checkpoint::kickoff_anchor_for_ordinal(kickoff_anchor.as_ref(), analysis.ordinal),
+                &mut truth_grounding_provenance,
             );
             let scores =
                 checkpoint::assign_drift_states(raw_scores, previous_checkpoint_scores.as_deref());
