@@ -1,0 +1,43 @@
+{
+  "case_id": "019eb311-c7ce-7f50-ae13-b51a5b5461c3",
+  "fixture_kind": "annotated_real_rollout",
+  "source_rollout_id": "019eb311-c7ce-7f50-ae13-b51a5b5461c3",
+  "source_artifact": "target/hybrid-drift-evals/019eb311-c7ce-7f50-ae13-b51a5b5461c3-ctx-r6-02/compactor",
+  "notes": "Expanded local Codex rollout screening selected this real depth-1 built-in default subagent session for CTX-R6-02. Raw call-id linkage proves that compact verifier calls at events 420 and 474 run the same checkpoints_reset_parent_visible_comparability_when_delegated_objective_changes command; outputs 423 and 477 each retain Exit code 101 and the same left Stalled / right InsufficientEvidence assertion. The attempted production fix at event 463 leaves that failure unchanged, so checkpoint 5 is a real troubleshooting-frontier stall before the later successful verifier outside the selected boundary. Full-analyzer checkpoint 5 is Stalled / Medium and its dead_end_thrash score is Active / 30 / High and flagged.",
+  "screening": {
+    "delegated": true,
+    "child_visibility": "visible"
+  },
+  "selected_checkpoint": {
+    "ordinal": 5,
+    "archetype": "troubleshooting",
+    "dimension": "troubleshooting_frontier",
+    "status": "stalled",
+    "confidence_min": "medium",
+    "confidence_max": "medium",
+    "required_signal_codes": [
+      "failure_signature_repeated"
+    ],
+    "forbidden_signal_codes": [
+      "failure_frontier_advanced",
+      "verification_clean",
+      "verification_scope_broadened"
+    ],
+    "supporting_evidence_min": 5,
+    "counter_evidence_min": 0,
+    "decisive_evidence": [
+      "Raw call-id linkage pairs the same failed verifier calls at compact events 420 and 474 with exit-101 outputs at events 423 and 477.",
+      "Both failed outputs retain the same checkpoints_reset_parent_visible_comparability_when_delegated_objective_changes assertion with left Stalled and right InsufficientEvidence.",
+      "An attempted progress.rs fix at event 463 leaves the same assertion unchanged, and no clean result for that verifier exists before the selected checkpoint boundary ends at event 489.",
+      "Checkpoint 5 exposes failure_signature_repeated and resolves dead_end_thrash to Active / 30 / High and flagged."
+    ],
+    "counter_evidence": [
+      "A later patch begins at event 486 inside the selected boundary, but its clean focused verifier is event 493 with output 495 after the checkpoint boundary; it does not advance the selected checkpoint's frontier."
+    ],
+    "why_not_other_dimensions": [
+      "Not implementation_verification_wall because the selected checkpoint repeats the same failing assertion without a clean or broader verifier result.",
+      "Not verification_closeout_narrowing because no residual verification scope is retired at the selected checkpoint.",
+      "Not parent_visible_orchestration because the selected child rollout directly exposes its own edits and verifier outputs rather than relying on opaque parent-visible synthesis."
+    ]
+  }
+}

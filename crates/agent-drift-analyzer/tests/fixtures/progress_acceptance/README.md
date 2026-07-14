@@ -20,6 +20,7 @@ Included native primary cases:
 - `019e899c-453f-71f2-a99d-155848c7b081` — annotated real-rollout troubleshooting advancement.
 - `019e940c-a91b-7fe0-a967-b0bdd595b581` — annotated real-rollout planning meander/stall.
 - `019e8b42-42bd-7b10-baae-3265edb65f4b` — annotated real-rollout verification closeout narrowing.
+- `019eb311-c7ce-7f50-ae13-b51a5b5461c3` — annotated real-rollout CTX-R6-02 true-stall proof with two identical failed verifier attempts, no clean result inside the selected checkpoint, and a flagged active `dead_end_thrash` score.
 - `019eb970-3543-7ab1-a5d6-2a62c00c7185` — annotated real-rollout delegated parent-visible positive proof that stays guardrail-only under limited child visibility.
 - `019f1ecb-b93a-7570-8d8d-9ce4e711880b` — annotated real-rollout CTX-R6-01 proof with two concrete repeated failed verifier attempts, analyzer-visible repeated-failure evidence, and later direct troubleshooting-frontier advancement.
 - `real-implementation-advancing-019e894a-ord6` — annotated real-rollout implementation verification-wall advancement.

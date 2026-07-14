@@ -327,3 +327,173 @@ fn acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged() {
     assert_eq!(dead_end_score.raw_score, 20);
     assert_eq!(dead_end_score.confidence, Confidence::High);
 }
+
+#[test]
+fn acceptance_fixtures_integrated_true_stall_stays_active() {
+    const CASE_ID: &str = "019eb311-c7ce-7f50-ae13-b51a5b5461c3";
+    const SELECTED_CHECKPOINT_ORDINAL: usize = 5;
+    const FAILED_VERIFIER_COMMAND: &str = "cargo test -p agent-drift-analyzer checkpoints_reset_parent_visible_comparability_when_delegated_objective_changes -- --nocapture";
+
+    let fixture_dir = camino::Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/progress_acceptance")
+        .join(CASE_ID);
+    let manifest: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_dir.join("manifest.json"))
+            .expect("read true-stall replay manifest"),
+    )
+    .expect("parse true-stall replay manifest");
+    assert_eq!(
+        manifest["session_ids"],
+        serde_json::json!([CASE_ID]),
+        "trusted replay fixture must contain only the selected real rollout"
+    );
+
+    let expected: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_dir.join("expected.json"))
+            .expect("read true-stall replay annotation"),
+    )
+    .expect("parse true-stall replay annotation");
+    assert_eq!(expected["fixture_kind"], "annotated_real_rollout");
+    assert_eq!(expected["source_rollout_id"], CASE_ID);
+    let fixture_notes = expected["notes"]
+        .as_str()
+        .expect("true-stall replay fixture notes");
+    assert!(fixture_notes.contains("CTX-R6-02"));
+    assert!(fixture_notes.contains("events 420 and 474"));
+    assert_eq!(
+        expected["selected_checkpoint"]["ordinal"],
+        SELECTED_CHECKPOINT_ORDINAL
+    );
+
+    let compact_rows = std::fs::read_to_string(fixture_dir.join("rows.compact.jsonl"))
+        .expect("read true-stall replay compact rows");
+    let compact_rows = compact_rows
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("parse compact row"))
+        .collect::<Vec<_>>();
+    for (call_event, output_event) in [(420, 423), (474, 477)] {
+        let verifier_call = compact_rows
+            .iter()
+            .find(|row| row["event_index"] == call_event && row["kind"] == "tool_call")
+            .expect("trusted replay fixture must retain each failed verifier call");
+        assert!(
+            verifier_call["text"]
+                .as_str()
+                .expect("failed verifier call text")
+                .contains(FAILED_VERIFIER_COMMAND),
+            "each retained failed verifier call must use the selected repeated command"
+        );
+
+        let verifier_output = compact_rows
+            .iter()
+            .find(|row| row["event_index"] == output_event && row["kind"] == "tool_output")
+            .expect("trusted replay fixture must retain each failed verifier output");
+        let verifier_output = verifier_output["text"]
+            .as_str()
+            .expect("failed verifier output text");
+        assert!(verifier_output.contains("Exit code: 101"));
+        assert!(verifier_output.contains(
+            "checkpoints_reset_parent_visible_comparability_when_delegated_objective_changes ... FAILED"
+        ));
+        assert!(verifier_output.contains("left: Stalled"));
+        assert!(verifier_output.contains("right: InsufficientEvidence"));
+        assert!(verifier_output.contains("test result: FAILED. 0 passed; 1 failed"));
+    }
+
+    for (call_event, output_event) in [(421, 425), (475, 479)] {
+        let sibling_call = compact_rows
+            .iter()
+            .find(|row| row["event_index"] == call_event && row["kind"] == "tool_call")
+            .expect("trusted replay fixture must retain each concurrent sibling verifier call");
+        assert!(
+            sibling_call["text"]
+                .as_str()
+                .expect("sibling verifier call text")
+                .contains("checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_parent_work")
+        );
+        let sibling_output = compact_rows
+            .iter()
+            .find(|row| row["event_index"] == output_event && row["kind"] == "tool_output")
+            .expect("trusted replay fixture must retain each concurrent sibling verifier output");
+        assert!(
+            sibling_output["text"]
+                .as_str()
+                .expect("sibling verifier output text")
+                .contains("Exit code: 0"),
+            "the successful concurrent sibling verifier must not be attributed as a failed attempt"
+        );
+    }
+
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let output_dir = camino::Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("output");
+    std::fs::create_dir_all(&output_dir).expect("create true-stall replay output dir");
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture_dir,
+        output_dir,
+    })
+    .expect("analyze trusted true-stall fixture");
+    let session = result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == CASE_ID)
+        .expect("selected real-rollout session");
+    let checkpoint = session
+        .checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.ordinal == SELECTED_CHECKPOINT_ORDINAL)
+        .expect("selected true-stall checkpoint");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("selected checkpoint progress");
+    assert_eq!(
+        progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(progress.status, ProgressStatus::Stalled);
+    assert_eq!(progress.confidence, Confidence::Medium);
+    let repeated_failure = progress
+        .signals
+        .iter()
+        .find(|signal| signal.code == ProgressSignalCode::FailureSignatureRepeated)
+        .expect("selected checkpoint must expose repeated-failure evidence");
+    for call_event in [420, 474] {
+        assert!(
+            repeated_failure
+                .evidence
+                .iter()
+                .any(|evidence| evidence.row.event_index == call_event),
+            "repeated-failure evidence must point to the truthful failed verifier call at event {call_event}"
+        );
+    }
+    assert!(
+        !progress.signals.iter().any(|signal| matches!(
+            signal.code,
+            ProgressSignalCode::FailureFrontierAdvanced
+                | ProgressSignalCode::VerificationClean
+                | ProgressSignalCode::VerificationScopeBroadened
+        )),
+        "selected checkpoint must not carry direct troubleshooting-frontier advancement"
+    );
+
+    let dead_end_score = checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::DeadEndThrash)
+        .expect("selected dead_end_thrash score");
+    assert_eq!(dead_end_score.state, DriftState::Active);
+    assert!(dead_end_score.flagged);
+    assert_eq!(dead_end_score.raw_score, 30);
+    assert_eq!(dead_end_score.confidence, Confidence::High);
+    for call_event in [420, 474] {
+        assert!(
+            dead_end_score
+                .evidence
+                .iter()
+                .any(|evidence| evidence.row.event_index == call_event),
+            "active true-stall score must point to the truthful failed verifier call at event {call_event}"
+        );
+    }
+}
