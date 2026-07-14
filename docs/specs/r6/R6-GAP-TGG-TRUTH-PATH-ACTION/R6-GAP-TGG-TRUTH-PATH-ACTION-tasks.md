@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — OPTION-A IMPLEMENTATION REVIEW-CLEAN / CLIPPY DECISION + RECEIPT-SERIES REVIEW REQUIRED**. The operator explicitly decided `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`. Packet authority and gate-state series `49b2bbd7f` + `70c0ca9f4` + `baa0983ac` + `d6cbc9d2c`, followed by ledger series `dba992383` + `70955db2a`, received fresh built-in `default` `REVIEW CLEAN`, completing Tasks 2A and 2B. Option-A implementation series `4ba9f2647` + `1f6e863bf` + `9565fb805` also received fresh independent `REVIEW CLEAN` after two review/fix rounds, and its behavior wall is green. Task 3A nevertheless remains incomplete because the packet's literal `cargo clippy ... -D warnings` gate exits `101` solely on one unchanged, out-of-scope `clippy::nonminimal_bool` warning in `dead_end_thrash.rs`, while the landed proof/blocker receipt `a341066a3` received a P2 bookkeeping finding and its receipt series remains pending fresh review. Stable decision `R6-TGG-CLIPPY-SCOPE-01` now gates either a narrowly authorized one-file simplification (recommended) or continued strict-boundary blocking. Task 3A stays blocked on both literal clippy and receipt-series review; Task 4, the transition, and successor work remain blocked.
+Status: **ACTIVE — CLIPPY SCOPE DECISION A RECORDED / BOUNDARY-AMENDMENT REVIEW GATE**. The operator explicitly decided `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`, and packet authority, ledger authority, and Option-A implementation series through `9565fb805` are fresh built-in `default` `REVIEW CLEAN`. Proof/blocker receipt series `a341066a3` + `0da262979` has now also received fresh `REVIEW CLEAN`; that verdict fixes the receipt-series review-state discrepancy but does not complete Task 3A while the literal clippy gate is red. On 2026-07-14 the operator selected `R6-TGG-CLIPPY-SCOPE-01 = A`, authorizing exactly one additional production file and one expression-level simplification after this TASKS/ledger boundary amendment is committed and freshly review-clean. Task 3A, Task 4, the transition, and successor activation remain incomplete; their final completion/status reconciliation belongs only in a separate post-fix proof receipt after the source fix, required proof, and fresh source review are actually clean.
 
 ## Required Gates
 
@@ -70,12 +70,23 @@ Record a separate literal pre-edit command/result for every other existing helpe
   - Completion record: complete at review-clean ledger series `dba992383` + `70955db2a`; `dba992383` alone was not completion.
   - Stop rule satisfied: no source or test edit preceded this separate review-clean gate.
 
+- [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.2C — Record clippy-scope decision A and freshly review the expanded boundary.**
+  - Operator decision: `R6-TGG-CLIPPY-SCOPE-01 = A`, selected on 2026-07-14.
+  - Allowed docs-only batch: exactly this TASKS and `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`; do not edit the packet SPEC/PLAN, source, or tests in this batch.
+  - Expanded production boundary after this batch is fresh-review-clean: exactly one additional file, `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`, limited to the semantics-preserving `clippy::nonminimal_bool` simplification in `score_confidence`.
+  - Forbidden: no lint allowance; no scoring-behavior, threshold, or evidence change; and no adjacent dead-end refactor.
+  - Pre-edit GitNexus impact: exact `score_confidence` is LOW, with one direct caller (`score_dead_end_thrash`) and one affected process. No HIGH/CRITICAL risk was reported.
+  - Commit/review: staged `detect-changes` gate; atomic TASKS/ledger commit; fresh independent built-in `default`; fixes only in a new TASKS/ledger commit followed by another fresh review until `REVIEW CLEAN`.
+  - Stop rule: do not edit `dead_end_thrash.rs` before this docs series is committed and fresh-review-clean. After that gate, land the authorized one-expression source fix in a separate atomic commit containing only `dead_end_thrash.rs`.
+  - Completion record: **INCOMPLETE** until the current boundary-amendment series is committed and receives fresh `REVIEW CLEAN`; this record makes no future source, proof, or review claim.
+
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3A — Implement and prove Option-A typed provenance.**
-  - Prerequisites: Tasks 2A and 2B committed and fresh-review-clean; all required GitNexus impacts below HIGH; no unisolatable unrelated work.
+  - Prerequisites: Tasks 2A, 2B, and 2C committed and fresh-review-clean; all required GitNexus impacts below HIGH; no unisolatable unrelated work.
   - Allowed files only:
     - `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs` — `score_truth_grounding_gap`, the provenance type (private unless cross-module signature threading requires `pub(crate)`), and necessary private helpers;
     - `crates/agent-drift-analyzer/src/scoring/mod.rs` — `score_session` and necessary private threading helpers;
     - `crates/agent-drift-analyzer/src/lib.rs` — `analyze_loaded_bundle` and necessary private per-session initialization/threading helpers;
+    - `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs` — only the separately authorized semantics-preserving `clippy::nonminimal_bool` simplification in `score_confidence`; no lint allowance, behavior/threshold/evidence change, or adjacent refactor;
     - `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` — focused provenance behavior only;
     - this TASKS — actual commands/results/review state;
     - `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` — actual named-gap evidence only.
@@ -107,6 +118,10 @@ Record a separate literal pre-edit command/result for every other existing helpe
     cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_inherit_parent_read_in_child_session -- --exact --nocapture
     cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_carries_clean_read_across_multiple_checkpoints -- --exact --nocapture
     cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_retains_clean_read_after_prior_same_path_action -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_retains_medium_confidence_for_partial_parent_visible_activity -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test dead_end_thrash dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test dead_end_thrash -- --nocapture
     cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture
     cargo test -p agent-drift-analyzer checkpoints -- --nocapture
     cargo fmt --all -- --check
@@ -115,8 +130,9 @@ Record a separate literal pre-edit command/result for every other existing helpe
     git diff --check
     ```
 
-  - Acceptance: every focused control, full `truth_grounding_gap` target, all matching checkpoint tests, format, check, and clippy green; exact counts and dispositions recorded only after execution.
-  - Commit/review: staged `detect-changes` gate; atomic bounded commit; fresh built-in `default`; fix in new bounded commits, rerun affected focused proof before the full wall, and use fresh reviewers until clean.
+  - Acceptance: all three focused `dead_end_thrash` regressions, the full `dead_end_thrash` target, every focused truth-grounding control, full `truth_grounding_gap` target, all matching checkpoint tests, format, check, and literal clippy green; exact counts and dispositions recorded only after execution.
+  - Source-fix commit/review: after Task 2C is fresh-review-clean, run the required proof, staged `detect-changes`, and land only the one-expression `dead_end_thrash.rs` change as a separate atomic commit; obtain fresh independent built-in `default` review, fixing only within the authorized expression scope in a new commit and repeating fresh review until clean.
+  - Final proof receipt: only after the source series and required proof are fresh-review-clean, land a separate TASKS/ledger-only receipt with actual commit hashes, exact proof results, and actual review verdict. Obtain fresh independent review of that receipt and fix/re-review until clean. This receipt, not the boundary amendment or earlier receipt series, must reconcile final Task 3A/Task 4/status wording.
   - Landed implementation series: `4ba9f2647` (`fix: track truth grounding provenance`) + `1f6e863bf` (`fix: preserve grounded path identity and order`) + `9565fb805` (`fix: keep grounding provenance path-scoped`) received fresh independent built-in `default` `REVIEW CLEAN` after two review/fix rounds.
   - Resolved review findings: component path prefixes now retain their identity and use canonical order; declaration pruning is exact; and pathless actions use the all-declared-path grounding rule rather than being grounded by an unrelated single path.
   - Green behavior/static proof:
@@ -126,12 +142,10 @@ Record a separate literal pre-edit command/result for every other existing helpe
     - `cargo fmt --all -- --check`, `cargo check -p agent-drift-analyzer`, and `git diff --check` passed;
     - `cargo clippy -p agent-drift-analyzer --all-targets -- -D warnings -A clippy::nonminimal_bool` passed all targets.
   - Preserved literal gate failure: exact required `cargo clippy -p agent-drift-analyzer --all-targets -- -D warnings` exits `101` solely at unchanged `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs:90-92` (`clippy::nonminimal_bool`), last changed by the earlier review-clean dead-end series `bcd94bf4f` + `931e50c85`. GitNexus impact for exact `score_confidence` is LOW: one direct caller (`score_dead_end_thrash`) and one process.
-  - Landed proof/blocker receipt: `a341066a3` (`docs: record grounding proof blocker`) records the implementation series, green behavior proof, literal-clippy blocker, and stable decision. Fresh review returned one P2 because the receipt still described itself as uncommitted. The receipt series beginning at `a341066a3` remains pending fresh review; neither that receipt nor this follow-on correction has a review-clean verdict.
-  - **DECISION REQUIRED — `R6-TGG-CLIPPY-SCOPE-01`:**
-    - **A (recommended):** authorize one semantics-preserving boolean simplification in `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`, the necessary focused `dead_end_thrash` regression rerun, exact clippy, and the existing TGG wall.
-    - **B:** keep the strict Option-A allowed-file boundary; leave Task 3A and the phase blocked on the literal clippy gate.
+  - Review-clean proof/blocker receipt series: `a341066a3` (`docs: record grounding proof blocker`) + `0da262979` (`docs: reconcile grounding proof receipt`) received fresh built-in `default` `REVIEW CLEAN` after correcting the P2 landed-state wording. This resolves that receipt-series review gate but does not satisfy the still-red literal clippy gate or perform the post-fix completion reconciliation.
+  - **DECIDED — `R6-TGG-CLIPPY-SCOPE-01 = A`:** authorize exactly one additional production file, `crates/agent-drift-analyzer/src/scoring/dead_end_thrash.rs`, and only the semantics-preserving `clippy::nonminimal_bool` simplification in `score_confidence`, after Task 2C is fresh-review-clean. Land it separately, run the locked proof wall, obtain fresh source review, and then land/freshly review the final proof receipt.
   - Historical non-acceptance: `52c9ab296` + `73132aead` remains review-findings evidence, not completion. `6409ae072` remains a review-clean witness, not a production closure.
-  - Completion record: **INCOMPLETE**. The implementation series is freshly review-clean and its behavior proof is green, but the literal clippy gate remains red and the receipt series beginning at landed proof/blocker receipt `a341066a3` remains pending fresh review after its P2. Do not check Task 3A or begin Task 4 until both gates are resolved.
+  - Completion record: **INCOMPLETE**. The implementation and earlier receipt series are freshly review-clean and the behavior proof is green, but Task 2C is not yet fresh-review-clean, the separately authorized source fix has not landed, the literal clippy gate remains red, and the final post-fix proof receipt does not exist. Do not check Task 3A or begin Task 4 until all of those gates are actually review-clean.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3B — Attributed no-code proof receipt — ineligible and not selected.**
   - Task 2 selected the production path; the operator has now selected internal provenance Option A.
@@ -140,7 +154,7 @@ Record a separate literal pre-edit command/result for every other existing helpe
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.4 — Obtain a review-clean closure path.**
   - Require Task 3A committed with exact focused/family/checkpoint/static proof and fresh built-in `default` `REVIEW CLEAN`.
   - Record actual commit hashes, impact results, command counts/results, review findings/dispositions, and final verdict here.
-  - Current state: **OPEN / BLOCKED ON TASK 3A, `R6-TGG-CLIPPY-SCOPE-01`, AND RECEIPT-SERIES REVIEW**. The review-clean implementation series does not satisfy closure while the literal clippy gate and fresh review of the receipt series beginning at landed proof/blocker receipt `a341066a3` remain open; neither `a341066a3` nor this follow-on correction is claimed review-clean.
+  - Current state: **OPEN / BLOCKED ON TASK 3A**. Decision `R6-TGG-CLIPPY-SCOPE-01 = A` is recorded and the earlier receipt series is fresh-review-clean, but the boundary amendment, separate source fix plus proof/review, and final proof receipt plus review are not yet clean. The review-clean implementation series alone does not satisfy closure while the literal clippy gate remains red.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 2A, 2B, 3A, and 4 committed and review-clean.
@@ -172,4 +186,4 @@ Record a separate literal pre-edit command/result for every other existing helpe
 
 ## Explicit Exclusions
 
-No public API, schema, export, replay, sentinel, presentation, R7, wrong-plan-branch implementation, context extraction, command classification, unrelated scorer, successor packet, TTL/freshness, or read-consumption work belongs in Task 3A. No status checkbox advances on intent, a prior witness, or unreviewed future evidence.
+No public API, schema, export, replay, sentinel, presentation, R7, wrong-plan-branch implementation, context extraction, command classification, successor packet, TTL/freshness, or read-consumption work belongs in Task 3A. No unrelated scorer change is allowed: the sole expansion is the one-expression, semantics-preserving `score_confidence` boolean simplification in `dead_end_thrash.rs`. No status checkbox advances on intent, a prior witness, or unreviewed future evidence.
