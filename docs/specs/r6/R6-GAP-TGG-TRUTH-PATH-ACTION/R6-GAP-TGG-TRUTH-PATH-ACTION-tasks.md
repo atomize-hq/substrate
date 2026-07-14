@@ -127,7 +127,7 @@ Record a separate literal pre-edit command/result for every other existing helpe
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.4 — Obtain a review-clean closure path.**
   - Require Task 3A committed with exact focused/family/checkpoint/static proof and fresh built-in `default` `REVIEW CLEAN`.
   - Record actual commit hashes, impact results, command counts/results, review findings/dispositions, and final verdict here.
-  - Current state: **OPEN / BLOCKED ON TASKS 2A, 2B, AND 3A**. The operator decision and witness do not satisfy closure.
+  - Current state: **OPEN / BLOCKED ON TASKS 2B AND 3A**. The operator decision and witness do not satisfy closure.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 2A, 2B, 3A, and 4 committed and review-clean.
