@@ -77,6 +77,19 @@ crash matrix includes startup evidence,
 snapshot publication/orphan staleness, terminal exact retry, and payload deletion/object-directory
 `fsync` windows.
 
+### A1.2a-WB gate assignment
+
+A1.2a-WB is a bounded correction under existing gates, not a new gate. `RG-AUTH-01` and
+`RG-AUTH-03` own exact session-binding preservation, Start request equality, exact retry, and
+zero-mutation rejection. `RG-BASE-02` owns preservation of exact world binding without generic
+synthesis or participant-placement leakage. `RG-DIFF-01` owns the broad before/after differential.
+Their combined matrix requires `Host + None`, `Host + Some(exact)`, and `World + Some(exact)` to
+apply or exact-join; `World + None`, descriptor/launch mismatch, malformed binding, and changed
+world ID or generation fail closed without mutation. Applied `Host + Some` keeps the descriptor and
+launch scope `Host`, persists the exact binding only on durable session authority, and leaves the
+host participant manifest without world placement fields. No schema/version/migration/golden-vector
+gate is implicated because no shape or canonical byte changes.
+
 ## A0 closeout evidence
 
 A0 changed documentation only. It moved no authority decision, changed no production call path or enforcement point, added no runtime primitive, and preserved all compatibility behavior. The inventory in `02-seam-crosswalk.md` is therefore evidence of current ownership and coverage, not evidence that HostSessionAuthority or HostExecutionEpisode has landed.
@@ -272,9 +285,25 @@ from that A1.1e closeout. A1.2 work exposed the cycle and remains preserved out 
 branch. This paragraph records the A1.1e closeout conclusion at that time; its old next-packet/order
 statement is superseded by the Case B production-ingress audit below. Do not restore or modify the
 broad A1.2 checkpoint, and do not begin A1.2b before the joint closeout → B3.1 → C1 corridor lands.
-The bounded A1.2a packet is now the exact next packet after this docs-only correction is
-independently review-clean. A1.3 is not dependency-ready, and A1 as a whole remains incomplete and
-non-landable.
+That historical next-packet statement is now superseded: bounded A1.2a is landed and review-clean,
+and A1.2a-WB is the exact prerequisite before A1.2a-S. A1.3 is not dependency-ready, and A1 as a
+whole remains incomplete and non-landable.
+
+## A1.2a recorded result and A1.2a-WB prerequisite
+
+A1.2a is landed and published through `b5f2b4f8dd7d9f650c462cd4626a562cacc1d27f`. Its bounded
+commit chain is strict V2 greenfield upgrade `ab2af5a4`, strict V2 dispatch `91d7e491`, atomic Start
+issuance `eba02f17`, atomic claim/application `e25896a9`, terminal-handoff hash-input documentation
+`a66096be`, and terminal/current-authority read completion `b5f2b4f8`. Independent review is clean.
+The exact shell-library baseline at that commit is `876 passed / 171 failed / 0 ignored`; the 171
+failures are the inherited legacy-writer/preflight set. A1.2a-S has no edits or commits.
+
+The newly bounded prerequisite order is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0**.
+A1.2a-WB owns only the Host/world-binding validator correction in `transition.rs` and its colocated
+`transition_tests.rs`. It does not change schemas, canonical JSON bytes, golden vectors, V1/V2
+fixtures, migrations, compatibility behavior, already-persisted objects, authority fields, or
+world capability/policy enforcement. A1.2a-S may begin only after A1.2a-WB is documentation-clean,
+implementation-clean, independently reviewed, and published.
 
 ## B0 closeout evidence
 
@@ -340,7 +369,8 @@ at the same legacy StateStore-root preflight. Neither is counted as B0 proof. Th
 `RG-OBS-01` are satisfied. B2.1 consumer clauses remain open. B1-3a/B1-3b receipt-core recovery is
 dependency-ready; B2.1 becomes ready only after that core is review-clean, and neither packet is
 production-complete before their joint closeout. The joint closeout is now additionally blocked on
-A1.2a, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0; B3.1, C1, and A1.2b are not ready. The preserved broad A1.2 checkpoint remains
+A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0; B3.1, C1, and A1.2b are not ready. A1.2a is
+landed; the preserved broad A1.2 checkpoint remains
 untouched at
 `18bea80b75ad2c59c7b635851b14552e380585f2`. No seam is promoted.
 
@@ -361,7 +391,7 @@ inspect/cancel/wait behavior, while moving those mixed responsibilities into the
 a fixed active-task side table, or generic activated-store writer would violate ownership.
 
 The corrected acyclic repair keeps the preserved B1-3a/B1-3b receipt core → B2.1-1/2/3
-supervisor branch independent while A1.1e → A1.2a current-authority protocol → A1.2a-S bounded
+supervisor branch independent while A1.1e → A1.2a current-authority protocol → A1.2a-WB → A1.2a-S bounded
 internal Start adoption → B1/B2.1-R0 → B3.2a builds the authority/retained branch. They first join
 at B1/B2.1-0 action-scoped dispatch
 preparation → one joint B1/B2.1 production closeout → B3.1 →
@@ -388,7 +418,8 @@ issuance/application and exact read, A1.2a-S owns only bounded internal Start ad
 prepared dispatcher remains a B-owned consumer after those and the retained prerequisites exist.
 
 The corrected acyclic sequence keeps the preserved **B1/B2.1 core** branch independent while
-**A1.1e → A1.2a current-authority protocol → A1.2a-S bounded internal Start adoption →
+**A1.1e → A1.2a current-authority protocol → A1.2a-WB Host/world-binding correction →
+A1.2a-S bounded internal Start adoption →
 B1/B2.1-R0 canonical retained target protocol → B3.2a retained creation/admission** builds the
 authority/retained branch. They first join at **B1/B2.1-0 action-scoped dispatch preparation** →
 joint closeout → B3.1 → C1 → **A1.2b
@@ -471,9 +502,11 @@ may close the joint packet. `PassToFail`, `FailToChangedFailure`, `Removed`,
 `RenamedOrSubstituted`, `NewFail`, and `NewIgnored` must all remain zero, and every retained failure
 must preserve its normalized signature.
 
-This docs-only correction does not authorize A1.2a, A1.2a-S, B1/B2.1-R0, B3.2a, B1/B2.1-0, runtime-WIP restoration, or any
-implementation. The exact next packet after independent clean sequence review is A1.2a; it must be
-implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
+This docs-only correction records landed A1.2a and authorizes only the subsequently reviewed
+A1.2a-WB two-file implementation. It does not authorize A1.2a-S, B1/B2.1-R0, B3.2a, B1/B2.1-0,
+runtime-WIP restoration, or any later implementation. The exact next packet after independent clean
+documentation review is A1.2a-WB; it must be implemented from its bounded contract rather than by
+restoring the broad A1.2 checkpoint.
 
 ## Baseline behaviors that all tracks preserve
 
@@ -483,7 +516,7 @@ open remains a blocking regression gate until its named owner and real-path proo
 | Gate ID | Baseline | Required proof |
 |---|---|---|
 | **RG-BASE-01** | Public world-scoped start → turn/reattach → stop; **open, blocking, and not waived** | A1.2 must supply exact parked-successor `Attach`/`ResumeOneTurn` application and A1.3 must adopt it on the real public CLI/helper/REPL path. Exact session and world binding survive; stop reaches durable terminal truth even when transport posture changes. Stale lifecycle/world-binding overwrite remains rejected. Prove unsafe foreign-principal ACL state fails closed separately, then run the positive smoke against an owner-only private bootstrap home with mode `0700` and no foreign ACL. This gate is neither permanently expected to fail nor successful until that real-path wall is green. |
-| **RG-BASE-02** | REPL first-dispatch `run_world_task` binding repair | Correct binding succeeds; stale/mismatched world generation fails closed; no generic binding synthesis on unrelated surfaces. |
+| **RG-BASE-02** | REPL first-dispatch `run_world_task` binding repair | Correct binding succeeds; stale/mismatched world generation fails closed; no generic binding synthesis on unrelated surfaces. A host runtime may carry exact parent-session world binding while its descriptor and participant manifest remain host-scoped. |
 | **RG-BASE-03** | Parked host ordinary-command and continuity parity | Unprefixed `ls`/`pwd` remain usable; policy-required `cd ../` cage denial remains; later targeted host turn reuses session/UAA continuity; public CLI parity stays green. |
 | **RG-BASE-04** | Retained spawn/fork/exact continue/exact stop plus ambiguity close | Exact source and child handles route correctly; backend-only follow-up with multiple retained workers fails closed; source detached stop and child live-transport stop remain valid. |
 | **RG-DIFF-01** | Monotonic broad-suite differential; a historical failure becoming a pass is neither automatic success nor automatic regression | Apply the exact-name and normalized-signature transition gate in `04`. Preserve complete inventories and artifact hashes; prove every historical failure-to-pass transition through the exact baseline and current full production dispatcher; inspect test and assertion diffs; map the causal change to the owning slice and symbol; prove no direct-resolver/transport substitution, bypass, weakened enforcement, removed behavior, hidden/renamed/ignored test, or unrelated capability loss; and obtain independent review. A lower-level substitute is `RegressionMasked`; any otherwise uncertain transition is `BaselineRegressionAmbiguous`. Either classification keeps the owning closeout open. |

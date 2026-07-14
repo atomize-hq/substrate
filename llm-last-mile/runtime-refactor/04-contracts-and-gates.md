@@ -1645,6 +1645,37 @@ Acceptance rules:
    identities; a different store or workspace requires a separately versioned explicit rebinding
    protocol outside A1.
 
+### Runtime placement and durable session world binding
+
+`AgentDescriptorV1.execution_scope` and
+`HostAttachLaunchKnobsV1.requested_execution_scope` are runtime-placement truth.
+`DurableSessionAuthorityV1.world_binding` is the durable parent orchestration session's exact
+available world-substrate truth. These dimensions are independent and are not bijective. A
+host-executing orchestrator may own a world-backed durable session; a world-executing runtime must
+have an exact world binding.
+
+The Start validator freezes this complete matrix:
+
+| Descriptor and launch scope | Session world binding | Result |
+|---|---|---|
+| `Host` | `None` | accept |
+| `Host` | `Some(exact binding)` | accept |
+| `World` | `Some(exact binding)` | accept |
+| `World` | `None` | reject |
+
+In every accepted row, descriptor scope exactly equals requested launch scope. Every `Some` is the
+exact complete `(world_id, world_generation)` pair supplied by session-authority truth; an empty or
+malformed binding is rejected, and no compatibility input may synthesize one. Changing either
+world ID or generation changes the canonical Start request, so it cannot exact-join an earlier
+request. `Host + Some` does not mean the host runtime executes in the world. The host participant
+descriptor and manifest stay host-scoped and receive no participant-level world placement fields;
+the binding is persisted only as session authority.
+
+A1.2a-WB changes validation semantics only. It adds no field or version, changes no canonical JSON
+byte or golden vector, creates no V3/migration/compatibility bridge, and rewrites no persisted
+object. World filesystem, network, caging, policy, capability, and enforcement semantics remain
+unchanged.
+
 ## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
 The landed `HostSessionTransitionIntentV1` byte shape remains strict and readable without defaults
@@ -2696,12 +2727,12 @@ verify, reinterpret, log as observability evidence, or use it as obligation sema
 ### B1/B2.1 bounded read-only dispatch-authority adapter
 
 The implementability audit selects **Case B**. This adapter is not implementation-authorized until
-the corrected A1.2a, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0 sequence is independently review-clean. A1.1e can read an exact
+the corrected A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0 sequence is independently review-clean. A1.1e can read an exact
 current authority but cannot create one, and the source branch has no production creator/adopter.
 The current prepared type also combines B-owned accepted/inspection routing with retained-worker
 admission data that has no canonical live-state representation.
 
-The authority/retained branch is **A1.2a → A1.2a-S → B1/B2.1-R0 → B3.2a**. The independently
+The authority/retained branch is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0 → B3.2a**. The independently
 preserved B1 receipt → B2.1 supervisor branch first joins it at **B1/B2.1-0**, after which the hard
 order is **joint B1/B2.1 production closeout → B3.1 → C1 → A1.2b**. R0 consumes no receipt or
 supervisor datum; neither B core is therefore a false prerequisite of R0.
@@ -2715,7 +2746,12 @@ The minimal prerequisite contract is:
    exact session/caller/lineage/workspace/world/revision/policy truth. It does not implement a
    non-greenfield upgrade, Attach, ResumeOneTurn, startup/post-turn reconciliation, obligation-cut
    consumption, correlation supply to world work, or public consumer adoption.
-2. **A1.2a-S — bounded internal Start adoption prerequisite:** make
+2. **A1.2a-WB — Host/world-binding validation correction:** preserve exact descriptor/launch-scope
+   equality, accept `Host + None`, `Host + Some(exact)`, and `World + Some(exact)`, and reject
+   `World + None` or any malformed binding without mutation. Exact present binding is session
+   authority, never host-participant placement. The packet changes no schema, canonical bytes,
+   fixtures, migration, compatibility path, or already-persisted object.
+3. **A1.2a-S — bounded internal Start adoption prerequisite:** make
    `prepare_host_orchestrator_runtime_from_resolved` construct only an unpersisted
    `GreenfieldHostStartProposalV1` carrying exact store/home/workspace/descriptor/policy/shell
    observations but no authoritative session/participant/run identity. The proposal is a distinct
@@ -2736,7 +2772,7 @@ The minimal prerequisite contract is:
    and treats launch, readiness, endpoint, process, prompt, and event state as observations. It does
    not adopt hidden-owner plans, public Start/Attach/Resume, startup-result reconciliation, or
    post-turn behavior.
-3. **B1/B2.1-R0 — canonical retained-target protocol prerequisite:** add the smallest
+4. **B1/B2.1-R0 — canonical retained-target protocol prerequisite:** add the smallest
    bounded registration handshake in which RetainedWorkerRuntime creates the immutable descriptor,
    participant-specific resume handle, and retained-worker object graph from a caller-fixed
    participant plan. HostSessionAuthority validates that plan and its exact commitment/scope and
@@ -2748,7 +2784,7 @@ The minimal prerequisite contract is:
    no production ingress caller and cannot itself count as full-dispatcher proof. It cannot use a
    test-only fixture or process-local map, and it adds no message, accepted-turn observation, active-turn,
    park/cancel/stop/fork, or live-admission semantics.
-4. **B3.2a — retained creation/admission bridge prerequisite:** route both real Spawn adapters—the
+5. **B3.2a — retained creation/admission bridge prerequisite:** route both real Spawn adapters—the
    direct dispatcher path and the live internal-toolbox retained-runtime path—through the same
    authority-bound `SpawnWorldWorker` preparation before generic compatibility
    preparation, atomically count/reserve a durable participant slot across processes before R0,
@@ -2761,7 +2797,7 @@ The minimal prerequisite contract is:
    Every ambiguous interruption remains nonterminal and counted live, so existing spawn admission
    narrows without HSA-ref counting or compatibility liveness. B3.2a has no accepted-turn,
    message, park/cancel/stop/fork, or final lifecycle semantics.
-5. **B1/B2.1-0 — action-scoped dispatch preparation:** accept the A1.2a/A1.2a-S,
+6. **B1/B2.1-0 — action-scoped dispatch preparation:** accept the A1.2a/A1.2a-WB/A1.2a-S,
    B1/B2.1-R0, and B3.2a typed read results plus B1 receipt and B2.1 supervisor truth through a
    caller-supplied bound capability or one explicitly authorized trusted open-and-bind conversion;
    build a B-owned prepared view only for RunWorldTask, ordinary retained ContinueWorldWorker, and
@@ -3198,7 +3234,7 @@ The canonical source of every value used to construct or interpret
 | current prepared caller backend, role, and participant record shape | `MissingCanonicalRepresentation` | `DurableSessionAuthorityV1` contains IDs/lineage but not backend/role. A1.2a must expose the exact applied descriptor through a typed read result; B1/B2.1-0 must narrow or replace the legacy record shape. |
 | workspace binding and authority-store identity | `HostSessionAuthorityTruth` | Use exact canonical workspace root, authority-store root, and store ID. |
 | requested world ID and generation | `ValidatedRequestInput` | Must be present in the validated request where required and equal the exact authority world binding. |
-| authoritative world binding and generation | `HostSessionAuthorityTruth` | Absence or mismatch fails closed; compatibility state cannot create or repair it. |
+| authoritative world binding and generation | `HostSessionAuthorityTruth` | For an action/runtime that requires a world, absence or mismatch fails closed; a host runtime may validly have no binding or may consume the exact session binding. Compatibility state cannot create or repair it. |
 | current policy ref and policy revision | `HostSessionAuthorityTruth` | The ref must be a Policy object and both values must equal the exact current authority. |
 | effective-policy/snapshot projection used by existing steering behavior | `CompatibilityProjectionValidatedAgainstAuthority` | Its ref/revision and canonical snapshot commitment must validate against exact current-policy identity before use. |
 | `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a must supply the exact RetainedWorkerRuntime admission count for production Spawn before closeout. B1/B2.1-0 removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |

@@ -60,7 +60,7 @@ flowchart TD
 | Boundary | Owns | Must not own |
 |---|---|---|
 | SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations | durable posture, world binding, retained continuity, successor allocation, terminal truth, transition-intent issuance/claim/application |
-| HostSessionAuthority | exact session/caller/lineage/binding resolution; durable posture transitions; revision-bound host-transition-intent issuance, claim validation, replay-safe application, and reconciliation | transport loops, provider mechanics, compatibility projection |
+| HostSessionAuthority | exact session/caller/lineage/session-world-binding resolution; durable posture transitions; revision-bound host-transition-intent issuance, claim validation, replay-safe application, and reconciliation | runtime-process placement, transport loops, provider mechanics, compatibility projection |
 | StateStore | bounded atomic physical persistence, migrations, schema evolution | lifecycle, receipt, supervisor, routing, or liveness-derived semantic authority; generic activated-store writes |
 | CompatibilityReadModel | legacy reads, torn-root diagnostics, compatibility projection/migration | new authority writes or overriding newer revisions |
 | WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries; blocking compatibility inspect/wait/cancel routing that consumes exact receipt/supervisor truth | provider-specific execution, direct policy invention, or ownership of accepted-work/observation truth |
@@ -83,6 +83,26 @@ flowchart TD
 ### 1. Durable session truth is process-independent
 
 Durable truth is the exact session identity, authoritative lineage, workspace/world binding, attach contract, retained-worker refs, resume handles, posture, and policy revision. Helper PID, attached client, socket reachability, startup stream state, and owner-process liveness are observations only.
+
+Runtime execution scope and durable session world binding are distinct authority dimensions.
+`AgentDescriptorV1.execution_scope` and the matching launch knob describe runtime placement;
+`DurableSessionAuthorityV1.world_binding` describes the parent orchestration session's exact
+available world substrate. Runtime placement and session binding are not bijective: a host-executing
+orchestrator may own a world-backed durable session, while a world-executing runtime requires that
+exact binding. The frozen Start acceptance matrix is:
+
+| Descriptor and launch scope | Session world binding | Result |
+|---|---|---|
+| `Host` | `None` | accept |
+| `Host` | `Some(exact binding)` | accept |
+| `World` | `Some(exact binding)` | accept |
+| `World` | `None` | reject |
+
+Descriptor scope must still equal requested launch scope, and any present binding must contain the
+exact non-empty world ID and generation supplied by session truth. `Host + Some` does not place the
+host runtime in the world. Host participant manifests remain host-scoped and do not acquire
+participant-level world placement fields; the binding stays on the durable session authority.
+World filesystem, network, caging, policy, capability, and enforcement semantics are unchanged.
 
 ### 2. Private transports are fast paths
 

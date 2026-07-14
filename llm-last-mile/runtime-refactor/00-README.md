@@ -3,7 +3,7 @@
 **Status:** canonical control pack for future runtime-refactor slices
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
-**Repo-truth snapshot:** 2026-07-13; re-check live code before every slice
+**Repo-truth snapshot:** 2026-07-14; re-check live code before every slice
 
 ## Canonical repo location
 
@@ -109,6 +109,10 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
   materialization covers an exact terminal event identity and sequence for one scoped run.
 - **Secret handoff:** one-time secure-FD delivery from host credential authority to the in-world Substrate gateway; never a UAA-native credential file projection.
 - **Runtime-family adapter:** provider mechanics only; never Substrate lifecycle or policy semantics.
+- **Runtime placement versus session binding:** `AgentDescriptorV1.execution_scope` and the matching
+  launch knob select where the runtime process executes. `DurableSessionAuthorityV1.world_binding`
+  records the durable parent session's exact available world substrate. These are independent
+  authority dimensions, not a bijection.
 
 ## Reading and update rules
 
@@ -132,7 +136,8 @@ legacy live-retained count. The corrected bounded corridor is:
 
 ```text
 A1.1e -> B0 -> B1-3a/B1-3b receipt core -> B2.1-1/2/3 -------------------------+
-       \-> A1.2a current-authority protocol -> A1.2a-S bounded Start adoption   |
+       \-> A1.2a current-authority protocol -> A1.2a-WB binding correction       |
+           -> A1.2a-S bounded Start adoption                                    |
            -> B1/B2.1-R0 canonical retained target protocol                     |
            -> B3.2a retained creation/admission bridge --------------------------+
                                                                                 -> B1/B2.1-0
@@ -144,13 +149,18 @@ This corridor does not close A1.1d, bypass A2/A3 ownership, enable foreground ea
 promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven;
 the B1 receipt and B2.1 supervisor cores are preserved at the current joint-closeout stop. B1
 cannot close until the accepted production paths enter the durable supervisor without attempting
-the legacy active-task writer. After this corrected sequence is independently review-clean, the
-exact next implementation packet is A1.2a. It is limited to production Start
-after one strict greenfield-only V1-to-V2 root upgrade; then reservation/issuance/application, initial
-authority birth, exact retry, and the typed read surface required to resolve that already-current
-authority; it has no Attach/Resume, obligation, correlation-supply, or public-consumer adoption.
-A1.2a-S then adopts only the ordinary internal greenfield host Start path: a distinct identity-free
-proposal is applied after the real dormant-launch adapter has the optional world binding and only
+the legacy active-task writer. A1.2a is landed and independently review-clean through
+`b5f2b4f8dd7d9f650c462cd4626a562cacc1d27f`; it remains limited to production Start after one
+strict greenfield-only V1-to-V2 root upgrade, reservation/issuance/application, initial authority
+birth, exact retry, and the typed read surface required to resolve that already-current authority.
+It has no Attach/Resume, obligation, correlation-supply, or public-consumer adoption.
+A1.2a-WB is the exact bounded prerequisite now inserted before A1.2a-S. It corrects only the Start
+validator so Host runtime placement accepts either no session world binding or an exact session
+world binding, while World placement still requires an exact binding. It does not change a schema,
+canonical JSON bytes, golden vectors, persisted objects, or participant placement. A1.2a-S depends
+on review-clean A1.2a-WB and then adopts only the ordinary internal greenfield host Start path: a
+distinct identity-free proposal is applied after the real dormant-launch adapter has the optional
+world binding and only
 then becomes the existing fully materialized `PreparedAgentRuntime`. It replaces that path's legacy
 session/participant writes with the applied A1.2a result, carries the bound capability into the
 live toolbox context, and leaves startup ownership Pending. It does not change fork/member prepared
