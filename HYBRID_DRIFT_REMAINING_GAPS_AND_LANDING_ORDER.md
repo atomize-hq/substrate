@@ -757,8 +757,10 @@ the relevant derived progress is equal. The three preserved reds route, in order
 review-clean `d13f0a71c`), complete `R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`, final
 proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and active docs-only
 `R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`). The frozen dead-end corpus still proves
-invariance rather than comparative integrated improvement. R6 remains partial; this transition
-candidate still requires fresh review, and `R6-REPLAY` remains blocked.
+invariance rather than comparative integrated improvement. R6 remains partial; transition series
+`2937dbe5a` + `91f55f6bf` received fresh independent built-in `default` `REVIEW CLEAN`. Prompt 1
+for `R6-GAP-WPB-EMPTY-AUTHORITY` is eligible, no successor packet work has started, and
+`R6-REPLAY` remains blocked.
 
 ## Packet R7: Full Delegated-Session Support
 
