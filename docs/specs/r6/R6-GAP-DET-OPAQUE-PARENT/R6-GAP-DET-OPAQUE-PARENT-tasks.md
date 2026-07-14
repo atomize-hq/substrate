@@ -101,7 +101,7 @@ The second command is required if `score_confidence` changes. Impact every addit
     checkpoint tests passed; and `cargo fmt --all -- --check` plus
     `cargo check -p agent-drift-analyzer` passed.
 
-- [ ] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
+- [x] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 0, 1, and 4 review-clean.
   - Apply the full R6-C.1 gap-transition authority manifest. Mark this gap `COMPLETE`; activate only `R6-GAP-TGG-TRUTH-PATH-ACTION`; keep later gaps blocked.
   - Successor boundary: record only these non-link `TO CREATE` paths and authorize their atomic docs gate:
@@ -116,11 +116,12 @@ The second command is required if `score_confidence` changes. Impact every addit
     `R6-GAP-DET-OPAQUE-PARENT` complete; activates only `R6-GAP-TGG-TRUTH-PATH-ACTION` at its
     docs-only gate with the three exact non-link `TO CREATE` paths above; and keeps
     `R6-GAP-WPB-EMPTY-AUTHORITY` plus `R6-REPLAY` blocked. Fresh independent review of `c3202d3f3`
-    found a P2 bookkeeping issue: Task 5 was checked before the transition review verdict. This fix
-    leaves Task 5 pending until the transition series is freshly **REVIEW CLEAN** without altering
-    the applied phase statuses or successor boundary. The sole next action is atomic creation and
-    fresh review of those three successor docs; they do not exist yet and no successor implementation
-    is authorized.
+    found a P2 bookkeeping issue: Task 5 was checked before the transition review verdict. Commit
+    `720336de8` corrected that premature checkbox without altering the applied phase statuses or
+    successor boundary, and a fresh built-in `default` reviewer returned **REVIEW CLEAN** for the
+    transition series `c3202d3f3` + `720336de8`. This is the bookkeeping receipt of that
+    already-obtained verdict. The sole next action is atomic creation and fresh review of those three
+    successor docs; they do not exist yet and no successor implementation is authorized.
 
 ## Explicit Exclusions
 
