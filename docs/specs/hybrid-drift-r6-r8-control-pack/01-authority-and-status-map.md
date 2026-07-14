@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119`, fresh independent built-in `default` `REVIEW CLEAN`; authority transition in this review series landed and pending fresh review
+**Verified against:** final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119`, fresh independent built-in `default` `REVIEW CLEAN`; authority transition series `56bb9966f` + `07a3b1fe5`, fresh independent built-in `default` `REVIEW CLEAN`
 
-**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `none`; authority transition landed; fresh transition review pending before replay execution)
+**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Obtain fresh independent review of the landed authority transition. Only after it is clean may Prompt 1 execute `R6-REPLAY` with active packet `none`; do not start replay, R6 close, or R7/R8 work in this transition. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Prompt 1 may execute only `R6-REPLAY` with active packet `none`; do not start R6 close or R7/R8 work. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 

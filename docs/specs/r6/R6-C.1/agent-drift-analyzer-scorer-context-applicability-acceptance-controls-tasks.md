@@ -12,9 +12,10 @@ fresh independent built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5
 also received fresh independent built-in `default` `REVIEW CLEAN`, completing the second route and
 activating the final gap. That route is now complete after implementation/review-fix series
 `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW
-CLEAN`. The authority transition in this review series is landed, activates only `R6-REPLAY` with
-active packet `none`, and awaits fresh transition review before replay execution begins. No replay,
-phase-close, terminal scorer disposition, or R7/R8 work is authorized first.
+CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` also received fresh independent
+built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`. Prompt 1
+for that replay phase is the sole next eligible invocation; no replay, phase-close, terminal scorer
+disposition, or R7/R8 work was executed by the transition.
 
 ## Required Staged Commit Gate
 
@@ -463,7 +464,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `35` unit + `131` integration plus matching export/truth tests, and the full analyzer plus
     format/check/literal-clippy/diff walls passed. All three named-gap execution instances are complete.
 
-- [ ] **R6-C.1.5.3 — Transition sequentially between gaps, then to `R6-REPLAY`.**
+- [x] **R6-C.1.5.3 — Transition sequentially between gaps, then to `R6-REPLAY`.**
   - Acceptance: after the active gap fix or no-code proof receipt is committed and review-clean, a
     separate narrow transition commit closes it and activates the next named red gap in matrix/family
     order. In the named-gap subledger, atomically mark the predecessor `COMPLETE`, only its immediate
@@ -479,10 +480,13 @@ before that reconciled transition is committed and fresh-review-clean.
     received fresh independent built-in `default` `REVIEW CLEAN`, marks
     `R6-GAP-TGG-TRUTH-PATH-ACTION` complete, activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its
     docs-only packet-creation gate with active packet `none`, and kept `R6-REPLAY` blocked. The
-    authority transition in this review series now marks `R6-GAP-WPB-EMPTY-AUTHORITY` and aggregate
-    `R6-GAP-*` complete and activates only `R6-REPLAY` with active packet `none`. This generic task
-    remains unchecked until that landed transition receives fresh independent `REVIEW CLEAN`; no
-    replay work has started.
+    final authority transition series `56bb9966f` + `07a3b1fe5` marks
+    `R6-GAP-WPB-EMPTY-AUTHORITY` and aggregate `R6-GAP-*` complete and activates only `R6-REPLAY`
+    with active packet `none`. The first fresh independent built-in `default` reviewer returned one
+    P2 finding for a stale historical Step 1 gate description in the final gap PLAN; `07a3b1fe5`
+    corrected it, and a fresh independent built-in `default` reviewer returned `REVIEW CLEAN` for
+    the complete transition series. Prompt 1 for `R6-REPLAY` with active packet `none` is the sole
+    next eligible invocation; no replay work has started.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 

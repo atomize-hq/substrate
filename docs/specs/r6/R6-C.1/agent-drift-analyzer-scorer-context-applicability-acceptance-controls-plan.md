@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY COMPLETE; R6-REPLAY ACTIVE** on 2026-07-14. Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`; the authority transition in this review series is landed, activates only `R6-REPLAY` with active packet `none`, and awaits fresh transition review before replay execution begins.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY COMPLETE; R6-REPLAY ACTIVE** on 2026-07-14. Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` and authority transition series `56bb9966f` + `07a3b1fe5` each received fresh independent built-in `default` `REVIEW CLEAN`. Only `R6-REPLAY` is active with active packet `none`; Prompt 1 for that replay phase is the sole next eligible invocation.
 This plan is ordered and test-first.
 
 ## Plan Decisions

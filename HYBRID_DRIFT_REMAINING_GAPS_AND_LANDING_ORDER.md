@@ -104,8 +104,9 @@ built-in `default` `REVIEW CLEAN`. Transition series `2937dbe5a` + `91f55f6bf` t
 independent built-in `default` `REVIEW CLEAN`, making only `R6-GAP-WPB-EMPTY-AUTHORITY` active at
 that boundary. Its implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` now
 also received fresh independent built-in `default` `REVIEW CLEAN`, completing the final named gap.
-The authority transition in this review series is landed, marks aggregate `R6-GAP-*` complete, and
-activates only `R6-REPLAY` with active packet `none`; fresh transition review is pending before replay.
+Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
+`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active
+packet `none`; Prompt 1 for that replay phase is the sole next eligible invocation.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -762,8 +763,9 @@ proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and comple
 `R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`; implementation/review-fix series
 `6b42e5476` + `e65df2561` + `cd4e24119` fresh independent `REVIEW CLEAN`). The frozen dead-end
 corpus still proves invariance rather than comparative integrated improvement. R6 remains partial.
-The authority transition in this review series is landed, marks aggregate `R6-GAP-*` complete, and
-activates only `R6-REPLAY` with active packet `none`; fresh transition review is pending before replay.
+Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
+`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active
+packet `none`; Prompt 1 for that replay phase is the sole next eligible invocation.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -857,9 +859,9 @@ The next honest work target is:
   proof-receipt series received fresh `REVIEW CLEAN`
 - keep `R6-GAP-WPB-EMPTY-AUTHORITY` complete after implementation/review-fix series `6b42e5476` +
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
-- **next eligible interaction:** fresh independent review of the landed authority transition
-- keep `R6-REPLAY` as the sole active phase with active packet `none`; do not execute it until the
-  transition review is clean
+- authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
+  `default` `REVIEW CLEAN`
+- **next eligible interaction:** Prompt 1 for `R6-REPLAY` with active packet `none`
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed

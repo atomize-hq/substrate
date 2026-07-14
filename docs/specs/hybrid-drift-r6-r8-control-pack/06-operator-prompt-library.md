@@ -304,10 +304,10 @@ result, current phase status, and the next eligible interaction.
 ## Current First Invocation
 
 Final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh
-independent built-in `default` `REVIEW CLEAN`. The authority transition in this review series is
-landed, marks aggregate `R6-GAP-*` complete, and makes `R6-REPLAY` the sole concrete active phase
-with active packet `none`. After that transition receives fresh independent `REVIEW CLEAN`, its
-default invocation uses Prompt 1 with:
+independent built-in `default` `REVIEW CLEAN`. Authority transition series `56bb9966f` +
+`07a3b1fe5` also received fresh independent built-in `default` `REVIEW CLEAN`, marks aggregate
+`R6-GAP-*` complete, and makes `R6-REPLAY` the sole concrete active phase with active packet `none`.
+The next eligible default invocation uses Prompt 1 with:
 
 ```text
 PHASE_ID: R6-REPLAY
@@ -315,6 +315,5 @@ ACTIVE_PACKET: none
 ```
 
 The session must re-check that status from live repo truth and execute only the selected replay
-phase. The current transition does not itself authorize replay before fresh transition review, does
-not assign terminal scorer dispositions, and does not start `R6-CLOSE`, R7, or R8 work. This example
-is not a permanent status override.
+phase. The review-clean transition did not assign terminal scorer dispositions and did not start
+replay, `R6-CLOSE`, R7, or R8 work. This example is not a permanent status override.

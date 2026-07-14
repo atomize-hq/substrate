@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition landed; fresh transition review pending before replay execution)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -49,9 +49,10 @@ All three named gaps are now complete with review-clean focused proof. The final
 `R6-GAP-WPB-EMPTY-AUTHORITY` implementation/review-fix series `6b42e5476` + `e65df2561` +
 `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`. The authority transition
 in this review series is landed, marks aggregate `R6-GAP-*` complete, and activates only
-`R6-REPLAY` with active packet `none`. Fresh transition review is pending; replay execution remains
-forbidden until that review is clean. R6 closure, terminal `wrong_plan_branch` disposition,
-successor execution, and all R7/R8 work remain blocked.
+`R6-REPLAY` with active packet `none`. Transition series `56bb9966f` + `07a3b1fe5` received fresh
+independent built-in `default` `REVIEW CLEAN`; Prompt 1 for `R6-REPLAY` with active packet `none` is
+the sole next eligible invocation. R6 closure, terminal `wrong_plan_branch` disposition, successor
+execution, and all R7/R8 work remain blocked.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

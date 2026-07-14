@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition landed; fresh transition review pending before replay execution)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)**
 
 ## Dependency Order
 
@@ -26,10 +26,10 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transitio
 7. **COMPLETE through fresh review-clean `6b42e5476` + `e65df2561` + `cd4e24119`:** the final named
    gap, `R6-GAP-WPB-EMPTY-AUTHORITY`, landed its bounded scorer fix, focused/family/checkpoint/full
    proof, receipt corrections, and fresh independent `REVIEW CLEAN`.
-8. **ACTIVE / TRANSITION REVIEW PENDING:** the authority transition in this review series is landed,
-   marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active packet `none`.
-   Obtain fresh transition `REVIEW CLEAN`, then run bounded replay evidence in a later phase; do not
-   start replay in this transition.
+8. **ACTIVE / TRANSITION REVIEW CLEAN:** authority transition series `56bb9966f` + `07a3b1fe5`
+   received fresh independent built-in `default` `REVIEW CLEAN`, marks aggregate `R6-GAP-*`
+   complete, and activates only `R6-REPLAY` with active packet `none`. Prompt 1 for that replay phase
+   is the sole next eligible invocation; no replay work was executed by the transition.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
@@ -56,7 +56,8 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transitio
 - Preserve unrelated worktree changes.
 
 All three named gaps are complete. Final implementation/review-fix series `6b42e5476` +
-`e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`. The authority
-transition in this review series is landed, activates only `R6-REPLAY` with active packet `none`,
-and awaits fresh transition review. No replay command, terminal scorer disposition, R6 close, or
-R7/R8 work is authorized before that review is clean.
+`e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`. Authority
+transition series `56bb9966f` + `07a3b1fe5` also received fresh independent built-in `default`
+`REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`. Prompt 1 for that replay
+phase is the sole next eligible invocation; no replay command, terminal scorer disposition, R6 close,
+or R7/R8 work was executed by the transition.

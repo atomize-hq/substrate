@@ -1,6 +1,6 @@
 # Plan: R6-GAP-WPB-EMPTY-AUTHORITY
 
-Status: **COMPLETE — IMPLEMENTATION/REVIEW-FIX SERIES REVIEW CLEAN; AUTHORITY TRANSITION LANDED; FRESH TRANSITION REVIEW PENDING**. Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN` with the exact witness and protected proof wall green. The authority transition in this review series is landed, marks this gap complete, activates only `R6-REPLAY` with active packet `none`, and awaits fresh transition review. Do not start replay, assign a terminal scorer disposition, close R6, or begin R7/R8 work in this transition.
+Status: **COMPLETE — IMPLEMENTATION/REVIEW-FIX AND AUTHORITY TRANSITION SERIES REVIEW CLEAN**. Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN` with the exact witness and protected proof wall green. Authority transition series `56bb9966f` + `07a3b1fe5` also received fresh independent built-in `default` `REVIEW CLEAN`, marks this gap and aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active packet `none`. Prompt 1 for that replay phase is the sole next eligible invocation; the transition did not start replay, assign a terminal scorer disposition, close R6, or begin R7/R8 work.
 
 ## Locked Decisions
 

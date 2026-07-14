@@ -21,8 +21,9 @@ received fresh independent built-in `default` `REVIEW CLEAN`. Authority-only tra
 `2937dbe5a` + `91f55f6bf` also received fresh independent built-in `default` `REVIEW CLEAN`. R6
 remains **PARTIAL**, but all three named gaps are complete. Final gap implementation/review-fix
 series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default`
-`REVIEW CLEAN`. The authority transition in this review series is landed, makes `R6-REPLAY` the
-sole active phase with active packet `none`, and awaits fresh transition review before replay begins.
+`REVIEW CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent
+built-in `default` `REVIEW CLEAN` and makes `R6-REPLAY` the sole active phase with active packet
+`none`; Prompt 1 for that replay phase is the sole next eligible invocation.
 R7 remains useful, design-ready draft work, but it is **not implementation-ready**.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
@@ -114,9 +115,10 @@ evidence. Its canonical
 [`TASKS`](R6-GAP-WPB-EMPTY-AUTHORITY/R6-GAP-WPB-EMPTY-AUTHORITY-tasks.md) landed in packet-doc
 series `8734f4dbe` + `334e7c6ac` and received fresh independent built-in `default` `REVIEW CLEAN`.
 Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` also received fresh
-independent built-in `default` `REVIEW CLEAN`, completing the named gap. The authority transition in
-this review series is landed, activates only `R6-REPLAY` with active packet `none`, and awaits fresh
-transition review before replay execution.
+independent built-in `default` `REVIEW CLEAN`, completing the named gap. Authority transition series
+`56bb9966f` + `07a3b1fe5` received fresh independent built-in `default` `REVIEW CLEAN` and activates
+only `R6-REPLAY` with active packet `none`; Prompt 1 for that replay phase is the sole next eligible
+invocation.
 
 ## Broad R6 Acceptance-Claim Audit
 
@@ -144,9 +146,10 @@ The three distinct routes must execute sequentially in matrix order:
    independent built-in `default` `REVIEW CLEAN` with exact, protected, family, checkpoint,
    full-analyzer, and static proof green.
 
-All three named gap routes are complete. The authority transition in this review series is landed,
-marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active packet `none`.
-Fresh transition review is pending; do not start replay before it is clean.
+All three named gap routes are complete. Authority transition series `56bb9966f` + `07a3b1fe5`
+received fresh independent built-in `default` `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete,
+and activates only `R6-REPLAY` with active packet `none`. Prompt 1 for that replay phase is the sole
+next eligible invocation.
 
 ## Verification Run For This Audit
 
@@ -183,8 +186,9 @@ code changed.
 
 **R6 status: PARTIAL with all three named gaps complete and `R6-REPLAY` the sole active phase with
 active packet `none`.** Final gap implementation/review-fix series `6b42e5476` + `e65df2561` +
-`cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`. The authority transition
-in this review series is landed and awaits fresh transition review before replay begins. The landed
+`cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`. Authority transition
+series `56bb9966f` + `07a3b1fe5` also received fresh independent built-in `default` `REVIEW CLEAN`;
+Prompt 1 for `R6-REPLAY` with active packet `none` is the sole next eligible invocation. The landed
 R6 packet history and completed `R6-C.1-CONTROLS` remain intact; commit `99efda8f9` is not closure
 authority. No terminal `truth_grounding_gap` or `wrong_plan_branch` disposition, replay close, R6
 close, or successor implementation is claimed.

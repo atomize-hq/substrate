@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition landed; fresh transition review pending before replay execution)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -42,8 +42,9 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transitio
 - [x] Resolve `R6-GAP-WPB-EMPTY-AUTHORITY`; implementation/review-fix series `6b42e5476` +
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN` with exact,
   protected, family, checkpoint, full-analyzer, and static proof green.
-- [ ] **Next eligible interaction:** fresh independent review of the landed authority transition.
-  Only after that review is clean may Prompt 1 start `R6-REPLAY` with active packet `none`.
+- [x] Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
+  `default` `REVIEW CLEAN`.
+- [ ] **Next eligible interaction:** Prompt 1 for `R6-REPLAY` with active packet `none`.
 - [ ] Re-run focused scorer tests, full analyzer tests, and the bounded replay wall.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.

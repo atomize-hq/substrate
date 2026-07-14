@@ -354,9 +354,10 @@ code changed. In matrix order the preserved routes are:
    independent built-in `default` `REVIEW CLEAN`; exact target is `0 / Low / Cleared`, unflagged,
    with empty evidence, and its protected/family/checkpoint/full-analyzer/static walls are green.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**, but all named gaps are complete. The authority
-transition in this review series is landed, makes `R6-REPLAY` the sole active phase with active
-packet `none`, and awaits fresh transition review before replay begins. The historical witness
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**, but all named gaps are complete. Authority
+transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default` `REVIEW
+CLEAN` and makes `R6-REPLAY` the sole active phase with active packet `none`; Prompt 1 for that replay
+phase is the sole next eligible invocation. The historical witness
 remains `60 / Low / Active`, flagged, with command-action evidence; the proven current target is
 `0 / Low / Cleared`, unflagged, with empty evidence. No terminal `truth_grounding_gap` or
 `wrong_plan_branch` disposition, replay close, or R6 close is claimed.

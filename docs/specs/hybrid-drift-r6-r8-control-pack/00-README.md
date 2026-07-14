@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; authority transition landed; fresh transition review pending before replay execution`
+**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; authority transition series 56bb9966f + 07a3b1fe5 fresh independent built-in default REVIEW CLEAN`
 
-**Last repo-truth verification:** final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119`, fresh independent built-in `default` `REVIEW CLEAN`; authority transition in this review series landed and pending fresh review
+**Last repo-truth verification:** final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119`, fresh independent built-in `default` `REVIEW CLEAN`; authority transition series `56bb9966f` + `07a3b1fe5`, fresh independent built-in `default` `REVIEW CLEAN`
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -21,9 +21,10 @@ packet docs landed in series `8734f4dbe` + `334e7c6ac` and received fresh indepe
 `default` `REVIEW CLEAN`. Its implementation/review-fix series `6b42e5476` + `e65df2561` +
 `cd4e24119` then received fresh independent built-in `default` `REVIEW CLEAN`, completing the final
 named gap with exact, protected, family, checkpoint, full-analyzer, and static proof green. The
-authority transition in this review series is landed, marks aggregate `R6-GAP-*` complete, and
-activates only `R6-REPLAY` with active packet `none`. Fresh transition review is pending; no replay,
-R6 closeout, terminal scorer disposition, or R7/R8 work is authorized before that review is clean.
+authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
+`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active
+packet `none`. Prompt 1 for that replay phase is the sole next eligible invocation; no replay, R6
+closeout, terminal scorer disposition, or R7/R8 work was executed by the transition.
 
 ## Purpose
 
