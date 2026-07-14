@@ -32,7 +32,7 @@
       "Checkpoint 5 exposes failure_signature_repeated and resolves dead_end_thrash to Active / 30 / High and flagged."
     ],
     "counter_evidence": [
-      "A later patch begins at event 486 inside the selected boundary, but its clean focused verifier is event 493 with output 495 after the checkpoint boundary; it does not advance the selected checkpoint's frontier."
+      "A later patch begins at event 486 inside the selected boundary, but its clean focused target verifier is event 492 with output 495 after the checkpoint boundary; the concurrent sibling is event 493 with output 496, and neither advances the selected checkpoint's frontier."
     ],
     "why_not_other_dimensions": [
       "Not implementation_verification_wall because the selected checkpoint repeats the same failing assertion without a clean or broader verifier result.",
