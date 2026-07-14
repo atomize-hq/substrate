@@ -27,6 +27,8 @@ pub(crate) fn score_truth_grounding_gap(
         .min();
     let mut grounded_reads = Vec::<EvidenceRef>::new();
     let mut ungrounded_actions = Vec::<EvidenceRef>::new();
+    let prior_grounding =
+        previous_truth_grounding_gap.is_some_and(|score| !score.flagged && score.raw_score > 0);
 
     for command in &analysis.interval.command_observations {
         let touches_truth = command.paths.iter().any(|path| {
@@ -40,7 +42,9 @@ pub(crate) fn score_truth_grounding_gap(
             .unwrap_or(true);
         if touches_truth && command.read_like && before_first_action {
             grounded_reads.extend(command.evidence.clone());
-        } else if (command.write_like || command.verification_like) && !touches_truth {
+        } else if (command.write_like || command.verification_like)
+            && (!touches_truth || !prior_grounding)
+        {
             ungrounded_actions.extend(command.evidence.clone());
         }
     }
