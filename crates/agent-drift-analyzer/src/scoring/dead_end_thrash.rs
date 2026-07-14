@@ -87,8 +87,8 @@ fn score_confidence(
     if !analysis.repetition.repeated_verification_loops.is_empty() {
         Confidence::High
     } else if !analysis.repetition.repeated_failure_loops.is_empty()
-        || (!analysis.current.context.command_observations.is_empty()
-            && !(session_progress.dimension == ProgressDimension::ParentVisibleOrchestration
+        || !(analysis.current.context.command_observations.is_empty()
+            || (session_progress.dimension == ProgressDimension::ParentVisibleOrchestration
                 && session_progress.confidence == Confidence::Low))
     {
         Confidence::Medium
