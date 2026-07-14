@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use crate::checkpoint::{
     CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
@@ -25,13 +26,7 @@ pub(crate) fn score_truth_grounding_gap(
     let mut grounded_reads = Vec::<EvidenceRef>::new();
     let mut ungrounded_actions = Vec::<EvidenceRef>::new();
 
-    let mut commands = analysis
-        .interval
-        .command_observations
-        .iter()
-        .collect::<Vec<_>>();
-    commands.sort_by_key(|command| first_event_index(command).unwrap_or(usize::MAX));
-    for command in commands {
+    for command in &analysis.interval.command_observations {
         let matching_paths = matching_truth_paths(command, &truth_paths);
         if command.write_like || command.verification_like {
             let grounded = if matching_paths.is_empty() {
@@ -128,11 +123,18 @@ fn matching_truth_paths<'a>(
     truth_paths
         .iter()
         .filter(|truth| {
-            command.paths.iter().any(|path| {
-                path == *truth || path.starts_with(truth.as_str()) || truth.starts_with(path)
-            })
+            command
+                .paths
+                .iter()
+                .any(|path| paths_share_identity(path, truth))
         })
         .collect()
+}
+
+fn paths_share_identity(left: &str, right: &str) -> bool {
+    let left = Path::new(left);
+    let right = Path::new(right);
+    left == right || left.starts_with(right) || right.starts_with(left)
 }
 
 fn historical_truth_grounding_gap_evidence(previous: &DriftScore) -> Vec<EvidenceRef> {
@@ -167,13 +169,6 @@ fn dedupe_evidence(evidence: &mut Vec<EvidenceRef>) {
             item.reason.clone(),
         ))
     });
-}
-
-fn first_event_index(command: &CommandObservation) -> Option<usize> {
-    command
-        .evidence
-        .first()
-        .map(|evidence| evidence.row.event_index)
 }
 
 fn is_historical_truth_grounding_gap_reason(reason: &str) -> bool {

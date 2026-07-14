@@ -800,6 +800,123 @@ fn truth_grounding_gap_does_not_ground_path_b_from_path_a_read() {
 }
 
 #[test]
+fn truth_grounding_gap_does_not_match_lexical_path_prefixes() {
+    let read_path = "docs/specs/truth.md";
+    let truth_path = "docs/specs/truth.md.bak";
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            &format!("/goal Update {truth_path} using that declared truth artifact."),
+        ),
+        tool_row(1, &format!("sed -n '1,120p' {read_path}")),
+        tool_row(
+            2,
+            &format!(
+                "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+            ),
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze lexical path-prefix collision bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    let score = truth_grounding_gap_score(
+        checkpoints
+            .last()
+            .expect("lexical path-prefix collision checkpoint"),
+    );
+
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+}
+
+#[test]
+fn truth_grounding_gap_preserves_canonical_multi_source_command_order() {
+    let truth_path = "docs/specs/multi-source-truth.md";
+    let source_a = Utf8PathBuf::from("/tmp/session-alpha/rollout-a.jsonl");
+    let source_b = Utf8PathBuf::from("/tmp/session-alpha/rollout-b.jsonl");
+    let mut objective = row(
+        0,
+        CompactionKind::UserMessage,
+        &format!("/goal Update {truth_path} using that declared truth artifact."),
+    );
+    objective.source_file = source_a.clone();
+    let mut earlier_read = tool_row(9, &format!("sed -n '1,120p' {truth_path}"));
+    earlier_read.source_file = source_a;
+    let mut first_action = tool_row(
+        1,
+        &format!(
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+        ),
+    );
+    first_action.source_file = source_b.clone();
+    let mut boundary = row(
+        2,
+        CompactionKind::AssistantMessage,
+        "The spec is grounded and the first action is complete; I am moving to the next checkpoint.",
+    );
+    boundary.source_file = source_b.clone();
+    let mut later_action = tool_row(
+        3,
+        &format!(
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+        ),
+    );
+    later_action.source_file = source_b;
+    let rows = vec![
+        objective,
+        earlier_read,
+        first_action,
+        boundary,
+        later_action,
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze canonical multi-source command-order bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+    assert_eq!(checkpoints.len(), 2);
+    let first_score = truth_grounding_gap_score(&checkpoints[0]);
+    assert_eq!(
+        (
+            first_score.raw_score,
+            first_score.confidence,
+            first_score.state,
+            first_score.flagged,
+        ),
+        (20, Confidence::Medium, DriftState::Cleared, false),
+    );
+    let later_score = truth_grounding_gap_score(
+        checkpoints
+            .last()
+            .expect("later canonical multi-source command-order checkpoint"),
+    );
+
+    assert_eq!(
+        (
+            later_score.raw_score,
+            later_score.confidence,
+            later_score.state,
+            later_score.flagged,
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false),
+    );
+}
+
+#[test]
 fn truth_grounding_gap_does_not_resurrect_read_after_path_redeclaration() {
     let path_a = "docs/specs/truth-path-a.md";
     let path_b = "docs/specs/truth-path-b.md";
