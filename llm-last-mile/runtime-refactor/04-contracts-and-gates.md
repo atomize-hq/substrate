@@ -747,7 +747,20 @@ enum TerminalHandoffStateV1 {
 }
 
 struct TerminalHandoffHashInputV1 {
-    schema_version: u32,
+    schema_version: u32, // exactly 1
+    intent_id: String,
+    run_id: String,
+    payload_commitment: AuthorityObjectCommitmentV1,
+    terminal_state: TerminalHandoffStateV1,
+    application_result_ref: Option<AuthorityObjectRefV1>,
+    input_acceptance_ref: Option<AuthorityObjectRefV1>,
+    post_turn_completion_ref: Option<AuthorityObjectRefV1>,
+    post_turn_application_result_ref: Option<AuthorityObjectRefV1>,
+    recorded_at: TimestampV1,
+}
+
+struct TerminalHandoffHashInputV2 {
+    schema_version: u32, // exactly 2
     intent_id: String,
     run_id: String,
     payload_commitment: AuthorityObjectCommitmentV1,
@@ -795,14 +808,18 @@ accepted task/active-run identity remains distinct. Missing or mismatched correl
 Complete and is never repaired from request IDs, active-run IDs, payloads, foreground state, or
 A1.2 guesses.
 
-Terminal handoff refs have this closed V1 matrix; `Some` refs must have the exact named kind and
+Terminal handoff bytes use strict schema-version dispatch. Existing `schema_version = 1` bytes
+decode only as `TerminalHandoffHashInputV1` and remain byte-for-byte unchanged; a missing V2 field
+is never defaulted into V1. `schema_version = 2` bytes decode only as
+`TerminalHandoffHashInputV2`. A V2 handoff is required exactly where the closed matrix carries a
+startup-ownership result; all other rows remain V1. `Some` refs must have the exact named kind and
 equal the corresponding intent substate/journal ref, and every unlisted ref is `None`:
 
-| Terminal state and mode | Initial application | Input acceptance | Startup ownership | Post-turn completion/result |
-|---|---|---|---|---|
-| `Rejected` or `Expired`, every mode | none | none | none | none |
-| `Applied Start` or `Applied Attach` | exact initial `ApplicationResult` | exact `InputAcceptance` iff a Start input is Accepted; none only for input-free mode or a terminally reconciled Start whose input is exactly `TerminalWithoutAcceptance` | exact `StartupOwnershipResult` in Accepted or TerminalReconciled | none |
-| `Applied ResumeOneTurn`, every post-turn Applied outcome | exact initial `ApplicationResult` | exact `InputAcceptance` for Accepted input; none only for `TerminalFailure` with exact `TerminalWithoutAcceptance` | none | exact `PostTurnCompletion` and post-turn `ApplicationResult` pair; `ResumableClean` additionally carries the exact Complete obligation snapshot in the post-turn application, while `TerminalClean`/`TerminalFailure` carry none |
+| Terminal state and mode | Handoff schema | Initial application | Input acceptance | Startup ownership | Post-turn completion/result |
+|---|---:|---|---|---|---|
+| `Rejected` or `Expired`, every mode | V1 | none | none | none | none |
+| `Applied Start` or `Applied Attach` | V2 | exact initial `ApplicationResult` | exact `InputAcceptance` iff a Start input is Accepted; none only for input-free mode or a terminally reconciled Start whose input is exactly `TerminalWithoutAcceptance` | exact `StartupOwnershipResult` in Accepted or TerminalReconciled | none |
+| `Applied ResumeOneTurn`, every post-turn Applied outcome | V1 | exact initial `ApplicationResult` | exact `InputAcceptance` for Accepted input; none only for `TerminalFailure` with exact `TerminalWithoutAcceptance` | none | exact `PostTurnCompletion` and post-turn `ApplicationResult` pair; `ResumableClean` additionally carries the exact Complete obligation snapshot in the post-turn application, while `TerminalClean`/`TerminalFailure` carry none |
 
 An applied Resume cannot bypass post-turn application. `ResumableClean` and `TerminalClean`
 require exact Accepted input. `TerminalFailure` requires either Accepted input or, only for an
@@ -866,6 +883,7 @@ Every `AuthorityObjectKindV1` has exactly one V1 bytes and commitment rule:
 | `PostTurnProtocolEvent` | 1 | `CanonicalJsonV1(PostTurnProtocolEventHashInputV1)` | `CanonicalSha256` |
 | `PostTurnCompletion` | 1 | `CanonicalJsonV1(PostTurnCompletionHashInputV1)` | `CanonicalSha256` |
 | `TerminalHandoff` | 1 | `CanonicalJsonV1(TerminalHandoffHashInputV1)` | `CanonicalSha256` |
+| `TerminalHandoff` | 2 | `CanonicalJsonV1(TerminalHandoffHashInputV2)` | `CanonicalSha256` |
 
 `TransitionTransportPayloadObjectV1` is the closed replay/reprojection schema; it contains typed
 refs to raw lease/input objects rather than copying their bytes. For all three sensitive kinds, the
@@ -881,7 +899,8 @@ HMAC values where sensitive refs occur. Start, Attach, and `ResumeOneTurn`-with-
 `HostSessionTransitionPayloadHashInputV1`; authority, lineage, attach-contract, application-result,
 input-acceptance, startup-ownership-result, obligation-snapshot-record, obligation-snapshot,
 post-turn-protocol-event, post-turn-completion, terminal-handoff, descriptor, resume-handle, policy, and retained-worker
-fixtures use their named wrappers; the typed-ref fixture uses `AuthorityObjectRefV1` itself. The
+fixtures use their named wrappers; terminal-handoff fixtures cover strict V1 and V2 bytes under
+their respective named wrappers, and the typed-ref fixture uses `AuthorityObjectRefV1` itself. The
 fixture set covers every allowed `HostStartupOwnershipProtocolEventV1` actor/variant pairing and
 terminal reason plus rejected cross-actor pairings, both
 `ObligationAttentionDispositionV1` variants, every `HostPostTurnProtocolEventKindV1` variant and
@@ -2278,12 +2297,12 @@ introducing another intent contract:
     This CAS increments `intent_revision` exactly once. A1.2 owns this internal decision protocol;
     A1.3 owns invocation by the real helper/REPL consumer, and A2 later generalizes episode
     observations without weakening these A1 commitments.
-13. Transport stays `Retained`/object-index `Present` until one exact committed
-    `TerminalHandoffHashInputV1` proves release. Input-bearing modes require Accepted or
+13. Transport stays `Retained`/object-index `Present` until one exact committed terminal handoff,
+    using strict V1/V2 dispatch from the matrix above, proves release. Input-bearing modes require Accepted or
     TerminalWithoutAcceptance; input-free Start/Attach require NotApplicable. Applied Start/Attach
     with `startup_ownership=Pending` remain retained and cannot enter release. Before release they
-    require `Accepted` or `TerminalReconciled`, and the terminal handoff carries that exact
-    startup-ownership result ref. Every applied Resume terminal handoff requires
+    require `Accepted` or `TerminalReconciled`, and the V2 terminal handoff carries that exact
+    startup-ownership result ref. Every applied Resume V1 terminal handoff requires
     post-turn Applied with the exact completion/result pair; `TerminalClean` and `TerminalFailure`
     carry no obligation snapshot, while `ResumableClean` carries the exact Complete ledger snapshot.
     Rejected/Expired require proof of no application.
