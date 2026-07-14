@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — PRODUCTION COMMIT `52c9ab296` REVIEW REQUIRED**. Packet docs `03754a2de` and ledger reconciliation `a5380c04e` are each fresh-review-clean. The scorer-local production commit has exact green proof, but Task 4 remains open until a fresh built-in `default` reviewer returns `REVIEW CLEAN`; the transition and successor remain unauthorized.
+Status: **ACTIVE — REVIEW FINDING PRESERVED / DECISION REQUIRED**. Production commit `52c9ab296` plus proof receipt `73132aead` received fresh `REVIEW FINDINGS` P1: `prior_grounding` conflates historical posture with grounding, while `lib.rs` drops clean `Cleared` grounding, producing two opposite cross-checkpoint defects. Test-only commit `6409ae072` preserves both exact regression witnesses in the allowed test file and independently received `REVIEW CLEAN`. The correct path-scoped provenance repair requires upstream internal edits beyond this packet's boundary, so Option A remains operator-decision-blocked; Task 4, the transition, and the successor remain open or blocked as applicable.
 
 ## Required Gates
 
@@ -51,7 +51,7 @@ Impact every additional proposed symbol with the identical command form; stop an
   - Red: select Task 3A. Green: select Task 3B only with attributable red-before/green-after proof at an earlier sequential named-gap production boundary; otherwise stop/escalate.
   - Result: the exact pre-edit `CTX-R6-12` witness remained red at `0 / Medium / Cleared`, unflagged, versus required `80 / High / Active`, flagged (`0 passed; 1 failed`). The exact analogous archetype regression passed (`1 passed; 0 failed`), and the owning `truth_grounding_gap` family reported `9 passed; 1 failed`, with only `CTX-R6-12` red. Task 3A was selected; Task 3B was ineligible and not selected.
 
-- [x] **R6-GAP-TGG-TRUTH-PATH-ACTION.3A — Land the smallest scorer-local production fix.**
+- [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3A — Land the smallest scorer-local production fix.**
   - Prerequisite: Task 2 remains red and impact is below HIGH.
   - Allowed files: `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs`; this TASKS; canonical ledger. `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` only for a necessary distinct narrow regression; never alter the witness.
   - Acceptance: truth-path-touching write/verification before any truth read yields exactly `80 / High / Active`, flagged, with authority and action evidence; the analogous archetype regression stays green; event order, history, grounded-read recovery, and unrelated scorer behavior remain intact.
@@ -63,14 +63,14 @@ Impact every additional proposed symbol with the identical command form; stop an
     cargo check -p agent-drift-analyzer
     ```
   - Commit/review: staged gate; atomic commit; fresh built-in `default`; new bounded fixes and fresh reviewers until clean.
-  - Result: `52c9ab296` (`fix: retain truth path actions before grounding`) landed the only production edit in `score_truth_grounding_gap`; the commit is **REVIEW REQUIRED**, not review-clean.
+  - Review finding preserved: `52c9ab296` (`fix: retain truth path actions before grounding`) landed the only production edit in `score_truth_grounding_gap`, and `73132aead` (`docs: record truth path action proof`) recorded its receipt. Fresh review of that production-plus-receipt series returned **`REVIEW FINDINGS` P1**, not `REVIEW CLEAN`: `prior_grounding` conflates historical posture with grounding, while `lib.rs` drops clean `Cleared` grounding.
     - Impact: LOW, with `0` upstream callers, `0` affected processes, and `0` affected modules. No HIGH/CRITICAL risk was reported.
-    - Exact `CTX-R6-12`: `1 passed; 0 failed`, now exactly `80 / High / Active`, flagged, with `truth artifact hint:` authority evidence and `command family: apply_patch` action evidence.
-    - Exact analogous archetype regression: `1 passed; 0 failed`.
-    - `cargo test -p agent-drift-analyzer truth_grounding_gap -- --nocapture`: all `10` matching tests passed with `0` failures.
-    - `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`: all `167` matching tests passed — unit target `35 passed; 0 failed`, checkpoints integration target `131 passed; 0 failed`, and export target `1 passed; 0 failed`.
-    - Same-interval clean-grounding regression: `1 passed; 0 failed`.
-    - `cargo fmt --all -- --check`, `cargo check -p agent-drift-analyzer`, and `git diff --check`: passed.
+    - The receipt's focused `CTX-R6-12`, analogous archetype, family, checkpoint, same-interval, format/check, and diff-check results remain a historical record of the incomplete wall; they do not establish proof or closure after the P1 finding.
+    - `6409ae072` (`test: preserve cross-checkpoint grounding gaps`) changes only `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs`, preserves both exact missing regression witnesses, and independently received **`REVIEW CLEAN`**.
+    - `truth_grounding_gap_reactivates_truth_path_action_after_historical_only_recovery`: actual `20 / Medium / HistoricalOnly`, unflagged, versus required `80 / High / Active`, flagged.
+    - `truth_grounding_gap_carries_clean_read_to_next_checkpoint_truth_path_action`: actual `80 / High / Active`, flagged, versus required `0 / Medium / Cleared`, unflagged.
+    - The original `CTX-R6-12` control remains passing; the owning family is `10 passed; 2 failed`, with exactly the two preserved cross-checkpoint witnesses red.
+    - Fresh read-only design concluded that correct path-scoped grounding provenance requires upstream internal edits beyond the authorized scorer-local packet boundary. Option A remains blocked on an operator decision; no production fix is authorized by this record. Task 3A is therefore unchecked and not accepted complete.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3B — Attributed no-code proof receipt — ineligible and not selected.**
   - Eligibility: an already-landed production commit from earlier sequential gap `R6-GAP-DET-OPAQUE-PARENT` must demonstrably make this witness green.
@@ -83,10 +83,11 @@ Impact every additional proposed symbol with the identical command form; stop an
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.4 — Obtain a review-clean closure path.**
   - Require exactly one of Tasks 3A/3B committed with exact proof and fresh `REVIEW CLEAN`.
   - Record commit hashes, command results, findings, dispositions, and review verdict here. Do not check this task before the verdict exists.
-  - Current state: production commit `52c9ab296` is landed with the exact proof above but remains **REVIEW REQUIRED**. The sole next action is fresh built-in `default` review; apply any bounded fix in a new commit and use a fresh reviewer until clean.
+  - Current state: **OPEN / DECISION REQUIRED**. Production `52c9ab296` plus receipt `73132aead` has a preserved P1 `REVIEW FINDINGS` verdict; witness commit `6409ae072` is independently `REVIEW CLEAN` but proves only that the two opposite regressions are preserved. Option A remains operator-decision-blocked because the correct path-scoped provenance repair exceeds the packet boundary. No review-clean closure path exists yet.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 0, 1, and 4 review-clean.
+  - Current state: **BLOCKED** on Task 4 and the operator decision; no transition or successor work is authorized.
   - Exact authority-only manifest:
     - `HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`
     - `SPEC.md`
