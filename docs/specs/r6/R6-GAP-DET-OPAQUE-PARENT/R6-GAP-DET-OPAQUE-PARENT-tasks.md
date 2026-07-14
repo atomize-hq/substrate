@@ -101,7 +101,7 @@ The second command is required if `score_confidence` changes. Impact every addit
     checkpoint tests passed; and `cargo fmt --all -- --check` plus
     `cargo check -p agent-drift-analyzer` passed.
 
-- [x] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
+- [ ] **R6-GAP-DET-OPAQUE-PARENT.5 — Land and independently review the narrow transition.**
   - Prerequisite: Tasks 0, 1, and 4 review-clean.
   - Apply the full R6-C.1 gap-transition authority manifest. Mark this gap `COMPLETE`; activate only `R6-GAP-TGG-TRUTH-PATH-ACTION`; keep later gaps blocked.
   - Successor boundary: record only these non-link `TO CREATE` paths and authorize their atomic docs gate:
@@ -111,12 +111,16 @@ The second command is required if `score_confidence` changes. Impact every addit
   - Do not create, link, cite as existing, or execute the successor packet.
   - Commit/review: authority docs only; staged gate; separate commit; fresh independent review and new transition-only fixes until clean.
   - Stop: review-clean transition committed; no next-phase work.
-  - Transition result (2026-07-13): this authority update applies the required statuses: marks
+  - Transition result (2026-07-13): `c3202d3f3` landed this authority transition and applies the
+    required statuses: marks
     `R6-GAP-DET-OPAQUE-PARENT` complete; activates only `R6-GAP-TGG-TRUTH-PATH-ACTION` at its
     docs-only gate with the three exact non-link `TO CREATE` paths above; and keeps
-    `R6-GAP-WPB-EMPTY-AUTHORITY` plus `R6-REPLAY` blocked. It does not claim an unknown transition
-    commit or review verdict. The sole next action is atomic creation and fresh review of those three
-    successor docs; they do not exist yet and no successor implementation is authorized.
+    `R6-GAP-WPB-EMPTY-AUTHORITY` plus `R6-REPLAY` blocked. Fresh independent review of `c3202d3f3`
+    found a P2 bookkeeping issue: Task 5 was checked before the transition review verdict. This fix
+    leaves Task 5 pending until the transition series is freshly **REVIEW CLEAN** without altering
+    the applied phase statuses or successor boundary. The sole next action is atomic creation and
+    fresh review of those three successor docs; they do not exist yet and no successor implementation
+    is authorized.
 
 ## Explicit Exclusions
 
