@@ -22,9 +22,12 @@ received fresh independent built-in `default` `REVIEW CLEAN`. Authority-only tra
 remains **PARTIAL**, but all three named gaps are complete. Final gap implementation/review-fix
 series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default`
 `REVIEW CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent
-built-in `default` `REVIEW CLEAN` and makes `R6-REPLAY` the sole active phase with active packet
-`none`; Prompt 1 for that replay phase is the sole next eligible invocation.
-R7 remains useful, design-ready draft work, but it is **not implementation-ready**.
+built-in `default` `REVIEW CLEAN` and made `R6-REPLAY` the sole active phase. `CTX-R6-01` is
+complete through fresh independent review-clean series `a0089c8de` + `968a4377f`. Trusted witness
+`60cde3dd7` preserves `CTX-R6-02` behavioral RED and routes it to active packet
+`R6-GAP-DET-REPLAY-STALL`, whose docs gate is only a candidate. `CTX-R6-06` and the replay family
+wall remain pending; no terminal disposition is assigned. R7 remains design-ready draft work, but
+it is **not implementation-ready**.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
 context, archetype, and progress. A scorer is complete when its chosen inputs match the behavior it
@@ -44,7 +47,7 @@ owns and behavior-level tests prove that match. Transitive availability alone is
 
 | Scorer | Intended behavior | Current direct inputs | Current indirect inputs | Typed outcomes | Turn context | Archetype | Progress | Structured objective | Working-set / truth evidence | Delegation visibility | Behavioral proof | Remaining gap | Disposition |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `dead_end_thrash` | Distinguish active repeated failure/verification with no frontier movement from expected churn that advances or cleanly recovers. | Repetition history, recovery-active bits, `SessionProgress`, command observations for confidence. | Typed attempts and outcomes feed progress; turn context feeds archetype; archetype selects progress dimension; objective changes can bound comparable history. | **Indirect, relevant.** Failure/verification classification and frontier signals depend on it. | **Indirect, relevant.** | **Indirect, relevant.** | **Direct, required.** | **Boundary only.** | **Not applicable.** | **Indirect, relevant.** The exact opaque-parent control preserves `ParentVisibleOrchestration` without attributing child misconduct. | Production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh `REVIEW CLEAN`. `CTX-R6-04` is `0 / Low / Cleared`, unflagged, empty evidence; the partial/mixed parent-visible regression is `0 / Medium / Cleared`, unflagged, empty evidence; and `CTX-R6-03` remains `30 / Medium / Active`, flagged. All `21` matching family tests and all `167` matching checkpoints passed; format/check passed. Frozen real-rollout derivatives remain invariance evidence only. | `R6-GAP-DET-OPAQUE-PARENT` complete; integrated replay proof remains bounded and incomplete. | **Focused gap proven / terminal disposition pending R6-CLOSE** |
+| `dead_end_thrash` | Distinguish active repeated failure/verification with no frontier movement from expected churn that advances or cleanly recovers. | Repetition history, recovery-active bits, `SessionProgress`, command observations for confidence. | Typed attempts/outcomes feed progress; turn context feeds archetype; archetype selects progress. | **Indirect, relevant.** | **Indirect, relevant.** | **Indirect, relevant.** | **Direct, required.** | **Boundary only.** | **Not applicable.** | **Indirect, relevant.** | Focused gap proof remains review-clean. `CTX-R6-01` integrated advancing replay is review-clean. Trusted `CTX-R6-02` witness `60cde3dd7` preserves checkpoint `5` `TroubleshootingFrontier / Stalled / Medium` and flagged `Active / 30 / High`, but truthful failed-call evidence is misattributed across concurrent siblings. | Active packet `R6-GAP-DET-REPLAY-STALL` at docs-gate candidate; `CTX-R6-06` and terminal disposition pending. | **Behavioral red routed / terminal disposition pending `R6-CLOSE`** |
 | `semantic_goal_drift` | Detect an unsanctioned target pivot relative to kickoff or prior checkpoint while suppressing legitimate narrowing, role shifts, replans, and unsupported delegated-parent claims. | Current structured objective, kickoff anchor, previous structured objective/checkpoint, stable target anchors, sanctioned-replan bit, delegation topology/visibility. | Structured extraction and checkpoint history supply the compared goals. | **Not applicable.** Outcome success does not establish target continuity. | **Not applicable.** | **Not applicable.** | **Not applicable.** | **Direct, required.** | **Not applicable.** | **Direct, required for the bounded opaque-parent guard.** | 56 focused scorer/state tests cover sanctioned replans, opaque/partial delegation, and internal `Fire` / `Suppress` / `NoClaim` routing. Separately, the bounded corpus-shape test proves fixture integrity only. The live analyzer-path acceptance test exercises only its 18 allowlisted pivot, narrowing, progression, and role-shift fixtures; it does not prove replan, delegation, or internal routing. The R6-3.X.2D corpus closeout recorded 110/110 sessions analyzable with 0 emitted fires after remediation. | No new failing witness. Progress or archetype would not make target-continuity reasoning more honest. | **Cutover complete** |
 | `truth_grounding_gap` | Detect write/verification action taken without first reading declared truth artifacts; preserve and recover history honestly. | Task-frame truth paths, interval command observations and event order, previous truth-gap score. | Working-set/task-frame extraction supplies the truth paths. | **Not applicable by design:** success/failure does not prove that required truth was read. | **Not applicable by design:** ordering is event-based, not turn-count based. | **Fit-for-purpose for archetype:** equivalent actions scored equally across planning and implementation frames. | **Not applicable:** later progress cannot retroactively establish prior grounding. | **Indirect boundary/source only.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Option-A internal path-scoped provenance now preserves action-before-read, historical-only non-grounding, same-path cross-checkpoint carry, path isolation, declaration pruning, session/trajectory isolation, multi-checkpoint carry, and non-consuming reads. Packet-locked controls passed `9 / 9`; the full family passed `22 / 22`; matching checkpoints passed `35` unit + `131` integration plus matching export/provenance tests; exact dead-end regressions and static gates remained green. Final proof-receipt series `fee9c2b16` + `6674a8316` received fresh `REVIEW CLEAN`. | `R6-GAP-TGG-TRUTH-PATH-ACTION` complete; terminal scorer disposition remains pending `R6-CLOSE`. | **Bounded gap complete / terminal disposition pending R6-CLOSE** |
 | `wrong_plan_branch` | Detect write/verification paths outside the task frame's expected truth/working-set scope and clear after a return in scope. | Truth-artifact paths, working-set paths, interval command paths and write/verification classification. | Objective/working-set extraction supplies expected paths; checkpoint boundaries isolate the current interval. | **Not applicable:** command outcome does not change path scope. | **Not applicable:** path scope is event-local. | **Not applicable:** exploration is already ignored unless it writes or verifies. | **Not applicable:** healthy progress cannot excuse mutation outside the authorized branch. | **Relevant through sanctioned continuity; the sanctioned-replan control passed.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Read-only exploration, sanctioned replan/path pivot, opaque-parent, and empty-authority controls pass. Historical witness `59f098b35` remains the preserved red receipt; after production fix `6b42e5476`, exact `CTX-R6-15` is `0 / Low / Cleared`, unflagged, with empty evidence, four protected controls pass, family is `6 / 6`, and checkpoint/full-analyzer/static walls are green. | Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`; `R6-GAP-WPB-EMPTY-AUTHORITY` is complete. | **Bounded gap complete / terminal disposition pending `R6-CLOSE`** |
@@ -60,14 +63,14 @@ expected path scope. Those are separate failure modes.
 
 | Required behavior | Exact proof | Result |
 |---|---|---|
-| Advancing troubleshooting frontier tolerates expected repeated failures. | `dead_end_thrash_suppresses_repeated_activity_when_the_frontier_advances`; upstream `checkpoints_mark_troubleshooting_frontier_advancement_from_compile_to_test_failure`; real-rollout-derived progress case `019e899c-453f-71f2-a99d-155848c7b081`. | **Proven** for the troubleshooting-frontier path. |
-| Stalled progress increases thrash concern. | `dead_end_thrash_names_stalls_when_repeated_activity_has_no_frontier_movement`; `checkpoints_mark_repeated_same_troubleshooting_signature_as_stalled`. | **Proven** for no-frontier-movement stall. |
+| Advancing troubleshooting frontier tolerates expected repeated failures. | Exact `CTX-R6-01` integrated control over trusted rollout `019f1ecb-b93a-7570-8d8d-9ce4e711880b`. | **Proven integrated:** series `a0089c8de` + `968a4377f` fresh independent `REVIEW CLEAN`; checkpoint `7` is advancing and score is `HistoricalOnly / 20 / High`, unflagged. |
+| Stalled progress increases thrash concern. | Synthetic stall controls plus trusted depth-1 subagent rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`. | **Trusted contract proven / behavior RED:** checkpoint `5` is `TroubleshootingFrontier / Stalled / Medium`, flagged `Active / 30 / High`; `60cde3dd7` fails only on concurrent output attribution and routes to `R6-GAP-DET-REPLAY-STALL`. |
 | Regressing progress increases/retains concern. | `dead_end_thrash_flags_regressing_frontier_with_repeated_failure_activity`; upstream `checkpoints_mark_troubleshooting_regression_when_frontier_falls_back`. | **Proven:** the scorer control passed at `30 / Medium / Active`, flagged. |
 | Clean recovery or verification clears/downgrades honestly. | `dead_end_thrash_clears_after_one_clean_in_scope_verification_interval`; `dead_end_thrash_downgrades_to_historical_only_after_the_recovery_transition`; `dead_end_thrash_clears_replay_shaped_memsrc_verifier_tail`. | **Proven.** |
 | Typed outcomes distinguish failure from neutral/success evidence. | `dead_end_thrash_treats_explicit_error_rows_as_repeated_failure_evidence`; `dead_end_thrash_treats_non_zero_exit_code_tool_output_as_failure_evidence`; `dead_end_thrash_ignores_repeated_neutral_tool_output_evidence`; `dead_end_thrash_keeps_repeated_successful_verification_as_historical_context`. | **Proven.** |
 | Opaque delegated-parent activity does not become child thrash. | `dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activity`; upstream delegation/progress controls include `checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_parent_work`; the partial/mixed regression protects typed Medium confidence. | **Proven focused:** production series through fresh review-clean `d13f0a71c` yields `0 / Low / Cleared`, unflagged, empty evidence for `CTX-R6-04`, while partial/mixed parent-visible progress stays `0 / Medium / Cleared`, unflagged, empty evidence. |
 | Turn-shape relevance is consumed upstream without changing equal-progress scorer output. | `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes`; upstream turn/archetype construction controls. | **Proven focused:** locked long-autonomous and many-short-conversational cases both scored `20 / Medium / HistoricalOnly`, unflagged. The broad acceptance sentence must not claim a scorer-level difference. |
-| Frozen replay postures remain invariant. | `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture`, the three named cleared controls, and `acceptance_fixtures_representative_sticky_success_tail_stays_recovered`. | **Invariance only for the bounded frozen corpus:** three cleared final states and one recovered sticky-success tail remain pinned. This is not a before/after comparator and does not prove integrated scorer improvement. |
+| Frozen replay postures remain invariant. | `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture`. | **Pending `CTX-R6-06` after active replay-stall packet:** invariance only, not comparative improvement. |
 
 ### `semantic_goal_drift`
 
@@ -117,16 +120,16 @@ series `8734f4dbe` + `334e7c6ac` and received fresh independent built-in `defaul
 Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` also received fresh
 independent built-in `default` `REVIEW CLEAN`, completing the named gap. Authority transition series
 `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default` `REVIEW CLEAN` and activates
-only `R6-REPLAY` with active packet `none`; Prompt 1 for that replay phase is the sole next eligible
-invocation.
+only `R6-REPLAY`; current active packet `R6-GAP-DET-REPLAY-STALL` is a docs-gate candidate
+from trusted `CTX-R6-02` witness `60cde3dd7`.
 
 ## Broad R6 Acceptance-Claim Audit
 
 | Root acceptance claim | Owning scorer/module | Focused proof | Replay/bounded evidence | Status and honest wording |
 |---|---|---|---|---|
-| Troubleshooting tolerates expected failures while the frontier advances. | `dead_end_thrash` over `SessionProgress`. | Advancement suppression plus upstream frontier tests named above. | Annotated real-rollout troubleshooting fixture `019e899c-...` supplies upstream progress evidence; the frozen dead-end corpus protects final posture. Neither is an integrated advancing repeated-failure scorer replay. | **Proven focused / bounded; integrated replay remains open.** `CTX-R6-01` still requires an integrated real-rollout-derived advancing repeated-failure score to remain unflagged or historical. |
+| Troubleshooting tolerates expected failures while the frontier advances. | `dead_end_thrash` over `SessionProgress`. | Focused advancement suppression plus upstream frontier tests. | Trusted integrated `CTX-R6-01` rollout is review-clean; trusted `CTX-R6-02` rollout preserves a concurrent-output-attribution behavioral red at `60cde3dd7`. | **Advancing case proven integrated; true-stall case routed.** Complete `R6-GAP-DET-REPLAY-STALL`, then run `CTX-R6-06` and the family wall. |
 | Long autonomous turns are evaluated differently from multi-turn conversational sessions. | Turn context + archetype + progress; `dead_end_thrash` consumes the derived progress rather than raw turn shape. | Construction tests prove the turn/archetype distinction; `dead_end_thrash_scores_equal_progress_equally_across_turn_shapes` proves equal derived progress produces equal scorer output. | No bounded replay A/B requires a different scorer disposition. | **Narrowed honestly:** turn structure informs archetype/progress construction; it does not independently change `dead_end_thrash` when the relevant derived progress is equal. |
-| Flagged sessions are materially more honest on known replay artifacts. | Primarily `dead_end_thrash`; semantic drift has its separate corpus. | Per-case frozen posture assertions; no before/after integrated comparator. | Four real-rollout-derived dead-end cases preserve three cleared and one recovered posture; the separate semantic closeout corpus recorded 110 sessions with no post-remediation fires. | **Partially / bounded proven.** The frozen dead-end corpus proves invariance, not comparative integrated improvement. Retain partial wording until integrated advancing and true-stall replay witnesses close the claim or the charter is narrowed. |
+| Flagged sessions are materially more honest on known replay artifacts. | Primarily `dead_end_thrash`; semantic drift has its separate corpus. | Focused scorer controls plus exact trusted replay cases. | `CTX-R6-01` is review-clean; `CTX-R6-02` preserves the correct flagged `Active / 30 / High` disposition but red evidence attribution; frozen invariance remains pending. | **Partially / bounded proven.** Finish the active replay-stall packet and `CTX-R6-06` before closure wording. |
 
 ## R6-C.1 Control Disposition (2026-07-13)
 
@@ -146,10 +149,12 @@ The three distinct routes must execute sequentially in matrix order:
    independent built-in `default` `REVIEW CLEAN` with exact, protected, family, checkpoint,
    full-analyzer, and static proof green.
 
-All three named gap routes are complete. Authority transition series `56bb9966f` + `07a3b1fe5`
-received fresh independent built-in `default` `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete,
-and activates only `R6-REPLAY` with active packet `none`. Prompt 1 for that replay phase is the sole
-next eligible invocation.
+All three original named gap routes are complete. **Historical transition-boundary receipt:**
+authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
+`REVIEW CLEAN`, marked aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY` with active
+packet `none`; Prompt 1 was then the sole next eligible invocation. That boundary is superseded by
+current replay state: `CTX-R6-01` is complete, trusted `CTX-R6-02` witness `60cde3dd7` is behavioral
+RED, and `R6-GAP-DET-REPLAY-STALL` is the active packet at docs-gate candidate.
 
 ## Verification Run For This Audit
 
@@ -184,14 +189,12 @@ code changed.
 
 ## Final R6 Status And R7 Promotion Gate
 
-**R6 status: PARTIAL with all three named gaps complete and `R6-REPLAY` the sole active phase with
-active packet `none`.** Final gap implementation/review-fix series `6b42e5476` + `e65df2561` +
-`cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`. Authority transition
-series `56bb9966f` + `07a3b1fe5` also received fresh independent built-in `default` `REVIEW CLEAN`;
-Prompt 1 for `R6-REPLAY` with active packet `none` is the sole next eligible invocation. The landed
-R6 packet history and completed `R6-C.1-CONTROLS` remain intact; commit `99efda8f9` is not closure
-authority. No terminal `truth_grounding_gap` or `wrong_plan_branch` disposition, replay close, R6
-close, or successor implementation is claimed.
+**R6 status: PARTIAL; `R6-REPLAY` remains the sole active phase and
+`R6-GAP-DET-REPLAY-STALL` is the active packet at docs-gate candidate.** `CTX-R6-01` is fresh
+independent `REVIEW CLEAN`; trusted `CTX-R6-02` witness `60cde3dd7` is behavioral RED and owns this
+packet. Prompt 2 Task `.0` is next; after fresh-review-clean docs, DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` gates Rust. `CTX-R6-06`, replay family wall, terminal
+dispositions, R6 close, and successor implementation remain pending or blocked.
 
 R7 may be promoted from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready only when:
 

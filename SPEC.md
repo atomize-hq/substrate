@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; packet docs-gate commit `200725001` landed with fresh `REVIEW FINDINGS` and is not review-clean)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -39,6 +39,11 @@ Hard decisions:
 - The semantic acceptance corpus-shape test proves fixture integrity; the separate live
   analyzer-path test proves behavior. Dispatcher order is explicit in source but not covered by a
   focused behavioral order assertion.
+- Trusted depth-1 built-in `default` subagent rollout
+  `019eb311-c7ce-7f50-ae13-b51a5b5461c3` satisfies the selected-checkpoint `CTX-R6-02` input
+  contract. Witness `60cde3dd7` preserves the behavioral red; packet docs-gate commit `200725001`
+  is landed under fresh review findings. Complete its bounded review-fix loop, then issue DECISION
+  REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit.
 - R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
   single-session scorer semantics.
 
@@ -48,11 +53,14 @@ controls resolved as `10 PASS / 3 preserved RED`, with no production change in t
 All three named gaps are now complete with review-clean focused proof. The final
 `R6-GAP-WPB-EMPTY-AUTHORITY` implementation/review-fix series `6b42e5476` + `e65df2561` +
 `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`. The authority transition
-in this review series is landed, marks aggregate `R6-GAP-*` complete, and activates only
-`R6-REPLAY` with active packet `none`. Transition series `56bb9966f` + `07a3b1fe5` received fresh
-independent built-in `default` `REVIEW CLEAN`; Prompt 1 for `R6-REPLAY` with active packet `none` is
-the sole next eligible invocation. R6 closure, terminal `wrong_plan_branch` disposition, successor
-execution, and all R7/R8 work remain blocked.
+in this review series is landed, marks the prior aggregate `R6-GAP-*` set complete, and activates
+`R6-REPLAY`. Transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
+`default` `REVIEW CLEAN`. Replay has since completed `CTX-R6-01` and preserved trusted `CTX-R6-02`
+behavioral RED at `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` is the active packet. Its docs-gate commit
+`200725001` is landed under fresh `REVIEW FINDINGS`, and the current next interaction is completion
+of the bounded review-fix/docs-gate loop. After that series is fresh-review-clean, DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` must precede Rust. `CTX-R6-06`, R6 closure, terminal
+dispositions, successor execution, and all R7/R8 work remain blocked.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

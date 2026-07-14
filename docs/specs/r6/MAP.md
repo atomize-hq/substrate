@@ -1,9 +1,7 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED** as of 2026-07-14. The scoped packet history below is
-landed, but the broad scorer-context charter is not closed for sequencing. Closure authority is
-`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`; its narrow remaining packet is
-`R6-C.1 — Scorer Context Applicability Acceptance Controls`. This map began as a scaffold created on
+Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / DOCS-GATE CANDIDATE** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; trusted `CTX-R6-02` witness `60cde3dd7` is behavioral RED. The packet docs gate is not review-clean, `CTX-R6-06` remains pending, and R6 close/R7 remain blocked. Closure authority is
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
 order (`HYBRID_DRIFT_REMAINING_GAPS_AND_LANDING_ORDER.md`) before the structured-objective (`SO`)
@@ -354,10 +352,10 @@ code changed. In matrix order the preserved routes are:
    independent built-in `default` `REVIEW CLEAN`; exact target is `0 / Low / Cleared`, unflagged,
    with empty evidence, and its protected/family/checkpoint/full-analyzer/static walls are green.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**, but all named gaps are complete. Authority
-transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default` `REVIEW
-CLEAN` and makes `R6-REPLAY` the sole active phase with active packet `none`; Prompt 1 for that replay
-phase is the sole next eligible invocation. The historical witness
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**. `R6-REPLAY` is the sole active phase;
+trusted `CTX-R6-02` witness `60cde3dd7` routes to active packet `R6-GAP-DET-REPLAY-STALL` at an
+uncommitted docs-gate candidate. Prompt 2 Task `.0` is next, followed by DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before Rust. The historical witness
 remains `60 / Low / Active`, flagged, with command-action evidence; the proven current target is
 `0 / Low / Cleared`, unflagged, with empty evidence. No terminal `truth_grounding_gap` or
 `wrong_plan_branch` disposition, replay close, or R6 close is claimed.

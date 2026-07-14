@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transition series `56bb9966f` + `07a3b1fe5` fresh independent built-in `default` `REVIEW CLEAN`)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; packet docs-gate commit `200725001` landed with fresh `REVIEW FINDINGS` and is not review-clean)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -44,8 +44,20 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; authority transitio
   protected, family, checkpoint, full-analyzer, and static proof green.
 - [x] Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`.
-- [ ] **Next eligible interaction:** Prompt 1 for `R6-REPLAY` with active packet `none`.
-- [ ] Re-run focused scorer tests, full analyzer tests, and the bounded replay wall.
+- [x] Complete `CTX-R6-01`; implementation/fix series `a0089c8de` + `968a4377f` received fresh
+  independent built-in `default` `REVIEW CLEAN`.
+- [x] Select trusted depth-1 built-in `default` subagent rollout
+  `019eb311-c7ce-7f50-ae13-b51a5b5461c3` under the canonical selected-checkpoint contract and
+  preserve `CTX-R6-02` behavioral RED at witness commit `60cde3dd7`.
+- [x] Land packet docs-gate commit `200725001` for active packet `R6-GAP-DET-REPLAY-STALL`; its
+  fresh review returned `REVIEW FINDINGS`, so this is not a review-clean gate receipt.
+- [ ] **Current next interaction:** complete the bounded review-fix/docs-gate loop for `200725001`
+  and the current authority reconciliation, then obtain a fresh independent built-in `default`
+  `REVIEW CLEAN` verdict.
+- [ ] After the packet docs gate is fresh-review-clean, issue DECISION REQUIRED
+  `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit.
+- [ ] Resolve `R6-GAP-DET-REPLAY-STALL` only after that decision, then run `CTX-R6-06`, focused
+  scorer proof, full analyzer proof, and the bounded replay family wall.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.
 - [ ] Begin bounded direct-child delegated-session support only after promotion.

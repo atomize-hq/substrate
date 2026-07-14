@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY COMPLETE; R6-REPLAY ACTIVE** on 2026-07-14. Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` and authority transition series `56bb9966f` + `07a3b1fe5` each received fresh independent built-in `default` `REVIEW CLEAN`. Only `R6-REPLAY` is active with active packet `none`; Prompt 1 for that replay phase is the sole next eligible invocation.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / DOCS-GATE CANDIDATE** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED. The packet docs gate is not review-clean; `CTX-R6-06` follows packet completion.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -322,11 +322,11 @@ complete and is never active alongside a gap.
 
 `R6-REPLAY` owns all three replay controls:
 
-- `CTX-R6-01` — select and annotate a trusted real-rollout-derived advancing repeated-failure fixture;
-  require unflagged/non-`Active`, with `HistoricalOnly` or `Recovered` determined only by prior score
-  history. Defer raw score and confidence until selection.
-- `CTX-R6-02` — select and annotate a trusted real-rollout-derived true-stall fixture; require
-  flagged/`Active`. Defer raw score and confidence until selection.
+- `CTX-R6-01` — complete and fresh independent `REVIEW CLEAN` at `a0089c8de` + `968a4377f`;
+  trusted fixture `019f1ecb-b93a-7570-8d8d-9ce4e711880b` is `HistoricalOnly / 20 / High`, unflagged.
+- `CTX-R6-02` — trusted subagent fixture `019eb311-c7ce-7f50-ae13-b51a5b5461c3` is preserved
+  behavioral RED at `60cde3dd7` and routes to active packet `R6-GAP-DET-REPLAY-STALL`; packet docs
+  gate first, then DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before Rust.
 - `CTX-R6-06` — run the existing frozen-corpus preservation control:
 
 ```bash
@@ -354,7 +354,7 @@ replaced in replay selection; they do not create a production gap.
 
 | IDs | Planned disposition |
 |---|---|
-| `CTX-R6-01`, `CTX-R6-02` | Trusted integrated controls execute only in `R6-REPLAY`; fixture-dependent precision remains deferred. |
+| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet at docs-gate candidate. |
 | `CTX-R6-03` through `CTX-R6-05` | Row-atomic `dead_end_thrash` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-06` | Existing frozen-corpus preservation control executes only in `R6-REPLAY`. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no `semantic_goal_drift` reopening. |

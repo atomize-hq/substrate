@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; CTX-R6-01 fresh independent built-in default REVIEW CLEAN; ACTION REQUIRED R6-REPLAY-CTX-R6-02-TRUSTED-STALL`
+**Current work phase:** `R6-REPLAY — ACTIVE; active packet R6-GAP-DET-REPLAY-STALL at docs-gate candidate; CTX-R6-02 behavioral RED preserved at 60cde3dd7`
 
-**Last repo-truth verification:** `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f`, fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-02` external-artifact escalation `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`
+**Last repo-truth verification:** `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f`, fresh independent built-in `default` `REVIEW CLEAN`; trusted `CTX-R6-02` witness commit `60cde3dd7`, behavioral RED; `R6-GAP-DET-REPLAY-STALL` docs gate is an uncommitted candidate, not review-clean
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -24,10 +24,14 @@ named gap with exact, protected, family, checkpoint, full-analyzer, and static p
 authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
 `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activates only `R6-REPLAY` with active
 packet `none`. `CTX-R6-01` is complete through fresh independent review-clean series `a0089c8de` +
-`968a4377f`. `CTX-R6-02` is open at ACTION REQUIRED
-`R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8 remain
-pending or blocked as owned. The next interaction is Prompt 6 after the trusted true-stall artifact
-is supplied, not a new Prompt 1 invocation.
+`968a4377f`. Expanded authoritative screening selected trusted depth-1 built-in `default` subagent
+rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; witness commit `60cde3dd7` preserves `CTX-R6-02`
+behavioral RED at `TroubleshootingFrontier / Stalled` and flagged `Active / 30 / High`, with failed
+calls `420`/`474` misattributed to successful siblings `421`/`475`. `R6-REPLAY` remains active and
+the active packet is now `R6-GAP-DET-REPLAY-STALL` at an uncommitted docs-gate candidate. The next
+interaction is Prompt 2 for Task `.0`; the packet's mandatory pre-Rust gate is DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`. `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8
+remain pending or blocked as owned.
 
 ## Purpose
 

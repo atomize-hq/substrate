@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-GAP-WPB-EMPTY-AUTHORITY COMPLETE; R6-REPLAY ACTIVE / ACTION REQUIRED AT CTX-R6-02** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / DOCS-GATE CANDIDATE** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -15,10 +15,11 @@ activating the final gap. That route is now complete after implementation/review
 CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` also received fresh independent
 built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`.
 `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is also fresh independent built-in
-`default` `REVIEW CLEAN`. `CTX-R6-02` remains open at ACTION REQUIRED
-`R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; `CTX-R6-06`, the replay family wall, `R6-CLOSE`, and R7/R8
-remain pending or blocked as owned. The current next interaction is Prompt 6 with the missing trusted
-true-stall artifact, not a new Prompt 1 invocation.
+`default` `REVIEW CLEAN`. Trusted `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED and routes
+to active packet `R6-GAP-DET-REPLAY-STALL`, whose docs gate is only an uncommitted candidate. Prompt
+2 Task `.0` is next; after that gate is fresh-review-clean, DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` must precede Rust. `CTX-R6-06`, the family wall,
+`R6-CLOSE`, and R7/R8 remain pending or blocked as owned.
 
 ## Required Staged Commit Gate
 
@@ -488,8 +489,11 @@ before that reconciled transition is committed and fresh-review-clean.
     with active packet `none`. The first fresh independent built-in `default` reviewer returned one
     P2 finding for a stale historical Step 1 gate description in the final gap PLAN; `07a3b1fe5`
     corrected it, and a fresh independent built-in `default` reviewer returned `REVIEW CLEAN` for
-    the complete transition series. Prompt 1 for `R6-REPLAY` with active packet `none` is the sole
-    next eligible invocation; no replay work has started.
+    the complete transition series. **Historical transition-boundary receipt:** at the
+    `56bb9966f` + `07a3b1fe5` boundary, Prompt 1 for `R6-REPLAY` with active packet `none` was the
+    sole next eligible invocation, and replay work had not yet started. Current replay state is
+    recorded below: `CTX-R6-01` is complete, `CTX-R6-02` is preserved RED at `60cde3dd7`, and
+    `R6-GAP-DET-REPLAY-STALL` is the active packet at docs-gate candidate.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 
@@ -503,34 +507,29 @@ before that reconciled transition is committed and fresh-review-clean.
   - Boundary: reject or replace a fixture-shape mismatch. Do not open a production gap for bad fixture
     selection; only a behavior red after trusted input validation may use `R6-GAP-DET-REPLAY-ADVANCING`.
   - Result (2026-07-14): implementation/fix series `a0089c8de` + `968a4377f` received fresh
-    independent built-in `default` `REVIEW CLEAN`. Trusted non-delegated real rollout
+    independent built-in `default` `REVIEW CLEAN`. Trusted real rollout
     `019f1ecb-b93a-7570-8d8d-9ce4e711880b` retains identical failing verifier calls at compact
     events `164` and `183` with exit-`101` outputs at `165` and `184`. Full-analyzer checkpoint `2`
     exposes `FailureSignatureRepeated`; checkpoint `7` is `TroubleshootingFrontier / Advancing`
     with `VerificationClean` and `VerificationScopeBroadened`. Its `dead_end_thrash` result is
     `HistoricalOnly / 20 / High`, unflagged, with no earlier `Active` score.
 
-- [ ] **R6-C.1.6.2 — Select and execute true-stall replay (`CTX-R6-02`) in `R6-REPLAY`.**
-  - Future exact test: `acceptance_fixtures_integrated_true_stall_stays_active`.
-  - Contract: a trusted annotated non-delegated real-rollout-derived fixture proves repeated failed
-    verifier attempts with `TroubleshootingFrontier / Stalled`, no later direct frontier advance, and
-    a flagged/`Active` `dead_end_thrash` result. Exact raw score/confidence wait for selection.
+- [ ] **R6-C.1.6.2 — Resolve true-stall replay (`CTX-R6-02`) in `R6-REPLAY`.**
+  - Exact test: `acceptance_fixtures_integrated_true_stall_stays_active`.
+  - Trusted witness: depth-1 built-in `default` subagent rollout
+    `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; checkpoint `5` is
+    `TroubleshootingFrontier / Stalled / Medium`, exposes `FailureSignatureRepeated`, and scores
+    flagged `Active / 30 / High`.
+  - Preserved RED (2026-07-14): commit `60cde3dd7`; the analyzer misattributes truthful failed calls
+    `420`/`474` to successful siblings `421`/`475`. Input, progress, and score contracts are correct.
+  - Authoritative screen: `3,423` total (`1,112` user, `2,298` subagent, `13` unspecified), `1,611`
+    verifier-bearing, `225` with at least two failures regardless of command, `161` subagent,
+    `189` non-identical failed-command candidates, `0` malformed, `224` analyzed; this was the sole
+    exact match.
+  - Route: active packet `R6-GAP-DET-REPLAY-STALL` at docs-gate candidate. Prompt 2 Task `.0` first;
+    after review-clean docs, DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before Rust.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
-  - Boundary: reject or replace a fixture-shape mismatch. Do not open a production gap for bad fixture
-    selection; only a behavior red after trusted input validation may use `R6-GAP-DET-REPLAY-STALL`.
-  - Current state: **ACTION REQUIRED — `R6-REPLAY-CTX-R6-02-TRUSTED-STALL`.** The committed
-    fixture corpus contains no exact true-stall witness. An exhaustive bounded local metadata screen
-    for 2026-06-01 through 2026-07-13 inspected `3,423` rollout files, `1,125` non-subagent/root
-    sessions, `515` sessions with verifier-like calls, and `30` sessions with at least two failed
-    identical verifier commands (`0` malformed logs); no qualifying witness was proven.
-  - Closest candidates were rejected honestly: `019f34e8-97cc-7852-8dd4-13a87efa4221` was
-    `TroubleshootingFrontier / Regressing` and `HistoricalOnly / 20`, unflagged;
-    `019f355d-ea49-77c2-a0e3-43a1d79d06d3` was `PlanningConvergence / Stalled` and repeated
-    `git diff --check`, not a failed test verifier; `019f385e-d2f2-7b90-9642-5a273e0e2f2a` and
-    `019f3a4f-89c4-73a2-9bc0-2589b7430485` were `TroubleshootingFrontier / Regressing` and later
-    advanced through `VerificationClean`.
-  - Resume condition: supply the session ID or path of a trusted non-delegated real rollout that
-    compacts and analyzes to the exact contract above, then use Prompt 6 with this escalation ID.
+  - Boundary: no `CTX-R6-06`, family wall, terminal disposition, `R6-CLOSE`, or R7/R8 work yet.
 
 - [ ] **R6-C.1.6.3 — Execute frozen-corpus preservation (`CTX-R6-06`) in `R6-REPLAY`.**
   - Existing exact test:

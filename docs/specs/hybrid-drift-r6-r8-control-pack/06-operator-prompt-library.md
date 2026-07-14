@@ -301,31 +301,33 @@ Finish with where the resolution was recorded, resumed work and commits, verific
 result, current phase status, and the next eligible interaction.
 ```
 
-## Current Resume Invocation
+## Current Packet Invocation
 
-Final gap implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` received fresh
-independent built-in `default` `REVIEW CLEAN`. Authority transition series `56bb9966f` +
-`07a3b1fe5` also received fresh independent built-in `default` `REVIEW CLEAN`, marks aggregate
-`R6-GAP-*` complete, and makes `R6-REPLAY` the sole concrete active phase with active packet `none`.
-Replay implementation/fix series `a0089c8de` + `968a4377f` completed `CTX-R6-01` and received fresh
-independent built-in `default` `REVIEW CLEAN`. `CTX-R6-02` remains open at ACTION REQUIRED
-`R6-REPLAY-CTX-R6-02-TRUSTED-STALL`; `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8 remain
-pending or blocked as owned. The next eligible interaction uses Prompt 6 with:
+`CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is fresh independent built-in
+`default` `REVIEW CLEAN`. Expanded authoritative screening selected trusted depth-1 built-in
+`default` subagent rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; witness commit `60cde3dd7`
+preserves `CTX-R6-02` behavioral RED at checkpoint `5` (`TroubleshootingFrontier / Stalled`,
+flagged `Active / 30 / High`) because failed calls `420`/`474` are misattributed to successful
+siblings `421`/`475`. `R6-REPLAY` remains the sole active phase. Active packet
+`R6-GAP-DET-REPLAY-STALL` is only an uncommitted docs-gate candidate, not review-clean.
+
+The next eligible interaction uses Prompt 2 for the docs gate only:
 
 ```text
-/goal Record the supplied decision or verify the supplied external unblock, then resume the exact
-blocked hybrid-drift scope through its normal proof, commit, and review-clean boundary.
+/goal Execute exactly one bounded hybrid-drift task/packet through commit and independent
+review-clean status, involving me only for a structured decision or external action.
 
 REPO: /Users/spensermcconnell/.codex/worktrees/97a0/substrate
 PHASE_ID: R6-REPLAY
-ACTIVE_PACKET: none
-ESCALATION_ID: R6-REPLAY-CTX-R6-02-TRUSTED-STALL
-RESOLUTION: Trusted non-delegated real rollout <session-id> is available at <path>.
-RATIONALE: The artifact supplies repeated failed verifier attempts with
-TroubleshootingFrontier/Stalled, no later direct frontier advance, and Active/flagged dead_end_thrash.
+ACTIVE_PACKET: R6-GAP-DET-REPLAY-STALL
+TASK_ID: R6-GAP-DET-REPLAY-STALL.0
+ACCEPTANCE: The packet SPEC/PLAN/TASKS plus authorized expected.json annotation correction are
+atomically committed and fresh built-in default review-clean without any Rust edit.
 AUTONOMY_MODE: escalation-only
+STOP_AT: R6-GAP-DET-REPLAY-STALL.0 review-clean; keep R6-REPLAY active
 ```
 
-The session must verify that artifact and status from live repo truth, then resume only the blocked
-replay scope. Do not start `CTX-R6-06`, `R6-CLOSE`, R7, or R8 before `CTX-R6-02` passes its exact
-contract. This example is not a permanent status override.
+After Task `.0` is fresh-review-clean, refresh the locked impacts and issue DECISION REQUIRED
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit. Do not claim the docs gate is already
+review-clean. Do not start `CTX-R6-06`, `R6-CLOSE`, R7, or R8. This example is not a permanent status
+override.
