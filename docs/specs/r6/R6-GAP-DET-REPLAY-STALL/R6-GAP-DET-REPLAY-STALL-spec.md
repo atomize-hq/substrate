@@ -104,9 +104,14 @@ Run in order:
 
 ```bash
 cargo test -p agent-drift-analyzer checkpoints_pair_concurrent_tool_outputs_by_call_id -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_concurrent_clean_sibling_does_not_erase_repeated_failed_lane -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_advancing_lane_ignores_unrelated_insufficient_sibling -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_conflicting_informative_lanes_aggregate_mixed -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_regressing_dominates_only_negative_lanes -- --nocapture
 cargo test -p agent-drift-analyzer troubleshooting -- --nocapture
 cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture
-cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_representative_sticky_success_tail_stays_recovered -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_representative_sticky_success_tail_is_historical_after_truthful_pairing -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture
 cargo test -p agent-drift-analyzer --test progress_acceptance progress_acceptance_cases_match_expected_progress_contract -- --nocapture
 cargo test -p agent-drift-analyzer checkpoint -- --nocapture
 cargo test -p agent-drift-analyzer -- --nocapture
@@ -196,14 +201,40 @@ REPLY FORMAT: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A|B|
 If `.2B` selects Option A, the amendment-ready implementation boundary is:
 
 1. preserve the current `attempt.rs` pairing candidate unchanged in intent;
-2. edit only `assess_troubleshooting_progress` plus new private lane helpers that evaluate the latest
-   attempt per comparable lane and conservatively aggregate lane results;
+2. edit only `assess_troubleshooting_progress` plus new private lane helpers, using the existing
+   `attempts_are_comparable` read-only and without transitive clustering or a shared-comparability
+   change. Keep current-checkpoint attempts in event order. A current attempt is a lane tail exactly
+   when no later current attempt satisfies existing `attempts_are_comparable` with it. Evaluate each
+   tail against the prior-checkpoint attempts plus earlier-current attempts that are directly
+   comparable to that tail, using the existing one-tail troubleshooting logic;
 3. repair malformed synthetic helpers by keeping general-purpose rows ID-less and giving explicit
    identity helpers matching call/output IDs;
-4. add focused concurrent-clean-sibling and `Mixed` lane unit coverage;
-5. reclassify only the sticky expected disposition, assertion, and packet/replay documentation to
-   `HistoricalOnly / 20`, unflagged; never alter raw rollout rows; and
-6. run focused pairing/progress/`CTX-R6-02`/sticky proof before the checkpoint, progress-corpus,
+4. aggregate only informative lane results, where every status other than `InsufficientEvidence` is
+   informative. Zero informative lanes return ordinary `InsufficientEvidence`; one returns unchanged;
+   any `Mixed` returns `Mixed`; `Advancing` plus either `Stalled` or `Regressing` returns `Mixed`;
+   otherwise any `Regressing` returns `Regressing`; otherwise any `Stalled` returns `Stalled`; and the
+   remaining informative case returns `Advancing`. An `InsufficientEvidence` lane never overrides an
+   informative lane;
+5. for multiple informative lanes, merge signals and counter-evidence in lane-tail event order and let
+   existing finalization deduplicate and cap them. Choose the minimum confidence among informative
+   lanes and additionally cap `Mixed` at `Medium`. A single informative lane preserves its confidence
+   and evidence unchanged;
+6. add focused tests with these exact names and contracts:
+   `troubleshooting_concurrent_clean_sibling_does_not_erase_repeated_failed_lane`
+   (`Stalled + InsufficientEvidence => Stalled / Medium`, with failure-lane evidence only),
+   `troubleshooting_advancing_lane_ignores_unrelated_insufficient_sibling`
+   (`Advancing + InsufficientEvidence => Advancing` unchanged),
+   `troubleshooting_conflicting_informative_lanes_aggregate_mixed` (positive plus negative informative
+   lanes produce `Mixed`, both signal polarities, and conservative confidence), and
+   `troubleshooting_regressing_dominates_only_negative_lanes` (`Regressing + Stalled => Regressing`);
+7. rename the future sticky test to
+   `acceptance_fixtures_representative_sticky_success_tail_is_historical_after_truthful_pairing`,
+   update that test function and assertion plus its sticky `expected.json` to
+   `HistoricalOnly / 20`, unflagged, and never alter raw rollout rows. Exact
+   `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture` must update the
+   sticky assertion to `HistoricalOnly / 20`, unflagged while its other three explicit postures remain
+   unchanged; and
+8. run focused pairing/progress/`CTX-R6-02`/sticky proof before the checkpoint, progress-corpus,
    `dead_end_thrash`, full-analyzer, compactor normalization, and static walls.
 
 Even under Option A, do not edit `recovery_state`, `drift_state_for_score`, `assign_drift_states`,

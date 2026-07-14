@@ -111,13 +111,33 @@ The original `attempt.rs` candidate remains preserved and uncommitted:
 If `.2B` selects Option A and this docs amendment is fresh-review-clean:
 
 - keep the `attempt.rs` pairing candidate unchanged in intent;
-- edit only `assess_troubleshooting_progress` plus new private helpers for latest-per-comparable-lane
-  evaluation and conservative lane aggregation;
+- edit only `assess_troubleshooting_progress` plus new private lane helpers. Keep current attempts in
+  event order; a current attempt is a lane tail exactly when no later current attempt satisfies the
+  existing `attempts_are_comparable` with it. Evaluate each tail against prior-checkpoint plus
+  earlier-current attempts directly comparable to that tail through the existing one-tail logic. Use
+  shared comparability read-only, with no transitive clustering or comparability edit;
+- treat every status except `InsufficientEvidence` as informative. Aggregate deterministically: zero
+  informative lanes gives ordinary `InsufficientEvidence`; one is returned unchanged; any `Mixed`
+  gives `Mixed`; `Advancing` plus `Stalled` or `Regressing` gives `Mixed`; otherwise any `Regressing`
+  gives `Regressing`; otherwise any `Stalled` gives `Stalled`; otherwise return `Advancing`.
+  `InsufficientEvidence` never overrides an informative lane;
+- for multiple informative lanes, merge signals and counter-evidence in lane-tail event order and let
+  existing finalization deduplicate/cap. Use the minimum informative-lane confidence, with `Mixed`
+  additionally capped at `Medium`; preserve a single informative lane's confidence and evidence;
 - repair malformed synthetic helpers by making general helpers ID-less and explicit identity helpers
   call/output-ID matched;
-- add focused concurrent-clean-sibling and `Mixed` lane unit coverage; and
-- reclassify only the sticky expected disposition, assertion, and docs to
-  `HistoricalOnly / 20`, unflagged; never edit raw rollout rows.
+- add `troubleshooting_concurrent_clean_sibling_does_not_erase_repeated_failed_lane`
+  (`Stalled + InsufficientEvidence => Stalled / Medium`, failure-lane evidence only),
+  `troubleshooting_advancing_lane_ignores_unrelated_insufficient_sibling`
+  (`Advancing + InsufficientEvidence => Advancing` unchanged),
+  `troubleshooting_conflicting_informative_lanes_aggregate_mixed` (positive plus negative gives
+  `Mixed`, both signal polarities, conservative confidence), and
+  `troubleshooting_regressing_dominates_only_negative_lanes` (`Regressing + Stalled => Regressing`);
+- rename the future sticky test to
+  `acceptance_fixtures_representative_sticky_success_tail_is_historical_after_truthful_pairing` and
+  update its function/assertion plus sticky `expected.json` to `HistoricalOnly / 20`, unflagged; never
+  edit raw rollout rows. The frozen `dead_end_thrash` corpus test must change only that sticky
+  assertion and keep its other three explicit postures unchanged.
 
 Impact every additional existing symbol before editing it. Even under Option A, do not edit
 `recovery_state`, `drift_state_for_score`, `assign_drift_states`, shared comparability, scorer logic,
@@ -138,9 +158,14 @@ Run in order:
 
 ```bash
 cargo test -p agent-drift-analyzer checkpoints_pair_concurrent_tool_outputs_by_call_id -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_concurrent_clean_sibling_does_not_erase_repeated_failed_lane -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_advancing_lane_ignores_unrelated_insufficient_sibling -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_conflicting_informative_lanes_aggregate_mixed -- --nocapture
+cargo test -p agent-drift-analyzer troubleshooting_regressing_dominates_only_negative_lanes -- --nocapture
 cargo test -p agent-drift-analyzer troubleshooting -- --nocapture
 cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture
-cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_representative_sticky_success_tail_stays_recovered -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_representative_sticky_success_tail_is_historical_after_truthful_pairing -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture
 cargo test -p agent-drift-analyzer --test progress_acceptance progress_acceptance_cases_match_expected_progress_contract -- --nocapture
 cargo test -p agent-drift-analyzer checkpoint -- --nocapture
 cargo test -p agent-drift-analyzer -- --nocapture

@@ -122,13 +122,37 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     receive only their matching outputs and outcomes.
   - Conditional Option-A amendment after Task `.2B` and fresh review-clean docs:
     - keep the `attempt.rs` candidate unchanged in intent;
-    - edit only `assess_troubleshooting_progress` plus new private helpers for
-      latest-per-comparable-lane evaluation and conservative lane aggregation;
+    - edit only `assess_troubleshooting_progress` plus new private lane helpers. Keep current attempts
+      in event order; a current attempt is a lane tail exactly when no later current attempt satisfies
+      existing `attempts_are_comparable` with it. Evaluate each tail with the existing one-tail logic
+      against prior-checkpoint plus earlier-current attempts directly comparable to that tail. Shared
+      comparability is read-only; do not add transitive clustering or edit `attempts_are_comparable`;
+    - aggregate only informative lanes (statuses other than `InsufficientEvidence`) using this table:
+      zero informative => ordinary `InsufficientEvidence`; one => unchanged; any `Mixed` => `Mixed`;
+      `Advancing` plus `Stalled` or `Regressing` => `Mixed`; otherwise any `Regressing` =>
+      `Regressing`; otherwise any `Stalled` => `Stalled`; otherwise => `Advancing`.
+      `InsufficientEvidence` never overrides an informative result;
+    - for multiple informative lanes, merge signals and counter-evidence in lane-tail event order and
+      pass them through existing finalization dedupe/caps. Confidence is the minimum informative-lane
+      confidence and `Mixed` is additionally capped at `Medium`; a single informative lane preserves
+      confidence and evidence unchanged;
     - repair malformed synthetic helpers by keeping general helpers ID-less and giving explicit
       identity helpers matched call/output IDs;
-    - add focused concurrent-clean-sibling and `Mixed` lane unit coverage; and
-    - reclassify only the sticky expected disposition, assertion, and docs to
-      `HistoricalOnly / 20`, unflagged; never edit raw rollout rows.
+    - add exact tests `troubleshooting_concurrent_clean_sibling_does_not_erase_repeated_failed_lane`
+      (`Stalled + InsufficientEvidence => Stalled / Medium`, failure-lane evidence only),
+      `troubleshooting_advancing_lane_ignores_unrelated_insufficient_sibling`
+      (`Advancing + InsufficientEvidence => Advancing` unchanged),
+      `troubleshooting_conflicting_informative_lanes_aggregate_mixed` (positive plus negative =>
+      `Mixed`, both signal polarities, conservative confidence), and
+      `troubleshooting_regressing_dominates_only_negative_lanes`
+      (`Regressing + Stalled => Regressing`); and
+    - rename the future sticky test to
+      `acceptance_fixtures_representative_sticky_success_tail_is_historical_after_truthful_pairing`,
+      updating its test function/assertion plus sticky `expected.json` to
+      `HistoricalOnly / 20`, unflagged, never raw rows. In
+      `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture`, update that
+      sticky assertion to `HistoricalOnly / 20`, unflagged while the other three explicit postures
+      remain unchanged.
   - Impact every additional existing symbol before editing it. Even under Option A, do not edit
     `recovery_state`, `drift_state_for_score`, `assign_drift_states`, shared comparability, scorer
     logic, compactor logic, raw fixtures, schemas, replay presentation, sentinel surfaces, R7, or R8.
@@ -142,9 +166,14 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
 
     ```bash
     cargo test -p agent-drift-analyzer checkpoints_pair_concurrent_tool_outputs_by_call_id -- --nocapture
+    cargo test -p agent-drift-analyzer troubleshooting_concurrent_clean_sibling_does_not_erase_repeated_failed_lane -- --nocapture
+    cargo test -p agent-drift-analyzer troubleshooting_advancing_lane_ignores_unrelated_insufficient_sibling -- --nocapture
+    cargo test -p agent-drift-analyzer troubleshooting_conflicting_informative_lanes_aggregate_mixed -- --nocapture
+    cargo test -p agent-drift-analyzer troubleshooting_regressing_dominates_only_negative_lanes -- --nocapture
     cargo test -p agent-drift-analyzer troubleshooting -- --nocapture
     cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture
-    cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_representative_sticky_success_tail_stays_recovered -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_representative_sticky_success_tail_is_historical_after_truthful_pairing -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture
     cargo test -p agent-drift-analyzer --test progress_acceptance progress_acceptance_cases_match_expected_progress_contract -- --nocapture
     cargo test -p agent-drift-analyzer checkpoint -- --nocapture
     cargo test -p agent-drift-analyzer -- --nocapture
@@ -158,8 +187,9 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - The compactor normalization command is optional confirmation, not edit authority.
   - Option-A acceptance: target evidence events `420`/`474`; siblings `421`/`475` excluded;
     `CTX-R6-02` checkpoint/score unchanged; clean target `492 -> 495`, sibling `493 -> 496`; sticky
-    expected disposition alone becomes `HistoricalOnly / 20`, unflagged, with raw rows unchanged;
-    all walls green.
+    expected disposition alone becomes `HistoricalOnly / 20`, unflagged, with raw rows unchanged; the
+    frozen `dead_end_thrash` corpus updates that sticky assertion while its other three postures remain
+    unchanged; all walls green.
   - Record exact results in this TASKS and the replay ledger, use the required commit gate, commit the
     bounded fix/proof receipt, and obtain fresh built-in `default` `REVIEW CLEAN`.
 
