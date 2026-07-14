@@ -124,21 +124,68 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
 ## Current control conclusion
 
 The current tree contains important constraints and footholds, but this pack does not classify any
-required seam as `ContractCorrectAndProven`. That is intentional. A1.1e is landed and supplies the
-exact authority-resolution foundation for a bounded cycle-breaking prerequisite corridor:
+required seam as `ContractCorrectAndProven`. That is intentional. A1.1e is landed and supplies
+necessary exact-read primitives, but the production-ingress audit found that it is not sufficient
+by itself for the B1/B2.1 joint closeout: no production path creates a current authority before
+A1.2, and the shared prepared dispatch still requires noncanonical compatibility records plus a
+legacy live-retained count. The corrected bounded corridor is:
 
 ```text
-A1.1e -> B0 -> B1-3a/B1-3b receipt core
-                  -> B2.1-1 -> B2.1-2 -> B2.1-3
-                  -> B1/B2.1 joint production closeout -> B3.1 -> C1 -> A1.2
+A1.1e -> B0 -> B1-3a/B1-3b receipt core -> B2.1-1/2/3 -------------------------+
+       \-> A1.2a current-authority protocol -> A1.2a-S bounded Start adoption   |
+           -> B1/B2.1-R0 canonical retained target protocol                     |
+           -> B3.2a retained creation/admission bridge --------------------------+
+                                                                                -> B1/B2.1-0
+                                                                                -> joint closeout
+                                                                                -> B3.1 -> C1 -> A1.2b
 ```
 
 This corridor does not close A1.1d, bypass A2/A3 ownership, enable foreground early return, or
-promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven.
-The B1-3a/B1-3b proposal, acknowledgement, and activated-store acceptance-record core is the exact
-next recovery/review packet; it may become independently review-clean without claiming B1
-production completion. B2.1 may begin only from that review-clean core, and B1 cannot close until
-the accepted production paths enter the durable supervisor without attempting the legacy
-active-task writer. B1 and B2.1 therefore share one production integration closeout before B3.1.
+promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven;
+the B1 receipt and B2.1 supervisor cores are preserved at the current joint-closeout stop. B1
+cannot close until the accepted production paths enter the durable supervisor without attempting
+the legacy active-task writer. After this corrected sequence is independently review-clean, the
+exact next implementation packet is A1.2a. It is limited to production Start
+after one strict greenfield-only V1-to-V2 root upgrade; then reservation/issuance/application, initial
+authority birth, exact retry, and the typed read surface required to resolve that already-current
+authority; it has no Attach/Resume, obligation, correlation-supply, or public-consumer adoption.
+A1.2a-S then adopts only the ordinary internal greenfield host Start path: a distinct identity-free
+proposal is applied after the real dormant-launch adapter has the optional world binding and only
+then becomes the existing fully materialized `PreparedAgentRuntime`. It replaces that path's legacy
+session/participant writes with the applied A1.2a result, carries the bound capability into the
+live toolbox context, and leaves startup ownership Pending. It does not change fork/member prepared
+runtime construction or adopt helper plans,
+public Attach/Resume, startup outcome reconciliation, or any post-turn behavior.
+B1/B2.1-R0 then lets RetainedWorkerRuntime create the immutable retained object graph and requires
+HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
+identity supplied by its caller, and fix the replay-stable registration/object identities before
+object publication, then atomically append exactly its participant to lineage, add its validated
+object ref, advance the authority revision, and persist a distinct non-transition registration
+proof. It then exact-resolves the canonical target; a still-Pending Start keeps its original
+expected revision and A1.2b later accepts only the unique contiguous registration-proof ancestry.
+R0 remains a registration protocol and does not claim a production caller, messaging,
+accepted-turn observation, park/cancel/stop/fork, or live-count semantics. B3.2a is the separate
+RetainedWorkerRuntime-owned production bridge: before R0 it atomically checks the durable
+admission count/cap and reserves one exact participant slot and full canonical request fingerprint
+under its own crash-stable admission key (never an HSA commitment key) across processes. A durable
+per-session registration head alone may then fix the current authority
+revision; later slots remain ordered without pinning a stale revision. The bridge passes that
+slot-fixed participant to R0 instead of allocating a retry-local ID, exact-joins R0, commits the
+proof before opening the member stream, and carries a transport-neutral typed equality proof through
+both the direct dispatcher transport and live internal-toolbox Spawn adapter via the real
+transport-api `Service::execute_stream` member branch to the world-service launch boundary. Activated-
+store legacy session/participant writes are replaced by exact proof validation. Unknown or
+interrupted state stays nonterminal and counted; only exact B0 terminal truth removes it from the
+live count. Active caller, posture, workspace, world, policy, spawn steering/outcome, and transport
+event behavior remain unchanged. B1/B2.1-0 then partitions the shared prepared state
+for RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task
+Inspect/Cancel/Wait. Those paths
+do not require the missing live-retained lifecycle count. This is the first point at which the
+independent B1/B2.1 receipt/supervisor branch joins the authority/retained branch. B1 and B2.1 share one production
+integration closeout only after those prerequisites. A1.2b remains after B3.1/C1 and retains all
+successor and obligation-dependent post-turn work; it begins by freezing the later strict V3
+root/intent/state extension, so A1.2a's V2 Start schema imports no B1-owned accepted-work type.
+Retained Inspect/Cancel/Stop remain on unchanged compatibility paths for B3.2/B4 and cannot count
+as a joint-closeout failure-to-pass transition.
 B2.2/B3.2 retain the deferred receipt-UX and broader retained-lifecycle work after A1 and the named
 A2/A3 boundaries. Similarly named event, span, or payload fields are not closure evidence.

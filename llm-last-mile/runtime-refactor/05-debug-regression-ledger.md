@@ -70,7 +70,7 @@ the correlation or scan, classify, create, resolve, reinterpret, or overwrite ob
 Inbox/count/worker/compatibility truth is forbidden. C1 owns the canonical records and complete
 cut. The corrected prerequisite order is B0 runtime identity/order, B1 accepted task/active-run
 identity, B2.1 durable observation/reconciliation, B3.1 exact retained-event semantics, and C1
-materialization/completeness before A1.2 resumes. This moves no A2/A3 ownership, permits the
+materialization/completeness before A1.2b resumes. This moves no A2/A3 ownership, permits the
 foreground to remain blocking until B2.2, and closes none of `RG-EVENT-01`, `RG-RECEIPT-03`,
 `RG-SUP-01`, `RG-SUP-02`, `RG-MSG-01`, `RG-OBL-01`, or `RG-OBL-02` by documentation alone. The
 crash matrix includes startup evidence,
@@ -269,11 +269,12 @@ closeout remains open, native macOS closeout remains pending, `RG-AUTH-03`, `RG-
 adoption, Start reservation, transition-intent issuance/claim/application, parked-successor repair,
 dispatch narrowing/enforcement, auto-attach adoption, and all A1.2 work were deliberately excluded
 from that A1.1e closeout. A1.2 work exposed the cycle and remains preserved out of the source
-branch. Its resumable post-turn closure is sequencing-blocked on the B0 → B1-3a/B1-3b receipt core
-→ B2.1-1/2/3 → joint B1/B2.1 production closeout → B3.1 → C1 corridor. Do not restore, modify, or
-resume A1.2 before that corridor lands. A1.3 is not dependency-ready. B0 was the exact next
-implementation packet and is now landed; receipt-core recovery/review is next, without claiming B1
-complete. A1 as a whole remains incomplete and non-landable.
+branch. This paragraph records the A1.1e closeout conclusion at that time; its old next-packet/order
+statement is superseded by the Case B production-ingress audit below. Do not restore or modify the
+broad A1.2 checkpoint, and do not begin A1.2b before the joint closeout → B3.1 → C1 corridor lands.
+The bounded A1.2a packet is now the exact next packet after this docs-only correction is
+independently review-clean. A1.3 is not dependency-ready, and A1 as a whole remains incomplete and
+non-landable.
 
 ## B0 closeout evidence
 
@@ -338,8 +339,9 @@ at the same legacy StateStore-root preflight. Neither is counted as B0 proof. Th
 `RG-EVENT-01`, prerequisite clauses of `RG-SUP-01` and `RG-MSG-01`, and carrier clause of
 `RG-OBS-01` are satisfied. B2.1 consumer clauses remain open. B1-3a/B1-3b receipt-core recovery is
 dependency-ready; B2.1 becomes ready only after that core is review-clean, and neither packet is
-production-complete before their joint closeout. B3.1, C1, and A1.2 are not ready. The preserved
-A1.2 checkpoint remains untouched at
+production-complete before their joint closeout. The joint closeout is now additionally blocked on
+A1.2a, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0; B3.1, C1, and A1.2b are not ready. The preserved broad A1.2 checkpoint remains
+untouched at
 `18bea80b75ad2c59c7b635851b14552e380585f2`. No seam is promoted.
 
 ## B1 production-path sequencing blocker
@@ -358,12 +360,120 @@ remains foreground-owned through `Exit`. Deleting registration alone would there
 inspect/cancel/wait behavior, while moving those mixed responsibilities into the receipt registry,
 a fixed active-task side table, or generic activated-store writer would violate ownership.
 
-The acyclic repair is B1-3a/B1-3b receipt core → B2.1-1/2/3 supervisor handoff, journal/waiter, and
-restart reconciliation → one joint B1/B2.1 production closeout → B3.1. The receipt core may be
-review-clean without closing B1. `WorldWorkReceiptRegistry` retains proposal/immutable acceptance
-truth; `WorldWorkExecutionSupervisor` owns active observation, journal, terminal reconciliation,
-restart, and caller-drop survival; `WorldDispatchControl` consumes those truths for bounded
-compatibility; HostSessionAuthority/StateStore supply only opaque bounded physical persistence.
+The corrected acyclic repair keeps the preserved B1-3a/B1-3b receipt core → B2.1-1/2/3
+supervisor branch independent while A1.1e → A1.2a current-authority protocol → A1.2a-S bounded
+internal Start adoption → B1/B2.1-R0 → B3.2a builds the authority/retained branch. They first join
+at B1/B2.1-0 action-scoped dispatch
+preparation → one joint B1/B2.1 production closeout → B3.1 →
+C1 → A1.2b. The receipt/supervisor cores may be review-clean without closing B1.
+`WorldWorkReceiptRegistry` retains proposal/immutable acceptance truth;
+`WorldWorkExecutionSupervisor` owns active observation, journal, terminal reconciliation, restart,
+and caller-drop survival; `WorldDispatchControl` consumes those truths for bounded compatibility;
+HostSessionAuthority/StateStore supply only their explicitly bounded authority/read and physical
+persistence capabilities.
+
+## B1/B2.1 `RegressionMasked` stop and ownership disposition
+
+The post-review production-ingress audit selects **Case B — canonical production input is
+missing**. A1.1e provides an exact reader, but `resolve_exact` requires an already-current
+`SessionNamespaceRecordV1::Authority`; no landed production path creates that authority. The
+current prepared dispatcher also consumes legacy session/caller/target record shapes absent from
+the exact read, and `live_retained_worker_count` drives steering even though
+`retained_worker_refs` carry no live/terminal state. Neither a legacy `authoritative_live`
+composite nor a count of all refs is an acceptable replacement.
+
+The audit therefore rejects the earlier ownership claim that
+`prepare_orchestrator_world_dispatch` belongs to A1.2. A1.2a owns only greenfield Start
+issuance/application and exact read, A1.2a-S owns only bounded internal Start adoption, and the
+prepared dispatcher remains a B-owned consumer after those and the retained prerequisites exist.
+
+The corrected acyclic sequence keeps the preserved **B1/B2.1 core** branch independent while
+**A1.1e → A1.2a current-authority protocol → A1.2a-S bounded internal Start adoption →
+B1/B2.1-R0 canonical retained target protocol → B3.2a retained creation/admission** builds the
+authority/retained branch. They first join at **B1/B2.1-0 action-scoped dispatch preparation** →
+joint closeout → B3.1 → C1 → **A1.2b
+successor/post-turn completion**. A1.2a owns only the strict greenfield V1-to-V2 root upgrade,
+followed by greenfield Start reservation/issuance/claim, single application/initial authority
+birth, crash-safe exact retry, and a typed read result joining the applied caller descriptor and
+bound home/store to exact authority. A semantic/non-greenfield V1 root cannot be converted.
+A1.2a-S alone adopts that result on the ordinary internal host bootstrap: the identity-free proposal
+is applied after the real dormant-launch adapter has the optional world binding, and only the
+applied result constructs the existing fully materialized `PreparedAgentRuntime`. It carries the
+bound capability to the live toolbox and suppresses activated-store legacy
+session/participant/snapshot writes while leaving startup ownership Pending. Fork/member prepared
+runtime paths remain unchanged. It does not adopt hidden-owner plans, public
+Attach/Resume, startup-result reconciliation, or post-turn behavior.
+B1/B2.1-R0 supplies only the durable canonical retained-target registration protocol; by design it
+has no production ingress and cannot satisfy full-dispatcher proof alone. Its complete immutable
+descriptor/resume/worker graph is published only after an HSA-owned issuer-request reservation
+validates the caller-fixed participant plan and fixes every remaining replay identity/commitment,
+then becomes authority only through the sole HSA-owned
+atomic lineage/ref mutation, request completion, and non-transition proof. Crash and lost-response
+retry rejoin that index; no later messaging or lifecycle semantics are introduced. B3.2a is the
+separate RetainedWorkerRuntime-owned production bridge: both real Spawn adapters first atomically
+fingerprint the complete validated request/authority/runtime/policy plan under the separate
+RetainedWorkerRuntime admission key, whose crash-stable lifetime is independent of HSA keys; count all durable
+nonterminal admission slots, enforce the cap, and persist fixed participant/bootstrap-run identity.
+Only one durable per-session registration head fixes current authority; later slots remain ordered
+without pinning a stale revision. The bridge passes the head plan to R0, exact-joins R0 before
+transport, and carries one transport-neutral typed equality proof through the direct dispatcher and
+live internal-toolbox adapter into the real transport-api `Service::execute_stream` member branch
+and `MemberRuntimeManager::launch` validation. The live adapter cannot allocate a retry-local
+participant or invoke activated-store legacy writers. Exact Registered
+truth makes the target routable; only exact B0 terminal truth removes it from the live count, while
+every ambiguous interruption stays nonterminal and counted. Spawn policy/outcome/events remain
+unchanged. B1/B2.1-0 removes the
+missing live-retained field and legacy session/caller inputs from B-owned RunWorldTask, ordinary
+retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait preparation while
+leaving `WorkerContinueForkCommand`, retained Inspect/Cancel/Stop, fork, the already-landed B3.2a
+spawn creation/admission bridge, and remaining retained lifecycle steering unchanged and unpromoted. A1.2b first owns the separately reviewed strict
+V2-to-V3 root/intent/state extension after B1/B3.1/C1 types are available, then retains
+Attach/Resume, startup/post-turn reconciliation, obligation-cut consumption, release, retry, and
+optional world-work correlation after C1. Its startup resolution
+may join the original Start application revision to current authority only through the unique
+contiguous R0 registration-proof chain; acceptance leaves current authority unchanged and terminal
+reconciliation preserves every R0-added lineage member/ref. Arbitrary stale revision still fails.
+The broad preserved
+A1.2 checkpoint is not restored or modified.
+
+The current preserved runtime WIP does not satisfy the differential gate. Eleven historical
+dispatcher/inspect/cancel/wait tests bypass the full dispatcher through lower-level receipt,
+supervisor, resolver, or transport calls. Those transitions are `RegressionMasked`, not
+failure-to-pass proof. Every one must re-enter the full dispatcher. Within the bounded closeout,
+only the named ephemeral accepted-task controls are eligible for failure-to-pass remediation;
+retained Inspect/Cancel/Stop may only preserve their exact historical failure and normalized
+signature until their later lifecycle owner lands. The historical duplicate-registration test may remain a legitimate isolated
+fixture correction only if its production semantics and exact assertions are unchanged; it does
+not count as receipt/supervisor remediation merely because the fixture becomes runnable.
+
+This disposition sharpens the open gates without closing them:
+
+- `RG-RECEIPT-03` requires full-dispatcher exact-session/world/cross-session reuse proof for the
+  named ephemeral accepted-task controls over immutable acceptance and supervisor truth, including
+  caller/waiter drop survival. It does not promote retained control lifecycle.
+- `RG-SUP-01` requires the accepted production path and full compatibility dispatcher to use the
+  exact claim/journal without a legacy active-task registration or resolver fallback for the
+  action-scoped closeout paths.
+- `RG-SUP-02` requires restart, waiter-drop, terminal-closeout, and acceptance-retention proof
+  through exact supervisor APIs reached by the named ephemeral production integration path;
+  retained closeout remains later-owned.
+- `RG-OBS-01` requires the prepared dispatch to join the A1.2a-S production-bound current-authority read,
+  R0's HSA-proven retained target where applicable, B1 acceptance, and B2.1 observation identity;
+  episode/liveness composites and compatibility
+  projections are not observability authority.
+- `RG-DIFF-01` requires all eleven historical tests to re-enter the full dispatcher with their
+  historical names and exact assertions. Retained control cases may remain `FailToSameFailure`,
+  but direct lower-level substitutions remain `RegressionMasked` even when they exercise
+  individually correct owner APIs.
+
+Only a fresh broad differential classified `ExpectedBaselineResolution` after that real-path proof
+may close the joint packet. `PassToFail`, `FailToChangedFailure`, `Removed`,
+`RenamedOrSubstituted`, `NewFail`, and `NewIgnored` must all remain zero, and every retained failure
+must preserve its normalized signature.
+
+This docs-only correction does not authorize A1.2a, A1.2a-S, B1/B2.1-R0, B3.2a, B1/B2.1-0, runtime-WIP restoration, or any
+implementation. The exact next packet after independent clean sequence review is A1.2a; it must be
+implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
 
 ## Baseline behaviors that all tracks preserve
 
@@ -376,7 +486,7 @@ open remains a blocking regression gate until its named owner and real-path proo
 | **RG-BASE-02** | REPL first-dispatch `run_world_task` binding repair | Correct binding succeeds; stale/mismatched world generation fails closed; no generic binding synthesis on unrelated surfaces. |
 | **RG-BASE-03** | Parked host ordinary-command and continuity parity | Unprefixed `ls`/`pwd` remain usable; policy-required `cd ../` cage denial remains; later targeted host turn reuses session/UAA continuity; public CLI parity stays green. |
 | **RG-BASE-04** | Retained spawn/fork/exact continue/exact stop plus ambiguity close | Exact source and child handles route correctly; backend-only follow-up with multiple retained workers fails closed; source detached stop and child live-transport stop remain valid. |
-| **RG-DIFF-01** | Monotonic broad-suite differential; a historical failure becoming a pass is neither automatic success nor automatic regression | Apply the exact-name and normalized-signature transition gate in `04`. Preserve complete inventories and artifact hashes; prove every historical failure-to-pass transition at the exact baseline and current production path; inspect test and assertion diffs; map the causal change to the owning slice and symbol; prove no bypass, weakened enforcement, removed behavior, hidden/renamed/ignored test, or unrelated capability loss; and obtain independent review. Any uncertain transition is `BaselineRegressionAmbiguous` and keeps the owning closeout open. |
+| **RG-DIFF-01** | Monotonic broad-suite differential; a historical failure becoming a pass is neither automatic success nor automatic regression | Apply the exact-name and normalized-signature transition gate in `04`. Preserve complete inventories and artifact hashes; prove every historical failure-to-pass transition through the exact baseline and current full production dispatcher; inspect test and assertion diffs; map the causal change to the owning slice and symbol; prove no direct-resolver/transport substitution, bypass, weakened enforcement, removed behavior, hidden/renamed/ignored test, or unrelated capability loss; and obtain independent review. A lower-level substitute is `RegressionMasked`; any otherwise uncertain transition is `BaselineRegressionAmbiguous`. Either classification keeps the owning closeout open. |
 
 ## Cross-gate smoke scenarios
 

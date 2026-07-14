@@ -194,8 +194,8 @@ capability-boundary change instead of broadening permissions.
 home once, before StateStore construction or config, policy, and inventory resolution, and passes
 the same opened `CanonicalDirectoryV1` identity to all four consumers. The value persisted in
 `WorkspaceBindingV1.authority_store_root` must equal that bootstrap-home identity byte-for-byte and
-by physical identity, and must equal `StateRootV1.bootstrap_home` before any authority record,
-intent, or object is accepted. No issuer, helper, retry, restart, reconciliation, config resolver,
+by physical identity, and must equal the decoded current strict root's `bootstrap_home`—whether
+`StateRootV1` or `StateRootV2`—before any authority record, intent, or object is accepted. No issuer, helper, retry, restart, reconciliation, config resolver,
 policy resolver, or inventory resolver may later reread `SUBSTRATE_HOME`, fall back to `$HOME`, or
 resolve the home relative to ambient CWD. A different home, even if valid and content-equivalent,
 is a binding mismatch.
@@ -928,8 +928,8 @@ enum AuthorityStoreCommitmentKeyStateV1 {
 Store initialization generates a 256-bit HMAC key from the OS CSPRNG while holding the root lock.
 `key_id` is exactly `ak_` plus 32 lowercase hexadecimal characters encoding a separate 128-bit
 OS-CSPRNG identifier.
-The lifecycle record is stored only in `StateRootV1.commitment_key_registry`; it contains no key
-bytes. Secret key bytes live outside the root at `authority-v1/keys/<key_id>.key`. Each key file is
+The lifecycle record is stored only in the current strict root's `commitment_key_registry`, for
+either `StateRootV1` or `StateRootV2`; it contains no key bytes. Secret key bytes live outside the root at `authority-v1/keys/<key_id>.key`. Each key file is
 an immutable binary `AuthorityStoreCommitmentKeyFileV1` envelope with this exact byte encoding:
 
 ```text
@@ -957,8 +957,8 @@ No other metadata source is accepted. Keys and raw values are never logged, trac
 placed in helper plans, or included in diagnostics. Only local authority processes already
 authorized for the store may open the key through the trusted store handle.
 
-Exactly one registry entry is `Active`, and its key ID equals
-`StateRootV1.active_commitment_key_id`. New sensitive records use only that key. Rotation is one
+Exactly one registry entry is `Active`, and its key ID equals the decoded current strict root's
+`active_commitment_key_id`. New sensitive records use only that key. Rotation is one
 serialized protocol under the root lock:
 
 1. Generate a new key ID, metadata record, and 32-byte key from the OS CSPRNG.
@@ -1015,7 +1015,7 @@ Delimiter concatenation is forbidden. The `StoreHmacSha256.digest_hex` is lowerc
 `HMAC-SHA-256(key, bytes_above)`. Sensitive bytes and these reusable commitments are authority
 store data only; failed verification reports a redacted typed error without logging either.
 
-#### `StateRootV1` and the session namespace
+#### Strict `StateRootV1`/`StateRootV2` and the session namespace
 
 ```rust
 struct StateRootV1 {
@@ -1030,6 +1030,23 @@ struct StateRootV1 {
     transition_intent_map: BTreeMap<String, HostSessionTransitionIntentV1>,
     issuer_request_index: BTreeMap<String, IssuerRequestIndexEntryV1>,
     application_journal: BTreeMap<String, HostSessionTransitionApplicationJournalV1>,
+    object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
+}
+
+struct StateRootV2 {
+    schema_version: u32, // exactly 2
+    authority_store_id: String,
+    bootstrap_home: CanonicalDirectoryV1,
+    root_revision: u64,
+    active_commitment_key_id: String,
+    commitment_key_registry: BTreeMap<String, AuthorityStoreCommitmentKeyV1>,
+    greenfield_namespace_certificate: GreenfieldNamespaceCertificateV1,
+    session_namespace_map: BTreeMap<String, SessionNamespaceRecordV1>,
+    transition_intent_map: BTreeMap<String, HostSessionTransitionIntentV2>,
+    issuer_request_index: BTreeMap<String, IssuerRequestIndexEntryV1>,
+    application_journal: BTreeMap<String, HostSessionTransitionApplicationJournalV2>,
+    retained_worker_registration_request_index: BTreeMap<String, RetainedWorkerAuthorityRegistrationRequestV1>,
+    retained_worker_registration_journal: BTreeMap<String, RetainedWorkerAuthorityRegistrationV1>,
     object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
 }
 
@@ -1089,6 +1106,16 @@ struct InitialTransitionApplicationJournalV1 {
 
 struct PostTurnApplicationJournalV1 {
     completion_ref: AuthorityObjectRefV1,
+    authority_revision_before: u64,
+    authority_revision_after: u64,
+    authority_record_commitment: AuthorityObjectCommitmentV1,
+    application_result_ref: AuthorityObjectRefV1,
+    applied_at: TimestampV1,
+}
+
+// A1.2b-only after C1; strict V1 is unchanged.
+struct PostTurnApplicationJournalV2 {
+    completion_ref: AuthorityObjectRefV1,
     obligation_snapshot_ref: Option<AuthorityObjectRefV1>,
     authority_revision_before: u64,
     authority_revision_after: u64,
@@ -1102,6 +1129,26 @@ struct HostSessionTransitionApplicationJournalV1 {
     intent_id: String,
     initial_application: InitialTransitionApplicationJournalV1,
     post_turn_application: Option<PostTurnApplicationJournalV1>,
+}
+
+struct HostSessionTransitionApplicationJournalV2 {
+    schema_version: u32, // exactly 2
+    intent_id: String,
+    initial_application: InitialTransitionApplicationJournalV1,
+    startup_terminal_application: Option<StartupOwnershipTerminalApplicationJournalV1>,
+    post_turn_application: Option<PostTurnApplicationJournalV1>,
+}
+
+struct StartupOwnershipTerminalApplicationJournalV1 {
+    schema_version: u32,
+    startup_ownership_result_ref: AuthorityObjectRefV1,
+    evidence_id: String,
+    authority_revision_before: u64,
+    authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    authority_revision_after: u64,
+    resulting_posture: HostSessionPostureV1,
+    authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    applied_at: TimestampV1,
 }
 
 enum AuthorityObjectStorageStateV1 {
@@ -1126,19 +1173,72 @@ struct AuthorityObjectIndexEntryV1 {
 Map ownership and keys are exact: `session_namespace_map` is keyed by
 `orchestration_session_id`; `transition_intent_map` and `application_journal` by `intent_id`;
 `issuer_request_index` by store-global `issuer_request_id`; `commitment_key_registry` by `key_id`;
-and `object_index` by `ref_id`. Each value repeats and must match its map key. Every non-released
+and `object_index` by `ref_id`. V2 additionally keys
+`retained_worker_registration_request_index` by store-global `issuer_request_id` and
+`retained_worker_registration_journal` by store-global `registration_id`. Each value repeats and
+must match its map key. A fresh A1.1 root is strict V1 and initializes its five semantic maps empty.
+V1 never accepts, defaults, or ignores V2 fields. A1.2a must perform the closed V1-to-V2 upgrade
+below before Start issuance. The resulting strict V2 root initializes both retained-registration
+maps empty. Only R0 may add entries. Request fields are immutable and request state has the sole
+`Reserved -> Applied` transition; journal entries are immutable; neither map permits deletion. An
+issuer request ID or registration ID is semantic occupancy: exact retry joins only the same
+complete record and any conflicting reuse fails before mutation. Initial V2 Start application
+creates a V2 application journal with `startup_terminal_application = None` and
+`post_turn_application = None`; only an exact terminal startup reconciliation may fill the startup
+field once, while Accepted startup leaves it `None`. Later V3 Attach/Resume uses the separately
+versioned application-journal member. Post-turn and startup-terminal phases occupy
+distinct fields and cannot substitute for each other.
+Every non-released
 object-index entry is reachable from an exact parent record in the same root; an index row alone
 cannot grant semantic authority. Only a
 `TransitionTransportPayload` entry may be `ReleaseEligible` or `Released`; every other committed
-object kind remains immutable `Present`. A session namespace key is never deleted in V1 after
-reservation, authority creation, or tombstoning; lifecycle changes replace only the value variants
-explicitly authorized above.
+object kind remains immutable `Present`. A session namespace key is never deleted from either
+supported strict root after reservation, authority creation, or tombstoning; lifecycle changes
+replace only the value variants explicitly authorized above.
 
 The greenfield certificate is not a migration barrier. Its `schema_version` is exactly 1, its store
 ID and bootstrap-home identity exactly equal the enclosing root, and its timestamp is the exact
 timestamp fixed by `AuthorityStoreInitializationV1`. It can be created only by the `FreshAbsent`
 initialization protocol below and is immutable for the life of the store. A missing, changed,
 copied, synthesized, or independently created certificate is root corruption.
+
+#### A1.2a strict greenfield root upgrade
+
+A1.2a owns one version-correct schema evolution from the already-landed strict `StateRootV1` to
+strict `StateRootV2`; this is not legacy authority conversion. The decoder first reads only the
+closed schema-version discriminator and then decodes exactly the selected closed struct. It never
+uses `serde(default)`, an optional V2 field on V1, unknown-field tolerance, or retry-by-parsing as a
+different version. Unknown versions and malformed/mixed-version bytes fail closed.
+
+The upgrade is allowed only while holding the retained opened physical-root transaction and only
+when the V1 root, key registry/files, immutable greenfield certificate, bootstrap-home/store
+identity, and exact root revision all validate; `session_namespace_map`, `transition_intent_map`,
+`issuer_request_index`, `application_journal`, and `object_index` are all empty; both pre-A1 legacy
+collections are safely absent/empty; and no object or semantic orphan exists. Any V1 semantic
+entry, pre-A1 artifact, unsafe/unreadable state, or identity/revision mismatch returns
+`UnsupportedNonGreenfieldRootV1` with zero mutation. No authority, reservation, intent, object, or
+application result is created by the upgrade.
+
+The one root transaction copies the store/home/certificate/key fields byte-for-byte, increments
+`root_revision` once, sets `schema_version = 2`, keeps the existing five semantic maps empty, and
+adds only empty `retained_worker_registration_request_index` and
+`retained_worker_registration_journal` maps; V2 intent/application entries use
+`HostSessionTransitionIntentV2` and
+`HostSessionTransitionApplicationJournalV2`. The root temp file, file/directory `fsync`, rename,
+lock, identity revalidation, and crash windows are exactly the existing root-publication protocol.
+Crash before publication leaves the exact V1 root; crash after publication yields the exact V2
+root. Exact retry joins only that byte-equivalent V2 conversion. Once V2 is published, no writer
+may emit V1 again. A1.1e read-only support for an existing strict V1 root remains unchanged, while
+A1.2a Start and all R0 mutations require strict V2. A1.2b mutations require the later strict V3.
+
+Shared key lifecycle and object-reachability code must dispatch on that same closed root-version
+type. Rotation or retirement preserves the decoded version and identical V1 behavior; it cannot
+down-convert V2 or reinterpret one application-journal shape as the other. V2 reachability includes
+every initial-application ref, every present startup-terminal or post-turn application ref, and,
+once R0 is allowed, every Applied retained-registration descriptor/resume/worker/policy ref.
+Reserved request IDs and commitments are plans, not object refs or reachability roots. A referenced
+object missing from this exhaustive version-specific traversal is corruption; an object is never
+made reachable merely by an object-index entry.
 
 #### External-object write protocol and filesystem safety
 
@@ -1333,7 +1433,13 @@ Every object-creating or semantic root transaction uses this order:
 2. Reject unsafe/symlinked authority paths, wrong ownership, unsafe permissions, or an unsupported
    filesystem.
 3. Acquire the cross-process exclusive lock on `authority-v1/lock/root.lock`.
-4. Re-read and strictly decode the current `StateRootV1`.
+4. Read the closed schema-version discriminator and strictly decode exactly the current
+   `StateRootV1` or `StateRootV2`. A1.2a's upgrade is the only semantic operation permitted on V1;
+   Start issuance/application and every R0 semantic mutation require strict V2. Before any A1.2b
+   semantic mutation, its separately reviewed packet must extend this closed discriminator and
+   transaction path for strict V3. Shared key
+   lifecycle and validation preserve their version without defaulting, down-converting, or
+   accepting mixed-version state.
 5. Re-enumerate both legacy authority collections as empty and validate the greenfield certificate,
    `root_revision`, object state, namespace reservation, intent/application revisions, and all
    semantic preconditions. A pre-A1 artifact fails closed and cannot be imported or ignored.
@@ -1520,9 +1626,14 @@ Acceptance rules:
    identities; a different store or workspace requires a separately versioned explicit rebinding
    protocol outside A1.
 
-## 1A. `HostSessionTransitionIntentV1`
+## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
-`HostSessionTransitionIntentV1` is the durable authority request for host-session `Start`, `Attach`, and `ResumeOneTurn`. A hidden-helper launch plan is only a private transport projection of this record. Reading or deleting that plan does not consume, apply, reject, or expire the intent.
+The landed `HostSessionTransitionIntentV1` byte shape remains strict and readable without defaults
+or added fields. Production A1.2a Start uses the strict V2 shape after the greenfield root upgrade;
+later Attach/Resume transition mutation uses the separately reviewed strict V3 shape. A
+hidden-helper launch plan is only a private transport
+projection of the selected record. Reading or deleting that plan does not consume, apply, reject,
+or expire the intent.
 
 ```rust
 struct HostSessionTransitionIntentV1 {
@@ -1552,6 +1663,38 @@ struct HostSessionTransitionIntentV1 {
     issued_at: TimestampV1,
     expires_at: TimestampV1,
     state: HostSessionTransitionIntentStateV1,
+    input_handoff: HostSessionTransitionInputHandoffV1,
+    transport_payload_state: HostSessionTransitionTransportPayloadStateV1,
+    updated_at: TimestampV1,
+}
+
+struct HostSessionTransitionIntentV2 {
+    schema_version: u32,                 // exactly 2
+    intent_id: String,
+    issuer_request_id: String,
+    intent_revision: u64,
+    mode: HostSessionTransitionModeV1,
+    authority_precondition: HostSessionAuthorityPreconditionV1,
+    orchestration_session_id: String,
+    shell_trace_session_id: String,
+    caller: HostSessionTransitionCallerV1,
+    source_authoritative_participant_id: Option<String>,
+    target_authoritative_participant_id: String,
+    target_participant_lease_token_ref: AuthorityObjectRefV1,
+    run_id: String,
+    resulting_authoritative_lineage: Vec<String>,
+    workspace_binding: WorkspaceBindingV1,
+    world_binding: Option<WorldBindingV1>,
+    descriptor_ref: AuthorityObjectRefV1,
+    host_attach_contract_ref: AuthorityObjectRefV1,
+    resume_handle_ref: Option<AuthorityObjectRefV1>,
+    transition_input_ref: Option<AuthorityObjectRefV1>,
+    post_turn_disposition: Option<HostPostTurnDispositionV1>,
+    transport_payload_ref: AuthorityObjectRefV1,
+    payload_commitment: AuthorityObjectCommitmentV1,
+    issued_at: TimestampV1,
+    expires_at: TimestampV1,
+    state: HostSessionTransitionIntentStateV2,
     input_handoff: HostSessionTransitionInputHandoffV1,
     transport_payload_state: HostSessionTransitionTransportPayloadStateV1,
     updated_at: TimestampV1,
@@ -1610,6 +1753,37 @@ enum HostSessionTransitionIntentStateV1 {
     },
     Applied {
         claim_id: String,
+        authority_revision_before: Option<u64>,
+        authority_revision_after: u64,
+        active_authoritative_participant_id: String,
+        resulting_posture: HostSessionPostureV1,
+        authority_record_commitment: AuthorityObjectCommitmentV1,
+        application_result_ref: AuthorityObjectRefV1,
+        post_turn: HostSessionPostTurnApplicationV1,
+        applied_at: TimestampV1,
+    },
+    Rejected {
+        reason: HostSessionTransitionTerminalRejectionV1,
+        terminal_handoff_ref: AuthorityObjectRefV1,
+        rejected_at: TimestampV1,
+    },
+    Expired {
+        terminal_handoff_ref: AuthorityObjectRefV1,
+        expired_at: TimestampV1,
+    },
+}
+
+enum HostSessionTransitionIntentStateV2 {
+    Issued,
+    Claimed {
+        claim_id: String,
+        claimant_attempt_id: String,
+        claim_revision: u64,
+        claimed_at: TimestampV1,
+        claim_expires_at: TimestampV1,
+    },
+    Applied {
+        claim_id: String,
         claimant_attempt_id: String,
         authority_revision_before: Option<u64>,
         authority_revision_after: u64,
@@ -1633,6 +1807,23 @@ enum HostSessionTransitionIntentStateV1 {
 }
 
 enum HostSessionPostTurnApplicationV1 {
+    NotApplicable,
+    Pending {
+        expected_run_id: String,
+        expected_authority_revision: u64,
+    },
+    Applied {
+        completion_ref: AuthorityObjectRefV1,
+        authority_revision_before: u64,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        application_result_ref: AuthorityObjectRefV1,
+        applied_at: TimestampV1,
+    },
+}
+
+// A1.2b-only after B1/B2.1, B3.1, and C1; not compiled by A1.2a.
+enum HostSessionPostTurnApplicationV2 {
     NotApplicable,
     Pending {
         expected_run_id: String,
@@ -1744,6 +1935,29 @@ enum HostSessionTransitionTransportPayloadStateV1 {
 }
 ```
 
+V1 validation, reachability, retry, and canonical encoding use only the landed V1 fields; V1
+`Applied` has neither `claimant_attempt_id` nor `startup_ownership`, and no decoder may default or
+infer them. V2 validation requires the persisted claimant attempt and closed startup-ownership
+substate, accepts only mode `Start`, and requires `post_turn=NotApplicable`; its reachable schema
+contains no B1 accepted-work or correlation type. A V1 root containing a V2 intent, a V2 root
+containing a V1 intent, or a state payload from the wrong intent version is mixed-version
+corruption. Every exact retry and reachable-object walk dispatches from the root version through
+the matching intent-state version.
+
+A1.2b may not widen V2 in place. After the joint B1/B2.1 closeout, B3.1, and C1 make their shared
+types available, A1.2b must first freeze and independently review a strict V3 root/intent/state
+extension. That later root preserves each existing V2 Start intent as an unchanged closed V2
+member, preserves both R0 maps and all authority/application proof bytes, and permits new
+Attach/Resume intents only through a separate V3 member using
+`HostSessionPostTurnApplicationV2`; its V3 application journal likewise uses the separate
+`PostTurnApplicationJournalV2` rather than widening V1. Its V2-to-V3 publication, crash, exact-retry, key-lifecycle,
+and reachability rules must be specified before A1.2b implementation. Neither the V3 type nor any
+B1 accepted-work/correlation import is part of A1.2a.
+
+All rules below that mention Attach, ResumeOneTurn, `AwaitingObligationCut`, a Complete ledger cut,
+or B1 work correlation apply only to the later A1.2b V3 member. A1.2a implements only the closed
+V2 Start subset and rejects those modes/states before persistence.
+
 Attempt rejection and terminal intent rejection are separate outcomes:
 
 | Validation outcome | Durable effect |
@@ -1820,23 +2034,35 @@ precedence, merge, parsing, and policy interpretation. A1.1 does not switch real
 thread that same handle only through its named CLI/REPL Start/Attach/Resume adoption paths; it may
 not broaden resolver semantics or convert unrelated callers.
 
-A1.2 is the first packet allowed to perform production Start semantics. It owns greenfield
+A1.2a is the first packet allowed to perform production Start semantics. It owns only greenfield
 certificate validation, `ExpectedAbsent` acceptance, Start reservation plus intent issuance,
-claim/application, initial Start-origin authority birth, startup-ownership resolution, pending
-post-turn reconciliation, ledger-snapshot consumption, and release as one intent protocol. It does
-not own runtime event identity, receipt acceptance, durable observation, retained-event semantics,
-canonical obligations, or their event/materialization cut. B0, the B1 receipt core, B2.1 and the
-joint B1/B2.1 production closeout, B3.1, and C1 own those prerequisites respectively. Until that
-corridor exists, A1.2 retains `AwaitingObligationCut` and
-cannot claim full packet closure. A1.3 adopts the protocol on real CLI/REPL consumers; A1.1
-primitive tests are not evidence that a production Start path is adopted.
+claim/application, initial Start-origin authority birth, crash reconciliation/exact retry, and the
+typed current-authority read result required by B1/B2.1-0. Applied Start retains the exact claimant
+attempt and records `HostSessionStartupOwnershipApplicationV1::Pending` for its run, authority
+revision, and active participant; A1.2a does not resolve that substate. It does not own
+startup-ownership/post-turn episode reconciliation, Attach/ResumeOneTurn, obligation-cut consumption, world-work correlation,
+or public consumer adoption. R0 may later advance the authority only through the closed
+non-transition registration chain defined below; the Pending substate continues to name the
+original application revision.
+
+A1.2b remains after the B1/B2.1 joint closeout, B3.1, and C1. Through the separately versioned V3
+extension it owns successor
+Attach/ResumeOneTurn, startup/post-turn reconciliation, ledger-snapshot consumption, correlation
+supply, and release as the remainder of the aggregate A1.2 intent protocol. Startup reconciliation accepts
+the original application revision only through the unique contiguous R0-registration ancestry
+rule below; arbitrary stale authority remains rejected. Neither A1.2 packet owns runtime
+event identity, receipt acceptance, durable observation, retained-event semantics, canonical
+obligations, or their event/materialization cut. Until that corridor exists, A1.2b retains
+`AwaitingObligationCut` and cannot claim aggregate A1.2 closure. A1.3 adopts the protocol on real
+CLI/REPL consumers; A1.1 primitive tests are not evidence that a production Start path is adopted.
 
 ### Start namespace reservation
 
 Start uses the namespace map and issuer index as one protocol:
 
-1. **Pre-issuance:** A1.2 may evaluate a new `ExpectedAbsent` request only while
-   the complete `StateRootV1` and immutable `GreenfieldNamespaceCertificateV1` verify against the
+1. **Pre-issuance:** A1.2a may evaluate a new `ExpectedAbsent` request only after the closed
+   greenfield upgrade has published a complete strict `StateRootV2`, and while that root and the
+   immutable `GreenfieldNamespaceCertificateV1` verify against the
    trusted bootstrap home and both pre-A1 authority collections re-enumerate empty. It then requires
    no `Authority`, `StartTombstone`, or foreign `StartReservation` for the session ID. A missing or
    unreadable individual record, absent compatibility projection, unverified/copy-created
@@ -2032,14 +2258,32 @@ introducing another intent contract:
     crash/retry joins all three results or none. Exact duplicate evidence joins; a
     conflicting evidence ID/protocol event, claimant, stale revision, substituted application, or
     second authority advance fails closed.
+    The sole narrow old-revision exception is an A1.2a Start whose startup substate remains Pending
+    while R0 registers retained targets before A1.2b runs. The evidence still names the exact
+    original application revision. HostSessionAuthority must prove a unique contiguous sequence of
+    `RetainedWorkerAuthorityRegistrationV1` records from that application hash/revision to the
+    exact current authority hash/revision. Every link must preserve active caller, posture,
+    workspace/store, world, policy, origin, attach ref, internal resume refs, and all existing
+    lineage/retained refs, adding only its committed participant/ref. A gap, fork, ambiguity,
+    non-registration authority mutation, reordered commitment, or mismatch fails as stale.
+    `OwnershipAccepted` then mutates only the intent startup substate and leaves the current
+    registration-descendant authority unchanged. `TerminalReconciled` CASes from that exact current
+    descendant, preserves every registered lineage member/ref and supporting object, and changes
+    only the already-specified terminal posture/revision fields; it never restores the original
+    application snapshot. The same atomic root commit adds the one immutable
+    `StartupOwnershipTerminalApplicationJournalV1` phase referencing the exact terminal
+    `StartupOwnershipResult`, before/after revisions and commitments, posture, and evidence ID.
+    That phase—not the evidence object by itself—is the current-authority proof for the terminal
+    revision. Exact retry joins the same ancestry, phase, and result.
     This CAS increments `intent_revision` exactly once. A1.2 owns this internal decision protocol;
     A1.3 owns invocation by the real helper/REPL consumer, and A2 later generalizes episode
     observations without weakening these A1 commitments.
 13. Transport stays `Retained`/object-index `Present` until one exact committed
     `TerminalHandoffHashInputV1` proves release. Input-bearing modes require Accepted or
     TerminalWithoutAcceptance; input-free Start/Attach require NotApplicable. Applied Start/Attach
-    require `startup_ownership=Accepted` or `TerminalReconciled`, and the terminal handoff carries
-    that exact startup-ownership result ref. Every applied Resume terminal handoff requires
+    with `startup_ownership=Pending` remain retained and cannot enter release. Before release they
+    require `Accepted` or `TerminalReconciled`, and the terminal handoff carries that exact
+    startup-ownership result ref. Every applied Resume terminal handoff requires
     post-turn Applied with the exact completion/result pair; `TerminalClean` and `TerminalFailure`
     carry no obligation snapshot, while `ResumableClean` carries the exact Complete ledger snapshot.
     Rejected/Expired require proof of no application.
@@ -2130,7 +2374,7 @@ On process restart or before retrying a nonterminal intent, `HostSessionAuthorit
    every reachable ref whose storage state requires bytes. A Released transport validates through
    its exact terminal handoff instead. Root uncertainty never falls back to external object or key
    presence.
-3. `Issued` Start must have been created by A1.2 after verifying the greenfield certificate and
+3. `Issued` Start must have been created by A1.2a after verifying the greenfield certificate and
    empty pre-A1 authority collections and must own its exact reservation; Issued non-Start must
    retain its exact authority precondition. With no application marker it remains claimable until
    expiry. Missing/mismatched self reservation is corruption, not absence.
@@ -2141,8 +2385,11 @@ On process restart or before retrying a nonterminal intent, `HostSessionAuthorit
    former reservation. A visible Authority without matching application proof fails closed.
 6. Objects with no root parent are orphans and never prove issuance/application. A missing or
    mismatched object required by Retained/Present state is corruption. ReleaseEligible plus absent
-   transport may advance only after exact terminal-handoff verification. Applied Start/Attach also
-   verify their startup-ownership evidence/result ref. An AwaitingObligationCut Resume verifies its
+   transport may advance only after exact terminal-handoff verification. An Applied V2 Start or V3 Attach
+   whose startup ownership is `Pending` verifies only its exact expected run, original application
+   revision, and active participant tuple and has no evidence/result ref. `Accepted` or
+   `TerminalReconciled` additionally requires and verifies the exact evidence/result ref. Strict V1
+   Applied remains read-only and does not acquire a synthesized startup substate. An AwaitingObligationCut Resume verifies its
    exact post-turn protocol-event ref, completion/event equality, acceptance/stream/transition
    correlation, and cut scope and remains pending until the semantic owner returns Complete;
    applied resumable post-turn Resume verifies the same event/completion chain, its exact Complete
@@ -2424,8 +2671,539 @@ host parsing of `AgentEvent.data`. The normalizer may read provider `AgentWrappe
 before emission, under its explicit exhaustive provider-shape tests, to construct
 `NormalizedWorldWorkerEventFacetV1`.
 `OpaqueAuthorityCommitmentV1` preserves the exact variant and fields of the HostSessionAuthority
-commitment supplied later by A1.2, but B1/B3.1/C1 may only retain and compare it; they cannot mint,
+commitment supplied later by A1.2b, but B1/B3.1/C1 may only retain and compare it; they cannot mint,
 verify, reinterpret, log as observability evidence, or use it as obligation semantics.
+
+### B1/B2.1 bounded read-only dispatch-authority adapter
+
+The implementability audit selects **Case B**. This adapter is not implementation-authorized until
+the corrected A1.2a, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0 sequence is independently review-clean. A1.1e can read an exact
+current authority but cannot create one, and the source branch has no production creator/adopter.
+The current prepared type also combines B-owned accepted/inspection routing with retained-worker
+admission data that has no canonical live-state representation.
+
+The authority/retained branch is **A1.2a → A1.2a-S → B1/B2.1-R0 → B3.2a**. The independently
+preserved B1 receipt → B2.1 supervisor branch first joins it at **B1/B2.1-0**, after which the hard
+order is **joint B1/B2.1 production closeout → B3.1 → C1 → A1.2b**. R0 consumes no receipt or
+supervisor datum; neither B core is therefore a false prerequisite of R0.
+
+The minimal prerequisite contract is:
+
+1. **A1.2a — current-authority establishment/read prerequisite:** use the production
+   HostSessionAuthority protocol to perform the strict greenfield-only V1-to-V2 root upgrade, then
+   verify greenfield absence, issue/claim/apply one Start, create initial authority, and exact-join
+   retry. Its read result joins the applied Start descriptor and accepted-home bound capability to
+   exact session/caller/lineage/workspace/world/revision/policy truth. It does not implement a
+   non-greenfield upgrade, Attach, ResumeOneTurn, startup/post-turn reconciliation, obligation-cut
+   consumption, correlation supply to world work, or public consumer adoption.
+2. **A1.2a-S — bounded internal Start adoption prerequisite:** make
+   `prepare_host_orchestrator_runtime_from_resolved` construct only an unpersisted
+   `GreenfieldHostStartProposalV1` carrying exact store/home/workspace/descriptor/policy/shell
+   observations but no authoritative session/participant/run identity. The proposal is a distinct
+   type, never a variant or partially initialized form of `PreparedAgentRuntime`. On the real
+   dormant-host launch path, `dispatch_targeted_follow_up_turn` first obtains the exact optional
+   world binding, then calls `apply_greenfield_host_start_from_authority`; that adapter derives the
+   A1.2a issuer key from the greenfield store identity plus the complete canonical Start plan and,
+   before transport or any legacy write, applies/exact-joins A1.2a Start. Only that result supplies
+   identities and constructs one fully materialized existing-shape `PreparedAgentRuntime` plus its
+   compatibility session/participant view. `PreparedAgentRuntime` itself, its fork/member
+   constructors, and its remote-member consumers do not acquire a pending variant or change
+   semantics. The new runtime carries the exact bound capability in an immutable shared
+   `RuntimeAuthorityContext::Bound` inside `RuntimeOrchestrationContext`; no context exists before
+   application. The hidden-owner constructor may initialize only the `Legacy` variant and receives
+   no adoption semantics. The authority-managed branch of
+   `start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx` performs no
+   activated-store legacy session/participant/snapshot write; it leaves startup ownership Pending
+   and treats launch, readiness, endpoint, process, prompt, and event state as observations. It does
+   not adopt hidden-owner plans, public Start/Attach/Resume, startup-result reconciliation, or
+   post-turn behavior.
+3. **B1/B2.1-R0 — canonical retained-target protocol prerequisite:** add the smallest
+   bounded registration handshake in which RetainedWorkerRuntime creates the immutable descriptor,
+   participant-specific resume handle, and retained-worker object graph from a caller-fixed
+   participant plan. HostSessionAuthority validates that plan and its exact commitment/scope and
+   atomically appends exactly the retained participant to
+   authoritative lineage, adds its typed worker ref, advances authority revision, and persists the
+   non-transition `RetainedWorkerAuthorityRegistrationV1` proof consumed by `resolve_exact`.
+   Exact retry joins; stale or conflicting revision fails closed. Registration cannot change
+   active caller, posture, workspace, world, current policy, origin, or any unrelated ref. R0 has
+   no production ingress caller and cannot itself count as full-dispatcher proof. It cannot use a
+   test-only fixture or process-local map, and it adds no message, accepted-turn observation, active-turn,
+   park/cancel/stop/fork, or live-admission semantics.
+4. **B3.2a — retained creation/admission bridge prerequisite:** route both real Spawn adapters—the
+   direct dispatcher path and the live internal-toolbox retained-runtime path—through the same
+   authority-bound `SpawnWorldWorker` preparation before generic compatibility
+   preparation, atomically count/reserve a durable participant slot across processes before R0,
+   pass that fixed participant plan to R0, exact-join it before transport, commit the final proof
+   plus the same fixed RetainedWorkerRuntime admission record, and
+   make the remote retained-start path validate the exact
+   session/request/participant/backend/protocol/world proof rather than invoke any activated-store
+   legacy session/participant writer. The admission record is nonterminal before transport,
+   routable only after exact Registered truth, and terminal only after exact B0 terminal truth.
+   Every ambiguous interruption remains nonterminal and counted live, so existing spawn admission
+   narrows without HSA-ref counting or compatibility liveness. B3.2a has no accepted-turn,
+   message, park/cancel/stop/fork, or final lifecycle semantics.
+5. **B1/B2.1-0 — action-scoped dispatch preparation:** accept the A1.2a/A1.2a-S,
+   B1/B2.1-R0, and B3.2a typed read results plus B1 receipt and B2.1 supervisor truth through a
+   caller-supplied bound capability or one explicitly authorized trusted open-and-bind conversion;
+   build a B-owned prepared view only for RunWorldTask, ordinary retained ContinueWorldWorker, and
+   ephemeral accepted-task Inspect/Cancel/Wait; and leave `WorkerContinueForkCommand`, retained
+   Inspect/Cancel/Stop and fork admission/lifecycle calculation on unchanged compatibility paths.
+   It leaves the already-landed B3.2a spawn creation/admission bridge unchanged and does not alter spawn
+   policy, steering, outcome, or lifecycle semantics. It neither uses
+   nor replaces that legacy count and cannot claim it as authority.
+6. After those prerequisites, validate the typed request, require session/caller/world agreement,
+   exact-join receipt and supervisor truth for accepted work, and fail closed on any absent,
+   incomplete, stale, or conflicting authority/binding/acceptance/claim.
+
+R0's non-transition proof is a distinct HostSessionAuthority record, not an application-journal
+entry and not a new transition mode:
+
+```rust
+enum RetainedWorkerAuthorityRegistrationRequestStateV1 {
+    Reserved,
+    Applied {
+        authority_revision_after: u64,
+        authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    },
+}
+
+struct RetainedWorkerAuthorityRegistrationRequestV1 {
+    schema_version: u32, // exactly 1
+    issuer_request_id: String,
+    registration_id: String,
+    orchestration_session_id: String,
+    authority_revision_before: u64,
+    authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    retained_participant_id: String,
+    descriptor_ref_id: String,
+    descriptor_commitment: AuthorityObjectCommitmentV1,
+    resume_handle_ref_id: String,
+    resume_handle_commitment: AuthorityObjectCommitmentV1,
+    retained_worker_ref_id: String,
+    retained_worker_commitment: AuthorityObjectCommitmentV1,
+    current_policy_ref: AuthorityObjectRefV1,
+    world_binding: WorldBindingV1,
+    registered_at: TimestampV1,
+    state: RetainedWorkerAuthorityRegistrationRequestStateV1,
+}
+
+struct RetainedWorkerAuthorityRegistrationV1 {
+    schema_version: u32, // exactly 1
+    issuer_request_id: String,
+    registration_id: String,
+    orchestration_session_id: String,
+    authority_revision_before: u64,
+    authority_record_commitment_before: AuthorityObjectCommitmentV1,
+    authority_revision_after: u64,
+    authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    retained_participant_id: String,
+    authoritative_lineage_commitment_after: AuthorityObjectCommitmentV1,
+    descriptor_ref: AuthorityObjectRefV1,
+    resume_handle_ref: AuthorityObjectRefV1,
+    retained_worker_ref: AuthorityObjectRefV1,
+    current_policy_ref: AuthorityObjectRefV1,
+    world_binding: WorldBindingV1,
+    registered_at: TimestampV1,
+}
+```
+
+The R0 caller must carry the existing validated retained-creation ingress request/idempotency ID.
+The API domain-separates it with the closed `retained-worker-registration` operation tag before
+using it as `issuer_request_id`; this key cannot be reused as a transition issuer key, and R0 may
+not create a replacement after entering the operation. Its caller also supplies one exact
+participant plan; the production caller is the B3.2a `SlotReserved` record. Before any object file
+is published, one root CAS validates that participant plan, the complete proposed canonical object
+bytes, and exact scope, then exact-joins or creates its request-index reservation. Under the root
+lock it generates/collision-checks the registration and planned object IDs and fixes all three canonical
+commitments, expected authority revision/commitment, current policy, world, and `registered_at`.
+An exact retry with the same issuer ID and complete bytes joins; reuse with any changed field fails
+before object publication. A crash before reservation publication leaves no object or semantic
+change and may retry from the same ingress request. A crash after reservation publication rereads
+these fixed identities rather than generating replacements.
+
+Only after that reservation is durable may RetainedWorkerRuntime publish the exact descriptor,
+resume-handle, and retained-worker bytes under the three reserved IDs. Their existence grants no
+authority. The final root CAS verifies every byte/commitment and the unchanged reservation, adds
+the three object-index entries, performs the authority lineage/ref mutation, inserts the immutable
+registration journal, and advances the request state from `Reserved` to `Applied` atomically.
+`StateRootV2.retained_worker_registration_journal` keys the proof by exact `registration_id`.
+That final CAS must verify the pre-revision/commitment, current policy and world,
+descriptor backend/protocol/world execution scope, participant-specific resume identity, and the
+retained object's session/participant/world/descriptor/resume/policy refs; append the participant
+exactly once to authoritative lineage; append the worker ref exactly once; increment authority
+revision exactly once; and commit the new authority hash plus registration proof. Active caller,
+posture, workspace/store, world, policy, origin, attach ref, internal resume refs, and existing
+lineage/worker refs remain byte-for-byte unchanged. A reserved object file present before a
+losing/crashed final CAS is verified and reused only through its exact Reserved request; without
+that reservation it is an ordinary orphan subject to reconciliation. It never becomes authority by
+existence alone.
+
+`resolve_exact` and current-authority proof validation accept the unique highest matching proof
+from exactly one of: an initial or post-turn transition application phase, a terminal startup
+application phase, or this registration journal. An Accepted startup result does not advance
+authority and supplies no authority proof; the already-current initial/R0 proof remains current.
+For every proof source, before/after revisions and commitments must form the unique contiguous
+history for that session, and the highest committed revision must equal the current authority.
+Missing, ambiguous, behind, skipped, substituted, or conflicting proof fails closed. A retry after
+the final CAS, including a lost response, joins the `Applied` request index to the identical journal
+and current authority and returns the original result. Reuse with different bytes, duplicate
+participant/ref under a different issuer or registration ID, or a stale expected revision fails.
+This operation creates no live/terminal state and cannot satisfy retained admission
+counting. When Start startup ownership is still Pending, each successful registration also becomes
+one link in the only permitted application-revision-to-current-revision ancestry. It does not
+rewrite the Pending expected revision or constitute startup acceptance; A1.2b must later validate
+the complete contiguous chain under the startup rule above.
+
+B3.2a adds a separate RetainedWorkerRuntime-owned creation/admission record; it is neither
+HostSessionAuthority nor accepted-turn Supervisor truth:
+
+```rust
+enum RetainedWorkerAdmissionCommitmentAlgorithmV1 {
+    HmacSha256,
+}
+
+struct RetainedWorkerAdmissionCommitmentV1 {
+    schema_version: u32, // exactly 1
+    algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1,
+    key_id: String,
+    digest_hex: String,
+}
+
+struct RetainedWorkerAdmissionRegistrationV1 {
+    registration_id: String,
+    retained_worker_ref: AuthorityObjectRefV1,
+}
+
+enum RetainedWorkerAdmissionStateV1 {
+    SlotReserved {
+        slot_sequence: u64,
+        reserved_at: TimestampV1,
+    },
+    AuthorityRegistrationHead {
+        authority_revision_expected: u64,
+        authority_record_commitment_expected: AuthorityObjectCommitmentV1,
+        head_acquired_at: TimestampV1,
+    },
+    PreTransportNonterminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+    },
+    TransportClaimedNonterminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        transport_claim_id: String,
+        claimed_at: TimestampV1,
+    },
+    Routable {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        stream_id: String,
+        registered_frame_sequence: u64,
+        registered_event_id: String,
+        registered_event_sequence: u64,
+        registered_at: TimestampV1,
+    },
+    InterruptedNonterminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        stream_id: Option<String>,
+        last_frame_sequence: Option<u64>,
+        interrupted_at: TimestampV1,
+    },
+    Terminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        stream_id: String,
+        terminal_frame_sequence: u64,
+        terminal_event_id: String,
+        terminal_event_sequence: u64,
+        exit_code: i32,
+        terminal_at: TimestampV1,
+    },
+    RejectedBeforeRegistration {
+        reason: String,
+        rejected_at: TimestampV1,
+    },
+}
+
+struct RetainedWorkerAdmissionRecordV1 {
+    schema_version: u32, // exactly 1
+    authority_store_id: String,
+    issuer_request_id: String,
+    canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentV1,
+    orchestration_session_id: String,
+    admission_authority_revision: u64,
+    admission_authority_record_commitment: AuthorityObjectCommitmentV1,
+    retained_participant_id: String,
+    bootstrap_run_id: String,
+    backend_id: String,
+    protocol: String,
+    world_binding: WorldBindingV1,
+    current_policy_ref: AuthorityObjectRefV1,
+    current_policy_revision: String,
+    max_live_retained_workers: u64,
+    state: RetainedWorkerAdmissionStateV1,
+    record_revision: u64,
+}
+```
+
+`canonical_spawn_fingerprint` is a RetainedWorkerRuntime-owned, domain-separated keyed HMAC. It
+does not use, extend, pin, or participate in the HostSessionAuthority commitment-key registry. Its
+exact HMAC input is the following byte sequence, where `len64` is unsigned 64-bit big-endian and
+each `canonical_*` member is the exact `CanonicalJsonV1` encoding of the complete strict typed
+value named by that member:
+
+```text
+"substrate.retained-worker.admission.hmac-input.v1\0"
+ || len64("substrate.retained-worker.admission.spawn.v1")
+ || "substrate.retained-worker.admission.spawn.v1"
+ || len64(authority_store_id) || authority_store_id
+ || len64(issuer_request_id) || issuer_request_id
+ || len64(canonical_validated_spawn_request) || canonical_validated_spawn_request
+ || len64(canonical_exact_current_authority) || canonical_exact_current_authority
+ || len64(canonical_descriptor_and_runtime_plan) || canonical_descriptor_and_runtime_plan
+ || len64(canonical_policy_and_admission_cap) || canonical_policy_and_admission_cap
+ || len64(retained_participant_id) || retained_participant_id
+ || len64(bootstrap_run_id) || bootstrap_run_id
+```
+
+The first canonical member is the complete validated `SpawnWorldWorker` request, including the
+prompt/payload bytes in its typed canonical location. The second contains the exact caller,
+session, revision, authority-record commitment, lineage, workspace, world, and current-policy
+observation returned by the bound read. The third contains the complete descriptor and runtime
+launch plan. The fourth contains the exact policy identity, current policy revision,
+`max_live_retained_workers`, and admission inputs. Unknown or omitted fields, alternate JSON,
+delimiter concatenation, presentation serialization, and digesting a prompt/payload separately are
+forbidden. The stored digest is lowercase-hex `HMAC-SHA-256(admission_key, bytes_above)`.
+
+RetainedWorkerRuntime owns one separate admission commitment-key envelope and registry header per
+authority store through its opaque fixed-registry physical capability. The envelope binds exact
+schema version, authority-store ID, key ID, creation timestamp, `HmacSha256`, and 32 OS-CSPRNG
+bytes. First initialization under the root lock publishes the owner-only/no-follow key file through
+a same-directory temp, `fsync`, no-replace rename, and directory `fsync`, then commits and `fsync`s
+the registry header naming that key. A crash before the header commit leaves an unregistered key
+orphan that locked recovery deletes only after proving the registry is absent; a committed header
+with a missing, malformed, wrong-store, wrong-key, or unreadable envelope is corruption and fails
+closed. Concurrent initialization exact-joins only the same committed header and key identity.
+
+B3.2a performs no admission-key rotation, retirement, or deletion. Its single committed key remains
+verification-capable for every live, interrupted, terminal, rejected, tombstoned, or otherwise
+retained admission record that names it, so crash retry and long-lived exact joins cannot lose
+verification. A later rotation/retention packet must add a locked complete reachability scan over
+the separate admission registry and may retire a key only after zero records reference it. HSA key
+rotation and reachability never inspect or control this registry. Raw key bytes, unredacted
+canonical input bytes, and prompt/payload bytes are never logged, traced, exported, carried to the
+world, or placed in the admission record; diagnostics may report only key ID and equality/mismatch.
+Every exact join and every state advance re-presents and verifies the fingerprint. Issuer reuse
+with changed prompt, payload, caller, authority, descriptor, policy, cap, participant, or run ID
+conflicts before any additional mutation.
+
+The fixed admission registry is persisted through an opaque physical capability bound to the same
+opened root/store identity; RetainedWorkerRuntime alone validates and changes its semantic bytes.
+It is keyed by exact `(orchestration_session_id, retained_participant_id)`, and each
+`issuer_request_id` may name exactly one record. Each post-R0 registration ID may appear in exactly
+one state value. The root lock orders registry publication with R0, but the files are not falsely
+described as one cross-file atomic rename.
+
+Before R0 reservation, B3.2a resolves the A1.2a-S bound exact authority and performs one locked registry
+transaction that revalidates the current policy identity/cap, joins every post-R0 record to
+current HSA registration truth, counts every `SlotReserved`, `AuthorityRegistrationHead`,
+`PreTransportNonterminal`, `TransportClaimedNonterminal`, `Routable`, or
+`InterruptedNonterminal` record as live, enforces the cap
+including all existing slots, allocates/collision-checks participant and bootstrap-run IDs,
+computes the complete canonical Spawn fingerprint, assigns the next monotonic session slot
+sequence, and persists one immutable `SlotReserved` identity. `Terminal` and
+`RejectedBeforeRegistration` do not count. This check and
+slot creation are one cross-process admission CAS; the existing process-local bootstrap guard may
+remain only as a same-process fast reservation. A missing, extra, stale, cross-session/world,
+duplicate, or commitment-mismatched R0/registry join fails closed rather than being omitted from
+the count.
+`retained_worker_refs.len()`, legacy `authoritative_live`, PID, helper, socket, endpoint, and
+process-local maps are never count inputs. Existing action/backend/session/world/policy checks and
+the exact `max_live_retained_workers` comparison run against this count before a new reservation.
+
+The registry also owns one durable per-session R0 head. At most one nonterminal record may be
+`AuthorityRegistrationHead`. The lowest-sequence `SlotReserved` may atomically become that head
+only when no head exists; only then does the same root-locked transaction read current HSA and fix
+the expected authority revision/commitment used by R0. A queued slot's fingerprint preserves its
+admission-time authority observation; promotion accepts a later current revision only by verifying
+the unique contiguous intervening chain consists solely of exact R0 registration proofs and that
+active caller, workspace, world, policy, origin, and all unrelated refs remain unchanged. Any
+transition proof, gap, ambiguity, or changed bound field rejects before R0. Later slots remain
+`SlotReserved` and fix no authority revision. After the head's exact R0 application, root-locked reconciliation first joins
+the applied HSA proof, advances that record to `PreTransportNonterminal`, and only then promotes
+the next slot against the new current authority. A crash between the HSA CAS and registry advance
+leaves the same head in place; exact retry/reconciliation joins the proof before promotion. It
+never gives two requests revision N and never skips or steals an ambiguous head based on PID,
+timeout, process death, or caller absence. An abandoned head remains conservatively live and
+blocks later registration until the same canonical request is retried or a later explicitly owned
+control protocol resolves it.
+
+The host-to-world launch carrier is typed and substitution-resistant:
+
+```rust
+struct RetainedWorkerAdmissionCommitmentCarrierV1 {
+    schema_version: u32, // exactly 1
+    algorithm: String,   // exactly "hmac-sha-256"
+    key_id: String,
+    digest_hex: String,
+}
+
+struct RetainedWorkerLaunchAuthorityProofV1 {
+    schema_version: u32, // exactly 1
+    authority_store_id: String,
+    issuer_request_id: String,
+    canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1,
+    registration_id: String,
+    registration_commitment: AuthorityObjectCommitmentV1,
+    authority_revision_after: u64,
+    authority_record_commitment_after: AuthorityObjectCommitmentV1,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    retained_participant_id: String,
+    bootstrap_run_id: String,
+    transport_claim_id: String,
+    backend_id: String,
+    protocol: String,
+    world_binding: WorldBindingV1,
+    current_policy_ref_id: String,
+    current_policy_revision: String,
+    retained_worker_ref_id: String,
+    retained_worker_commitment: AuthorityObjectCommitmentV1,
+}
+```
+
+Before either transport builder serializes it, the host exact-joins every field to the current HSA
+registration proof, admission record/fingerprint, bound caller, descriptor, policy, and world. The
+carrier is the exact field-for-field, transport-neutral equality projection of the internal
+RetainedWorkerAdmissionCommitmentV1; it contains no secret key and grants no HSA or admission
+mutation authority. The receiving world compares the closed carrier and dispatch fields only; it
+does not verify or reinterpret the host-only HMAC input. The
+optional carrier field on the V1 compatibility request may remain absent only on the explicitly
+pre-activation legacy path; both A1.2a-S authority-managed Spawn producers require it with no
+fallback. `transport-api-types` validates its closed shape. Production member Spawn enters
+`Service::execute_stream`, whose member-dispatch branch passes the same transport-api request
+directly to `MemberRuntimeManager::launch`; `world-api`, `Service::execute`, and
+`convert_member_dispatch_request` are not part of this route. `MemberRuntimeManager::launch`
+rejects any missing (for the authority-managed route), changed, or dispatch-mismatched proof before
+process creation. World-service does not mint or advance HSA or admission truth; the bound host
+verification supplies authority authenticity and the launch boundary supplies exact
+carrier/request equality.
+
+The production order is exact:
+
+1. `dispatch_orchestrator_world_request` validates the raw request and routes only
+   `SpawnWorldWorker` to the B3.2a authority-bound preparation before the still-legacy generic
+   prepared-dispatch path. Concretely it calls `prepare_authority_bound_spawn_world_worker` and
+   then `spawn_prepared_world_worker`; every other action remains on its prior path until
+   B1/B2.1-0. Existing `spawn_world_worker` remains the legacy prepared-entry wrapper and delegates
+   its already-prepared bootstrap to the same `spawn_prepared_world_worker` execution body.
+2. Existing steering/session/world checks and the same-process fast concurrency reservation run
+   through `WorldDispatchSteeringInput` and `WorldDispatchConcurrencyInput` passed to the same
+   named functions used by legacy preparation. The locked admission CAS
+   then exact-joins or creates the `SlotReserved` record from the
+   domain-separated ingress request, complete canonical Spawn fingerprint, participant ID, and
+   bootstrap run ID before R0. Concurrent processes
+   therefore cannot both observe the same available slot. Exact retry returns the same slot;
+   changed bytes conflict. The transport builder must use this participant ID and cannot allocate a
+   retry-local UUID.
+3. Only the durable per-session `AuthorityRegistrationHead` may call R0. It accepts the exact slot
+   plan and fingerprint, validates the participant and bootstrap run rather than allocating either,
+   then exact-joins or creates its HSA request reservation,
+   publishes objects, and commits the final HSA CAS. The admission registry then advances the same
+   record to `PreTransportNonterminal` with the exact registration/ref and promotes the next slot
+   against the new current revision. No member transport opens
+   before both durable commits. Crash after slot publication retries from that slot; crash after
+   R0 commit but before admission advancement exact-joins R0 and advances only the matching slot.
+   An unrelated request cannot adopt either half. A typed terminal R0 rejection may advance the
+   slot to `RejectedBeforeRegistration` only after locked proof that no R0 request, registration,
+   object parent, or authority mutation exists; ambiguous/local errors leave the same
+   `AuthorityRegistrationHead` live. A proven rejection promotes the next slot against unchanged
+   current authority.
+4. Before either adapter opens transport, one registry CAS advances
+   `PreTransportNonterminal` to `TransportClaimedNonterminal` and fixes a unique
+   `transport_claim_id`; only that CAS winner may send. A concurrent exact join waits for Routable
+   or returns the existing bounded in-progress/interrupted compatibility result and never sends a
+   duplicate. Crash, caller loss, timeout, or process observation cannot steal or renew the claim;
+   ambiguous claim state stays live/nonroutable for later B3.2 reconciliation.
+5. The direct dispatcher builder carries `RetainedWorkerLaunchAuthorityProofV1` through
+   `MemberDispatchTransportRequest` and transport-api `MemberDispatchRequestV1`.
+   `Service::execute_stream` passes that exact typed member-dispatch request directly to
+   `MemberRuntimeManager::launch`, which validates it before creating the world member. The direct stream
+   consumer accepts only the exact matching B0 Registered event, persists Routable, returns the
+   unchanged Spawn outcome, and hands the remaining body to the registry observer.
+6. The live `handle_internal_toolbox_world_dispatch_request` Spawn branch invokes the same
+   authority-bound preparation instead of `prepare_orchestrator_world_dispatch`, and a new
+   `prepare_member_runtime_startup_from_authority_registration` constructs `PreparedAgentRuntime`
+   from the slot/R0 graph without calling `prepare_member_runtime_startup_for_descriptor` or
+   allocating a participant, bootstrap run, lease, or descriptor identity. It preserves the
+   retained runtime handle/map behavior. `build_member_dispatch_transport_request` carries the
+   same typed proof.
+7. `start_remote_member_runtime_with_prepared` resolves and validates the exact R0/admission tuple
+   against its received session/request/participant/backend/protocol/world values before emitting
+   Registered. On this activated path, it invokes none of its legacy
+   `persist_participant`/`persist_runtime_snapshots` session-participant writers; their in-memory
+   fields and existing emitted events remain episode observations. Missing or mismatched proof
+   fails before Registered with no fallback. The pre-activation compatibility path is unchanged.
+8. The host accepts Routable only from the exact matching B0 Registered event and persists its
+   stream/frame/event identity before returning the existing Spawn receipt. The remaining response
+   body is handed to an observer independent of the initiating caller. Only an exact B0 Exit and
+   matching terminal identity may persist `Terminal`. Error, EOF, body drop, timeout, observer
+   loss, process death, PID/helper/socket posture, or restart uncertainty remains or becomes
+   `InterruptedNonterminal`; it stays counted live and cannot become routable by inference.
+
+An ordinary retained Continue may consume only the exact R0 target joined to a Routable B3.2a
+record. `PreTransportNonterminal`, `InterruptedNonterminal`, and `Terminal` return distinct bounded
+non-routable failures without changing authority. Remaining observer reconnect/replay, park,
+cancel, stop, fork, accepted-turn lifecycle, and final worker semantics stay in the later B3.2/B4
+packets.
+
+The B-owned adapter never falls back to legacy active-task authority and cannot issue/apply a
+transition, synthesize authority, change lifecycle, consume obligations, or fabricate correlation.
+PID, helper, socket, prompt, foreground-guard, process-local-map, and `authoritative_live`
+observations are excluded from every B-owned durable decision. A1.2b remains after B3.1/C1 for all
+successor and obligation-dependent work.
+
+Retained-worker Inspect/Cancel/Stop is outside B1/B2.1-0 because R0 deliberately supplies no
+retained lifecycle, delivery, or terminal-closeout truth. Those historical cases must still enter
+the unchanged full dispatcher for differential accounting, but at this closeout they may only
+remain `FailToSameFailure` with an identical normalized signature. Replacing their dispatcher
+entry with a lower-level resolver or transport call remains `RegressionMasked`.
+
+The canonical source of every value used to construct or interpret
+`PreparedOrchestratorWorldDispatch` is exactly:
+
+| Prepared value or decision input | Canonical source classification | Binding rule |
+|---|---|---|
+| exact accepted bootstrap-home/store binding and derived `BoundAgentRuntimeStateStore` capability | `HostSessionAuthorityTruth` | A1.2a establishes and reads current authority; A1.2a-S adopts that applied Start on the ordinary internal host bootstrap and carries the exact accepted-home bound capability into production. Only the bound capability may access authority, receipt-registry, or supervisor namespaces. |
+| legacy `AgentRuntimeStateStore` clone retained by the prepared compatibility shape | `CompatibilityProjectionValidatedAgainstAuthority` | It may perform only compatibility reads after its physical home/store identity validates against the bound capability; it cannot select or access durable authority namespaces. |
+| complete validated request, including request/idempotency/action/mode/payload fields | `ValidatedRequestInput` | Validation proves shape only; every authority-bearing request field is checked against its named canonical source below. |
+| orchestration session ID and authority revision | `HostSessionAuthorityTruth` | Must equal the exact resolved authority and root observation. |
+| current prepared `OrchestrationSessionRecord` shape | `MissingCanonicalRepresentation` | A1 activation rejects legacy writers and A1.1e does not return this compatibility record. B1/B2.1-0 must replace it with a narrower typed dispatch view sourced from A1.2a authority/application truth; it may not synthesize legacy lifecycle state. |
+| active caller participant ID and authoritative lineage | `HostSessionAuthorityTruth` | Caller must be the exact active authoritative participant and a member of the exact lineage. |
+| current prepared caller backend, role, and participant record shape | `MissingCanonicalRepresentation` | `DurableSessionAuthorityV1` contains IDs/lineage but not backend/role. A1.2a must expose the exact applied descriptor through a typed read result; B1/B2.1-0 must narrow or replace the legacy record shape. |
+| workspace binding and authority-store identity | `HostSessionAuthorityTruth` | Use exact canonical workspace root, authority-store root, and store ID. |
+| requested world ID and generation | `ValidatedRequestInput` | Must be present in the validated request where required and equal the exact authority world binding. |
+| authoritative world binding and generation | `HostSessionAuthorityTruth` | Absence or mismatch fails closed; compatibility state cannot create or repair it. |
+| current policy ref and policy revision | `HostSessionAuthorityTruth` | The ref must be a Policy object and both values must equal the exact current authority. |
+| effective-policy/snapshot projection used by existing steering behavior | `CompatibilityProjectionValidatedAgainstAuthority` | Its ref/revision and canonical snapshot commitment must validate against exact current-policy identity before use. |
+| `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a must supply the exact RetainedWorkerRuntime admission count for production Spawn before closeout. B1/B2.1-0 removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |
+| target participant ID named by the request | `ValidatedRequestInput` | It is a requested target only until exact authority/accepted-work validation succeeds. |
+| current prepared retained target backend, role, and participant record shape | `MissingCanonicalRepresentation` | A1.1e does not expose the retained object/descriptor as this legacy record, and activated stores reject the legacy writer that current fixtures use. R0 replaces the immutable identity shape: RetainedWorkerRuntime creates the descriptor/resume/worker graph; HostSessionAuthority atomically appends its participant to lineage, binds its ref, and proves the new revision as `HostSessionAuthorityTruth`. B3.2a supplies separate routability/admission truth, and B1/B2.1-0 consumes the exact join without fabricating broader lifecycle state. |
+| immutable accepted task/active-run identity and acceptance revision | `ReceiptRegistryTruth` | Exact lookup is scoped by store, session, work identity, caller/backend, and world; unknown acceptance fails closed. |
+| active claim, journal cursor, interruption state, routability, and immutable terminal closeout | `SupervisorTruth` | Exact claim must match the acceptance record; waiter/caller drop does not delete it and only exact terminal truth closes routability. |
+| optional host-transition correlation before A1.2b adoption | `MissingCanonicalRepresentation` | It remains absent through A1.2a and the joint closeout; request ID, task/active-run ID, compatibility state, or the adapter may not synthesize it. |
+| PID, helper, socket, prompt, foreground guard, process-local map, and legacy `authoritative_live` state | `EpisodeObservationOnly` | These values may support transport diagnostics only and never supply or override prepared authority, accepted work, routability, or terminal truth. |
+
+The required current-authority creator/read view and the prepared session/caller/live-retained
+fields make Case A unrealizable. A1.2a supplies only the prerequisite authority establishment/read
+capability; A1.2a-S supplies only its bounded internal production adopter; B1/B2.1-R0 supplies only canonical retained-target registration/read; B3.2a supplies the
+production creation/admission bridge and canonical live/routability state; B1/B2.1-0 removes non-B fields from the B-owned prepared view. A1.2b keeps all
+successor/post-turn and obligation-dependent ownership after C1. Full
+`dispatch_orchestrator_world_request`/`dispatch_prepared_orchestrator_world_request` entry is
+required regression proof; tests that invoke only a lower-level receipt, supervisor, transport, or
+resolver API cannot close this gate.
+
+Accordingly, the prior claim that `prepare_orchestrator_world_dispatch` itself belongs to A1.2 is
+rejected. It remains a B-owned `WorldDispatchControl` consumer after the named prerequisites.
+A1.2a alone issues/applies greenfield Start; A1.2a-S only adopts that result and carries its bound
+capability; neither packet owns prepared world-work joins, receipts, supervision, or dispatch
+lifecycle decisions.
 
 ## 2C. `WorldWorkAcceptanceRecordV1`
 
@@ -2494,14 +3272,17 @@ request-envelope extension only: it neither creates acceptance before acknowledg
 
 The record owns accepted work identity, not final lifecycle, supervisor claim, host-transition
 semantics, or model-facing receipt semantics. `host_transition_correlation` is absent for ordinary
-world work and remains absent on every production path until A1.2 supplies it from an already
+world work and remains absent on every production path until A1.2b supplies it from an already
 validated HostSessionAuthority transition. B1 defines and stores the optional carrier as part of
 its canonical acceptance record, validates only exact equality with the record's
 store/session/caller/authority fields, and retains it unchanged; it neither authenticates, issues,
 applies, nor interprets the transition and never equates `transition_run_id` with the distinct
-accepted task/active-run identity. The landed A1.1e facade is therefore sufficient for B1's current
-authority resolution without a new hash domain or verifier. Production A1.2 later becomes the sole
-source, first validating its own intent/revision/payload commitment and then supplying the exact
+accepted task/active-run identity. The landed A1.1e facade is sufficient for the receipt core to
+validate an already-existing authority without a new hash domain or verifier; it is not sufficient
+to establish that authority or supply the complete joint-closeout prepared-dispatch view. A1.2a
+supplies the missing current-authority establishment/read prerequisite but keeps correlation
+absent. Production A1.2b later becomes the sole correlation source, first validating its own
+intent/revision/payload commitment and then supplying the exact
 correlation through the HostSessionAuthority-owned call boundary. B1 validates the exact current
 policy identity used for submission but does not invent the E2 retained-worker capability cap. E2
 creates the immutable run/cap commitments and the final active receipt references this exact
@@ -2674,7 +3455,8 @@ wrong store identity, non-`ValidExisting` activation posture, unsafe/malformed r
 an otherwise invalid retained capability fails before receipt mutation and leaves the observed tree
 untouched. A later valid HostSessionAuthority root revision does not itself stale this store-bound
 capability: the transaction re-reads the current root under lock and requires the same physical root
-and store ID. B1 never changes `StateRootV1`, `root_revision`, or `authority_revision`; proposal and
+and store ID. B1 never changes either strict `StateRootV1` or strict `StateRootV2`,
+`root_revision`, or `authority_revision`; proposal and
 record fields retain the exact authority revision observed before submission. The only B1 accepted
 record transition remains absence to immutable `record_revision = 1`; no additional physical or
 registry revision counter is introduced.
