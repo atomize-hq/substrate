@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` fresh independent `REVIEW CLEAN`; Task `.1` Option A accepted; Task `.2` next)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.1` acceptance receipt `d788f45c9` fresh independent `REVIEW CLEAN`; Task `.2` complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` required; Task `.3` incomplete; Task `.4` blocked)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -55,11 +55,14 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
   current review-fix candidate without claiming the series review-clean.
 - [x] Complete packet Task `.0`; full docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`.
 - [x] Record explicit operator reply `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on
-  2026-07-14. Task `.1` is complete; the locked `attempt.rs`-only fix and packet proof wall are
-  authorized.
-- [ ] Reconfirm the preserved `CTX-R6-02` behavioral red in packet Task `.2`, then complete Tasks
-  `.3`-`.4`. After the packet transition, run `CTX-R6-06`, focused
-  scorer proof, full analyzer proof, and the bounded replay family wall.
+  2026-07-14. Task `.1` receipt `d788f45c9` received fresh independent `REVIEW CLEAN`.
+- [x] Complete packet Task `.2`: exact pre-edit `CTX-R6-02` reconfirmation exited `101` at
+  `acceptance_fixtures.rs:463` on the event-`420` evidence assertion; preserve
+  `/tmp/r6-replay-stall-pre-edit-red.log`.
+- [ ] Resolve packet Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01`. The
+  uncommitted Task `.3` candidate makes call-ID pairing truthful but exposes `CTX-R6-02`
+  `InsufficientEvidence` and frozen `CTX-R6-06` `HistoricalOnly`; Task `.4`, `CTX-R6-06`, focused
+  scorer proof, full analyzer proof, and the replay family wall remain blocked.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.
 - [ ] Begin bounded direct-child delegated-session support only after promotion.

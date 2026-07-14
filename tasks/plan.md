@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` docs-gate/review-fix series fresh independent `REVIEW CLEAN`; Task `.1` Option A accepted; Task `.2` next)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.1` acceptance receipt `d788f45c9` fresh independent `REVIEW CLEAN`; Task `.2` complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` required; Task `.3` incomplete; Task `.4` blocked)**
 
 ## Dependency Order
 
@@ -26,13 +26,16 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
 7. **COMPLETE through fresh review-clean `6b42e5476` + `e65df2561` + `cd4e24119`:** the final named
    gap, `R6-GAP-WPB-EMPTY-AUTHORITY`, landed its bounded scorer fix, focused/family/checkpoint/full
    proof, receipt corrections, and fresh independent `REVIEW CLEAN`.
-8. **ACTIVE / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT:** authority transition series
+8. **ACTIVE / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE:** authority transition series
    `56bb9966f` + `07a3b1fe5` is fresh independent built-in `default` `REVIEW CLEAN`. Replay then
    completed `CTX-R6-01` and preserved trusted `CTX-R6-02` behavioral RED at `60cde3dd7`. Active packet
    `R6-GAP-DET-REPLAY-STALL` has landed Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` +
    `9edf564d3`, which received fresh independent built-in `default` `REVIEW CLEAN`. On 2026-07-14
    the operator explicitly accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; Task `.1`
-   is complete and Task `.2` is next.
+   receipt `d788f45c9` received fresh independent `REVIEW CLEAN`. Task `.2` reconfirmed the exact
+   pre-edit red. The uncommitted Task `.3` candidate now exposes progress/recovery reds outside the
+   prior boundary, so Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current and
+   Task `.4` is blocked.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
@@ -63,6 +66,9 @@ All three named gaps are complete. Final implementation/review-fix series `6b42e
 transition series `56bb9966f` + `07a3b1fe5` also received fresh independent built-in `default`
 `REVIEW CLEAN` and activated only `R6-REPLAY`. Current active packet is
 `R6-GAP-DET-REPLAY-STALL`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3`
-received fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Option A for
-`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14; Tasks `.2`-`.4` are authorized in order and
-Task `.2` is next. No terminal scorer disposition, R6 close, or R7/R8 work is authorized yet.
+received fresh independent built-in `default` `REVIEW CLEAN`. Task `.1` decision receipt
+`d788f45c9` also received fresh independent built-in `default` `REVIEW CLEAN`, and Task `.2` is
+complete. The current gate is Task `.2A`, decision
+`R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01`; Task `.3` is incomplete with an uncommitted,
+unproven candidate and Task `.4` is blocked. No terminal scorer disposition, R6 close, or R7/R8 work
+is authorized yet.

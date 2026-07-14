@@ -303,9 +303,32 @@ result, current phase status, and the next eligible interaction.
 
 ## Current Packet Invocation
 
-Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. `R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. On 2026-07-14 the operator explicitly replied `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A`, accepting the documented HIGH caller-context risk, locked `attempt.rs`-only fix, and packet proof wall. Task `.1` is complete; Tasks `.2`-`.4` are authorized in order. `CTX-R6-06`, `R6-CLOSE`, R7, and R8 remain blocked.
+`R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` and Task `.1` receipt
+`d788f45c9` are fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` exact pre-edit red is
+complete. The uncommitted Task `.3` pairing candidate is not proof or review-clean: it makes the new
+unit test green but exposes `CTX-R6-02` `InsufficientEvidence` and frozen `CTX-R6-06`
+`HistoricalOnly`. Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current. Task
+`.4`, `CTX-R6-06`, the family wall, `R6-CLOSE`, R7, and R8 remain blocked.
 
-Resolved Prompt 6 invocation and durable decision receipt:
+Current decision report:
+
+```text
+DECISION REQUIRED
+ID: R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01
+PHASE/PACKET: R6-REPLAY / R6-GAP-DET-REPLAY-STALL
+QUESTION: Preserve the locked Stalled/Active CTX-R6-02 and frozen Recovered CTX-R6-06 contracts and authorize a review-clean same-packet amendment for the smallest call-ID cutover scope beyond attempt.rs, including accepted HIGH recovery_state impact?
+REPO EVIDENCE: Task .1 receipt d788f45c9 is REVIEW CLEAN; Task .2 reconfirmed exit 101 at acceptance_fixtures.rs:463. The uncommitted candidate truthfully pairs 420->423, 421->425, 474->477, and 475->479, but exact CTX-R6-02 exits 101 at line 455 with InsufficientEvidence instead of Stalled, and frozen CTX-R6-06 becomes HistoricalOnly after expected-negative 831->837 exit 1. assess_troubleshooting_progress impact is LOW; likely recovery_state impact is HIGH.
+WHY AUTHORITY CANNOT DECIDE: Prior acceptance authorized only attempt.rs. Progress, recovery, synthetic-helper scope, and HIGH recovery_state impact were not accepted.
+OPTIONS:
+A. Preserve both contracts and authorize a docs-first, fresh-review-clean same-packet amendment for the smallest call-ID cutover scope beyond attempt.rs, including accepted HIGH recovery_state impact, followed by refreshed impact, focused tests, bounded fix, full wall, atomic commits, and fresh review.
+B. Reject expansion, discard the uncommitted candidate, and leave CTX-R6-02, CTX-R6-06, the family wall, R6-CLOSE, and R7/R8 blocked.
+RECOMMENDATION: A. Pairing truth is proven diagnostically, but the two locked replay contracts still need explicit bounded authority.
+SAFE WORK ALREADY COMPLETED: Task .0 and Task .1 are review-clean; Task .2 is complete; the candidate and secondary reds are preserved but uncommitted.
+BLOCKED SCOPE ONLY: Further Rust/test-helper edits, candidate commit, Task .4, CTX-R6-06, family wall, packet transition, R6-CLOSE, and R7/R8.
+REPLY FORMAT: DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A|B|explicit alternative
+```
+
+Historical resolved Prompt 6 invocation and durable Task `.1` decision receipt:
 
 ```text
 /goal Record the supplied decision, then resume the exact blocked hybrid-drift scope through its normal proof, commit, and review-clean boundary.

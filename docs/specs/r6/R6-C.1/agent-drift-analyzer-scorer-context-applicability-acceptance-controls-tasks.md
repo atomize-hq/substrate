@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.1` RECEIPT `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -16,7 +16,7 @@ CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` also received fres
 built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`.
 `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is also fresh independent built-in
 `default` `REVIEW CLEAN`. Trusted `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED and routes
-to active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14; Task `.1` is complete and Task `.2` is next. `CTX-R6-06`, the family wall,
+to active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2` is complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` now gates the uncommitted Task `.3` candidate, and Task `.4` is blocked. `CTX-R6-06`, the family wall,
 `R6-CLOSE`, and R7/R8 remain pending or blocked as owned.
 
 ## Required Staged Commit Gate
@@ -519,12 +519,17 @@ before that reconciled transition is committed and fresh-review-clean.
     `TroubleshootingFrontier / Stalled / Medium`, exposes `FailureSignatureRepeated`, and scores
     flagged `Active / 30 / High`.
   - Preserved RED (2026-07-14): commit `60cde3dd7`; the analyzer misattributes truthful failed calls
-    `420`/`474` to successful siblings `421`/`475`. Input, progress, and score contracts are correct.
+    `420`/`474` to successful siblings `421`/`475`. The input/progress/score statement was correct
+    only for the committed baseline; an uncommitted truthful-pairing candidate exposes a separate
+    `InsufficientEvidence` progress red.
   - Authoritative screen: `3,423` total (`1,112` user, `2,298` subagent, `13` unspecified), `1,611`
     verifier-bearing, `225` with at least two failures regardless of command, `161` subagent,
     `189` non-identical failed-command candidates, `0` malformed, `224` analyzed; this was the sole
     exact match.
-  - Route: active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14; packet Task `.1` is complete and Task `.2` is next.
+  - Route: active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` series and Task `.1` receipt
+    `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete.
+    Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current; Task `.3` remains
+    incomplete with an uncommitted candidate and Task `.4` is blocked.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
   - Boundary: no `CTX-R6-06`, family wall, terminal disposition, `R6-CLOSE`, or R7/R8 work yet.
 
@@ -533,6 +538,8 @@ before that reconciled transition is committed and fresh-review-clean.
     `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture`.
   - Acceptance: preserve exactly three `Cleared / 0 / unflagged` final postures and one
     `Recovered / 20 / unflagged` final posture. This is invariance, not comparative improvement.
+  - Current candidate red: truthful pairing exposes expected-negative check `831 -> 837`, exit `1`,
+    and changes the sticky rollout to `HistoricalOnly`; Task `.2A` blocks execution/follow-up.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture`.
   - Ownership: execution and any preservation follow-up remain entirely in `R6-REPLAY`.
 

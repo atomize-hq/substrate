@@ -1,10 +1,12 @@
 # Plan: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** within
-`R6-REPLAY`. Witness `60cde3dd7` is preserved red. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default`
-`REVIEW CLEAN`. On 2026-07-14 the operator explicitly selected Option A for
-`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`, accepting the documented HIGH caller-context risk, the
-locked `attempt.rs`-only fix, and the packet proof wall. Task `.1` is complete; Task `.2` is next.
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
+`d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3`
+INCOMPLETE** within `R6-REPLAY`. Witness `60cde3dd7` is preserved red. Task `.0` series
+`200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` decision receipt `d788f45c9`
+each received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2` reconfirmed the exact
+pre-edit red. The uncommitted Task `.3` candidate exposes secondary progress/recovery reds; Task `.2A`
+decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current.
 
 ## Decisions
 
@@ -33,15 +35,32 @@ becomes CRITICAL or the boundary widens.
 **Complete:** refreshed evidence remained LOW for `pair_output_rows` (`1` direct caller, `17`
 indexed impacts, `0` processes, `1` module) and HIGH for `build_command_attempts` caller context
 (`16` direct indexed callers/tests, `0` processes, `1` module). The operator replied
-`DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on 2026-07-14. Tasks `.2`-`.4` are authorized
-inside the locked packet boundary; `CTX-R6-06`, `R6-CLOSE`, and R7/R8 remain blocked.
+`DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on 2026-07-14; receipt `d788f45c9` is fresh
+independent `REVIEW CLEAN`. That decision authorized Tasks `.2`-`.4` only inside the locked
+`attempt.rs` boundary. Task `.2` is complete, but the Task `.3` candidate proved that boundary
+insufficient; Task `.2A` now gates further work. `CTX-R6-06`, `R6-CLOSE`, and R7/R8 remain blocked.
 
-### 2. Reconfirm The Preserved Red
+### 2. Reconfirm The Preserved Red — Complete
 
 After the docs and decision gates, run exact `CTX-R6-02`. The expected pre-edit failure is the
 event-`420` truthful-evidence assertion: checkpoint `5` and `Active / 30 / High` remain correct, but
 evidence names successful sibling calls `421`/`475`. If the witness is unexpectedly green or fails
 for a different contract, preserve output and stop for authority reconciliation.
+
+Receipt: exact `CTX-R6-02` exited `101` at `acceptance_fixtures.rs:463`, the event-`420`
+truthful-evidence assertion. Output is preserved at `/tmp/r6-replay-stall-pre-edit-red.log`.
+
+### 2A. Obtain Post-Pairing Scope Acceptance — Current Gate
+
+The uncommitted Task `.3` candidate makes the call-ID unit regression green and pairs target/sibling
+outcomes truthfully, but exact `CTX-R6-02` now stops at line `455` with
+`InsufficientEvidence != Stalled`; its broader candidate walls are red. Frozen `CTX-R6-06` also
+changes from `Recovered` to `HistoricalOnly`. The prior accepted scope does not authorize progress,
+recovery, or synthetic-helper changes. Issue decision
+`R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` and stop. Option A preserves both contracts and
+authorizes a docs-first, fresh-review-clean same-packet amendment for the smallest call-ID cutover
+scope beyond `attempt.rs`, including accepted HIGH `recovery_state` impact. Option B discards the
+candidate and leaves the replay gates blocked. Do not create a nested or successor packet.
 
 ### 3. Implement The Locked Pairing Fix
 
@@ -56,7 +75,16 @@ In `crates/agent-drift-analyzer/src/checkpoint/attempt.rs` only:
 Impact any additional existing symbol before editing it. Do not change compactor, progress, scoring,
 fixture rows, or public contracts.
 
-### 4. Prove, Commit, And Fresh-Review
+**Incomplete stop state:** the uncommitted candidate patch
+`030d3d3e97640ba8fd4cf71f29f886b2273ec6e653aefa622aacaeb7057fdae7` is preserved at
+`/tmp/r6-pairing-fix-secondary-red.patch`. Its unit regression passes `1 / 1`, and diagnostics pair
+`420 -> 423` and `474 -> 477` as failed while `421 -> 425` and `475 -> 479` are clean. Exact
+`CTX-R6-02` remains red at line `455`; analyzer-library, checkpoints-integration,
+`dead_end_thrash`, and progress-corpus walls are respectively `144/13`, `109/24`, `15/3`, and
+`2/1` pass/fail. Do not commit or widen this candidate before Task `.2A` is resolved and any Option-A
+amendment is committed and fresh-review-clean.
+
+### 4. Prove, Commit, And Fresh-Review — Blocked
 
 Run in order:
 
@@ -86,7 +114,8 @@ fresh independent review. Do not activate `R6-CLOSE` or start R7/R8.
 
 ## Escalation Boundary
 
-The mandatory HIGH-impact warning/acceptance is a material decision gate. Otherwise escalate only
+The original HIGH-impact warning/acceptance and the post-pairing Task `.2A` decision are material
+decision gates. Otherwise escalate only
 for changed semantic authority, CRITICAL impact, an invalid preserved witness, required scope outside
 `attempt.rs`, unisolatable unrelated work, or review proving the packet invalid. Routine red proof,
 tests, commits, and review fixes remain autonomous after acceptance.

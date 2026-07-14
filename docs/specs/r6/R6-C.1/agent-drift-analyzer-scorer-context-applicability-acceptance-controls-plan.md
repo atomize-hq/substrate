@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14; Task `.1` is complete and Task `.2` is next. `CTX-R6-06` follows packet completion.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.1` RECEIPT `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` gates the uncommitted pairing candidate after it exposed progress and frozen-recovery reds. `CTX-R6-06` follows only after packet completion.
 This plan is ordered and test-first.
 
 ## Plan Decisions
