@@ -169,8 +169,11 @@ fn acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_postu
 
 #[test]
 fn acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged() {
-    const CASE_ID: &str = "019e899c-453f-71f2-a99d-155848c7b081";
-    const SELECTED_CHECKPOINT_ORDINAL: usize = 3;
+    const CASE_ID: &str = "019f1ecb-b93a-7570-8d8d-9ce4e711880b";
+    const REPEATED_FAILURE_CHECKPOINT_ORDINAL: usize = 2;
+    const SELECTED_CHECKPOINT_ORDINAL: usize = 7;
+    const FAILED_VERIFIER_COMMAND: &str =
+        "cargo test -p agent-drift-analyzer semantic_goal_drift -- --nocapture";
 
     let fixture_dir = camino::Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/progress_acceptance")
@@ -197,7 +200,7 @@ fn acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged() {
         .as_str()
         .expect("advancing replay fixture notes");
     assert!(fixture_notes.contains("CTX-R6-01"));
-    assert!(fixture_notes.contains("event 171"));
+    assert!(fixture_notes.contains("events 164 and 183"));
     assert_eq!(
         expected["selected_checkpoint"]["ordinal"],
         SELECTED_CHECKPOINT_ORDINAL
@@ -205,29 +208,35 @@ fn acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged() {
 
     let compact_rows = std::fs::read_to_string(fixture_dir.join("rows.compact.jsonl"))
         .expect("read advancing replay compact rows");
-    let repeated_failure_output = compact_rows
+    let compact_rows = compact_rows
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("parse compact row"))
-        .find(|row| row["event_index"] == 171 && row["kind"] == "tool_output")
-        .expect("trusted replay fixture must retain the repeated-failure output");
-    let repeated_failure_text = repeated_failure_output["text"]
-        .as_str()
-        .expect("repeated-failure output text");
-    assert!(
-        repeated_failure_text
-            .contains("real_session_live_coordinator_persists_cursor_across_restarts ... FAILED"),
-        "trusted replay fixture must retain the first concrete failure"
-    );
-    assert!(
-        repeated_failure_text.contains(
-            "real_session_live_coordinator_rejects_invalid_persisted_cursor_state ... FAILED"
-        ),
-        "trusted replay fixture must retain the second concrete failure"
-    );
-    assert!(
-        repeated_failure_text.contains("test result: FAILED. 3 passed; 2 failed"),
-        "trusted replay fixture must retain the repeated-failure result summary"
-    );
+        .collect::<Vec<_>>();
+    for (call_event, output_event) in [(164, 165), (183, 184)] {
+        let verifier_call = compact_rows
+            .iter()
+            .find(|row| row["event_index"] == call_event && row["kind"] == "tool_call")
+            .expect("trusted replay fixture must retain each failed verifier call");
+        assert!(
+            verifier_call["text"]
+                .as_str()
+                .expect("failed verifier call text")
+                .contains(FAILED_VERIFIER_COMMAND),
+            "each retained failed verifier call must use the selected repeated command"
+        );
+
+        let verifier_output = compact_rows
+            .iter()
+            .find(|row| row["event_index"] == output_event && row["kind"] == "tool_output")
+            .expect("trusted replay fixture must retain each failed verifier output");
+        let verifier_output = verifier_output["text"]
+            .as_str()
+            .expect("failed verifier output text");
+        assert!(verifier_output.contains("Exit code: 101"));
+        assert!(verifier_output
+            .contains("semantic_goal_drift_acceptance_flags_kickoff_anchor_pivot_end_to_end"));
+        assert!(verifier_output.contains("test result: FAILED. 1 passed; 1 failed"));
+    }
 
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let output_dir = camino::Utf8Path::from_path(temp_dir.path())
@@ -244,6 +253,26 @@ fn acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged() {
         .iter()
         .find(|session| session.session_id == CASE_ID)
         .expect("selected real-rollout session");
+    let repeated_failure_checkpoint = session
+        .checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.ordinal == REPEATED_FAILURE_CHECKPOINT_ORDINAL)
+        .expect("analyzer-visible repeated-failure checkpoint");
+    let repeated_failure_progress = repeated_failure_checkpoint
+        .session_progress
+        .as_ref()
+        .expect("repeated-failure checkpoint progress");
+    assert!(
+        repeated_failure_progress.signals.iter().any(|signal| {
+            signal.code == ProgressSignalCode::FailureSignatureRepeated
+                && signal
+                    .evidence
+                    .iter()
+                    .any(|evidence| evidence.row.event_index == 164)
+        }),
+        "the full analyzer must expose a repeated failing verification signature before advancement"
+    );
+
     let checkpoint = session
         .checkpoints
         .iter()
@@ -264,6 +293,13 @@ fn acceptance_fixtures_integrated_advancing_repeated_failures_stay_unflagged() {
             .iter()
             .any(|signal| signal.code == ProgressSignalCode::VerificationClean),
         "selected checkpoint must carry a direct troubleshooting-frontier advancement signal"
+    );
+    assert!(
+        progress
+            .signals
+            .iter()
+            .any(|signal| signal.code == ProgressSignalCode::VerificationScopeBroadened),
+        "selected checkpoint must retain the later broader clean verifier"
     );
 
     let dead_end_score = checkpoint

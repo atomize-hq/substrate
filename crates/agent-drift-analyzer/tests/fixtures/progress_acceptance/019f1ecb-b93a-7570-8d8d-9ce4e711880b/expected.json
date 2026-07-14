@@ -1,0 +1,39 @@
+{
+  "case_id": "019f1ecb-b93a-7570-8d8d-9ce4e711880b",
+  "fixture_kind": "annotated_real_rollout",
+  "source_rollout_id": "019f1ecb-b93a-7570-8d8d-9ce4e711880b",
+  "source_artifact": "target/hybrid-drift-evals/019f1ecb-b93a-7570-8d8d-9ce4e711880b-ctx-r6-01/compactor",
+  "notes": "Bounded local Codex rollout screening selected this non-delegated real substrate troubleshooting session for CTX-R6-01. Compact verifier calls at events 164 and 183 run the same semantic_goal_drift command; outputs 165 and 184 each retain Exit code 101 and the same named failed acceptance test. Full-analyzer checkpoint 2 exposes failure_signature_repeated, while checkpoint 7 later advances the troubleshooting frontier directly through verification_clean and verification_scope_broadened. The selected checkpoint is HistoricalOnly / 20 / High and unflagged because no earlier dead_end_thrash score was Active.",
+  "screening": {
+    "delegated": false,
+    "child_visibility": "not_applicable"
+  },
+  "selected_checkpoint": {
+    "ordinal": 7,
+    "archetype": "troubleshooting",
+    "dimension": "troubleshooting_frontier",
+    "status": "advancing",
+    "confidence_min": "high",
+    "confidence_max": "high",
+    "required_signal_codes": [
+      "verification_clean",
+      "verification_scope_broadened"
+    ],
+    "forbidden_signal_codes": [],
+    "supporting_evidence_min": 2,
+    "counter_evidence_min": 0,
+    "decisive_evidence": [
+      "Two separate real verifier attempts at compact events 164/165 and 183/184 failed with the same command and named acceptance-test failure.",
+      "Full-analyzer checkpoint 2 exposes failure_signature_repeated before the selected advancement checkpoint.",
+      "A later clean focused verifier and broader clean full-analyzer verifier directly advance the troubleshooting frontier at checkpoint 7.",
+      "Earlier dead_end_thrash checkpoints were never Active, so the selected unflagged score resolves to HistoricalOnly rather than Recovered."
+    ],
+    "counter_evidence": [
+      "None expected; the selected checkpoint carries direct clean and broadened verification evidence after the repeated failed attempts."
+    ],
+    "why_not_other_dimensions": [
+      "Not implementation_verification_wall because checkpoint 7 is a troubleshooting checkpoint whose direct evidence repairs and broadens proof after the repeated verifier failures.",
+      "Not verification_closeout_narrowing because the decisive evidence advances the failure frontier rather than retiring residual closeout scope."
+    ]
+  }
+}

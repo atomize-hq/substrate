@@ -21,6 +21,7 @@ Included native primary cases:
 - `019e940c-a91b-7fe0-a967-b0bdd595b581` — annotated real-rollout planning meander/stall.
 - `019e8b42-42bd-7b10-baae-3265edb65f4b` — annotated real-rollout verification closeout narrowing.
 - `019eb970-3543-7ab1-a5d6-2a62c00c7185` — annotated real-rollout delegated parent-visible positive proof that stays guardrail-only under limited child visibility.
+- `019f1ecb-b93a-7570-8d8d-9ce4e711880b` — annotated real-rollout CTX-R6-01 proof with two concrete repeated failed verifier attempts, analyzer-visible repeated-failure evidence, and later direct troubleshooting-frontier advancement.
 - `real-implementation-advancing-019e894a-ord6` — annotated real-rollout implementation verification-wall advancement.
 - `real-closeout-conservative-019e767c-ord3` — annotated real-rollout closeout/review checkpoint that stays `insufficient_evidence` instead of overclaiming narrowing.
 - `real-reopen-regressing-019e894a-ord7` — annotated real-rollout reopen/re-verify checkpoint that regresses honestly after a previously clean verifier breaks again.

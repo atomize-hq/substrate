@@ -10,11 +10,12 @@ use agent_drift_analyzer::{
 use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::TempDir;
 
-const NATIVE_PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 7] = [
+const NATIVE_PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 8] = [
     "019e899c-453f-71f2-a99d-155848c7b081",
     "019e8b42-42bd-7b10-baae-3265edb65f4b",
     "019e940c-a91b-7fe0-a967-b0bdd595b581",
     "019eb970-3543-7ab1-a5d6-2a62c00c7185",
+    "019f1ecb-b93a-7570-8d8d-9ce4e711880b",
     "real-closeout-conservative-019e767c-ord3",
     "real-implementation-advancing-019e894a-ord6",
     "real-reopen-regressing-019e894a-ord7",
@@ -33,11 +34,12 @@ const SYNTHETIC_PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 4] = [
     "synthetic-planning-advancing",
 ];
 
-const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 14] = [
+const PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 15] = [
     "019e899c-453f-71f2-a99d-155848c7b081",
     "019e8b42-42bd-7b10-baae-3265edb65f4b",
     "019e940c-a91b-7fe0-a967-b0bdd595b581",
     "019eb970-3543-7ab1-a5d6-2a62c00c7185",
+    "019f1ecb-b93a-7570-8d8d-9ce4e711880b",
     "real-closeout-conservative-019e767c-ord3",
     "real-implementation-advancing-019e894a-ord6",
     "real-reopen-regressing-019e894a-ord7",

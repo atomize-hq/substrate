@@ -2,7 +2,7 @@
   "case_id": "019e899c-453f-71f2-a99d-155848c7b081",
   "fixture_kind": "annotated_real_rollout",
   "source_artifact": "target/hybrid-drift-evals/019e899c-453f-71f2-a99d-155848c7b081-sample/compactor",
-  "notes": "Real substrate troubleshooting session reused as the mandatory annotated real-rollout proof point for R5-7 and selected as the trusted CTX-R6-01 integrated replay fixture. Compact event 171 retains one real failed verifier result with two named failing tests (3 passed; 2 failed); selected checkpoint 3 then directly advances the troubleshooting frontier through verification_clean and verification_scope_broadened. The checkpoint is HistoricalOnly / 20 / High and unflagged because its repeated verifier history has no prior Active dead_end_thrash score.",
+  "notes": "Real substrate troubleshooting session reused as the mandatory annotated real-rollout proof point for R5-7.",
   "selected_checkpoint": {
     "ordinal": 3,
     "archetype": "troubleshooting",
@@ -18,10 +18,8 @@
     "counter_evidence_min": 0,
     "forbidden_signal_codes": [],
     "decisive_evidence": [
-      "Compact event 171 retains two concrete failing tests in the real verifier output before the selected checkpoint advances.",
       "A later clean verifier broadened proof on the same troubleshooting target.",
-      "The checkpoint retained same-scope verifier comparability instead of inferring unrelated progress.",
-      "Earlier dead_end_thrash checkpoints were Cleared rather than Active, so the selected unflagged score resolves to HistoricalOnly rather than Recovered."
+      "The checkpoint retained same-scope verifier comparability instead of inferring unrelated progress."
     ],
     "counter_evidence": [
       "None expected; this checkpoint did not carry contradictory closeout or delegation evidence."

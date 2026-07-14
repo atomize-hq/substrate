@@ -1,0 +1,25 @@
+{
+  "schema_version": "v0.2",
+  "generated_at": "2026-07-14T17:03:12.835106Z",
+  "codex_home": "/Users/spensermcconnell/.codex",
+  "output_dir": "target/hybrid-drift-evals/019f1ecb-b93a-7570-8d8d-9ce4e711880b-ctx-r6-01/compactor",
+  "discovered_file_count": 1,
+  "archival_row_count": 235,
+  "compact_row_count": 176,
+  "dedupe_group_count": 13,
+  "session_ids": [
+    "019f1ecb-b93a-7570-8d8d-9ce4e711880b"
+  ],
+  "files": [
+    {
+      "id": 0,
+      "path": "/Users/spensermcconnell/.codex/sessions/2026/07/01/rollout-2026-07-01T13-48-15-019f1ecb-b93a-7570-8d8d-9ce4e711880b.jsonl",
+      "session_id": "019f1ecb-b93a-7570-8d8d-9ce4e711880b",
+      "turns": [
+        "019f1ecb-c58c-7b81-be4f-4a1d66e75493",
+        "019f1ede-ec60-7e32-8b98-e3fbf48329d5",
+        "3a8d6f21-b6e6-4e37-a170-f17f37b1876a"
+      ]
+    }
+  ]
+}
