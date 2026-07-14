@@ -107,9 +107,9 @@ also received fresh independent built-in `default` `REVIEW CLEAN`, completing th
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
 `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Replay has since
 completed `CTX-R6-01` and preserved trusted `CTX-R6-02` behavioral RED at `60cde3dd7`; active packet
-`R6-GAP-DET-REPLAY-STALL` has landed packet docs/annotation `200725001` and first authority correction
-`08fa86e94`. This final status correction completes the Task `.0` review-fix candidate, but the full
-series awaits fresh independent review and is not review-clean.
+`R6-GAP-DET-REPLAY-STALL` Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` +
+`d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The current
+gate is DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit is authorized.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -122,7 +122,7 @@ control.” The current honest sequence is:
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
 5. keep the landed final gap-to-replay authority transition series `56bb9966f + 07a3b1fe5` at fresh independent `REVIEW CLEAN`
-6. fresh-review/fix the full `R6-GAP-DET-REPLAY-STALL` Task `.0` docs-gate series; do not use Prompt 2 or edit Rust before it is review-clean
+6. obtain operator decision `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; do not edit Rust before acceptance
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
@@ -769,8 +769,8 @@ corpus still proves invariance rather than comparative integrated improvement. R
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
 `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Current replay
 state has `CTX-R6-01` complete and trusted `CTX-R6-02` behavioral RED at `60cde3dd7`, routed to active
-packet `R6-GAP-DET-REPLAY-STALL`. Packet docs/annotation `200725001` and first authority correction
-`08fa86e94` are landed; this final correction and the full Task `.0` series await fresh review.
+packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh
+independent built-in `default` `REVIEW CLEAN`; the operator decision now gates Rust.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -866,11 +866,10 @@ The next honest work target is:
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
 - authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`
-- **current action:** fresh-review/fix the full `R6-GAP-DET-REPLAY-STALL` Task `.0` docs-gate
-  series `200725001` + `08fa86e94` + `d03f5a355` + this Immediate Next Action correction; keep
-  `R6-REPLAY` active with `R6-GAP-DET-REPLAY-STALL` as its active packet, and do not use Prompt 2 or
-  edit Rust. After a fresh clean verdict, issue DECISION REQUIRED
-  `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; keep `CTX-R6-06`, `R6-CLOSE`, and R7 blocked meanwhile
+- **current action:** issue DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` after Task
+  `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent
+  built-in `default` `REVIEW CLEAN`; keep `R6-REPLAY` and packet `R6-GAP-DET-REPLAY-STALL` active,
+  do not edit Rust before acceptance, and keep `CTX-R6-06`, `R6-CLOSE`, and R7 blocked
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed

@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` docs-gate review-fix series pending fresh independent review, not review-clean)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` docs-gate/review-fix series fresh independent `REVIEW CLEAN`; operator acceptance pending)**
 
 ## Dependency Order
 
@@ -29,9 +29,7 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
 8. **ACTIVE / PACKET DOCS-GATE REVIEW-FIX PENDING FRESH REVIEW:** authority transition series
    `56bb9966f` + `07a3b1fe5` remains fresh independent built-in `default` `REVIEW CLEAN`. Replay then
    completed `CTX-R6-01` and preserved trusted `CTX-R6-02` behavioral RED at `60cde3dd7`. Active packet
-   `R6-GAP-DET-REPLAY-STALL` has landed packet docs/annotation `200725001` and first authority
-   correction `08fa86e94`; this final correction completes the review-fix candidate, but Task `.0`
-   awaits a fresh clean verdict. Current action is fresh series review/fix, not Prompt 2 or Rust.
+   `R6-GAP-DET-REPLAY-STALL` has landed Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` now gates Rust.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is

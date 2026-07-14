@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; packet docs/annotation `200725001` and first authority correction `08fa86e94` landed; current final status correction and full Task `.0` series pending fresh review, not review-clean)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` fresh independent `REVIEW CLEAN`; decision pending)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -53,11 +53,8 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
   fresh review returned `REVIEW FINDINGS`, so this is not a review-clean gate receipt.
 - [x] Land first authority/status correction `08fa86e94`; this final status correction completes the
   current review-fix candidate without claiming the series review-clean.
-- [ ] **Current next interaction:** obtain a fresh independent built-in `default` review of full
-  `200725001` + `08fa86e94` + current-correction series and continue bounded fixes if needed. Task `.0`
-  remains incomplete/not review-clean; do not use Prompt 2 or edit Rust.
-- [ ] After the packet docs gate is fresh-review-clean, issue DECISION REQUIRED
-  `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit.
+- [x] Complete packet Task `.0`; full docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`.
+- [ ] **Current decision gate:** DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; do not edit Rust before explicit operator acceptance.
 - [ ] Resolve `R6-GAP-DET-REPLAY-STALL` only after that decision, then run `CTX-R6-06`, focused
   scorer proof, full analyzer proof, and the bounded replay family wall.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.

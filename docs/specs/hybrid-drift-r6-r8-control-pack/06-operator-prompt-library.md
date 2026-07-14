@@ -303,21 +303,18 @@ result, current phase status, and the next eligible interaction.
 
 ## Current Packet Invocation
 
-`CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is fresh independent built-in
-`default` `REVIEW CLEAN`. Expanded authoritative screening selected trusted depth-1 built-in
-`default` subagent rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; witness commit `60cde3dd7`
-preserves `CTX-R6-02` behavioral RED at checkpoint `5` (`TroubleshootingFrontier / Stalled`,
-flagged `Active / 30 / High`) because failed calls `420`/`474` are misattributed to successful
-siblings `421`/`475`. `R6-REPLAY` remains the sole active phase and
-`R6-GAP-DET-REPLAY-STALL` remains its active packet. Packet docs/annotation `200725001` landed and
-received fresh review findings; first authority correction `08fa86e94` also landed. This final status
-correction completes the current review-fix candidate, but Task `.0` and the full series remain
-incomplete/not review-clean until a fresh independent reviewer returns a clean verdict.
+Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. `R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. The current interaction is structured DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit, `CTX-R6-06`, `R6-CLOSE`, R7, or R8 work is authorized before the operator response.
 
-The current eligible interaction is the already-running fresh series review/fix loop, not Prompt 2
-and not Rust. Review range: packet docs/annotation `200725001`, first authority correction
-`08fa86e94`, and the commit containing this final status correction. Keep `PHASE_ID: R6-REPLAY` and
-`ACTIVE_PACKET: R6-GAP-DET-REPLAY-STALL`; use Prompt 4 only if a separate recovery invocation is
-needed. After Task `.0` is fresh-review-clean, refresh the locked impacts and issue DECISION REQUIRED
-`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit. Do not start `CTX-R6-06`, `R6-CLOSE`,
-R7, or R8. This current-status block is not a permanent authority override.
+After operator acceptance, resume with this filled Prompt 6 invocation:
+
+```text
+/goal Record the supplied decision, then resume the exact blocked hybrid-drift scope through its normal proof, commit, and review-clean boundary.
+
+REPO: /Users/spensermcconnell/.codex/worktrees/97a0/substrate
+PHASE_ID: R6-REPLAY
+ACTIVE_PACKET: R6-GAP-DET-REPLAY-STALL
+ESCALATION_ID: R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE
+RESOLUTION: ACCEPT the locked one-file call-ID-aware pairing fix and packet proof wall
+RATIONALE: Operator accepts the documented HIGH-impact caller context within the packet's locked scope.
+AUTONOMY_MODE: escalation-only
+```

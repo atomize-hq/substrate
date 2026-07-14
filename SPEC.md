@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; packet docs/annotation `200725001` and first authority correction `08fa86e94` landed; current final status correction and full Task `.0` series pending fresh review, not review-clean)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` fresh independent `REVIEW CLEAN`; decision pending)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -57,11 +57,7 @@ All three named gaps are now complete with review-clean focused proof. The final
 in this review series is landed, marks the prior aggregate `R6-GAP-*` set complete, and activates
 `R6-REPLAY`. Transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
 `default` `REVIEW CLEAN`. Replay has since completed `CTX-R6-01` and preserved trusted `CTX-R6-02`
-behavioral RED at `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` is the active packet. Packet docs/annotation
-`200725001` and first authority correction `08fa86e94` are landed; this final status correction
-completes the review-fix candidate, but Task `.0` and the full series remain not review-clean. The
-current action is fresh series review/fix, not Prompt 2 or Rust. After that series is fresh-review-clean, DECISION REQUIRED
-`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` must precede Rust. `CTX-R6-06`, R6 closure, terminal
+behavioral RED at `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` is the active packet. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The current gate is DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit is authorized before operator acceptance. `CTX-R6-06`, R6 closure, terminal
 dispositions, successor execution, and all R7/R8 work remain blocked.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims

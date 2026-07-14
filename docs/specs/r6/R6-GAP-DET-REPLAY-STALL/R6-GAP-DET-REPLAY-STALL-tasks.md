@@ -1,11 +1,8 @@
 # Tasks: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-FIX SERIES PENDING FRESH REVIEW** within
-`R6-REPLAY`. Trusted witness `60cde3dd7` preserves `CTX-R6-02` red. Packet docs/annotation
-`200725001` and first authority correction `08fa86e94` are landed; this final status correction
-completes the current review-fix candidate, but no task below is complete and no packet review-clean
-claim is made until a fresh independent reviewer returns clean. No Rust edit is authorized before
-Tasks 0 and 1 close.
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / DECISION REQUIRED** within
+`R6-REPLAY`. Trusted witness `60cde3dd7` preserves `CTX-R6-02` red. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`.
+The current gate is DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit is authorized before explicit operator acceptance.
 
 ## Required Commit Gate
 
@@ -21,16 +18,13 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
 
 ## Task Ledger
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.0 — Commit and independently review the packet docs gate.**
+- [x] **R6-GAP-DET-REPLAY-STALL.0 — Commit and independently review the packet docs gate.**
   - Files: exactly this SPEC/PLAN/TASKS plus the already-authorized `expected.json` correction from
     clean target `493 -> 495` to truthful target `492 -> 495`, retaining sibling `493 -> 496`.
   - Verify: JSON parse; local Markdown links/status wording; required staged gate; `git diff --check`.
   - Review: fresh built-in `default`; bounded docs/annotation fix commits; fresh reviewer until clean.
   - Boundary: do not run the witness or edit Rust until this task is committed and review-clean.
-  - Current receipt: packet docs/annotation `200725001` landed with fresh review findings; first
-    authority correction `08fa86e94` landed; this final status correction completes the review-fix
-    candidate. The full series now requires a fresh independent verdict and remains incomplete/not
-    review-clean. Current action is series review/fix, not Prompt 2 or Rust.
+  - Current receipt: full series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.0` is complete.
 
 - [ ] **R6-GAP-DET-REPLAY-STALL.1 — Refresh impact and obtain the required operator decision.**
   - Prerequisite: Task 0 review-clean.
