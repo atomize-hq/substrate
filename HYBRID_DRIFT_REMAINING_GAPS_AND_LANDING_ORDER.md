@@ -118,8 +118,8 @@ control.” The current honest sequence is:
 2. keep `R6-C.1-CONTROLS` complete with its actual `10 PASS / 3 preserved RED` disposition
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
-5. obtain fresh independent review of the landed final gap-to-replay authority transition
-6. after that review is clean, run bounded `R6-REPLAY` in a later phase; all named gaps are complete
+5. keep the landed final gap-to-replay authority transition series `56bb9966f + 07a3b1fe5` at fresh independent `REVIEW CLEAN`
+6. use Prompt 1 for the next eligible later-phase invocation with `PHASE_ID: R6-REPLAY` and `ACTIVE_PACKET: none`; all named gaps are complete
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
