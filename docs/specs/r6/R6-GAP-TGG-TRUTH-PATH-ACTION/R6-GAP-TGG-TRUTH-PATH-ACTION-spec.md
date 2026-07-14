@@ -1,78 +1,128 @@
 # R6-GAP-TGG-TRUTH-PATH-ACTION — Truth-Path Action-Before-Read Gap
 
-Status: **ACTIVE — PACKET DOCS GATE ONLY**. `CTX-R6-12`, preserved by witness commit `e67d8b214`, is the only active named gap. The sole current action is to commit and freshly review this SPEC/PLAN/TASKS family. Witness reconfirmation, production/no-code proof, and successor work are not authorized until that gate and the separate canonical-ledger reconciliation are each committed and fresh-review-clean.
+Status: **ACTIVE — OPTION-A PACKET-AMENDMENT GATE**. The operator has resolved `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`: repair the internal, typed, session-local, path-scoped truth-grounding provenance seam. This decision does not itself authorize implementation. The sole current action is to commit exactly this SPEC/PLAN/TASKS amendment and obtain fresh built-in `default` `REVIEW CLEAN`; the preferred and packet-required next gate is then a separate ledger-only decision reconciliation before any source or test edit.
 
-## Objective And Preserved Witness
+## Decision Record And Current Evidence
 
-Close only `CTX-R6-12` without weakening or rewriting its committed control:
+- Decision: **Option A**, explicitly selected by the operator on 2026-07-13.
+- Current repository boundary: `48f259d25` (`docs: record grounding provenance review gap`). This is the current decision-required receipt, not production proof or closure.
+- Review-clean witness: `6409ae072` (`test: preserve cross-checkpoint grounding gaps`) changes only `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` and independently received fresh `REVIEW CLEAN`.
+- Preserved incomplete series: production `52c9ab296` plus receipt `73132aead` received fresh `REVIEW FINDINGS` P1. The later receipt `48f259d25` records that disposition and keeps Task 3A unchecked.
+- Historical entry gates remain complete: packet docs `03754a2de` and ledger reconciliation `a5380c04e` each received fresh built-in `default` `REVIEW CLEAN` for the earlier scorer-only boundary. They do not authorize this expanded Option-A boundary; this amendment must pass its own commit-and-review gate.
 
-`truth_grounding_gap_flags_truth_path_action_before_read`
+No command result or review verdict later than `48f259d25` is claimed by this amendment.
 
-Locked input and result:
+## Objective And Preserved Controls
 
-- one declared truth artifact, `docs/specs/agent-drift-analyzer-v0.4-spec.md`;
-- the first write/verification action is an `apply_patch` touching that same path;
-- there is no earlier truth read;
-- required result: `80 / High / Active`, flagged;
-- evidence includes both `truth artifact hint: docs/specs/agent-drift-analyzer-v0.4-spec.md` and `command family: apply_patch`.
+Close only `CTX-R6-12` and its review-clean cross-checkpoint provenance witnesses without weakening their committed expectations:
 
-The preserved witness instead produced `0 / Medium / Cleared`, unflagged. At the controls wall it was the sole red among the ten matching `truth_grounding_gap` tests. The directly analogous passing regression is `truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes`: the same pre-read write obligation is correctly `80 / High / Active`, flagged, for both planning and implementation when the action is outside the truth path. This packet must make truth-path-touching action obey that same provenance rule without making archetype load-bearing.
+1. **Original `CTX-R6-12` remains exact.** `truth_grounding_gap_flags_truth_path_action_before_read` must remain `80 / High / Active`, flagged, with the declared truth-artifact authority evidence and `command family: apply_patch` action evidence when a truth-path-touching action occurs before any qualifying read.
+2. **Historical-only is not grounding.** `truth_grounding_gap_reactivates_truth_path_action_after_historical_only_recovery` must become `80 / High / Active`, flagged, at the later same-path action. Historical score posture and historical evidence do not establish a read.
+3. **A real same-path read crosses the next checkpoint boundary.** `truth_grounding_gap_carries_clean_read_to_next_checkpoint_truth_path_action` must become `0 / Medium / Cleared`, unflagged, at the next-checkpoint same-path action. This proves carry across one checkpoint boundary; it is not an expiry, TTL, freshness, or read-consumption rule.
+4. **Path identity is load-bearing.** A qualifying read of path A must never ground an action against path B. Add or preserve a focused path-isolation control in the owning test target.
+5. **Session identity is load-bearing.** Provenance resets for every bundle session and must never move between parent and child trajectories. Add or preserve focused session-isolation coverage in the owning test target if the existing fixture wall does not already prove this exact behavior.
 
-## Owning Seam And Boundary
+At `6409ae072`, the original control passes while the two preserved cross-checkpoint controls are red; the owning family is historically recorded as `10 passed; 2 failed`. That is witness evidence, not an implementation result.
 
-`score_truth_grounding_gap` in `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs` owns the disposition. Live source currently collects a write/verification as `ungrounded_actions` only when it does **not** touch declared truth; a write/verification that touches truth before any read therefore contributes neither a grounded read nor an ungrounded action. The repair is scorer-local: pre-read write/verification against declared truth is still action and must retain its action evidence.
+## Option-A Internal Contract
 
-Default production boundary: change only `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs`, and within it only `score_truth_grounding_gap`. `first_event_index`, `historical_truth_grounding_gap_evidence`, `dedupe_evidence`, and `is_historical_truth_grounding_gap_reason` are read-only unless the scorer-local repair proves impossible; impact any proposed helper edit and stop/escalate rather than widening silently. Do not edit context extraction, command classification, dispatcher code, another scorer, R7, replay, exports, or presentation.
+The repair may introduce only an internal provenance value threaded through the existing analyzer call chain:
 
-Before any indexed-symbol edit, run:
+`analyze_loaded_bundle` → `score_session` → `score_truth_grounding_gap`
+
+The implementation contract is:
+
+- Provenance is derived only from typed qualifying read observations and their event order.
+- `DriftScore`, `raw_score`, `state`, `flagged`, historical score posture, evidence presence, and evidence `reason` strings are forbidden provenance sources.
+- Provenance is keyed to declared truth-path identity, not to a session-wide grounded boolean.
+- A carried entry may affect an action only when its matching path is still declared in the current `TaskFrame.truth_artifacts`.
+- Paths no longer declared in the current task frame are removed from carried eligibility. A later re-declaration must not resurrect provenance that was dropped while out of frame.
+- A same-interval read qualifies only when event order places it before the relevant action. A read observed in an earlier checkpoint of the same session is earlier by construction and may carry for that matching path.
+- Provenance is initialized inside the per-session loop in `analyze_loaded_bundle`; it resets for each session and never crosses a parent/child or sibling trajectory boundary.
+- History/evidence recovery remains a disposition and presentation concern only. It cannot create, restore, or infer provenance.
+- This packet establishes no freshness, TTL, maximum checkpoint count, or read-consumption behavior. Such semantics require separate evidence and a separate decision.
+
+The internal representation may be a private or `pub(crate)` non-exported type plus necessary private helpers, but it must remain housed in the three bounded source files below. No public signature or exported type may change.
+
+## Authorized Files By Atomic Batch
+
+### Packet-amendment gate — current batch
+
+Exactly:
+
+- this SPEC;
+- this packet's PLAN;
+- this packet's TASKS.
+
+No source, test, ledger, staging, or implementation belongs in the current batch.
+
+### Ledger-only decision reconciliation — next required batch
+
+Exactly:
+
+- `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`.
+
+Record `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`, the review-clean packet-amendment commit, the expanded bounded source/test authority, and Task 3A as the next action. Preserve the gap as active and make no proof or closure claim. Commit separately and obtain fresh built-in `default` `REVIEW CLEAN` before implementation.
+
+### Option-A implementation/proof batch — only after both gates are review-clean
+
+Only:
+
+- `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs` — `score_truth_grounding_gap` and necessary internal provenance types/helpers;
+- `crates/agent-drift-analyzer/src/scoring/mod.rs` — `score_session` and necessary internal threading types/helpers;
+- `crates/agent-drift-analyzer/src/lib.rs` — `analyze_loaded_bundle` and necessary session-local initialization/threading helpers;
+- `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` — focused provenance behavior tests only;
+- this TASKS — exact results and review state;
+- `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` — actual `CTX-R6-12` / named-gap evidence only.
+
+An allowed file is not permission to make unrelated edits within it. Unrelated dirty files remain unstaged.
+
+## Explicit Non-Goals
+
+No public API, schema, export, replay, sentinel, or presentation change is authorized. Do not change `Checkpoint`, `DriftScore`, serialized JSON, summary/checkpoint export, inference/context extraction, command classification, another scorer, R7, successor packets, or replay fixtures. Do not use evidence reason parsing as hidden state. Do not add freshness, TTL, or read consumption absent separate evidence and a separate packet decision.
+
+## Mandatory GitNexus Pre-Edit Gate
+
+After both docs gates are review-clean and before any source edit, run these three exact commands individually and record each risk, direct callers, affected processes, and affected modules in TASKS:
 
 ```bash
 npx gitnexus impact score_truth_grounding_gap -r 97a0-substrate --direction upstream --depth 3
+npx gitnexus impact score_session -r 97a0-substrate --direction upstream --depth 3
+npx gitnexus impact analyze_loaded_bundle -r 97a0-substrate --direction upstream --depth 3
 ```
 
-If any additional symbol is proposed, first run the identical command with its exact symbol name. Warn and stop on HIGH or CRITICAL impact.
+Before editing any existing helper, run the same exact gate with that helper's actual symbol name as a separate command. The currently bounded helpers in `truth_grounding_gap.rs` therefore require these exact commands if any is edited:
 
-## Allowed Files By Atomic Batch
+```bash
+npx gitnexus impact historical_truth_grounding_gap_evidence -r 97a0-substrate --direction upstream --depth 3
+npx gitnexus impact dedupe_evidence -r 97a0-substrate --direction upstream --depth 3
+npx gitnexus impact first_event_index -r 97a0-substrate --direction upstream --depth 3
+npx gitnexus impact is_historical_truth_grounding_gap_reason -r 97a0-substrate --direction upstream --depth 3
+```
 
-- Packet-docs gate: exactly this SPEC, PLAN, and TASKS.
-- Post-docs ledger gate: exactly `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md`, in a separate batch after the packet-docs gate is fresh-review-clean. Replace the active row's three `TO CREATE` markers with these actual paths, record the review-clean packet-docs commit, and make witness reconfirmation the next action without changing the preserved-red disposition.
-- Red production-fix batch: `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs`; this TASKS; and the canonical ledger for actual `CTX-R6-12` / named-gap evidence. `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` is allowed only if a distinct narrow regression is necessary; the preserved witness itself must not change.
-- Eligible no-code receipt batch: this TASKS and the canonical ledger only. No production or test file may change.
-- Review fixes: only files already allowed for the atomic batch under review.
-- Final transition: exactly the authority manifest listed in this TASKS, with this packet and no successor packet file.
+Every other existing helper proposed for edit gets its own literal command line and recorded result before editing; a wildcard, file-level result, or one anchor's result cannot stand in for another symbol. A genuinely new private helper has no pre-edit indexed symbol: record that fact rather than inventing impact output, keep it inside the bounded files, and rely on the required staged `detect-changes` gate to inspect its actual graph effect. Warn and stop before editing on any HIGH or CRITICAL result.
 
-Unrelated dirty files remain unstaged.
+## Exact Verification And Acceptance
 
-## Red Versus No-Code Closure
-
-After both entry gates are review-clean, run the focused witness, then the analogous regression, then the owning family.
-
-- **Red:** take the scorer-local production path. Make the smallest change that treats pre-read write/verification as ungrounded action whether or not its path overlaps declared truth. Preserve event ordering, history recovery, read-before-action behavior, evidence deduplication, and the archetype-equivalence result.
-- **Unexpectedly green:** no-code closure is eligible only if an already-landed production commit from the earlier sequential gap `R6-GAP-DET-OPAQUE-PARENT` can be shown to change this exact witness from red to green. Prove that attribution at the candidate commit boundary in clean checkouts, with focused proof before family proof, and record the exact hashes/results. If the predecessor boundary cannot demonstrate red-before/green-after, stop for authority reconciliation; an unrelated landed commit or current-HEAD green is not a receipt.
-
-## Exact Verification
-
-Focused proof precedes family proof, both before and after a red-path repair:
+Run focused controls first, then the full owning target, checkpoint family, and static gates:
 
 ```bash
 cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_truth_path_action_before_read -- --exact --nocapture
-cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_scores_equivalent_actions_equally_across_archetypes -- --exact --nocapture
-cargo test -p agent-drift-analyzer truth_grounding_gap -- --nocapture
-```
-
-For a red production path, also run after those commands:
-
-```bash
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_reactivates_truth_path_action_after_historical_only_recovery -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_carries_clean_read_to_next_checkpoint_truth_path_action -- --exact --nocapture
+# Run each new path-scope and session-isolation control here with --exact before the family.
+cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture
 cargo test -p agent-drift-analyzer checkpoints -- --nocapture
 cargo fmt --all -- --check
 cargo check -p agent-drift-analyzer
+cargo clippy -p agent-drift-analyzer --all-targets -- -D warnings
 ```
 
-Replay and broader scorer walls are not part of this gap.
+Acceptance requires every focused control, the full `truth_grounding_gap` integration target, all matching checkpoint tests, format, check, and clippy to be green. Record exact counts and dispositions only after running them; this packet amendment claims none of those future results.
 
 ## Commit, Review, And Exit
 
-Before every commit:
+Before every implementation or proof commit:
 
 ```bash
 git add -- <intended-files-only>
@@ -81,6 +131,4 @@ git diff --cached --check
 git diff --cached
 ```
 
-Commit each batch atomically. After packet docs, ledger reconciliation, production fix or no-code receipt, every review fix, and the final transition, dispatch a fresh built-in `default` reviewer. Apply actionable findings in a new bounded commit and repeat with a fresh reviewer until `REVIEW CLEAN`.
-
-The gap exits only when entry gates, selected closure path, exact proof, and fresh reviews are complete. A separate authority-only transition then marks this gap complete and activates only `R6-GAP-WPB-EMPTY-AUTHORITY` at its docs-only gate. Record its three canonical paths as non-link `TO CREATE` entries; do not create, link, cite as existing, or execute that successor. Stop after the transition series is independently review-clean.
+Commit atomically and dispatch a fresh built-in `default` reviewer. Apply findings in a new bounded commit and repeat with a fresh built-in `default` reviewer until `REVIEW CLEAN`. Task 3A, Task 4, the authority transition, and successor work remain incomplete. Only a later review-clean implementation/proof series may unlock the separate authority-only transition already listed in TASKS.
