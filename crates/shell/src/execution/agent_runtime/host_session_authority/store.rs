@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::Path;
 
 use super::schema::{CanonicalDirectoryV1, TimestampV1};
-use super::store_schema::StateRootV1;
+use super::store_schema::{StateRootV1, StateRootV2};
 use super::trusted_fs::TrustedAuthorityRoot;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,6 +36,81 @@ pub(super) fn upgrade_greenfield_root_opened(
     root: &TrustedAuthorityRoot,
 ) -> Result<RootUpgradeOutcomeV1, BootstrapError> {
     platform::upgrade_greenfield_root_opened(root)
+}
+
+pub(super) fn read_opened_root_v2(
+    root: &TrustedAuthorityRoot,
+) -> Result<StateRootV2, BootstrapError> {
+    platform::read_opened_root_v2(root)
+}
+
+pub(super) fn prepare_generated_object_v2_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    object_kind: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1,
+    bytes: &[u8],
+    context: Option<&ObjectVerificationContextV1>,
+) -> Result<GeneratedObjectV1, BootstrapError> {
+    platform::prepare_generated_object_v2_opened(
+        root,
+        expected_root_revision,
+        object_kind,
+        bytes,
+        context,
+    )
+}
+
+pub(super) fn allocate_sensitive_object_ref_v2_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    object_kind: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1,
+    bytes: &[u8],
+    context: &ObjectVerificationContextV1,
+) -> Result<
+    crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    BootstrapError,
+> {
+    platform::allocate_sensitive_object_ref_v2_opened(
+        root,
+        expected_root_revision,
+        object_kind,
+        bytes,
+        context,
+    )
+}
+
+pub(super) fn prepare_typed_object_v2_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    reference: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    bytes: &[u8],
+    context: Option<&ObjectVerificationContextV1>,
+) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+    platform::prepare_typed_object_v2_opened(
+        root,
+        expected_root_revision,
+        reference,
+        bytes,
+        context,
+    )
+}
+
+pub(super) fn read_typed_object_v2_opened(
+    root: &TrustedAuthorityRoot,
+    expected_root_revision: u64,
+    reference: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    context: Option<&ObjectVerificationContextV1>,
+) -> Result<Vec<u8>, BootstrapError> {
+    platform::read_typed_object_v2_opened(root, expected_root_revision, reference, context)
+}
+
+pub(super) fn commit_v2_root_exact_current_opened(
+    root: &TrustedAuthorityRoot,
+    exact_current: &StateRootV2,
+    proposed: &StateRootV2,
+    publication_guard: impl FnMut() -> Result<(), BootstrapError>,
+) -> Result<StateRootV2, BootstrapError> {
+    platform::commit_v2_root_exact_current_opened(root, exact_current, proposed, publication_guard)
 }
 
 #[cfg(test)]
@@ -227,6 +302,12 @@ impl fmt::Display for BootstrapError {
 
 impl std::error::Error for BootstrapError {}
 
+impl BootstrapError {
+    pub(super) fn transition_guard() -> Self {
+        Self("transition publication guard failed")
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ObjectVerificationContextV1 {
     pub(crate) intent_id: String,
@@ -254,6 +335,13 @@ pub(crate) enum ObjectPublicationOutcomeV1 {
     JoinedExactOrphan,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct GeneratedObjectV1 {
+    pub(super) reference:
+        crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(super) byte_length: u64,
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod platform {
     use std::fmt;
@@ -263,7 +351,7 @@ mod platform {
     #[cfg(test)]
     use super::LegacyMutationV1;
     use super::{
-        BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1,
+        BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, GeneratedObjectV1,
         GreenfieldUpgradeCrashPointV1, InitializationCrashPointV1, InitializationMaterialV1,
         KeyLifecycleCrashPointV1, LegacyStateStoreCollectionV1, ObjectPublicationOutcomeV1,
         ObjectVerificationContextV1, RootUpgradeOutcomeV1, TransactionCommitOutcomeV1,
@@ -281,7 +369,7 @@ mod platform {
         TerminalHandoffHashInputV1, TerminalHandoffStateV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_format::{
-        key_id, nonce, store_id, validate_key_id, validate_ref_id,
+        key_id, nonce, object_ref_id, store_id, validate_key_id, validate_ref_id,
         AuthorityStoreCommitmentKeyFileV1, TempNameV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_schema::{
@@ -323,9 +411,9 @@ mod platform {
     use key_lifecycle::{retire_commitment_key_with, rotate_commitment_key_with};
     #[path = "object_persistence.rs"]
     mod object_persistence;
-    use object_persistence::publish_or_join_orphan;
     use object_persistence::validate_orphan_candidate;
     use object_persistence::verify_object_bytes;
+    use object_persistence::{canonical_digest, publish_or_join_orphan, sensitive_domain};
     #[path = "reachability.rs"]
     mod reachability;
     use reachability::{add_expected_ref, collect_reachable_objects, collect_reachable_objects_v2};
@@ -342,7 +430,8 @@ mod platform {
         compare_and_swap_opened_root_with, compare_and_swap_opened_root_with_exact_current,
         compare_and_swap_root_with, with_existing_semantic_preflight,
         with_existing_versioned_semantic_preflight, with_opened_existing_semantic_preflight,
-        with_opened_semantic_preflight, SemanticPreflightMode,
+        with_opened_existing_versioned_semantic_preflight, with_opened_semantic_preflight,
+        SemanticPreflightMode,
     };
 
     pub(super) fn classify(path: &std::path::Path) -> BootstrapClassificationV1 {
@@ -599,6 +688,228 @@ mod platform {
             context,
             system_material()?.key_nonce,
         )
+    }
+
+    pub(super) fn read_opened_root_v2(
+        root: &TrustedAuthorityRoot,
+    ) -> Result<StateRootV2, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root, |transaction| {
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError("A1.2a requires strict StateRootV2"));
+            };
+            Ok(root.clone())
+        })
+    }
+
+    pub(super) fn prepare_generated_object_v2_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        object_kind: AuthorityObjectKindV1,
+        bytes: &[u8],
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<GeneratedObjectV1, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError("A1.2a objects require strict StateRootV2"));
+            };
+            let reference =
+                generated_object_ref_v2(transaction.layout, root, object_kind, bytes, context)?;
+            validate_orphan_candidate(transaction.layout, root, &reference, bytes, context)?;
+            transaction.reconcile()?;
+            publish_or_join_orphan(
+                transaction.layout,
+                root,
+                &reference,
+                bytes,
+                context,
+                system_material()?.key_nonce,
+            )?;
+            Ok(GeneratedObjectV1 {
+                reference,
+                byte_length: bytes.len() as u64,
+            })
+        })
+    }
+
+    pub(super) fn allocate_sensitive_object_ref_v2_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        object_kind: AuthorityObjectKindV1,
+        bytes: &[u8],
+        context: &ObjectVerificationContextV1,
+    ) -> Result<AuthorityObjectRefV1, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError("A1.2a objects require strict StateRootV2"));
+            };
+            if sensitive_domain(object_kind).is_none() {
+                return Err(BootstrapError("generated object kind is not sensitive"));
+            }
+            generated_object_ref_v2(transaction.layout, root, object_kind, bytes, Some(context))
+        })
+    }
+
+    pub(super) fn prepare_typed_object_v2_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        reference: &AuthorityObjectRefV1,
+        bytes: &[u8],
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError("A1.2a objects require strict StateRootV2"));
+            };
+            validate_orphan_candidate(transaction.layout, root, reference, bytes, context)?;
+            transaction.reconcile()?;
+            publish_or_join_orphan(
+                transaction.layout,
+                root,
+                reference,
+                bytes,
+                context,
+                system_material()?.key_nonce,
+            )
+        })
+    }
+
+    pub(super) fn read_typed_object_v2_opened(
+        root: &TrustedAuthorityRoot,
+        expected_root_revision: u64,
+        reference: &AuthorityObjectRefV1,
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root, |transaction| {
+            transaction.require_expected_root(expected_root_revision)?;
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError("A1.2a objects require strict StateRootV2"));
+            };
+            let index = root
+                .object_index
+                .get(&reference.ref_id)
+                .filter(|index| {
+                    index.object_kind == reference.object_kind
+                        && index.object_schema_version == reference.schema_version
+                        && index.storage_state == AuthorityObjectStorageStateV1::Present
+                })
+                .ok_or(BootstrapError("typed object has no present index entry"))?;
+            let kind = transaction
+                .layout
+                .objects
+                .open_directory(kind_slug(reference.object_kind))
+                .map_err(|_| BootstrapError("open typed object kind directory"))?;
+            let version = kind
+                .open_directory(&format!("v{}", reference.schema_version))
+                .map_err(|_| BootstrapError("open typed object version directory"))?;
+            let bytes = version
+                .open_file(&format!("{}.obj", reference.ref_id))
+                .and_then(|file| file.read_all())
+                .map_err(|_| BootstrapError("read typed object"))?;
+            if bytes.len() as u64 != index.byte_length {
+                return Err(BootstrapError("typed object byte length mismatch"));
+            }
+            verify_object_bytes(transaction.layout, root, reference, &bytes, context, true)?;
+            Ok(bytes)
+        })
+    }
+
+    pub(super) fn commit_v2_root_exact_current_opened(
+        root: &TrustedAuthorityRoot,
+        exact_current: &StateRootV2,
+        proposed: &StateRootV2,
+        mut publication_guard: impl FnMut() -> Result<(), BootstrapError>,
+    ) -> Result<StateRootV2, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root, |transaction| {
+            let VersionedStateRoot::V2(locked) = &transaction.root else {
+                return Err(BootstrapError("A1.2a mutation requires strict StateRootV2"));
+            };
+            if locked != exact_current {
+                return Err(BootstrapError(
+                    "locked V2 authority root differs from exact observed root",
+                ));
+            }
+            let candidate = VersionedStateRoot::V2(proposed.clone());
+            transaction.validate_publication_candidate(exact_current.root_revision, &candidate)?;
+            transaction.reconcile()?;
+            publish_versioned_replacement_root(
+                transaction.layout,
+                transaction.trusted_root,
+                &transaction.legacy,
+                &candidate,
+                system_material()?.root_nonce,
+                || {
+                    transaction
+                        .validate_publication_candidate(exact_current.root_revision, &candidate)?;
+                    publication_guard()
+                },
+            )?;
+            Ok(proposed.clone())
+        })
+    }
+
+    fn generated_object_ref_v2(
+        layout: &StoreLayout<'_>,
+        root: &StateRootV2,
+        object_kind: AuthorityObjectKindV1,
+        bytes: &[u8],
+        context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<AuthorityObjectRefV1, BootstrapError> {
+        let commitment = if let Some(domain) = sensitive_domain(object_kind) {
+            let context =
+                context.ok_or(BootstrapError("sensitive object parent context is missing"))?;
+            let record = root
+                .commitment_key_registry
+                .get(&root.active_commitment_key_id)
+                .filter(|record| record.state == AuthorityStoreCommitmentKeyStateV1::Active)
+                .ok_or(BootstrapError("active commitment key is unavailable"))?;
+            let key = layout
+                .keys
+                .open_file(&format!("{}.key", record.key_id))
+                .map_err(|_| BootstrapError("open active commitment key"))?;
+            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
+                &key.read_all()
+                    .map_err(|_| BootstrapError("read active commitment key"))?,
+            )
+            .map_err(|_| BootstrapError("decode active commitment key"))?;
+            AuthorityObjectCommitmentV1::StoreHmacSha256 {
+                key_id: record.key_id.clone(),
+                domain: String::from_utf8(domain.as_bytes().to_vec())
+                    .map_err(|_| BootstrapError("sensitive object domain is invalid"))?,
+                digest_hex: store_hmac_sha256(
+                    &envelope.secret_key,
+                    domain,
+                    &root.authority_store_id,
+                    &context.intent_id,
+                    Some(&context.run_id),
+                    bytes,
+                )
+                .map_err(|_| BootstrapError("commit sensitive object"))?,
+            }
+        } else {
+            AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: canonical_digest(object_kind, bytes)?,
+            }
+        };
+        let mut random = rand::thread_rng();
+        for _ in 0..32 {
+            let mut entropy = [0_u8; 16];
+            random.fill_bytes(&mut entropy);
+            let reference = AuthorityObjectRefV1 {
+                ref_id: object_ref_id(entropy),
+                object_kind,
+                schema_version: 1,
+                commitment: commitment.clone(),
+            };
+            if !root.object_index.contains_key(&reference.ref_id) {
+                return Ok(reference);
+            }
+        }
+        Err(BootstrapError(
+            "unable to allocate collision-free object ID",
+        ))
     }
 
     pub(super) fn read_root(path: &std::path::Path) -> Result<StateRootV1, BootstrapError> {
@@ -1337,11 +1648,11 @@ mod platform {
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 mod platform {
     use super::{
-        BootstrapClassificationV1, BootstrapError, ObjectPublicationOutcomeV1,
+        BootstrapClassificationV1, BootstrapError, GeneratedObjectV1, ObjectPublicationOutcomeV1,
         ObjectVerificationContextV1, RootUpgradeOutcomeV1,
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
-        AuthorityObjectRefV1, CanonicalDirectoryV1,
+        AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV1;
 
@@ -1431,6 +1742,72 @@ mod platform {
     pub(super) fn upgrade_greenfield_root_opened(
         _root: &TrustedAuthorityRoot,
     ) -> Result<RootUpgradeOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn read_opened_root_v2(
+        _root: &TrustedAuthorityRoot,
+    ) -> Result<super::StateRootV2, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn prepare_generated_object_v2_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _object_kind: AuthorityObjectKindV1,
+        _bytes: &[u8],
+        _context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<GeneratedObjectV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn allocate_sensitive_object_ref_v2_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _object_kind: AuthorityObjectKindV1,
+        _bytes: &[u8],
+        _context: &ObjectVerificationContextV1,
+    ) -> Result<AuthorityObjectRefV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn prepare_typed_object_v2_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _reference: &AuthorityObjectRefV1,
+        _bytes: &[u8],
+        _context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn read_typed_object_v2_opened(
+        _root: &TrustedAuthorityRoot,
+        _expected_root_revision: u64,
+        _reference: &AuthorityObjectRefV1,
+        _context: Option<&ObjectVerificationContextV1>,
+    ) -> Result<Vec<u8>, BootstrapError> {
+        Err(BootstrapError(
+            "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn commit_v2_root_exact_current_opened(
+        _root: &TrustedAuthorityRoot,
+        _exact_current: &super::StateRootV2,
+        _proposed: &super::StateRootV2,
+        _publication_guard: impl FnMut() -> Result<(), BootstrapError>,
+    ) -> Result<super::StateRootV2, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
         ))

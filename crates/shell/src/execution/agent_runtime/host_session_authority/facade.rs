@@ -201,6 +201,10 @@ impl OpenedBootstrapHomeV1<'_> {
 }
 
 impl HostSessionAuthority {
+    pub(super) fn trusted_root(&self) -> &TrustedAuthorityRoot {
+        &self.root
+    }
+
     pub(crate) fn from_trusted_root(
         root: TrustedAuthorityRoot,
     ) -> Result<Self, AuthorityFacadeError> {

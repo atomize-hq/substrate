@@ -20,6 +20,8 @@ pub(crate) mod store_format;
 #[allow(dead_code)]
 pub(crate) mod store_schema;
 #[allow(dead_code)]
+pub(crate) mod transition;
+#[allow(dead_code)]
 pub(crate) mod trusted_fs;
 #[allow(dead_code)]
 pub(crate) mod validation;
@@ -30,3 +32,5 @@ pub(crate) use facade::{
 
 #[cfg(test)]
 mod golden_vectors;
+#[cfg(test)]
+mod transition_tests;
