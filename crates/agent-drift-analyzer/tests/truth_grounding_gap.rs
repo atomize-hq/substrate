@@ -539,6 +539,87 @@ fn truth_grounding_gap_preserves_history_without_keeping_the_latest_interval_act
 }
 
 #[test]
+fn truth_grounding_gap_reactivates_truth_path_action_after_historical_only_recovery() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update docs/specs/agent-drift-analyzer-v0.4-spec.md using that declared truth artifact before changing behavior.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Read docs/specs/agent-drift-analyzer-v0.4-spec.md before acting.",
+        ),
+        tool_row(2, "cargo test -p agent-drift-analyzer -- --nocapture"),
+        row(
+            3,
+            CompactionKind::AssistantMessage,
+            "I need to re-ground on the spec before editing again.",
+        ),
+        tool_row(4, "pwd"),
+        row(
+            5,
+            CompactionKind::AssistantMessage,
+            "The recovery checkpoint contains historical context only; I am moving to the next checkpoint.",
+        ),
+        tool_row(
+            6,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: docs/specs/agent-drift-analyzer-v0.4-spec.md\n*** End Patch\nPATCH",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze cross-checkpoint historical recovery bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert_eq!(checkpoints.len(), 3);
+    let scores = checkpoints
+        .iter()
+        .map(|checkpoint| {
+            checkpoint
+                .drift_scores
+                .iter()
+                .find(|score| score.class == DriftClass::TruthGroundingGap)
+                .expect("truth grounding gap score")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        (
+            scores[0].raw_score,
+            scores[0].confidence,
+            scores[0].state,
+            scores[0].flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+    assert_eq!(
+        (
+            scores[1].raw_score,
+            scores[1].confidence,
+            scores[1].state,
+            scores[1].flagged,
+        ),
+        (20, Confidence::Medium, DriftState::Recovered, false),
+    );
+    assert!(scores[1].evidence.iter().any(|evidence| evidence
+        .reason
+        .starts_with("historical truth-grounding gap:")));
+    assert_eq!(
+        (
+            scores[2].raw_score,
+            scores[2].confidence,
+            scores[2].state,
+            scores[2].flagged,
+        ),
+        (80, Confidence::High, DriftState::Active, true),
+    );
+}
+
+#[test]
 fn truth_grounding_gap_does_not_turn_clean_grounding_into_historical_gap_evidence() {
     let rows = vec![
         row(
@@ -604,6 +685,69 @@ fn truth_grounding_gap_does_not_turn_clean_grounding_into_historical_gap_evidenc
     assert!(!second.evidence.iter().any(|evidence| evidence
         .reason
         .starts_with("historical truth-grounding gap:")));
+}
+
+#[test]
+fn truth_grounding_gap_carries_clean_read_to_next_checkpoint_truth_path_action() {
+    let rows = vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update docs/specs/agent-drift-analyzer-v0.4-spec.md using that declared truth artifact before changing behavior.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Read docs/specs/agent-drift-analyzer-v0.4-spec.md before acting.",
+        ),
+        tool_row(2, "sed -n '1,120p' docs/specs/agent-drift-analyzer-v0.4-spec.md"),
+        row(
+            3,
+            CompactionKind::AssistantMessage,
+            "The spec is grounded; I am moving to the next checkpoint.",
+        ),
+        tool_row(
+            4,
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: docs/specs/agent-drift-analyzer-v0.4-spec.md\n*** End Patch\nPATCH",
+        ),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze cross-checkpoint clean grounding bundle");
+    let checkpoints = read_checkpoints(&result.checkpoints_path);
+
+    assert_eq!(checkpoints.len(), 2);
+    let scores = checkpoints
+        .iter()
+        .map(|checkpoint| {
+            checkpoint
+                .drift_scores
+                .iter()
+                .find(|score| score.class == DriftClass::TruthGroundingGap)
+                .expect("truth grounding gap score")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        (
+            scores[0].raw_score,
+            scores[0].confidence,
+            scores[0].state,
+            scores[0].flagged,
+        ),
+        (20, Confidence::Medium, DriftState::Cleared, false),
+    );
+    assert_eq!(
+        (
+            scores[1].raw_score,
+            scores[1].confidence,
+            scores[1].state,
+            scores[1].flagged,
+        ),
+        (0, Confidence::Medium, DriftState::Cleared, false),
+    );
 }
 
 #[test]
