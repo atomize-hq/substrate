@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-REPLAY — ACTIVE; active packet R6-GAP-DET-REPLAY-STALL; docs-gate/review-fix series fresh independent `REVIEW CLEAN`; decision pending; CTX-R6-02 behavioral RED preserved at 60cde3dd7`
+**Current work phase:** `R6-REPLAY — ACTIVE; active packet R6-GAP-DET-REPLAY-STALL; Task .0 review-clean; Task .1 Option A accepted; Task .2 preserved-red reconfirmation next; CTX-R6-02 behavioral RED preserved at 60cde3dd7`
 
-**Last repo-truth verification:** `CTX-R6-01` series review-clean; trusted `CTX-R6-02` witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` now gates Rust.
+**Last repo-truth verification:** `CTX-R6-01` series review-clean; trusted `CTX-R6-02` witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. On 2026-07-14 the operator explicitly accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; Task `.1` is complete and Task `.2` is next.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -28,7 +28,7 @@ packet `none`. `CTX-R6-01` is complete through fresh independent review-clean se
 rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; witness commit `60cde3dd7` preserves `CTX-R6-02`
 behavioral RED at `TroubleshootingFrontier / Stalled` and flagged `Active / 30 / High`, with failed
 calls `420`/`474` misattributed to successful siblings `421`/`475`. `R6-REPLAY` remains active and
-the active packet is `R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` now gates Rust. `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8 remain pending or blocked as owned.
+the active packet is `R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The operator explicitly accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14; Task `.1` is complete and Tasks `.2`-`.4` are authorized in order. `CTX-R6-06`, the family wall, `R6-CLOSE`, and R7/R8 remain pending or blocked as owned.
 
 ## Purpose
 

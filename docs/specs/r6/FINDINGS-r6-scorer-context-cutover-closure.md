@@ -26,8 +26,9 @@ built-in `default` `REVIEW CLEAN` and made `R6-REPLAY` the sole active phase. `C
 complete through fresh independent review-clean series `a0089c8de` + `968a4377f`. Trusted witness
 `60cde3dd7` preserves `CTX-R6-02` behavioral RED and routes it to active packet
 `R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` +
-`9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The current gate is
-DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before any Rust edit. `CTX-R6-06` and
+`9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. On 2026-07-14 the operator
+accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; Task `.1` is complete and Task `.2`
+is next. `CTX-R6-06` and
 the replay family wall remain pending; no terminal disposition is assigned. R7 remains design-ready
 draft work, but it is **not implementation-ready**.
 
@@ -49,7 +50,7 @@ owns and behavior-level tests prove that match. Transitive availability alone is
 
 | Scorer | Intended behavior | Current direct inputs | Current indirect inputs | Typed outcomes | Turn context | Archetype | Progress | Structured objective | Working-set / truth evidence | Delegation visibility | Behavioral proof | Remaining gap | Disposition |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `dead_end_thrash` | Distinguish active repeated failure/verification with no frontier movement from expected churn that advances or cleanly recovers. | Repetition history, recovery-active bits, `SessionProgress`, command observations for confidence. | Typed attempts/outcomes feed progress; turn context feeds archetype; archetype selects progress. | **Indirect, relevant.** | **Indirect, relevant.** | **Indirect, relevant.** | **Direct, required.** | **Boundary only.** | **Not applicable.** | **Indirect, relevant.** | Focused gap proof remains review-clean. `CTX-R6-01` integrated advancing replay is review-clean. Trusted `CTX-R6-02` witness `60cde3dd7` preserves checkpoint `5` `TroubleshootingFrontier / Stalled / Medium` and flagged `Active / 30 / High`, but truthful failed-call evidence is misattributed across concurrent siblings. | Active packet `R6-GAP-DET-REPLAY-STALL`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` is fresh independent `REVIEW CLEAN`; decision pending; `CTX-R6-06` and terminal disposition pending. | **Behavioral red routed / terminal disposition pending `R6-CLOSE`** |
+| `dead_end_thrash` | Distinguish active repeated failure/verification with no frontier movement from expected churn that advances or cleanly recovers. | Repetition history, recovery-active bits, `SessionProgress`, command observations for confidence. | Typed attempts/outcomes feed progress; turn context feeds archetype; archetype selects progress. | **Indirect, relevant.** | **Indirect, relevant.** | **Indirect, relevant.** | **Direct, required.** | **Boundary only.** | **Not applicable.** | **Indirect, relevant.** | Focused gap proof remains review-clean. `CTX-R6-01` integrated advancing replay is review-clean. Trusted `CTX-R6-02` witness `60cde3dd7` preserves checkpoint `5` `TroubleshootingFrontier / Stalled / Medium` and flagged `Active / 30 / High`, but truthful failed-call evidence is misattributed across concurrent siblings. | Active packet `R6-GAP-DET-REPLAY-STALL`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` is fresh independent `REVIEW CLEAN`; Task `.1` Option A accepted and Task `.2` next; `CTX-R6-06` and terminal disposition pending. | **Behavioral red routed / terminal disposition pending `R6-CLOSE`** |
 | `semantic_goal_drift` | Detect an unsanctioned target pivot relative to kickoff or prior checkpoint while suppressing legitimate narrowing, role shifts, replans, and unsupported delegated-parent claims. | Current structured objective, kickoff anchor, previous structured objective/checkpoint, stable target anchors, sanctioned-replan bit, delegation topology/visibility. | Structured extraction and checkpoint history supply the compared goals. | **Not applicable.** Outcome success does not establish target continuity. | **Not applicable.** | **Not applicable.** | **Not applicable.** | **Direct, required.** | **Not applicable.** | **Direct, required for the bounded opaque-parent guard.** | 56 focused scorer/state tests cover sanctioned replans, opaque/partial delegation, and internal `Fire` / `Suppress` / `NoClaim` routing. Separately, the bounded corpus-shape test proves fixture integrity only. The live analyzer-path acceptance test exercises only its 18 allowlisted pivot, narrowing, progression, and role-shift fixtures; it does not prove replan, delegation, or internal routing. The R6-3.X.2D corpus closeout recorded 110/110 sessions analyzable with 0 emitted fires after remediation. | No new failing witness. Progress or archetype would not make target-continuity reasoning more honest. | **Cutover complete** |
 | `truth_grounding_gap` | Detect write/verification action taken without first reading declared truth artifacts; preserve and recover history honestly. | Task-frame truth paths, interval command observations and event order, previous truth-gap score. | Working-set/task-frame extraction supplies the truth paths. | **Not applicable by design:** success/failure does not prove that required truth was read. | **Not applicable by design:** ordering is event-based, not turn-count based. | **Fit-for-purpose for archetype:** equivalent actions scored equally across planning and implementation frames. | **Not applicable:** later progress cannot retroactively establish prior grounding. | **Indirect boundary/source only.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Option-A internal path-scoped provenance now preserves action-before-read, historical-only non-grounding, same-path cross-checkpoint carry, path isolation, declaration pruning, session/trajectory isolation, multi-checkpoint carry, and non-consuming reads. Packet-locked controls passed `9 / 9`; the full family passed `22 / 22`; matching checkpoints passed `35` unit + `131` integration plus matching export/provenance tests; exact dead-end regressions and static gates remained green. Final proof-receipt series `fee9c2b16` + `6674a8316` received fresh `REVIEW CLEAN`. | `R6-GAP-TGG-TRUTH-PATH-ACTION` complete; terminal scorer disposition remains pending `R6-CLOSE`. | **Bounded gap complete / terminal disposition pending R6-CLOSE** |
 | `wrong_plan_branch` | Detect write/verification paths outside the task frame's expected truth/working-set scope and clear after a return in scope. | Truth-artifact paths, working-set paths, interval command paths and write/verification classification. | Objective/working-set extraction supplies expected paths; checkpoint boundaries isolate the current interval. | **Not applicable:** command outcome does not change path scope. | **Not applicable:** path scope is event-local. | **Not applicable:** exploration is already ignored unless it writes or verifies. | **Not applicable:** healthy progress cannot excuse mutation outside the authorized branch. | **Relevant through sanctioned continuity; the sanctioned-replan control passed.** | **Direct, required.** | **Proven for the bounded opaque-parent no-action case.** | Read-only exploration, sanctioned replan/path pivot, opaque-parent, and empty-authority controls pass. Historical witness `59f098b35` remains the preserved red receipt; after production fix `6b42e5476`, exact `CTX-R6-15` is `0 / Low / Cleared`, unflagged, with empty evidence, four protected controls pass, family is `6 / 6`, and checkpoint/full-analyzer/static walls are green. | Implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`; `R6-GAP-WPB-EMPTY-AUTHORITY` is complete. | **Bounded gap complete / terminal disposition pending `R6-CLOSE`** |
@@ -124,8 +125,8 @@ independent built-in `default` `REVIEW CLEAN`, completing the named gap. Authori
 `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default` `REVIEW CLEAN` and activates
 only `R6-REPLAY`; current active packet `R6-GAP-DET-REPLAY-STALL` owns trusted `CTX-R6-02` witness
 `60cde3dd7`. Its Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received
-fresh independent built-in `default` `REVIEW CLEAN`; current work is the pre-Rust DECISION REQUIRED
-`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` gate.
+fresh independent built-in `default` `REVIEW CLEAN`; the operator accepted Option A for
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14. Task `.1` is complete and Task `.2` is next.
 
 ## Broad R6 Acceptance-Claim Audit
 
@@ -158,7 +159,8 @@ authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent
 `REVIEW CLEAN`, marked aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY` with active
 packet `none`; Prompt 1 was then the sole next eligible invocation. That boundary is superseded by
 current replay state: `CTX-R6-01` is complete, trusted `CTX-R6-02` witness `60cde3dd7` is behavioral
-RED, and `R6-GAP-DET-REPLAY-STALL` is the active packet with Task `.0` docs-gate/review-fix series fresh independent `REVIEW CLEAN`; operator decision pending.
+RED, and `R6-GAP-DET-REPLAY-STALL` is the active packet with Task `.0` docs-gate/review-fix series
+fresh independent `REVIEW CLEAN`; Task `.1` Option A is accepted and Task `.2` is next.
 
 ## Verification Run For This Audit
 
@@ -194,8 +196,11 @@ code changed.
 ## Final R6 Status And R7 Promotion Gate
 
 **R6 status: PARTIAL; `R6-REPLAY` remains the sole active phase and
-`R6-GAP-DET-REPLAY-STALL` is the active packet with Task `.0` review-clean and the structured operator decision pending.** `CTX-R6-01` is fresh independent `REVIEW CLEAN`; trusted `CTX-R6-02` witness
-`60cde3dd7` is behavioral RED and owns this packet. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` now gates Rust. `CTX-R6-06`, replay family wall, terminal
+`R6-GAP-DET-REPLAY-STALL` is the active packet with Task `.0` review-clean, Task `.1` Option A
+accepted, and Task `.2` next.** `CTX-R6-01` is fresh independent `REVIEW CLEAN`; trusted `CTX-R6-02`
+witness `60cde3dd7` is behavioral RED and owns this packet. Task `.0` series `200725001` +
+`08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`.
+The operator accepted `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` Option A on 2026-07-14. `CTX-R6-06`, replay family wall, terminal
 dispositions, R6 close, and successor implementation remain pending or blocked.
 
 R7 may be promoted from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready only when:

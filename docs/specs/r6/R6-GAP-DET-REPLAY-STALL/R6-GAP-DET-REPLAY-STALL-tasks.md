@@ -1,8 +1,11 @@
 # Tasks: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / DECISION REQUIRED** within
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** within
 `R6-REPLAY`. Trusted witness `60cde3dd7` preserves `CTX-R6-02` red. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`.
-The current gate is DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit is authorized before explicit operator acceptance.
+The operator explicitly replied `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on
+2026-07-14, accepting the documented HIGH caller-context risk, locked `attempt.rs`-only fix, and
+packet proof wall. Task `.1` is complete; Tasks `.2`-`.4` are authorized in order. `CTX-R6-06`,
+`R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Required Commit Gate
 
@@ -26,7 +29,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - Boundary: do not run the witness or edit Rust until this task is committed and review-clean.
   - Current receipt: full series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.0` is complete.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.1 — Refresh impact and obtain the required operator decision.**
+- [x] **R6-GAP-DET-REPLAY-STALL.1 — Refresh impact and obtain the required operator decision.**
   - Prerequisite: Task 0 review-clean.
   - Refresh upstream impact for `pair_output_rows`; inspect `build_command_attempts` as its caller and
     packet-wide context.
@@ -36,6 +39,9 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`, recommending acceptance of the locked one-file fix plus
     full proof wall. Record explicit operator acceptance before any Rust edit.
   - Stop if refreshed risk is CRITICAL or the authorized boundary changes.
+  - Receipt: on 2026-07-14 the operator explicitly replied
+    `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A`, accepting the recorded HIGH caller-context
+    risk, locked `attempt.rs`-only change, and full packet proof wall. Task `.2` is now next.
 
 - [ ] **R6-GAP-DET-REPLAY-STALL.2 — Reconfirm the preserved behavioral red.**
   - Prerequisites: Tasks 0 and 1 complete.

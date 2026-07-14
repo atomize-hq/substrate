@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / DECISION REQUIRED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The current gate is DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit is authorized before explicit operator acceptance. `CTX-R6-06` follows packet completion.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14; Task `.1` is complete and Task `.2` is next. `CTX-R6-06` follows packet completion.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -326,7 +326,8 @@ complete and is never active alongside a gap.
   trusted fixture `019f1ecb-b93a-7570-8d8d-9ce4e711880b` is `HistoricalOnly / 20 / High`, unflagged.
 - `CTX-R6-02` — trusted subagent fixture `019eb311-c7ce-7f50-ae13-b51a5b5461c3` is preserved
   behavioral RED at `60cde3dd7` and routes to active packet `R6-GAP-DET-REPLAY-STALL`; packet docs
-  gate first, then DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` before Rust.
+  are review-clean, Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` is accepted, and Task `.2`
+  is next.
 - `CTX-R6-06` — run the existing frozen-corpus preservation control:
 
 ```bash

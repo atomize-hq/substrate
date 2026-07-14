@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** `CTX-R6-01` review-clean; witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` now gates Rust.
+**Verified against:** `CTX-R6-01` review-clean; witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` on 2026-07-14; Task `.1` is complete.
 
-**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.0` docs-gate/review-fix series fresh independent `REVIEW CLEAN`; decision pending; `CTX-R6-01` fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-02` behavioral RED at `60cde3dd7`)
+**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.0` docs-gate/review-fix series fresh independent `REVIEW CLEAN`; Task `.1` Option A accepted; Task `.2` preserved-red reconfirmation next; `CTX-R6-01` fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-02` behavioral RED at `60cde3dd7`)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / R6-GAP-DET-REPLAY-STALL TASK `.0` REVIEW-CLEAN / DECISION REQUIRED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` now gates Rust. Keep `CTX-R6-06`, R6 close, and R7/R8 blocked. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / R6-GAP-DET-REPLAY-STALL TASK `.0` REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; run Task `.2` next, then Tasks `.3`-`.4` in order. Keep `CTX-R6-06`, R6 close, and R7/R8 blocked. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 

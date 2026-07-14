@@ -1,8 +1,12 @@
 # R6-GAP-DET-REPLAY-STALL — Concurrent Replay Output Attribution
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / DECISION REQUIRED** within
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** within
 `R6-REPLAY`. Witness commit `60cde3dd7` preserves the trusted `CTX-R6-02` behavioral red. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`.
-The current gate is DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit is authorized before explicit operator acceptance.
+On 2026-07-14, the operator explicitly replied
+`DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A`, accepting the documented HIGH caller-context
+risk, the locked `attempt.rs`-only fix, and the packet proof wall. Task `.1` is complete; Tasks
+`.2`-`.4` are authorized in order, with preserved-red reconfirmation next. `CTX-R6-06`,
+`R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Objective And Preserved Witness
 
@@ -61,9 +65,11 @@ HIGH (`16` direct indexed callers/tests). Repository rules require warning befor
 impact is HIGH.
 
 After these docs are committed and fresh-review-clean, refresh both upstream impacts and issue a
-structured `DECISION REQUIRED` report with ID `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`. Do not edit
-Rust until the operator explicitly accepts the bounded one-file change with the proof wall below.
-If refreshed impact is CRITICAL or changes the owning boundary, recommend stopping instead.
+structured `DECISION REQUIRED` report with ID `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`. That gate
+was satisfied on 2026-07-14 when the operator explicitly selected Option A, accepting the bounded
+one-file change and proof wall below. This acceptance does not authorize scope outside
+`attempt.rs`; if refreshed impact becomes CRITICAL or changes the owning boundary, recommend
+stopping instead.
 
 ## Acceptance And Exact Proof
 

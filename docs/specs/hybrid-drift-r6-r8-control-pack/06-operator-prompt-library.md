@@ -303,9 +303,9 @@ result, current phase status, and the next eligible interaction.
 
 ## Current Packet Invocation
 
-Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. `R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. The current interaction is structured DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no Rust edit, `CTX-R6-06`, `R6-CLOSE`, R7, or R8 work is authorized before the operator response.
+Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. `R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. On 2026-07-14 the operator explicitly replied `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A`, accepting the documented HIGH caller-context risk, locked `attempt.rs`-only fix, and packet proof wall. Task `.1` is complete; Tasks `.2`-`.4` are authorized in order. `CTX-R6-06`, `R6-CLOSE`, R7, and R8 remain blocked.
 
-After operator acceptance, resume with this filled Prompt 6 invocation:
+Resolved Prompt 6 invocation and durable decision receipt:
 
 ```text
 /goal Record the supplied decision, then resume the exact blocked hybrid-drift scope through its normal proof, commit, and review-clean boundary.

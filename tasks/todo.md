@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` fresh independent `REVIEW CLEAN`; decision pending)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; trusted `CTX-R6-02` behavioral-RED witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` fresh independent `REVIEW CLEAN`; Task `.1` Option A accepted; Task `.2` next)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -54,8 +54,11 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
 - [x] Land first authority/status correction `08fa86e94`; this final status correction completes the
   current review-fix candidate without claiming the series review-clean.
 - [x] Complete packet Task `.0`; full docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`.
-- [ ] **Current decision gate:** DECISION REQUIRED `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; do not edit Rust before explicit operator acceptance.
-- [ ] Resolve `R6-GAP-DET-REPLAY-STALL` only after that decision, then run `CTX-R6-06`, focused
+- [x] Record explicit operator reply `DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on
+  2026-07-14. Task `.1` is complete; the locked `attempt.rs`-only fix and packet proof wall are
+  authorized.
+- [ ] Reconfirm the preserved `CTX-R6-02` behavioral red in packet Task `.2`, then complete Tasks
+  `.3`-`.4`. After the packet transition, run `CTX-R6-06`, focused
   scorer proof, full analyzer proof, and the bounded replay family wall.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.

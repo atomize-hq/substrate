@@ -1,9 +1,10 @@
 # Plan: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / DECISION REQUIRED** within
+Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` DECISION ACCEPTED / TASK `.2` NEXT** within
 `R6-REPLAY`. Witness `60cde3dd7` is preserved red. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default`
-`REVIEW CLEAN`. The current gate is DECISION REQUIRED
-`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; no production edit is authorized before operator acceptance.
+`REVIEW CLEAN`. On 2026-07-14 the operator explicitly selected Option A for
+`R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`, accepting the documented HIGH caller-context risk, the
+locked `attempt.rs`-only fix, and the packet proof wall. Task `.1` is complete; Task `.2` is next.
 
 ## Decisions
 
@@ -18,7 +19,7 @@ Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / DECISION REQUIRED**
 
 ### 0. Lock And Review The Packet
 
-Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.0` is complete and review-clean. Preserve the witness and do not edit Rust before the Task 1 operator decision.
+Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.0` is complete and review-clean. Historical boundary: the witness remained preserved and Rust was not authorized until the Task 1 operator decision, now accepted.
 
 ### 1. Refresh Impact And Obtain Operator Acceptance
 
@@ -28,6 +29,12 @@ HIGH for its caller/context (`16` direct indexed callers/tests). Because HIGH re
 issue `DECISION REQUIRED` ID `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` and stop the edit boundary until
 the operator accepts the bounded one-file change and proof wall. Stop/recommend rejection if impact
 becomes CRITICAL or the boundary widens.
+
+**Complete:** refreshed evidence remained LOW for `pair_output_rows` (`1` direct caller, `17`
+indexed impacts, `0` processes, `1` module) and HIGH for `build_command_attempts` caller context
+(`16` direct indexed callers/tests, `0` processes, `1` module). The operator replied
+`DECISION R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE: A` on 2026-07-14. Tasks `.2`-`.4` are authorized
+inside the locked packet boundary; `CTX-R6-06`, `R6-CLOSE`, and R7/R8 remain blocked.
 
 ### 2. Reconfirm The Preserved Red
 
