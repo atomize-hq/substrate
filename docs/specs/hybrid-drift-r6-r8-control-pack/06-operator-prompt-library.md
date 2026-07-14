@@ -303,29 +303,44 @@ result, current phase status, and the next eligible interaction.
 
 ## Current Packet Invocation
 
-`R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` and Task `.1` receipt
-`d788f45c9` are fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` exact pre-edit red is
-complete. The uncommitted Task `.3` pairing candidate is not proof or review-clean: it makes the new
-unit test green but exposes `CTX-R6-02` `InsufficientEvidence` and frozen `CTX-R6-06`
-`HistoricalOnly`. Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current. Task
-`.4`, `CTX-R6-06`, the family wall, `R6-CLOSE`, R7, and R8 remain blocked.
+`R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. Task `.2A` Option A is accepted
+and complete; packet-only amendment series `d631e0c56` + `6498c343f` received fresh independent
+built-in `default` `REVIEW CLEAN`. The uncommitted Task `.3` pairing candidate remains incomplete
+and is not proof or review-clean. No widened implementation is authorized. Task `.2B` decision
+`R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.4`, `CTX-R6-06`, the
+family wall, `R6-CLOSE`, R7, and R8 remain blocked.
 
 Current decision report:
 
 ```text
 DECISION REQUIRED
-ID: R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01
+ID: R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02
 PHASE/PACKET: R6-REPLAY / R6-GAP-DET-REPLAY-STALL
-QUESTION: Preserve the locked Stalled/Active CTX-R6-02 and frozen Recovered CTX-R6-06 contracts and authorize a review-clean same-packet amendment for the smallest call-ID cutover scope beyond attempt.rs, including accepted HIGH recovery_state impact?
-REPO EVIDENCE: Task .1 receipt d788f45c9 is REVIEW CLEAN; Task .2 reconfirmed exit 101 at acceptance_fixtures.rs:463. The uncommitted candidate truthfully pairs 420->423, 421->425, 474->477, and 475->479, but exact CTX-R6-02 exits 101 at line 455 with InsufficientEvidence instead of Stalled, and frozen CTX-R6-06 becomes HistoricalOnly after expected-negative 831->837 exit 1. assess_troubleshooting_progress impact is LOW; likely recovery_state impact is HIGH.
-WHY AUTHORITY CANNOT DECIDE: Prior acceptance authorized only attempt.rs. Progress, recovery, synthetic-helper scope, and HIGH recovery_state impact were not accepted.
+QUESTION: Preserve truthful pairing and canonical immediately-prior-Active recovery semantics by reclassifying the sticky CTX-R6-06 result to HistoricalOnly, discard the pairing candidate to retain Recovered, or redefine Recovered broadly?
+REPO EVIDENCE: Task .2A Option A is accepted and complete; packet amendment series d631e0c56 + 6498c343f is fresh independent REVIEW CLEAN. Clean f898d61e7 passes the exact sticky control 1/1 because checkpoint 9 is Regressing / Active 40 and checkpoint 10 is Recovered 20. The preserved uncommitted candidate truthfully pairs checkpoint 9's concurrent clean wall, yielding checkpoint 9 Advancing / HistoricalOnly 20 and checkpoint 10 HistoricalOnly 20. Expected-negative event 831->837 and recovery_state are non-causal; recovery_state does not read attempt outcomes. Canonical Recovered requires the immediately previous same-class score to be Active. Verified impacts are assess_troubleshooting_progress LOW 4/12/0/2, recovery_state HIGH 1/30/3/2, drift_state_for_score LOW 1/4/1/2, and assign_drift_states LOW 2/4/1/2.
+WHY AUTHORITY CANNOT DECIDE: The frozen Recovered expectation conflicts with canonical immediately-prior-Active semantics after truthful pairing removes the prior Active score. The accepted HIGH recovery_state boundary does not authorize editing a diagnosed non-causal seam.
 OPTIONS:
-A. Preserve both contracts and authorize a docs-first, fresh-review-clean same-packet amendment for the smallest call-ID cutover scope beyond attempt.rs, including accepted HIGH recovery_state impact, followed by refreshed impact, focused tests, bounded fix, full wall, atomic commits, and fresh review.
-B. Reject expansion, discard the uncommitted candidate, and leave CTX-R6-02, CTX-R6-06, the family wall, R6-CLOSE, and R7/R8 blocked.
-RECOMMENDATION: A. Pairing truth is proven diagnostically, but the two locked replay contracts still need explicit bounded authority.
-SAFE WORK ALREADY COMPLETED: Task .0 and Task .1 are review-clean; Task .2 is complete; the candidate and secondary reds are preserved but uncommitted.
-BLOCKED SCOPE ONLY: Further Rust/test-helper edits, candidate commit, Task .4, CTX-R6-06, family wall, packet transition, R6-CLOSE, and R7/R8.
-REPLY FORMAT: DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A|B|explicit alternative
+A. Reclassify sticky CTX-R6-06 to HistoricalOnly / 20, unflagged; preserve truthful pairing and canonical transition semantics; authorize the packet's conditional bounded Task .3 amendment after this gate is recorded and review-clean.
+B. Discard the uncommitted pairing candidate and retain frozen Recovered, leaving CTX-R6-02 unresolved and every downstream replay gate blocked.
+C. Redefine Recovered beyond immediately previous same-class Active and authorize a broad cross-family contract/test review.
+RECOMMENDATION: A. It preserves truthful call attribution and the already-canonical transition rule without editing the diagnosed non-causal recovery/state seams.
+SAFE WORK ALREADY COMPLETED: Task .2A and its packet amendment are fresh-review-clean; the candidate and secondary reds are preserved but uncommitted.
+BLOCKED SCOPE ONLY: Any widened Rust/test/expectation edit, candidate commit, Task .4, CTX-R6-06, family wall, packet transition, R6-CLOSE, and R7/R8.
+REPLY FORMAT: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A|B|C|explicit alternative
+```
+
+Historical resolved Task `.2A` Prompt 6 invocation:
+
+```text
+/goal Record the supplied decision, then resume the exact blocked hybrid-drift scope through its normal proof, commit, and review-clean boundary.
+
+REPO: /Users/spensermcconnell/.codex/worktrees/97a0/substrate
+PHASE_ID: R6-REPLAY
+ACTIVE_PACKET: R6-GAP-DET-REPLAY-STALL
+ESCALATION_ID: R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01
+RESOLUTION: ACCEPT the docs-first same-packet amendment and recorded HIGH recovery_state boundary
+RATIONALE: Operator selected Option A; amendment diagnosis and review still gate implementation.
+AUTONOMY_MODE: escalation-only
 ```
 
 Historical resolved Prompt 6 invocation and durable Task `.1` decision receipt:

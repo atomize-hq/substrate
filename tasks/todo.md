@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.1` acceptance receipt `d788f45c9` fresh independent `REVIEW CLEAN`; Task `.2` complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` required; Task `.3` incomplete; Task `.4` blocked)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.2A` Option A accepted and complete; packet amendment series `d631e0c56` + `6498c343f` fresh independent `REVIEW CLEAN`; Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` required; Task `.3` incomplete; Task `.4` blocked)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -59,10 +59,17 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
 - [x] Complete packet Task `.2`: exact pre-edit `CTX-R6-02` reconfirmation exited `101` at
   `acceptance_fixtures.rs:463` on the event-`420` evidence assertion; preserve
   `/tmp/r6-replay-stall-pre-edit-red.log`.
-- [ ] Resolve packet Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01`. The
-  uncommitted Task `.3` candidate makes call-ID pairing truthful but exposes `CTX-R6-02`
-  `InsufficientEvidence` and frozen `CTX-R6-06` `HistoricalOnly`; Task `.4`, `CTX-R6-06`, focused
-  scorer proof, full analyzer proof, and the replay family wall remain blocked.
+- [x] Resolve packet Task `.2A`: on 2026-07-14 the operator accepted
+  `DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A`. Packet-only amendment series
+  `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`.
+- [ ] Resolve packet Task `.2B` decision
+  `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02`. Clean `f898d61e7` transitions checkpoint
+  `9` `Regressing / Active 40` to checkpoint `10` `Recovered 20`; truthful pairing instead yields
+  checkpoint `9` `Advancing / HistoricalOnly 20` then checkpoint `10` `HistoricalOnly 20`.
+  Event `831 -> 837` and `recovery_state` are non-causal; canonical `Recovered` requires the
+  immediately previous same-class score to be `Active`. No widened implementation is authorized.
+  Task `.3` remains incomplete and uncommitted; Task `.4`, `CTX-R6-06`, focused scorer proof, full
+  analyzer proof, and the replay family wall remain blocked.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.
 - [ ] Begin bounded direct-child delegated-session support only after promotion.

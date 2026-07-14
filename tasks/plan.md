@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.1` acceptance receipt `d788f45c9` fresh independent `REVIEW CLEAN`; Task `.2` complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` required; Task `.3` incomplete; Task `.4` blocked)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.2A` Option A accepted and complete; packet amendment series `d631e0c56` + `6498c343f` fresh independent `REVIEW CLEAN`; Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` required; Task `.3` incomplete; Task `.4` blocked)**
 
 ## Dependency Order
 
@@ -26,16 +26,20 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
 7. **COMPLETE through fresh review-clean `6b42e5476` + `e65df2561` + `cd4e24119`:** the final named
    gap, `R6-GAP-WPB-EMPTY-AUTHORITY`, landed its bounded scorer fix, focused/family/checkpoint/full
    proof, receipt corrections, and fresh independent `REVIEW CLEAN`.
-8. **ACTIVE / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE:** authority transition series
+8. **ACTIVE / TASK `.2A` ACCEPTED AND COMPLETE / AMENDMENT REVIEW-CLEAN / TASK `.2B` DECISION REQUIRED / TASK `.3` INCOMPLETE:** authority transition series
    `56bb9966f` + `07a3b1fe5` is fresh independent built-in `default` `REVIEW CLEAN`. Replay then
    completed `CTX-R6-01` and preserved trusted `CTX-R6-02` behavioral RED at `60cde3dd7`. Active packet
    `R6-GAP-DET-REPLAY-STALL` has landed Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` +
    `9edf564d3`, which received fresh independent built-in `default` `REVIEW CLEAN`. On 2026-07-14
    the operator explicitly accepted Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE`; Task `.1`
    receipt `d788f45c9` received fresh independent `REVIEW CLEAN`. Task `.2` reconfirmed the exact
-   pre-edit red. The uncommitted Task `.3` candidate now exposes progress/recovery reds outside the
-   prior boundary, so Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current and
-   Task `.4` is blocked.
+   pre-edit red. The operator accepted Option A for Task `.2A`, and packet amendment series
+   `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. That amendment corrects the
+   sticky causality: truthful pairing removes checkpoint `9`'s `Active` state, not via event
+   `831 -> 837` or `recovery_state`, so canonical immediately-prior-`Active` recovery semantics now
+   conflict with the frozen `Recovered` expectation. Task `.2B` decision
+   `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.3` remains incomplete
+   and uncommitted, no widened implementation is authorized, and Task `.4` is blocked.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
@@ -68,7 +72,8 @@ transition series `56bb9966f` + `07a3b1fe5` also received fresh independent buil
 `R6-GAP-DET-REPLAY-STALL`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3`
 received fresh independent built-in `default` `REVIEW CLEAN`. Task `.1` decision receipt
 `d788f45c9` also received fresh independent built-in `default` `REVIEW CLEAN`, and Task `.2` is
-complete. The current gate is Task `.2A`, decision
-`R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01`; Task `.3` is incomplete with an uncommitted,
-unproven candidate and Task `.4` is blocked. No terminal scorer disposition, R6 close, or R7/R8 work
+complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` +
+`6498c343f` is fresh independent `REVIEW CLEAN`. The current gate is Task `.2B`, decision
+`R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02`; Task `.3` is incomplete with an uncommitted,
+unproven candidate, no widened implementation is authorized, and Task `.4` is blocked. No terminal scorer disposition, R6 close, or R7/R8 work
 is authorized yet.

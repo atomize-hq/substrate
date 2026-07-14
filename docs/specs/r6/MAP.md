@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.1` RECEIPT `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; trusted `CTX-R6-02` witness `60cde3dd7` remains the committed-baseline behavioral RED. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete. The uncommitted Task `.3` candidate exposes progress/recovery reds outside the prior acceptance, so Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current. `CTX-R6-06` remains blocked, and R6 close/R7 remain blocked. Closure authority is
+Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; trusted `CTX-R6-02` witness `60cde3dd7` remains the committed-baseline behavioral RED. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. The current gate is Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02`; Task `.3` remains incomplete and uncommitted with no widened implementation authority. `CTX-R6-06` remains blocked, and R6 close/R7 remain blocked. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
@@ -356,8 +356,13 @@ R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**. `R6-REPLAY` is the sole active 
 trusted `CTX-R6-02` witness `60cde3dd7` routes to active packet `R6-GAP-DET-REPLAY-STALL`.
 Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt
 `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete.
-Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current; Task `.3` is incomplete
-with an uncommitted candidate and Task `.4` is blocked.
+Task `.2A` Option A is accepted and complete; packet amendment series `d631e0c56` + `6498c343f`
+received fresh independent `REVIEW CLEAN`. The amendment records clean `f898d61e7` checkpoint `9`
+`Regressing / Active 40` then checkpoint `10` `Recovered 20`, versus candidate checkpoint `9`
+`Advancing / HistoricalOnly 20` then checkpoint `10` `HistoricalOnly 20`; event `831 -> 837` and
+`recovery_state` are non-causal. Task `.2B` decision
+`R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current; Task `.3` is incomplete with an
+uncommitted candidate and no widened implementation authority, and Task `.4` is blocked.
 
 ## Non-Goals For This Rescope
 

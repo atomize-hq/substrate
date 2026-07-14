@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.1` RECEIPT `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** on 2026-07-14. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -16,7 +16,7 @@ CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` also received fres
 built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`.
 `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is also fresh independent built-in
 `default` `REVIEW CLEAN`. Trusted `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED and routes
-to active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2` is complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` now gates the uncommitted Task `.3` candidate, and Task `.4` is blocked. `CTX-R6-06`, the family wall,
+to active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2` is complete; Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` now gates the uncommitted Task `.3` candidate, and Task `.4` is blocked. `CTX-R6-06`, the family wall,
 `R6-CLOSE`, and R7/R8 remain pending or blocked as owned.
 
 ## Required Staged Commit Gate
@@ -491,9 +491,11 @@ before that reconciled transition is committed and fresh-review-clean.
     `56bb9966f` + `07a3b1fe5` boundary, Prompt 1 for `R6-REPLAY` with active packet `none` was the
     sole next eligible invocation, and replay work had not yet started. Current replay state is
     recorded below: `CTX-R6-01` is complete, `CTX-R6-02` is preserved RED at `60cde3dd7`, and
-    `R6-GAP-DET-REPLAY-STALL` is the active packet. Task `.2` is complete; Task `.2A` decision
-    `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current; Task `.3` remains incomplete with an
-    uncommitted candidate; Task `.4` and later gates remain blocked.
+    `R6-GAP-DET-REPLAY-STALL` is the active packet. Task `.2A` Option A is accepted and complete;
+    packet amendment series `d631e0c56` + `6498c343f` is fresh independent `REVIEW CLEAN`. Task
+    `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current; Task `.3`
+    remains incomplete with an uncommitted candidate and no widened implementation authority; Task
+    `.4` and later gates remain blocked.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 
@@ -530,8 +532,10 @@ before that reconciled transition is committed and fresh-review-clean.
     exact match.
   - Route: active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` series and Task `.1` receipt
     `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete.
-    Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current; Task `.3` remains
-    incomplete with an uncommitted candidate and Task `.4` is blocked.
+    Task `.2A` Option A is accepted and complete; packet amendment series `d631e0c56` +
+    `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` decision
+    `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current; Task `.3` remains incomplete
+    with an uncommitted candidate and no widened implementation authority, and Task `.4` is blocked.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
   - Boundary: no `CTX-R6-06`, family wall, terminal disposition, `R6-CLOSE`, or R7/R8 work yet.
 
@@ -540,8 +544,11 @@ before that reconciled transition is committed and fresh-review-clean.
     `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture`.
   - Acceptance: preserve exactly three `Cleared / 0 / unflagged` final postures and one
     `Recovered / 20 / unflagged` final posture. This is invariance, not comparative improvement.
-  - Current candidate red: truthful pairing exposes expected-negative check `831 -> 837`, exit `1`,
-    and changes the sticky rollout to `HistoricalOnly`; Task `.2A` blocks execution/follow-up.
+  - Current candidate red: clean `f898d61e7` transitions checkpoint `9`
+    `Regressing / Active 40` to checkpoint `10` `Recovered 20`; truthful pairing instead yields
+    checkpoint `9` `Advancing / HistoricalOnly 20` then checkpoint `10` `HistoricalOnly 20`.
+    Expected-negative event `831 -> 837` and `recovery_state` are non-causal. Task `.2B` blocks
+    execution/follow-up.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture`.
   - Ownership: execution and any preservation follow-up remain entirely in `R6-REPLAY`.
 

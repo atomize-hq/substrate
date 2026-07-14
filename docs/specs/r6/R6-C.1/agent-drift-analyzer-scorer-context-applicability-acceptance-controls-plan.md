@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.1` RECEIPT `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` gates the uncommitted pairing candidate after it exposed progress and frozen-recovery reds. `CTX-R6-06` follows only after packet completion.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` gates the uncommitted pairing candidate; no widened implementation is authorized. `CTX-R6-06` follows only after packet completion.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -327,8 +327,11 @@ complete and is never active alongside a gap.
 - `CTX-R6-02` — trusted subagent fixture `019eb311-c7ce-7f50-ae13-b51a5b5461c3` is preserved
   behavioral RED at `60cde3dd7` and routes to active packet `R6-GAP-DET-REPLAY-STALL`; packet docs
   are review-clean, Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` is accepted, Task `.2` is
-  complete, and Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current. Task `.3`
-  remains incomplete with an uncommitted candidate; Task `.4` and later gates remain blocked.
+  complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` +
+  `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` decision
+  `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.3` remains incomplete
+  with an uncommitted candidate and no widened implementation authority; Task `.4` and later gates
+  remain blocked.
 - `CTX-R6-06` — run the existing frozen-corpus preservation control:
 
 ```bash
@@ -356,7 +359,7 @@ replaced in replay selection; they do not create a production gap.
 
 | IDs | Planned disposition |
 |---|---|
-| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Task `.2` is complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` is current; Task `.3` remains incomplete with an uncommitted candidate; Task `.4` and later gates remain blocked. |
+| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Task `.2A` Option A is accepted and complete; packet amendment series `d631e0c56` + `6498c343f` is review-clean; Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` is current. Task `.3` remains incomplete with an uncommitted candidate and no widened implementation authority; Task `.4` and later gates remain blocked. |
 | `CTX-R6-03` through `CTX-R6-05` | Row-atomic `dead_end_thrash` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-06` | Existing frozen-corpus preservation control executes only in `R6-REPLAY`. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no `semantic_goal_drift` reopening. |

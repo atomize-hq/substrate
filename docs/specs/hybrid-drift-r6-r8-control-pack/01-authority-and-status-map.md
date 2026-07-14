@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** `CTX-R6-01` review-clean; committed-baseline witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` complete; Task `.2A` decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01` current.
+**Verified against:** `CTX-R6-01` review-clean; committed-baseline witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` complete; Task `.2A` Option A accepted/complete; packet amendment series `d631e0c56` + `6498c343f` fresh independent `REVIEW CLEAN`; Task `.2B` decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02` current.
 
-**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.1` receipt `d788f45c9` fresh independent `REVIEW CLEAN`; Task `.2` complete; Task `.2A` decision required; Task `.3` uncommitted candidate incomplete; Task `.4` blocked; `CTX-R6-06` blocked)
+**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.2A` Option A accepted and complete; amendment `d631e0c56` + `6498c343f` review-clean; Task `.2B` decision required; Task `.3` uncommitted candidate incomplete; no widened implementation authorized; Task `.4` blocked; `CTX-R6-06` blocked)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / R6-GAP-DET-REPLAY-STALL TASK `.2` COMPLETE / TASK `.2A` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve review-clean Task `.1` receipt `d788f45c9` and completed Task `.2`. Obtain decision `R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01`; do not commit or widen the uncommitted candidate. Keep `CTX-R6-06`, family wall, R6 close, and R7/R8 blocked. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / R6-GAP-DET-REPLAY-STALL TASK `.2A` ACCEPTED AND COMPLETE / AMENDMENT REVIEW-CLEAN / TASK `.2B` DECISION REQUIRED / TASK `.3` INCOMPLETE / TASK `.4` BLOCKED** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve Task `.2A` and review-clean amendment series `d631e0c56` + `6498c343f`. Obtain decision `R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02`; do not commit or widen the uncommitted candidate. Keep `CTX-R6-06`, family wall, R6 close, and R7/R8 blocked. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
