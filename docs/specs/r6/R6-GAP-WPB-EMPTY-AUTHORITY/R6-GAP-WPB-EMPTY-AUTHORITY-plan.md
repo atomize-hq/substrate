@@ -17,9 +17,9 @@ Status: **COMPLETE — IMPLEMENTATION/REVIEW-FIX SERIES REVIEW CLEAN; AUTHORITY 
 
 Packet-doc series `8734f4dbe` + `334e7c6ac` contains only the three canonical packet docs and received fresh independent built-in `default` `REVIEW CLEAN`.
 
-### 1. Reconcile The Review-Clean Packet Across Current Authority — Landed Review Candidate Pending Fresh Review
+### 1. Reconcile The Review-Clean Packet Across Current Authority — Complete / Historical Review-Clean Gate
 
-After Step 0 is review-clean, make a separate narrow authority-only reconciliation across every live surface whose current status or next action still says these packet files are absent or that packet creation is next:
+Historical execution contract (completed): after Step 0 became review-clean, the separate packet-gate authority series reconciled every live surface whose current status or next action still said these packet files were absent or that packet creation was next:
 
 - root `SPEC.md`, `tasks/plan.md`, and `tasks/todo.md`;
 - `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` and `docs/specs/r6/MAP.md`;
@@ -29,11 +29,11 @@ After Step 0 is review-clean, make a separate narrow authority-only reconciliati
 - the completed `R6-GAP-TGG-TRUTH-PATH-ACTION` SPEC, PLAN, and TASKS current-status/next-action mirrors; and
 - `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-spec.md`, `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-plan.md`, and `docs/specs/r6/R6-C.1/agent-drift-analyzer-scorer-context-applicability-acceptance-controls-tasks.md`.
 
-Record the actual review-clean packet-doc series and exact packet paths. Keep `R6-GAP-WPB-EMPTY-AUTHORITY` `ACTIVE`, set `ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY`, keep `R6-REPLAY` `BLOCKED`, and make the exact `CTX-R6-15` witness reconfirmation the sole next action. Preserve historical witness `59f098b35` as `60 / Low / Active`, flagged, with command-action evidence, and preserve the separate locked target as `0 / Low / Cleared`, unflagged, with empty evidence. Do not update proof or terminal disposition beyond that committed history. Commit this reconciliation separately and fresh-review/fix until clean.
+That historical reconciliation recorded the review-clean packet-doc series and exact packet paths, kept `R6-GAP-WPB-EMPTY-AUTHORITY` `ACTIVE`, set `ACTIVE_PACKET: R6-GAP-WPB-EMPTY-AUTHORITY`, kept `R6-REPLAY` `BLOCKED`, and made the exact `CTX-R6-15` witness reconfirmation the sole next action. It preserved historical witness `59f098b35` as `60 / Low / Active`, flagged, with command-action evidence, and the separate locked target as `0 / Low / Cleared`, unflagged, with empty evidence, without adding proof or a terminal disposition.
 
-No witness rerun, impact command, production edit, or no-code receipt begins before Steps 0 and 1 are each committed and review-clean.
+The historical block on witness execution cleared only after Steps 0 and 1 were each committed and review-clean.
 
-Current result: Step 0 is complete at review-clean series `8734f4dbe` + `334e7c6ac`. Step 1 landed at `eb24b59da` as the packet-gate authority-reconciliation review candidate and is pending fresh review; it is not review-clean. Witness execution remains blocked until the corrected series is fresh-review-clean.
+Historical result: Step 0 is complete at review-clean series `8734f4dbe` + `334e7c6ac`. Step 1 is complete at packet-gate authority series `eb24b59da` + `e7006f4b2`, which received fresh independent built-in `default` `REVIEW CLEAN` and authorized Step 2. This gate is closed and does not route current operators backward.
 
 ### 2. Reconfirm The Witness And Select One Route
 
