@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-WPB-EMPTY-AUTHORITY
 
-Status: **ACTIVE — PACKET DOCS REVIEW CLEAN; PACKET-GATE AUTHORITY RECONCILIATION CANDIDATE; PRESERVED RED; NO GAP EXECUTION YET**. Witness `59f098b35` remains the only `CTX-R6-15` behavior receipt: historical `60 / Low / Active`, flagged, with command-action evidence, against the separate locked target `0 / Low / Cleared`, unflagged, with empty evidence. Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`; active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. Task 1 is the current uncommitted authority-only candidate, not a review-clean result. Do not check execution or transition tasks until their exact commit, verification, and fresh-review results exist.
+Status: **ACTIVE — PACKET DOCS REVIEW CLEAN; PACKET-GATE AUTHORITY RECONCILIATION CANDIDATE; PRESERVED RED; NO GAP EXECUTION YET**. Witness `59f098b35` remains the only `CTX-R6-15` behavior receipt: historical `60 / Low / Active`, flagged, with command-action evidence, against the separate locked target `0 / Low / Cleared`, unflagged, with empty evidence. Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`; active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. Task 1 landed at `eb24b59da` as the packet-gate authority-reconciliation review candidate and is pending fresh review; it is not review-clean. Keep Task 1 unchecked, and do not check execution or transition tasks until their exact commit, verification, and fresh-review results exist.
 
 ## Required Gates
 
@@ -37,7 +37,7 @@ Record risk, callers, processes, and modules. Impact every other existing symbol
   - Honesty: preserve witness `59f098b35` as historical `60 / Low / Active`, flagged, with command-action evidence; preserve target `0 / Low / Cleared`, unflagged, with empty evidence; add no new proof result, terminal scorer disposition, or gap-complete claim.
   - Commit/review: separate authority-only commit, staged gate, fresh built-in `default` review, authority-only fixes and fresh reviewers until clean.
   - Blocking rule: no Task 2 witness, Task 3 impact/edit, or no-code receipt begins first.
-  - Result: **CURRENT UNCOMMITTED CANDIDATE**. The authority-only reconciliation is present in the worktree but has no commit or review verdict yet. Exact `CTX-R6-15` witness reconfirmation remains blocked until this candidate is committed and fresh-review-clean.
+  - Result: **LANDED REVIEW CANDIDATE PENDING FRESH REVIEW**. Commit `eb24b59da` is the landed packet-gate authority-reconciliation review candidate; it is not review-clean. Keep Task 1 unchecked. Exact `CTX-R6-15` witness reconfirmation remains blocked until the corrected series is fresh-review-clean.
 
 - [ ] **R6-GAP-WPB-EMPTY-AUTHORITY.2 — Reconfirm the preserved witness and select one route.**
   - Prerequisite: Tasks 0 and 1 each committed and fresh-review-clean.

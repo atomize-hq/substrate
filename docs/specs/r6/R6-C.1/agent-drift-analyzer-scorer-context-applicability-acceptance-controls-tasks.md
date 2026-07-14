@@ -423,9 +423,9 @@ before that reconciled transition is committed and fresh-review-clean.
     fresh independent built-in `default` `REVIEW CLEAN`. Active successor
     `R6-GAP-WPB-EMPTY-AUTHORITY` then landed packet-doc series `8734f4dbe` + `334e7c6ac`, which
     received fresh independent built-in `default` `REVIEW CLEAN`. This generic task remains open only
-    because the required packet-gate authority reconciliation is the current uncommitted candidate;
-    exact `CTX-R6-15` witness reconfirmation remains blocked until that candidate is committed and
-    fresh-review-clean.
+    because the required packet-gate authority reconciliation landed at `eb24b59da` as the review
+    candidate pending fresh review; it is not review-clean. Exact `CTX-R6-15` witness reconfirmation
+    remains blocked until the corrected series is fresh-review-clean.
 
 - [ ] **R6-C.1.5.2 — Execute the review-clean active gap as one distinct phase.**
   - Prerequisite: R6-C.1.5.1 is review-clean for this exact named gap; its SPEC/PLAN/TASKS now exist; the

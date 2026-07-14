@@ -1,6 +1,6 @@
 # Plan: R6-GAP-WPB-EMPTY-AUTHORITY
 
-Status: **ACTIVE — PACKET DOCS REVIEW CLEAN; PACKET-GATE AUTHORITY RECONCILIATION CANDIDATE; PRESERVED RED; NO GAP EXECUTION YET**. Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`, and active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. The separate authority-only reconciliation is the current uncommitted candidate, not a review-clean result. No witness, production, no-code receipt, or replay work is authorized until it is committed and fresh-review-clean.
+Status: **ACTIVE — PACKET DOCS REVIEW CLEAN; PACKET-GATE AUTHORITY RECONCILIATION CANDIDATE; PRESERVED RED; NO GAP EXECUTION YET**. Packet-doc series `8734f4dbe` + `334e7c6ac` received fresh independent built-in `default` `REVIEW CLEAN`, and active packet is `R6-GAP-WPB-EMPTY-AUTHORITY`. The separate authority-only reconciliation landed at `eb24b59da` as the packet-gate review candidate and is pending fresh review; it is not review-clean. No witness, production, no-code receipt, or replay work is authorized until the corrected series is fresh-review-clean.
 
 ## Locked Decisions
 
@@ -17,7 +17,7 @@ Status: **ACTIVE — PACKET DOCS REVIEW CLEAN; PACKET-GATE AUTHORITY RECONCILIAT
 
 Packet-doc series `8734f4dbe` + `334e7c6ac` contains only the three canonical packet docs and received fresh independent built-in `default` `REVIEW CLEAN`.
 
-### 1. Reconcile The Review-Clean Packet Across Current Authority — Current Candidate
+### 1. Reconcile The Review-Clean Packet Across Current Authority — Landed Review Candidate Pending Fresh Review
 
 After Step 0 is review-clean, make a separate narrow authority-only reconciliation across every live surface whose current status or next action still says these packet files are absent or that packet creation is next:
 
@@ -33,7 +33,7 @@ Record the actual review-clean packet-doc series and exact packet paths. Keep `R
 
 No witness rerun, impact command, production edit, or no-code receipt begins before Steps 0 and 1 are each committed and review-clean.
 
-Current result: Step 0 is complete at review-clean series `8734f4dbe` + `334e7c6ac`. Step 1 is the current uncommitted authority-only candidate and has no commit or review-clean verdict yet.
+Current result: Step 0 is complete at review-clean series `8734f4dbe` + `334e7c6ac`. Step 1 landed at `eb24b59da` as the packet-gate authority-reconciliation review candidate and is pending fresh review; it is not review-clean. Witness execution remains blocked until the corrected series is fresh-review-clean.
 
 ### 2. Reconfirm The Witness And Select One Route
 
