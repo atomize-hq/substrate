@@ -1,6 +1,6 @@
 # Tasks: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — OPTION-A PACKET-AMENDMENT GATE**. The operator explicitly decided `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`. Current HEAD/decision receipt is `48f259d25`; test-only witness `6409ae072` is independently `REVIEW CLEAN`. This working-tree amendment authorizes no implementation. Task 2A is the sole current action, Task 2B is the separate ledger-only gate, and Task 3A, Task 4, the transition, and successor work remain incomplete.
+Status: **ACTIVE — OPTION-A PACKET-AMENDMENT REVIEW GATE**. The operator explicitly decided `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A`. Decision receipt `48f259d25` and independently review-clean test witness `6409ae072` remain historical evidence. Packet-amendment candidate `49b2bbd7f` has landed and is pending fresh review; Task 2A remains unchecked until its packet-only series receives fresh built-in `default` `REVIEW CLEAN`. Task 2B is the separate ledger-only gate, and Task 3A, Task 4, the transition, and successor work remain incomplete.
 
 ## Required Gates
 
@@ -25,7 +25,7 @@ If any current scorer helper is edited, run its own exact command first:
 
 ```bash
 npx gitnexus impact historical_truth_grounding_gap_evidence -r 97a0-substrate --direction upstream --depth 3
-npx gitnexus impact dedupe_evidence -r 97a0-substrate --direction upstream --depth 3
+npx gitnexus impact Function:crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs:dedupe_evidence -r 97a0-substrate --direction upstream --depth 3
 npx gitnexus impact first_event_index -r 97a0-substrate --direction upstream --depth 3
 npx gitnexus impact is_historical_truth_grounding_gap_reason -r 97a0-substrate --direction upstream --depth 3
 ```
@@ -51,11 +51,12 @@ Record a separate literal pre-edit command/result for every other existing helpe
   - Decision: operator selected `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` on 2026-07-13.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.2A — Commit and freshly review this Option-A packet amendment.**
-  - Current action: exactly this SPEC, PLAN, and TASKS; no other file.
+  - Landed candidate: `49b2bbd7f` (`docs: authorize typed grounding provenance`) is pending fresh review and does not complete this task.
+  - Current review-fix scope: exactly this SPEC, PLAN, and TASKS; no other file.
   - Required amendment: replace docs-only/scorer-only implementation authority with the bounded typed, session-local, path-scoped seam across `score_truth_grounding_gap`, `score_session`, and `analyze_loaded_bundle` plus necessary private helpers, focused tests, TASKS, and the canonical ledger.
   - Verify: inspect only the three-file diff and run `git diff --check`; do not run scorer tests or edit implementation.
   - Commit/review: atomic packet-only commit; fresh built-in `default`; docs-only fixes in new commits and fresh reviewers until `REVIEW CLEAN`.
-  - Completion record: leave unchecked until the commit hash and actual fresh review verdict exist.
+  - Completion record: leave unchecked until the packet-amendment candidate/fix series has an actual fresh `REVIEW CLEAN` verdict; `49b2bbd7f` alone is not completion.
   - Stop rule: Task 2B and Task 3A remain unauthorized until this task is committed and review-clean.
 
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.2B — Reconcile the Option-A decision in the canonical ledger.**
@@ -70,30 +71,40 @@ Record a separate literal pre-edit command/result for every other existing helpe
 - [ ] **R6-GAP-TGG-TRUTH-PATH-ACTION.3A — Implement and prove Option-A typed provenance.**
   - Prerequisites: Tasks 2A and 2B committed and fresh-review-clean; all required GitNexus impacts below HIGH; no unisolatable unrelated work.
   - Allowed files only:
-    - `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs` — `score_truth_grounding_gap` and necessary private internal provenance types/helpers;
-    - `crates/agent-drift-analyzer/src/scoring/mod.rs` — `score_session` and necessary private threading types/helpers;
+    - `crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs` — `score_truth_grounding_gap`, the provenance type (private unless cross-module signature threading requires `pub(crate)`), and necessary private helpers;
+    - `crates/agent-drift-analyzer/src/scoring/mod.rs` — `score_session` and necessary private threading helpers;
     - `crates/agent-drift-analyzer/src/lib.rs` — `analyze_loaded_bundle` and necessary private per-session initialization/threading helpers;
     - `crates/agent-drift-analyzer/tests/truth_grounding_gap.rs` — focused provenance behavior only;
     - this TASKS — actual commands/results/review state;
     - `docs/specs/hybrid-drift-r6-r8-control-pack/05-proof-decision-regression-ledger.md` — actual named-gap evidence only.
   - Provenance source: qualifying typed read observations plus event order only. Never `DriftScore`, `raw_score`, `state`, `flagged`, historical posture, evidence presence, or evidence reason strings.
-  - Path rule: carry only a matching truth path still declared in the current task frame; path A read never grounds path B action; dropping a path from the frame drops its carried eligibility.
-  - Session rule: initialize/reset per bundle session; never cross parent/child or sibling trajectories.
-  - Temporal rule: same-path read must carry across the tested next checkpoint boundary. This is not authority for freshness, TTL, maximum-age, or read-consumption semantics.
+  - Path rule: carry only a matching truth path still declared in the current task frame; path A read never grounds path B action; dropping a path from the frame permanently drops that carried read, so later re-declaration requires a new qualifying read.
+  - Session rule: initialize/reset per bundle session; never cross sessions or move from parent to child. Prove parent-to-child non-inheritance only through existing analyzer bundle/session fixtures; do not add or validate R7 topology.
+  - Temporal rule: same-path read must carry across the next checkpoint, across multiple checkpoints, and after a prior same-path action while the path remains declared. This is proof against packet-authorized TTL/expiry/maximum-checkpoint/read-consumption behavior, not authority to introduce any such semantics.
+  - Visibility rule: every new helper is private. The provenance type is private unless cross-module signature threading requires `pub(crate)`; no helper and no other new item may use `pub(crate)`.
   - Public boundary: no public API/schema/export/replay/sentinel/presentation change and no other scorer/context/classifier change.
   - Preserve focused controls:
     - original `truth_grounding_gap_flags_truth_path_action_before_read` remains exact `80 / High / Active`, flagged, with authority and action evidence;
     - historical-only recovery does not ground the later action;
     - real same-path read grounds the next-checkpoint action;
-    - path A read does not ground path B action;
-    - provenance does not cross sessions/parent-child trajectories.
+    - `truth_grounding_gap_does_not_ground_path_b_from_path_a_read` asserts the path-B action at `80 / High / Active`, flagged;
+    - `truth_grounding_gap_does_not_resurrect_read_after_path_redeclaration` asserts the re-declared-path action at `80 / High / Active`, flagged after an intervening frame removed the path;
+    - `truth_grounding_gap_does_not_carry_read_across_sessions` asserts the later session's same-path action at `80 / High / Active`, flagged;
+    - `truth_grounding_gap_does_not_inherit_parent_read_in_child_session` asserts the child session's same-path action at `80 / High / Active`, flagged;
+    - `truth_grounding_gap_carries_clean_read_across_multiple_checkpoints` asserts the later same-path action at `0 / Medium / Cleared`, unflagged;
+    - `truth_grounding_gap_retains_clean_read_after_prior_same_path_action` asserts the later same-path action at `0 / Medium / Cleared`, unflagged.
   - Run focused before family/checkpoint/static wall:
 
     ```bash
     cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_truth_path_action_before_read -- --exact --nocapture
     cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_reactivates_truth_path_action_after_historical_only_recovery -- --exact --nocapture
     cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_carries_clean_read_to_next_checkpoint_truth_path_action -- --exact --nocapture
-    # Run each added path-scope/session-isolation control individually with --exact here.
+    cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_ground_path_b_from_path_a_read -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_resurrect_read_after_path_redeclaration -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_carry_read_across_sessions -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_inherit_parent_read_in_child_session -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_carries_clean_read_across_multiple_checkpoints -- --exact --nocapture
+    cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_retains_clean_read_after_prior_same_path_action -- --exact --nocapture
     cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture
     cargo test -p agent-drift-analyzer checkpoints -- --nocapture
     cargo fmt --all -- --check

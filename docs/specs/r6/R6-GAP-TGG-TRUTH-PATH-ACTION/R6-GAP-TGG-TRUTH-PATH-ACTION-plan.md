@@ -1,6 +1,6 @@
 # Plan: R6-GAP-TGG-TRUTH-PATH-ACTION
 
-Status: **ACTIVE — OPTION-A PACKET-AMENDMENT GATE**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` is operator-decided. Current HEAD/receipt is `48f259d25`; review-clean witness `6409ae072` preserves the two opposite cross-checkpoint failures. Do not implement from this working tree amendment. First commit and freshly review the three packet docs, then land and freshly review the separate ledger-only decision reconciliation.
+Status: **ACTIVE — OPTION-A PACKET-AMENDMENT REVIEW GATE**. `R6-TGG-CROSS-CHECKPOINT-PROVENANCE-01 = A` is operator-decided. Decision receipt `48f259d25` and review-clean witness `6409ae072` preserve the two opposite cross-checkpoint failures. Packet-amendment candidate `49b2bbd7f` has landed and is pending fresh review; Task 2A remains unchecked until the packet-amendment series receives fresh built-in `default` `REVIEW CLEAN`. Do not implement before that verdict and the separate ledger-only decision reconciliation are each review-clean.
 
 ## Locked Decisions
 
@@ -9,18 +9,18 @@ Status: **ACTIVE — OPTION-A PACKET-AMENDMENT GATE**. `R6-TGG-CROSS-CHECKPOINT-
 3. Never infer provenance from `DriftScore`, `raw_score`, `state`, `flagged`, evidence presence, historical posture, or evidence reason strings.
 4. Carry only matching paths still declared in the current task frame; a read of path A never grounds an action against path B.
 5. Initialize provenance per session and never cross parent/child or sibling trajectories.
-6. Preserve the original `CTX-R6-12`, make historical-only context non-grounding, and let a real same-path read carry across the tested next checkpoint boundary.
-7. Add no freshness, TTL, or read-consumption semantics without separate evidence and a separate decision.
+6. Preserve the original `CTX-R6-12`, make historical-only context non-grounding, and let a real same-path read carry across the next checkpoint, across multiple checkpoints, and after a prior same-path action while the path remains declared.
+7. A removed path loses the carried read permanently; later re-declaration requires a new qualifying read. Add no freshness, TTL, expiry, maximum-checkpoint, or read-consumption semantics without separate evidence and a separate decision.
 8. Make no public API, schema, export, replay, sentinel, or presentation change.
 9. Keep Task 3A, Task 4, the transition, and successor work incomplete until their actual proof and review gates pass.
 
 ## Ordered Execution
 
-### 0. Land This Packet Amendment
+### 0. Finish Fresh Review Of The Landed Packet-Amendment Candidate
 
-Current allowed files are exactly the three packet docs. Inspect only that diff, run `git diff --check`, commit atomically, and dispatch a fresh built-in `default` reviewer. Apply docs-only findings in new docs-only commits and use a fresh built-in `default` reviewer each time until `REVIEW CLEAN`.
+Candidate `49b2bbd7f` has landed and is pending fresh review. Current allowed review-fix files are exactly the same three packet docs. Inspect only that diff, run `git diff --check`, commit fixes atomically, and dispatch a fresh built-in `default` reviewer. Apply docs-only findings in new docs-only commits and use a fresh built-in `default` reviewer each time until `REVIEW CLEAN`. Keep Task 2A unchecked until the clean verdict exists.
 
-No ledger, source, test, staging beyond the intended packet docs, or implementation is authorized by the working-tree amendment itself.
+No ledger, source, test, staging beyond the intended packet docs, or implementation is authorized while the landed packet-amendment candidate remains review-pending.
 
 ### 1. Reconcile The Operator Decision In The Canonical Ledger
 
@@ -52,7 +52,7 @@ If an existing helper will change, run its own literal command before editing it
 
 ```bash
 npx gitnexus impact historical_truth_grounding_gap_evidence -r 97a0-substrate --direction upstream --depth 3
-npx gitnexus impact dedupe_evidence -r 97a0-substrate --direction upstream --depth 3
+npx gitnexus impact Function:crates/agent-drift-analyzer/src/scoring/truth_grounding_gap.rs:dedupe_evidence -r 97a0-substrate --direction upstream --depth 3
 npx gitnexus impact first_event_index -r 97a0-substrate --direction upstream --depth 3
 npx gitnexus impact is_historical_truth_grounding_gap_reason -r 97a0-substrate --direction upstream --depth 3
 ```
@@ -67,9 +67,9 @@ Within only the allowed Option-A files:
 2. In `scoring/mod.rs`, thread that internal value through `score_session` only as necessary for `truth_grounding_gap`; do not change scorer ordering or another scorer's contract.
 3. In `scoring/truth_grounding_gap.rs`, make `score_truth_grounding_gap` consult/update typed path-scoped provenance. Derive it only from qualifying read-like `CommandObservation`s and event order. Retain entries only for matching currently declared truth paths.
 4. Keep historical evidence generation separate from provenance. Historical-only state may inform disposition/evidence but cannot ground an action.
-5. In `tests/truth_grounding_gap.rs`, preserve the original and review-clean witnesses and add the smallest focused controls needed for path A/path B isolation and per-session/parent-child reset.
+5. In `tests/truth_grounding_gap.rs`, preserve the three original/history/next-checkpoint controls and add the six exact lifecycle controls named in Step 4: path A/B isolation, removal plus re-declaration, bundle-session isolation, parent-to-child non-inheritance through existing analyzer fixtures without adding or validating R7 topology, carry across multiple checkpoints, and carry after a prior same-path action.
 
-Necessary private or `pub(crate)` non-exported types/helpers may live only in `truth_grounding_gap.rs`, `scoring/mod.rs`, or `lib.rs`. No other file is an implementation escape hatch.
+Every new helper must be private. The provenance type must be private unless cross-module signature threading makes `pub(crate)` visibility necessary; no helper and no other new item may use `pub(crate)`. Those items may live only in `truth_grounding_gap.rs`, `scoring/mod.rs`, or `lib.rs`. No other file is an implementation escape hatch.
 
 ### 4. Prove Focused Before Family
 
@@ -79,9 +79,15 @@ Run the exact focused controls first:
 cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_flags_truth_path_action_before_read -- --exact --nocapture
 cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_reactivates_truth_path_action_after_historical_only_recovery -- --exact --nocapture
 cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_carries_clean_read_to_next_checkpoint_truth_path_action -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_ground_path_b_from_path_a_read -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_resurrect_read_after_path_redeclaration -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_carry_read_across_sessions -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_does_not_inherit_parent_read_in_child_session -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_carries_clean_read_across_multiple_checkpoints -- --exact --nocapture
+cargo test -p agent-drift-analyzer --test truth_grounding_gap truth_grounding_gap_retains_clean_read_after_prior_same_path_action -- --exact --nocapture
 ```
 
-Run every newly added path-scope or session-isolation test individually with `--exact` before continuing. Then run:
+Only after all nine exact controls pass, run:
 
 ```bash
 cargo test -p agent-drift-analyzer --test truth_grounding_gap -- --nocapture
@@ -92,7 +98,7 @@ cargo clippy -p agent-drift-analyzer --all-targets -- -D warnings
 git diff --check
 ```
 
-The original `CTX-R6-12`, historical-only non-grounding, one-boundary same-path carry, path isolation, session isolation, the full owning target, and checkpoints must all be green. Record actual counts/results in TASKS and the canonical ledger; do not infer them from earlier receipts.
+The original `CTX-R6-12`, historical-only non-grounding, one-boundary same-path carry, path A/B isolation, removal/re-declaration invalidation, bundle-session isolation, parent-to-child non-inheritance, multi-checkpoint carry, non-consuming prior-action carry, the full owning target, and checkpoints must all be green. Record actual counts/results in TASKS and the canonical ledger; do not infer them from earlier receipts.
 
 ### 5. Commit And Fresh-Review The Closure Candidate
 
