@@ -13,7 +13,7 @@ use agent_session_compactor::{
     DelegationLinkState, SourceKind, UserMessageRole,
 };
 use camino::Utf8PathBuf;
-use support::BundleFixture;
+use support::{read_checkpoints, BundleFixture};
 
 const PARENT: &str = "session-parent";
 const CHILD_A: &str = "session-child-a";
@@ -246,6 +246,149 @@ fn delegation_heuristics_are_used_only_when_typed_graph_truth_is_absent() {
         vec!["spawn_agent".to_string()],
         "markers remain observable but do not drive the role when graph truth exists"
     );
+}
+
+#[test]
+fn delegation_summary_matches_verified_graph_parent_checkpoint() {
+    let fixture = delegation_fixture(&[PARENT, CHILD_A]);
+    let result = analyze_with_links(&fixture, vec![verified_link(PARENT, CHILD_A, 1, 0)]);
+
+    assert_summary_matches_exported_delegation(&result, PARENT);
+}
+
+#[test]
+fn delegation_summary_matches_verified_graph_child_with_local_marker_checkpoint() {
+    let fixture = verified_child_with_local_spawn_marker_fixture();
+    let result = analyze_with_links(&fixture, vec![verified_link(PARENT, CHILD_A, 1, 0)]);
+
+    assert_summary_matches_exported_delegation(&result, CHILD_A);
+}
+
+#[test]
+fn delegation_summary_matches_partial_closure_checkpoint() {
+    let fixture = delegation_fixture(&[PARENT, CHILD_A]);
+    let result = analyze_with_links(
+        &fixture,
+        vec![
+            verified_link(PARENT, CHILD_A, 1, 0),
+            typed_link(
+                PARENT,
+                "session-missing-child",
+                None,
+                None,
+                DelegationLinkState::ParentOnly,
+                vec![delegation_evidence(PARENT, 1)],
+                Vec::new(),
+            ),
+        ],
+    );
+
+    assert_summary_matches_exported_delegation(&result, PARENT);
+}
+
+#[test]
+fn delegation_summary_matches_conflict_opaque_checkpoint() {
+    let fixture = delegation_fixture(&[PARENT, CHILD_A]);
+    let result = analyze_with_links(
+        &fixture,
+        vec![
+            verified_link(PARENT, CHILD_A, 1, 0),
+            typed_link(
+                PARENT,
+                "session-conflicted-child",
+                Some("session-other-parent"),
+                Some(1),
+                DelegationLinkState::ConflictingParent,
+                vec![delegation_evidence(PARENT, 1)],
+                vec![delegation_evidence("session-conflicted-child", 0)],
+            ),
+        ],
+    );
+
+    assert_summary_matches_exported_delegation(&result, PARENT);
+}
+
+fn assert_summary_matches_exported_delegation(result: &AnalyzeResult, session_id: &str) {
+    let exported_checkpoints = read_checkpoints(&result.checkpoints_path);
+    let exported = exported_checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.session_id == session_id)
+        .max_by_key(|checkpoint| checkpoint.ordinal)
+        .expect("exported session checkpoint");
+    assert_eq!(
+        &exported.delegation,
+        &final_checkpoint(result, session_id).delegation,
+        "checkpoints.jsonl must preserve the public checkpoint delegation context"
+    );
+
+    let delegation_json = serde_json::to_value(&exported.delegation)
+        .expect("serialize public delegation context for summary comparison");
+    let topology = delegation_json["topology"]
+        .as_str()
+        .expect("delegation topology wire name");
+    let visibility = delegation_json["child_work_visibility"]
+        .as_str()
+        .expect("delegation visibility wire name");
+    let confidence = delegation_json["confidence"]
+        .as_str()
+        .expect("delegation confidence wire name");
+    let markers = delegation_json["markers"]
+        .as_array()
+        .expect("delegation marker list")
+        .iter()
+        .map(|marker| marker.as_str().expect("delegation marker"))
+        .collect::<Vec<_>>();
+    let markers = if markers.is_empty() {
+        "none".to_string()
+    } else {
+        markers.join(",")
+    };
+    let support = format_summary_delegation_evidence(&exported.delegation.supporting_evidence);
+    let counter = format_summary_delegation_evidence(&exported.delegation.counter_evidence);
+
+    let summary = fs::read_to_string(&result.summary_path).expect("summary");
+    let session_header = format!("## {session_id}\n");
+    let session_section = summary
+        .split_once(&session_header)
+        .map(|(_, tail)| tail)
+        .and_then(|tail| tail.split("\n## ").next())
+        .expect("session summary section");
+    let checkpoint_header = format!("- {}:", exported.checkpoint_id);
+    let checkpoint_section = session_section
+        .split_once(&checkpoint_header)
+        .map(|(_, tail)| tail)
+        .and_then(|tail| tail.split("\n- ").next())
+        .expect("checkpoint summary section");
+    let expected = format!(
+        "  delegation: `topology={topology} visibility={visibility} confidence={confidence} markers={markers} support[{support}] counter[{counter}]`"
+    );
+    assert!(
+        checkpoint_section.lines().any(|line| line == expected),
+        "summary delegation must match checkpoints.jsonl for {}\nexpected: {expected}\ncheckpoint summary:{checkpoint_section}",
+        exported.checkpoint_id
+    );
+}
+
+fn format_summary_delegation_evidence(evidence: &[agent_drift_analyzer::EvidenceRef]) -> String {
+    if evidence.is_empty() {
+        return "none".to_string();
+    }
+
+    evidence
+        .iter()
+        .map(|item| {
+            let source = item
+                .row
+                .source_file
+                .file_name()
+                .unwrap_or(item.row.source_file.as_str());
+            format!(
+                "{source}@{}:{} {}",
+                item.row.event_index, item.row.row_ordinal, item.reason
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn assert_opaque_ambiguous(checkpoint: &agent_drift_analyzer::Checkpoint) {

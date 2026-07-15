@@ -6,7 +6,6 @@ use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessage
 use camino::{Utf8Path, Utf8PathBuf};
 use time::OffsetDateTime;
 
-use super::checkpoint_analyses;
 use crate::checkpoint::{
     Checkpoint, ChildWorkVisibility, Confidence, DelegationTopology, DriftClass, ProgressDimension,
     ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress, StructuredObjective,
@@ -637,9 +636,21 @@ fn summarize_session(session: &BundleSession, checkpoints: &[&Checkpoint]) -> Se
     let spacing = checkpoint_spacing(session, &sorted_checkpoints);
     let checkpoint_stats = summarize_checkpoint_diagnostics(&sorted_checkpoints);
     let progress_distribution = summarize_progress_distribution(&sorted_checkpoints);
-    let delegation_by_ordinal = checkpoint_analyses(session)
-        .into_iter()
-        .map(|analysis| (analysis.ordinal, analysis.delegation))
+    let delegation_by_ordinal = sorted_checkpoints
+        .iter()
+        .map(|checkpoint| {
+            (
+                checkpoint.ordinal,
+                DelegationInference {
+                    topology: Some(checkpoint.delegation.topology),
+                    child_work_visibility: Some(checkpoint.delegation.child_work_visibility),
+                    confidence: Some(checkpoint.delegation.confidence),
+                    markers: checkpoint.delegation.markers.clone(),
+                    supporting_evidence: checkpoint.delegation.supporting_evidence.clone(),
+                    counter_evidence: checkpoint.delegation.counter_evidence.clone(),
+                },
+            )
+        })
         .collect::<BTreeMap<_, _>>();
     let metrics = SessionSummaryMetrics {
         turns_observed: session_turn_count(session),
