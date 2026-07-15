@@ -63,7 +63,8 @@ none is red. It does not close R6.
 7. **Frozen-corpus preservation is executable but replay-owned (`CTX-R6-06`).** `R6-REPLAY` must run
    existing test
    `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture` and preserve three
-   `Cleared / 0 / unflagged` cases plus one `Recovered / 20 / unflagged` sticky case. This remains
+   `Cleared / 0 / unflagged` cases plus one `HistoricalOnly / 20 / unflagged` sticky case. The prior
+   `Recovered / 20 / unflagged` result is historical baseline only, not current authority. This remains
    posture invariance, not comparative integrated improvement.
 8. **Phase transitions are exclusive.** No `R6-GAP-*` phase runs while `R6-C.1-CONTROLS` remains
    active. Every red matrix row gets a distinct named gap phase. Gap phases transition sequentially in
@@ -249,7 +250,7 @@ transition is committed and a fresh independent reviewer says `REVIEW CLEAN`.
 |---|---|
 | `CTX-R6-01`, `CTX-R6-02` | Exact integrated controls specified above; execution remains `R6-REPLAY`. |
 | `CTX-R6-03` through `CTX-R6-05` | Open `dead_end_thrash` controls in `R6-C.1-CONTROLS`. |
-| `CTX-R6-06` | Existing exact frozen-corpus preservation control is specified above; execution stays `R6-REPLAY` and must preserve three cleared plus one recovered posture. |
+| `CTX-R6-06` | Existing exact frozen-corpus preservation control is specified above; execution stays `R6-REPLAY` and must preserve three cleared plus one sticky `HistoricalOnly / 20 / unflagged` posture. `Recovered / 20 / unflagged` is historical baseline only, not current authority. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no reopen here. |
 | `CTX-R6-09` through `CTX-R6-13` | Open `truth_grounding_gap` controls in `R6-C.1-CONTROLS`. |
 | `CTX-R6-14`, `CTX-R6-15` | Open `wrong_plan_branch` controls in `R6-C.1-CONTROLS`. |
