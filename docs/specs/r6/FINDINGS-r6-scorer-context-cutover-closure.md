@@ -260,7 +260,8 @@ MAP/SPEC/PLAN/TASKS implementation-ready, and received fresh independent built-i
 CLEAN`; `R7-PROMOTE` is complete. The narrow status transition series `6bf0ac6ad` + `4a887ee0c` +
 `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` each received
-fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. `R7-1` is active at entry
-only with packet `none`; transition commit `339744dff` awaits fresh review. `R7-1.1` is next,
-unchecked, and unstarted. Production implementation remains unstarted; `R7-2..R7-6` and R8 remain
-blocked.
+fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
+`339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-1` is
+active at entry only with packet `none`; `R7-1.1` is next, unchecked, and unstarted. Production
+implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked. Prompt 1 for `R7-1` / `none`
+is prepared but has not been started.

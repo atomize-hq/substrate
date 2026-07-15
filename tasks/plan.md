@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0.2` commit `fa85cd4b8` and the complete `R7-0` phase are fresh independent built-in `default` `REVIEW CLEAN`; the narrow `R7-0 -> R7-1` transition commit is pending fresh review; `R7-1.1` is next and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked)**
+Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is complete and review-clean; transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default` `REVIEW CLEAN`; `R7-1.1` is next, unchecked, and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked; Prompt 1 for `R7-1` / `none` is prepared but not started)**
 
 ## Dependency Order
 
@@ -56,13 +56,14 @@ Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0.2` c
     `REVIEW CLEAN`. Fixture-only `R7-0.2` commit `fa85cd4b8` also received fresh independent
     built-in `default` `REVIEW CLEAN`; focused `2 / 2`, compactor `25 / 25` including end-to-end
     `2 / 2`, and privacy scans over `24` rows are green with zero markers or raw UUIDs.
-12. **ACTIVE AT ENTRY ONLY — R7-1:** active packet is `none`; the narrow `R7-0 -> R7-1`
-    transition commit awaits fresh review. `R7-1.1` is next and unstarted; production
-    implementation remains unstarted, and `R7-2..R7-6` plus R8 remain blocked.
+12. **ACTIVE AT ENTRY ONLY — R7-1:** transition/fix series `339744dff` + `d20cac6a9` is fresh
+    independent built-in `default` `REVIEW CLEAN`; active packet is `none`. `R7-1.1` is next,
+    unchecked, and unstarted; production implementation remains unstarted, and `R7-2..R7-6` plus
+    R8 remain blocked. Prompt 1 selectors are prepared but have not been started.
 
 ## Execution Rules
 
-- Do not begin `R7-1.1` until the narrow `R7-0 -> R7-1` transition commit is fresh-review-clean.
+- Do not begin `R7-1.1` in this completed `R7-0` phase run; Prompt 1 is prepared but not started.
 - Do not reopen `semantic_goal_drift` without a new failing witness.
 - Do not add a common mega-context argument to every scorer.
 - Treat `dead_end_thrash` regression/delegation/turn-shape; truth-grounding applicability,
@@ -105,6 +106,6 @@ fresh independent built-in `default` `REVIEW CLEAN`; `R7-PROMOTE` is complete. T
 series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default`
 `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2`
 commit `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`.
-Only `R7-1` is active at entry with packet `none`; the narrow transition commit awaits fresh
-review. `R7-1.1` is next and unstarted, production R7 implementation remains unstarted, and
-`R7-2..R7-6` plus R8 remain blocked.
+Transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default` `REVIEW
+CLEAN`. Only `R7-1` is active at entry with packet `none`; `R7-1.1` is next, unchecked, and
+unstarted, production R7 implementation remains unstarted, and `R7-2..R7-6` plus R8 remain blocked.

@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R7-1 — ACTIVE AT ENTRY ONLY; active packet none; R7-0 COMPLETE after R7-0.1 series and R7-0.2 commit fa85cd4b8 received fresh independent REVIEW CLEAN; narrow R7-0 -> R7-1 transition commit pending fresh review; R7-1.1 next and unstarted; R7-2..R7-6 and R8 blocked; production implementation unstarted`
+**Current work phase:** `R7-1 — ACTIVE AT ENTRY ONLY; active packet none; R7-0 COMPLETE AND REVIEW-CLEAN; R7-0 -> R7-1 transition/fix series 339744dff + d20cac6a9 fresh independent built-in default REVIEW CLEAN; R7-1.1 next, unchecked, and unstarted; R7-2..R7-6 and R8 blocked; production implementation unstarted; Prompt 1 prepared but not started`
 
-**Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, and R7-0.2 commit `fa85cd4b8` each received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The R7-0.2 fixture commit contains `12` sanitized JSONL files / `24` rows over seven cases; focused parser/privacy proof passes `2 / 2`, the compactor family passes `25 / 25` including end-to-end `2 / 2`, and manual JSON/private-marker/raw-UUID scans plus formatting are green with zero privacy matches. No production symbol changed. `R7-0` is complete; the narrow `R7-0 -> R7-1` transition commit awaits fresh review.
+**Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, R7-0.2 commit `fa85cd4b8`, and R7-0 -> R7-1 transition/fix series `339744dff` + `d20cac6a9` each received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The R7-0.2 fixture commit contains `12` sanitized JSONL files / `24` rows over seven cases; focused parser/privacy proof passes `2 / 2`, the compactor family passes `25 / 25` including end-to-end `2 / 2`, and manual JSON/private-marker/raw-UUID scans plus formatting are green with zero privacy matches. No production symbol changed. `R7-0` is complete and review-clean; `R7-1.1` remains next, unchecked, and unstarted.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -44,9 +44,10 @@ independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete. The late
 built-in `default` `REVIEW CLEAN`. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`
 received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` +
 `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in
-`default` `REVIEW CLEAN`, completing `R7-0`. Only `R7-1` is active at entry with packet `none`; the
-narrow transition commit awaits fresh review. `R7-1.1` is next and unstarted. Production
-implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked.
+`default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series `339744dff` + `d20cac6a9` is
+fresh independent built-in `default` `REVIEW CLEAN`. Only `R7-1` is active at entry with packet
+`none`; `R7-1.1` is next, unchecked, and unstarted. Production implementation remains unstarted;
+`R7-2..R7-6` and R8 remain blocked.
 
 ## Purpose
 

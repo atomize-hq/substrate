@@ -4,9 +4,10 @@ Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
 Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
-`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-0 -> R7-1 TRANSITION COMMIT PENDING FRESH REVIEW / R7-1.1 NEXT AND UNSTARTED / R7-2..R7-6 AND
-R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
+`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-0 -> R7-1 TRANSITION/FIX SERIES `339744dff` +
+`d20cac6a9` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
+R7-1.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2..R7-6 AND R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT
+STARTED / PROMPT 1 PREPARED BUT NOT STARTED**
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
@@ -14,9 +15,10 @@ independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Tran
 CLEAN`. `R7-0.1` is complete after the exact contract `rg` passed; series `a9e75f149` +
 `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. Fixture-only
 `R7-0.2` commit `fa85cd4b8` also received fresh independent built-in `default` `REVIEW CLEAN`, so
-`R7-0` is complete. `R7-1` is active at entry only with packet `none`; the narrow transition commit
-awaits fresh review. `R7-1.1` is next and unstarted. Production implementation remains unstarted;
-`R7-2..R7-6` plus R8 remain blocked.
+`R7-0` is complete. Transition/fix series `339744dff` + `d20cac6a9` also received fresh independent
+built-in `default` `REVIEW CLEAN`. `R7-1` is active at entry only with packet `none`; `R7-1.1` is
+next, unchecked, and unstarted. Production implementation remains unstarted; `R7-2..R7-6` plus R8
+remain blocked.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -72,7 +74,8 @@ awaits fresh review. `R7-1.1` is next and unstarted. Production implementation r
   applicable to `R7-0.2`.
 
 Checkpoint receipt: all items above are complete and fresh-review-clean at fixture commit
-`fa85cd4b8`; `R7-0` is complete. The narrow phase-transition commit is a separate review boundary.
+`fa85cd4b8`; `R7-0` is complete. Separate transition/fix series `339744dff` + `d20cac6a9` received
+fresh independent built-in `default` `REVIEW CLEAN`; Prompt 1 is prepared but not started.
 
 ## R7-1: Compactor Linkage And Direct-Child Closure
 

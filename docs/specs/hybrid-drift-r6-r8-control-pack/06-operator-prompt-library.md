@@ -320,20 +320,19 @@ transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` also received fresh in
 `R7-0.2` commit `fa85cd4b8` each received fresh independent built-in `default` `REVIEW CLEAN`.
 The fixture proof is focused parser/privacy `2 / 2`, full compactor `25 / 25` including end-to-end
 `2 / 2`, and manual privacy scans over `24` rows with zero private markers and zero raw UUIDs. No
-production symbol changed. `R7-0` is complete. The narrow transition makes only `R7-1` active at
-entry with packet `none` and is pending fresh review; `R7-1.1` is next and unstarted. Production
-implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked.
+production symbol changed. `R7-0` is complete and review-clean. Transition/fix series `339744dff` +
+`d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. Only `R7-1` is active at
+entry with packet `none`; `R7-1.1` is next, unchecked, and unstarted. Production implementation
+remains unstarted; `R7-2..R7-6` and R8 remain blocked.
 
-The next required interaction is the normal fresh-review wall for the committed narrow
-`R7-0 -> R7-1` transition. Do not begin `R7-1.1` until that commit is fresh-review-clean. After a
-clean verdict, the prepared Prompt 1 selectors for a fresh next-phase session are:
+The prepared Prompt 1 selectors for a fresh next-phase session are:
 
 ```text
 PHASE_ID: R7-1
 ACTIVE_PACKET: none
 ```
 
-Preparing these selectors does not start `R7-1` implementation.
+Preparing these selectors does not start `R7-1` implementation. Prompt 1 has not been invoked.
 
 Historical resolved Task `.2B` decision report:
 

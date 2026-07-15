@@ -1,15 +1,17 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
 Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
-`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-0 -> R7-1 TRANSITION COMMIT PENDING FRESH REVIEW / R7-1.1 NEXT AND UNSTARTED / R7-2..R7-6 AND
-R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**. Promotion series
+`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-0 -> R7-1 TRANSITION/FIX SERIES `339744dff` +
+`d20cac6a9` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
+R7-1.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2..R7-6 AND R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT
+STARTED / PROMPT 1 PREPARED BUT NOT STARTED**. Promotion series
 `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. The narrow
 `R7-PROMOTE -> R7-0` transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`. The docs-only `R7-0.1` series `a9e75f149` +
 `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` each received fresh
-independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. The narrow transition makes only
-`R7-1` active at entry with packet `none` and awaits fresh review. `R7-1.1` is next and unstarted;
+independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
+`339744dff` + `d20cac6a9` also received fresh independent built-in `default` `REVIEW CLEAN`. Only
+`R7-1` is active at entry with packet `none`; `R7-1.1` is next, unchecked, and unstarted;
 no production linkage implementation has begun.
 
 ## R6 Handoff
@@ -43,10 +45,11 @@ status transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh 
 Fixture-only `R7-0.2` commit `fa85cd4b8` also received fresh independent built-in `default`
 `REVIEW CLEAN`: all seven sanitized cases parse without failures, the focused target passes
 `2 / 2`, the full compactor family passes `25 / 25` including end-to-end `2 / 2`, and all `24`
-rows pass privacy scans with zero private markers and zero raw UUIDs. `R7-0` is complete. Only
-`R7-1` is active at entry with packet `none`; the narrow transition commit awaits fresh review.
-`R7-1.1` is next and unstarted. Production implementation has not started, and `R7-2..R7-6` plus
-R8 remain blocked.
+rows pass privacy scans with zero private markers and zero raw UUIDs. `R7-0` is complete and
+review-clean. Transition/fix series `339744dff` + `d20cac6a9` received fresh independent built-in
+`default` `REVIEW CLEAN`. Only `R7-1` is active at entry with packet `none`; `R7-1.1` is next,
+unchecked, and unstarted. Production implementation has not started, and `R7-2..R7-6` plus R8
+remain blocked.
 
 ## Live Linkage Evidence
 
@@ -80,9 +83,10 @@ semantics. Ordinary parent-visible orchestration may still be described as paren
 ## Packet Order
 
 The packet order below is implementation-ready. `R7-0` is **complete** after `R7-0.1` and
-fixture-only `R7-0.2` commit `fa85cd4b8` each received fresh independent `REVIEW CLEAN`. `R7-1` is
-**active at entry only** with packet `none`; its narrow transition commit awaits fresh review,
-`R7-1.1` is next and unstarted, and no production implementation work has started.
+fixture-only `R7-0.2` commit `fa85cd4b8` each received fresh independent `REVIEW CLEAN`.
+Transition/fix series `339744dff` + `d20cac6a9` is also fresh independent built-in `default`
+`REVIEW CLEAN`. `R7-1` is **active at entry only** with packet `none`; `R7-1.1` is next, unchecked,
+and unstarted, and no production implementation work has started.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

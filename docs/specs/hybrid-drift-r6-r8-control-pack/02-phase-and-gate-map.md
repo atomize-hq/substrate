@@ -23,7 +23,7 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R6-CLOSE` | COMPLETE | R6 `CLOSED` authority reconciliation | SATISFIED — replay closeout proof receipt is fresh-review-clean and no ordinary gap is open | SATISFIED — `CTX-R6-17` assigns every material surface a terminal disposition; all root/R6/R7 gate/status docs agree; and transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. |
 | `R7-PROMOTE` | COMPLETE | Promote the R7 authority family to implementation-ready | SATISFIED — R6 finding says `CLOSED`, terminal scorer table is complete, and authority stack agrees | SATISFIED — promotion series `455d0ed90` + `876ac55de` makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready and received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` also received fresh independent built-in `default` `REVIEW CLEAN`; no R7 task started. |
 | `R7-0` | COMPLETE | Docs lock and sanitized evidence matrix | SATISFIED — `R7-PROMOTE` is complete; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` and `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` are fresh independent `REVIEW CLEAN` | SATISFIED — fixture-only `R7-0.2` commit `fa85cd4b8` received fresh independent built-in `default` `REVIEW CLEAN`; focused parser/privacy passes `2 / 2`, full compactor passes `25 / 25` including end-to-end `2 / 2`, and privacy scans over `24` rows found zero private markers and zero raw UUIDs. No production symbol changed. |
-| `R7-1` | ACTIVE AT ENTRY ONLY / TRANSITION COMMIT PENDING FRESH REVIEW | Compactor linkage and direct-child closure | SATISFIED FOR ENTRY ONLY — `R7-0` exit gate is fresh-review-clean; the narrow `R7-0 -> R7-1` transition commit is the current review boundary; active packet is `none`; `R7-1.1` is next and unstarted | PENDING — `R7-1.1`, `R7-1.2`, and `R7-1.3` plus the R7-1 checkpoint are complete and fresh-review-clean. |
+| `R7-1` | ACTIVE AT ENTRY ONLY / ENTRY TRANSITION REVIEW-CLEAN / IMPLEMENTATION UNSTARTED | Compactor linkage and direct-child closure | SATISFIED — `R7-0` exit gate and transition/fix series `339744dff` + `d20cac6a9` are fresh independent built-in `default` `REVIEW CLEAN`; active packet is `none`; `R7-1.1` is next, unchecked, and unstarted; Prompt 1 is prepared but not started | PENDING — `R7-1.1`, `R7-1.2`, and `R7-1.3` plus the R7-1 checkpoint are complete and fresh-review-clean. |
 | `R7-2..R7-6` | BLOCKED | Analyzer linkage through minimal sentinel compatibility | `R7-1` exit gate review-clean, then each ordered predecessor phase complete | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
@@ -61,9 +61,10 @@ implementation-ready and received fresh independent built-in `default` `REVIEW C
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` +
 `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default`
-`REVIEW CLEAN`, completing `R7-0`. Only `R7-1` is active at entry with packet `none`; the narrow
-transition commit awaits fresh review. `R7-1.1` is next and unstarted. Production implementation
-remains unstarted, and `R7-2..R7-6` plus R8 remain blocked.
+`REVIEW CLEAN`, completing `R7-0`. Transition/fix series `339744dff` + `d20cac6a9` also received
+fresh independent built-in `default` `REVIEW CLEAN`. Only `R7-1` is active at entry with packet
+`none`; `R7-1.1` is next, unchecked, and unstarted. Production implementation remains unstarted,
+and `R7-2..R7-6` plus R8 remain blocked.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

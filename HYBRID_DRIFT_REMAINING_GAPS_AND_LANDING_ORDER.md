@@ -23,10 +23,11 @@ independent built-in `default` `REVIEW CLEAN`. Docs-only `R7-0.1` series `a9e75f
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Focused parser/privacy proof
 passes `2 / 2`; the full compactor family passes `25 / 25` including end-to-end `2 / 2`; and
 privacy scans over `24` rows
-found zero private markers and zero raw UUIDs. Only `R7-1` is active at entry with packet `none`;
-the narrow transition commit awaits fresh review, and `R7-1.1` is next and unstarted. Production
-implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked. The Ground Truth Sources
-list below is historical context, not an exhaustive index of current authority.
+found zero private markers and zero raw UUIDs. Transition/fix series `339744dff` + `d20cac6a9`
+received fresh independent built-in `default` `REVIEW CLEAN`, making the `R7-0 -> R7-1` boundary
+review-clean. Only `R7-1` is active at entry with packet `none`; `R7-1.1` is next, unchecked, and
+unstarted. Production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked. The
+Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 > **Historical status note (2026-07-04; superseded):** `R5`/`R5.5`/`R5.75`
 > structured-objective work had advanced well beyond the older root sequence, through `R6` scorer
@@ -105,15 +106,16 @@ progress views for matching checkpoints.
 
 The active follow-on is solely `R7-1` at entry with packet `none`. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
-independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. The narrow transition commit
-awaits fresh review; `R7-1.1` is next and unstarted, no production implementation has started, and
-`R7-2..R7-6` plus R8 remain blocked. `R7-PROMOTE` and its fresh-review-clean promotion series are
-complete; entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent
-built-in `default` `REVIEW CLEAN`.
+independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
+`339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-1.1` is
+next, unchecked, and unstarted, no production implementation has started, and `R7-2..R7-6` plus R8
+remain blocked. `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
+transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
+`default` `REVIEW CLEAN`.
 The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
-reconciliation, or R7 promotion content. Only fresh review of the narrow `R7-0 -> R7-1` transition
-commit remains at this phase boundary; do not start `R7-1.1` before it is fresh-review-clean.
+reconciliation, R7 promotion content, or the `R7-0 -> R7-1` transition review. Prompt 1 selectors
+for `R7-1` / packet `none` are prepared but have not been started; `R7-1.1` remains unstarted.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -147,9 +149,9 @@ independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series `6bf0
 `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. Docs-only
 `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit
 `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Only
-`R7-1` is active at entry with packet `none`; the narrow transition commit awaits fresh review,
-and `R7-1.1` is next and unstarted. Production implementation remains unstarted; `R7-2..R7-6`
-plus R8 remain blocked.
+Transition/fix series `339744dff` + `d20cac6a9` received fresh independent built-in `default`
+`REVIEW CLEAN`. `R7-1` is active at entry with packet `none`; `R7-1.1` is next, unchecked, and
+unstarted. Production implementation remains unstarted; `R7-2..R7-6` plus R8 remain blocked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -169,9 +171,9 @@ control.” The current honest sequence is:
 7. keep completed `CTX-R6-17`, the terminal table, and R6 `CLOSED` authority reconciled
 8. keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de`, entry transition
    series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, `R7-0.1` series `a9e75f149` + `55bea5fa5` +
-   `faff68ac6`, and `R7-0.2` commit `fa85cd4b8` fixed; keep `R7-0` complete; keep only `R7-1`
-   active at entry with packet `none`; freshly review the narrow phase-transition commit; start no
-   `R7-1.1` production linkage work before that transition is fresh-review-clean
+   `faff68ac6`, `R7-0.2` commit `fa85cd4b8`, and review-clean transition/fix series `339744dff` +
+   `d20cac6a9` fixed; keep `R7-0` complete; keep only `R7-1` active at entry with packet `none`;
+   preserve prepared Prompt 1 selectors without starting `R7-1.1` production linkage work
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -835,9 +837,9 @@ family implementation-ready, and received fresh independent built-in `default` `
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`. Docs-only `R7-0.1` series `a9e75f149` +
 `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` each received fresh
-independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Only `R7-1` is active at entry
-with packet `none`; the narrow transition commit awaits fresh review, and `R7-1.1` is next and
-unstarted. Production
+independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
+`339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. Only `R7-1`
+is active at entry with packet `none`; `R7-1.1` is next, unchecked, and unstarted. Production
 implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked.
 
 ## Packet R7: Full Delegated-Session Support
@@ -915,9 +917,10 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 implementation-ready R7 family is current. Transition series `6bf0ac6ad` + `4a887ee0c` +
 `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` each received
-fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Only `R7-1` is active at
-entry with packet `none`; the narrow transition commit awaits fresh review, and `R7-1.1` is next
-and unstarted. Production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked.
+fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
+`339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. Only `R7-1`
+is active at entry with packet `none`; `R7-1.1` is next, unchecked, and unstarted. Production
+implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked.
 
 The next honest work target is:
 
@@ -948,8 +951,9 @@ The next honest work target is:
 - **current action:** keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de`,
   entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, `R7-0.1` series `a9e75f149` +
   `55bea5fa5` + `faff68ac6`, and fixture-only `R7-0.2` commit `fa85cd4b8` fixed; keep `R7-0`
-  complete and only `R7-1` active at entry with packet `none`; obtain fresh independent review of
-  the narrow `R7-0 -> R7-1` transition commit; leave `R7-1.1` unstarted
+  complete; keep transition/fix series `339744dff` + `d20cac6a9` at fresh independent built-in
+  `default` `REVIEW CLEAN`; keep only `R7-1` active at entry with packet `none`; preserve prepared
+  Prompt 1 selectors without starting the next, unchecked `R7-1.1` task
 - keep production delegated-session implementation blocked; do not make R7 absorb ordinary
   single-session scorer gaps
 - keep `R7-2..R7-6` blocked until their ordered predecessor exits review-clean

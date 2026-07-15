@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0.2` commit `fa85cd4b8` and the complete `R7-0` phase are fresh independent built-in `default` `REVIEW CLEAN`; the narrow `R7-0 -> R7-1` transition commit is pending fresh review; `R7-1.1` is next and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked)**
+Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is complete and review-clean; transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default` `REVIEW CLEAN`; `R7-1.1` is next, unchecked, and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked; Prompt 1 for `R7-1` / `none` is prepared but not started)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -109,11 +109,14 @@ Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0.2` c
   `25 / 25`, including end-to-end `2 / 2`. Manual privacy and format gates are green with zero
   private markers and zero raw UUIDs; no production symbol or raw private rollout changed. A fresh
   independent built-in `default` reviewer returned `REVIEW CLEAN` with no actionable findings.
-- [ ] Freshly review the committed narrow `R7-0 -> R7-1` phase-transition update. `R7-1` is active
-  at entry only with packet `none`; keep `R7-1.1` unstarted until this transition is review-clean.
+- [x] Freshly review the committed narrow `R7-0 -> R7-1` phase-transition update. The first review
+  found status/bookkeeping blockers; fix `d20cac6a9` resolved them, and a fresh independent built-in
+  `default` reviewer returned `REVIEW CLEAN` for series `339744dff` + `d20cac6a9`.
+- [ ] Start `R7-1.1` only in the next phase run. `R7-1` is active at entry only with packet `none`;
+  Prompt 1 selectors are prepared but have not been started.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
 `R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.
-`R7-1` is active at entry only with packet `none`; the narrow transition commit awaits fresh review
-and `R7-1.1` is next and unstarted. Production implementation has not started; `R7-2..R7-6` plus
-R8 remain blocked.
+`R7-1` is active at entry only with packet `none`; transition/fix series `339744dff` + `d20cac6a9`
+is fresh independent built-in `default` `REVIEW CLEAN`, and `R7-1.1` is next, unchecked, and
+unstarted. Production implementation has not started; `R7-2..R7-6` plus R8 remain blocked.

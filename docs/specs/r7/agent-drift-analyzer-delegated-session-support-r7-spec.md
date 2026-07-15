@@ -4,9 +4,10 @@ Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
 Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
-`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-0 -> R7-1 TRANSITION COMMIT PENDING FRESH REVIEW / R7-1.1 NEXT AND UNSTARTED / R7-2..R7-6 AND
-R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
+`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-0 -> R7-1 TRANSITION/FIX SERIES `339744dff` +
+`d20cac6a9` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
+R7-1.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2..R7-6 AND R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT
+STARTED / PROMPT 1 PREPARED BUT NOT STARTED**
 
 ## Assumptions I'm Making
 
@@ -15,9 +16,10 @@ R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
    complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent
    built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and
    fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`,
-   completing `R7-0`. `R7-1` is active at entry only with packet `none`; the narrow transition
-   commit awaits fresh review. `R7-1.1` is next and unstarted. No production implementation work
-   has started, and `R7-2..R7-6` plus R8 remain blocked.
+   completing `R7-0`. Transition/fix series `339744dff` + `d20cac6a9` also received fresh
+   independent built-in `default` `REVIEW CLEAN`. `R7-1` is active at entry only with packet
+   `none`; `R7-1.1` is next, unchecked, and unstarted. No production implementation work has
+   started, and `R7-2..R7-6` plus R8 remain blocked.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -53,9 +55,10 @@ independent built-in `default` `REVIEW CLEAN`; it made `R7-0` active at entry on
 nested-depth residue, and single-agent raw shapes; focused parser/privacy proof is `2 / 2`, full
 compactor proof is `25 / 25` including end-to-end `2 / 2`, privacy scans over `24` rows found zero
 private markers and zero raw UUIDs, and fresh independent review returned `REVIEW CLEAN`. `R7-0` is
-complete. `R7-1` is active at entry only with packet `none`, but `R7-1.1` remains unstarted until
-the narrow transition commit is fresh-review-clean. R7 must extend the stable ordinary
-single-session baseline and must not absorb baseline scorer semantics.
+complete. Transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default`
+`REVIEW CLEAN`. `R7-1` is active at entry only with packet `none`, while `R7-1.1` remains next,
+unchecked, and unstarted. R7 must extend the stable ordinary single-session baseline and must not
+absorb baseline scorer semantics.
 
 ## Objective
 
