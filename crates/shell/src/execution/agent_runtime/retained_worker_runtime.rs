@@ -9,27 +9,30 @@
     reason = "R0 is a component proof and deliberately has no production ingress caller"
 )]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use rand::RngCore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use sha2::{Digest, Sha256};
 
 use super::host_session_authority::canonical_json;
 #[cfg(test)]
 use super::host_session_authority::facade::RetainedReservationCrashPointV1;
 use super::host_session_authority::facade::{
-    ReservedRetainedWorkerRegistrationV1, RetainedWorkerAuthorityPreconditionV1,
+    ReservedRetainedWorkerRegistrationV1, ResolvedCurrentAuthorityV1,
+    RetainedWorkerAuthorityPreconditionV1,
 };
 use super::host_session_authority::schema::{
     AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1,
-    AuthorityObjectCommitmentV1, AuthorityObjectRefV1, PolicyObjectHashInputV1,
-    ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1, TimestampV1, WorldBindingV1,
+    AuthorityObjectCommitmentV1, AuthorityObjectRefV1, HostAttachContractV1,
+    PolicyObjectHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1, TimestampV1,
+    WorldBindingV1,
 };
 use super::host_session_authority::store_schema::{
-    RetainedWorkerAuthorityRegistrationRequestStateV1, RetainedWorkerAuthorityRegistrationV1,
-    SessionNamespaceRecordV1,
+    DurableSessionAuthorityV1, RetainedWorkerAuthorityRegistrationRequestStateV1,
+    RetainedWorkerAuthorityRegistrationV1, SessionNamespaceRecordV1, VersionedStateRoot,
 };
 use super::host_session_authority::validation::ValidatedCanonicalV1;
 use super::host_session_authority::HostSessionAuthority;
@@ -223,11 +226,123 @@ pub(crate) struct RetainedWorkerAdmissionKeyIdentityV1 {
     pub(crate) algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1,
 }
 
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CanonicalWorkerSpawnPayloadV1 {
+    pub(crate) prompt: String,
+}
+
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CanonicalValidatedSpawnRequestV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) request_id: String,
+    pub(crate) idempotency_key: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) action: String,
+    pub(crate) mode: String,
+    pub(crate) target_backend_id: String,
+    pub(crate) task_run_id: Option<String>,
+    pub(crate) target_participant_id: Option<String>,
+    pub(crate) world_id: String,
+    pub(crate) world_generation: u64,
+    pub(crate) payload: CanonicalWorkerSpawnPayloadV1,
+}
+
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CanonicalExactCurrentAuthorityV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) authority_revision: u64,
+    pub(crate) authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) authoritative_lineage_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) authority: DurableSessionAuthorityV1,
+    pub(crate) caller_participant_id: String,
+    pub(crate) caller_role: String,
+    pub(crate) caller_descriptor_ref: AuthorityObjectRefV1,
+    pub(crate) caller_descriptor: AgentDescriptorV1,
+    pub(crate) host_attach_contract: HostAttachContractV1,
+    pub(crate) current_policy: PolicyObjectHashInputV1,
+}
+
+impl CanonicalExactCurrentAuthorityV1 {
+    pub(crate) fn from_resolved(resolved: &ResolvedCurrentAuthorityV1) -> Self {
+        Self {
+            schema_version: 1,
+            authority_store_id: resolved.observation.authority_store_id.clone(),
+            orchestration_session_id: resolved.observation.orchestration_session_id.clone(),
+            authority_revision: resolved.observation.authority_revision,
+            authority_record_commitment: resolved.observation.authority_record_commitment.clone(),
+            authoritative_lineage_commitment: resolved
+                .observation
+                .authoritative_lineage_commitment
+                .clone(),
+            authority: resolved.authority.clone(),
+            caller_participant_id: resolved.caller.participant_id.clone(),
+            caller_role: "orchestrator".into(),
+            caller_descriptor_ref: resolved.caller.descriptor_ref.clone(),
+            caller_descriptor: resolved.caller.descriptor.clone(),
+            host_attach_contract: resolved.host_attach_contract.clone(),
+            current_policy: resolved.current_policy.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CanonicalDescriptorAndRuntimePlanV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) descriptor: AgentDescriptorV1,
+    pub(crate) runtime_role: String,
+    pub(crate) internal_uaa_session_id_domain: String,
+}
+
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CanonicalPolicyAndAdmissionCapV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) current_policy_ref: AuthorityObjectRefV1,
+    pub(crate) current_policy: PolicyObjectHashInputV1,
+    pub(crate) dispatch_enabled: bool,
+    pub(crate) allowed_backends: Vec<String>,
+    pub(crate) allowed_actions: Vec<String>,
+    pub(crate) allowed_modes: Vec<String>,
+    pub(crate) same_session_only: bool,
+    pub(crate) same_world_binding_only: bool,
+    pub(crate) allow_capability_narrowing: bool,
+    pub(crate) max_live_retained_workers: u64,
+    pub(crate) max_concurrent_ephemeral: u64,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAdmissionPlanV1 {
+    pub(crate) issuer_request_id: String,
+    pub(crate) spawn_request: CanonicalValidatedSpawnRequestV1,
+    pub(crate) exact_authority: CanonicalExactCurrentAuthorityV1,
+    pub(crate) descriptor_and_runtime_plan: CanonicalDescriptorAndRuntimePlanV1,
+    pub(crate) policy_and_admission_cap: CanonicalPolicyAndAdmissionCapV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAdmissionSlotV1 {
+    pub(crate) record: RetainedWorkerAdmissionRecordV1,
+    pub(crate) joined: bool,
+}
+
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AdmissionInitializationCrashPointV1 {
     BeforeKeyPublication,
     AfterKeyPublication,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AdmissionReservationCrashPointV1 {
+    AfterSlotReserved,
 }
 
 #[cfg(test)]
@@ -413,6 +528,196 @@ impl RetainedWorkerRuntime {
             }
             RetainedWorkerRuntimeError(error.to_string())
         })
+    }
+
+    pub(crate) fn reserve_admission_slot(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+    ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
+        let mut participant_entropy = [0_u8; 16];
+        let mut bootstrap_run_entropy = [0_u8; 16];
+        let mut publication_nonce = [0_u8; 16];
+        let mut random = rand::rngs::OsRng;
+        random.fill_bytes(&mut participant_entropy);
+        random.fill_bytes(&mut bootstrap_run_entropy);
+        random.fill_bytes(&mut publication_nonce);
+        let reserved_at = TimestampV1::parse(
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        )
+        .map_err(|_| RetainedWorkerRuntimeError("create admission slot timestamp".into()))?;
+        self.reserve_admission_slot_with(
+            authority,
+            plan,
+            reserved_at,
+            participant_entropy,
+            bootstrap_run_entropy,
+            publication_nonce,
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    fn reserve_admission_slot_at(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        reserved_at: TimestampV1,
+        participant_entropy: [u8; 16],
+        bootstrap_run_entropy: [u8; 16],
+        publication_nonce: [u8; 16],
+        crash_point: Option<AdmissionReservationCrashPointV1>,
+    ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
+        self.reserve_admission_slot_with(
+            authority,
+            plan,
+            reserved_at,
+            participant_entropy,
+            bootstrap_run_entropy,
+            publication_nonce,
+            crash_point,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn reserve_admission_slot_with(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        reserved_at: TimestampV1,
+        participant_entropy: [u8; 16],
+        bootstrap_run_entropy: [u8; 16],
+        publication_nonce: [u8; 16],
+        #[cfg(test)] crash_point: Option<AdmissionReservationCrashPointV1>,
+        #[cfg(not(test))] _crash_point: Option<()>,
+    ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
+        let resolved = authority
+            .resolve_current_exact(&plan.spawn_request.orchestration_session_id, None)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        if plan.exact_authority != CanonicalExactCurrentAuthorityV1::from_resolved(&resolved) {
+            return Err(RetainedWorkerRuntimeError(
+                "canonical admission authority proof is not the exact bound read".into(),
+            ));
+        }
+        self.initialize_admission_registry(authority)?;
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut semantic_failure = None;
+        let result = storage.transaction(|transaction| {
+            let registry_bytes = transaction.read_registry()?.ok_or_else(
+                super::host_session_authority::store::BootstrapError::retained_admission_semantic,
+            )?;
+            let mut registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            let (_, envelope) = retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                ),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            let slot = retain_semantic_error(
+                reserve_slot_in_registry(
+                    &mut registry,
+                    transaction.authority_root(),
+                    plan,
+                    &envelope.secret_key,
+                    reserved_at,
+                    participant_entropy,
+                    bootstrap_run_entropy,
+                ),
+                &mut semantic_failure,
+            )?;
+            if slot.joined {
+                return Ok(slot);
+            }
+            let published = retain_semantic_error(
+                encode_canonical(&registry, "encode admission registry"),
+                &mut semantic_failure,
+            )?;
+            let temp_name = format!("admission-registry--{}.tmp", lower_hex(&publication_nonce));
+            transaction.replace_registry(&temp_name, &published)?;
+            #[cfg(test)]
+            if crash_point == Some(AdmissionReservationCrashPointV1::AfterSlotReserved) {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                    ),
+                );
+            }
+            Ok(slot)
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        result.map_err(|error| {
+            #[cfg(test)]
+            if error.to_string() == "injected retained admission initialization crash"
+                && crash_point == Some(AdmissionReservationCrashPointV1::AfterSlotReserved)
+            {
+                return RetainedWorkerRuntimeError(
+                    "injected crash after admission slot reservation".into(),
+                );
+            }
+            RetainedWorkerRuntimeError(error.to_string())
+        })
+    }
+
+    pub(crate) fn read_admission_record(
+        &self,
+        authority: &HostSessionAuthority,
+        orchestration_session_id: &str,
+        retained_participant_id: &str,
+    ) -> Result<Option<RetainedWorkerAdmissionRecordV1>, RetainedWorkerRuntimeError> {
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut semantic_failure = None;
+        let result = storage.transaction(|transaction| {
+            let Some(registry_bytes) = transaction.read_registry()? else {
+                return Ok(None);
+            };
+            let registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                )
+                .map(drop),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            Ok(registry
+                .records_by_session
+                .get(orchestration_session_id)
+                .and_then(|records| records.get(retained_participant_id))
+                .cloned())
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
     }
 
     pub(crate) fn reserve_registration(
@@ -861,6 +1166,21 @@ fn validate_committed_admission_key(
     registry: &RetainedWorkerAdmissionRegistryV1,
     keys: &[(String, Vec<u8>)],
 ) -> Result<RetainedWorkerAdmissionKeyIdentityV1, RetainedWorkerRuntimeError> {
+    load_committed_admission_key(authority_store_id, registry, keys)
+        .map(|(identity, _envelope)| identity)
+}
+
+fn load_committed_admission_key(
+    authority_store_id: &str,
+    registry: &RetainedWorkerAdmissionRegistryV1,
+    keys: &[(String, Vec<u8>)],
+) -> Result<
+    (
+        RetainedWorkerAdmissionKeyIdentityV1,
+        RetainedWorkerAdmissionKeyEnvelopeV1,
+    ),
+    RetainedWorkerRuntimeError,
+> {
     let header = &registry.commitment_key;
     if registry.schema_version != 1
         || registry.authority_store_id != authority_store_id
@@ -896,11 +1216,14 @@ fn validate_committed_admission_key(
             "committed admission key envelope identity is inexact".into(),
         ));
     }
-    Ok(RetainedWorkerAdmissionKeyIdentityV1 {
-        authority_store_id: authority_store_id.to_owned(),
-        key_id: header.key_id.clone(),
-        algorithm: header.algorithm,
-    })
+    Ok((
+        RetainedWorkerAdmissionKeyIdentityV1 {
+            authority_store_id: authority_store_id.to_owned(),
+            key_id: header.key_id.clone(),
+            algorithm: header.algorithm,
+        },
+        envelope,
+    ))
 }
 
 fn valid_key_id(value: &str) -> bool {
@@ -910,6 +1233,570 @@ fn valid_key_id(value: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
     })
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalDescriptorAndRuntimeFingerprintV1<'a> {
+    schema_version: u32,
+    descriptor: &'a AgentDescriptorV1,
+    runtime_role: &'a str,
+    internal_uaa_session_id_domain: &'a str,
+    retained_participant_id: &'a str,
+    bootstrap_run_id: &'a str,
+    internal_uaa_session_id: String,
+}
+
+fn reserve_slot_in_registry(
+    registry: &mut RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+    plan: &RetainedWorkerAdmissionPlanV1,
+    secret_key: &[u8; 32],
+    reserved_at: TimestampV1,
+    participant_entropy: [u8; 16],
+    bootstrap_run_entropy: [u8; 16],
+) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
+    validate_admission_plan(authority_root, plan)?;
+    if let Some(locator) = registry.issuer_request_index.get(&plan.issuer_request_id) {
+        let record = registry
+            .records_by_session
+            .get(&locator.orchestration_session_id)
+            .and_then(|records| records.get(&locator.retained_participant_id))
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError("admission issuer index is dangling".into())
+            })?;
+        let fingerprint = canonical_spawn_fingerprint(
+            &registry.commitment_key.key_id,
+            secret_key,
+            plan,
+            &record.retained_participant_id,
+            &record.bootstrap_run_id,
+        )?;
+        if record.schema_version != 1
+            || record.authority_store_id != plan.exact_authority.authority_store_id
+            || record.issuer_request_id != plan.issuer_request_id
+            || record.canonical_spawn_fingerprint != fingerprint
+            || record.orchestration_session_id != plan.spawn_request.orchestration_session_id
+            || record.admission_authority_revision != plan.exact_authority.authority_revision
+            || record.admission_authority_record_commitment
+                != plan.exact_authority.authority_record_commitment
+            || record.backend_id != plan.descriptor_and_runtime_plan.descriptor.backend_id
+            || record.protocol != plan.descriptor_and_runtime_plan.descriptor.protocol
+            || record.world_binding.world_id != plan.spawn_request.world_id
+            || record.world_binding.world_generation != plan.spawn_request.world_generation
+            || record.current_policy_ref != plan.policy_and_admission_cap.current_policy_ref
+            || record.current_policy_revision
+                != plan.policy_and_admission_cap.current_policy.policy_revision
+            || record.max_live_retained_workers
+                != plan.policy_and_admission_cap.max_live_retained_workers
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "admission issuer retry changed canonical spawn bytes or bound scope".into(),
+            ));
+        }
+        return Ok(RetainedWorkerAdmissionSlotV1 {
+            record: record.clone(),
+            joined: true,
+        });
+    }
+
+    let live_count = registry
+        .records_by_session
+        .values()
+        .flat_map(BTreeMap::values)
+        .filter(|record| admission_state_is_live(&record.state))
+        .count() as u64;
+    if live_count >= plan.policy_and_admission_cap.max_live_retained_workers {
+        return Err(RetainedWorkerRuntimeError(format!(
+            "retained_worker_cap_reached: live retained worker count {live_count} reaches configured maximum {}",
+            plan.policy_and_admission_cap.max_live_retained_workers
+        )));
+    }
+
+    let retained_participant_id = format!("rwp_{}", lower_hex(&participant_entropy));
+    let bootstrap_run_id = format!("rwr_{}", lower_hex(&bootstrap_run_entropy));
+    if registry
+        .records_by_session
+        .values()
+        .flat_map(BTreeMap::values)
+        .any(|record| {
+            record.retained_participant_id == retained_participant_id
+                || record.bootstrap_run_id == bootstrap_run_id
+        })
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "generated admission participant or bootstrap-run identity collides".into(),
+        ));
+    }
+    let slot_sequence = registry
+        .next_slot_sequence_by_session
+        .get(&plan.spawn_request.orchestration_session_id)
+        .copied()
+        .unwrap_or(1);
+    let next_slot_sequence = slot_sequence
+        .checked_add(1)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission slot sequence overflow".into()))?;
+    let fingerprint = canonical_spawn_fingerprint(
+        &registry.commitment_key.key_id,
+        secret_key,
+        plan,
+        &retained_participant_id,
+        &bootstrap_run_id,
+    )?;
+    let world_binding = WorldBindingV1 {
+        world_id: plan.spawn_request.world_id.clone(),
+        world_generation: plan.spawn_request.world_generation,
+    };
+    let record = RetainedWorkerAdmissionRecordV1 {
+        schema_version: 1,
+        authority_store_id: plan.exact_authority.authority_store_id.clone(),
+        issuer_request_id: plan.issuer_request_id.clone(),
+        canonical_spawn_fingerprint: fingerprint,
+        orchestration_session_id: plan.spawn_request.orchestration_session_id.clone(),
+        admission_authority_revision: plan.exact_authority.authority_revision,
+        admission_authority_record_commitment: plan
+            .exact_authority
+            .authority_record_commitment
+            .clone(),
+        retained_participant_id: retained_participant_id.clone(),
+        bootstrap_run_id,
+        backend_id: plan
+            .descriptor_and_runtime_plan
+            .descriptor
+            .backend_id
+            .clone(),
+        protocol: plan.descriptor_and_runtime_plan.descriptor.protocol.clone(),
+        world_binding,
+        current_policy_ref: plan.policy_and_admission_cap.current_policy_ref.clone(),
+        current_policy_revision: plan
+            .policy_and_admission_cap
+            .current_policy
+            .policy_revision
+            .clone(),
+        max_live_retained_workers: plan.policy_and_admission_cap.max_live_retained_workers,
+        state: RetainedWorkerAdmissionStateV1::SlotReserved {
+            slot_sequence,
+            reserved_at,
+        },
+        record_revision: 1,
+    };
+    registry.issuer_request_index.insert(
+        plan.issuer_request_id.clone(),
+        RetainedWorkerAdmissionRecordLocatorV1 {
+            orchestration_session_id: record.orchestration_session_id.clone(),
+            retained_participant_id: retained_participant_id.clone(),
+        },
+    );
+    registry
+        .records_by_session
+        .entry(record.orchestration_session_id.clone())
+        .or_default()
+        .insert(retained_participant_id, record.clone());
+    registry.next_slot_sequence_by_session.insert(
+        plan.spawn_request.orchestration_session_id.clone(),
+        next_slot_sequence,
+    );
+    validate_admission_registry(registry, authority_root)?;
+    Ok(RetainedWorkerAdmissionSlotV1 {
+        record,
+        joined: false,
+    })
+}
+
+fn validate_admission_plan(
+    authority_root: &VersionedStateRoot,
+    plan: &RetainedWorkerAdmissionPlanV1,
+) -> Result<(), RetainedWorkerRuntimeError> {
+    let request = &plan.spawn_request;
+    let exact = &plan.exact_authority;
+    let runtime = &plan.descriptor_and_runtime_plan;
+    let policy = &plan.policy_and_admission_cap;
+    let VersionedStateRoot::V2(root) = authority_root else {
+        return Err(RetainedWorkerRuntimeError(
+            "retained admission requires strict V2 authority".into(),
+        ));
+    };
+    let SessionNamespaceRecordV1::Authority(locked_authority) = root
+        .session_namespace_map
+        .get(&request.orchestration_session_id)
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError("admission session authority is absent".into())
+        })?
+    else {
+        return Err(RetainedWorkerRuntimeError(
+            "admission session namespace is not authority".into(),
+        ));
+    };
+    AgentDescriptorHashInputV1 {
+        schema_version: 1,
+        descriptor: runtime.descriptor.clone(),
+    }
+    .validate()
+    .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+    policy
+        .current_policy
+        .validate()
+        .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+    policy
+        .current_policy_ref
+        .validate()
+        .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+    if plan.issuer_request_id.is_empty()
+        || request.schema_version != 1
+        || request.request_id.is_empty()
+        || request.idempotency_key.is_empty()
+        || request.action != "spawn_world_worker"
+        || request.mode != "retained"
+        || request.task_run_id.is_some()
+        || request.target_participant_id.is_some()
+        || request.payload.prompt.is_empty()
+        || exact.schema_version != 1
+        || exact.authority_store_id != root.authority_store_id
+        || exact.orchestration_session_id != request.orchestration_session_id
+        || exact.authority_revision != locked_authority.authority_revision
+        || exact.authority != **locked_authority
+        || exact.authority.orchestration_session_id != request.orchestration_session_id
+        || exact
+            .authority
+            .active_authoritative_participant_id
+            .as_deref()
+            != Some(request.caller_participant_id.as_str())
+        || exact.caller_participant_id != request.caller_participant_id
+        || exact.caller_role != "orchestrator"
+        || exact.caller_descriptor_ref != exact.host_attach_contract.descriptor_ref
+        || exact.caller_descriptor.backend_id != exact.host_attach_contract.backend_id
+        || exact.caller_descriptor.protocol != exact.host_attach_contract.protocol
+        || exact.current_policy != policy.current_policy
+        || exact.authority.current_policy_ref.as_ref() != Some(&policy.current_policy_ref)
+        || exact.authority.current_policy_revision.as_deref()
+            != Some(policy.current_policy.policy_revision.as_str())
+        || exact.authority.world_binding.as_ref()
+            != Some(&WorldBindingV1 {
+                world_id: request.world_id.clone(),
+                world_generation: request.world_generation,
+            })
+        || runtime.schema_version != 1
+        || runtime.descriptor.execution_scope != AgentExecutionScopeV1::World
+        || runtime.descriptor.backend_id != request.target_backend_id
+        || runtime.runtime_role != "member"
+        || runtime.internal_uaa_session_id_domain
+            != "substrate.retained-worker.internal-uaa-session.v1"
+        || policy.schema_version != 1
+        || !policy.dispatch_enabled
+        || !policy
+            .allowed_backends
+            .iter()
+            .any(|backend| backend == &request.target_backend_id)
+        || !policy
+            .allowed_actions
+            .iter()
+            .any(|action| action == &request.action)
+        || !policy
+            .allowed_modes
+            .iter()
+            .any(|mode| mode == &request.mode)
+        || !policy.same_session_only
+        || !policy.same_world_binding_only
+        || policy.allow_capability_narrowing
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "canonical admission plan is incomplete or conflicts with locked authority".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn canonical_spawn_fingerprint(
+    key_id: &str,
+    secret_key: &[u8; 32],
+    plan: &RetainedWorkerAdmissionPlanV1,
+    retained_participant_id: &str,
+    bootstrap_run_id: &str,
+) -> Result<RetainedWorkerAdmissionCommitmentV1, RetainedWorkerRuntimeError> {
+    let request = encode_canonical(
+        &plan.spawn_request,
+        "encode canonical validated spawn request",
+    )?;
+    let exact_authority = encode_canonical(
+        &plan.exact_authority,
+        "encode canonical exact current authority",
+    )?;
+    let descriptor_runtime = encode_canonical(
+        &CanonicalDescriptorAndRuntimeFingerprintV1 {
+            schema_version: 1,
+            descriptor: &plan.descriptor_and_runtime_plan.descriptor,
+            runtime_role: &plan.descriptor_and_runtime_plan.runtime_role,
+            internal_uaa_session_id_domain: &plan
+                .descriptor_and_runtime_plan
+                .internal_uaa_session_id_domain,
+            retained_participant_id,
+            bootstrap_run_id,
+            internal_uaa_session_id: format!("uaa_{bootstrap_run_id}"),
+        },
+        "encode canonical descriptor and runtime plan",
+    )?;
+    let policy_cap = encode_canonical(
+        &plan.policy_and_admission_cap,
+        "encode canonical policy and admission cap",
+    )?;
+    let mut input = b"substrate.retained-worker.admission.hmac-input.v1\0".to_vec();
+    for member in [
+        b"substrate.retained-worker.admission.spawn.v1".as_slice(),
+        plan.exact_authority.authority_store_id.as_bytes(),
+        plan.issuer_request_id.as_bytes(),
+        request.as_slice(),
+        exact_authority.as_slice(),
+        descriptor_runtime.as_slice(),
+        policy_cap.as_slice(),
+        retained_participant_id.as_bytes(),
+        bootstrap_run_id.as_bytes(),
+    ] {
+        append_len64(&mut input, member)?;
+    }
+    let digest = hmac_sha256(secret_key, &input);
+    Ok(RetainedWorkerAdmissionCommitmentV1 {
+        schema_version: 1,
+        algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256,
+        key_id: key_id.to_owned(),
+        digest_hex: lower_hex(&digest),
+    })
+}
+
+fn append_len64(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), RetainedWorkerRuntimeError> {
+    let length = u64::try_from(bytes.len())
+        .map_err(|_| RetainedWorkerRuntimeError("admission HMAC member is too large".into()))?;
+    output.extend_from_slice(&length.to_be_bytes());
+    output.extend_from_slice(bytes);
+    Ok(())
+}
+
+fn hmac_sha256(secret_key: &[u8; 32], input: &[u8]) -> [u8; 32] {
+    const BLOCK_SIZE: usize = 64;
+    let mut inner_pad = [0x36_u8; BLOCK_SIZE];
+    let mut outer_pad = [0x5c_u8; BLOCK_SIZE];
+    for (index, byte) in secret_key.iter().enumerate() {
+        inner_pad[index] ^= byte;
+        outer_pad[index] ^= byte;
+    }
+    let mut inner = Sha256::new();
+    inner.update(inner_pad);
+    inner.update(input);
+    let inner_digest = inner.finalize();
+    let mut outer = Sha256::new();
+    outer.update(outer_pad);
+    outer.update(inner_digest);
+    outer.finalize().into()
+}
+
+fn admission_state_is_live(state: &RetainedWorkerAdmissionStateV1) -> bool {
+    !matches!(
+        state,
+        RetainedWorkerAdmissionStateV1::Terminal { .. }
+            | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. }
+    )
+}
+
+fn admission_registration(
+    state: &RetainedWorkerAdmissionStateV1,
+) -> Option<&RetainedWorkerAdmissionRegistrationV1> {
+    match state {
+        RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration }
+        | RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { registration, .. }
+        | RetainedWorkerAdmissionStateV1::Routable { registration, .. }
+        | RetainedWorkerAdmissionStateV1::InterruptedNonterminal { registration, .. }
+        | RetainedWorkerAdmissionStateV1::Terminal { registration, .. } => Some(registration),
+        RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+        | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => None,
+    }
+}
+
+fn validate_admission_registry(
+    registry: &RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+) -> Result<(), RetainedWorkerRuntimeError> {
+    if registry.schema_version != 1
+        || registry.authority_store_id != authority_root.authority_store_id()
+        || registry.commitment_key.schema_version != 1
+        || registry.commitment_key.authority_store_id != registry.authority_store_id
+        || registry.commitment_key.algorithm
+            != RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256
+        || !valid_key_id(&registry.commitment_key.key_id)
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission registry header is invalid".into(),
+        ));
+    }
+    let mut expected_issuers = BTreeMap::new();
+    let mut participant_ids = BTreeSet::new();
+    let mut bootstrap_run_ids = BTreeSet::new();
+    let mut registration_ids = BTreeSet::new();
+    for (session_id, records) in &registry.records_by_session {
+        if session_id.is_empty() || records.is_empty() {
+            return Err(RetainedWorkerRuntimeError(
+                "admission registry session bucket is invalid".into(),
+            ));
+        }
+        let mut head_count = 0_usize;
+        let mut slot_sequences = BTreeSet::new();
+        for (participant_id, record) in records {
+            record
+                .current_policy_ref
+                .validate()
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+            if record.schema_version != 1
+                || record.authority_store_id != registry.authority_store_id
+                || record.issuer_request_id.is_empty()
+                || record.orchestration_session_id != *session_id
+                || record.retained_participant_id != *participant_id
+                || !valid_generated_id(&record.retained_participant_id, "rwp_")
+                || !valid_generated_id(&record.bootstrap_run_id, "rwr_")
+                || record.backend_id.is_empty()
+                || record.protocol.is_empty()
+                || record.world_binding.world_id.is_empty()
+                || record.current_policy_revision.is_empty()
+                || record.admission_authority_revision == 0
+                || record.max_live_retained_workers == 0
+                || record.record_revision == 0
+                || record.canonical_spawn_fingerprint.schema_version != 1
+                || record.canonical_spawn_fingerprint.algorithm
+                    != RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256
+                || record.canonical_spawn_fingerprint.key_id != registry.commitment_key.key_id
+                || !is_lower_hex(&record.canonical_spawn_fingerprint.digest_hex, 64)
+                || !participant_ids.insert(record.retained_participant_id.clone())
+                || !bootstrap_run_ids.insert(record.bootstrap_run_id.clone())
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "admission registry record identity is invalid".into(),
+                ));
+            }
+            match &record.state {
+                RetainedWorkerAdmissionStateV1::SlotReserved { slot_sequence, .. } => {
+                    if *slot_sequence == 0 || !slot_sequences.insert(*slot_sequence) {
+                        return Err(RetainedWorkerRuntimeError(
+                            "admission slot sequence is invalid".into(),
+                        ));
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
+                    authority_revision_expected,
+                    ..
+                } => {
+                    head_count += 1;
+                    if *authority_revision_expected == 0 {
+                        return Err(RetainedWorkerRuntimeError(
+                            "admission registration head revision is invalid".into(),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+            if head_count > 1 {
+                return Err(RetainedWorkerRuntimeError(
+                    "admission registry has more than one session registration head".into(),
+                ));
+            }
+            if let Some(registration) = admission_registration(&record.state) {
+                if registration.registration_id.is_empty()
+                    || !registration_ids.insert(registration.registration_id.clone())
+                {
+                    return Err(RetainedWorkerRuntimeError(
+                        "admission registration identity is invalid or duplicated".into(),
+                    ));
+                }
+                validate_admission_registration_against_authority(
+                    authority_root,
+                    record,
+                    registration,
+                )?;
+            }
+            if expected_issuers
+                .insert(
+                    record.issuer_request_id.clone(),
+                    RetainedWorkerAdmissionRecordLocatorV1 {
+                        orchestration_session_id: session_id.clone(),
+                        retained_participant_id: participant_id.clone(),
+                    },
+                )
+                .is_some()
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "admission issuer identity is duplicated".into(),
+                ));
+            }
+        }
+        let next = registry
+            .next_slot_sequence_by_session
+            .get(session_id)
+            .copied()
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError("admission next slot sequence is absent".into())
+            })?;
+        if next == 0
+            || slot_sequences
+                .iter()
+                .next_back()
+                .is_some_and(|value| *value >= next)
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "admission next slot sequence is not monotonic".into(),
+            ));
+        }
+    }
+    if registry.issuer_request_index != expected_issuers
+        || registry
+            .next_slot_sequence_by_session
+            .keys()
+            .any(|session| !registry.records_by_session.contains_key(session))
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission registry indices are inexact".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_admission_registration_against_authority(
+    authority_root: &VersionedStateRoot,
+    record: &RetainedWorkerAdmissionRecordV1,
+    admission_registration: &RetainedWorkerAdmissionRegistrationV1,
+) -> Result<(), RetainedWorkerRuntimeError> {
+    let VersionedStateRoot::V2(root) = authority_root else {
+        return Err(RetainedWorkerRuntimeError(
+            "post-R0 admission record requires V2 authority".into(),
+        ));
+    };
+    let registration = root
+        .retained_worker_registration_journal
+        .get(&admission_registration.registration_id)
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError("post-R0 admission registration is absent".into())
+        })?;
+    if registration.registration_id != admission_registration.registration_id
+        || registration.orchestration_session_id != record.orchestration_session_id
+        || registration.retained_participant_id != record.retained_participant_id
+        || registration.retained_worker_ref != admission_registration.retained_worker_ref
+        || registration.current_policy_ref != record.current_policy_ref
+        || registration.world_binding != record.world_binding
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "post-R0 admission registration conflicts with authority truth".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn is_lower_hex(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+fn valid_generated_id(value: &str, prefix: &str) -> bool {
+    value
+        .strip_prefix(prefix)
+        .is_some_and(|hex| is_lower_hex(hex, 32))
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
@@ -2207,6 +3094,14 @@ mod tests {
     const RETAINED_SUBPROCESS_COMMITMENT: &str = "SUBSTRATE_R0_RETAINED_SUBPROCESS_COMMITMENT";
     const RETAINED_SUBPROCESS_VARIANT: &str = "SUBSTRATE_R0_RETAINED_SUBPROCESS_VARIANT";
     const ADMISSION_INIT_SUBPROCESS_HOME: &str = "SUBSTRATE_B3_2A_ADMISSION_INIT_SUBPROCESS_HOME";
+    const ADMISSION_RESERVATION_SUBPROCESS_HOME: &str =
+        "SUBSTRATE_B3_2A_ADMISSION_RESERVATION_SUBPROCESS_HOME";
+    const ADMISSION_RESERVATION_SUBPROCESS_ISSUER: &str =
+        "SUBSTRATE_B3_2A_ADMISSION_RESERVATION_SUBPROCESS_ISSUER";
+    const ADMISSION_RESERVATION_SUBPROCESS_PROMPT: &str =
+        "SUBSTRATE_B3_2A_ADMISSION_RESERVATION_SUBPROCESS_PROMPT";
+    const ADMISSION_RESERVATION_SUBPROCESS_CAP: &str =
+        "SUBSTRATE_B3_2A_ADMISSION_RESERVATION_SUBPROCESS_CAP";
 
     #[test]
     fn retained_registration_subprocess_worker() {
@@ -2252,6 +3147,22 @@ mod tests {
         RetainedWorkerRuntime
             .initialize_admission_registry(&authority)
             .unwrap();
+    }
+
+    #[test]
+    fn admission_reservation_subprocess_worker() {
+        let Some(home) = std::env::var_os(ADMISSION_RESERVATION_SUBPROCESS_HOME) else {
+            return;
+        };
+        let authority = HostSessionAuthority::open(std::path::Path::new(&home)).unwrap();
+        let issuer = std::env::var(ADMISSION_RESERVATION_SUBPROCESS_ISSUER).unwrap();
+        let prompt = std::env::var(ADMISSION_RESERVATION_SUBPROCESS_PROMPT).unwrap();
+        let cap = std::env::var(ADMISSION_RESERVATION_SUBPROCESS_CAP)
+            .unwrap()
+            .parse()
+            .unwrap();
+        let plan = admission_plan(&authority, &issuer, &prompt, cap);
+        let _ = RetainedWorkerRuntime.reserve_admission_slot(&authority, &plan);
     }
 
     #[test]
@@ -2594,5 +3505,453 @@ mod tests {
             .unwrap()
             .file_type()
             .is_symlink());
+    }
+
+    fn admission_plan(
+        authority: &HostSessionAuthority,
+        issuer_request_id: &str,
+        prompt: &str,
+        max_live_retained_workers: u64,
+    ) -> RetainedWorkerAdmissionPlanV1 {
+        let resolved = authority.resolve_current_exact("r0-session", None).unwrap();
+        let descriptor = plan(resolved.observation.clone()).descriptor;
+        let target_backend_id = descriptor.backend_id.clone();
+        RetainedWorkerAdmissionPlanV1 {
+            issuer_request_id: issuer_request_id.into(),
+            spawn_request: CanonicalValidatedSpawnRequestV1 {
+                schema_version: 1,
+                request_id: format!("request-{issuer_request_id}"),
+                idempotency_key: format!("idempotency-{issuer_request_id}"),
+                orchestration_session_id: "r0-session".into(),
+                caller_participant_id: "r0-orchestrator".into(),
+                action: "spawn_world_worker".into(),
+                mode: "retained".into(),
+                target_backend_id: target_backend_id.clone(),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: "r0-world".into(),
+                world_generation: 7,
+                payload: CanonicalWorkerSpawnPayloadV1 {
+                    prompt: prompt.into(),
+                },
+            },
+            exact_authority: CanonicalExactCurrentAuthorityV1::from_resolved(&resolved),
+            descriptor_and_runtime_plan: CanonicalDescriptorAndRuntimePlanV1 {
+                schema_version: 1,
+                descriptor,
+                runtime_role: "member".into(),
+                internal_uaa_session_id_domain: "substrate.retained-worker.internal-uaa-session.v1"
+                    .into(),
+            },
+            policy_and_admission_cap: CanonicalPolicyAndAdmissionCapV1 {
+                schema_version: 1,
+                current_policy_ref: resolved
+                    .authority
+                    .current_policy_ref
+                    .clone()
+                    .expect("started authority must bind policy"),
+                current_policy: resolved.current_policy.clone(),
+                dispatch_enabled: true,
+                allowed_backends: vec![target_backend_id],
+                allowed_actions: vec!["spawn_world_worker".into()],
+                allowed_modes: vec!["retained".into()],
+                same_session_only: true,
+                same_world_binding_only: true,
+                allow_capability_narrowing: false,
+                max_live_retained_workers,
+                max_concurrent_ephemeral: 4,
+            },
+        }
+    }
+
+    #[test]
+    fn admission_cap_zero_rejects_without_slot_or_authority_mutation() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let authority_before = authority.read_a12a_root().unwrap();
+        let plan = admission_plan(&authority, "cap-zero", "prompt", 0);
+
+        assert!(runtime.reserve_admission_slot(&authority, &plan).is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), authority_before);
+        let registry = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let decoded: RetainedWorkerAdmissionRegistryV1 =
+            decode_canonical(&fs::read(registry).unwrap(), "decode fixture registry").unwrap();
+        assert!(decoded.records_by_session.is_empty());
+    }
+
+    #[test]
+    fn admission_cap_boundary_counts_slot_reserved_and_rejects_second_request() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let first_plan = admission_plan(&authority, "cap-one-first", "first", 1);
+        let first = runtime
+            .reserve_admission_slot(&authority, &first_plan)
+            .unwrap();
+        let root_after_first = authority.read_a12a_root().unwrap();
+
+        let second_plan = admission_plan(&authority, "cap-one-second", "second", 1);
+        assert!(runtime
+            .reserve_admission_slot(&authority, &second_plan)
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), root_after_first);
+        assert!(matches!(
+            first.record.state,
+            RetainedWorkerAdmissionStateV1::SlotReserved {
+                slot_sequence: 1,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn admission_exact_retry_joins_stable_identity_and_changed_prompt_conflicts() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "exact-retry", "original prompt", 1);
+        let first = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let joined = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        assert!(!first.joined);
+        assert!(joined.joined);
+        assert_eq!(joined.record, first.record);
+
+        let changed = admission_plan(&authority, "exact-retry", "changed prompt", 1);
+        assert!(runtime
+            .reserve_admission_slot(&authority, &changed)
+            .is_err());
+        let inspection = runtime
+            .read_admission_record(
+                &authority,
+                &first.record.orchestration_session_id,
+                &first.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(inspection, first.record);
+    }
+
+    #[test]
+    fn admission_retry_rejects_every_changed_bound_input_without_mutation() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "changed-input", "original prompt", 3);
+        let first = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let authority_before = authority.read_a12a_root().unwrap();
+
+        let mut variants = Vec::new();
+        let mut changed = plan.clone();
+        changed.spawn_request.payload.prompt = "changed prompt".into();
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.spawn_request.request_id = "changed-request".into();
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.spawn_request.idempotency_key = "changed-idempotency".into();
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.spawn_request.caller_participant_id = "changed-caller".into();
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.spawn_request.orchestration_session_id = "changed-session".into();
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.spawn_request.world_id = "changed-world".into();
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.spawn_request.world_generation += 1;
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.descriptor_and_runtime_plan.descriptor.backend_id = "cli:changed-worker".into();
+        changed.spawn_request.target_backend_id = "cli:changed-worker".into();
+        changed.policy_and_admission_cap.allowed_backends = vec!["cli:changed-worker".into()];
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.descriptor_and_runtime_plan.descriptor.protocol = "substrate.changed".into();
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.policy_and_admission_cap.max_live_retained_workers = 4;
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.policy_and_admission_cap.max_concurrent_ephemeral += 1;
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.policy_and_admission_cap.dispatch_enabled = false;
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.exact_authority.authority_record_commitment =
+            AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "00".repeat(32),
+            };
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed.exact_authority.authoritative_lineage_commitment =
+            AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "11".repeat(32),
+            };
+        variants.push(changed);
+        let mut changed = plan.clone();
+        changed
+            .exact_authority
+            .authority
+            .workspace_binding
+            .workspace_root
+            .physical_path = "/substituted-workspace".into();
+        variants.push(changed);
+
+        for changed in variants {
+            assert!(runtime
+                .reserve_admission_slot(&authority, &changed)
+                .is_err());
+            assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+            assert_eq!(authority.read_a12a_root().unwrap(), authority_before);
+        }
+        assert_eq!(
+            runtime
+                .read_admission_record(
+                    &authority,
+                    &first.record.orchestration_session_id,
+                    &first.record.retained_participant_id,
+                )
+                .unwrap(),
+            Some(first.record)
+        );
+    }
+
+    #[test]
+    fn malformed_committed_admission_identity_fails_closed_without_repair() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "identity-corruption", "prompt", 2);
+        let slot = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+            &fs::read(&registry_path).unwrap(),
+            "decode fixture registry",
+        )
+        .unwrap();
+        let records = registry
+            .records_by_session
+            .get_mut(&slot.record.orchestration_session_id)
+            .unwrap();
+        let mut malformed = records
+            .remove(&slot.record.retained_participant_id)
+            .unwrap();
+        malformed.retained_participant_id = "malformed-participant".into();
+        records.insert("malformed-participant".into(), malformed);
+        registry
+            .issuer_request_index
+            .get_mut(&slot.record.issuer_request_id)
+            .unwrap()
+            .retained_participant_id = "malformed-participant".into();
+        let malformed_bytes = encode_canonical(&registry, "encode fixture registry").unwrap();
+        fs::write(&registry_path, &malformed_bytes).unwrap();
+
+        assert!(runtime
+            .read_admission_record(
+                &authority,
+                &slot.record.orchestration_session_id,
+                "malformed-participant",
+            )
+            .is_err());
+        assert_eq!(fs::read(registry_path).unwrap(), malformed_bytes);
+    }
+
+    #[test]
+    fn admission_fingerprint_binds_stable_participant_and_bootstrap_run() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "identity-binding", "private prompt", 2);
+        let slot = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (_, key_path) = initialized_admission_paths(&parent, &identity);
+        let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+            decode_canonical(&fs::read(key_path).unwrap(), "decode fixture key").unwrap();
+        let changed_participant = canonical_spawn_fingerprint(
+            &identity.key_id,
+            &envelope.secret_key,
+            &plan,
+            "rwp_00000000000000000000000000000000",
+            &slot.record.bootstrap_run_id,
+        )
+        .unwrap();
+        let changed_run = canonical_spawn_fingerprint(
+            &identity.key_id,
+            &envelope.secret_key,
+            &plan,
+            &slot.record.retained_participant_id,
+            "rwr_00000000000000000000000000000000",
+        )
+        .unwrap();
+
+        assert_ne!(changed_participant, slot.record.canonical_spawn_fingerprint);
+        assert_ne!(changed_run, slot.record.canonical_spawn_fingerprint);
+        assert_ne!(changed_participant, changed_run);
+    }
+
+    #[test]
+    fn admission_registry_contains_neither_prompt_nor_key_material() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let prompt = "private prompt marker B3.2a";
+        let plan = admission_plan(&authority, "secret-exclusion", prompt, 2);
+        runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (admission_root, key_path) = initialized_admission_paths(&parent, &identity);
+        let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+            decode_canonical(&fs::read(key_path).unwrap(), "decode fixture key").unwrap();
+        let registry_bytes = fs::read(admission_root.join("registry-v1.json")).unwrap();
+        let registry_text = std::str::from_utf8(&registry_bytes).unwrap();
+        let canonical_secret = serde_json::to_string(&envelope.secret_key).unwrap();
+
+        assert!(!registry_text.contains(prompt));
+        assert!(!registry_text.contains(&canonical_secret));
+    }
+
+    #[test]
+    fn crash_after_slot_reserved_retries_to_the_committed_identity() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "slot-crash", "prompt", 2);
+        let failure = runtime
+            .reserve_admission_slot_at(
+                &authority,
+                &plan,
+                timestamp("2026-07-15T13:00:00.000000000Z"),
+                [11_u8; 16],
+                [12_u8; 16],
+                [13_u8; 16],
+                Some(AdmissionReservationCrashPointV1::AfterSlotReserved),
+            )
+            .unwrap_err();
+        assert_eq!(
+            failure.to_string(),
+            "injected crash after admission slot reservation"
+        );
+
+        let joined = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        assert!(joined.joined);
+        assert_eq!(
+            joined.record.retained_participant_id,
+            format!("rwp_{}", lower_hex(&[11_u8; 16]))
+        );
+        assert_eq!(
+            joined.record.bootstrap_run_id,
+            format!("rwr_{}", lower_hex(&[12_u8; 16]))
+        );
+    }
+
+    #[test]
+    fn concurrent_process_cap_reservation_commits_exactly_one_live_slot() {
+        let (parent, authority, _) = started_authority();
+        let executable = std::env::current_exe().unwrap();
+        let test_name = "execution::agent_runtime::retained_worker_runtime::tests::admission_reservation_subprocess_worker";
+        let spawn = |issuer: &str, prompt: &str| {
+            Command::new(&executable)
+                .arg("--exact")
+                .arg(test_name)
+                .arg("--nocapture")
+                .arg("--test-threads=1")
+                .env(
+                    ADMISSION_RESERVATION_SUBPROCESS_HOME,
+                    parent.path().join("home"),
+                )
+                .env(ADMISSION_RESERVATION_SUBPROCESS_ISSUER, issuer)
+                .env(ADMISSION_RESERVATION_SUBPROCESS_PROMPT, prompt)
+                .env(ADMISSION_RESERVATION_SUBPROCESS_CAP, "1")
+                .spawn()
+                .unwrap()
+        };
+        let mut first = spawn("cap-process-a", "prompt a");
+        let mut second = spawn("cap-process-b", "prompt b");
+        assert!(first.wait().unwrap().success());
+        assert!(second.wait().unwrap().success());
+
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let registry: RetainedWorkerAdmissionRegistryV1 =
+            decode_canonical(&fs::read(registry_path).unwrap(), "decode fixture registry").unwrap();
+        assert_eq!(
+            registry
+                .records_by_session
+                .values()
+                .flat_map(BTreeMap::values)
+                .count(),
+            1
+        );
+        assert_eq!(registry.issuer_request_index.len(), 1);
+        assert_eq!(
+            authority.read_a12a_root().unwrap().authority_store_id,
+            registry.authority_store_id
+        );
+    }
+
+    #[test]
+    fn concurrent_process_exact_retry_joins_one_admission_identity() {
+        let (parent, _authority, _) = started_authority();
+        let executable = std::env::current_exe().unwrap();
+        let test_name = "execution::agent_runtime::retained_worker_runtime::tests::admission_reservation_subprocess_worker";
+        let spawn = || {
+            Command::new(&executable)
+                .arg("--exact")
+                .arg(test_name)
+                .arg("--nocapture")
+                .arg("--test-threads=1")
+                .env(
+                    ADMISSION_RESERVATION_SUBPROCESS_HOME,
+                    parent.path().join("home"),
+                )
+                .env(ADMISSION_RESERVATION_SUBPROCESS_ISSUER, "same-issuer")
+                .env(ADMISSION_RESERVATION_SUBPROCESS_PROMPT, "same prompt")
+                .env(ADMISSION_RESERVATION_SUBPROCESS_CAP, "2")
+                .spawn()
+                .unwrap()
+        };
+        let mut first = spawn();
+        let mut second = spawn();
+        assert!(first.wait().unwrap().success());
+        assert!(second.wait().unwrap().success());
+
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let registry: RetainedWorkerAdmissionRegistryV1 =
+            decode_canonical(&fs::read(registry_path).unwrap(), "decode fixture registry").unwrap();
+        assert_eq!(registry.issuer_request_index.len(), 1);
+        assert_eq!(
+            registry
+                .records_by_session
+                .values()
+                .flat_map(BTreeMap::values)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn admission_hmac_matches_independent_sha256_vector() {
+        let digest = hmac_sha256(&[0x0b_u8; 32], b"Hi There");
+        assert_eq!(
+            lower_hex(&digest),
+            "198a607eb44bfbc69903a0f1cf2bbdc5ba0aa3f3d9ae3c1c7a3b1696a0b68cf7"
+        );
+    }
+
+    #[test]
+    fn canonical_spawn_fingerprint_len64_framing_is_big_endian_and_unambiguous() {
+        let mut framed = Vec::new();
+        append_len64(&mut framed, b"a").unwrap();
+        append_len64(&mut framed, b"bc").unwrap();
+        assert_eq!(
+            framed,
+            vec![0, 0, 0, 0, 0, 0, 0, 1, b'a', 0, 0, 0, 0, 0, 0, 0, 2, b'b', b'c']
+        );
     }
 }
