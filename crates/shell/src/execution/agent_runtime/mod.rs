@@ -7,6 +7,7 @@ pub(crate) mod mapping;
 pub(crate) mod obligation_ledger;
 pub(crate) mod orchestration_session;
 pub(crate) mod registry;
+pub(crate) mod retained_worker_runtime;
 pub(crate) mod session;
 pub(crate) mod state_store;
 pub(crate) mod tool_invocation_contract;

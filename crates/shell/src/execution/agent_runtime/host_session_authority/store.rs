@@ -113,6 +113,19 @@ pub(super) fn commit_v2_root_exact_current_opened(
     platform::commit_v2_root_exact_current_opened(root, exact_current, proposed, publication_guard)
 }
 
+pub(super) fn reserve_retained_worker_registration_opened(
+    root: &TrustedAuthorityRoot,
+    input: &RetainedWorkerReservationInputV1,
+    build_worker: impl Fn(
+        &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+        &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+        &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+        &crate::execution::agent_runtime::host_session_authority::schema::WorldBindingV1,
+    ) -> Result<Vec<u8>, &'static str>,
+) -> Result<RetainedWorkerReservationV1, BootstrapError> {
+    platform::reserve_retained_worker_registration_opened(root, input, build_worker)
+}
+
 #[cfg(test)]
 pub(crate) fn rotate_commitment_key(
     path: &Path,
@@ -342,6 +355,43 @@ pub(super) struct GeneratedObjectV1 {
     pub(super) byte_length: u64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct RetainedWorkerReservationInputV1 {
+    pub(super) issuer_request_id: String,
+    pub(super) orchestration_session_id: String,
+    pub(super) expected_authority_store_id: String,
+    pub(super) expected_authority_revision: u64,
+    pub(super) expected_authority_commitment:
+        crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1,
+    pub(super) retained_participant_id: String,
+    pub(super) descriptor_bytes: Vec<u8>,
+    pub(super) resume_handle_bytes: Vec<u8>,
+    pub(super) registered_at:
+        Option<crate::execution::agent_runtime::host_session_authority::schema::TimestampV1>,
+    pub(super) crash_point: Option<RetainedReservationCrashPointV1>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum RetainedReservationCrashPointV1 {
+    BeforeRootPublication,
+    AfterRootPublication,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct RetainedWorkerReservationV1 {
+    pub(super) request: crate::execution::agent_runtime::host_session_authority::store_schema::RetainedWorkerAuthorityRegistrationRequestV1,
+    pub(super) descriptor_ref:
+        crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(super) resume_handle_ref:
+        crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(super) retained_worker_ref:
+        crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(super) descriptor_bytes: Vec<u8>,
+    pub(super) resume_handle_bytes: Vec<u8>,
+    pub(super) retained_worker_bytes: Vec<u8>,
+    pub(super) joined: bool,
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod platform {
     use std::fmt;
@@ -354,19 +404,21 @@ mod platform {
         BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, GeneratedObjectV1,
         GreenfieldUpgradeCrashPointV1, InitializationCrashPointV1, InitializationMaterialV1,
         KeyLifecycleCrashPointV1, LegacyStateStoreCollectionV1, ObjectPublicationOutcomeV1,
-        ObjectVerificationContextV1, RootUpgradeOutcomeV1, TransactionCommitOutcomeV1,
-        VersionedObjectVerificationParentIntentV1,
+        ObjectVerificationContextV1, RetainedReservationCrashPointV1,
+        RetainedWorkerReservationInputV1, RetainedWorkerReservationV1, RootUpgradeOutcomeV1,
+        TransactionCommitOutcomeV1, VersionedObjectVerificationParentIntentV1,
     };
     use crate::execution::agent_runtime::host_session_authority::canonical_json;
     use crate::execution::agent_runtime::host_session_authority::hash::{
         canonical_sha256, store_hmac_sha256, validate_object_commitment_rule, SensitiveDomainV1,
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
-        AgentDescriptorHashInputV1, ApplicationResultHashInputV1, AuthorityObjectCommitmentV1,
-        AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
-        HostAttachContractHashInputV1, InputAcceptanceHashInputV1, PolicyObjectHashInputV1,
-        PostTurnCompletionHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
-        TerminalHandoffHashInputV1, TerminalHandoffStateV1,
+        AgentDescriptorHashInputV1, AgentExecutionScopeV1, ApplicationResultHashInputV1,
+        AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
+        CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1, HostAttachContractHashInputV1,
+        InputAcceptanceHashInputV1, PolicyObjectHashInputV1, PostTurnCompletionHashInputV1,
+        ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1, TerminalHandoffHashInputV1,
+        TerminalHandoffStateV1, TimestampV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_format::{
         key_id, nonce, object_ref_id, store_id, validate_key_id, validate_ref_id,
@@ -380,7 +432,9 @@ mod platform {
         HostSessionStartupOwnershipApplicationV1, HostSessionTransitionInputHandoffV1,
         HostSessionTransitionIntentStateV1, HostSessionTransitionIntentStateV2,
         HostSessionTransitionIntentV1, HostSessionTransitionIntentV2,
-        HostSessionTransitionTransportPayloadStateV1, SessionNamespaceRecordV1, StateRootV1,
+        HostSessionTransitionTransportPayloadStateV1,
+        RetainedWorkerAuthorityRegistrationRequestStateV1,
+        RetainedWorkerAuthorityRegistrationRequestV1, SessionNamespaceRecordV1, StateRootV1,
         StateRootV2, VersionedStateRoot,
     };
     use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
@@ -413,7 +467,10 @@ mod platform {
     mod object_persistence;
     use object_persistence::validate_orphan_candidate;
     use object_persistence::verify_object_bytes;
-    use object_persistence::{canonical_digest, publish_or_join_orphan, sensitive_domain};
+    use object_persistence::{
+        canonical_digest, publish_or_join_orphan, reserved_object_location_is_absent,
+        sensitive_domain,
+    };
     #[path = "reachability.rs"]
     mod reachability;
     use reachability::{add_expected_ref, collect_reachable_objects, collect_reachable_objects_v2};
@@ -848,6 +905,477 @@ mod platform {
             )?;
             Ok(proposed.clone())
         })
+    }
+
+    pub(super) fn reserve_retained_worker_registration_opened(
+        root_handle: &TrustedAuthorityRoot,
+        input: &RetainedWorkerReservationInputV1,
+        build_worker: impl Fn(
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &crate::execution::agent_runtime::host_session_authority::schema::WorldBindingV1,
+        ) -> Result<Vec<u8>, &'static str>,
+    ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root_handle, |transaction| {
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError(
+                    "retained registration requires strict StateRootV2",
+                ));
+            };
+            if input.issuer_request_id.is_empty()
+                || !input
+                    .issuer_request_id
+                    .starts_with("retained-worker-registration:")
+                || input.issuer_request_id == "retained-worker-registration:"
+                || input.orchestration_session_id.is_empty()
+                || input.retained_participant_id.is_empty()
+                || input.expected_authority_revision == 0
+            {
+                return Err(BootstrapError(
+                    "retained registration input identity is invalid",
+                ));
+            }
+            let descriptor: AgentDescriptorHashInputV1 =
+                canonical_json::from_slice(&input.descriptor_bytes)
+                    .map_err(|_| BootstrapError("decode retained descriptor bytes"))?;
+            let resume: ResumeHandleHashInputV1 =
+                canonical_json::from_slice(&input.resume_handle_bytes)
+                    .map_err(|_| BootstrapError("decode retained resume bytes"))?;
+            if descriptor.schema_version != 1
+                || descriptor.descriptor.schema_version != 1
+                || descriptor.descriptor.execution_scope != AgentExecutionScopeV1::World
+                || resume.schema_version != 1
+                || resume.orchestration_session_id != input.orchestration_session_id
+                || resume.participant_id != input.retained_participant_id
+                || resume.backend_id != descriptor.descriptor.backend_id
+                || resume.protocol != descriptor.descriptor.protocol
+            {
+                return Err(BootstrapError(
+                    "retained descriptor and resume plan disagree",
+                ));
+            }
+            let descriptor_commitment = canonical_commitment_for_kind(
+                AuthorityObjectKindV1::AgentDescriptor,
+                &input.descriptor_bytes,
+            )?;
+            let resume_handle_commitment = canonical_commitment_for_kind(
+                AuthorityObjectKindV1::ResumeHandle,
+                &input.resume_handle_bytes,
+            )?;
+
+            if let Some(existing) = root
+                .retained_worker_registration_request_index
+                .get(&input.issuer_request_id)
+            {
+                let descriptor_ref = reserved_ref(
+                    &existing.descriptor_ref_id,
+                    AuthorityObjectKindV1::AgentDescriptor,
+                    &existing.descriptor_commitment,
+                );
+                let resume_handle_ref = reserved_ref(
+                    &existing.resume_handle_ref_id,
+                    AuthorityObjectKindV1::ResumeHandle,
+                    &existing.resume_handle_commitment,
+                );
+                let retained_worker_ref = reserved_ref(
+                    &existing.retained_worker_ref_id,
+                    AuthorityObjectKindV1::RetainedWorker,
+                    &existing.retained_worker_commitment,
+                );
+                let worker_bytes = build_worker(
+                    &descriptor_ref,
+                    &resume_handle_ref,
+                    &existing.current_policy_ref,
+                    &existing.world_binding,
+                )
+                .map_err(BootstrapError)?;
+                let worker_commitment = canonical_commitment_for_kind(
+                    AuthorityObjectKindV1::RetainedWorker,
+                    &worker_bytes,
+                )?;
+                if existing.orchestration_session_id != input.orchestration_session_id
+                    || existing.authority_revision_before != input.expected_authority_revision
+                    || existing.authority_record_commitment_before
+                        != input.expected_authority_commitment
+                    || existing.retained_participant_id != input.retained_participant_id
+                    || existing.descriptor_commitment != descriptor_commitment
+                    || existing.resume_handle_commitment != resume_handle_commitment
+                    || existing.retained_worker_commitment != worker_commitment
+                    || input
+                        .registered_at
+                        .as_ref()
+                        .is_some_and(|registered_at| registered_at != &existing.registered_at)
+                {
+                    return Err(BootstrapError(
+                        "retained registration retry changed reserved bytes or scope",
+                    ));
+                }
+                validate_reserved_graph(
+                    transaction.layout,
+                    root,
+                    existing,
+                    &descriptor_ref,
+                    &input.descriptor_bytes,
+                    &resume_handle_ref,
+                    &input.resume_handle_bytes,
+                    &retained_worker_ref,
+                    &worker_bytes,
+                )?;
+                if matches!(
+                    existing.state,
+                    RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved
+                ) {
+                    validate_reservation_authority(root, input)?;
+                }
+                transaction.reconcile()?;
+                return Ok(RetainedWorkerReservationV1 {
+                    request: existing.clone(),
+                    descriptor_ref,
+                    resume_handle_ref,
+                    retained_worker_ref,
+                    descriptor_bytes: input.descriptor_bytes.clone(),
+                    resume_handle_bytes: input.resume_handle_bytes.clone(),
+                    retained_worker_bytes: worker_bytes,
+                    joined: true,
+                });
+            }
+
+            validate_reservation_authority(root, input)?;
+            if root
+                .issuer_request_index
+                .contains_key(&input.issuer_request_id)
+                || root
+                    .retained_worker_registration_request_index
+                    .values()
+                    .any(|request| request.retained_participant_id == input.retained_participant_id)
+            {
+                return Err(BootstrapError(
+                    "retained registration issuer or participant is already reserved",
+                ));
+            }
+            let SessionNamespaceRecordV1::Authority(authority) = root
+                .session_namespace_map
+                .get(&input.orchestration_session_id)
+                .ok_or(BootstrapError("retained registration session is absent"))?
+            else {
+                return Err(BootstrapError(
+                    "retained registration session has no durable authority",
+                ));
+            };
+            if authority
+                .authoritative_participant_lineage
+                .contains(&input.retained_participant_id)
+            {
+                return Err(BootstrapError(
+                    "retained participant already belongs to authority lineage",
+                ));
+            }
+            let current_policy_ref = authority.current_policy_ref.clone().ok_or(BootstrapError(
+                "retained registration requires current policy",
+            ))?;
+            let world_binding = authority.world_binding.clone().ok_or(BootstrapError(
+                "retained registration requires exact world binding",
+            ))?;
+            let descriptor_ref = allocate_reserved_canonical_ref(
+                transaction.layout,
+                root,
+                AuthorityObjectKindV1::AgentDescriptor,
+                &input.descriptor_bytes,
+            )?;
+            let resume_handle_ref = allocate_reserved_canonical_ref(
+                transaction.layout,
+                root,
+                AuthorityObjectKindV1::ResumeHandle,
+                &input.resume_handle_bytes,
+            )?;
+            let worker_bytes = build_worker(
+                &descriptor_ref,
+                &resume_handle_ref,
+                &current_policy_ref,
+                &world_binding,
+            )
+            .map_err(BootstrapError)?;
+            let retained_worker_ref = allocate_reserved_canonical_ref(
+                transaction.layout,
+                root,
+                AuthorityObjectKindV1::RetainedWorker,
+                &worker_bytes,
+            )?;
+            let registration_id = allocate_registration_id(root)?;
+            let registered_at = match &input.registered_at {
+                Some(value) => value.clone(),
+                None => system_timestamp()?,
+            };
+            let request = RetainedWorkerAuthorityRegistrationRequestV1 {
+                schema_version: 1,
+                issuer_request_id: input.issuer_request_id.clone(),
+                registration_id,
+                orchestration_session_id: input.orchestration_session_id.clone(),
+                authority_revision_before: input.expected_authority_revision,
+                authority_record_commitment_before: input.expected_authority_commitment.clone(),
+                retained_participant_id: input.retained_participant_id.clone(),
+                descriptor_ref_id: descriptor_ref.ref_id.clone(),
+                descriptor_commitment: descriptor_ref.commitment.clone(),
+                resume_handle_ref_id: resume_handle_ref.ref_id.clone(),
+                resume_handle_commitment: resume_handle_ref.commitment.clone(),
+                retained_worker_ref_id: retained_worker_ref.ref_id.clone(),
+                retained_worker_commitment: retained_worker_ref.commitment.clone(),
+                current_policy_ref,
+                world_binding,
+                registered_at,
+                state: RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved,
+            };
+            validate_reserved_graph(
+                transaction.layout,
+                root,
+                &request,
+                &descriptor_ref,
+                &input.descriptor_bytes,
+                &resume_handle_ref,
+                &input.resume_handle_bytes,
+                &retained_worker_ref,
+                &worker_bytes,
+            )?;
+            let mut proposed = root.clone();
+            proposed.root_revision = proposed.root_revision.checked_add(1).ok_or(
+                BootstrapError("retained reservation root revision overflow"),
+            )?;
+            proposed
+                .retained_worker_registration_request_index
+                .insert(input.issuer_request_id.clone(), request.clone());
+            let candidate = VersionedStateRoot::V2(proposed);
+            transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+            transaction.reconcile()?;
+            publish_versioned_replacement_root(
+                transaction.layout,
+                transaction.trusted_root,
+                &transaction.legacy,
+                &candidate,
+                system_material()?.root_nonce,
+                || {
+                    transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+                    if input.crash_point
+                        == Some(RetainedReservationCrashPointV1::BeforeRootPublication)
+                    {
+                        return Err(BootstrapError(
+                            "injected crash before retained reservation publication",
+                        ));
+                    }
+                    Ok(())
+                },
+            )?;
+            if input.crash_point == Some(RetainedReservationCrashPointV1::AfterRootPublication) {
+                return Err(BootstrapError(
+                    "injected crash after retained reservation publication",
+                ));
+            }
+            Ok(RetainedWorkerReservationV1 {
+                request,
+                descriptor_ref,
+                resume_handle_ref,
+                retained_worker_ref,
+                descriptor_bytes: input.descriptor_bytes.clone(),
+                resume_handle_bytes: input.resume_handle_bytes.clone(),
+                retained_worker_bytes: worker_bytes,
+                joined: false,
+            })
+        })
+    }
+
+    fn validate_reservation_authority(
+        root: &StateRootV2,
+        input: &RetainedWorkerReservationInputV1,
+    ) -> Result<(), BootstrapError> {
+        if root.authority_store_id != input.expected_authority_store_id {
+            return Err(BootstrapError(
+                "retained registration authority store is inexact",
+            ));
+        }
+        let SessionNamespaceRecordV1::Authority(authority) = root
+            .session_namespace_map
+            .get(&input.orchestration_session_id)
+            .ok_or(BootstrapError("retained registration authority is absent"))?
+        else {
+            return Err(BootstrapError(
+                "retained registration authority record is not durable",
+            ));
+        };
+        let commitment = canonical_authority_commitment(authority)?;
+        if authority.authority_revision != input.expected_authority_revision
+            || commitment != input.expected_authority_commitment
+        {
+            return Err(BootstrapError(
+                "retained registration expected authority is stale",
+            ));
+        }
+        Ok(())
+    }
+
+    fn canonical_authority_commitment(
+        authority: &crate::execution::agent_runtime::host_session_authority::store_schema::DurableSessionAuthorityV1,
+    ) -> Result<AuthorityObjectCommitmentV1, BootstrapError> {
+        canonical_sha256(&DurableSessionAuthorityHashInputV1 {
+            schema_version: authority.schema_version,
+            orchestration_session_id: authority.orchestration_session_id.clone(),
+            shell_trace_session_id: authority.shell_trace_session_id.clone(),
+            authority_revision: authority.authority_revision,
+            origin: authority.origin.clone(),
+            authoritative_participant_lineage: authority.authoritative_participant_lineage.clone(),
+            active_authoritative_participant_id: authority
+                .active_authoritative_participant_id
+                .clone(),
+            workspace_binding: authority.workspace_binding.clone(),
+            world_binding: authority.world_binding.clone(),
+            host_attach_contract_ref: authority.host_attach_contract_ref.clone(),
+            retained_worker_refs: authority.retained_worker_refs.clone(),
+            internal_resume_handle_refs: authority.internal_resume_handle_refs.clone(),
+            lifecycle_posture: authority.lifecycle_posture,
+            current_policy_ref: authority.current_policy_ref.clone(),
+            current_policy_revision: authority.current_policy_revision.clone(),
+        })
+        .map(|digest_hex| AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex })
+        .map_err(|_| BootstrapError("commit retained registration authority"))
+    }
+
+    fn canonical_commitment_for_kind(
+        kind: AuthorityObjectKindV1,
+        bytes: &[u8],
+    ) -> Result<AuthorityObjectCommitmentV1, BootstrapError> {
+        canonical_digest(kind, bytes)
+            .map(|digest_hex| AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex })
+    }
+
+    fn reserved_ref(
+        ref_id: &str,
+        object_kind: AuthorityObjectKindV1,
+        commitment: &AuthorityObjectCommitmentV1,
+    ) -> AuthorityObjectRefV1 {
+        AuthorityObjectRefV1 {
+            ref_id: ref_id.to_owned(),
+            object_kind,
+            schema_version: 1,
+            commitment: commitment.clone(),
+        }
+    }
+
+    fn allocate_reserved_canonical_ref(
+        layout: &StoreLayout<'_>,
+        root: &StateRootV2,
+        object_kind: AuthorityObjectKindV1,
+        bytes: &[u8],
+    ) -> Result<AuthorityObjectRefV1, BootstrapError> {
+        let commitment = canonical_commitment_for_kind(object_kind, bytes)?;
+        let mut random = rand::rngs::OsRng;
+        for _ in 0..32 {
+            let mut entropy = [0_u8; 16];
+            random.fill_bytes(&mut entropy);
+            let reference = reserved_ref(&object_ref_id(entropy), object_kind, &commitment);
+            let reserved = root
+                .retained_worker_registration_request_index
+                .values()
+                .any(|request| {
+                    request.descriptor_ref_id == reference.ref_id
+                        || request.resume_handle_ref_id == reference.ref_id
+                        || request.retained_worker_ref_id == reference.ref_id
+                });
+            if !root.object_index.contains_key(&reference.ref_id)
+                && !reserved
+                && reserved_object_location_is_absent(layout, &reference)?
+            {
+                return Ok(reference);
+            }
+        }
+        Err(BootstrapError(
+            "unable to allocate collision-free retained object ID",
+        ))
+    }
+
+    fn allocate_registration_id(root: &StateRootV2) -> Result<String, BootstrapError> {
+        let mut random = rand::rngs::OsRng;
+        for _ in 0..32 {
+            let mut entropy = [0_u8; 16];
+            random.fill_bytes(&mut entropy);
+            let candidate = format!("rr_{}", nonce(entropy));
+            if !root
+                .retained_worker_registration_request_index
+                .values()
+                .any(|request| request.registration_id == candidate)
+                && !root
+                    .retained_worker_registration_journal
+                    .contains_key(&candidate)
+            {
+                return Ok(candidate);
+            }
+        }
+        Err(BootstrapError(
+            "unable to allocate collision-free retained registration ID",
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn validate_reserved_graph(
+        layout: &StoreLayout<'_>,
+        root: &StateRootV2,
+        request: &RetainedWorkerAuthorityRegistrationRequestV1,
+        descriptor_ref: &AuthorityObjectRefV1,
+        descriptor_bytes: &[u8],
+        resume_handle_ref: &AuthorityObjectRefV1,
+        resume_handle_bytes: &[u8],
+        retained_worker_ref: &AuthorityObjectRefV1,
+        retained_worker_bytes: &[u8],
+    ) -> Result<(), BootstrapError> {
+        verify_object_bytes(layout, root, descriptor_ref, descriptor_bytes, None, false)?;
+        verify_object_bytes(
+            layout,
+            root,
+            resume_handle_ref,
+            resume_handle_bytes,
+            None,
+            false,
+        )?;
+        verify_object_bytes(
+            layout,
+            root,
+            retained_worker_ref,
+            retained_worker_bytes,
+            None,
+            false,
+        )?;
+        let descriptor: AgentDescriptorHashInputV1 =
+            canonical_json::from_slice(descriptor_bytes)
+                .map_err(|_| BootstrapError("decode reserved retained descriptor"))?;
+        let resume: ResumeHandleHashInputV1 = canonical_json::from_slice(resume_handle_bytes)
+            .map_err(|_| BootstrapError("decode reserved retained resume handle"))?;
+        let worker: RetainedWorkerObjectHashInputV1 =
+            canonical_json::from_slice(retained_worker_bytes)
+                .map_err(|_| BootstrapError("decode reserved retained worker"))?;
+        if descriptor_ref.ref_id != request.descriptor_ref_id
+            || descriptor_ref.commitment != request.descriptor_commitment
+            || resume_handle_ref.ref_id != request.resume_handle_ref_id
+            || resume_handle_ref.commitment != request.resume_handle_commitment
+            || retained_worker_ref.ref_id != request.retained_worker_ref_id
+            || retained_worker_ref.commitment != request.retained_worker_commitment
+            || descriptor.descriptor.execution_scope != AgentExecutionScopeV1::World
+            || resume.orchestration_session_id != request.orchestration_session_id
+            || resume.participant_id != request.retained_participant_id
+            || resume.backend_id != descriptor.descriptor.backend_id
+            || resume.protocol != descriptor.descriptor.protocol
+            || worker.orchestration_session_id != request.orchestration_session_id
+            || worker.participant_id != request.retained_participant_id
+            || worker.world_binding != request.world_binding
+            || worker.descriptor_ref != *descriptor_ref
+            || worker.resume_handle_ref != *resume_handle_ref
+            || worker.policy_ref != request.current_policy_ref
+        {
+            return Err(BootstrapError("reserved retained object graph is inexact"));
+        }
+        Ok(())
+    }
+
+    fn system_timestamp() -> Result<TimestampV1, BootstrapError> {
+        TimestampV1::parse(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true))
+            .map_err(|_| BootstrapError("sample retained registration timestamp"))
     }
 
     fn generated_object_ref_v2(

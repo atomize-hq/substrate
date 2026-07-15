@@ -10,6 +10,7 @@ use super::schema::{
     HostSessionTransitionTerminalRejectionV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
 use super::store_format::{validate_key_id, validate_ref_id, validate_store_id};
+use super::validation::validate_object_commitment_rule;
 
 const SCHEMA_VERSION: u32 = 1;
 
@@ -698,6 +699,8 @@ impl StateRootV2 {
             || !self.transition_intent_map.is_empty()
             || !self.issuer_request_index.is_empty()
             || !self.application_journal.is_empty()
+            || !self.retained_worker_registration_request_index.is_empty()
+            || !self.retained_worker_registration_journal.is_empty()
             || !self.object_index.is_empty()
         {
             return Err(StoreSchemaError(
@@ -758,14 +761,6 @@ impl StateRootV2 {
                 "greenfield certificate timestamp has no initial key",
             ));
         }
-        if !self.retained_worker_registration_request_index.is_empty()
-            || !self.retained_worker_registration_journal.is_empty()
-        {
-            return Err(StoreSchemaError(
-                "A1.2a StateRootV2 cannot contain retained registration state",
-            ));
-        }
-
         for (key, record) in &self.session_namespace_map {
             if key != record.orchestration_session_id() {
                 return Err(StoreSchemaError("V2 session namespace map key mismatch"));
@@ -826,6 +821,7 @@ impl StateRootV2 {
                 "every V2 intent requires one issuer index entry",
             ));
         }
+        self.validate_retained_registration_relations()?;
         for record in self.session_namespace_map.values() {
             self.validate_start_namespace_relations(record)?;
         }
@@ -841,6 +837,143 @@ impl StateRootV2 {
             {
                 return Err(StoreSchemaError(
                     "only V2 transport payload objects may be released",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_retained_registration_relations(&self) -> Result<(), StoreSchemaError> {
+        let mut registration_ids = std::collections::BTreeSet::new();
+        let mut reserved_ref_ids = std::collections::BTreeSet::new();
+        let mut retained_participants = std::collections::BTreeSet::new();
+        for (issuer_key, request) in &self.retained_worker_registration_request_index {
+            if request.schema_version != 1
+                || issuer_key != &request.issuer_request_id
+                || !request
+                    .issuer_request_id
+                    .starts_with("retained-worker-registration:")
+                || request.issuer_request_id == "retained-worker-registration:"
+                || self.issuer_request_index.contains_key(issuer_key)
+                || request.registration_id.is_empty()
+                || request.orchestration_session_id.is_empty()
+                || request.authority_revision_before == 0
+                || request.retained_participant_id.is_empty()
+                || request.world_binding.world_id.is_empty()
+            {
+                return Err(StoreSchemaError(
+                    "retained registration request identity is invalid",
+                ));
+            }
+            validate_registration_commitment(&request.authority_record_commitment_before)?;
+            validate_registration_ref(&request.current_policy_ref, AuthorityObjectKindV1::Policy)?;
+            for (ref_id, commitment, kind) in [
+                (
+                    &request.descriptor_ref_id,
+                    &request.descriptor_commitment,
+                    AuthorityObjectKindV1::AgentDescriptor,
+                ),
+                (
+                    &request.resume_handle_ref_id,
+                    &request.resume_handle_commitment,
+                    AuthorityObjectKindV1::ResumeHandle,
+                ),
+                (
+                    &request.retained_worker_ref_id,
+                    &request.retained_worker_commitment,
+                    AuthorityObjectKindV1::RetainedWorker,
+                ),
+            ] {
+                validate_ref_id(ref_id)
+                    .map_err(|_| StoreSchemaError("retained registration ref ID is invalid"))?;
+                validate_object_commitment_rule(kind, 1, commitment)
+                    .map_err(|_| StoreSchemaError("retained registration commitment is invalid"))?;
+                if !reserved_ref_ids.insert(ref_id.clone()) {
+                    return Err(StoreSchemaError(
+                        "retained registration object identity is reused",
+                    ));
+                }
+            }
+            if !registration_ids.insert(request.registration_id.clone()) {
+                return Err(StoreSchemaError("retained registration identity is reused"));
+            }
+            match &request.state {
+                RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved => {
+                    if self
+                        .retained_worker_registration_journal
+                        .contains_key(&request.registration_id)
+                        || [
+                            &request.descriptor_ref_id,
+                            &request.resume_handle_ref_id,
+                            &request.retained_worker_ref_id,
+                        ]
+                        .iter()
+                        .any(|ref_id| self.object_index.contains_key(*ref_id))
+                    {
+                        return Err(StoreSchemaError(
+                            "reserved retained registration is already authoritative",
+                        ));
+                    }
+                }
+                RetainedWorkerAuthorityRegistrationRequestStateV1::Applied {
+                    authority_revision_after,
+                    authority_record_commitment_after,
+                } => {
+                    if *authority_revision_after
+                        != request
+                            .authority_revision_before
+                            .checked_add(1)
+                            .ok_or(StoreSchemaError("retained authority revision overflow"))?
+                    {
+                        return Err(StoreSchemaError(
+                            "retained registration authority revision is not contiguous",
+                        ));
+                    }
+                    validate_registration_commitment(authority_record_commitment_after)?;
+                    let journal = self
+                        .retained_worker_registration_journal
+                        .get(&request.registration_id)
+                        .ok_or(StoreSchemaError(
+                            "applied retained registration has no journal",
+                        ))?;
+                    validate_applied_registration_request(request, journal)?;
+                    if !retained_participants.insert(request.retained_participant_id.clone()) {
+                        return Err(StoreSchemaError(
+                            "retained registration participant is reused",
+                        ));
+                    }
+                }
+            }
+        }
+        if self.retained_worker_registration_journal.len()
+            != self
+                .retained_worker_registration_request_index
+                .values()
+                .filter(|request| {
+                    matches!(
+                        request.state,
+                        RetainedWorkerAuthorityRegistrationRequestStateV1::Applied { .. }
+                    )
+                })
+                .count()
+        {
+            return Err(StoreSchemaError(
+                "retained registration journal has no unique applied request",
+            ));
+        }
+        for (registration_id, journal) in &self.retained_worker_registration_journal {
+            if journal.schema_version != 1
+                || registration_id != &journal.registration_id
+                || !self
+                    .retained_worker_registration_request_index
+                    .values()
+                    .any(|request| {
+                        request.registration_id == *registration_id
+                            && request.issuer_request_id == journal.issuer_request_id
+                    })
+            {
+                return Err(StoreSchemaError(
+                    "retained registration journal identity is invalid",
                 ));
             }
         }
@@ -1160,6 +1293,85 @@ impl StateRootV2 {
             Err(StoreSchemaError("V2 namespace ownership is inconsistent"))
         }
     }
+}
+
+fn validate_registration_commitment(
+    commitment: &AuthorityObjectCommitmentV1,
+) -> Result<(), StoreSchemaError> {
+    validate_object_commitment_rule(AuthorityObjectKindV1::AgentDescriptor, 1, commitment)
+        .map_err(|_| StoreSchemaError("retained registration requires canonical commitment"))
+}
+
+fn validate_registration_ref(
+    reference: &AuthorityObjectRefV1,
+    expected_kind: AuthorityObjectKindV1,
+) -> Result<(), StoreSchemaError> {
+    validate_ref_id(&reference.ref_id)
+        .map_err(|_| StoreSchemaError("retained registration object ref ID is invalid"))?;
+    if reference.schema_version != 1 || reference.object_kind != expected_kind {
+        return Err(StoreSchemaError(
+            "retained registration object ref kind or version is invalid",
+        ));
+    }
+    validate_object_commitment_rule(
+        reference.object_kind,
+        reference.schema_version,
+        &reference.commitment,
+    )
+    .map_err(|_| StoreSchemaError("retained registration object ref commitment is invalid"))
+}
+
+fn validate_applied_registration_request(
+    request: &RetainedWorkerAuthorityRegistrationRequestV1,
+    journal: &RetainedWorkerAuthorityRegistrationV1,
+) -> Result<(), StoreSchemaError> {
+    let RetainedWorkerAuthorityRegistrationRequestStateV1::Applied {
+        authority_revision_after,
+        authority_record_commitment_after,
+    } = &request.state
+    else {
+        return Err(StoreSchemaError(
+            "retained registration journal requires applied request",
+        ));
+    };
+    if journal.issuer_request_id != request.issuer_request_id
+        || journal.registration_id != request.registration_id
+        || journal.orchestration_session_id != request.orchestration_session_id
+        || journal.authority_revision_before != request.authority_revision_before
+        || journal.authority_record_commitment_before != request.authority_record_commitment_before
+        || journal.authority_revision_after != *authority_revision_after
+        || journal.authority_record_commitment_after != *authority_record_commitment_after
+        || journal.retained_participant_id != request.retained_participant_id
+        || journal.descriptor_ref.ref_id != request.descriptor_ref_id
+        || journal.descriptor_ref.commitment != request.descriptor_commitment
+        || journal.resume_handle_ref.ref_id != request.resume_handle_ref_id
+        || journal.resume_handle_ref.commitment != request.resume_handle_commitment
+        || journal.retained_worker_ref.ref_id != request.retained_worker_ref_id
+        || journal.retained_worker_ref.commitment != request.retained_worker_commitment
+        || journal.current_policy_ref != request.current_policy_ref
+        || journal.world_binding != request.world_binding
+        || journal.registered_at != request.registered_at
+    {
+        return Err(StoreSchemaError(
+            "retained registration request and journal disagree",
+        ));
+    }
+    validate_registration_ref(
+        &journal.descriptor_ref,
+        AuthorityObjectKindV1::AgentDescriptor,
+    )?;
+    validate_registration_ref(
+        &journal.resume_handle_ref,
+        AuthorityObjectKindV1::ResumeHandle,
+    )?;
+    validate_registration_ref(
+        &journal.retained_worker_ref,
+        AuthorityObjectKindV1::RetainedWorker,
+    )?;
+    validate_registration_ref(&journal.current_policy_ref, AuthorityObjectKindV1::Policy)?;
+    validate_registration_commitment(&journal.authority_record_commitment_before)?;
+    validate_registration_commitment(&journal.authority_record_commitment_after)?;
+    validate_registration_commitment(&journal.authoritative_lineage_commitment_after)
 }
 
 fn validate_namespace_record_identity(

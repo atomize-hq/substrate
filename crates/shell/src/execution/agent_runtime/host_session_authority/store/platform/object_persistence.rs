@@ -174,6 +174,13 @@ fn existing_orphan_bytes(
     Ok(existing)
 }
 
+pub(super) fn reserved_object_location_is_absent(
+    layout: &StoreLayout<'_>,
+    reference: &AuthorityObjectRefV1,
+) -> Result<bool, BootstrapError> {
+    existing_orphan_bytes(layout, reference).map(|bytes| bytes.is_none())
+}
+
 pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(
     layout: &StoreLayout<'_>,
     root: &R,
