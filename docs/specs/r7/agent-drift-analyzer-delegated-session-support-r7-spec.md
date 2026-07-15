@@ -3,13 +3,12 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, R7-1, AND R7-2 COMPLETE /
-`CTX-R7-03` PROVEN / ENTRY-AUTHORITY REPAIR `9fd9d9972` FRESH INDEPENDENT REVIEW CLEAN / R7-3.1
-AND R7-3.2 PLUS BEHAVIOR/STATIC CHECKPOINT COMPLETE / TEST-ONLY COMMITS `f8dd04549` AND
-`c7c6f35b8` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` / R7-3 SOLE ACTIVE PHASE /
-ACTIVE PACKET NONE / CHECKPOINT-DOC RECEIPT PENDING FRESH INDEPENDENT REVIEW / R7-3 EXIT GATE AND
-`CTX-R7-04` BLOCKED/PENDING UNTIL THE RECEIPT IS FRESH-REVIEW-CLEAN / R7-4..R7-6 AND R8 BLOCKED /
-NO NEXT-PHASE SELECTORS PREPARED OR INVOKED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-3 COMPLETE /
+CHECKPOINT-DOC COMMIT `931c2701c` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` /
+`CTX-R7-04` PROVEN / R7-4 SOLE ACTIVE PHASE AT ENTRY ONLY / ACTIVE PACKET NONE / CURRENT
+TRANSITION CANDIDATE PENDING FRESH INDEPENDENT REVIEW / R7-4.1 NEXT, UNCHECKED, AND UNSTARTED /
+R7-4 PRODUCTION/SCORER WORK UNSTARTED / R7-5..R7-6 AND R8 BLOCKED / PROMPT 1 SELECTORS
+`PHASE_ID: R7-4` / `ACTIVE_PACKET: none` PREPARED AND ELIGIBLE BUT NOT INVOKED**
 
 ## Assumptions I'm Making
 
@@ -30,11 +29,13 @@ NO NEXT-PHASE SELECTORS PREPARED OR INVOKED**
    exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -109,11 +110,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked. R7 must continue to preserve the stable
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked. R7 must continue to preserve the stable
 ordinary single-session baseline and must not absorb baseline scorer semantics.
 
 ## Objective

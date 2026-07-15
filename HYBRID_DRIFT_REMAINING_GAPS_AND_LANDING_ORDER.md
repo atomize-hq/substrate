@@ -35,11 +35,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked. The
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 Operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact
@@ -128,7 +130,8 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is solely R7-3 at entry with packet `none`. Docs-only `R7-0.1` series
+The active follow-on is solely R7-4 at entry with packet `none`; the current transition candidate
+is pending fresh independent review, and no R7-4 work has started. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
 `339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
@@ -147,11 +150,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
 `default` `REVIEW CLEAN`.
@@ -207,11 +212,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -240,11 +247,12 @@ control.” The current honest sequence is:
    checkpoint-doc commit `78a168c09` fresh independent `REVIEW CLEAN`, R7-2 complete, and
    `CTX-R7-03` proven; keep transition/fix series `e27d82580` + `305e40bf2` fresh independent
    built-in `default` `REVIEW CLEAN` after the first review's stale R7 plan paragraph was corrected;
-   keep entry-authority repair `9fd9d9972` and R7-3 test-only commits `f8dd04549` and `c7c6f35b8`
-   fresh independent `REVIEW CLEAN`; keep R7-3.1, R7-3.2, and the behavior/static checkpoint
-   complete; keep only R7-3 active with packet `none` while this checkpoint-doc receipt awaits fresh
-   independent review; keep `CTX-R7-04` blocked/pending and next-phase selectors neither prepared nor
-   invoked
+   keep entry-authority repair `9fd9d9972`, R7-3 test-only commits `f8dd04549` and `c7c6f35b8`, and
+   checkpoint-doc commit `931c2701c` fresh independent `REVIEW CLEAN`; keep R7-3.1, R7-3.2, and the
+   behavior/static checkpoint complete; keep R7-3 complete and `CTX-R7-04` proven; keep only R7-4
+   active at entry with packet `none` while the current transition candidate awaits fresh independent
+   review; keep `R7-4.1` unchecked and unstarted, all R7-4 production/scorer work unstarted,
+   `R7-5..R7-6` plus R8 blocked, and the prepared R7-4 selectors uninvoked
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -918,11 +926,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -1009,11 +1019,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 
 The next honest work target is:
 
@@ -1053,12 +1065,14 @@ The next honest work target is:
   behavior/static checkpoint complete; keep checkpoint-doc commit `78a168c09` fresh independent
   `REVIEW CLEAN`, R7-2 complete, and `CTX-R7-03` proven; keep entry-authority repair `9fd9d9972`
   and R7-3 test-only commits `f8dd04549` and `c7c6f35b8` fresh independent `REVIEW CLEAN`; keep
-  R7-3.1, R7-3.2, and the behavior/static checkpoint complete; keep only R7-3 active with packet
-  `none` while this checkpoint-doc receipt awaits fresh independent review; keep `CTX-R7-04`
-  blocked/pending and next-phase selectors neither prepared nor invoked
+  checkpoint-doc commit `931c2701c` fresh independent `REVIEW CLEAN`, R7-3 complete, and
+  `CTX-R7-04` proven; keep only R7-4 active at entry with packet `none` while the current transition
+  candidate awaits fresh independent review; keep `R7-4.1` unchecked and unstarted, all R7-4
+  production/scorer work unstarted, `R7-5..R7-6` plus R8 blocked, and the prepared R7-4 selectors
+  uninvoked
 - keep later delegated-session work blocked; do not make R7 absorb ordinary single-session scorer
   gaps
-- keep `R7-4..R7-6` blocked until their ordered predecessor exits review-clean
+- keep `R7-5..R7-6` blocked until their ordered predecessor exits review-clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.

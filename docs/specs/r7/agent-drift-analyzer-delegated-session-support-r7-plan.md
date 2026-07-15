@@ -3,13 +3,12 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, R7-1, AND R7-2 COMPLETE /
-`CTX-R7-03` PROVEN / ENTRY-AUTHORITY REPAIR `9fd9d9972` FRESH INDEPENDENT REVIEW CLEAN / R7-3.1
-AND R7-3.2 PLUS BEHAVIOR/STATIC CHECKPOINT COMPLETE / TEST-ONLY COMMITS `f8dd04549` AND
-`c7c6f35b8` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` / R7-3 SOLE ACTIVE PHASE /
-ACTIVE PACKET NONE / CHECKPOINT-DOC RECEIPT PENDING FRESH INDEPENDENT REVIEW / R7-3 EXIT GATE AND
-`CTX-R7-04` BLOCKED/PENDING UNTIL THE RECEIPT IS FRESH-REVIEW-CLEAN / R7-4..R7-6 AND R8 BLOCKED /
-NO NEXT-PHASE SELECTORS PREPARED OR INVOKED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-3 COMPLETE /
+CHECKPOINT-DOC COMMIT `931c2701c` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` /
+`CTX-R7-04` PROVEN / R7-4 SOLE ACTIVE PHASE AT ENTRY ONLY / ACTIVE PACKET NONE / CURRENT
+TRANSITION CANDIDATE PENDING FRESH INDEPENDENT REVIEW / R7-4.1 NEXT, UNCHECKED, AND UNSTARTED /
+R7-4 PRODUCTION/SCORER WORK UNSTARTED / R7-5..R7-6 AND R8 BLOCKED / PROMPT 1 SELECTORS
+`PHASE_ID: R7-4` / `ACTIVE_PACKET: none` PREPARED AND ELIGIBLE BUT NOT INVOKED**
 
 This implementation plan is reconciled and implementation-ready. R6 is `CLOSED`, and promotion
 series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so
@@ -28,11 +27,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 
 ## Overview
 
@@ -89,11 +90,13 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 
 ```text
 R7-0 docs + sanitized evidence matrix
@@ -218,8 +221,10 @@ diff checks are green. No R7-3, R7-4, sentinel, or R8 work leaked in. Checkpoint
 `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, so R7-2 is `COMPLETE` and
 `CTX-R7-03` is `PROVEN`. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` are fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 and R7-3.2 are
-complete at fresh-review-clean test-only commits `f8dd04549` and `c7c6f35b8`; R7-3 remains the sole
-active phase with `ACTIVE_PACKET: none` while its checkpoint-doc receipt awaits fresh review.
+complete at fresh-review-clean test-only commits `f8dd04549` and `c7c6f35b8`. Checkpoint-doc commit
+`931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-3 exit
+gate and proving `CTX-R7-04`. Only R7-4 is active at entry with `ACTIVE_PACKET: none`; the current
+transition candidate is pending fresh independent review, and no R7-4 work has started.
 
 ## Phase 3: Separate Parent And Child Progress
 
@@ -265,9 +270,12 @@ constructors missing
 `Checkpoint.delegation` at `crates/agent-drift-sentinel/tests/support/mod.rs:81`,
 `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs:48`, and
 `crates/agent-drift-sentinel/tests/replay_input.rs:79`; route that witness to already-planned R7-6.1
-and do not claim workspace clippy green. R7-3 remains the sole active phase with
-`ACTIVE_PACKET: none`; `CTX-R7-04` and the exit gate remain blocked/pending until this checkpoint-doc
-receipt is fresh-review-clean. No R7-4 selectors are prepared or invoked.
+and do not claim workspace clippy green. Checkpoint-doc commit `931c2701c` received fresh independent
+built-in `default` `REVIEW CLEAN`, satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is
+complete. Only R7-4 is active at entry with `ACTIVE_PACKET: none`; the current transition candidate
+is pending fresh independent review. `R7-4.1` is next, unchecked, and unstarted; no R7-4 production/
+scorer work has started. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are prepared
+and eligible but uninvoked.
 
 ## Phase 4: Delegated Scorer Guardrails
 
@@ -394,10 +402,12 @@ commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`,
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
 repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
-`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
-remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
-fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
-receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
-are prepared or invoked.
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
+Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
+entry with packet `none`; the current transition candidate is pending fresh independent review.
+`R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
+`R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
+prepared and eligible but have not been invoked.
 Default-on linked closure, new drift taxonomy, and recursive depth remain evidence-gated decisions
 for later packets.
