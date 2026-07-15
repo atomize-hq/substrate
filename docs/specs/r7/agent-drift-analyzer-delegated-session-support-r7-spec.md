@@ -64,7 +64,7 @@ constructors missing `Checkpoint.delegation` at
 `crates/agent-drift-sentinel/tests/replay_input.rs:79`; route that witness to already-planned R7-6.1
 and do not claim workspace clippy green.
 
-## Implementation Promotion Gate — R7-3 Behavior Complete / Receipt Review Pending
+## Implementation Promotion Gate — R7-3 Complete / R7-4 Transition Review Pending
 
 This document is now implementation-ready authority. The R6 prerequisites audited during the
 now-complete `R7-PROMOTE` phase are satisfied:

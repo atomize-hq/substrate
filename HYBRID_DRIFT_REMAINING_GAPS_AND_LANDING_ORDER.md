@@ -164,10 +164,9 @@ The open work is no longer archetype identification, first-cut progress export, 
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
 reconciliation, R7 promotion content, the `R7-0 -> R7-1` transition review, R7-1 implementation, or
 R7-2 implementation.
-Transition/fix series `6a8797c15` + `4ee469014` is committed and fresh independent built-in
-`default` `REVIEW CLEAN`. Checkpoint-doc commit `78a168c09` is fresh independent built-in `default`
-`REVIEW CLEAN`, satisfying the R7-2 exit gate and proving `CTX-R7-03`. Preparing the eligible Prompt
-1 selectors for R7-3 does not invoke them or start R7-3 implementation.
+Checkpoint-doc commit `931c2701c` is fresh independent built-in `default` `REVIEW CLEAN`, satisfying
+the R7-3 exit gate and proving `CTX-R7-04`. The eligible Prompt 1 selectors for R7-4 are prepared but
+uninvoked; that preparation does not start R7-4 implementation.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
