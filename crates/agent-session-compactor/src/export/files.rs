@@ -7,9 +7,10 @@ use time::OffsetDateTime;
 
 use crate::dedupe::{DedupeGroup, RowRef};
 use crate::export::{
-    BundleFileV0_2, BundleManifest, DedupeGroupV0_2, ExportBundleRequest, ExportError,
-    ExportRowV0_2, RowRefV0_2,
+    BundleFileV0_2, BundleManifest, DedupeGroupV0_2, DelegationEvidenceRef, DelegationLink,
+    DelegationLinkState, ExportBundleRequest, ExportError, ExportRowV0_2, RowRefV0_2,
 };
+use crate::ingest::{ChildSessionOrigin, ParentSpawnResult, RolloutLinkageMetadata};
 use crate::normalize::CompactionRow;
 
 const SCHEMA_VERSION: &str = "v0.2";
@@ -46,6 +47,7 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         dedupe_group_count: request.dedupe_groups.len(),
         session_ids: request.session_ids.clone(),
         files: file_registry.files.clone(),
+        delegation_links: delegation_links_from_metadata(request.linkage_metadata),
     };
     let archival_rows = export_rows(request.archival_rows, &file_registry)?;
     let compact_rows = export_rows(request.compact_rows, &file_registry)?;
@@ -71,6 +73,238 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
     publish_bundle(&paths)?;
 
     Ok(manifest)
+}
+
+fn delegation_links_from_metadata(metadata: &[RolloutLinkageMetadata]) -> Vec<DelegationLink> {
+    let mut parent_claims = BTreeMap::<(String, String), Vec<&ParentSpawnResult>>::new();
+    let mut parent_keys_by_child = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut child_origins = BTreeMap::<String, Vec<&ChildSessionOrigin>>::new();
+
+    for rollout in metadata {
+        for claim in &rollout.parent_spawn_results {
+            parent_claims
+                .entry((
+                    claim.parent_session_id.clone(),
+                    claim.child_session_id.clone(),
+                ))
+                .or_default()
+                .push(claim);
+            parent_keys_by_child
+                .entry(claim.child_session_id.clone())
+                .or_default()
+                .insert(claim.parent_session_id.clone());
+        }
+        if let Some(origin) = rollout.child_origin.as_ref() {
+            child_origins
+                .entry(origin.child_session_id.clone())
+                .or_default()
+                .push(origin);
+        }
+    }
+
+    for claims in parent_claims.values_mut() {
+        claims.sort_by_key(|claim| {
+            (
+                claim.call_id.as_str(),
+                claim.spawn_call_provenance.source_file.as_str(),
+                claim.spawn_call_provenance.line_number,
+                claim.spawn_result_provenance.source_file.as_str(),
+                claim.spawn_result_provenance.line_number,
+            )
+        });
+    }
+    for origins in child_origins.values_mut() {
+        origins.sort_by_key(|origin| {
+            (
+                origin.parent_session_id.as_str(),
+                origin.depth,
+                origin.provenance.source_file.as_str(),
+                origin.provenance.line_number,
+            )
+        });
+    }
+
+    let mut links = Vec::new();
+    for ((parent_session_id, child_session_id), claims) in &parent_claims {
+        let origins = child_origins
+            .get(child_session_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let origin = origins.first().copied();
+        let state = classify_parent_claim(
+            parent_session_id,
+            child_session_id,
+            claims.len(),
+            parent_keys_by_child
+                .get(child_session_id)
+                .map(BTreeSet::len)
+                .unwrap_or_default(),
+            origins,
+        );
+        links.push(DelegationLink {
+            parent_session_id: parent_session_id.clone(),
+            child_session_id: child_session_id.clone(),
+            child_origin_parent_session_id: origin.map(|origin| origin.parent_session_id.clone()),
+            depth: origin.map(|origin| origin.depth),
+            state,
+            parent_evidence: parent_evidence(claims),
+            child_evidence: child_evidence(origins),
+        });
+    }
+
+    for (child_session_id, origins) in &child_origins {
+        if parent_keys_by_child.contains_key(child_session_id) {
+            continue;
+        }
+        let Some(origin) = origins.first() else {
+            continue;
+        };
+        links.push(DelegationLink {
+            parent_session_id: origin.parent_session_id.clone(),
+            child_session_id: child_session_id.clone(),
+            child_origin_parent_session_id: Some(origin.parent_session_id.clone()),
+            depth: Some(origin.depth),
+            state: classify_child_only(child_session_id, origins),
+            parent_evidence: Vec::new(),
+            child_evidence: child_evidence(origins),
+        });
+    }
+
+    links.sort_by(|left, right| {
+        (
+            &left.parent_session_id,
+            &left.child_session_id,
+            &left.child_origin_parent_session_id,
+            left.depth,
+            left.state,
+            &left.parent_evidence,
+            &left.child_evidence,
+        )
+            .cmp(&(
+                &right.parent_session_id,
+                &right.child_session_id,
+                &right.child_origin_parent_session_id,
+                right.depth,
+                right.state,
+                &right.parent_evidence,
+                &right.child_evidence,
+            ))
+    });
+    links.dedup();
+    links
+}
+
+fn parent_evidence(claims: &[&ParentSpawnResult]) -> Vec<DelegationEvidenceRef> {
+    claims
+        .iter()
+        .flat_map(|claim| {
+            [
+                evidence_ref(&claim.spawn_call_provenance),
+                evidence_ref(&claim.spawn_result_provenance),
+            ]
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn child_evidence(origins: &[&ChildSessionOrigin]) -> Vec<DelegationEvidenceRef> {
+    origins
+        .iter()
+        .map(|origin| evidence_ref(&origin.provenance))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn evidence_ref(provenance: &crate::ingest::RolloutRowProvenance) -> DelegationEvidenceRef {
+    DelegationEvidenceRef {
+        source_file: provenance.source_file.clone(),
+        line_number: provenance.line_number,
+        event_index: provenance.event_index,
+    }
+}
+
+fn classify_parent_claim(
+    parent_session_id: &str,
+    child_session_id: &str,
+    claim_count: usize,
+    distinct_parent_count: usize,
+    origins: &[&ChildSessionOrigin],
+) -> DelegationLinkState {
+    if !valid_session_id(parent_session_id)
+        || !valid_session_id(child_session_id)
+        || origins.iter().any(|origin| {
+            !valid_session_id(&origin.parent_session_id)
+                || !valid_session_id(&origin.child_session_id)
+        })
+    {
+        return DelegationLinkState::MalformedSessionId;
+    }
+    if parent_session_id == child_session_id
+        || origins.iter().any(|origin| {
+            origin.parent_session_id == origin.child_session_id
+                || origin.parent_session_id == child_session_id
+        })
+    {
+        return DelegationLinkState::SelfLink;
+    }
+    if claim_count > 1 || origins.len() > 1 {
+        return DelegationLinkState::Duplicate;
+    }
+    if distinct_parent_count > 1 {
+        return DelegationLinkState::ConflictingParent;
+    }
+    let Some(origin) = origins.first() else {
+        return DelegationLinkState::ParentOnly;
+    };
+    if origin.parent_session_id != parent_session_id {
+        return DelegationLinkState::ConflictingParent;
+    }
+    depth_state(origin.depth)
+}
+
+fn classify_child_only(
+    child_session_id: &str,
+    origins: &[&ChildSessionOrigin],
+) -> DelegationLinkState {
+    if !valid_session_id(child_session_id)
+        || origins.iter().any(|origin| {
+            !valid_session_id(&origin.parent_session_id)
+                || !valid_session_id(&origin.child_session_id)
+        })
+    {
+        return DelegationLinkState::MalformedSessionId;
+    }
+    if origins.iter().any(|origin| {
+        origin.parent_session_id == child_session_id
+            || origin.parent_session_id == origin.child_session_id
+    }) {
+        return DelegationLinkState::SelfLink;
+    }
+    if origins.len() > 1 {
+        return DelegationLinkState::Duplicate;
+    }
+    match origins.first().map(|origin| origin.depth) {
+        Some(1) => DelegationLinkState::ChildOnly,
+        Some(depth) => depth_state(depth),
+        None => DelegationLinkState::ChildOnly,
+    }
+}
+
+fn depth_state(depth: u32) -> DelegationLinkState {
+    match depth {
+        1 => DelegationLinkState::Verified,
+        2.. => DelegationLinkState::DeeperResidue,
+        _ => DelegationLinkState::DepthMismatch,
+    }
+}
+
+fn valid_session_id(session_id: &str) -> bool {
+    !session_id.is_empty()
+        && !session_id
+            .chars()
+            .any(|character| character.is_whitespace() || character.is_control())
 }
 
 struct BundlePaths {

@@ -367,6 +367,7 @@ impl ExportFixture {
             generated_at: datetime!(2026-05-29 12:00:00 UTC),
             session_ids: vec!["session-123".to_string()],
             source_files: self.source_files.clone(),
+            linkage_metadata: &[],
             archival_rows: &self.archival_rows,
             compact_rows: &self.compact_rows,
             dedupe_groups: &self.dedupe_groups,

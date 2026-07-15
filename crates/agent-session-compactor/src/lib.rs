@@ -26,8 +26,9 @@ pub use discovery::{
     DiscoveryError,
 };
 pub use export::{
-    export_bundle, BundleFileV0_2, BundleManifest, DedupeGroupV0_2, ExportBundleRequest,
-    ExportError, ExportRowV0_2, RowRefV0_2,
+    export_bundle, BundleFileV0_2, BundleManifest, DedupeGroupV0_2, DelegationEvidenceRef,
+    DelegationLink, DelegationLinkState, ExportBundleRequest, ExportError, ExportRowV0_2,
+    RowRefV0_2,
 };
 pub use ingest::{
     extract_rollout_linkage_metadata, ingest_rollout_artifacts, ingest_rollout_file,
@@ -91,12 +92,17 @@ pub fn compact_codex_sessions(config: &RunConfig) -> Result<CompactionRunResult,
         .iter()
         .map(|rollout| rollout.source_file.clone())
         .collect::<Vec<_>>();
+    let linkage_metadata = ingested_rollouts
+        .iter()
+        .map(extract_rollout_linkage_metadata)
+        .collect::<Vec<_>>();
     let manifest = export_bundle(&ExportBundleRequest {
         codex_home: &codex_home,
         output_dir: &config.output_dir,
         generated_at: config.generated_at.unwrap_or_else(OffsetDateTime::now_utc),
         session_ids,
         source_files,
+        linkage_metadata: &linkage_metadata,
         archival_rows: &dedupe_result.archival_rows,
         compact_rows: &dedupe_result.compact_rows,
         dedupe_groups: &dedupe_result.dedupe_groups,
@@ -178,6 +184,7 @@ mod core_types_tests {
                     turns: vec!["turn-456".to_string()],
                 },
             ],
+            delegation_links: Vec::new(),
         };
 
         assert_eq!(row_ref.event_index, row.event_index);

@@ -112,6 +112,7 @@ impl BundleFixture {
             dedupe_group_count: dedupe_groups.len(),
             session_ids: collect_session_ids(&archival_rows, &compact_rows),
             files: file_registry.files.clone(),
+            delegation_links: Vec::new(),
         };
 
         fs::write(
