@@ -2319,14 +2319,23 @@ mod platform {
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 mod platform {
+    #[cfg(test)]
+    use super::RetainedReservationCrashPointV1;
     use super::{
         BootstrapClassificationV1, BootstrapError, GeneratedObjectV1, ObjectPublicationOutcomeV1,
-        ObjectVerificationContextV1, RootUpgradeOutcomeV1,
+        ObjectVerificationContextV1, RetainedWorkerReservationInputV1, RetainedWorkerReservationV1,
+        RootUpgradeOutcomeV1, TrustedAuthorityRoot,
+    };
+    #[cfg(test)]
+    use crate::execution::agent_runtime::host_session_authority::schema::{
+        AuthorityObjectCommitmentV1, TimestampV1,
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
-        AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
+        AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1, WorldBindingV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV1;
+    #[cfg(test)]
+    use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV2;
 
     pub(crate) struct LegacyStateStoreTransactionV1;
 
@@ -2424,6 +2433,62 @@ mod platform {
     ) -> Result<super::StateRootV2, BootstrapError> {
         Err(BootstrapError(
             "authority store is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn reserve_retained_worker_registration_opened(
+        _root: &TrustedAuthorityRoot,
+        _input: &RetainedWorkerReservationInputV1,
+        _build_worker: impl Fn(
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &WorldBindingV1,
+        ) -> Result<Vec<u8>, &'static str>,
+    ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
+        Err(BootstrapError(
+            "retained registration is unsupported on this platform",
+        ))
+    }
+
+    #[cfg(test)]
+    pub(super) fn reserve_retained_worker_registration_at_opened(
+        _root: &TrustedAuthorityRoot,
+        _input: &RetainedWorkerReservationInputV1,
+        _registered_at: TimestampV1,
+        _crash_point: Option<RetainedReservationCrashPointV1>,
+        _build_worker: impl Fn(
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &WorldBindingV1,
+        ) -> Result<Vec<u8>, &'static str>,
+    ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
+        Err(BootstrapError(
+            "retained registration is unsupported on this platform",
+        ))
+    }
+
+    #[cfg(test)]
+    pub(super) fn reserved_object_ref_id_is_globally_absent_test(
+        _path: &std::path::Path,
+        _ref_id: &str,
+    ) -> Result<bool, BootstrapError> {
+        Err(BootstrapError(
+            "retained collision checks are unsupported on this platform",
+        ))
+    }
+
+    #[cfg(test)]
+    pub(super) fn retained_reservation_authority_matches_test(
+        _root: &StateRootV2,
+        _orchestration_session_id: &str,
+        _expected_authority_store_id: &str,
+        _expected_authority_revision: u64,
+        _expected_authority_commitment: &AuthorityObjectCommitmentV1,
+    ) -> Result<(), BootstrapError> {
+        Err(BootstrapError(
+            "retained authority checks are unsupported on this platform",
         ))
     }
 
