@@ -19,10 +19,10 @@ design, and the per-packet sets. R6 is **CLOSED** after `R6-CLOSE` / `CTX-R6-17`
 implementation-ready, and received fresh independent built-in `default` `REVIEW CLEAN`.
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet
-`none`. Docs-only `R7-0.1` is committed at landing candidate `a9e75f149`; its fresh independent
-review found a narrative-state blocker, and correction `55bea5fa5` is landed. The full `R7-0.1`
-series awaits fresh independent re-review and is not review-clean. `R7-0.2` is next only after that
-series is fresh-review-clean and remains unstarted. Fixtures, all implementation, and `R7-1..R7-6`
+`none`. Docs-only `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent
+built-in `default` `REVIEW CLEAN`. `R7-0.2` is a fixture-only landing candidate pending fresh review;
+focused parser/privacy proof passes `2 / 2`, and the full compactor family passes `25 / 25`,
+including end-to-end `2 / 2`. Production implementation remains unstarted, and `R7-1..R7-6`
 remain blocked. The Ground Truth Sources list below is historical context, not an exhaustive index
 of current authority.
 
@@ -101,12 +101,11 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is solely `R7-0`, with packet `none`. Docs-only `R7-0.1` is committed at
-landing candidate `a9e75f149`; its fresh independent review found a narrative-state blocker, and
-correction `55bea5fa5` is landed. The full `R7-0.1` series awaits fresh independent re-review and
-is not review-clean. `R7-0.2` is next only after that series is fresh-review-clean and remains
-unstarted. Fixtures, all implementation, and `R7-1..R7-6` remain blocked. `R7-PROMOTE` and its
-fresh-review-clean promotion series are complete; transition series
+The active follow-on is solely `R7-0`, with packet `none`. Docs-only `R7-0.1` series `a9e75f149` +
+`55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.2` is a
+fixture-only landing candidate pending fresh review; no production implementation has started, and
+`R7-1..R7-6` remain blocked. `R7-PROMOTE` and its fresh-review-clean promotion series are complete;
+transition series
 `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in `default` `REVIEW CLEAN`.
 The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
@@ -142,11 +141,10 @@ reconfirmed the four exact replay controls at `1 / 1` each, the Manifest E filte
 `R6-CLOSE` is complete and R6 is `CLOSED`. Promotion series `455d0ed90` + `876ac55de` is fresh
 independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` +
 `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0`
-remains the sole active phase with packet `none`. Docs-only `R7-0.1` is committed at landing
-candidate `a9e75f149`; its fresh independent review found a narrative-state blocker, and correction
-`55bea5fa5` is landed. The full `R7-0.1` series awaits fresh independent re-review and is not
-review-clean. `R7-0.2` is next only after that series is fresh-review-clean and remains unstarted.
-Fixtures, all implementation, and `R7-1..R7-6` remain blocked.
+remains the sole active phase with packet `none`. Docs-only `R7-0.1` series `a9e75f149` +
+`55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.2` is a
+fixture-only landing candidate pending fresh review. Production implementation remains unstarted,
+and `R7-1..R7-6` remain blocked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -166,9 +164,9 @@ control.” The current honest sequence is:
 7. keep completed `CTX-R6-17`, the terminal table, and R6 `CLOSED` authority reconciled
 8. keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de` and transition
    series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed; keep `R7-0` the sole active phase with
-   packet `none`; preserve committed `R7-0.1` landing candidate `a9e75f149` and landed correction
-   `55bea5fa5`, then obtain fresh independent re-review of the full series; start no `R7-0.2`,
-   fixture, implementation, or `R7-1..R7-6` work before the full series is fresh-review-clean
+   packet `none`; preserve fresh-review-clean `R7-0.1` series `a9e75f149` + `55bea5fa5` +
+   `faff68ac6`; freshly review the `R7-0.2` fixture landing candidate; start no production linkage
+   or `R7-1..R7-6` work before the `R7-0` exit gate is fresh-review-clean
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -831,11 +829,9 @@ Promotion series `455d0ed90` + `876ac55de` completed the R7 content/gate audit, 
 family implementation-ready, and received fresh independent built-in `default` `REVIEW CLEAN`.
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet
-`none`. Docs-only `R7-0.1` is committed at landing candidate `a9e75f149`; its fresh independent
-review found a narrative-state blocker, and correction `55bea5fa5` is landed. The full `R7-0.1`
-series awaits fresh independent re-review and is not review-clean. `R7-0.2` is next only after that
-series is fresh-review-clean and remains unstarted. Fixtures, all R7 implementation, and
-`R7-1..R7-6` remain blocked.
+`none`. Docs-only `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent
+built-in `default` `REVIEW CLEAN`. `R7-0.2` is a fixture-only landing candidate pending fresh review.
+Production implementation remains unstarted, and `R7-1..R7-6` remain blocked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -911,11 +907,9 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 `455d0ed90` + `876ac55de` is fresh independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete and the
 implementation-ready R7 family is current. Transition series `6bf0ac6ad` + `4a887ee0c` +
 `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` remains the sole
-active phase with packet `none`. Docs-only `R7-0.1` is committed at landing candidate `a9e75f149`;
-its fresh independent review found a narrative-state blocker, and correction `55bea5fa5` is landed.
-The full `R7-0.1` series awaits fresh independent re-review and is not review-clean. `R7-0.2` is
-next only after that series is fresh-review-clean and remains unstarted. Fixtures, all implementation,
-and `R7-1..R7-6` remain blocked.
+active phase with packet `none`. Docs-only `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6`
+is fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.2` is a fixture-only landing candidate
+pending fresh review. Production implementation remains unstarted, and `R7-1..R7-6` remain blocked.
 
 The next honest work target is:
 
@@ -943,13 +937,11 @@ The next honest work target is:
 - keep completed `CTX-R6-17` and its terminal table: `dead_end_thrash`/`semantic_goal_drift`
   **Cutover complete**; `truth_grounding_gap`/`wrong_plan_branch`/`scoring/mod.rs`
   **Fit-for-purpose exception**; no merge/deprecation or deferral route
-- **current action:** keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de`
-  and transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed; keep `R7-0` the sole active
-  phase with packet `none`; preserve committed docs-only `R7-0.1` landing candidate `a9e75f149`
-  and landed narrative-state correction `55bea5fa5`, then obtain fresh independent re-review of
-  the full series
-- keep `R7-0.2` next only after the full `R7-0.1` series is fresh-review-clean and unstarted;
-  keep fixtures and all delegated-session implementation blocked; do not make R7 absorb ordinary
+- **current action:** keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de`,
+  transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, and `R7-0.1` series `a9e75f149` +
+  `55bea5fa5` + `faff68ac6` fixed; keep `R7-0` the sole active phase with packet `none`; obtain fresh
+  independent review of the `R7-0.2` fixture landing candidate
+- keep production delegated-session implementation blocked; do not make R7 absorb ordinary
   single-session scorer gaps
 - keep `R7-1..R7-6` blocked until their ordered predecessor exits review-clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets

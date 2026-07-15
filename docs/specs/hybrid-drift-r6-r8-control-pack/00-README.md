@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R7-0 — ACTIVE; active packet none; R7-PROMOTE and its entry transition fresh independent REVIEW CLEAN; R7-0.1 complete at docs-only landing candidate with fresh review pending; R7-0.2 next after review-clean; fixtures and all implementation unstarted; R7-1..R7-6 blocked`
+**Current work phase:** `R7-0 — ACTIVE; active packet none; R7-PROMOTE, its entry transition, and R7-0.1 series fresh independent REVIEW CLEAN; R7-0.2 fixture landing candidate pending fresh review; R7-1..R7-6 blocked; production implementation unstarted`
 
-**Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, and R7 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` each received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The exact `R7-0.1` contract `rg` passed at the docs-only landing candidate; no R7 fixture or implementation work has started, and fresh independent review is pending.
+**Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, and R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6` each received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The `R7-0.2` landing candidate contains `12` sanitized JSONL files / `24` rows over seven cases; focused parser/privacy proof passes `2 / 2`, the compactor family passes `25 / 25` including end-to-end `2 / 2`, and manual JSON/private-marker/raw-UUID scans plus formatting are green. No production symbol changed, and fresh independent review is pending.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -43,9 +43,9 @@ independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete. The late
 `R7-PROMOTE`, makes the R7 authority family implementation-ready, and received fresh independent
 built-in `default` `REVIEW CLEAN`. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`
 received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` remains the sole active phase
-with packet `none`. `R7-0.1` is complete at its docs-only landing candidate and awaits fresh
-independent review; `R7-0.2` is next only after that review is clean. Fixtures and all R7
-implementation remain unstarted; `R7-1..R7-6` and R8 remain blocked.
+with packet `none`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent
+built-in `default` `REVIEW CLEAN`. `R7-0.2` is a fixture-only landing candidate pending fresh review.
+Production implementation remains unstarted; `R7-1..R7-6` and R8 remain blocked.
 
 ## Purpose
 

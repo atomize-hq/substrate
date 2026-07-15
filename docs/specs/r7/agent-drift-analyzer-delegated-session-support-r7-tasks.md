@@ -4,16 +4,17 @@ Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
 Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
-R7-0.1 COMPLETE AT LANDING CANDIDATE, FRESH REVIEW PENDING / R7-0.2 NEXT AFTER REVIEW-CLEAN /
-FIXTURES AND IMPLEMENTATION NOT STARTED**
+R7-0.1 SERIES FRESH INDEPENDENT REVIEW CLEAN / R7-0.2 FIXTURE LANDING CANDIDATE, FRESH REVIEW
+PENDING / R7-1..R7-6 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
 `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW
 CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is complete at its
-docs-only landing candidate after the exact contract `rg` passed; fresh independent review is
-pending. `R7-0.2` is next only after that review is clean and remains unchecked and unstarted.
-Fixtures and all implementation remain unstarted; `R7-1..R7-6` remain blocked.
+docs-only landing candidate after the exact contract `rg` passed; series `a9e75f149` + `55bea5fa5`
++ `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.2` is now a fixture-only
+landing candidate pending fresh review. Production implementation remains unstarted;
+`R7-1..R7-6` remain blocked.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -39,25 +40,33 @@ Fixtures and all implementation remain unstarted; `R7-1..R7-6` remain blocked.
   - Verify: `rg -n "R6-1|reciprocal|separate trajector|R8" docs/specs/r6/MAP.md docs/specs/r7`
   - Files: `docs/specs/r6/MAP.md`, `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
   - Dependencies: review-clean `R7-PROMOTE` phase transition
-  - Receipt: docs-only landing candidate; the exact verification command passed and confirmed the
+  - Receipt: docs-only landing series `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent
+    built-in `default` `REVIEW CLEAN`; the exact verification command passed and confirmed the
     `R6-1` core, reciprocal direct linkage, separate trajectories, direct-child-first boundary,
-    no-new-drift-class-by-default posture, and R8 exclusion. Fresh independent review is pending;
-    no fixture, product behavior, or implementation symbol changed.
+    no-new-drift-class-by-default posture, and R8 exclusion. No fixture, product behavior, or
+    implementation symbol changed in that docs-only series.
   - Scope: medium, docs only
 
-- [ ] **R7-0.2: Add sanitized raw-link fixture matrix.**
+- [x] **R7-0.2: Add sanitized raw-link fixture matrix.**
   - Acceptance: fixtures cover reciprocal, parent-only, child-only, conflict, multi-child,
     nested-depth residue, and single-agent control without private prompt/tool content.
   - Verify: focused compactor fixture parser tests plus manual privacy review
-  - Files: `crates/agent-session-compactor/tests/fixtures/delegation_links/**`, fixture README
+  - Files: `crates/agent-session-compactor/tests/fixtures/delegation_links/**`, fixture README,
+    `crates/agent-session-compactor/tests/delegation_link_fixtures.rs`
   - Dependencies: R7-0.1
+  - Receipt: fixture-only landing candidate pending fresh review. Twelve JSONL files / `24` rows
+    cover all seven accepted cases. The focused parser/privacy target passes `2 / 2`; full
+    `agent-session-compactor` passes `25 / 25`, including end-to-end `2 / 2`; JSON parsing,
+    formatting, and manual private-marker / raw-UUID scans pass with zero matches. No production
+    symbol changed, and no raw private rollout was copied.
   - Scope: small
 
 ### Checkpoint R7-0
 
-- [ ] Fixture shapes match current raw Codex parent result and child `session_meta` source fields.
-- [ ] No raw private rollout is committed.
-- [ ] Implementation symbols receive GitNexus impact analysis before editing.
+- [x] Fixture shapes match current raw Codex parent result and child `session_meta` source fields.
+- [x] No raw private rollout is committed.
+- [x] No implementation symbol was edited; therefore no pre-edit symbol impact analysis was
+  applicable to `R7-0.2`.
 
 ## R7-1: Compactor Linkage And Direct-Child Closure
 

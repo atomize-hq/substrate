@@ -1,13 +1,14 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
 Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
-R7-0.1 COMPLETE AT LANDING CANDIDATE, FRESH REVIEW PENDING / R7-0.2 NEXT AFTER REVIEW-CLEAN /
-FIXTURES AND IMPLEMENTATION NOT STARTED**. Promotion series
+R7-0.1 SERIES FRESH INDEPENDENT REVIEW CLEAN / R7-0.2 FIXTURE LANDING CANDIDATE, FRESH REVIEW
+PENDING / R7-1..R7-6 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**. Promotion series
 `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. The narrow
 `R7-PROMOTE -> R7-0` transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
-independent built-in `default` `REVIEW CLEAN`. The docs-only `R7-0.1` landing candidate freezes the
-already-landed family contract; it is not yet fresh-review-clean and starts no fixture or
-implementation work.
+independent built-in `default` `REVIEW CLEAN`. The docs-only `R7-0.1` series `a9e75f149` +
+`55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. The `R7-0.2`
+landing candidate adds only the sanitized fixture matrix, its parser/privacy test, and status/proof
+receipts; it awaits fresh review and starts no production linkage implementation.
 
 ## R6 Handoff
 
@@ -35,10 +36,12 @@ resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. Promotion 
 + `876ac55de` reconciled the preserved MAP/SPEC/PLAN/TASKS to implementation-ready authority and
 received fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE`. The narrow
 status transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in
-`default` `REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is
-complete at its docs-only landing candidate after the exact contract `rg` passed; fresh independent
-review is pending. `R7-0.2` is next only after that review is clean, and fixture and implementation
-work have not started.
+`default` `REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. The exact
+`R7-0.1` contract `rg` passed, and series `a9e75f149` + `55bea5fa5` + `faff68ac6` received fresh
+independent built-in `default` `REVIEW CLEAN`. `R7-0.2` is now a fixture-only landing candidate:
+all seven sanitized cases parse without failures, the focused target passes `2 / 2`, and the full
+compactor family passes `25 / 25`, including end-to-end `2 / 2`. Production implementation has not
+started, and `R7-1..R7-6` remain blocked.
 
 ## Live Linkage Evidence
 
@@ -72,9 +75,8 @@ semantics. Ordinary parent-visible orchestration may still be described as paren
 ## Packet Order
 
 The packet order below is implementation-ready. `R7-0` is **active** with packet `none`; its entry
-transition is fresh independent `REVIEW CLEAN`. `R7-0.1` is complete at its docs-only landing
-candidate and awaits fresh independent review. `R7-0.2` is next only after that review is clean; no
-fixture or implementation work has started.
+transition and the complete `R7-0.1` series are fresh independent `REVIEW CLEAN`. `R7-0.2` is a
+fixture-only landing candidate pending fresh review; no production implementation work has started.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

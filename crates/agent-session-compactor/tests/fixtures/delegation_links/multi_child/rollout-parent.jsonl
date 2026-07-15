@@ -1,0 +1,5 @@
+{"type":"session_meta","payload":{"id":"session-parent-echo"}}
+{"type":"response_item","payload":{"type":"function_call","name":"spawn_agent","call_id":"call-echo-one"}}
+{"type":"response_item","payload":{"type":"function_call_output","call_id":"call-echo-one","output":"{\"agent_id\":\"session-child-echo-one\"}"}}
+{"type":"response_item","payload":{"type":"function_call","name":"spawn_agent","call_id":"call-echo-two"}}
+{"type":"response_item","payload":{"type":"function_call_output","call_id":"call-echo-two","output":"{\"agent_id\":\"session-child-echo-two\"}"}}

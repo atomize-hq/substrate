@@ -1,0 +1,1 @@
+{"type":"session_meta","payload":{"id":"session-child-charlie","source":{"subagent":{"thread_spawn":{"parent_thread_id":"session-parent-charlie","depth":1,"agent_nickname":"agent-charlie"}}}}}

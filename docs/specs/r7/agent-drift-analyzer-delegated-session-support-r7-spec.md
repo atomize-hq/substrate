@@ -4,8 +4,8 @@ Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
 Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
-R7-0.1 COMPLETE AT LANDING CANDIDATE, FRESH REVIEW PENDING / R7-0.2 NEXT AFTER REVIEW-CLEAN /
-FIXTURES AND IMPLEMENTATION NOT STARTED**
+R7-0.1 SERIES FRESH INDEPENDENT REVIEW CLEAN / R7-0.2 FIXTURE LANDING CANDIDATE, FRESH REVIEW
+PENDING / R7-1..R7-6 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
 
 ## Assumptions I'm Making
 
@@ -13,9 +13,9 @@ FIXTURES AND IMPLEMENTATION NOT STARTED**
    `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is
    complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent
    built-in `default` `REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`.
-   `R7-0.1` is complete at its docs-only landing candidate after the exact contract `rg` passed;
-   fresh independent review is pending. `R7-0.2` is next only after that review is clean, and no
-   fixture or implementation work has started.
+   `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in `default`
+   `REVIEW CLEAN`. `R7-0.2` is a fixture-only landing candidate pending fresh review. No production
+   implementation work has started, and `R7-1..R7-6` remain blocked.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -45,10 +45,12 @@ Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit, rec
 canonical mirrors, and received fresh independent built-in `default` `REVIEW CLEAN`.
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`; it made `R7-0` active at entry only with packet
-`none`. The docs-only `R7-0.1` landing candidate now freezes the already-landed contract after the
-exact verification command passed. It awaits fresh independent review, so `R7-0.2` is next only
-after a clean verdict. Fixtures and all implementation remain unstarted. R7 must extend the stable
-ordinary single-session baseline; it must not absorb baseline scorer semantics.
+`none`. The exact docs-only `R7-0.1` contract verification passed, and series `a9e75f149` +
+`55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. The `R7-0.2`
+fixture-only landing candidate covers reciprocal, parent-only, child-only, conflict, multi-child,
+nested-depth residue, and single-agent raw shapes with parser and privacy proof green. It awaits
+fresh review. R7 must extend the stable ordinary single-session baseline; it must not absorb
+baseline scorer semantics or begin `R7-1` before the `R7-0` exit gate is review-clean.
 
 ## Objective
 

@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE` and its entry transition are fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is COMPLETE at its docs-only landing candidate with fresh independent review pending; `R7-0.2` is next only after that review is clean; fixtures and all implementation remain unstarted; `R7-1..R7-6` remain blocked)**
+Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE`, its entry transition, and `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` are fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.2` is a fixture-only landing candidate pending fresh review; production implementation remains unstarted; `R7-1..R7-6` remain blocked)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -101,12 +101,17 @@ Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE` and its ent
   CLEAN`, marking `R7-PROMOTE` complete and `R7-0` active at entry only with packet `none`.
 - [x] Complete docs-only `R7-0.1` at its landing candidate. The exact contract `rg` passed and
   confirmed the landed R6-1 core, reciprocal direct linkage, separate trajectories,
-  direct-child-first boundary, no-new-drift-class-by-default posture, and R8 exclusion. Fresh
-  independent review is pending; no fixture, product behavior, or implementation symbol changed.
-- [ ] Execute `R7-0.2` only after the `R7-0.1` landing series is fresh-review-clean. Fixtures and all
-  bounded direct-child delegated-session implementation remain unstarted.
+  direct-child-first boundary, no-new-drift-class-by-default posture, and R8 exclusion. Series
+  `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`;
+  no fixture, product behavior, or implementation symbol changed in that series.
+- [x] Add the `R7-0.2` sanitized fixture matrix. The fixture-only landing candidate contains `12`
+  JSONL files / `24` rows across all seven cases; focused parser/privacy proof passes `2 / 2`, and
+  full compactor proof passes `25 / 25`, including end-to-end `2 / 2`. Manual privacy and format
+  gates are green; no production symbol or raw private rollout changed. Fresh review is pending.
+- [ ] Keep `R7-1` blocked until the `R7-0.2` candidate and narrow `R7-0 -> R7-1` phase transition
+  are committed and fresh-review-clean.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
-`R7-0` remains the sole active phase with packet `none`. `R7-0.1` is complete at its docs-only
-landing candidate and awaits fresh independent review; `R7-0.2` is next only after that review is
-clean and remains unchecked and unstarted. `R7-1..R7-6` remain blocked.
+`R7-0` remains the sole active phase with packet `none`. `R7-0.1` is fresh-review-clean; `R7-0.2`
+is a fixture-only landing candidate pending fresh review. Production implementation has not
+started; `R7-1..R7-6` remain blocked.

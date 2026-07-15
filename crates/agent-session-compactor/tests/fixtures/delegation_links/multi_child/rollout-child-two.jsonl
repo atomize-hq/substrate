@@ -1,0 +1,1 @@
+{"type":"session_meta","payload":{"id":"session-child-echo-two","source":{"subagent":{"thread_spawn":{"parent_thread_id":"session-parent-echo","depth":1,"agent_nickname":"agent-echo-two","agent_role":"default"}}}}}
