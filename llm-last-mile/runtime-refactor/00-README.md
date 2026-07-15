@@ -185,6 +185,9 @@ per-session registration head alone may then fix the current authority revision.
 releases the head without automatically promoting another record. Only exact re-presentation of
 the complete canonical request for the lowest-sequence queued slot may acquire the next head;
 later requests cannot overtake it, and an abandoned earliest slot remains conservatively live.
+Remaining B3.2 owns exact, restart-safe durable resolution and reconciliation of that abandoned
+admission; B4 owns the user/tool-facing exact inspect/cancel verb and distinct outcomes. B3.2a
+implements neither protocol.
 The admission record stores only the keyed commitment and non-secret fixed fields, never the
 request/prompt/payload preimage. The bridge passes that
 slot-fixed participant to R0 instead of allocating a retry-local ID, exact-joins R0, commits the

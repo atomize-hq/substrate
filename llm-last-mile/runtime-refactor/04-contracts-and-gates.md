@@ -3128,6 +3128,39 @@ slot remains conservatively live and blocks every later slot until the same cano
 retries or a later explicitly owned lifecycle/control protocol resolves it. B3.2a adds no such
 abandonment/control protocol.
 
+### Deferred retained-spawn admission recovery contract
+
+B3.2a deliberately stops at conservative exact-retry behavior. It adds no cancellation,
+abandonment, expiry, or liveness-based resolution protocol and adds no runtime enum, schema field,
+or persisted request preimage for future recovery. The remaining B3.2 packet owns every durable
+admission-state transition used to resolve an abandoned admission; `WorldDispatchControl` in B4
+owns the user/tool-facing exact inspect/cancel verb and consumes the RetainedWorkerRuntime result
+without writing admission state itself.
+
+Any later resolution request must exact-join all of the following durable preconditions before a
+state advance: issuer request identity, admission-record identity and revision, orchestration
+session, current exact authority and the relevant admission-to-current ancestry, current policy
+identity and authorization, retained participant, and the exact admission state being resolved.
+The complete canonical Spawn request remains required wherever fingerprint verification or exact
+retry semantics depend on it. PID, timeout, caller presence or disappearance, helper state, socket
+state, endpoint state, EOF, observer loss, and process liveness supply no resolution authority.
+
+Resolution is forward-only against durable protocol truth. It must not delete or roll back an
+already-committed R0 lineage/ref/registration, classify R0 rejection as cancellation, or treat
+stopping an already-created worker as cancelling a pending admission. Partial or already-applied
+R0 registration is reconciled to its exact admission record. A transport claim whose launch or
+registration result is ambiguous remains live and cannot free capacity until exact transport and
+runtime truth is reconciled. Crashes before and after resolution converge on retry; repeated
+resolution exact-joins the same terminal result; and the live admission count decreases only after
+that terminal result is durably published. Only then may the next eligible queued request acquire
+the registration head under the existing earliest-slot rule.
+
+B4 may freeze and return these semantic outcome categories without adding them to the B3.2a
+runtime schema: cancelled before registration; registered before transport; transport ambiguous
+or cancellation pending; already routable or terminal; invalid target; ambiguous target; and
+policy denied. Remaining B3.2 must first provide the durable, restart-safe resolution/reconciliation
+primitive those outcomes consume.
+
 The host-to-world launch carrier is typed and substitution-resistant:
 
 ```rust
