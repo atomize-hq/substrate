@@ -266,12 +266,34 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerRegistrationPlanV1,
     ) -> Result<RetainedWorkerRegistrationResultV1, RetainedWorkerRuntimeError> {
-        let reserved = self.reserve_registration(authority, plan)?;
+        self.register_retained_target_with(authority, plan, |_| Ok(()))
+    }
+
+    fn register_retained_target_with(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerRegistrationPlanV1,
+        after_reservation: impl FnOnce(
+            &ReservedRetainedWorkerRegistrationV1,
+        ) -> Result<(), RetainedWorkerRuntimeError>,
+    ) -> Result<RetainedWorkerRegistrationResultV1, RetainedWorkerRuntimeError> {
+        let mut reserved = self.reserve_registration(authority, plan)?;
+        after_reservation(&reserved)?;
         if matches!(
             reserved.request.state,
-            super::host_session_authority::store_schema::RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved
+            RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved
         ) {
-            self.publish_reserved_object_graph(authority, &reserved)?;
+            if let Err(publication_error) = self.publish_reserved_object_graph(authority, &reserved)
+            {
+                let refreshed = self.reserve_registration(authority, plan)?;
+                if matches!(
+                    refreshed.request.state,
+                    RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved
+                ) {
+                    return Err(publication_error);
+                }
+                reserved = refreshed;
+            }
         }
         let applied = authority
             .apply_reserved_retained_worker_registration(&reserved)
@@ -1525,6 +1547,30 @@ mod tests {
         assert_eq!(joined, first);
         assert_eq!(authority.read_a12a_root().unwrap(), applied_root);
         assert_eq!(object_files(&object_root), applied_objects);
+    }
+
+    #[test]
+    fn reserved_observation_joins_peer_application_during_publication() {
+        let (_parent, authority, observation) = started_authority();
+        let peer_authority = HostSessionAuthority::open(&_parent.path().join("home")).unwrap();
+        let runtime = RetainedWorkerRuntime;
+        let plan = plan(observation);
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+        let mut peer_result = None;
+
+        let joined = runtime
+            .register_retained_target_with(&authority, &plan, |_| {
+                peer_result = Some(runtime.register_retained_target(&peer_authority, &plan)?);
+                Ok(())
+            })
+            .expect("a Reserved observation must join a peer that reaches Applied first");
+
+        assert_eq!(Some(joined), peer_result);
+        let root = authority.read_a12a_root().unwrap();
+        assert_eq!(root.retained_worker_registration_request_index.len(), 1);
+        assert_eq!(root.retained_worker_registration_journal.len(), 1);
+        assert_eq!(object_files(&object_root).len(), objects_before.len() + 3);
     }
 
     #[test]
