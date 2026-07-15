@@ -13,7 +13,7 @@ leakage occurred.
 
 **Current phase:** `R7-3` (**SOLE ACTIVE PHASE AT ENTRY ONLY**; active packet: `none`; R7-2
 complete at fresh independent review-clean checkpoint-doc commit `78a168c09`; `CTX-R7-03` proven;
-current transition receipt pending fresh independent review; `R7-3.1` next, unchecked, and
+transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph; `R7-3.1` next, unchecked, and
 unstarted; R7-3 analyzer/production implementation unstarted; `R7-4..R7-6` and R8 blocked; Prompt 1
 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` prepared and eligible but not invoked)
 
@@ -37,7 +37,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, R7-1, AND R7-2 COMPLETE AND REVIEW-CLEAN / CHECKPOINT-DOC COMMIT `78a168c09` FRESH INDEPENDENT REVIEW CLEAN / `CTX-R7-03` PROVEN / R7-3 SOLE ACTIVE PHASE AT ENTRY ONLY / ACTIVE PACKET NONE / CURRENT TRANSITION RECEIPT PENDING FRESH INDEPENDENT REVIEW / R7-3.1 NEXT, UNCHECKED, AND UNSTARTED / R7-3 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED / R7-4..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Commit and freshly review only the narrow R7-2 -> R7-3 transition receipt. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but must not be invoked until that receipt is fresh-review-clean. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, R7-1, AND R7-2 COMPLETE AND REVIEW-CLEAN / CHECKPOINT-DOC COMMIT `78a168c09` FRESH INDEPENDENT REVIEW CLEAN / `CTX-R7-03` PROVEN / R7-3 SOLE ACTIVE PHASE AT ENTRY ONLY / ACTIVE PACKET NONE / TRANSITION/FIX SERIES `e27d82580` + `305e40bf2` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` AFTER FIX `305e40bf2` CORRECTED THE FIRST REVIEW'S STALE R7 PLAN PARAGRAPH / R7-3.1 NEXT, UNCHECKED, AND UNSTARTED / R7-3 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED / R7-4..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve the review-clean transition boundary. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked; no R7-3 analyzer/production work has started. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -89,7 +89,7 @@ R6, complete the terminal scorer-disposition table, or unblock R7.
 R7 is now an implementation-ready authority family. `R7-PROMOTE`, `R7-0`, `R7-1`, and `R7-2` are
 complete. Checkpoint-doc commit `78a168c09` received fresh independent built-in `default` `REVIEW
 CLEAN`, satisfying the R7-2 exit gate and proving `CTX-R7-03`. Only R7-3 is active at entry with
-packet `none`; current transition receipt pending fresh independent review. `R7-3.1` is next,
+packet `none`; transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next,
 unchecked, and unstarted; no R7-3 analyzer/production implementation has started:
 
 - `docs/specs/r7/MAP.md`
@@ -119,7 +119,7 @@ independent built-in `default` `REVIEW CLEAN`; the fix resolved the summary-vs-c
 The R7-2 task and behavior/static proof is complete at the counts recorded above. Checkpoint-doc
 commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-2
 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet `none`;
-current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked, and
+transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next, unchecked, and
 unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` plus R8 remain
 blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
 have not been invoked.

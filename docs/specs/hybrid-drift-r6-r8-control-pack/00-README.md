@@ -5,8 +5,9 @@
 **Pack status:** ACTIVE
 
 **Current work phase:** `R7-3 — SOLE ACTIVE PHASE AT ENTRY ONLY; active packet none; R7-2 complete
-at fresh independent review-clean checkpoint-doc commit 78a168c09; CTX-R7-03 proven; current
-transition receipt pending fresh independent review; R7-3.1 next, unchecked, and unstarted; R7-3
+at fresh independent review-clean checkpoint-doc commit 78a168c09; CTX-R7-03 proven; transition/fix
+series e27d82580 + 305e40bf2 fresh independent built-in default REVIEW CLEAN after fix 305e40bf2
+corrected the first review's stale R7 plan paragraph; R7-3.1 next, unchecked, and unstarted; R7-3
 analyzer/production implementation unstarted; R7-4..R7-6 and R8 blocked; Prompt 1 selectors
 PHASE_ID: R7-3 / ACTIVE_PACKET: none prepared and eligible but not invoked`
 
@@ -15,7 +16,7 @@ PHASE_ID: R7-3 / ACTIVE_PACKET: none prepared and eligible but not invoked`
 summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
 commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
-`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+`none`; transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next, unchecked,
 and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
 blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
 have not been invoked.
@@ -79,7 +80,7 @@ proven. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2a
 summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
 commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
-`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+`none`; transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next, unchecked,
 and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
 blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
 have not been invoked.

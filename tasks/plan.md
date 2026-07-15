@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-3` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`; R7-2 complete at fresh independent review-clean checkpoint-doc commit `78a168c09`; `CTX-R7-03` proven; current transition receipt pending fresh independent review; `R7-3.1` next, unchecked, and unstarted; R7-3 analyzer/production implementation unstarted; `R7-4..R7-6` and R8 blocked; Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` prepared and eligible but not invoked)**
+Current phase: **`R7-3` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`; R7-2 complete at fresh independent review-clean checkpoint-doc commit `78a168c09`; `CTX-R7-03` proven; transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph; `R7-3.1` next, unchecked, and unstarted; R7-3 analyzer/production implementation unstarted; `R7-4..R7-6` and R8 blocked; Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` prepared and eligible but not invoked)**
 
 ## Dependency Order
 
@@ -68,17 +68,18 @@ Current phase: **`R7-3` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`;
     fix resolved the summary-vs-checkpoint blocker. The tasks and behavior/static checkpoint are
     complete. Checkpoint-doc commit `78a168c09` received fresh independent built-in `default`
     `REVIEW CLEAN`, satisfying the R7-2 exit gate and proving `CTX-R7-03`.
-14. **ACTIVE AT ENTRY ONLY — R7-3 TRANSITION GATE:** active packet is `none`; current transition
-    receipt pending fresh independent review. `R7-3.1` is next, unchecked, and unstarted; R7-3
-    analyzer/production implementation has not started. `R7-4..R7-6` plus R8 remain blocked.
-    Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but have
-    not been invoked.
+14. **ACTIVE AT ENTRY ONLY — R7-3:** active packet is `none`; transition/fix series `e27d82580` +
+    `305e40bf2` is fresh independent built-in `default` `REVIEW CLEAN`. The first reviewer found one
+    stale R7 plan paragraph; fix `305e40bf2` corrected it. `R7-3.1` is next, unchecked, and
+    unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` plus R8 remain
+    blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible
+    but have not been invoked.
 
 ## Execution Rules
 
-- Commit and obtain fresh independent review for only the narrow R7-2 -> R7-3 transition receipt.
-  Do not start `R7-3.1` or invoke the prepared R7-3 Prompt 1 selectors until that receipt is fresh-
-  review-clean.
+- Preserve transition/fix series `e27d82580` + `305e40bf2` as fresh independent built-in `default`
+  `REVIEW CLEAN`. Do not begin R7-3 implementation unless Prompt 1 is invoked in a fresh R7-3 phase
+  session.
 - Do not reopen `semantic_goal_drift` without a new failing witness.
 - Do not add a common mega-context argument to every scorer.
 - Treat `dead_end_thrash` regression/delegation/turn-shape; truth-grounding applicability,
@@ -99,7 +100,7 @@ Current phase: **`R7-3` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`;
   `7af2ae517` + `75a353e46` fresh independent `REVIEW CLEAN`; keep R7-2.1/.2/.3 and the behavior/
   static checkpoint complete. Keep checkpoint-doc commit `78a168c09` fresh independent `REVIEW
   CLEAN`, R7-2 complete, and `CTX-R7-03` proven. Keep only R7-3 active at entry with packet `none`;
-  current transition receipt pending fresh independent review. Keep `R7-3.1` unchecked/unstarted,
+  transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. Keep `R7-3.1` unchecked/unstarted,
   R7-3 analyzer/production implementation unstarted, and `R7-4..R7-6` plus R8 blocked. Keep Prompt
   1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` prepared and eligible but not invoked.
 - Run GitNexus impact analysis before any later symbol edit. Before every commit, stage only intended
@@ -138,7 +139,7 @@ independent built-in `default` `REVIEW CLEAN`; the R7-1 checkpoint is complete. 
 summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
 commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
 R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
-`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+`none`; transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next, unchecked,
 and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
 blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
 have not been invoked.
