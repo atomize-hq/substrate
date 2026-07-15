@@ -1,21 +1,25 @@
 # Authority And Status Map
 
-**Verified against:** preserved review-clean R6/R7 predecessor receipts; R7-2 task commits
-`c60d05f77` and `9403c8a24` plus implementation/fix series `7af2ae517` + `75a353e46` fresh
-independent built-in `default` `REVIEW CLEAN`; operator decision
-`R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A`; input `16 / 16`; delegation matches `39` total;
-checkpoint matches `172` total; full analyzer `417 / 417`; formatting, analyzer clippy `-D
-warnings`, and diff checks green. Staged GitNexus gates were LOW / `0`, MEDIUM / `1`, authorized
-HIGH / `9`, and MEDIUM / `2` affected processes in task order. Public v0.8/readable v0.7,
-graph-derived roles and ids, `Linked`/`Partial`, fail-closed conflicts, deterministic `RowRef`
-evidence, JSON-summary parity, and separate trajectories are proven; no R7-3/R7-4/sentinel/R8
-leakage occurred.
+**Verified against:** preserved review-clean R6/R7 predecessor receipts; R7-3 entry-authority
+repair `9fd9d9972` fresh independent built-in `default` `REVIEW CLEAN`; R7-3.1 test-only commit
+`f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` fresh independent built-in `default` `REVIEW
+CLEAN`. R7-3.1's placeholder acceptance scaffold intentionally produced test-scaffold RED `0 / 1`;
+after replacement with the real acceptance assertion, its exact target passed `1 / 1` and full
+`progress_acceptance` passed `4 / 4`. R7-3.2's placeholder acceptance scaffolds intentionally
+produced test-scaffold RED `3 / 3`; after replacement with the real acceptance assertions, the
+exact targets passed `3 / 3`, and the checkpoint filter passed `175` matched tests across targets.
+`cargo test -p agent-drift-analyzer -- --nocapture` passes `421 / 421` aggregate; formatting,
+`cargo clippy -p agent-drift-analyzer --all-targets -- -D warnings`, and diff checks are green. Both
+staged GitNexus gates were LOW / `0` affected processes.
+`cargo clippy --workspace --all-targets -- -D warnings` remains RED only in R7-6-owned sentinel test
+constructors missing `Checkpoint.delegation`; that witness is routed to
+already-planned R7-6.1 and does not reopen R7-3.
 
-**Current phase:** `R7-3` (**SOLE ACTIVE PHASE AT ENTRY ONLY**; active packet: `none`; R7-2
-complete at fresh independent review-clean checkpoint-doc commit `78a168c09`; `CTX-R7-03` proven;
-transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph; `R7-3.1` next, unchecked, and
-unstarted; R7-3 analyzer/production implementation unstarted; `R7-4..R7-6` and R8 blocked; Prompt 1
-selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` prepared and eligible but not invoked)
+**Current phase:** `R7-3` (**SOLE ACTIVE PHASE**; active packet: `none`; R7-3.1, R7-3.2,
+and the behavior/static checkpoint complete; test-only commits `f8dd04549` and `c7c6f35b8` fresh
+independent review-clean; checkpoint-doc receipt pending fresh independent review; R7-3 exit gate
+and `CTX-R7-04` blocked/pending until the receipt is fresh-review-clean; `R7-4..R7-6` and R8 blocked;
+no next-phase selectors prepared or invoked)
 
 ## How To Resolve Truth
 
@@ -37,7 +41,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, R7-1, AND R7-2 COMPLETE AND REVIEW-CLEAN / CHECKPOINT-DOC COMMIT `78a168c09` FRESH INDEPENDENT REVIEW CLEAN / `CTX-R7-03` PROVEN / R7-3 SOLE ACTIVE PHASE AT ENTRY ONLY / ACTIVE PACKET NONE / TRANSITION/FIX SERIES `e27d82580` + `305e40bf2` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` AFTER FIX `305e40bf2` CORRECTED THE FIRST REVIEW'S STALE R7 PLAN PARAGRAPH / R7-3.1 NEXT, UNCHECKED, AND UNSTARTED / R7-3 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED / R7-4..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve the review-clean transition boundary. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked; no R7-3 analyzer/production work has started. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, R7-1, AND R7-2 COMPLETE AND REVIEW-CLEAN / `CTX-R7-03` PROVEN / R7-3.1 AND R7-3.2 PLUS BEHAVIOR-STATIC CHECKPOINT COMPLETE / TEST-ONLY COMMITS `f8dd04549` AND `c7c6f35b8` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` / R7-3 SOLE ACTIVE PHASE / ACTIVE PACKET NONE / CHECKPOINT-DOC RECEIPT PENDING FRESH INDEPENDENT REVIEW / `CTX-R7-04` BLOCKED-PENDING / R7-4..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Obtain fresh independent review for only the R7-3 checkpoint-doc receipt; do not prepare or invoke R7-4 selectors. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -86,11 +90,13 @@ R6, complete the terminal scorer-disposition table, or unblock R7.
 
 ## R7 Authority
 
-R7 is now an implementation-ready authority family. `R7-PROMOTE`, `R7-0`, `R7-1`, and `R7-2` are
-complete. Checkpoint-doc commit `78a168c09` received fresh independent built-in `default` `REVIEW
-CLEAN`, satisfying the R7-2 exit gate and proving `CTX-R7-03`. Only R7-3 is active at entry with
-packet `none`; transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next,
-unchecked, and unstarted; no R7-3 analyzer/production implementation has started:
+R7 is now an implementation-ready authority family. `R7-PROMOTE`, `R7-0`, `R7-1`, and `R7-2`
+are complete, and `CTX-R7-03` is proven. Transition/fix series `e27d82580` + `305e40bf2` and
+entry-authority repair `9fd9d9972` are fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1
+test-only commit `f8dd04549`, R7-3.2 test-only commit `c7c6f35b8`, and the behavior/static
+checkpoint are complete and fresh independent built-in `default` `REVIEW CLEAN`. R7-3 remains the
+sole active phase with packet `none`; `CTX-R7-04` and the exit gate remain blocked/pending until the
+checkpoint-doc receipt is fresh-review-clean:
 
 - `docs/specs/r7/MAP.md`
 - `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
@@ -118,11 +124,14 @@ and `9403c8a24`, plus implementation/fix series `7af2ae517` + `75a353e46`, recei
 independent built-in `default` `REVIEW CLEAN`; the fix resolved the summary-vs-checkpoint blocker.
 The R7-2 task and behavior/static proof is complete at the counts recorded above. Checkpoint-doc
 commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-2
-exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet `none`;
-transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next, unchecked, and
-unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` plus R8 remain
-blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
-have not been invoked.
+exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
+repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
+commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
+remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
+fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
+receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
+are prepared or invoked.
 
 ## R8 Authority
 

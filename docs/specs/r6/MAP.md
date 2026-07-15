@@ -1,12 +1,12 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE, R7-0, R7-1, AND
-R7-2 COMPLETE AND REVIEW-CLEAN; R7 AUTHORITY IMPLEMENTATION-READY; CHECKPOINT-DOC COMMIT
-`78a168c09` FRESH INDEPENDENT REVIEW CLEAN; `CTX-R7-03` PROVEN; R7-3 SOLE ACTIVE PHASE AT ENTRY
-ONLY; ACTIVE PACKET NONE; TRANSITION/FIX SERIES `e27d82580` + `305e40bf2` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN` AFTER FIX `305e40bf2` CORRECTED THE FIRST REVIEW'S STALE R7 PLAN PARAGRAPH; R7-3.1
-NEXT, UNCHECKED, AND UNSTARTED; R7-3 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED; R7-4..R7-6
-AND R8 BLOCKED; PROMPT 1 SELECTORS `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` PREPARED AND ELIGIBLE
-BUT NOT INVOKED** as of 2026-07-15. Preserved review-clean R6 proof series remain authoritative.
+Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE, R7-0,
+R7-1, AND R7-2 COMPLETE AND REVIEW-CLEAN; R7 AUTHORITY IMPLEMENTATION-READY; `CTX-R7-03` PROVEN;
+R7-3.1 AND R7-3.2 PLUS BEHAVIOR/STATIC CHECKPOINT COMPLETE; TEST-ONLY COMMITS `f8dd04549` AND
+`c7c6f35b8` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN`; R7-3 SOLE ACTIVE PHASE; ACTIVE
+PACKET NONE; CHECKPOINT-DOC RECEIPT PENDING FRESH INDEPENDENT REVIEW; R7-3 EXIT GATE AND
+`CTX-R7-04` BLOCKED/PENDING UNTIL THE RECEIPT IS FRESH-REVIEW-CLEAN; R7-4..R7-6 AND R8 BLOCKED;
+NO NEXT-PHASE SELECTORS PREPARED OR INVOKED** as of 2026-07-15. Preserved review-clean R6 proof series remain authoritative.
 The review-clean R7 implementation series changes no R6 behavior. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
@@ -383,11 +383,14 @@ task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh in
 `75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the
 summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
 commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
-R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
-`none`; transition/fix series `e27d82580` + `305e40bf2` received fresh independent built-in `default` `REVIEW CLEAN` after fix `305e40bf2` corrected the first review's stale R7 plan paragraph. `R7-3.1` is next, unchecked,
-and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
-blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
-have not been invoked.
+R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Transition/fix series `e27d82580` + `305e40bf2` and entry-authority
+repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`. R7-3.1 test-only
+commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
+`default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete. R7-3
+remains the sole active phase with packet `none` while this checkpoint-doc receipt still requires
+fresh independent review. The R7-3 exit gate and `CTX-R7-04` remain blocked/pending until the
+receipt itself is fresh-review-clean. `R7-4..R7-6` and R8 remain blocked; no next-phase selectors
+are prepared or invoked.
 
 ## Non-Goals For This Rescope
 
