@@ -111,11 +111,14 @@ completed `CTX-R6-01` and `CTX-R6-02`. Historical witness `60cde3dd7` is preserv
 contract, seven focused controls, all `20` troubleshooting matches, exact sticky and frozen-corpus
 controls, progress acceptance, checkpoint matches, full analyzer `402 / 402`, compactor
 normalization, and static gates. A fresh independent built-in `default` reviewer returned
-`REVIEW CLEAN`. The narrow authority transition committed by this change completes the packet,
-clears active packet to `none`, and keeps `R6-REPLAY` active. Current sticky authority remains
-`HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` remains historical evidence
-only. Fresh review of this transition is pending; then `CTX-R6-06` replay proof and the R6 family
-wall are next.
+`REVIEW CLEAN`. Packet transition series `1ff592823` + `7839a7f47` then received fresh independent
+built-in `default` `REVIEW CLEAN`, completed the packet, cleared active packet to `none`, and kept
+`R6-REPLAY` active. Phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, the renamed sticky control,
+and exact `CTX-R6-06` each pass `1 / 1`; the R6 family wall and full analyzer `402 / 402` are green.
+Proof receipt `b1791c1e3` records those results and is fresh-review-pending. Current sticky authority
+remains `HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` remains historical
+evidence only. `R6-REPLAY` is active and proof-complete; only after the proof receipt is
+fresh-review-clean may the narrow transition to `R6-CLOSE` land.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -128,9 +131,10 @@ control.” The current honest sequence is:
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
 5. keep the landed final gap-to-replay authority transition series `56bb9966f + 07a3b1fe5` at fresh independent `REVIEW CLEAN`
-6. keep `R6-GAP-DET-REPLAY-STALL` and `CTX-R6-02` complete at review-clean commit `6eda87e60`;
-   freshly review this authority-only transition, then run `CTX-R6-06` replay proof and the R6
-   family wall with active packet `none`
+6. keep `R6-GAP-DET-REPLAY-STALL` and `CTX-R6-02` complete at review-clean commit `6eda87e60`, keep
+   packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`, and keep
+   `CTX-R6-06` plus the R6 family wall complete with active packet `none`; freshly review proof
+   receipt `b1791c1e3`, then land only the narrow `R6-REPLAY -> R6-CLOSE` transition
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
