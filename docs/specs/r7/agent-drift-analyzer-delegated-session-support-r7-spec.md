@@ -3,16 +3,19 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
-NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
+R7-0.1 COMPLETE AT LANDING CANDIDATE, FRESH REVIEW PENDING / R7-0.2 NEXT AFTER REVIEW-CLEAN /
+FIXTURES AND IMPLEMENTATION NOT STARTED**
 
 ## Assumptions I'm Making
 
 1. R6 is **CLOSED**; `R6-CLOSE` and `CTX-R6-17` are complete. Promotion series `455d0ed90` +
    `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is
    complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent
-   built-in `default` `REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`; `R7-0.1` is
-   next, and no R7 task has started.
+   built-in `default` `REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`.
+   `R7-0.1` is complete at its docs-only landing candidate after the exact contract `rg` passed;
+   fresh independent review is pending. `R7-0.2` is next only after that review is clean, and no
+   fixture or implementation work has started.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -25,7 +28,7 @@ NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 6. R8 still owns broad sentinel interpretation consolidation. R7 may add only compatibility and
    compact presentation required to carry the new analyzer semantics end to end.
 
-## Implementation Promotion Gate — Promotion Complete, R7-0 Active At Entry Only
+## Implementation Promotion Gate — Promotion Complete, R7-0 Active
 
 This document is now implementation-ready authority. The R6 prerequisites audited during the
 now-complete `R7-PROMOTE` phase are satisfied:
@@ -41,10 +44,11 @@ now-complete `R7-PROMOTE` phase are satisfied:
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit, reconciled the
 canonical mirrors, and received fresh independent built-in `default` `REVIEW CLEAN`.
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
-independent built-in `default` `REVIEW CLEAN`; it makes `R7-0` active at entry only with packet
-`none`, identifies `R7-0.1` as next, and authorizes no task execution yet. `R7-0.1`, `R7-0.2`,
-fixtures, and all implementation remain unstarted. R7 must extend the stable ordinary
-single-session baseline; it must not absorb baseline scorer semantics.
+independent built-in `default` `REVIEW CLEAN`; it made `R7-0` active at entry only with packet
+`none`. The docs-only `R7-0.1` landing candidate now freezes the already-landed contract after the
+exact verification command passed. It awaits fresh independent review, so `R7-0.2` is next only
+after a clean verdict. Fixtures and all implementation remain unstarted. R7 must extend the stable
+ordinary single-session baseline; it must not absorb baseline scorer semantics.
 
 ## Objective
 

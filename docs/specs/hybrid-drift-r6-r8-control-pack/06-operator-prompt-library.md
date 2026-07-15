@@ -316,20 +316,15 @@ The R6-close transition is committed and fresh-review-clean. R7 promotion series
 `876ac55de` completes `R7-PROMOTE`, makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready, and
 received fresh independent built-in `default` `REVIEW CLEAN`. Narrow `R7-PROMOTE -> R7-0`
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` also received fresh independent built-in
-`default` `REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`; `R7-0.1` is next, while
-`R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted. `R7-1..R7-6` and R8
-remain blocked.
+`default` `REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is
+complete at its docs-only landing candidate after the exact contract `rg` passed; fresh independent
+review is pending. `R7-0.2` is next only after that review is clean. Fixtures and all R7
+implementation remain unstarted; `R7-1..R7-6` and R8 remain blocked.
 
-The next eligible Prompt 1 invocation is prepared with these selectors but is not started:
-
-```text
-PHASE_ID: R7-0
-ACTIVE_PACKET: none
-```
-
-The transition session is complete and review-clean. The selectors above are ready for a fresh
-session but have not been started. Do not execute `R7-0.1`, `R7-0.2`, fixtures, implementation, or
-another phase here.
+The next required interaction is the normal fresh-review wall for the committed `R7-0.1` landing
+candidate. Do not use Prompt 1 to restart the phase and do not begin `R7-0.2` until the landing
+candidate is fresh-review-clean. After a clean verdict, continue the already-authorized `R7-0.2`
+task inside the active `R7-0` phase; do not start another phase.
 
 Historical resolved Task `.2B` decision report:
 

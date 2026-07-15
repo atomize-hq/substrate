@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOTE` is COMPLETE after promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, fixtures, and all implementation remain unstarted; `R7-1..R7-6` remain blocked)**
+Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE` and its entry transition are fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is COMPLETE at its docs-only landing candidate with fresh independent review pending; `R7-0.2` is next only after that review is clean; fixtures and all implementation remain unstarted; `R7-1..R7-6` remain blocked)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -99,9 +99,14 @@ Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOT
 - [x] Land and freshly review the narrow `R7-PROMOTE -> R7-0` status transition. Transition series
   `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW
   CLEAN`, marking `R7-PROMOTE` complete and `R7-0` active at entry only with packet `none`.
-- [ ] Execute `R7-0.1` next in a fresh phase session. `R7-0.1`, `R7-0.2`,
-  fixtures, and all bounded direct-child delegated-session implementation remain unstarted.
+- [x] Complete docs-only `R7-0.1` at its landing candidate. The exact contract `rg` passed and
+  confirmed the landed R6-1 core, reciprocal direct linkage, separate trajectories,
+  direct-child-first boundary, no-new-drift-class-by-default posture, and R8 exclusion. Fresh
+  independent review is pending; no fixture, product behavior, or implementation symbol changed.
+- [ ] Execute `R7-0.2` only after the `R7-0.1` landing series is fresh-review-clean. Fixtures and all
+  bounded direct-child delegated-session implementation remain unstarted.
 
-The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready,
-`R7-0` is active at entry only with packet `none`, and `R7-0.1` is next. Every `R7-0..R7-6` item
-remains unchecked and unstarted; `R7-1..R7-6` remain blocked.
+The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
+`R7-0` remains the sole active phase with packet `none`. `R7-0.1` is complete at its docs-only
+landing candidate and awaits fresh independent review; `R7-0.2` is next only after that review is
+clean and remains unchecked and unstarted. `R7-1..R7-6` remain blocked.

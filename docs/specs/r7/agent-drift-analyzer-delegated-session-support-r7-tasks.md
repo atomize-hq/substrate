@@ -3,15 +3,17 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
-NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
+R7-0.1 COMPLETE AT LANDING CANDIDATE, FRESH REVIEW PENDING / R7-0.2 NEXT AFTER REVIEW-CLEAN /
+FIXTURES AND IMPLEMENTATION NOT STARTED**
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
 `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW
-CLEAN`. `R7-0` is active at entry only with packet `none`, and `R7-0.1` is next. Every `R7-0..R7-6`
-item remains unchecked; neither `R7-0.1` nor `R7-0.2`, and no fixture or implementation work, has
-started. `R7-1..R7-6` remain blocked.
+CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is complete at its
+docs-only landing candidate after the exact contract `rg` passed; fresh independent review is
+pending. `R7-0.2` is next only after that review is clean and remains unchecked and unstarted.
+Fixtures and all implementation remain unstarted; `R7-1..R7-6` remain blocked.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -24,19 +26,23 @@ started. `R7-1..R7-6` remain blocked.
   - Dependencies: review-clean R6 `CLOSED` authority
   - Receipt: promotion series `455d0ed90` + `876ac55de` fresh independent built-in `default`
     `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fresh independent
-    built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry only, `R7-0.1` is next, and no
-    `R7-0` item has started
+    built-in `default` `REVIEW CLEAN`; at that transition boundary `R7-0` was active at entry only,
+    `R7-0.1` was next, and no `R7-0` item had started
   - Scope: medium, docs only
 
 ## R7-0: Docs Lock And Evidence Matrix
 
-- [ ] **R7-0.1: Freeze the implementation-ready R7 family at phase entry.**
+- [x] **R7-0.1: Freeze the implementation-ready R7 family at phase entry.**
   - Acceptance: the landed family records the `dead_end_thrash` core plus reciprocal direct
     linkage, separate trajectories, and R8 boundaries, and the review-clean transition identifies
     `R7-0` as the sole active phase before fixture work begins.
   - Verify: `rg -n "R6-1|reciprocal|separate trajector|R8" docs/specs/r6/MAP.md docs/specs/r7`
   - Files: `docs/specs/r6/MAP.md`, `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
   - Dependencies: review-clean `R7-PROMOTE` phase transition
+  - Receipt: docs-only landing candidate; the exact verification command passed and confirmed the
+    `R6-1` core, reciprocal direct linkage, separate trajectories, direct-child-first boundary,
+    no-new-drift-class-by-default posture, and R8 exclusion. Fresh independent review is pending;
+    no fixture, product behavior, or implementation symbol changed.
   - Scope: medium, docs only
 
 - [ ] **R7-0.2: Add sanitized raw-link fixture matrix.**

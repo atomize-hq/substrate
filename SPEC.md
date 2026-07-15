@@ -8,15 +8,17 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOTE` is COMPLETE after promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, fixtures, and all implementation remain unstarted; `R7-1..R7-6` remain blocked)**
+Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE` and its entry transition are fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is COMPLETE at its docs-only landing candidate with fresh independent review pending; `R7-0.2` is next only after that review is clean; fixtures and all implementation remain unstarted; `R7-1..R7-6` remain blocked)**
 
 The scoped R6 packets, acceptance controls, named gaps, replay closeout, and terminal-disposition
 reconciliation are complete. R6 is closed for sequencing. Promotion series `455d0ed90` +
 `876ac55de` reconciled the R7 authority family to implementation-ready content and received fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE`. The narrow status transition
 series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default`
-`REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`; `R7-0.1` is next, and
-delegated-session fixture and implementation work has not begun.
+`REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is complete at
+its docs-only landing candidate after the exact contract `rg` passed; fresh independent review is
+pending. `R7-0.2` is next only after that review is clean, and delegated-session fixture and
+implementation work has not begun.
 
 Hard decisions:
 
@@ -67,9 +69,10 @@ Hard decisions:
 - The R7 authority family is implementation-ready after completed promotion series `455d0ed90` +
   `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-PROMOTE` is complete.
   Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in
-  `default` `REVIEW CLEAN`; `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and
-  `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted. `R7-1..R7-6` remain
-  blocked.
+  `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is
+  complete at its docs-only landing candidate and awaits fresh independent review; `R7-0.2` is next
+  only after that review is clean. Fixtures and all R7 implementation remain unstarted;
+  `R7-1..R7-6` remain blocked.
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
@@ -100,5 +103,7 @@ The R6 finding is `CLOSED` and `R6-CLOSE` is complete. Promotion series `455d0ed
 completed the R7 content/gate audit, made the R7 authority family implementation-ready, and received
 fresh independent built-in `default` `REVIEW CLEAN`; `R7-PROMOTE` is complete. The narrow transition
 series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default`
-`REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and `R7-0.1`,
-`R7-0.2`, fixtures, and all R7 implementation remain unstarted. `R7-1..R7-6` and R8 remain blocked.
+`REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is complete at its
+docs-only landing candidate and awaits fresh independent review; `R7-0.2` is next only after that
+review is clean. Fixtures and all R7 implementation remain unstarted; `R7-1..R7-6` and R8 remain
+blocked.

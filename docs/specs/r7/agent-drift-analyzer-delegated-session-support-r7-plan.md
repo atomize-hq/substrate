@@ -3,14 +3,17 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
-NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
+R7-0.1 COMPLETE AT LANDING CANDIDATE, FRESH REVIEW PENDING / R7-0.2 NEXT AFTER REVIEW-CLEAN /
+FIXTURES AND IMPLEMENTATION NOT STARTED**
 
 This implementation plan is reconciled and implementation-ready. R6 is `CLOSED`, and promotion
 series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
-independent built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry only with packet `none`,
-`R7-0.1` is next, and no `R7-0.1`, `R7-0.2`, fixture, or implementation work has started.
+independent built-in `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet
+`none`. `R7-0.1` is complete at its docs-only landing candidate after the exact contract `rg`
+passed; fresh independent review is pending. `R7-0.2` is next only after that review is clean, and
+no fixture or implementation work has started.
 
 ## Overview
 
@@ -54,9 +57,11 @@ The R6 closure entry gate is satisfied: applicability audit complete; every mate
 surface assigned exactly one terminal disposition; broad acceptance proven or narrowed honestly;
 named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`. Promotion
 series `455d0ed90` + `876ac55de` completed the family content/gate audit and received fresh
-independent built-in `default` `REVIEW CLEAN`. The graph is now at `R7-0` entry only; `R7-0.1` remains
-unstarted after transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent
-built-in `default` `REVIEW CLEAN`.
+independent built-in `default` `REVIEW CLEAN`. The graph remains in `R7-0`; `R7-0.1` is complete at
+its docs-only landing candidate after the exact contract `rg` passed and awaits fresh independent
+review. `R7-0.2` is next only after that review is clean. Transition series `6bf0ac6ad` +
+`4a887ee0c` + `e83ebb430` remains the fresh independent built-in `default` `REVIEW CLEAN` entry
+receipt.
 
 ```text
 R7-0 docs + sanitized evidence matrix
@@ -300,5 +305,6 @@ Sequential requirements:
 ## Open Questions
 
 No unresolved design question blocks future `R7-1` after `R7-0` exits review-clean. `R7-1` is
-currently phase-blocked, and `R7-0.1` and `R7-0.2` remain unstarted. Default-on linked closure, new
-drift taxonomy, and recursive depth remain evidence-gated decisions for later packets.
+currently phase-blocked. `R7-0.1` is complete at its landing candidate and awaits fresh review;
+`R7-0.2` is next only after that review is clean and remains unstarted. Default-on linked closure,
+new drift taxonomy, and recursive depth remain evidence-gated decisions for later packets.

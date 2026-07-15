@@ -52,9 +52,9 @@ dispatcher infrastructure `scoring/mod.rs` are **Fit-for-purpose exception**. R6
 `876ac55de` completed the R7 content/gate audit, made the R7 authority family implementation-ready,
 and received fresh independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. The
 narrow status transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent
-built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry only with packet `none`, `R7-0.1` is
-next, and no R7 task has started. This R6
-closeout itself began no R7 work.
+built-in `default` `REVIEW CLEAN`. At that historical transition boundary, `R7-0` was active at
+entry only with packet `none`, `R7-0.1` was next, and no R7 task had started. This R6 closeout itself
+began no R7 work; current R7 task state is recorded below.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
 context, archetype, and progress. A scorer is complete when its chosen inputs match the behavior it
@@ -259,5 +259,6 @@ promotion series `455d0ed90` + `876ac55de` completed the R7 content/gate audit, 
 MAP/SPEC/PLAN/TASKS implementation-ready, and received fresh independent built-in `default` `REVIEW
 CLEAN`; `R7-PROMOTE` is complete. The narrow status transition series `6bf0ac6ad` + `4a887ee0c` +
 `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` is active at entry
-only with packet `none`, `R7-0.1` is next, and `R7-0.1`, `R7-0.2`, fixtures, and all R7
-implementation remain unstarted. `R7-1..R7-6` remain blocked.
+with packet `none`. `R7-0.1` is complete at its docs-only landing candidate and awaits fresh
+independent review; `R7-0.2` is next only after that review is clean. Fixtures and all R7
+implementation remain unstarted; `R7-1..R7-6` remain blocked.

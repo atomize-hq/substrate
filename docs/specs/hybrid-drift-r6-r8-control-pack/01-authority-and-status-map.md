@@ -2,7 +2,7 @@
 
 **Verified against:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; Manifest E family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check green; R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, and R7 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` each received fresh independent built-in `default` `REVIEW CLEAN` without starting R7 fixture or implementation work.
 
-**Current phase:** `R7-0` (**ACTIVE AT ENTRY ONLY**; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE` is complete; the R7 authority family is implementation-ready; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted; `R7-1..R7-6` remain blocked)
+**Current phase:** `R7-0` (**ACTIVE**; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE` and its entry transition are fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is complete at its docs-only landing candidate with fresh independent review pending; `R7-0.2` is next only after that review is clean; fixtures and all R7 implementation remain unstarted; `R7-1..R7-6` remain blocked)
 
 ## How To Resolve Truth
 
@@ -24,7 +24,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE / R7-0.1 NEXT** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Start a fresh `R7-0` session at `R7-0.1`; the prepared Prompt 1 is ready but not started. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE / R7-0.1 LANDING CANDIDATE PENDING FRESH REVIEW / R7-0.2 NEXT AFTER REVIEW-CLEAN** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Freshly review the `R7-0.1` landing candidate; only after a clean verdict may `R7-0.2` begin. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -73,8 +73,8 @@ R6, complete the terminal scorer-disposition table, or unblock R7.
 
 ## R7 Authority
 
-R7 is now an implementation-ready authority family. `R7-PROMOTE` is complete, and `R7-0` is active
-at entry only with packet `none`:
+R7 is now an implementation-ready authority family. `R7-PROMOTE` is complete, and `R7-0` remains
+the sole active phase with packet `none`:
 
 - `docs/specs/r7/MAP.md`
 - `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
@@ -85,8 +85,9 @@ The R6 `CLOSED` and terminal-disposition entry gate is satisfied. Promotion seri
 `876ac55de` completes `R7-PROMOTE`, makes the four R7 authority documents implementation-ready, and
 received fresh independent built-in `default` `REVIEW CLEAN`. Transition series `6bf0ac6ad` +
 `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.1` is
-next, while `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted. `R7-1..R7-6`
-remain blocked.
+complete at its docs-only landing candidate after the exact contract `rg` passed and awaits fresh
+independent review. `R7-0.2` is next only after that review is clean. Fixtures and all R7
+implementation remain unstarted; `R7-1..R7-6` remain blocked.
 
 ## R8 Authority
 

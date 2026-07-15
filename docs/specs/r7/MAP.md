@@ -1,10 +1,13 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
-NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**. Promotion series
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
+R7-0.1 COMPLETE AT LANDING CANDIDATE, FRESH REVIEW PENDING / R7-0.2 NEXT AFTER REVIEW-CLEAN /
+FIXTURES AND IMPLEMENTATION NOT STARTED**. Promotion series
 `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. The narrow
 `R7-PROMOTE -> R7-0` transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
-independent built-in `default` `REVIEW CLEAN`. It starts no `R7-0` task.
+independent built-in `default` `REVIEW CLEAN`. The docs-only `R7-0.1` landing candidate freezes the
+already-landed family contract; it is not yet fresh-review-clean and starts no fixture or
+implementation work.
 
 ## R6 Handoff
 
@@ -32,8 +35,10 @@ resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. Promotion 
 + `876ac55de` reconciled the preserved MAP/SPEC/PLAN/TASKS to implementation-ready authority and
 received fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE`. The narrow
 status transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in
-`default` `REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`; `R7-0.1` is next, and
-neither `R7-0.1` nor `R7-0.2` has started.
+`default` `REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is
+complete at its docs-only landing candidate after the exact contract `rg` passed; fresh independent
+review is pending. `R7-0.2` is next only after that review is clean, and fixture and implementation
+work have not started.
 
 ## Live Linkage Evidence
 
@@ -66,9 +71,10 @@ semantics. Ordinary parent-visible orchestration may still be described as paren
 
 ## Packet Order
 
-The packet order below is implementation-ready. `R7-0` is **active at entry only** with packet
-`none`; its transition is fresh independent `REVIEW CLEAN`, and `R7-0.1` is next but remains
-unstarted. No `R7-0.1`, `R7-0.2`, fixture, or implementation work has started.
+The packet order below is implementation-ready. `R7-0` is **active** with packet `none`; its entry
+transition is fresh independent `REVIEW CLEAN`. `R7-0.1` is complete at its docs-only landing
+candidate and awaits fresh independent review. `R7-0.2` is next only after that review is clean; no
+fixture or implementation work has started.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.
