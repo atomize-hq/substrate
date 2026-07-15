@@ -289,7 +289,7 @@ statement is superseded by the Case B production-ingress audit below. Do not res
 broad A1.2 checkpoint, and do not begin A1.2b before the joint closeout → B3.1 → C1 corridor lands.
 That historical next-packet statement is now superseded: bounded A1.2a, A1.2a-WB, and A1.2a-S are
 landed and independently review-clean. B1/B2.1-R0 is also landed and independently review-clean
-through `bb3eefba`; B3.2a is next and has not begun. A1.3 is not dependency-ready, and A1 as a
+through `bb3eefba`; B3.2a remains incomplete. A1.3 is not dependency-ready, and A1 as a
 whole remains incomplete and non-landable.
 
 ## A1.2a, A1.2a-WB, and A1.2a-S recorded result
@@ -332,7 +332,7 @@ assertions. No new failure name, assertion change, fixture weakening, or test su
 involved. These progressed failures remain explicit inputs to their later owning packets and are
 not counted as A1.2a-S closure of the B1/B2.1 joint differential gate. Reviewer
 `/root/a12a_s_runtime_review_1` completed read-only with verdict CLEAN. No seam is promoted;
-B1/B2.1-R0 is now independently review-clean through `bb3eefba`; B3.2a is next and has not begun.
+B1/B2.1-R0 is now independently review-clean through `bb3eefba`; B3.2a remains incomplete.
 
 ## B0 closeout evidence
 
@@ -477,8 +477,17 @@ separate RetainedWorkerRuntime-owned production bridge: both real Spawn adapters
 fingerprint the complete validated request/authority/runtime/policy plan under the separate
 RetainedWorkerRuntime admission key, whose crash-stable lifetime is independent of HSA keys; count all durable
 nonterminal admission slots, enforce the cap, and persist fixed participant/bootstrap-run identity.
-Only one durable per-session registration head fixes current authority; later slots remain ordered
-without pinning a stale revision. The bridge passes the head plan to R0, exact-joins R0 before
+Only one durable per-session registration head fixes current authority. Queued `SlotReserved`
+records with no current head are valid and remain live for cap accounting. Reconciliation of the
+completed current head advances only that record and releases the head; it never automatically
+promotes another slot. Only exact re-presentation of the complete canonical request for the
+lowest-sequence queued slot can acquire the next head after re-verifying its stored HMAC and the
+complete admission-to-current R0-only ancestry. The registry stores no request/prompt/payload
+preimage; digest equality alone cannot promote. Changed bytes conflict without mutation, later
+slots cannot overtake, and caller/PID/helper/socket/endpoint/timeout/EOF/liveness/observer state
+cannot acquire, replace, renew, or steal. An abandoned earliest slot conservatively blocks later
+slots until its exact request retries or a later owned lifecycle/control protocol resolves it;
+B3.2a adds no such abandonment protocol. The bridge passes the head plan to R0, exact-joins R0 before
 transport, and carries one transport-neutral typed equality proof through the direct dispatcher and
 live internal-toolbox adapter into the real transport-api `Service::execute_stream` member branch
 and `MemberRuntimeManager::launch` validation. The live adapter cannot allocate a retry-local
@@ -540,8 +549,8 @@ A1.2a and authorized only the subsequently reviewed A1.2a-WB implementation in `
 boundary. At that point it did not authorize any other facade behavior or A1.2a-S and required WB
 to be implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
 That authorization state is superseded by the recorded review-clean WB and A1.2a-S closeout above.
-B1/B2.1-R0 is now review-clean through `bb3eefba`; B3.2a is the exact next packet and has not
-begun. B1/B2.1-0, runtime-WIP restoration, and later implementation remain unauthorized here.
+B1/B2.1-R0 is now review-clean through `bb3eefba`; B3.2a is the exact next packet and remains
+incomplete. B1/B2.1-0 and later implementation remain unauthorized here.
 
 ## B1/B2.1-R0 recorded result
 
@@ -583,7 +592,7 @@ Reserved-to-Applied publication race fixed by `0d5225f3`; the first final integr
 found the Applied retry store-ID gap fixed by `bb3eefba`. Fresh reviewer
 `/root/r0_final_integration_rereview` returned final CLEAN. This is component proof only: R0 has no
 production ingress caller, supplies no e2e or live doctor/smoke proof, and has no native macOS
-claim. No seam is promoted, B3.2a was not begun, and B3.2a is the next packet.
+claim. No seam is promoted, B3.2a remains incomplete, and B3.2a is the next packet.
 
 ## Baseline behaviors that all tracks preserve
 

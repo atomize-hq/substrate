@@ -167,7 +167,7 @@ activated legacy session/participant/snapshot writes, carries the exact bound ca
 live toolbox context, and leaves startup ownership Pending. It does not change fork/member prepared
 runtime construction or adopt helper plans, public Attach/Resume, startup outcome reconciliation,
 or any post-turn behavior. B1/B2.1-R0 is now landed and independently review-clean through
-`bb3eefba`; no seam is promoted, and B3.2a is next and has not begun.
+`bb3eefba`; no seam is promoted, and B3.2a remains incomplete.
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before
@@ -180,8 +180,13 @@ accepted-turn observation, park/cancel/stop/fork, or live-count semantics. B3.2a
 RetainedWorkerRuntime-owned production bridge: before R0 it atomically checks the durable
 admission count/cap and reserves one exact participant slot and full canonical request fingerprint
 under its own crash-stable admission key (never an HSA commitment key) across processes. A durable
-per-session registration head alone may then fix the current authority
-revision; later slots remain ordered without pinning a stale revision. The bridge passes that
+per-session registration head alone may then fix the current authority revision. A queued
+`SlotReserved` record plus no current head is valid: after the current head reconciles R0 it
+releases the head without automatically promoting another record. Only exact re-presentation of
+the complete canonical request for the lowest-sequence queued slot may acquire the next head;
+later requests cannot overtake it, and an abandoned earliest slot remains conservatively live.
+The admission record stores only the keyed commitment and non-secret fixed fields, never the
+request/prompt/payload preimage. The bridge passes that
 slot-fixed participant to R0 instead of allocating a retry-local ID, exact-joins R0, commits the
 proof before opening the member stream, and carries a transport-neutral typed equality proof through
 both the direct dispatcher transport and live internal-toolbox Spawn adapter via the real

@@ -1682,8 +1682,8 @@ The implementation boundary is exactly `transition.rs`, colocated `transition_te
 binding unchanged and may not reject an authority already accepted and persisted under the matrix
 through the obsolete `Host + Some` rule. All other facade behavior is outside scope. This
 write/read boundary is review-clean through `275f9fa2`, and the dependent A1.2a-S adoption is
-review-clean through `2f2fecb3`; B1/B2.1-R0 is review-clean through `bb3eefba`, and B3.2a is next
-and has not begun.
+review-clean through `2f2fecb3`; B1/B2.1-R0 is review-clean through `bb3eefba`, and B3.2a remains
+incomplete.
 
 ## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
@@ -2810,7 +2810,10 @@ The minimal prerequisite contract is:
    routable only after exact Registered truth, and terminal only after exact B0 terminal truth.
    Every ambiguous interruption remains nonterminal and counted live, so existing spawn admission
    narrows without HSA-ref counting or compatibility liveness. B3.2a has no accepted-turn,
-   message, park/cancel/stop/fork, or final lifecycle semantics.
+   message, park/cancel/stop/fork, abandonment protocol, or final lifecycle semantics. A queued
+   `SlotReserved` record with no head is valid; head acquisition requires complete exact
+   re-presentation of the earliest request, while current-head reconciliation/release never
+   promotes another slot and persists no request/prompt/payload preimage.
 6. **B1/B2.1-0 — action-scoped dispatch preparation:** accept the A1.2a/A1.2a-WB/A1.2a-S,
    B1/B2.1-R0, and B3.2a typed read results plus B1 receipt and B2.1 supervisor truth through a
    caller-supplied bound capability or one explicitly authorized trusted open-and-bind conversion;
@@ -3011,6 +3014,11 @@ struct RetainedWorkerAdmissionRecordV1 {
 }
 ```
 
+The corrected queued-promotion contract uses this existing V1 schema and the existing
+`SlotReserved` state. It adds no schema version, persisted request/preimage object, side table,
+secret domain, or lifecycle state merely to encode "waiting for retry." Queued `SlotReserved`
+records with no current `AuthorityRegistrationHead` are a valid registry state.
+
 `canonical_spawn_fingerprint` is a RetainedWorkerRuntime-owned, domain-separated keyed HMAC. It
 does not use, extend, pin, or participate in the HostSessionAuthority commitment-key registry. Its
 exact HMAC input is the following byte sequence, where `len64` is unsigned 64-bit big-endian and
@@ -3056,9 +3064,14 @@ retained admission record that names it, so crash retry and long-lived exact joi
 verification. A later rotation/retention packet must add a locked complete reachability scan over
 the separate admission registry and may retire a key only after zero records reference it. HSA key
 rotation and reachability never inspect or control this registry. Raw key bytes, unredacted
-canonical input bytes, and prompt/payload bytes are never logged, traced, exported, carried to the
-world, or placed in the admission record; diagnostics may report only key ID and equality/mismatch.
-Every exact join and every state advance re-presents and verifies the fingerprint. Issuer reuse
+canonical input bytes, and prompt/payload bytes are never persisted in the admission record, a side
+table, a sealed-preimage object, logs, traces, diagnostics, transport proof, or any other durable
+artifact; they exist only in the ordinary in-memory scope of the typed call that received them.
+They are never reconstructed from adjacent state or inferred from the stored digest. Diagnostics
+may report only key ID and equality/mismatch. Every exact join and every state advance that depends
+on the Spawn fingerprint receives the complete typed canonical input, recomputes the framed HMAC
+bytes above, and verifies the stored commitment. Digest equality without that complete input is
+never promotion or state-advance authority. Issuer reuse
 with changed prompt, payload, caller, authority, descriptor, policy, cap, participant, or run ID
 conflicts before any additional mutation.
 
@@ -3087,21 +3100,33 @@ process-local maps are never count inputs. Existing action/backend/session/world
 the exact `max_live_retained_workers` comparison run against this count before a new reservation.
 
 The registry also owns one durable per-session R0 head. At most one nonterminal record may be
-`AuthorityRegistrationHead`. The lowest-sequence `SlotReserved` may atomically become that head
-only when no head exists; only then does the same root-locked transaction read current HSA and fix
-the expected authority revision/commitment used by R0. A queued slot's fingerprint preserves its
-admission-time authority observation; promotion accepts a later current revision only by verifying
-the unique contiguous intervening chain consists solely of exact R0 registration proofs and that
-active caller, workspace, world, policy, origin, and all unrelated refs remain unchanged. Any
-transition proof, gap, ambiguity, or changed bound field rejects before R0. Later slots remain
-`SlotReserved` and fix no authority revision. After the head's exact R0 application, root-locked reconciliation first joins
-the applied HSA proof, advances that record to `PreTransportNonterminal`, and only then promotes
-the next slot against the new current authority. A crash between the HSA CAS and registry advance
-leaves the same head in place; exact retry/reconciliation joins the proof before promotion. It
-never gives two requests revision N and never skips or steals an ambiguous head based on PID,
-timeout, process death, or caller absence. An abandoned head remains conservatively live and
-blocks later registration until the same canonical request is retried or a later explicitly owned
-control protocol resolves it.
+`AuthorityRegistrationHead`, while any number permitted by the cap may remain `SlotReserved` when
+no head exists. Head acquisition is request-driven. An exact retry first finds its existing
+`SlotReserved` record, re-presents and verifies the complete typed Spawn request, prompt/payload,
+admission-time authority observation, descriptor/runtime plan, policy/cap, retained participant,
+bootstrap run, and stored HMAC, and proves that this record is the lowest-sequence queued slot. A
+root-locked transaction may advance only that record to `AuthorityRegistrationHead` and fix the
+current HSA revision/commitment only when no head exists. The retry also validates the complete
+admission-to-current ancestry: every contiguous intervening proof must be an exact R0 registration
+proof, while active caller, workspace, world, policy, origin, and every unrelated ref remain
+unchanged. Any transition proof, gap, ambiguity, changed bound field, changed canonical byte, later
+slot, or digest-only presentation conflicts without mutating either the requested or earlier slot.
+
+Current-head reconciliation is a different durable transaction. The same head request must
+re-present the complete canonical fingerprint input, exact-join its applied HSA proof, and may then
+advance only its own record to `PreTransportNonterminal`, thereby releasing the head. It must not
+promote any queued slot in that transaction. A future queued request acquires the released head only
+when that earliest request is itself re-presented and passes the complete verification above. A
+crash between the HSA CAS and current-record advancement leaves the same head in place; its exact
+retry joins the proof and advances only that record. A crash after advancement may reopen with no
+head and queued slots, which is valid and remains stable until an exact earliest retry.
+
+A later request cannot overtake an earlier queued slot merely because it reappears first. PID,
+caller presence or loss, helper/process liveness, timeout, EOF, socket/endpoint state, transport
+state, and observer loss cannot acquire, replace, renew, or steal the head. An abandoned earliest
+slot remains conservatively live and blocks every later slot until the same canonical request
+retries or a later explicitly owned lifecycle/control protocol resolves it. B3.2a adds no such
+abandonment/control protocol.
 
 The host-to-world launch carrier is typed and substitution-resistant:
 
@@ -3187,50 +3212,67 @@ The production order is exact:
    therefore cannot both observe the same available slot. Exact retry returns the same slot;
    changed bytes conflict. The transport builder must use this participant ID and cannot allocate a
    retry-local UUID.
-3. Only the durable per-session `AuthorityRegistrationHead` may call R0. It accepts the exact slot
-   plan and fingerprint, validates the participant and bootstrap run rather than allocating either,
-   then exact-joins or creates its HSA request reservation,
-   publishes objects, and commits the final HSA CAS. The admission registry then advances the same
-   record to `PreTransportNonterminal` with the exact registration/ref and promotes the next slot
-   against the new current revision. No member transport opens
-   before both durable commits. Crash after slot publication retries from that slot; crash after
-   R0 commit but before admission advancement exact-joins R0 and advances only the matching slot.
-   An unrelated request cannot adopt either half. A typed terminal R0 rejection may advance the
-   slot to `RejectedBeforeRegistration` only after locked proof that no R0 request, registration,
-   object parent, or authority mutation exists; ambiguous/local errors leave the same
-   `AuthorityRegistrationHead` live. A proven rejection promotes the next slot against unchanged
-   current authority.
-4. Before either adapter opens transport, one registry CAS advances
+3. A request re-presentation for an existing `SlotReserved` may acquire the head only if it is the
+   lowest-sequence queued slot, no head exists, the complete canonical fingerprint input and stored
+   HMAC match, and the full admission-to-current ancestry is R0-only and exact. Changed bytes or a
+   later-slot retry conflicts with zero mutation. Creating a slot, reconciling another head, caller
+   presence, PID, helper, socket, endpoint, timeout, EOF, process state, or observer state never
+   supplies promotion eligibility.
+4. Only the durable per-session `AuthorityRegistrationHead` may call R0. Its exact retry
+   re-presents the complete canonical input, validates the participant and bootstrap run rather
+   than allocating either, then exact-joins or creates its HSA request reservation, publishes
+   objects, and commits the final HSA CAS. A separate registry transaction exact-joins that proof,
+   advances only the matching current record to `PreTransportNonterminal`, and releases the head;
+   it does not promote another slot. No member transport opens before both durable commits. Crash
+   after slot publication retries from that slot; crash after R0 commit but before admission
+   advancement exact-joins R0 and advances only the matching slot. An unrelated request cannot
+   adopt either half. A typed terminal R0 rejection may advance the slot to
+   `RejectedBeforeRegistration` only after locked proof that no R0 request, registration, object
+   parent, or authority mutation exists; ambiguous/local errors leave the same
+   `AuthorityRegistrationHead` live. A proven rejection releases the head without promoting a
+   queued slot.
+5. Before either adapter opens transport, one registry CAS advances
    `PreTransportNonterminal` to `TransportClaimedNonterminal` and fixes a unique
    `transport_claim_id`; only that CAS winner may send. A concurrent exact join waits for Routable
    or returns the existing bounded in-progress/interrupted compatibility result and never sends a
    duplicate. Crash, caller loss, timeout, or process observation cannot steal or renew the claim;
    ambiguous claim state stays live/nonroutable for later B3.2 reconciliation.
-5. The direct dispatcher builder carries `RetainedWorkerLaunchAuthorityProofV1` through
+6. The direct dispatcher builder carries `RetainedWorkerLaunchAuthorityProofV1` through
    `MemberDispatchTransportRequest` and transport-api `MemberDispatchRequestV1`.
    `Service::execute_stream` passes that exact typed member-dispatch request directly to
    `MemberRuntimeManager::launch`, which validates it before creating the world member. The direct stream
    consumer accepts only the exact matching B0 Registered event, persists Routable, returns the
    unchanged Spawn outcome, and hands the remaining body to the registry observer.
-6. The live `handle_internal_toolbox_world_dispatch_request` Spawn branch invokes the same
+7. The live `handle_internal_toolbox_world_dispatch_request` Spawn branch invokes the same
    authority-bound preparation instead of `prepare_orchestrator_world_dispatch`, and a new
    `prepare_member_runtime_startup_from_authority_registration` constructs `PreparedAgentRuntime`
    from the slot/R0 graph without calling `prepare_member_runtime_startup_for_descriptor` or
    allocating a participant, bootstrap run, lease, or descriptor identity. It preserves the
    retained runtime handle/map behavior. `build_member_dispatch_transport_request` carries the
    same typed proof.
-7. `start_remote_member_runtime_with_prepared` resolves and validates the exact R0/admission tuple
+8. `start_remote_member_runtime_with_prepared` resolves and validates the exact R0/admission tuple
    against its received session/request/participant/backend/protocol/world values before emitting
    Registered. On this activated path, it invokes none of its legacy
    `persist_participant`/`persist_runtime_snapshots` session-participant writers; their in-memory
    fields and existing emitted events remain episode observations. Missing or mismatched proof
    fails before Registered with no fallback. The pre-activation compatibility path is unchanged.
-8. The host accepts Routable only from the exact matching B0 Registered event and persists its
+9. The host accepts Routable only from the exact matching B0 Registered event and persists its
    stream/frame/event identity before returning the existing Spawn receipt. The remaining response
    body is handed to an observer independent of the initiating caller. Only an exact B0 Exit and
    matching terminal identity may persist `Terminal`. Error, EOF, body drop, timeout, observer
    loss, process death, PID/helper/socket posture, or restart uncertainty remains or becomes
    `InterruptedNonterminal`; it stays counted live and cannot become routable by inference.
+
+B3.2a proof must exercise a valid no-head/queued registry after reopen; exact earliest retry with
+one and multiple queued slots; later retry and changed prompt, payload, caller, authority,
+descriptor/runtime plan, policy/cap, participant, and bootstrap-run conflicts with zero slot
+mutation; digest-only refusal; concurrent identical/conflicting earliest retries with at most one
+head; independent heads for different sessions; and cap accounting that includes every queued
+slot. Crash proof covers before, during, and after current-head advancement/release and queued-head
+publication, with exact retry from each durable state. Security proof scans registry/object files,
+logs, traces, diagnostics, and errors for request/prompt/payload bytes. The explicit caller/PID/
+helper/socket/endpoint/timeout/EOF/process-liveness/observer-loss matrix proves that none can
+acquire or steal admission, head, transport-claim, routability, or terminal authority.
 
 An ordinary retained Continue may consume only the exact R0 target joined to a Routable B3.2a
 record. `PreTransportNonterminal`, `InterruptedNonterminal`, and `Terminal` return distinct bounded
