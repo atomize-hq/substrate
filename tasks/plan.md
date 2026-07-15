@@ -69,8 +69,9 @@ Current phase: **`R7-2` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`;
 
 ## Execution Rules
 
-- Do not begin R7-2 implementation until this narrow transition candidate is committed and fresh-
-  review-clean and Prompt 1 is invoked in a fresh R7-2 phase session.
+- Transition candidate `6a8797c15` is committed but pending fresh independent review. Do not begin
+  R7-2 implementation until review/fix/re-review makes the committed candidate fresh-review-clean
+  and Prompt 1 is invoked in a fresh R7-2 phase session.
 - Do not reopen `semantic_goal_drift` without a new failing witness.
 - Do not add a common mega-context argument to every scorer.
 - Treat `dead_end_thrash` regression/delegation/turn-shape; truth-grounding applicability,

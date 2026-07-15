@@ -126,7 +126,8 @@ transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independ
 The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
 reconciliation, R7 promotion content, the `R7-0 -> R7-1` transition review, or R7-1 implementation.
-The next work is commit and fresh review of only the narrow R7-1 -> R7-2 transition candidate.
+Transition commit `6a8797c15` is committed but pending fresh independent review. The next work is
+review/fix/re-review of only that committed R7-1 -> R7-2 transition candidate.
 Preparing Prompt 1 selectors for R7-2 does not invoke them or start R7-2 implementation.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
@@ -973,7 +974,8 @@ The next honest work target is:
   complete; keep transition/fix series `339744dff` + `d20cac6a9` at fresh independent built-in
   `default` `REVIEW CLEAN`; keep R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and
   `e865eee13` and checkpoint-doc commit `1cae7d693` fresh independent `REVIEW CLEAN`; keep R7-1
-  complete; commit and freshly review only the narrow R7-1 -> R7-2 transition candidate; keep
+  complete; transition commit `6a8797c15` is committed but pending fresh independent review, so
+  review/fix/re-review only that committed R7-1 -> R7-2 transition candidate; keep
   `R7-2.1` next, unchecked, and unstarted without starting R7-2 analyzer/production implementation
 - keep later delegated-session work blocked; do not make R7 absorb ordinary single-session scorer
   gaps

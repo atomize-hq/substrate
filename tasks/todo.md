@@ -124,8 +124,9 @@ Current phase: **`R7-2` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`;
   and staged GitNexus gates are green; no raw private rollout data was added.
 - [x] Freshly review and land the R7-1 checkpoint-doc receipt at `1cae7d693`; the fresh independent
   built-in `default` reviewer returned `REVIEW CLEAN`, satisfying the R7-1 exit gate.
-- [ ] Commit and freshly review only the narrow R7-1 -> R7-2 transition candidate. Keep `R7-2.1`
-  next, unchecked, and unstarted; do not begin R7-2 analyzer/production implementation.
+- [ ] Review/fix/re-review only committed narrow R7-1 -> R7-2 transition candidate `6a8797c15`,
+  which is pending fresh independent review. Keep `R7-2.1` next, unchecked, and unstarted; do not
+  begin R7-2 analyzer/production implementation.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
 `R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.

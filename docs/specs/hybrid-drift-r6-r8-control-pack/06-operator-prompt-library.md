@@ -332,8 +332,9 @@ R7-2 is active at entry with packet `none`; this narrow transition candidate awa
 independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production
 implementation has not started. `R7-3..R7-6` and R8 remain blocked.
 
-After this transition candidate is committed and fresh-review-clean, the prepared Prompt 1
-selectors for the next fresh phase session are:
+Transition commit `6a8797c15` is committed but pending fresh independent review. After review/fix/
+re-review makes the committed candidate fresh-review-clean, the prepared Prompt 1 selectors for
+the next fresh phase session are:
 
 ```text
 PHASE_ID: R7-2
@@ -341,7 +342,7 @@ ACTIVE_PACKET: none
 ```
 
 Preparing these selectors does not invoke Prompt 1 or start R7-2 implementation. Do not invoke them
-until this transition candidate is committed and fresh-review-clean.
+until review/fix/re-review makes committed transition candidate `6a8797c15` fresh-review-clean.
 
 Historical resolved Task `.2B` decision report:
 
