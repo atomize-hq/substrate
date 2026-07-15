@@ -8,11 +8,12 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 is `CLOSED`; `R6-CLOSE` and `CTX-R6-17` are complete; the promotion entry gate is satisfied; preserved R7 drafts remain not implementation-ready and no R7 promotion or implementation task has started)**
+Current phase: **`R7-PROMOTE` (ACTIVE — CONTENT GATE COMPLETE / TRANSITION PENDING; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE.1` is complete; the R7 authority family is implementation-ready; the narrow phase-transition commit and independent review are pending; `R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted and inactive)**
 
 The scoped R6 packets, acceptance controls, named gaps, replay closeout, and terminal-disposition
-reconciliation are complete. R6 is closed for sequencing. The next active objective is the separate
-docs/status-only `R7-PROMOTE` phase; it must not begin delegated-session implementation.
+reconciliation are complete. R6 is closed for sequencing. `R7-PROMOTE.1` has reconciled the R7
+authority family to implementation-ready content. Only the narrow phase-transition commit and its
+independent review remain in `R7-PROMOTE`; delegated-session implementation must not begin.
 
 Hard decisions:
 
@@ -60,8 +61,9 @@ Hard decisions:
   `default` reviewer returned `REVIEW CLEAN`.
 - `scoring/mod.rs` is dispatcher/routing infrastructure rather than a fifth scorer; its terminal
   disposition is **Fit-for-purpose exception**.
-- R7 remains a preserved draft family. Its R6 closure entry gate is satisfied and `R7-PROMOTE` is
-  active at entry only, but the drafts are not implementation-ready until that phase is completed.
+- The R7 authority family is implementation-ready after completed `R7-PROMOTE.1`. `R7-PROMOTE`
+  remains the sole active phase with packet `none` while its narrow phase-transition commit and
+  independent review are pending; `R7-0.1`, `R7-0.2`, and all R7 implementation remain inactive.
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
@@ -88,6 +90,7 @@ Manifest E filters at `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`,
 with all suites green, and `git diff --check`. It assigns `dead_end_thrash` and
 `semantic_goal_drift` **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and
 `scoring/mod.rs` **Fit-for-purpose exception**. No merge/deprecation or deferral route is used.
-The R6 finding is `CLOSED`, `R6-CLOSE` is complete, and `R7-PROMOTE` is active at entry only with
-packet `none`. This closeout does not promote the R7 drafts, check off a promotion or implementation
-task, or begin R7/R8 implementation.
+The R6 finding is `CLOSED` and `R6-CLOSE` is complete. `R7-PROMOTE.1` has since completed the R7
+content/gate audit, making the R7 authority family implementation-ready. `R7-PROMOTE` remains the
+sole active phase with packet `none` while the narrow phase-transition commit and independent review
+are pending; `R7-0.1`, `R7-0.2`, and all R7/R8 implementation remain unstarted and inactive.

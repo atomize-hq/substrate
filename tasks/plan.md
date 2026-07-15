@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 is `CLOSED`; `R6-CLOSE` and `CTX-R6-17` are complete; promotion entry gate satisfied; R7 drafts not yet implementation-ready; no R7 task started)**
+Current phase: **`R7-PROMOTE` (ACTIVE — CONTENT GATE COMPLETE / TRANSITION PENDING; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE.1` is complete; the R7 authority family is implementation-ready; the narrow phase-transition commit and independent review are pending; `R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted and inactive)**
 
 ## Dependency Order
 
@@ -48,9 +48,9 @@ Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 i
    series `13b14d5f1` + `50446e6d6` received fresh independent built-in `default` `REVIEW CLEAN`
    with no actionable findings after `50446e6d6` resolved the first review's two P1 findings and one
    P3 finding.
-10. **ACTIVE AT ENTRY ONLY — R7-PROMOTE:** reconcile the preserved R7 drafts to
-    implementation-ready only inside the separate promotion phase. No promotion or implementation
-    task is started by the R6 closeout.
+10. **CONTENT GATE COMPLETE / TRANSITION PENDING — R7-PROMOTE:** `R7-PROMOTE.1` reconciled the
+    R7 authority family to implementation-ready content. Land and independently review only the
+    narrow phase-transition update; do not start `R7-0.1`, `R7-0.2`, or any R7 implementation.
 
 ## Execution Rules
 
@@ -64,7 +64,8 @@ Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 i
   improvement. Keep broad replay honesty partially / bounded proven until integrated replay closes
   the claim or the wording is narrowed.
 - Keep R7 reciprocal direct linkage, separate trajectories, direct-child-first support, and no-new-
-  drift-class-by-default as draft design decisions, not current implementation authority.
+  drift-class-by-default as implementation-ready authority decisions, but inactive until the narrow
+  `R7-PROMOTE` phase transition is committed and independently review-clean.
 - Run GitNexus impact analysis before any later symbol edit. Before every commit, stage only intended
   files with `git add -- <intended-files-only>`, run
   `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, run
@@ -88,6 +89,7 @@ built-in `default` `REVIEW CLEAN`, so `R6-REPLAY` is complete and no ordinary re
 The 2026-07-15 `CTX-R6-17` receipt reconfirms the four exact replay controls, the five Manifest E
 family filters, full analyzer all-suites green, and `git diff --check`. Transition/review-fix series
 `13b14d5f1` + `50446e6d6` is fresh independent built-in `default` `REVIEW CLEAN` with no actionable
-findings. R6 is `CLOSED` and `R6-CLOSE` is complete. `R7-PROMOTE` is active at entry only with packet
-`none`; the preserved R7 drafts remain not implementation-ready, and no R7 promotion or
-implementation task has started.
+findings. R6 is `CLOSED` and `R6-CLOSE` is complete. `R7-PROMOTE.1` has completed the R7 content/gate audit,
+so the R7 authority family is implementation-ready. `R7-PROMOTE` remains the sole active phase with
+packet `none` while the narrow phase-transition commit and independent review are pending;
+`R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted and inactive.

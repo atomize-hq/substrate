@@ -14,9 +14,9 @@ records:
 This file is the repo-root landing-order narrative for the hybrid-drift stack. Authority for the
 current R6 closure decision lives in
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, then `docs/specs/r6/MAP.md`, the R6
-design, and the per-packet sets. R6 is **CLOSED** after `R6-CLOSE` / `CTX-R6-17`; `R7-PROMOTE` is
-active at entry only with its R6-closure gate satisfied. The preserved R7 drafts remain not
-implementation-ready until that separate promotion phase completes. The Ground Truth Sources list
+design, and the per-packet sets. R6 is **CLOSED** after `R6-CLOSE` / `CTX-R6-17`. `R7-PROMOTE.1` has completed the R7 content/gate
+audit, so the R7 authority family is implementation-ready. `R7-PROMOTE` remains the sole active
+phase with packet `none` while its narrow phase-transition commit and independent review are pending. The Ground Truth Sources list
 below is historical context, not an exhaustive index of current authority.
 
 > **Historical status note (2026-07-04; superseded):** `R5`/`R5.5`/`R5.75`
@@ -94,9 +94,10 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is now `R7-PROMOTE` at entry only; the open work is no longer archetype
-identification, first-cut progress export, `R5.75`, the R6 acceptance-control matrix, a named scorer
-gap, replay closeout, or R6 terminal-disposition reconciliation.
+The active follow-on is `R7-PROMOTE` at its transition boundary; `R7-PROMOTE.1` and the R7
+content/gate audit are complete. The open work is no longer archetype identification, first-cut
+progress export, `R5.75`, the R6 acceptance-control matrix, a named scorer gap, replay closeout, or
+R6 terminal-disposition reconciliation.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -125,7 +126,8 @@ reconfirmed the four exact replay controls at `1 / 1` each, the Manifest E filte
 `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, the full analyzer with all suites green, and
 `git diff --check`. It assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus
 `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
-`R6-CLOSE` is complete and R6 is `CLOSED`; `R7-PROMOTE` is active at entry only.
+`R6-CLOSE` is complete and R6 is `CLOSED`; `R7-PROMOTE` remains active with packet `none`, its
+content gate complete and its narrow phase transition pending commit and independent review.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -143,8 +145,8 @@ control.” The current honest sequence is:
    `e6d43eee9` + `61c9d5074` fresh independent `REVIEW CLEAN`, and keep `CTX-R6-06` plus the R6 family
    wall complete with active packet `none`
 7. keep completed `CTX-R6-17`, the terminal table, and R6 `CLOSED` authority reconciled
-8. execute the separate docs/status-only `R7-PROMOTE` phase without beginning delegated-session
-   implementation; only after promotion may bounded R7 implementation begin
+8. keep completed `R7-PROMOTE.1` and its implementation-ready R7 authority content fixed; land and
+   independently review only the narrow phase transition before bounded R7 implementation begins
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -802,8 +804,10 @@ independent built-in `default` `REVIEW CLEAN`. Sticky `CTX-R6-06` authority rema
 `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only.
 The 2026-07-15 `CTX-R6-17` receipt completed the terminal table: `dead_end_thrash` and
 `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and
-`scoring/mod.rs` **Fit-for-purpose exception**. R6 is **CLOSED**, `R6-CLOSE` is complete, and only
-`R7-PROMOTE` is active at entry with no R7 promotion or implementation task started.
+`scoring/mod.rs` **Fit-for-purpose exception**. R6 is **CLOSED** and `R6-CLOSE` is complete. `R7-PROMOTE.1` has completed the R7 content/gate
+audit; the R7 authority family is implementation-ready. Only `R7-PROMOTE` is active with packet
+`none` while the narrow phase-transition commit and independent review are pending; `R7-0.1`,
+`R7-0.2`, and all R7 implementation remain unstarted and inactive.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -875,8 +879,9 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, `R5.75`, and R6 are landed and closed. The next authority is
-the preserved R7 draft family plus the active `R7-PROMOTE` gate/status surfaces.
+`R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, `R5.75`, and R6 are landed and closed. The next authority is the implementation-ready R7 family plus the active `R7-PROMOTE`
+gate/status surfaces. `R7-PROMOTE.1` is complete; only its narrow transition and independent review
+remain before `R7-0` may activate.
 
 The next honest work target is:
 
@@ -904,11 +909,10 @@ The next honest work target is:
 - keep completed `CTX-R6-17` and its terminal table: `dead_end_thrash`/`semantic_goal_drift`
   **Cutover complete**; `truth_grounding_gap`/`wrong_plan_branch`/`scoring/mod.rs`
   **Fit-for-purpose exception**; no merge/deprecation or deferral route
-- **current action:** execute only `R7-PROMOTE` as a fresh docs/status promotion phase. Its entry gate
-  is satisfied, but the preserved R7 drafts are not implementation-ready and no R7 promotion or
-  implementation task has started
-- preserve full delegated-session support as design-ready R7 draft work until promotion completes;
-  do not begin R7 implementation or make it absorb ordinary single-session scorer gaps
+- **current action:** keep completed `R7-PROMOTE.1` and the implementation-ready R7 authority
+  content fixed; land and independently review only the narrow `R7-PROMOTE` phase-transition update
+- keep `R7-0.1`, `R7-0.2`, and all delegated-session implementation unstarted and inactive until that
+  transition is review-clean; do not make R7 absorb ordinary single-session scorer gaps
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.

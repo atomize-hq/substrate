@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 is `CLOSED`; `R6-CLOSE` and `CTX-R6-17` are complete; promotion entry gate satisfied; R7 drafts not yet implementation-ready; no R7 task started)**
+Current phase: **`R7-PROMOTE` (ACTIVE — CONTENT GATE COMPLETE / TRANSITION PENDING; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE.1` is complete; the R7 authority family is implementation-ready; the narrow phase-transition commit and independent review are pending; `R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted and inactive)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -93,9 +93,12 @@ Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 i
   `CLOSED`. Transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent
   built-in `default` `REVIEW CLEAN` with no actionable findings after `50446e6d6` resolved the first
   review's two P1 findings and one P3 finding.
-- [ ] In the separate active `R7-PROMOTE` phase, promote the preserved R7 drafts to
-  implementation-ready. This R6 closeout does not check off or begin that task.
-- [ ] Begin bounded direct-child delegated-session support only after promotion.
+- [x] Complete `R7-PROMOTE.1`: reconcile the R7 authority family to implementation-ready content;
+  content/gate audit commit `455d0ed90` starts no R7 implementation.
+- [ ] Land the narrow `R7-PROMOTE` phase-transition commit and obtain fresh independent review clean.
+- [ ] Begin `R7-0.1`, `R7-0.2`, or any bounded direct-child delegated-session implementation only
+  after that transition is committed and review-clean.
 
-The R7 task ledger is intentionally preserved under `docs/specs/r7/`, but none of its implementation
-items are active until the separate `R7-PROMOTE` phase completes.
+The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready,
+but every `R7-0..R7-6` item remains unchecked and inactive while the narrow `R7-PROMOTE` transition
+and independent review are pending.

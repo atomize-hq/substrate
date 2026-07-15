@@ -4,7 +4,7 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R7-PROMOTE — ACTIVE AT ENTRY ONLY; active packet none; R6 CLOSED; R6-CLOSE and CTX-R6-17 complete; R7 promotion entry gate satisfied; preserved R7 drafts remain not implementation-ready; no R7 promotion or implementation task started`
+**Current work phase:** `R7-PROMOTE — ACTIVE; content gate complete; transition pending; active packet none; R6 CLOSED; R7-PROMOTE.1 complete; R7 authority family implementation-ready; narrow phase-transition commit and independent review pending; R7-0.1, R7-0.2, and all R7 implementation unstarted and inactive`
 
 **Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
 
@@ -39,8 +39,10 @@ wall passed `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`, `truth_gro
 `HistoricalOnly / 20`, unflagged remains current sticky authority and `Recovered / 20` historical
 baseline only. The phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh
 independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete. The later 2026-07-15
-`CTX-R6-17` receipt closes R6 and `R6-CLOSE`. `R7-PROMOTE` is active at entry only; R7
-implementation and R8 remain blocked as owned.
+`CTX-R6-17` receipt closes R6 and `R6-CLOSE`. R7 content/gate audit commit `455d0ed90` completes
+`R7-PROMOTE.1` and makes the R7 authority family implementation-ready. `R7-PROMOTE` remains active
+with packet `none` while the narrow phase-transition commit and independent review are pending;
+`R7-0.1`, `R7-0.2`, all R7 implementation, and R8 remain blocked as owned.
 
 ## Purpose
 
@@ -64,7 +66,7 @@ This pack is an **execution-context router**, not a semantic authority. It must 
 
 - live source and behavior-level tests for what the repository currently does;
 - the active R6 closure finding and packet-local R6 documents for R6 decisions;
-- the R7 MAP/SPEC/PLAN/TASKS after their promotion gate is satisfied; or
+- the implementation-ready R7 MAP/SPEC/PLAN/TASKS; or
 - a future reviewed R8 SPEC/PLAN/TASKS family.
 
 If this pack conflicts with canonical authority or live behavior, stop the active implementation,

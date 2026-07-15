@@ -48,10 +48,10 @@ merge/deprecation, or deferral route.
 `CTX-R6-17` assigns the terminal table exactly as follows: `dead_end_thrash` and
 `semantic_goal_drift` are **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and
 dispatcher infrastructure `scoring/mod.rs` are **Fit-for-purpose exception**. R6 is **CLOSED** and
-`R6-CLOSE` is **COMPLETE**. The R7 promotion entry gate is satisfied, so `R7-PROMOTE` is the sole
-active phase with active packet `none`. The preserved R7 draft family remains draft and is **not
-implementation-ready** until that separate promotion phase reconciles it; no R7 promotion or
-implementation task is checked off or begun by this closeout.
+`R6-CLOSE` is **COMPLETE**. The R7 promotion entry gate is satisfied. `R7-PROMOTE.1` has since
+completed the R7 content/gate audit, so the R7 authority family is implementation-ready.
+`R7-PROMOTE` remains the sole active phase with active packet `none` while its narrow phase-transition
+commit and independent review are pending; this R6 closeout itself began no R7 work.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
 context, archetype, and progress. A scorer is complete when its chosen inputs match the behavior it
@@ -251,6 +251,7 @@ The R7 promotion entry gate is now satisfied because:
    bounded named gaps, replay closeout is complete, and this finding is **CLOSED**; and
 5. root landing-order authority, R6 MAP, root SPEC/tasks, and R7 status all agree.
 
-`R7-PROMOTE` is therefore **ACTIVE** with active packet `none`. This is entry authority for a fresh
-promotion phase only: the preserved R7 MAP/SPEC/PLAN/TASKS remain draft and not implementation-ready,
-and no R7 promotion or implementation task is completed by this R6 closeout.
+`R7-PROMOTE` is therefore **ACTIVE** with active packet `none`. That R6 closeout supplied only the
+entry authority and completed no R7 task. Since then, `R7-PROMOTE.1` has completed the R7 content/gate
+audit and made the R7 MAP/SPEC/PLAN/TASKS implementation-ready. The narrow phase-transition commit
+and independent review remain pending; `R7-0.1`, `R7-0.2`, and all R7 implementation remain inactive.
