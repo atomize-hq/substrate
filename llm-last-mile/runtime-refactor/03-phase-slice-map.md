@@ -499,6 +499,24 @@ legacy-writer exclusion after acceptance, caller-drop/restart survival, exact te
 blocking compatibility, the differential baseline, and supported doctor/smoke. B3.1 remains
 blocked until this joint closeout passes.
 
+The exact B3.2a source allowlist in the Track B row below is extended by only these three
+integration-test files:
+
+- `crates/world-service/tests/member_runtime_world_placement_v1.rs`
+- `crates/world-service/tests/streamed_execute_cancel_v1.rs`
+- `crates/world-service/tests/member_runtime_retained_lifecycle_v1.rs`
+
+Their authorization is limited to mechanical initialization of the new optional
+`MemberDispatchRequestV1` launch-authority-proof field and compatibility regression proof.
+Existing explicitly pre-activation or legacy request literals must initialize that field as
+`None` while preserving every other fixture input, test name, assertion, expected outcome, and
+expected error. A test that claims to exercise the authority-managed B3.2a route must instead use
+the exact valid proof through the canonical production path; it cannot be made to pass with
+`None`. No helper default that hides a missing Rust literal field, fixture-only authority,
+alternate proof, alternate transport, side table, production-path change, or weakened assertion is
+authorized. The row's prohibition on a wildcard or other integration site applies after this exact
+three-file addition. B3.2a remains incomplete.
+
 After A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, and B3.2a are independently review-clean, the exact future implementation allowlist for
 B1/B2.1-0 action-scoped dispatch preparation and its colocated real-dispatcher proof is:
 

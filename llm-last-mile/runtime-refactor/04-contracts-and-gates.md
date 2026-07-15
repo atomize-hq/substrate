@@ -3154,6 +3154,22 @@ process creation. World-service does not mint or advance HSA or admission truth;
 verification supplies authority authenticity and the launch boundary supplies exact
 carrier/request equality.
 
+`#[serde(default)]` on the optional `MemberDispatchRequestV1` proof field preserves wire
+compatibility by supplying `Default::default()` only when that field is absent during
+deserialization. It does not initialize Rust struct literals: each literal must name the field (or
+use explicit Rust struct update syntax, which is not authorized for these fixtures). Therefore the
+B3.2a allowlist additionally permits edits only in
+`crates/world-service/tests/member_runtime_world_placement_v1.rs`,
+`crates/world-service/tests/streamed_execute_cancel_v1.rs`, and
+`crates/world-service/tests/member_runtime_retained_lifecycle_v1.rs`, solely to set the field to
+`None` in existing explicitly pre-activation or legacy literals and prove unchanged compatibility.
+Every other fixture input, test name, assertion, expected outcome, and expected error remains
+unchanged. Any existing test that claims the authority-managed B3.2a route must carry an exact
+valid proof through the canonical production path instead; `None` is not valid there. These test
+files may not introduce a production path, helper default, fixture-only authority, alternate
+proof, alternate transport, side table, or weakened assertion. Authority-managed Spawn still
+requires the exact proof, and B3.2a remains incomplete.
+
 The production order is exact:
 
 1. `dispatch_orchestrator_world_request` validates the raw request and routes only
