@@ -174,11 +174,38 @@ fn existing_orphan_bytes(
     Ok(existing)
 }
 
-pub(super) fn reserved_object_location_is_absent(
+pub(super) fn reserved_object_ref_id_is_globally_absent(
     layout: &StoreLayout<'_>,
-    reference: &AuthorityObjectRefV1,
+    ref_id: &str,
 ) -> Result<bool, BootstrapError> {
-    existing_orphan_bytes(layout, reference).map(|bytes| bytes.is_none())
+    let commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: "0000000000000000000000000000000000000000000000000000000000000000".into(),
+    };
+    for object_kind in [
+        AuthorityObjectKindV1::AgentDescriptor,
+        AuthorityObjectKindV1::RetainedWorker,
+        AuthorityObjectKindV1::ResumeHandle,
+        AuthorityObjectKindV1::Policy,
+        AuthorityObjectKindV1::HostAttachContract,
+        AuthorityObjectKindV1::TransitionTransportPayload,
+        AuthorityObjectKindV1::TransitionInput,
+        AuthorityObjectKindV1::LeaseToken,
+        AuthorityObjectKindV1::ApplicationResult,
+        AuthorityObjectKindV1::InputAcceptance,
+        AuthorityObjectKindV1::PostTurnCompletion,
+        AuthorityObjectKindV1::TerminalHandoff,
+    ] {
+        let reference = AuthorityObjectRefV1 {
+            ref_id: ref_id.to_owned(),
+            object_kind,
+            schema_version: 1,
+            commitment: commitment.clone(),
+        };
+        if existing_orphan_bytes(layout, &reference)?.is_some() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(

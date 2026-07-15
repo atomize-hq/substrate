@@ -6,12 +6,14 @@ use std::path::Path;
 
 use super::canonical_json;
 use super::hash::canonical_sha256;
+#[cfg(test)]
+use super::schema::TimestampV1;
 use super::schema::{
     AgentDescriptorHashInputV1, AgentDescriptorV1, AuthoritativeLineageHashInputV1,
     AuthorityObjectCommitmentV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
     DurableSessionAuthorityHashInputV1, DurableSessionAuthorityOriginV1,
     HostAttachContractHashInputV1, HostAttachContractV1, HostSessionPostureV1,
-    PolicyObjectHashInputV1, TimestampV1, WorldBindingV1,
+    PolicyObjectHashInputV1, WorldBindingV1,
 };
 use super::store::{
     self, BootstrapClassificationV1, ExpectedRevisionsV1, ObjectPublicationOutcomeV1,
@@ -76,10 +78,18 @@ pub(crate) struct ResolvedCurrentAuthorityV1 {
     pub(crate) bound_state_store: super::super::state_store::BoundAgentRuntimeStateStore,
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RetainedReservationCrashPointV1 {
     BeforeRootPublication,
     AfterRootPublication,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAuthorityPreconditionV1 {
+    pub(crate) authority_store_id: String,
+    pub(crate) authority_revision: u64,
+    pub(crate) authority_record_commitment: AuthorityObjectCommitmentV1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -601,11 +611,41 @@ impl HostSessionAuthority {
         &self,
         registration_request_id: &str,
         orchestration_session_id: &str,
-        expected_authority: &AuthorityObservationV1,
+        expected_authority: &RetainedWorkerAuthorityPreconditionV1,
         retained_participant_id: &str,
         descriptor_bytes: Vec<u8>,
         resume_handle_bytes: Vec<u8>,
-        registered_at: Option<TimestampV1>,
+        build_worker: impl Fn(
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &WorldBindingV1,
+        ) -> Result<Vec<u8>, &'static str>,
+    ) -> Result<ReservedRetainedWorkerRegistrationV1, AuthorityFacadeError> {
+        let input = retained_reservation_input(
+            registration_request_id,
+            orchestration_session_id,
+            expected_authority,
+            retained_participant_id,
+            descriptor_bytes,
+            resume_handle_bytes,
+        )?;
+        store::reserve_retained_worker_registration_opened(&self.root, &input, build_worker)
+            .map(reserved_registration)
+            .map_err(store_error)
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn reserve_retained_worker_registration_at(
+        &self,
+        registration_request_id: &str,
+        orchestration_session_id: &str,
+        expected_authority: &RetainedWorkerAuthorityPreconditionV1,
+        retained_participant_id: &str,
+        descriptor_bytes: Vec<u8>,
+        resume_handle_bytes: Vec<u8>,
+        registered_at: TimestampV1,
         crash_point: Option<RetainedReservationCrashPointV1>,
         build_worker: impl Fn(
             &AuthorityObjectRefV1,
@@ -614,27 +654,19 @@ impl HostSessionAuthority {
             &WorldBindingV1,
         ) -> Result<Vec<u8>, &'static str>,
     ) -> Result<ReservedRetainedWorkerRegistrationV1, AuthorityFacadeError> {
-        if registration_request_id.is_empty()
-            || orchestration_session_id.is_empty()
-            || retained_participant_id.is_empty()
-            || expected_authority.orchestration_session_id != orchestration_session_id
-        {
-            return Err(AuthorityFacadeError(
-                "retained registration plan identity is invalid".into(),
-            ));
-        }
-        let issuer_request_id = format!("retained-worker-registration:{registration_request_id}");
-        let input = store::RetainedWorkerReservationInputV1 {
-            issuer_request_id,
-            orchestration_session_id: orchestration_session_id.to_owned(),
-            expected_authority_store_id: expected_authority.authority_store_id.clone(),
-            expected_authority_revision: expected_authority.authority_revision,
-            expected_authority_commitment: expected_authority.authority_record_commitment.clone(),
-            retained_participant_id: retained_participant_id.to_owned(),
+        let input = retained_reservation_input(
+            registration_request_id,
+            orchestration_session_id,
+            expected_authority,
+            retained_participant_id,
             descriptor_bytes,
             resume_handle_bytes,
+        )?;
+        store::reserve_retained_worker_registration_at_opened(
+            &self.root,
+            &input,
             registered_at,
-            crash_point: crash_point.map(|point| match point {
+            crash_point.map(|point| match point {
                 RetainedReservationCrashPointV1::BeforeRootPublication => {
                     store::RetainedReservationCrashPointV1::BeforeRootPublication
                 }
@@ -642,19 +674,55 @@ impl HostSessionAuthority {
                     store::RetainedReservationCrashPointV1::AfterRootPublication
                 }
             }),
-        };
-        store::reserve_retained_worker_registration_opened(&self.root, &input, build_worker)
-            .map(|reserved| ReservedRetainedWorkerRegistrationV1 {
-                request: reserved.request,
-                descriptor_ref: reserved.descriptor_ref,
-                resume_handle_ref: reserved.resume_handle_ref,
-                retained_worker_ref: reserved.retained_worker_ref,
-                descriptor_bytes: reserved.descriptor_bytes,
-                resume_handle_bytes: reserved.resume_handle_bytes,
-                retained_worker_bytes: reserved.retained_worker_bytes,
-                joined: reserved.joined,
-            })
-            .map_err(store_error)
+            build_worker,
+        )
+        .map(reserved_registration)
+        .map_err(store_error)
+    }
+}
+
+fn retained_reservation_input(
+    registration_request_id: &str,
+    orchestration_session_id: &str,
+    expected_authority: &RetainedWorkerAuthorityPreconditionV1,
+    retained_participant_id: &str,
+    descriptor_bytes: Vec<u8>,
+    resume_handle_bytes: Vec<u8>,
+) -> Result<store::RetainedWorkerReservationInputV1, AuthorityFacadeError> {
+    if registration_request_id.is_empty()
+        || orchestration_session_id.is_empty()
+        || retained_participant_id.is_empty()
+        || expected_authority.authority_store_id.is_empty()
+        || expected_authority.authority_revision == 0
+    {
+        return Err(AuthorityFacadeError(
+            "retained registration plan identity is invalid".into(),
+        ));
+    }
+    Ok(store::RetainedWorkerReservationInputV1 {
+        issuer_request_id: format!("retained-worker-registration:{registration_request_id}"),
+        orchestration_session_id: orchestration_session_id.to_owned(),
+        expected_authority_store_id: expected_authority.authority_store_id.clone(),
+        expected_authority_revision: expected_authority.authority_revision,
+        expected_authority_commitment: expected_authority.authority_record_commitment.clone(),
+        retained_participant_id: retained_participant_id.to_owned(),
+        descriptor_bytes,
+        resume_handle_bytes,
+    })
+}
+
+fn reserved_registration(
+    reserved: store::RetainedWorkerReservationV1,
+) -> ReservedRetainedWorkerRegistrationV1 {
+    ReservedRetainedWorkerRegistrationV1 {
+        request: reserved.request,
+        descriptor_ref: reserved.descriptor_ref,
+        resume_handle_ref: reserved.resume_handle_ref,
+        retained_worker_ref: reserved.retained_worker_ref,
+        descriptor_bytes: reserved.descriptor_bytes,
+        resume_handle_bytes: reserved.resume_handle_bytes,
+        retained_worker_bytes: reserved.retained_worker_bytes,
+        joined: reserved.joined,
     }
 }
 

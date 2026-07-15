@@ -127,6 +127,28 @@ pub(super) fn reserve_retained_worker_registration_opened(
 }
 
 #[cfg(test)]
+pub(super) fn reserve_retained_worker_registration_at_opened(
+    root: &TrustedAuthorityRoot,
+    input: &RetainedWorkerReservationInputV1,
+    registered_at: crate::execution::agent_runtime::host_session_authority::schema::TimestampV1,
+    crash_point: Option<RetainedReservationCrashPointV1>,
+    build_worker: impl Fn(
+        &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+        &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+        &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+        &crate::execution::agent_runtime::host_session_authority::schema::WorldBindingV1,
+    ) -> Result<Vec<u8>, &'static str>,
+) -> Result<RetainedWorkerReservationV1, BootstrapError> {
+    platform::reserve_retained_worker_registration_at_opened(
+        root,
+        input,
+        registered_at,
+        crash_point,
+        build_worker,
+    )
+}
+
+#[cfg(test)]
 pub(crate) fn rotate_commitment_key(
     path: &Path,
     expected_root_revision: u64,
@@ -152,6 +174,43 @@ pub(crate) fn prepare_typed_object(
     context: Option<&ObjectVerificationContextV1>,
 ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
     platform::prepare_typed_object(path, expected_root_revision, reference, bytes, context)
+}
+
+#[cfg(test)]
+pub(crate) fn reserved_object_ref_id_is_globally_absent_test(
+    path: &Path,
+    ref_id: &str,
+) -> Result<bool, BootstrapError> {
+    platform::reserved_object_ref_id_is_globally_absent_test(path, ref_id)
+}
+
+#[cfg(test)]
+pub(crate) fn prepare_typed_object_v2_test(
+    path: &Path,
+    expected_root_revision: u64,
+    reference: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    bytes: &[u8],
+) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+    let root = TrustedAuthorityRoot::open(path)
+        .map_err(|_| BootstrapError("open strict V2 object test root"))?;
+    platform::prepare_typed_object_v2_opened(&root, expected_root_revision, reference, bytes, None)
+}
+
+#[cfg(test)]
+pub(crate) fn retained_reservation_authority_matches_test(
+    root: &StateRootV2,
+    orchestration_session_id: &str,
+    expected_authority_store_id: &str,
+    expected_authority_revision: u64,
+    expected_authority_commitment: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1,
+) -> Result<(), BootstrapError> {
+    platform::retained_reservation_authority_matches_test(
+        root,
+        orchestration_session_id,
+        expected_authority_store_id,
+        expected_authority_revision,
+        expected_authority_commitment,
+    )
 }
 
 pub(super) fn prepare_typed_object_opened(
@@ -366,9 +425,6 @@ pub(super) struct RetainedWorkerReservationInputV1 {
     pub(super) retained_participant_id: String,
     pub(super) descriptor_bytes: Vec<u8>,
     pub(super) resume_handle_bytes: Vec<u8>,
-    pub(super) registered_at:
-        Option<crate::execution::agent_runtime::host_session_authority::schema::TimestampV1>,
-    pub(super) crash_point: Option<RetainedReservationCrashPointV1>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -468,7 +524,7 @@ mod platform {
     use object_persistence::validate_orphan_candidate;
     use object_persistence::verify_object_bytes;
     use object_persistence::{
-        canonical_digest, publish_or_join_orphan, reserved_object_location_is_absent,
+        canonical_digest, publish_or_join_orphan, reserved_object_ref_id_is_globally_absent,
         sensitive_domain,
     };
     #[path = "reachability.rs"]
@@ -548,6 +604,46 @@ mod platform {
         collect_reachable_objects_v2(root)
             .map(|reachable| reachable.into_keys().collect())
             .map_err(|_| BootstrapError("collect strict V2 reachable objects"))
+    }
+
+    #[cfg(test)]
+    pub(super) fn reserved_object_ref_id_is_globally_absent_test(
+        path: &std::path::Path,
+        ref_id: &str,
+    ) -> Result<bool, BootstrapError> {
+        let root = TrustedAuthorityRoot::open(path)
+            .map_err(|_| BootstrapError("open retained collision test root"))?;
+        with_opened_existing_versioned_semantic_preflight(&root, |transaction| {
+            if !matches!(transaction.root, VersionedStateRoot::V2(_)) {
+                return Err(BootstrapError(
+                    "retained collision test requires strict StateRootV2",
+                ));
+            }
+            reserved_object_ref_id_is_globally_absent(transaction.layout, ref_id)
+        })
+    }
+
+    #[cfg(test)]
+    pub(super) fn retained_reservation_authority_matches_test(
+        root: &StateRootV2,
+        orchestration_session_id: &str,
+        expected_authority_store_id: &str,
+        expected_authority_revision: u64,
+        expected_authority_commitment: &AuthorityObjectCommitmentV1,
+    ) -> Result<(), BootstrapError> {
+        validate_reservation_authority(
+            root,
+            &RetainedWorkerReservationInputV1 {
+                issuer_request_id: "retained-worker-registration:test".into(),
+                orchestration_session_id: orchestration_session_id.into(),
+                expected_authority_store_id: expected_authority_store_id.into(),
+                expected_authority_revision,
+                expected_authority_commitment: expected_authority_commitment.clone(),
+                retained_participant_id: "test-retained-participant".into(),
+                descriptor_bytes: Vec::new(),
+                resume_handle_bytes: Vec::new(),
+            },
+        )
     }
 
     fn upgrade_greenfield_root_opened_with(
@@ -917,6 +1013,49 @@ mod platform {
             &crate::execution::agent_runtime::host_session_authority::schema::WorldBindingV1,
         ) -> Result<Vec<u8>, &'static str>,
     ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
+        reserve_retained_worker_registration_opened_with(
+            root_handle,
+            input,
+            None,
+            None,
+            build_worker,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn reserve_retained_worker_registration_at_opened(
+        root_handle: &TrustedAuthorityRoot,
+        input: &RetainedWorkerReservationInputV1,
+        registered_at: TimestampV1,
+        crash_point: Option<RetainedReservationCrashPointV1>,
+        build_worker: impl Fn(
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &crate::execution::agent_runtime::host_session_authority::schema::WorldBindingV1,
+        ) -> Result<Vec<u8>, &'static str>,
+    ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
+        reserve_retained_worker_registration_opened_with(
+            root_handle,
+            input,
+            Some(registered_at),
+            crash_point,
+            build_worker,
+        )
+    }
+
+    fn reserve_retained_worker_registration_opened_with(
+        root_handle: &TrustedAuthorityRoot,
+        input: &RetainedWorkerReservationInputV1,
+        registered_at_override: Option<TimestampV1>,
+        crash_point: Option<RetainedReservationCrashPointV1>,
+        build_worker: impl Fn(
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &AuthorityObjectRefV1,
+            &crate::execution::agent_runtime::host_session_authority::schema::WorldBindingV1,
+        ) -> Result<Vec<u8>, &'static str>,
+    ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
         with_opened_existing_versioned_semantic_preflight(root_handle, |transaction| {
             let VersionedStateRoot::V2(root) = &transaction.root else {
                 return Err(BootstrapError(
@@ -1002,8 +1141,7 @@ mod platform {
                     || existing.descriptor_commitment != descriptor_commitment
                     || existing.resume_handle_commitment != resume_handle_commitment
                     || existing.retained_worker_commitment != worker_commitment
-                    || input
-                        .registered_at
+                    || registered_at_override
                         .as_ref()
                         .is_some_and(|registered_at| registered_at != &existing.registered_at)
                 {
@@ -1077,18 +1215,23 @@ mod platform {
             let world_binding = authority.world_binding.clone().ok_or(BootstrapError(
                 "retained registration requires exact world binding",
             ))?;
+            let mut allocated_ref_ids = std::collections::BTreeSet::new();
             let descriptor_ref = allocate_reserved_canonical_ref(
                 transaction.layout,
                 root,
                 AuthorityObjectKindV1::AgentDescriptor,
                 &input.descriptor_bytes,
+                &allocated_ref_ids,
             )?;
+            allocated_ref_ids.insert(descriptor_ref.ref_id.clone());
             let resume_handle_ref = allocate_reserved_canonical_ref(
                 transaction.layout,
                 root,
                 AuthorityObjectKindV1::ResumeHandle,
                 &input.resume_handle_bytes,
+                &allocated_ref_ids,
             )?;
+            allocated_ref_ids.insert(resume_handle_ref.ref_id.clone());
             let worker_bytes = build_worker(
                 &descriptor_ref,
                 &resume_handle_ref,
@@ -1101,9 +1244,10 @@ mod platform {
                 root,
                 AuthorityObjectKindV1::RetainedWorker,
                 &worker_bytes,
+                &allocated_ref_ids,
             )?;
             let registration_id = allocate_registration_id(root)?;
-            let registered_at = match &input.registered_at {
+            let registered_at = match &registered_at_override {
                 Some(value) => value.clone(),
                 None => system_timestamp()?,
             };
@@ -1155,9 +1299,7 @@ mod platform {
                 system_material()?.root_nonce,
                 || {
                     transaction.validate_publication_candidate(root.root_revision, &candidate)?;
-                    if input.crash_point
-                        == Some(RetainedReservationCrashPointV1::BeforeRootPublication)
-                    {
+                    if crash_point == Some(RetainedReservationCrashPointV1::BeforeRootPublication) {
                         return Err(BootstrapError(
                             "injected crash before retained reservation publication",
                         ));
@@ -1165,7 +1307,7 @@ mod platform {
                     Ok(())
                 },
             )?;
-            if input.crash_point == Some(RetainedReservationCrashPointV1::AfterRootPublication) {
+            if crash_point == Some(RetainedReservationCrashPointV1::AfterRootPublication) {
                 return Err(BootstrapError(
                     "injected crash after retained reservation publication",
                 ));
@@ -1264,6 +1406,7 @@ mod platform {
         root: &StateRootV2,
         object_kind: AuthorityObjectKindV1,
         bytes: &[u8],
+        allocated_ref_ids: &std::collections::BTreeSet<String>,
     ) -> Result<AuthorityObjectRefV1, BootstrapError> {
         let commitment = canonical_commitment_for_kind(object_kind, bytes)?;
         let mut random = rand::rngs::OsRng;
@@ -1281,7 +1424,8 @@ mod platform {
                 });
             if !root.object_index.contains_key(&reference.ref_id)
                 && !reserved
-                && reserved_object_location_is_absent(layout, &reference)?
+                && !allocated_ref_ids.contains(&reference.ref_id)
+                && reserved_object_ref_id_is_globally_absent(layout, &reference.ref_id)?
             {
                 return Ok(reference);
             }

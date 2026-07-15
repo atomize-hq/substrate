@@ -12,20 +12,24 @@
 use std::fmt;
 
 use super::host_session_authority::canonical_json;
+#[cfg(test)]
+use super::host_session_authority::facade::RetainedReservationCrashPointV1;
 use super::host_session_authority::facade::{
-    ReservedRetainedWorkerRegistrationV1, RetainedReservationCrashPointV1,
+    ReservedRetainedWorkerRegistrationV1, RetainedWorkerAuthorityPreconditionV1,
 };
+#[cfg(test)]
+use super::host_session_authority::schema::TimestampV1;
 use super::host_session_authority::schema::{
     AgentDescriptorHashInputV1, AgentDescriptorV1, ResumeHandleHashInputV1,
-    RetainedWorkerObjectHashInputV1, TimestampV1,
+    RetainedWorkerObjectHashInputV1,
 };
-use super::host_session_authority::{AuthorityObservationV1, HostSessionAuthority};
+use super::host_session_authority::HostSessionAuthority;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RetainedWorkerRegistrationPlanV1 {
     pub(crate) registration_request_id: String,
     pub(crate) orchestration_session_id: String,
-    pub(crate) expected_authority: AuthorityObservationV1,
+    pub(crate) expected_authority: RetainedWorkerAuthorityPreconditionV1,
     pub(crate) retained_participant_id: String,
     pub(crate) descriptor: AgentDescriptorV1,
     pub(crate) internal_uaa_session_id: String,
@@ -58,16 +62,63 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerRegistrationPlanV1,
     ) -> Result<ReservedRetainedWorkerRegistrationV1, RetainedWorkerRuntimeError> {
-        self.reserve_registration_with(authority, plan, None, None)
+        let (descriptor_bytes, resume_handle_bytes) = Self::immutable_inputs(plan)?;
+        authority
+            .reserve_retained_worker_registration(
+                &plan.registration_request_id,
+                &plan.orchestration_session_id,
+                &plan.expected_authority,
+                &plan.retained_participant_id,
+                descriptor_bytes,
+                resume_handle_bytes,
+                move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
+                    Self::retained_worker_bytes(
+                        plan,
+                        descriptor_ref,
+                        resume_handle_ref,
+                        policy_ref,
+                        world_binding,
+                    )
+                },
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
     }
 
-    fn reserve_registration_with(
+    #[cfg(test)]
+    fn reserve_registration_at(
         &self,
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerRegistrationPlanV1,
-        registered_at: Option<TimestampV1>,
+        registered_at: TimestampV1,
         crash_point: Option<RetainedReservationCrashPointV1>,
     ) -> Result<ReservedRetainedWorkerRegistrationV1, RetainedWorkerRuntimeError> {
+        let (descriptor_bytes, resume_handle_bytes) = Self::immutable_inputs(plan)?;
+        authority
+            .reserve_retained_worker_registration_at(
+                &plan.registration_request_id,
+                &plan.orchestration_session_id,
+                &plan.expected_authority,
+                &plan.retained_participant_id,
+                descriptor_bytes,
+                resume_handle_bytes,
+                registered_at,
+                crash_point,
+                move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
+                    Self::retained_worker_bytes(
+                        plan,
+                        descriptor_ref,
+                        resume_handle_ref,
+                        policy_ref,
+                        world_binding,
+                    )
+                },
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
+    fn immutable_inputs(
+        plan: &RetainedWorkerRegistrationPlanV1,
+    ) -> Result<(Vec<u8>, Vec<u8>), RetainedWorkerRuntimeError> {
         let descriptor_bytes = canonical_json::to_vec(&AgentDescriptorHashInputV1 {
             schema_version: 1,
             descriptor: plan.descriptor.clone(),
@@ -82,43 +133,26 @@ impl RetainedWorkerRuntime {
             internal_uaa_session_id: plan.internal_uaa_session_id.clone(),
         })
         .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
-        let orchestration_session_id = plan.orchestration_session_id.clone();
-        let retained_participant_id = plan.retained_participant_id.clone();
-        authority
-            .reserve_retained_worker_registration(
-                &plan.registration_request_id,
-                &plan.orchestration_session_id,
-                &plan.expected_authority,
-                &plan.retained_participant_id,
-                descriptor_bytes,
-                resume_handle_bytes,
-                registered_at,
-                crash_point,
-                move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
-                    canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
-                        schema_version: 1,
-                        orchestration_session_id: orchestration_session_id.clone(),
-                        participant_id: retained_participant_id.clone(),
-                        world_binding: world_binding.clone(),
-                        descriptor_ref: descriptor_ref.clone(),
-                        resume_handle_ref: resume_handle_ref.clone(),
-                        policy_ref: policy_ref.clone(),
-                    })
-                    .map_err(|_| "encode retained-worker object")
-                },
-            )
-            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+        Ok((descriptor_bytes, resume_handle_bytes))
     }
 
-    #[cfg(test)]
-    fn reserve_registration_at(
-        &self,
-        authority: &HostSessionAuthority,
+    fn retained_worker_bytes(
         plan: &RetainedWorkerRegistrationPlanV1,
-        registered_at: TimestampV1,
-        crash_point: Option<RetainedReservationCrashPointV1>,
-    ) -> Result<ReservedRetainedWorkerRegistrationV1, RetainedWorkerRuntimeError> {
-        self.reserve_registration_with(authority, plan, Some(registered_at), crash_point)
+        descriptor_ref: &super::host_session_authority::schema::AuthorityObjectRefV1,
+        resume_handle_ref: &super::host_session_authority::schema::AuthorityObjectRefV1,
+        policy_ref: &super::host_session_authority::schema::AuthorityObjectRefV1,
+        world_binding: &super::host_session_authority::schema::WorldBindingV1,
+    ) -> Result<Vec<u8>, &'static str> {
+        canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
+            schema_version: 1,
+            orchestration_session_id: plan.orchestration_session_id.clone(),
+            participant_id: plan.retained_participant_id.clone(),
+            world_binding: world_binding.clone(),
+            descriptor_ref: descriptor_ref.clone(),
+            resume_handle_ref: resume_handle_ref.clone(),
+            policy_ref: policy_ref.clone(),
+        })
+        .map_err(|_| "encode retained-worker object")
     }
 
     pub(crate) fn register_retained_target(
@@ -138,7 +172,9 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use super::*;
-    use crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority;
+    use crate::execution::agent_runtime::host_session_authority::facade::{
+        AuthorityObservationV1, HostSessionAuthority,
+    };
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AgentExecutionScopeV1, HostAttachCapabilitiesV1, HostAttachExecutionClientStartV1,
         HostAttachLaunchKnobsV1, HostAttachModePreferenceV1, HostSessionAuthorityPreconditionV1,
@@ -183,7 +219,7 @@ mod tests {
         };
         let request = IssueHostSessionTransitionRequestV1 {
             intent_id: "r0-start-intent".into(),
-            issuer_request_id: "r0-start-request".into(),
+            issuer_request_id: "retained-worker-registration:transition-start".into(),
             mode: HostSessionTransitionModeV1::Start,
             authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
             orchestration_session_id: "r0-session".into(),
@@ -288,7 +324,11 @@ mod tests {
         RetainedWorkerRegistrationPlanV1 {
             registration_request_id: "spawn-request-1".into(),
             orchestration_session_id: "r0-session".into(),
-            expected_authority: observation,
+            expected_authority: RetainedWorkerAuthorityPreconditionV1 {
+                authority_store_id: observation.authority_store_id,
+                authority_revision: observation.authority_revision,
+                authority_record_commitment: observation.authority_record_commitment,
+            },
             retained_participant_id: "r0-retained-1".into(),
             descriptor: AgentDescriptorV1 {
                 schema_version: 1,
@@ -389,7 +429,6 @@ mod tests {
         conflicts.push((changed, registered_at.clone()));
         let mut changed = plan.clone();
         changed.orchestration_session_id = "r0-session-changed".into();
-        changed.expected_authority.orchestration_session_id = "r0-session-changed".into();
         conflicts.push((changed, registered_at.clone()));
         let mut changed = plan.clone();
         changed.expected_authority.authority_revision += 1;
@@ -476,5 +515,133 @@ mod tests {
         assert_eq!(joined.request, request);
         assert_eq!(restarted.read_a12a_root().unwrap(), durable);
         assert_eq!(object_files(&object_root), objects_before);
+    }
+
+    #[test]
+    fn transition_issuer_cannot_be_reused_for_retained_registration() {
+        let (_parent, authority, observation) = started_authority();
+        let mut conflict = plan(observation);
+        conflict.registration_request_id = "transition-start".into();
+        let root_before = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+
+        assert!(RetainedWorkerRuntime
+            .reserve_registration_at(
+                &authority,
+                &conflict,
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+        assert_eq!(object_files(&object_root), objects_before);
+    }
+
+    #[test]
+    fn strict_root_rejects_duplicate_participant_across_reserved_requests() {
+        let (_parent, authority, observation) = started_authority();
+        let reserved = RetainedWorkerRuntime
+            .reserve_registration_at(
+                &authority,
+                &plan(observation),
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        let mut root = authority.read_a12a_root().unwrap();
+        let mut duplicate = reserved.request;
+        duplicate.issuer_request_id = "retained-worker-registration:duplicate".into();
+        duplicate.registration_id = "rr_11111111111111111111111111111111".into();
+        duplicate.descriptor_ref_id = "ao_11111111111111111111111111111111".into();
+        duplicate.resume_handle_ref_id = "ao_22222222222222222222222222222222".into();
+        duplicate.retained_worker_ref_id = "ao_33333333333333333333333333333333".into();
+        root.retained_worker_registration_request_index
+            .insert(duplicate.issuer_request_id.clone(), duplicate);
+
+        assert!(root.validate().is_err());
+    }
+
+    #[test]
+    fn reserved_object_identity_collision_check_is_global_across_kinds() {
+        let (_parent, authority, _observation) = started_authority();
+        let root = authority.read_a12a_root().unwrap();
+        let policy = PolicyObjectHashInputV1 {
+            schema_version: 1,
+            policy_revision: "orphan-policy".into(),
+            canonical_policy_snapshot_sha256:
+                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".into(),
+        };
+        let bytes = canonical_json::to_vec(&policy).unwrap();
+        let reference = crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1 {
+            ref_id: "ao_99999999999999999999999999999999".into(),
+            object_kind: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1::Policy,
+            schema_version: 1,
+            commitment: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: crate::execution::agent_runtime::host_session_authority::hash::canonical_sha256(&policy).unwrap(),
+            },
+        };
+        let home = _parent.path().join("home");
+        crate::execution::agent_runtime::host_session_authority::store::prepare_typed_object_v2_test(
+            &home,
+            root.root_revision,
+            &reference,
+            &bytes,
+        )
+        .unwrap();
+
+        assert!(!crate::execution::agent_runtime::host_session_authority::store::reserved_object_ref_id_is_globally_absent_test(
+            &home,
+            &reference.ref_id,
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn reserved_retry_rejects_changed_current_policy_or_world_binding() {
+        let (_parent, authority, observation) = started_authority();
+        let plan = plan(observation);
+        RetainedWorkerRuntime
+            .reserve_registration_at(
+                &authority,
+                &plan,
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        let root = authority.read_a12a_root().unwrap();
+        let validate = |candidate: &crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV2| {
+            crate::execution::agent_runtime::host_session_authority::store::retained_reservation_authority_matches_test(
+                candidate,
+                &plan.orchestration_session_id,
+                &plan.expected_authority.authority_store_id,
+                plan.expected_authority.authority_revision,
+                &plan.expected_authority.authority_record_commitment,
+            )
+        };
+        validate(&root).unwrap();
+
+        let mut changed_world = root.clone();
+        let crate::execution::agent_runtime::host_session_authority::store_schema::SessionNamespaceRecordV1::Authority(authority) = changed_world
+            .session_namespace_map
+            .get_mut(&plan.orchestration_session_id)
+            .unwrap()
+        else {
+            panic!("production Start must establish authority")
+        };
+        authority.world_binding.as_mut().unwrap().world_generation += 1;
+        assert!(validate(&changed_world).is_err());
+
+        let mut changed_policy = root;
+        let crate::execution::agent_runtime::host_session_authority::store_schema::SessionNamespaceRecordV1::Authority(authority) = changed_policy
+            .session_namespace_map
+            .get_mut(&plan.orchestration_session_id)
+            .unwrap()
+        else {
+            panic!("production Start must establish authority")
+        };
+        authority.current_policy_ref.as_mut().unwrap().ref_id =
+            "ao_88888888888888888888888888888888".into();
+        assert!(validate(&changed_policy).is_err());
     }
 }

@@ -897,6 +897,11 @@ impl StateRootV2 {
             if !registration_ids.insert(request.registration_id.clone()) {
                 return Err(StoreSchemaError("retained registration identity is reused"));
             }
+            if !retained_participants.insert(request.retained_participant_id.clone()) {
+                return Err(StoreSchemaError(
+                    "retained registration participant is reused",
+                ));
+            }
             match &request.state {
                 RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved => {
                     if self
@@ -937,11 +942,6 @@ impl StateRootV2 {
                             "applied retained registration has no journal",
                         ))?;
                     validate_applied_registration_request(request, journal)?;
-                    if !retained_participants.insert(request.retained_participant_id.clone()) {
-                        return Err(StoreSchemaError(
-                            "retained registration participant is reused",
-                        ));
-                    }
                 }
             }
         }
