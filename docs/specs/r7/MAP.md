@@ -1,10 +1,11 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE / CHECKPOINT DOC COMMIT
-`1cae7d693` FRESH INDEPENDENT REVIEW CLEAN / R7-2 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-2.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED /
-TRANSITION/FIX SERIES `6a8797c15` + `4ee469014` FRESH INDEPENDENT REVIEW CLEAN / `CTX-R7-03` OPEN /
-PROMPT 1 SELECTORS PREPARED AND ELIGIBLE BUT NOT INVOKED / R7-3..R7-6 AND R8 BLOCKED**. Promotion series
+Status: **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE / R7-2.1, R7-2.2,
+R7-2.3, AND BEHAVIOR/STATIC CHECKPOINT COMPLETE / TASK COMMITS `c60d05f77`, `9403c8a24`, AND
+SERIES `7af2ae517` + `75a353e46` FRESH INDEPENDENT REVIEW CLEAN / R7-2 SOLE ACTIVE PHASE /
+ACTIVE PACKET NONE / CHECKPOINT-DOC RECEIPT PENDING FRESH INDEPENDENT REVIEW / R7-2 EXIT GATE
+AND `CTX-R7-03` OPEN UNTIL THE RECEIPT COMMIT IS FRESH-REVIEW-CLEAN / R7-3..R7-6 AND R8 BLOCKED /
+R7-3.1 UNCHECKED AND UNSTARTED / NO NEXT-PHASE SELECTORS PREPARED OR INVOKED**. Promotion series
 `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. The narrow
 `R7-PROMOTE -> R7-0` transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`. The docs-only `R7-0.1` series `a9e75f149` +
@@ -14,10 +15,13 @@ independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix
 `R7-1.1` series `e65127720` + `685cf843b`, `R7-1.2` commit `4d122cd9f`, and `R7-1.3` commit
 `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`. R7-1 implementation and its
 checkpoint are complete. Checkpoint-doc commit `1cae7d693` received fresh independent built-in
-`default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at
-entry with packet `none`; transition/fix series `6a8797c15` + `4ee469014` received fresh independent built-in `default` `REVIEW CLEAN`. `CTX-R7-03` is open. Prompt 1 selectors `PHASE_ID: R7-2` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked.
-`R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started.
-`R7-3..R7-6` plus R8 remain blocked.
+`default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` +
+`75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the
+summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are
+complete. R7-2 remains the sole active phase with packet `none` while this checkpoint-doc receipt
+still requires fresh independent review. The R7-2 exit gate and `CTX-R7-03`
+remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain
+blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or invoked.
 
 ## R6 Handoff
 
@@ -58,10 +62,22 @@ are fresh independent built-in `default` `REVIEW CLEAN`. Focused delegation-link
 `36` unit/integration tests plus `3` doctests; formatting, clippy, diff, and staged GitNexus gates are
 green. Link/session/file ordering is deterministic, and no raw private rollout data was added.
 Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`,
-satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`;
-transition/fix series `6a8797c15` + `4ee469014` received fresh independent built-in `default` `REVIEW CLEAN`. `CTX-R7-03` is open. Prompt 1 selectors `PHASE_ID: R7-2` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. `R7-2.1` is next, unchecked, and
-unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain
-blocked.
+satisfying the R7-1 exit gate. R7-1 is complete. Operator decision
+`R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact analyzer seam. R7-2
+task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 implementation/fix series `7af2ae517` +
+`75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN` after the fix reconciled
+the summary-vs-checkpoint blocker. At implementation HEAD `75a353e46`, input passes `16 / 16`,
+delegation matches pass `39` total, checkpoint matches pass `172` total, full analyzer passes `417 /
+417`, and format, analyzer clippy `-D warnings`, and diff checks are green. Staged GitNexus gates
+reported R7-2.1 LOW / `0` affected processes, R7-2.2 MEDIUM / `1`, R7-2.3 HIGH / `9` within the
+authorized decision, and the fix MEDIUM / `2`. Public v0.8 with v0.7 compatibility, graph-derived
+roles and ids, `Linked`/`Partial` visibility, fail-closed conflicts, deterministic `RowRef` evidence,
+JSON-summary parity, and separate trajectories are proven. No R7-3, R7-4, sentinel, or R8 work
+leaked into the series. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete.
+R7-2 remains the sole active phase with packet `none` while this checkpoint-doc receipt still
+requires fresh independent review. The R7-2 exit gate and `CTX-R7-03` remain open until the
+receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain blocked; `R7-3.1` is unchecked and
+unstarted; no next-phase selectors are prepared or invoked.
 
 ## Live Linkage Evidence
 
@@ -73,10 +89,11 @@ The current raw Codex rollout shape exposes a deterministic direct-link seam:
 3. The compactor now preserves structured parent spawn-result and child-origin metadata with row
    provenance, emits serde-defaulted typed delegation links, and supports an explicit verified
    direct-child closure without turning linkage into message text.
-4. The analyzer can load multiple sessions from one compactor bundle, but R7-2 has not yet added a
-   link graph between those sessions.
-5. The analyzer's existing `DelegationContext`, `DelegationTopology`, and `ChildWorkVisibility` are
-   private and heuristic; `DelegatedChild` is defined but not populated from verified linkage.
+4. The analyzer loads and validates a deterministic direct link graph over included bundle sessions;
+   missing and conflicting link states remain bounded and legacy manifests load with an empty graph.
+5. Public checkpoint v0.8 exports `DelegationContext`, topology, graph-derived role ids, visibility,
+   confidence, and deterministic `RowRef` evidence. Verified links populate `DelegatingParent` and
+   `DelegatedChild`; heuristic markers are fallback-only, and v0.7 remains readable.
 6. Real-session sentinel coordination currently compacts one requested session and rejects analyzer
    output containing any additional session id.
 
@@ -103,10 +120,13 @@ independent built-in `default` `REVIEW CLEAN`, and the R7-1 checkpoint is comple
 commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
 R7-1 exit gate. Transition/fix series `6a8797c15` + `4ee469014` received fresh independent built-in
 `default` `REVIEW CLEAN`; its first review's stale uncommitted-state finding is fixed. R7-1 remains
-complete and `CTX-R7-02` remains proven. Only R7-2 is active at entry with packet `none`;
-`CTX-R7-03` is open. Prompt 1 selectors are prepared and eligible but have not been invoked. `R7-2.1`
-is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started.
-`R7-3..R7-6` plus R8 remain blocked.
+complete and `CTX-R7-02` remains proven. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` +
+`75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the
+summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are
+complete. R7-2 remains the sole active phase with packet `none` while this checkpoint-doc receipt
+still requires fresh independent review. The R7-2 exit gate and `CTX-R7-03`
+remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain
+blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or invoked.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

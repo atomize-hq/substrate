@@ -331,20 +331,19 @@ independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. Tr
 `6a8797c15` then received `CHANGES REQUIRED` for stale uncommitted-state wording; fix commit
 `4ee469014` corrected it, and a fresh independent built-in `default` re-review returned exactly
 `REVIEW CLEAN` with no actionable findings for the full transition/fix series. R7-1 remains complete
-and `CTX-R7-02` remains proven. Only R7-2 is active at entry with packet `none`; `CTX-R7-03` is open;
-`R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started.
-`R7-3..R7-6` and R8 remain blocked.
+and `CTX-R7-02` remains proven. Operator decision
+`R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact analyzer seam. R7-2.1
+commit `c60d05f77`, R7-2.2 commit `9403c8a24`, and R7-2.3 implementation/fix series `7af2ae517` +
+`75a353e46` received fresh independent built-in `default` `REVIEW CLEAN`; the fix resolved the
+summary-vs-checkpoint blocker. Input passes `16 / 16`, delegation matches pass `39`, checkpoint
+matches pass `172`, full analyzer passes `417 / 417`, and formatting, analyzer clippy `-D warnings`,
+diff, and staged GitNexus gates are green within the recorded risk bounds. Public v0.8/readable
+v0.7, graph roles/ids, `Linked`/`Partial`, fail-closed conflicts, deterministic `RowRef` evidence,
+JSON-summary parity, and separate trajectories are proven with no R7-3/R7-4/sentinel/R8 leakage.
 
-The review-clean transition/fix series makes these Prompt 1 selectors prepared and eligible for the
-next fresh phase session:
-
-```text
-PHASE_ID: R7-2
-ACTIVE_PACKET: none
-```
-
-Preparing these selectors does not invoke Prompt 1 or start R7-2 implementation. They have not been
-invoked in this transition receipt.
+R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. R7-2 remains the sole
+active phase with packet `none`; this checkpoint-doc receipt is a review candidate pending fresh independent review. The R7-2 exit gate and `CTX-R7-03` remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain blocked; `R7-3.1` is unchecked and unstarted. Do not
+prepare or invoke R7-3 Prompt 1 selectors yet.
 
 Historical resolved Task `.2B` decision report:
 

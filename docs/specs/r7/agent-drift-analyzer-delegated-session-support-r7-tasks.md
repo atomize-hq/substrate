@@ -3,11 +3,12 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE / CHECKPOINT DOC COMMIT
-`1cae7d693` FRESH INDEPENDENT REVIEW CLEAN / R7-2 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-2.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED /
-TRANSITION/FIX SERIES `6a8797c15` + `4ee469014` FRESH INDEPENDENT REVIEW CLEAN / `CTX-R7-03` OPEN /
-PROMPT 1 SELECTORS PREPARED AND ELIGIBLE BUT NOT INVOKED / R7-3..R7-6 AND R8 BLOCKED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE / R7-2.1, R7-2.2,
+R7-2.3, AND BEHAVIOR/STATIC CHECKPOINT COMPLETE / TASK COMMITS `c60d05f77`, `9403c8a24`, AND
+SERIES `7af2ae517` + `75a353e46` FRESH INDEPENDENT REVIEW CLEAN / R7-2 SOLE ACTIVE PHASE /
+ACTIVE PACKET NONE / CHECKPOINT-DOC RECEIPT PENDING FRESH INDEPENDENT REVIEW / R7-2 EXIT GATE
+AND `CTX-R7-03` OPEN UNTIL THE RECEIPT COMMIT IS FRESH-REVIEW-CLEAN / R7-3..R7-6 AND R8 BLOCKED /
+R7-3.1 UNCHECKED AND UNSTARTED / NO NEXT-PHASE SELECTORS PREPARED OR INVOKED**
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
@@ -19,10 +20,14 @@ CLEAN`. `R7-0.1` is complete after the exact contract `rg` passed; series `a9e75
 built-in `default` `REVIEW CLEAN`. `R7-1.1` series `e65127720` + `685cf843b`, `R7-1.2` commit
 `4d122cd9f`, and `R7-1.3` commit `e865eee13` each received fresh independent built-in `default`
 `REVIEW CLEAN`. Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default`
-`REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with
-packet `none`; transition/fix series `6a8797c15` + `4ee469014` received fresh independent built-in `default` `REVIEW CLEAN`. `CTX-R7-03` is open. Prompt 1 selectors `PHASE_ID: R7-2` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. `R7-2.1` is next,
-unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6`
-plus R8 remain blocked.
+`REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and
+`9403c8a24`, plus R7-2.3 series `7af2ae517` + `75a353e46`, are fresh independent built-in `default`
+`REVIEW CLEAN`; the fix reconciled the summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and
+the behavior/static checkpoint are complete. R7-2 remains the sole active phase with packet `none`
+while this checkpoint-doc receipt still requires fresh independent review. The R7-2
+exit gate and `CTX-R7-03` remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6`
+and R8 remain blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or
+invoked.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -131,42 +136,71 @@ The full compactor wall passes `36` unit/integration tests plus `3` doctests; fo
 passes `6 / 6`; R7-1.3 end-to-end and CLI proof pass `6 / 6` and `2 / 2`. Formatting, clippy, diff,
 and staged GitNexus gates are green. Deterministic link/session/file ordering is proven, and no raw
 private rollout data was added. Checkpoint-doc commit `1cae7d693` received fresh independent
-built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is
-active at entry with packet `none`; transition/fix series `6a8797c15` + `4ee469014` received fresh independent built-in `default` `REVIEW CLEAN`. `CTX-R7-03` is open. Prompt 1 selectors `PHASE_ID: R7-2` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked.
-`R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not
-started. `R7-3..R7-6` plus R8 remain blocked.
+built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task
+commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` + `75a353e46`, are fresh
+independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the summary-vs-checkpoint blocker.
+R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. R7-2 remains the sole
+active phase with packet `none` while this checkpoint-doc receipt still requires fresh independent
+review. The R7-2 exit gate and `CTX-R7-03` remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain blocked; `R7-3.1` is unchecked and unstarted; no next-phase
+selectors are prepared or invoked.
 
 ## R7-2: Analyzer Link Graph And Checkpoint v0.8
 
-- [ ] **R7-2.1: Load and validate the typed direct link graph.**
+- [x] **R7-2.1: Load and validate the typed direct link graph.**
   - Acceptance: verified links reference included sessions; missing/conflicting links remain bounded;
     v0.2 manifests without links still load.
   - Verify: `cargo test -p agent-drift-analyzer input -- --nocapture`
   - Files: `crates/agent-drift-analyzer/src/input.rs`, input tests
   - Dependencies: R7-1
+  - Receipt: commit `c60d05f77` received fresh independent built-in `default` `REVIEW CLEAN`.
+    Verified links load only when their sessions are included, missing/conflicting states remain
+    bounded, legacy v0.2 manifests without links still load, and the input filter passes `16 / 16`.
+    Its staged GitNexus gate reported LOW risk with `0` affected processes.
   - Scope: medium
 
-- [ ] **R7-2.2: Promote delegation context into checkpoint schema v0.8.**
+- [x] **R7-2.2: Promote delegation context into checkpoint schema v0.8.**
   - Acceptance: v0.8 requires topology, parent/child ids, visibility, confidence, and evidence;
     v0.7 remains readable; `ChildWorkVisibility::Linked` is explicit.
   - Verify: schema round-trip and legacy compatibility tests
   - Files: `crates/agent-drift-analyzer/src/checkpoint/schema.rs`, schema/export tests
   - Dependencies: R7-2.1
+  - Receipt: operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded
+    high-impact analyzer seam. Commit `9403c8a24` received fresh independent built-in `default`
+    `REVIEW CLEAN`. Public checkpoint v0.8 carries required topology, role ids, visibility,
+    confidence, and deterministic `RowRef` evidence; v0.7 remains readable; `Linked` is explicit.
+    Its staged GitNexus gate reported MEDIUM risk with `1` affected process.
   - Scope: medium
 
-- [ ] **R7-2.3: Derive parent/child roles from graph truth.**
+- [x] **R7-2.3: Derive parent/child roles from graph truth.**
   - Acceptance: verified parent/child sessions become `DelegatingParent`/`DelegatedChild`; heuristic
     markers remain fallback-only; mixed closures become `Partial` or `MixedOrAmbiguous`.
   - Verify: `cargo test -p agent-drift-analyzer delegation -- --nocapture`
   - Files: `crates/agent-drift-analyzer/src/checkpoint/mod.rs`, `src/inference/mod.rs`, tests
   - Dependencies: R7-2.2
+  - Receipt: implementation `7af2ae517` plus fix `75a353e46` received fresh independent built-in
+    `default` `REVIEW CLEAN` after the fix aligned JSON summary delegation with checkpoint truth.
+    Verified graph roles and parent/child ids are authoritative; mixed visibility becomes `Partial`;
+    conflicts fail closed; heuristic markers remain fallback-only; JSON-summary parity and separate
+    trajectories are proven. Staged GitNexus reported HIGH / `9` affected processes for the
+    authorized implementation and MEDIUM / `2` for the fix.
   - Scope: medium
 
 ### Checkpoint R7-2
 
-- [ ] `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
-- [ ] Legacy R3.75 delegated and ordinary single-agent controls remain stable.
-- [ ] Public field naming and compatibility receive interface review.
+- [x] `cargo test -p agent-drift-analyzer checkpoints -- --nocapture`
+- [x] Legacy R3.75 delegated and ordinary single-agent controls remain stable.
+- [x] Public field naming and compatibility receive interface review.
+
+Checkpoint receipt: at implementation HEAD `75a353e46`, the input filter passes `16 / 16`;
+delegation matches pass `39` total (`25` library + `4` checkpoint + `8` delegation-context + `2`
+export); checkpoint matches pass `172` total (`36` library + `134` checkpoints + `1` export + `1`
+truth-grounding); and the full analyzer passes `417 / 417`. `cargo fmt --all -- --check`, analyzer
+clippy with `-D warnings`, and `git diff --check` are green. The public v0.8/v0.7 compatibility,
+verified graph roles and ids, `Linked`/`Partial` visibility, fail-closed conflicts, deterministic
+`RowRef` evidence, JSON-summary parity, and separate trajectories are proven. No R7-3, R7-4,
+sentinel, or R8 work leaked into the series. These behavior/static items are complete, but R7-2 and
+`CTX-R7-03` remain open until this checkpoint-doc receipt receives fresh independent `REVIEW
+CLEAN`; do not prepare or invoke R7-3 selectors yet.
 
 ## R7-3: Separate Parent And Child Progress
 
