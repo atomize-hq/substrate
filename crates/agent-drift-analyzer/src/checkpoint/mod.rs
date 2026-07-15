@@ -12,7 +12,8 @@ use crate::{
     context::extract_verification_commands, context::focusable_directive_rows,
     context::CommandObservation, context::ContextPack, context::ObjectiveSummary,
     inference::infer_delegation_context, inference::infer_task_frame,
-    inference::DelegationInference, scoring::DriftStateHint, scoring::ScoredDrift,
+    inference::DelegationInference, inference::TypedDelegationInference, scoring::DriftStateHint,
+    scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use attempt::{
@@ -425,6 +426,36 @@ pub(crate) fn build_session_checkpoint_from_analysis(
         task_frame,
         drift_scores,
     )
+}
+
+pub(crate) fn build_session_checkpoint_from_analysis_with_typed_delegation(
+    analysis: &CheckpointAnalysis,
+    task_frame: &TaskFrame,
+    drift_scores: Vec<DriftScore>,
+    typed_delegation: Option<&TypedDelegationInference>,
+) -> Checkpoint {
+    let mut checkpoint = build_session_checkpoint_from_analysis(analysis, task_frame, drift_scores);
+    if let Some(typed_delegation) = typed_delegation {
+        checkpoint.delegation =
+            public_typed_delegation_context(&analysis.delegation, typed_delegation);
+    }
+    checkpoint
+}
+
+fn public_typed_delegation_context(
+    heuristic: &DelegationInference,
+    typed: &TypedDelegationInference,
+) -> DelegationContext {
+    DelegationContext {
+        topology: typed.topology,
+        parent_session_id: typed.parent_session_id.clone(),
+        child_session_ids: typed.child_session_ids.clone(),
+        child_work_visibility: typed.child_work_visibility,
+        confidence: typed.confidence,
+        markers: heuristic.markers.clone(),
+        supporting_evidence: typed.supporting_evidence.clone(),
+        counter_evidence: typed.counter_evidence.clone(),
+    }
 }
 
 pub(crate) fn build_scoring_session_progress(analysis: &CheckpointAnalysis) -> SessionProgress {

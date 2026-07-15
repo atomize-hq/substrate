@@ -1,6 +1,9 @@
 use std::collections::BTreeSet;
 
-use agent_session_compactor::{CompactionKind, CompactionRow};
+use agent_session_compactor::{
+    CompactionKind, CompactionRow, DelegationEvidenceRef, DelegationLink, DelegationLinkState,
+    RowRef,
+};
 use camino::Utf8Path;
 use serde_json::Value;
 
@@ -8,7 +11,7 @@ use crate::checkpoint::{
     ChildWorkVisibility, Confidence, DelegationTopology, EvidenceRef, TaskFrame,
 };
 use crate::context::ContextPack;
-use crate::input::{extract_path_hints, parse_tool_payload, BundleSession};
+use crate::input::{extract_path_hints, parse_tool_payload, BundleSession, DelegationLinkGraph};
 
 const EXPLICIT_DELEGATION_MARKERS: [&str; 4] =
     ["multi_agent_v1", "spawn_agent", "wait_agent", "close_agent"];
@@ -29,6 +32,306 @@ pub(crate) struct DelegationInference {
     pub markers: Vec<String>,
     pub supporting_evidence: Vec<EvidenceRef>,
     pub counter_evidence: Vec<EvidenceRef>,
+}
+
+/// Analyzer-owned delegation semantics derived from typed bundle linkage.
+///
+/// Returning `None` is significant: only then may the checkpoint surface use
+/// legacy marker inference. A present value always outranks message/tool
+/// heuristics, including when typed observations fail closed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TypedDelegationInference {
+    pub topology: DelegationTopology,
+    pub parent_session_id: Option<String>,
+    pub child_session_ids: Vec<String>,
+    pub child_work_visibility: ChildWorkVisibility,
+    pub confidence: Confidence,
+    pub supporting_evidence: Vec<EvidenceRef>,
+    pub counter_evidence: Vec<EvidenceRef>,
+}
+
+pub(crate) fn infer_typed_delegation_context(
+    session_id: &str,
+    graph: &DelegationLinkGraph,
+    observations: &[DelegationLink],
+) -> Option<TypedDelegationInference> {
+    let graph_links = graph.by_session_id.get(session_id);
+    let mut relevant_observations = observations
+        .iter()
+        .filter(|link| delegation_observation_mentions_session(link, session_id))
+        .collect::<Vec<_>>();
+    relevant_observations.sort_by(|left, right| {
+        (
+            &left.parent_session_id,
+            &left.child_session_id,
+            &left.child_origin_parent_session_id,
+            left.depth,
+            left.state,
+            &left.parent_evidence,
+            &left.child_evidence,
+        )
+            .cmp(&(
+                &right.parent_session_id,
+                &right.child_session_id,
+                &right.child_origin_parent_session_id,
+                right.depth,
+                right.state,
+                &right.parent_evidence,
+                &right.child_evidence,
+            ))
+    });
+
+    if graph_links.is_none() && relevant_observations.is_empty() {
+        return None;
+    }
+
+    let parent_links = graph_links
+        .map(|links| links.parent_links.as_slice())
+        .unwrap_or_default();
+    let child_links = graph_links
+        .map(|links| links.child_links.as_slice())
+        .unwrap_or_default();
+    let semantic_links = parent_links
+        .iter()
+        .chain(child_links.iter())
+        .collect::<Vec<_>>();
+
+    let observed_parent_role = relevant_observations
+        .iter()
+        .filter(|link| link.state != DelegationLinkState::DeeperResidue)
+        .any(|link| {
+            link.parent_session_id == session_id
+                || link.child_origin_parent_session_id.as_deref() == Some(session_id)
+        });
+    let observed_child_role = relevant_observations
+        .iter()
+        .filter(|link| link.state != DelegationLinkState::DeeperResidue)
+        .any(|link| link.child_session_id == session_id);
+    let has_incomplete_direct_observation = relevant_observations.iter().any(|link| {
+        matches!(
+            link.state,
+            DelegationLinkState::ParentOnly | DelegationLinkState::ChildOnly
+        )
+    });
+    let has_hard_conflict = relevant_observations.iter().any(|link| {
+        matches!(
+            link.state,
+            DelegationLinkState::ConflictingParent
+                | DelegationLinkState::SelfLink
+                | DelegationLinkState::Duplicate
+                | DelegationLinkState::MalformedSessionId
+                | DelegationLinkState::DepthMismatch
+        )
+    });
+
+    let verified_links_are_exact = semantic_links
+        .iter()
+        .all(|link| verified_graph_link_is_exact(link));
+    let unique_parent_ids = parent_links
+        .iter()
+        .map(|link| link.parent_session_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let unique_child_ids = child_links
+        .iter()
+        .map(|link| link.child_session_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let duplicate_verified_edge = unique_parent_ids.len() != parent_links.len()
+        || unique_child_ids.len() != child_links.len();
+    let role_conflict = observed_parent_role && observed_child_role;
+    let graph_role_conflict = !parent_links.is_empty() && !child_links.is_empty();
+    let invalid_semantic_graph = !verified_links_are_exact
+        || parent_links.len() > 1
+        || duplicate_verified_edge
+        || graph_role_conflict;
+
+    let typed_counter_evidence = delegation_link_evidence(
+        relevant_observations
+            .iter()
+            .copied()
+            .filter(|link| link.state != DelegationLinkState::Verified),
+        |link| {
+            format!(
+                "typed delegation observation remained non-semantic: {}",
+                delegation_link_state_name(link.state)
+            )
+        },
+    );
+
+    if has_hard_conflict || role_conflict || invalid_semantic_graph {
+        let withheld_graph_evidence = delegation_link_evidence(
+            semantic_links.iter().copied(),
+            |_| {
+                "verified delegation graph evidence was withheld by a conflicting or invalid role closure"
+                    .to_string()
+            },
+        );
+        return Some(TypedDelegationInference {
+            topology: DelegationTopology::MixedOrAmbiguous,
+            parent_session_id: None,
+            child_session_ids: Vec::new(),
+            child_work_visibility: ChildWorkVisibility::Opaque,
+            confidence: Confidence::Low,
+            supporting_evidence: Vec::new(),
+            counter_evidence: merge_delegation_evidence(vec![
+                withheld_graph_evidence,
+                typed_counter_evidence,
+            ]),
+        });
+    }
+
+    let supporting_evidence = delegation_link_evidence(semantic_links.iter().copied(), |_| {
+        "verified delegation graph evidence".to_string()
+    });
+    if !child_links.is_empty() {
+        let child_session_ids = unique_child_ids
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        return Some(TypedDelegationInference {
+            topology: DelegationTopology::DelegatingParent,
+            parent_session_id: None,
+            child_session_ids,
+            child_work_visibility: if has_incomplete_direct_observation {
+                ChildWorkVisibility::Partial
+            } else {
+                ChildWorkVisibility::Linked
+            },
+            confidence: if has_incomplete_direct_observation {
+                Confidence::Medium
+            } else {
+                Confidence::High
+            },
+            supporting_evidence,
+            counter_evidence: typed_counter_evidence,
+        });
+    }
+
+    if let Some(parent_session_id) = unique_parent_ids.into_iter().next() {
+        return Some(TypedDelegationInference {
+            topology: DelegationTopology::DelegatedChild,
+            parent_session_id: Some(parent_session_id.to_string()),
+            child_session_ids: Vec::new(),
+            child_work_visibility: if has_incomplete_direct_observation {
+                ChildWorkVisibility::Partial
+            } else {
+                ChildWorkVisibility::Linked
+            },
+            confidence: if has_incomplete_direct_observation {
+                Confidence::Medium
+            } else {
+                Confidence::High
+            },
+            supporting_evidence,
+            counter_evidence: typed_counter_evidence,
+        });
+    }
+
+    let topology = match (observed_parent_role, observed_child_role) {
+        (true, false) => DelegationTopology::DelegatingParent,
+        (false, true) => DelegationTopology::DelegatedChild,
+        _ => DelegationTopology::MixedOrAmbiguous,
+    };
+    Some(TypedDelegationInference {
+        topology,
+        parent_session_id: None,
+        child_session_ids: Vec::new(),
+        child_work_visibility: ChildWorkVisibility::Opaque,
+        confidence: Confidence::Low,
+        supporting_evidence: Vec::new(),
+        counter_evidence: typed_counter_evidence,
+    })
+}
+
+fn delegation_observation_mentions_session(link: &DelegationLink, session_id: &str) -> bool {
+    link.parent_session_id == session_id
+        || link.child_session_id == session_id
+        || link.child_origin_parent_session_id.as_deref() == Some(session_id)
+}
+
+fn verified_graph_link_is_exact(link: &DelegationLink) -> bool {
+    link.state == DelegationLinkState::Verified
+        && valid_delegation_session_id(&link.parent_session_id)
+        && valid_delegation_session_id(&link.child_session_id)
+        && link.parent_session_id != link.child_session_id
+        && link.child_origin_parent_session_id.as_deref() == Some(link.parent_session_id.as_str())
+        && link.depth == Some(1)
+}
+
+fn valid_delegation_session_id(session_id: &str) -> bool {
+    !session_id.is_empty()
+        && session_id
+            .chars()
+            .all(|character| !character.is_whitespace() && !character.is_control())
+}
+
+fn delegation_link_evidence<'a>(
+    links: impl IntoIterator<Item = &'a DelegationLink>,
+    reason: impl Fn(&DelegationLink) -> String,
+) -> Vec<EvidenceRef> {
+    let mut evidence = links
+        .into_iter()
+        .flat_map(|link| {
+            let reason = reason(link);
+            link.parent_evidence
+                .iter()
+                .chain(link.child_evidence.iter())
+                .map(move |source| EvidenceRef {
+                    row: delegation_evidence_row_ref(source),
+                    reason: reason.clone(),
+                })
+        })
+        .collect::<Vec<_>>();
+    sort_and_dedupe_delegation_evidence(&mut evidence);
+    evidence
+}
+
+fn delegation_evidence_row_ref(source: &DelegationEvidenceRef) -> RowRef {
+    // Link provenance addresses one raw rollout event rather than one of the
+    // event's normalized text fragments. Row ordinal zero is therefore the
+    // stable analyzer RowRef representation of that typed source event.
+    RowRef {
+        source_file: source.source_file.clone(),
+        event_index: source.event_index,
+        row_ordinal: 0,
+    }
+}
+
+fn merge_delegation_evidence(groups: Vec<Vec<EvidenceRef>>) -> Vec<EvidenceRef> {
+    let mut evidence = groups.into_iter().flatten().collect::<Vec<_>>();
+    sort_and_dedupe_delegation_evidence(&mut evidence);
+    evidence
+}
+
+fn sort_and_dedupe_delegation_evidence(evidence: &mut Vec<EvidenceRef>) {
+    evidence.sort_by(|left, right| {
+        (
+            &left.row.source_file,
+            left.row.event_index,
+            left.row.row_ordinal,
+            &left.reason,
+        )
+            .cmp(&(
+                &right.row.source_file,
+                right.row.event_index,
+                right.row.row_ordinal,
+                &right.reason,
+            ))
+    });
+    evidence.dedup_by(|left, right| left.row == right.row && left.reason == right.reason);
+}
+
+fn delegation_link_state_name(state: DelegationLinkState) -> &'static str {
+    match state {
+        DelegationLinkState::Verified => "verified",
+        DelegationLinkState::ParentOnly => "parent_only",
+        DelegationLinkState::ChildOnly => "child_only",
+        DelegationLinkState::ConflictingParent => "conflicting_parent",
+        DelegationLinkState::SelfLink => "self_link",
+        DelegationLinkState::Duplicate => "duplicate",
+        DelegationLinkState::MalformedSessionId => "malformed_session_id",
+        DelegationLinkState::DepthMismatch => "depth_mismatch",
+        DelegationLinkState::DeeperResidue => "deeper_residue",
+    }
 }
 
 pub fn infer_task_frame(context: &ContextPack) -> TaskFrame {

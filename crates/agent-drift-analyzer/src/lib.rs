@@ -7,7 +7,7 @@ use tempfile as _;
 use camino::Utf8PathBuf;
 use checkpoint::export_checkpoints;
 use context::{assemble_context, ContextPack};
-use inference::infer_task_frame;
+use inference::{infer_task_frame, infer_typed_delegation_context};
 use input::load_bundle;
 use scoring::{score_session, TruthGroundingProvenance};
 
@@ -76,6 +76,11 @@ pub fn analyze_loaded_bundle(
     let mut exported_checkpoints = Vec::new();
 
     for session in &bundle.sessions {
+        let typed_delegation = infer_typed_delegation_context(
+            &session.session_id,
+            &bundle.delegation_graph,
+            &bundle.manifest.delegation_links,
+        );
         let context = assemble_context(session);
         let task_frame = infer_task_frame(&context);
         let mut checkpoints = Vec::new();
@@ -100,11 +105,14 @@ pub fn analyze_loaded_bundle(
                 .filter(|score| score.state != DriftState::Cleared)
                 .cloned();
             previous_checkpoint_scores = Some(scores.clone());
-            checkpoints.push(checkpoint::build_session_checkpoint_from_analysis(
-                analysis,
-                &analysis.current.task_frame,
-                scores,
-            ));
+            checkpoints.push(
+                checkpoint::build_session_checkpoint_from_analysis_with_typed_delegation(
+                    analysis,
+                    &analysis.current.task_frame,
+                    scores,
+                    typed_delegation.as_ref(),
+                ),
+            );
         }
         exported_checkpoints.extend(checkpoints.iter().cloned());
         analyses.push(SessionAnalysis {
