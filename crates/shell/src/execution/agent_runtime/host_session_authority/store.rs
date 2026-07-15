@@ -3090,6 +3090,85 @@ mod platform {
 
     pub(crate) struct LegacyStateStoreTransactionV1;
 
+    pub(crate) struct RetainedWorkerAdmissionStorageV1;
+
+    pub(crate) struct RetainedWorkerAdmissionStorageTransactionV1;
+
+    impl RetainedWorkerAdmissionStorageV1 {
+        pub(crate) fn authority_store_id(&self) -> &str {
+            ""
+        }
+
+        pub(crate) fn transaction<T>(
+            &self,
+            _operation: impl FnOnce(
+                &mut RetainedWorkerAdmissionStorageTransactionV1,
+            ) -> Result<T, BootstrapError>,
+        ) -> Result<T, BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+    }
+
+    impl RetainedWorkerAdmissionStorageTransactionV1 {
+        pub(crate) fn read_registry(&self) -> Result<Option<Vec<u8>>, BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn read_keys(&self) -> Result<Vec<(String, Vec<u8>)>, BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn stage_key_temp(
+            &self,
+            _temp_name: &str,
+            _bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn publish_staged_key_no_replace(
+            &self,
+            _temp_name: &str,
+            _key_name: &str,
+        ) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn remove_key(&self, _key_name: &str) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn publish_registry_no_replace(
+            &self,
+            _temp_name: &str,
+            _bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+    }
+
+    pub(super) fn retained_worker_admission_storage_opened(
+        _root: &TrustedAuthorityRoot,
+    ) -> Result<RetainedWorkerAdmissionStorageV1, BootstrapError> {
+        Err(BootstrapError(
+            "retained admission storage is unsupported on this platform",
+        ))
+    }
+
     impl LegacyStateStoreTransactionV1 {
         pub(crate) fn read_file(
             &self,
