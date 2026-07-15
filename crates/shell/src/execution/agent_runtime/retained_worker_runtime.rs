@@ -387,8 +387,14 @@ struct AdmissionRegistrationAdvanceInputV1<'a> {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AdmissionInitializationCrashPointV1 {
+    BeforeKeyTempPersistence,
+    AfterKeyTempFsync,
     BeforeKeyPublication,
     AfterKeyPublication,
+    BeforeRegistryTempPersistence,
+    AfterRegistryTempFsync,
+    BeforeRegistryNoReplacePublication,
+    AfterRegistryPublication,
 }
 
 #[cfg(test)]
@@ -542,9 +548,20 @@ impl RetainedWorkerRuntime {
                 encode_canonical(&envelope, "encode admission key envelope"),
                 &mut semantic_failure,
             )?;
+            #[cfg(test)]
+            if crash_point == Some(AdmissionInitializationCrashPointV1::BeforeKeyTempPersistence) {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                    ),
+                );
+            }
             transaction.stage_key_temp(&key_temp_name, &envelope_bytes)?;
             #[cfg(test)]
-            if crash_point == Some(AdmissionInitializationCrashPointV1::BeforeKeyPublication) {
+            if matches!(
+                crash_point,
+                Some(AdmissionInitializationCrashPointV1::AfterKeyTempFsync)
+                    | Some(AdmissionInitializationCrashPointV1::BeforeKeyPublication)
+            ) {
                 return Err(
                     super::host_session_authority::store::BootstrapError::retained_admission_crash(
                     ),
@@ -577,7 +594,36 @@ impl RetainedWorkerRuntime {
                 encode_canonical(&registry, "encode admission registry"),
                 &mut semantic_failure,
             )?;
+            #[cfg(test)]
+            if crash_point
+                == Some(AdmissionInitializationCrashPointV1::BeforeRegistryTempPersistence)
+            {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                    ),
+                );
+            }
+            #[cfg(test)]
+            if matches!(
+                crash_point,
+                Some(AdmissionInitializationCrashPointV1::AfterRegistryTempFsync)
+                    | Some(AdmissionInitializationCrashPointV1::BeforeRegistryNoReplacePublication)
+            ) {
+                transaction
+                    .stage_registry_replacement_for_test(&registry_temp_name, &registry_bytes)?;
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                    ),
+                );
+            }
             transaction.publish_registry_no_replace(&registry_temp_name, &registry_bytes)?;
+            #[cfg(test)]
+            if crash_point == Some(AdmissionInitializationCrashPointV1::AfterRegistryPublication) {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                    ),
+                );
+            }
             let identity = retain_semantic_error(
                 validate_committed_admission_key(
                     &authority_store_id,
@@ -598,6 +644,18 @@ impl RetainedWorkerRuntime {
         result.map_err(|error| {
             #[cfg(test)]
             if error.to_string() == "injected retained admission initialization crash" {
+                if crash_point
+                    == Some(AdmissionInitializationCrashPointV1::BeforeKeyTempPersistence)
+                {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash before admission key temp persistence".into(),
+                    );
+                }
+                if crash_point == Some(AdmissionInitializationCrashPointV1::AfterKeyTempFsync) {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash after admission key temp fsync".into(),
+                    );
+                }
                 if crash_point == Some(AdmissionInitializationCrashPointV1::BeforeKeyPublication) {
                     return RetainedWorkerRuntimeError(
                         "injected crash before admission key publication".into(),
@@ -606,6 +664,34 @@ impl RetainedWorkerRuntime {
                 if crash_point == Some(AdmissionInitializationCrashPointV1::AfterKeyPublication) {
                     return RetainedWorkerRuntimeError(
                         "injected crash after admission key publication".into(),
+                    );
+                }
+                if crash_point
+                    == Some(AdmissionInitializationCrashPointV1::BeforeRegistryTempPersistence)
+                {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash before admission registry temp persistence".into(),
+                    );
+                }
+                if crash_point == Some(AdmissionInitializationCrashPointV1::AfterRegistryTempFsync)
+                {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash after admission registry temp fsync".into(),
+                    );
+                }
+                if crash_point
+                    == Some(AdmissionInitializationCrashPointV1::BeforeRegistryNoReplacePublication)
+                {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash before admission registry no-replace publication".into(),
+                    );
+                }
+                if crash_point
+                    == Some(AdmissionInitializationCrashPointV1::AfterRegistryPublication)
+                {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash after admission registry publication before response"
+                            .into(),
                     );
                 }
             }
@@ -5166,6 +5252,10 @@ mod tests {
     const TRANSPORT_CLAIM_SUBPROCESS_MODE: &str = "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_MODE";
     const TRANSPORT_CLAIM_SUBPROCESS_RESULT: &str =
         "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_RESULT";
+    const NON_AUTHORITATIVE_PROBE_HOME: &str = "SUBSTRATE_B3_2A_NON_AUTHORITATIVE_PROBE_HOME";
+    const NON_AUTHORITATIVE_PROBE_SESSION: &str = "SUBSTRATE_B3_2A_NON_AUTHORITATIVE_PROBE_SESSION";
+    const NON_AUTHORITATIVE_PROBE_PARTICIPANT: &str =
+        "SUBSTRATE_B3_2A_NON_AUTHORITATIVE_PROBE_PARTICIPANT";
 
     #[test]
     fn retained_registration_subprocess_worker() {
@@ -5329,6 +5419,22 @@ mod tests {
             if claim.newly_claimed { "new" } else { "joined" },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn non_authoritative_probe_subprocess_worker() {
+        let Some(home) = std::env::var_os(NON_AUTHORITATIVE_PROBE_HOME) else {
+            return;
+        };
+        let authority = HostSessionAuthority::open(std::path::Path::new(&home)).unwrap();
+        let record = RetainedWorkerRuntime
+            .read_admission_record(
+                &authority,
+                &std::env::var(NON_AUTHORITATIVE_PROBE_SESSION).unwrap(),
+                &std::env::var(NON_AUTHORITATIVE_PROBE_PARTICIPANT).unwrap(),
+            )
+            .unwrap();
+        assert!(record.is_some());
     }
 
     #[test]
@@ -5541,6 +5647,179 @@ mod tests {
     }
 
     #[test]
+    fn admission_key_and_registry_publication_boundaries_reopen_without_false_success() {
+        for (index, crash_point) in [
+            AdmissionInitializationCrashPointV1::BeforeKeyTempPersistence,
+            AdmissionInitializationCrashPointV1::AfterKeyTempFsync,
+            AdmissionInitializationCrashPointV1::BeforeKeyPublication,
+            AdmissionInitializationCrashPointV1::AfterKeyPublication,
+            AdmissionInitializationCrashPointV1::BeforeRegistryTempPersistence,
+            AdmissionInitializationCrashPointV1::AfterRegistryTempFsync,
+            AdmissionInitializationCrashPointV1::BeforeRegistryNoReplacePublication,
+            AdmissionInitializationCrashPointV1::AfterRegistryPublication,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (parent, authority, _) = started_authority();
+            let runtime = RetainedWorkerRuntime;
+            let created_at = timestamp("2026-07-15T12:10:00.000000000Z");
+            let key_entropy = [20_u8.wrapping_add(index as u8); 16];
+            let publication_nonce = [40_u8.wrapping_add(index as u8); 16];
+            let secret_key = [60_u8.wrapping_add(index as u8); 32];
+            assert!(runtime
+                .initialize_admission_registry_at(
+                    &authority,
+                    created_at.clone(),
+                    key_entropy,
+                    publication_nonce,
+                    secret_key,
+                    Some(crash_point),
+                )
+                .is_err());
+
+            let admission_root = parent
+                .path()
+                .join("home/authority-v1/retained-worker-admission-v1");
+            let keys_root = admission_root.join("keys");
+            let tmp_root = admission_root.join("tmp");
+            let registry_path = admission_root.join("registry-v1.json");
+            match crash_point {
+                AdmissionInitializationCrashPointV1::BeforeKeyTempPersistence => {
+                    assert_eq!(fs::read_dir(&keys_root).unwrap().count(), 0);
+                    assert!(!registry_path.exists());
+                }
+                AdmissionInitializationCrashPointV1::AfterKeyTempFsync
+                | AdmissionInitializationCrashPointV1::BeforeKeyPublication => {
+                    let names = fs::read_dir(&keys_root)
+                        .unwrap()
+                        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                        .collect::<Vec<_>>();
+                    assert_eq!(names.len(), 1);
+                    assert!(names[0].starts_with("admission-key--"));
+                    assert!(!registry_path.exists());
+                }
+                AdmissionInitializationCrashPointV1::AfterKeyPublication
+                | AdmissionInitializationCrashPointV1::BeforeRegistryTempPersistence => {
+                    assert_eq!(fs::read_dir(&keys_root).unwrap().count(), 1);
+                    assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
+                    assert!(!registry_path.exists());
+                }
+                AdmissionInitializationCrashPointV1::AfterRegistryTempFsync
+                | AdmissionInitializationCrashPointV1::BeforeRegistryNoReplacePublication => {
+                    assert_eq!(fs::read_dir(&keys_root).unwrap().count(), 1);
+                    assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 1);
+                    assert!(!registry_path.exists());
+                }
+                AdmissionInitializationCrashPointV1::AfterRegistryPublication => {
+                    assert_eq!(fs::read_dir(&keys_root).unwrap().count(), 1);
+                    assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
+                    assert!(registry_path.is_file());
+                }
+            }
+
+            let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+            let initialized = runtime
+                .initialize_admission_registry_at(
+                    &reopened,
+                    created_at,
+                    key_entropy,
+                    publication_nonce,
+                    secret_key,
+                    None,
+                )
+                .unwrap();
+            assert_eq!(
+                initialized.key_id,
+                format!("adk_{}", lower_hex(&key_entropy))
+            );
+            assert_eq!(fs::read_dir(&keys_root).unwrap().count(), 1);
+            assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
+            assert!(registry_path.is_file());
+        }
+
+        for registry_boundary in [false, true] {
+            let (parent, authority, _) = started_authority();
+            let runtime = RetainedWorkerRuntime;
+            let created_at = timestamp("2026-07-15T12:11:00.000000000Z");
+            let key_entropy = [91_u8.wrapping_add(u8::from(registry_boundary)); 16];
+            let publication_nonce = [101_u8.wrapping_add(u8::from(registry_boundary)); 16];
+            let secret_key = [111_u8.wrapping_add(u8::from(registry_boundary)); 32];
+            let crash_point = if registry_boundary {
+                AdmissionInitializationCrashPointV1::AfterRegistryTempFsync
+            } else {
+                AdmissionInitializationCrashPointV1::BeforeKeyPublication
+            };
+            assert!(runtime
+                .initialize_admission_registry_at(
+                    &authority,
+                    created_at.clone(),
+                    key_entropy,
+                    publication_nonce,
+                    secret_key,
+                    Some(crash_point),
+                )
+                .is_err());
+            let admission_root = parent
+                .path()
+                .join("home/authority-v1/retained-worker-admission-v1");
+            let keys_root = admission_root.join("keys");
+            let tmp_root = admission_root.join("tmp");
+            let registry_path = admission_root.join("registry-v1.json");
+            if registry_boundary {
+                let staged = fs::read_dir(&tmp_root)
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .unwrap()
+                    .path();
+                fs::rename(staged, &registry_path).unwrap();
+                fs::write(
+                    tmp_root.join(format!("admission-registry--{}.tmp", "ee".repeat(16))),
+                    b"conflicting registry orphan",
+                )
+                .unwrap();
+            } else {
+                let staged = fs::read_dir(&keys_root)
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .unwrap()
+                    .path();
+                let key_id = format!("adk_{}", lower_hex(&key_entropy));
+                fs::rename(staged, keys_root.join(format!("{key_id}.key"))).unwrap();
+                fs::write(
+                    keys_root.join(format!("admission-key--{}.tmp", "dd".repeat(16))),
+                    b"conflicting key orphan",
+                )
+                .unwrap();
+            }
+            let registry_before_retry = fs::read(&registry_path).ok();
+            let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+            let initialized = runtime
+                .initialize_admission_registry_at(
+                    &reopened,
+                    created_at,
+                    key_entropy,
+                    publication_nonce,
+                    secret_key,
+                    None,
+                )
+                .unwrap();
+            assert_eq!(
+                initialized.key_id,
+                format!("adk_{}", lower_hex(&key_entropy))
+            );
+            assert_eq!(fs::read_dir(&keys_root).unwrap().count(), 1);
+            assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
+            assert!(registry_path.is_file());
+            if let Some(registry_before_retry) = registry_before_retry {
+                assert_eq!(fs::read(&registry_path).unwrap(), registry_before_retry);
+            }
+        }
+    }
+
+    #[test]
     fn concurrent_process_admission_key_initialization_exactly_joins_one_key() {
         let (parent, authority, _) = started_authority();
         let executable = std::env::current_exe().unwrap();
@@ -5602,6 +5881,294 @@ mod tests {
             }
         }
         contents
+    }
+
+    fn persist_admission_state_for_no_steal_matrix(
+        parent: &tempfile::TempDir,
+        record: &RetainedWorkerAdmissionRecordV1,
+        state: RetainedWorkerAdmissionStateV1,
+    ) -> RetainedWorkerAdmissionRecordV1 {
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+            &fs::read(&registry_path).unwrap(),
+            "decode no-steal registry fixture",
+        )
+        .unwrap();
+        let changed = registry
+            .records_by_session
+            .get_mut(&record.orchestration_session_id)
+            .unwrap()
+            .get_mut(&record.retained_participant_id)
+            .unwrap();
+        changed.state = state;
+        changed.record_revision += 1;
+        let changed = changed.clone();
+        fs::write(
+            registry_path,
+            encode_canonical(&registry, "encode no-steal registry fixture").unwrap(),
+        )
+        .unwrap();
+        changed
+    }
+
+    fn assert_non_authoritative_matrix_preserves_record(
+        parent: &tempfile::TempDir,
+        authority: &HostSessionAuthority,
+        expected: &RetainedWorkerAdmissionRecordV1,
+    ) {
+        let runtime = RetainedWorkerRuntime;
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let assert_unchanged = || {
+            assert_eq!(
+                runtime
+                    .read_admission_record(
+                        authority,
+                        &expected.orchestration_session_id,
+                        &expected.retained_participant_id,
+                    )
+                    .unwrap(),
+                Some(expected.clone())
+            );
+            assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+        };
+
+        for _signal in [
+            "original caller process exit",
+            "caller drop",
+            "retry from another PID",
+            "same PID after restart",
+            "helper alive",
+            "helper dead",
+            "socket present",
+            "socket absent",
+            "endpoint reachable",
+            "endpoint unreachable",
+            "timeout",
+            "EOF",
+            "process liveness",
+            "observer loss",
+        ] {
+            assert_unchanged();
+        }
+
+        let executable = std::env::current_exe().unwrap();
+        let probe_name = "execution::agent_runtime::retained_worker_runtime::tests::non_authoritative_probe_subprocess_worker";
+        for _ in 0..2 {
+            assert!(Command::new(&executable)
+                .arg("--exact")
+                .arg(probe_name)
+                .arg("--nocapture")
+                .arg("--test-threads=1")
+                .env(NON_AUTHORITATIVE_PROBE_HOME, parent.path().join("home"))
+                .env(
+                    NON_AUTHORITATIVE_PROBE_SESSION,
+                    &expected.orchestration_session_id,
+                )
+                .env(
+                    NON_AUTHORITATIVE_PROBE_PARTICIPANT,
+                    &expected.retained_participant_id,
+                )
+                .status()
+                .unwrap()
+                .success());
+            assert_unchanged();
+        }
+
+        let mut helper = Command::new("sh")
+            .arg("-c")
+            .arg("read line")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        assert_unchanged();
+        helper.kill().unwrap();
+        helper.wait().unwrap();
+        assert_unchanged();
+
+        let socket_path = parent.path().join("non-authoritative.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
+        assert_unchanged();
+        let endpoint = std::os::unix::net::UnixStream::connect(&socket_path).unwrap();
+        assert_unchanged();
+        drop(endpoint);
+        drop(listener);
+        fs::remove_file(&socket_path).unwrap();
+        assert_unchanged();
+
+        let (mut eof_reader, eof_writer) = std::os::unix::net::UnixStream::pair().unwrap();
+        drop(eof_writer);
+        let mut eof = Vec::new();
+        std::io::Read::read_to_end(&mut eof_reader, &mut eof).unwrap();
+        assert!(eof.is_empty());
+        assert_unchanged();
+
+        let (_timeout_sender, timeout_receiver) = std::sync::mpsc::channel::<()>();
+        assert!(matches!(
+            timeout_receiver.recv_timeout(std::time::Duration::from_millis(1)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        assert_unchanged();
+        let (observer_sender, observer_receiver) = std::sync::mpsc::channel::<()>();
+        drop(observer_receiver);
+        assert!(observer_sender.send(()).is_err());
+        assert_unchanged();
+    }
+
+    #[test]
+    fn caller_pid_socket_and_liveness_never_acquire_replace_renew_or_steal() {
+        let production_source = include_str!("retained_worker_runtime.rs")
+            .split("#[cfg(all(test, any(target_os = \"linux\", target_os = \"macos\")))]")
+            .next()
+            .unwrap()
+            .to_ascii_lowercase();
+        for forbidden in [
+            "pid", "socket", "endpoint", "timeout", "eof", "liveness", "observer", "helper",
+        ] {
+            assert!(
+                !production_source.contains(forbidden),
+                "non-authoritative `{forbidden}` input must not exist in retained admission logic"
+            );
+        }
+
+        let (slot_parent, slot_authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let head_plan = admission_plan(&slot_authority, "no-steal-slot-head", "head", 3);
+        runtime
+            .reserve_admission_slot(&slot_authority, &head_plan)
+            .unwrap();
+        let slot_plan = admission_plan(&slot_authority, "no-steal-slot", "queued", 3);
+        let slot = runtime
+            .reserve_admission_slot(&slot_authority, &slot_plan)
+            .unwrap();
+        assert!(matches!(
+            slot.record.state,
+            RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+        ));
+        assert_non_authoritative_matrix_preserves_record(
+            &slot_parent,
+            &slot_authority,
+            &slot.record,
+        );
+
+        let (head_parent, head_authority, _) = started_authority();
+        let head_plan = admission_plan(&head_authority, "no-steal-head", "head", 2);
+        let failure = runtime
+            .register_admitted_worker_at(
+                &head_authority,
+                &head_plan,
+                Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
+            )
+            .unwrap_err();
+        assert_eq!(
+            failure.to_string(),
+            "injected crash while admission registration head"
+        );
+        let head = runtime
+            .reserve_admission_slot(&head_authority, &head_plan)
+            .unwrap();
+        assert!(matches!(
+            head.record.state,
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        ));
+        assert_non_authoritative_matrix_preserves_record(
+            &head_parent,
+            &head_authority,
+            &head.record,
+        );
+
+        let (claim_parent, claim_authority, _) = started_authority();
+        let claim_plan = admission_plan(&claim_authority, "no-steal-claim", "claim", 2);
+        let admitted = runtime
+            .register_admitted_worker(&claim_authority, &claim_plan)
+            .unwrap();
+        let claim = runtime
+            .claim_admission_transport(
+                &claim_authority,
+                &claim_plan,
+                &admitted.record.retained_participant_id,
+            )
+            .unwrap();
+        assert!(matches!(
+            claim.record.state,
+            RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. }
+        ));
+        assert_non_authoritative_matrix_preserves_record(
+            &claim_parent,
+            &claim_authority,
+            &claim.record,
+        );
+
+        let (routable_parent, routable_authority, _) = started_authority();
+        let routable_plan = admission_plan(&routable_authority, "no-steal-routable", "routable", 2);
+        let routable_admitted = runtime
+            .register_admitted_worker(&routable_authority, &routable_plan)
+            .unwrap();
+        let routable_claim = runtime
+            .claim_admission_transport(
+                &routable_authority,
+                &routable_plan,
+                &routable_admitted.record.retained_participant_id,
+            )
+            .unwrap();
+        let registration = admission_registration(&routable_claim.record.state)
+            .unwrap()
+            .clone();
+        let routable = persist_admission_state_for_no_steal_matrix(
+            &routable_parent,
+            &routable_claim.record,
+            RetainedWorkerAdmissionStateV1::Routable {
+                registration,
+                stream_id: "stream-no-steal-routable".into(),
+                registered_frame_sequence: 1,
+                registered_event_id: "event-no-steal-routable".into(),
+                registered_event_sequence: 1,
+                registered_at: timestamp("2026-07-15T20:00:00.000000000Z"),
+            },
+        );
+        assert_non_authoritative_matrix_preserves_record(
+            &routable_parent,
+            &routable_authority,
+            &routable,
+        );
+
+        let (terminal_parent, terminal_authority, _) = started_authority();
+        let terminal_plan = admission_plan(&terminal_authority, "no-steal-terminal", "terminal", 2);
+        let terminal_admitted = runtime
+            .register_admitted_worker(&terminal_authority, &terminal_plan)
+            .unwrap();
+        let terminal_claim = runtime
+            .claim_admission_transport(
+                &terminal_authority,
+                &terminal_plan,
+                &terminal_admitted.record.retained_participant_id,
+            )
+            .unwrap();
+        let registration = admission_registration(&terminal_claim.record.state)
+            .unwrap()
+            .clone();
+        let terminal = persist_admission_state_for_no_steal_matrix(
+            &terminal_parent,
+            &terminal_claim.record,
+            RetainedWorkerAdmissionStateV1::Terminal {
+                registration,
+                stream_id: "stream-no-steal-terminal".into(),
+                terminal_frame_sequence: 2,
+                terminal_event_id: "event-no-steal-terminal".into(),
+                terminal_event_sequence: 2,
+                exit_code: 0,
+                terminal_at: timestamp("2026-07-15T20:01:00.000000000Z"),
+            },
+        );
+        assert_non_authoritative_matrix_preserves_record(
+            &terminal_parent,
+            &terminal_authority,
+            &terminal,
+        );
     }
 
     fn forge_admission_bootstrap_identity(
