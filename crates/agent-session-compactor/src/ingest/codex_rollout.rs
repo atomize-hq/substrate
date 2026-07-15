@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
 
@@ -6,6 +7,38 @@ use codex::{RolloutEvent, RolloutJsonlError, RolloutJsonlParser, RolloutUnknown}
 use serde_json::Value;
 
 use crate::discovery::DiscoveredSessionArtifact;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RolloutRowProvenance {
+    pub source_file: Utf8PathBuf,
+    pub line_number: usize,
+    pub event_index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParentSpawnResult {
+    pub parent_session_id: String,
+    pub child_session_id: String,
+    pub call_id: String,
+    pub spawn_call_provenance: RolloutRowProvenance,
+    pub spawn_result_provenance: RolloutRowProvenance,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChildSessionOrigin {
+    pub child_session_id: String,
+    pub parent_session_id: String,
+    pub depth: u32,
+    pub agent_nickname: Option<String>,
+    pub agent_role: Option<String>,
+    pub provenance: RolloutRowProvenance,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RolloutLinkageMetadata {
+    pub parent_spawn_results: Vec<ParentSpawnResult>,
+    pub child_origin: Option<ChildSessionOrigin>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum IngestError {
@@ -48,6 +81,112 @@ pub struct IngestedRolloutFile {
     pub records: Vec<IngestedRolloutRecord>,
     pub unknown_records: Vec<IngestedRolloutUnknown>,
     pub parse_failures: Vec<RolloutParseFailure>,
+}
+
+pub fn extract_rollout_linkage_metadata(rollout: &IngestedRolloutFile) -> RolloutLinkageMetadata {
+    let mut spawn_calls = BTreeMap::<&str, Vec<&IngestedRolloutRecord>>::new();
+    for record in &rollout.records {
+        let RolloutEvent::ResponseItem(item) = &record.event else {
+            continue;
+        };
+        if item.payload.kind.as_deref() == Some("function_call")
+            && item.payload.name.as_deref() == Some("spawn_agent")
+        {
+            if let Some(call_id) = item.payload.call_id.as_deref() {
+                spawn_calls.entry(call_id).or_default().push(record);
+            }
+        }
+    }
+
+    let mut parent_spawn_results = Vec::new();
+    if let Some(parent_session_id) = rollout.session_id.as_deref() {
+        for record in &rollout.records {
+            let RolloutEvent::ResponseItem(item) = &record.event else {
+                continue;
+            };
+            if item.payload.kind.as_deref() != Some("function_call_output") {
+                continue;
+            }
+            let Some(call_id) = item.payload.call_id.as_deref() else {
+                continue;
+            };
+            let Some(child_session_id) = item
+                .payload
+                .output
+                .as_deref()
+                .and_then(extract_spawn_result_child_id)
+            else {
+                continue;
+            };
+
+            for spawn_call in spawn_calls.get(call_id).into_iter().flatten() {
+                parent_spawn_results.push(ParentSpawnResult {
+                    parent_session_id: parent_session_id.to_string(),
+                    child_session_id: child_session_id.clone(),
+                    call_id: call_id.to_string(),
+                    spawn_call_provenance: row_provenance(spawn_call),
+                    spawn_result_provenance: row_provenance(record),
+                });
+            }
+        }
+    }
+
+    let child_origin = rollout.records.iter().find_map(|record| {
+        let RolloutEvent::SessionMeta(meta) = &record.event else {
+            return None;
+        };
+        let child_session_id = meta.payload.id.as_ref()?;
+        let source = meta.payload.source.as_deref()?;
+        let source: ChildOriginSource = serde_json::from_str(source).ok()?;
+        let origin = source.subagent.thread_spawn;
+        Some(ChildSessionOrigin {
+            child_session_id: child_session_id.clone(),
+            parent_session_id: origin.parent_thread_id,
+            depth: origin.depth,
+            agent_nickname: origin.agent_nickname,
+            agent_role: origin.agent_role,
+            provenance: row_provenance(record),
+        })
+    });
+
+    RolloutLinkageMetadata {
+        parent_spawn_results,
+        child_origin,
+    }
+}
+
+fn extract_spawn_result_child_id(output: &str) -> Option<String> {
+    serde_json::from_str::<Value>(output)
+        .ok()?
+        .get("agent_id")?
+        .as_str()
+        .map(str::to_string)
+}
+
+fn row_provenance(record: &IngestedRolloutRecord) -> RolloutRowProvenance {
+    RolloutRowProvenance {
+        source_file: record.source_file.clone(),
+        line_number: record.line_number,
+        event_index: record.event_index,
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ChildOriginSource {
+    subagent: ChildOriginSubagent,
+}
+
+#[derive(serde::Deserialize)]
+struct ChildOriginSubagent {
+    thread_spawn: ChildOriginThreadSpawn,
+}
+
+#[derive(serde::Deserialize)]
+struct ChildOriginThreadSpawn {
+    parent_thread_id: String,
+    depth: u32,
+    agent_nickname: Option<String>,
+    agent_role: Option<String>,
 }
 
 pub fn ingest_rollout_artifacts(

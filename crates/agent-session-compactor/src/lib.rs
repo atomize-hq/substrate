@@ -30,8 +30,10 @@ pub use export::{
     ExportError, ExportRowV0_2, RowRefV0_2,
 };
 pub use ingest::{
-    ingest_rollout_artifacts, ingest_rollout_file, IngestError, IngestedRolloutFile,
-    IngestedRolloutRecord, IngestedRolloutUnknown, RolloutParseFailure,
+    extract_rollout_linkage_metadata, ingest_rollout_artifacts, ingest_rollout_file,
+    ChildSessionOrigin, IngestError, IngestedRolloutFile, IngestedRolloutRecord,
+    IngestedRolloutUnknown, ParentSpawnResult, RolloutLinkageMetadata, RolloutParseFailure,
+    RolloutRowProvenance,
 };
 pub use normalize::{
     normalize_rollout_file, CompactionKind, CompactionRow, SourceKind, UserMessageRole,

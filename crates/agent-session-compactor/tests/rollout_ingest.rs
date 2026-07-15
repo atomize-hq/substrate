@@ -3,7 +3,10 @@ use blake3 as _;
 use std::fs;
 
 use agent_session_compactor::discovery::DiscoveredSessionArtifact;
-use agent_session_compactor::ingest::{ingest_rollout_artifacts, ingest_rollout_file};
+use agent_session_compactor::ingest::{
+    extract_rollout_linkage_metadata, ingest_rollout_artifacts, ingest_rollout_file,
+};
+use agent_session_compactor::normalize::{normalize_rollout_file, CompactionKind};
 use camino::Utf8Path;
 use clap as _;
 use codex::RolloutEvent;
@@ -127,6 +130,73 @@ fn rollout_ingest_coerces_current_live_session_meta_and_tool_search_shapes() {
         }
         other => panic!("expected response item, got {other:?}"),
     }
+}
+
+#[test]
+fn rollout_ingest_extracts_spawn_results_and_child_origin_with_row_provenance() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let parent_path = temp_dir.path().join("rollout-parent.jsonl");
+    fs::write(
+        &parent_path,
+        concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-parent\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"spawn_agent\",\"call_id\":\"call-spawn\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"call-other\",\"output\":\"{\\\"agent_id\\\":\\\"session-unmatched\\\"}\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"call-spawn\",\"output\":\"{\\\"agent_id\\\":\\\"session-child\\\"}\"}}\n"
+        ),
+    )
+    .expect("write parent fixture");
+    let child_path = temp_dir.path().join("rollout-child.jsonl");
+    fs::write(
+        &child_path,
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-child\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"session-parent\",\"depth\":1,\"agent_nickname\":\"agent-child\",\"agent_role\":\"default\"}}}}}\n",
+    )
+    .expect("write child fixture");
+
+    let parent = ingest_rollout_file(
+        Utf8Path::from_path(&parent_path).expect("parent path should be valid UTF-8"),
+    )
+    .expect("ingest parent rollout");
+    let child = ingest_rollout_file(
+        Utf8Path::from_path(&child_path).expect("child path should be valid UTF-8"),
+    )
+    .expect("ingest child rollout");
+
+    let parent_metadata = extract_rollout_linkage_metadata(&parent);
+    assert_eq!(parent_metadata.parent_spawn_results.len(), 1);
+    let spawn_result = &parent_metadata.parent_spawn_results[0];
+    assert_eq!(spawn_result.parent_session_id, "session-parent");
+    assert_eq!(spawn_result.child_session_id, "session-child");
+    assert_eq!(spawn_result.call_id, "call-spawn");
+    assert_eq!(spawn_result.spawn_call_provenance.line_number, 2);
+    assert_eq!(spawn_result.spawn_call_provenance.event_index, 1);
+    assert_eq!(spawn_result.spawn_result_provenance.line_number, 4);
+    assert_eq!(spawn_result.spawn_result_provenance.event_index, 3);
+    assert_eq!(
+        spawn_result.spawn_result_provenance.source_file,
+        parent.source_file
+    );
+    assert!(parent_metadata.child_origin.is_none());
+
+    let child_metadata = extract_rollout_linkage_metadata(&child);
+    assert!(child_metadata.parent_spawn_results.is_empty());
+    let child_origin = child_metadata.child_origin.expect("child origin metadata");
+    assert_eq!(child_origin.child_session_id, "session-child");
+    assert_eq!(child_origin.parent_session_id, "session-parent");
+    assert_eq!(child_origin.depth, 1);
+    assert_eq!(child_origin.agent_nickname.as_deref(), Some("agent-child"));
+    assert_eq!(child_origin.agent_role.as_deref(), Some("default"));
+    assert_eq!(child_origin.provenance.line_number, 1);
+    assert_eq!(child_origin.provenance.event_index, 0);
+    assert_eq!(child_origin.provenance.source_file, child.source_file);
+
+    assert!(normalize_rollout_file(&child).is_empty());
+    assert!(normalize_rollout_file(&parent).iter().all(|row| !matches!(
+        row.kind,
+        CompactionKind::SystemMessage
+            | CompactionKind::UserMessage
+            | CompactionKind::AssistantMessage
+    )));
 }
 
 fn seeded_artifact_root() -> TempDir {
