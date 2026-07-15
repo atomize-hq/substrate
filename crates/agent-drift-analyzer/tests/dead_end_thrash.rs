@@ -1336,10 +1336,5 @@ fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
 
 fn tool_row(event_index: usize, command: &str) -> CompactionRow {
     let payload = format!("{{\"command\":{command:?},\"workdir\":\"/repo\"}}");
-    let mut row = row(event_index, CompactionKind::ToolCall, &payload);
-    row.dedupe_identity = Some(
-        "{\"call_id\":\"call-1\",\"name\":\"functions.shell_command\",\"type\":\"function_call\"}"
-            .to_string(),
-    );
-    row
+    row(event_index, CompactionKind::ToolCall, &payload)
 }

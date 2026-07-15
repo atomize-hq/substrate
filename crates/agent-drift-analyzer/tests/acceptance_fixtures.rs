@@ -118,7 +118,7 @@ fn acceptance_fixtures_cleared_control_019e943c_stays_cleared() {
 }
 
 #[test]
-fn acceptance_fixtures_representative_sticky_success_tail_stays_recovered() {
+fn acceptance_fixtures_representative_sticky_success_tail_is_historical_after_truthful_pairing() {
     assert_acceptance_case("019e894a-86c9-71e3-b57b-e3d3285f0988");
 }
 
@@ -154,8 +154,8 @@ fn acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_postu
 
     assert_eq!(
         sticky_score.state,
-        DriftState::Recovered,
-        "sticky success-tail witness must stay recovered"
+        DriftState::HistoricalOnly,
+        "sticky success-tail witness must stay historical after truthful pairing"
     );
     assert!(
         !sticky_score.flagged,

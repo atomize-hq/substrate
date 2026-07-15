@@ -25,8 +25,8 @@
     "supporting_evidence_min": 2,
     "counter_evidence_min": 0,
     "decisive_evidence": [
-      "An earlier later-stage verification attempt established a previously clean frontier.",
-      "A later regressing verification attempt on the same work product broke that clean state and reopened work."
+      "An earlier clean verification attempt established a previously clean frontier.",
+      "A later failing verification attempt on the same work product broke that clean state and reopened work."
     ],
     "counter_evidence": [
       "None expected; this bundle never established a closeout checkpoint first, so the guardrail is limited to preventing a stale positive interpretation after the previously clean verifier broke again."

@@ -3307,7 +3307,7 @@ mod tests {
                     CompactionKind::UserMessage,
                     "/goal Inspect delegation wiring only.",
                 ),
-                tool_call(1, "spawn_agent", "{\"agent_type\":\"worker\"}"),
+                identified_tool_call(1, "spawn_agent", "{\"agent_type\":\"worker\"}"),
             ],
             compact_rows: vec![
                 row(
@@ -3359,7 +3359,7 @@ mod tests {
                     CompactionKind::UserMessage,
                     "/goal Inspect delegation wiring only.",
                 ),
-                tool_call(1, "multi_agent_v1", "{\"mode\":\"delegated\"}"),
+                identified_tool_call(1, "multi_agent_v1", "{\"mode\":\"delegated\"}"),
                 row(
                     2,
                     CompactionKind::DeveloperMessage,
@@ -3372,7 +3372,7 @@ mod tests {
                     CompactionKind::UserMessage,
                     "/goal Inspect delegation wiring only.",
                 ),
-                tool_call(1, "multi_agent_v1", "{\"mode\":\"delegated\"}"),
+                identified_tool_call(1, "multi_agent_v1", "{\"mode\":\"delegated\"}"),
                 row(
                     2,
                     CompactionKind::DeveloperMessage,
@@ -3842,8 +3842,12 @@ mod tests {
         }
     }
 
-    fn tool_call(event_index: usize, tool_name: &str, text: &str) -> CompactionRow {
-        let mut row = row(event_index, CompactionKind::ToolCall, text);
+    fn tool_call(event_index: usize, _tool_name: &str, text: &str) -> CompactionRow {
+        row(event_index, CompactionKind::ToolCall, text)
+    }
+
+    fn identified_tool_call(event_index: usize, tool_name: &str, text: &str) -> CompactionRow {
+        let mut row = tool_call(event_index, tool_name, text);
         row.dedupe_identity = Some(format!(
             "{{\"call_id\":\"call-{event_index}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
         ));

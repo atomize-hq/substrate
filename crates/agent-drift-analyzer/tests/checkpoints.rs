@@ -1523,7 +1523,7 @@ fn checkpoints_cap_confidence_when_parent_visible_behavior_is_child_opaque() {
             "turn-001",
             "/goal Coordinate a delegated implementation while keeping parent-visible work conservative.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             1,
             "turn-001",
             "multi_agent_v1",
@@ -1795,7 +1795,7 @@ fn checkpoints_lock_delegated_parent_opaque_fixture_as_low_confidence_planning()
             "turn-001",
             "/goal Coordinate a delegated implementation while keeping parent-visible work conservative.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             1,
             "turn-001",
             "multi_agent_v1",
@@ -1910,13 +1910,13 @@ fn checkpoints_progress_falls_back_to_parent_visible_orchestration_for_opaque_pa
             "turn-001",
             "/goal Coordinate delegated work without overclaiming child progress.",
         ),
-        tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
+        identified_tool_call_row(1, "turn-001", "spawn_agent", "{\"goal\":\"fix packet R5-4\"}"),
         developer_row(
             2,
             "turn-001",
             "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             3,
             "turn-001",
             "wait_agent",
@@ -1959,7 +1959,7 @@ fn checkpoints_reset_parent_visible_comparability_when_delegated_objective_chang
             "turn-001",
             "/goal Coordinate delegated work on checkpoint/progress.rs without overclaiming child progress.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             1,
             "turn-001",
             "spawn_agent",
@@ -1970,7 +1970,7 @@ fn checkpoints_reset_parent_visible_comparability_when_delegated_objective_chang
             "turn-001",
             "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             3,
             "turn-001",
             "wait_agent",
@@ -1981,7 +1981,7 @@ fn checkpoints_reset_parent_visible_comparability_when_delegated_objective_chang
             "turn-002",
             "/goal Coordinate delegated work on checkpoint/export.rs without overclaiming child progress.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             5,
             "turn-002",
             "spawn_agent",
@@ -1992,7 +1992,7 @@ fn checkpoints_reset_parent_visible_comparability_when_delegated_objective_chang
             "turn-002",
             "Child session id 019ea444-4444-7444-8444-444444444444 remains in a separate rollout file.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             7,
             "turn-002",
             "wait_agent",
@@ -2023,7 +2023,7 @@ fn checkpoints_do_not_carry_parent_visible_status_across_changed_goal_empty_foll
             "turn-001",
             "/goal Coordinate delegated work on checkpoint/progress.rs without overclaiming child progress.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             1,
             "turn-001",
             "spawn_agent",
@@ -2034,7 +2034,7 @@ fn checkpoints_do_not_carry_parent_visible_status_across_changed_goal_empty_foll
             "turn-001",
             "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             3,
             "turn-001",
             "wait_agent",
@@ -2068,7 +2068,7 @@ fn checkpoints_keep_parent_visible_synthesis_capped_under_partial_child_visibili
             "turn-001",
             "/goal Coordinate delegated findings without claiming child execution progress.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             1,
             "turn-001",
             "spawn_agent",
@@ -2135,7 +2135,7 @@ fn checkpoints_keep_visible_child_result_plus_parent_plan_refinement_parent_visi
             "turn-001",
             "/goal Coordinate delegated findings while refining the packet plan myself.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             1,
             "turn-001",
             "spawn_agent",
@@ -2197,7 +2197,7 @@ fn checkpoints_keep_opaque_parent_plan_refinement_conservative() {
             "turn-001",
             "/goal Coordinate delegated findings while refining the packet plan myself.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             1,
             "turn-001",
             "spawn_agent",
@@ -2208,7 +2208,7 @@ fn checkpoints_keep_opaque_parent_plan_refinement_conservative() {
             "turn-001",
             "Child session id 019ea555-5555-7555-8555-555555555555 remains in a separate rollout file.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             3,
             "turn-001",
             "wait_agent",
@@ -2279,7 +2279,7 @@ fn checkpoints_keep_visible_child_result_plus_parent_spec_and_handoff_refinement
                 "turn-001",
                 "/goal Coordinate delegated findings while refining the packet plan myself.",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 1,
                 "turn-001",
                 "spawn_agent",
@@ -2365,7 +2365,7 @@ fn checkpoints_keep_opaque_parent_spec_and_handoff_refinement_conservative() {
                 "turn-001",
                 "/goal Coordinate delegated findings while refining the packet plan myself.",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 1,
                 "turn-001",
                 "spawn_agent",
@@ -2376,7 +2376,7 @@ fn checkpoints_keep_opaque_parent_spec_and_handoff_refinement_conservative() {
                 "turn-001",
                 "Child session id 019ea555-5555-7555-8555-555555555555 remains in a separate rollout file.",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 3,
                 "turn-001",
                 "wait_agent",
@@ -2450,13 +2450,13 @@ fn checkpoints_keep_opaque_parent_verification_and_vcs_parent_visible() {
             "turn-001",
             "Child session id 019ea666-6666-7666-8666-666666666666 remains in a separate rollout file.",
         ),
-        tool_call_row(
+        identified_tool_call_row(
             3,
             "turn-001",
             "spawn_agent",
             r#"{"goal":"inspect packet R5-4"}"#,
         ),
-        tool_call_row(
+        identified_tool_call_row(
             4,
             "turn-001",
             "wait_agent",
@@ -7569,7 +7569,16 @@ fn tool_output_row(event_index: usize, turn_id: &str, text: &str) -> CompactionR
     row(event_index, turn_id, CompactionKind::ToolOutput, text, None)
 }
 
-fn tool_call_row(event_index: usize, turn_id: &str, tool_name: &str, text: &str) -> CompactionRow {
+fn tool_call_row(event_index: usize, turn_id: &str, _tool_name: &str, text: &str) -> CompactionRow {
+    row(event_index, turn_id, CompactionKind::ToolCall, text, None)
+}
+
+fn identified_tool_call_row(
+    event_index: usize,
+    turn_id: &str,
+    tool_name: &str,
+    text: &str,
+) -> CompactionRow {
     row(
         event_index,
         turn_id,

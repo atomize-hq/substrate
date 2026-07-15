@@ -775,15 +775,15 @@ fn assert_selected_checkpoint_narrative_alignment(
                 &actual_facts,
                 &[
                     "previously clean scope broken",
-                    "earlier later stage verification attempt",
-                    "later regressing verification attempt",
+                    "earlier clean verification attempt",
+                    "later failing verification attempt",
                 ],
                 case_id,
                 "selected checkpoint facts",
             );
             assert_text_contains_all(
                 &decisive_text,
-                &["earlier", "clean", "later regressing verification attempt"],
+                &["earlier", "clean", "later failing verification attempt"],
                 case_id,
                 "selected_checkpoint.decisive_evidence",
             );

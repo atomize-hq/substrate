@@ -264,6 +264,18 @@ pub(crate) fn verification_target_from_command(
 }
 
 fn pair_output_rows(rows: &[CompactionRow], command_index: usize) -> Vec<&CompactionRow> {
+    if let Some(command_call_id) = tool_call_id(&rows[command_index]) {
+        return rows
+            .iter()
+            .skip(command_index + 1)
+            .take_while(|row| !row_starts_new_phase(row))
+            .filter(|row| {
+                row.kind == CompactionKind::ToolOutput
+                    && tool_call_id(row).as_deref() == Some(command_call_id.as_str())
+            })
+            .collect();
+    }
+
     let mut paired = Vec::new();
     for (offset, row) in rows.iter().enumerate().skip(command_index + 1) {
         if row.kind == CompactionKind::ToolCall || row_starts_new_phase(row) {
@@ -281,6 +293,18 @@ fn pair_output_rows(rows: &[CompactionRow], command_index: usize) -> Vec<&Compac
         }
     }
     paired
+}
+
+fn tool_call_id(row: &CompactionRow) -> Option<String> {
+    row.dedupe_identity
+        .as_deref()
+        .and_then(|identity| serde_json::from_str::<Value>(identity).ok())
+        .and_then(|value| {
+            value
+                .get("call_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 
 fn derive_attempt_outcome(rows: &[&CompactionRow], exit_code: Option<i32>) -> AttemptOutcome {
@@ -1106,6 +1130,39 @@ mod tests {
     }
 
     #[test]
+    fn checkpoints_pair_concurrent_tool_outputs_by_call_id() {
+        let rows = vec![
+            tool_call_for_call(
+                10,
+                "call-10",
+                "functions.shell_command",
+                "cargo test target_verifier",
+            ),
+            tool_call_for_call(
+                11,
+                "call-11",
+                "functions.shell_command",
+                "cargo test sibling_verifier",
+            ),
+            tool_output_for_call(
+                12,
+                "call-10",
+                "Exit code: 101\nerror: target verifier failed",
+            ),
+            tool_output_for_call(13, "call-11", "Exit code: 0\nOutput:\nsibling passed"),
+        ];
+
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        assert_eq!(attempts.len(), 2);
+        assert_eq!(attempts[0].outcome, AttemptOutcome::Failed);
+        assert_eq!(attempts[0].exit_code, Some(101));
+        assert_eq!(attempts[0].output_rows[0].event_index, 12);
+        assert_eq!(attempts[1].outcome, AttemptOutcome::Clean);
+        assert_eq!(attempts[1].exit_code, Some(0));
+        assert_eq!(attempts[1].output_rows[0].event_index, 13);
+    }
+
+    #[test]
     fn checkpoints_pair_adjacent_unknown_rows_only_when_they_look_like_output() {
         let rows = vec![
             tool_call(0, "functions.shell_command", "cargo test checkpoints"),
@@ -1682,19 +1739,39 @@ mod tests {
         }
     }
 
-    fn tool_call(event_index: usize, tool_name: &str, text: &str) -> CompactionRow {
+    fn tool_call(event_index: usize, _tool_name: &str, text: &str) -> CompactionRow {
+        row(event_index, CompactionKind::ToolCall, text, None)
+    }
+
+    fn tool_call_for_call(
+        event_index: usize,
+        call_id: &str,
+        tool_name: &str,
+        text: &str,
+    ) -> CompactionRow {
         row(
             event_index,
             CompactionKind::ToolCall,
             text,
             Some(format!(
-                "{{\"call_id\":\"call-{event_index}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
+                "{{\"call_id\":\"{call_id}\",\"name\":\"{tool_name}\",\"type\":\"function_call\"}}"
             )),
         )
     }
 
     fn tool_output(event_index: usize, text: &str) -> CompactionRow {
         row(event_index, CompactionKind::ToolOutput, text, None)
+    }
+
+    fn tool_output_for_call(event_index: usize, call_id: &str, text: &str) -> CompactionRow {
+        row(
+            event_index,
+            CompactionKind::ToolOutput,
+            text,
+            Some(format!(
+                "{{\"call_id\":\"{call_id}\",\"type\":\"function_call_output\"}}"
+            )),
+        )
     }
 
     fn unknown_row(event_index: usize, text: &str) -> CompactionRow {

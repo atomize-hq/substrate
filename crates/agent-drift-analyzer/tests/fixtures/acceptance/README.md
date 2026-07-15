@@ -7,7 +7,8 @@ Included success-tail cases:
 - `019e93fa-60d4-73d1-9092-014130b60e14`
 - `019e940c-a91b-7fe0-a967-b0bdd595b581`
 - `019e943c-668e-7a03-992b-6a98cf3055da`
-- `019e894a-86c9-71e3-b57b-e3d3285f0988`
+- `019e894a-86c9-71e3-b57b-e3d3285f0988` — current authorized posture is
+  `historical_only / 20`, unflagged, after truthful call-ID pairing.
 
 Excluded cases:
 

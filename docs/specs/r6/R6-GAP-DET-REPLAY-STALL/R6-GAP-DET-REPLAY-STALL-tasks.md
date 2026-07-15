@@ -4,8 +4,8 @@ Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANC
 `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
 OPTION A ACCEPTED AND COMPLETE / TASK `.3` COMPLETE AT FOCUSED-CANDIDATE BOUNDARY / TASK `.3A`
 COMMIT `7812dd5ef` REVIEW-CLEAN / TASK `.3B` COMPLETE / TASK `.3C` COMMIT `961a36574`
-REVIEW-CLEAN / TASK `.3D` COMPLETE AT TWO-PHRASE CANDIDATE BOUNDARY / TASK `.3E` DOCS GATE
-CURRENT / TASK `.3F` BLOCKED / TASK `.4` STOPPED AT ORDERED PROOF STEP 12** within
+REVIEW-CLEAN / TASK `.3D` COMPLETE / TASK `.3E` COMMIT `4615d9e3c` REVIEW-CLEAN / TASK `.3F`
+COMPLETE / TASK `.4` IMPLEMENTATION AND PROOF COMMITTED BY THIS CHANGE, FRESH REVIEW PENDING** within
 `R6-REPLAY`. Trusted
 witness `60cde3dd7` preserves `CTX-R6-02` red. Task `.0` series `200725001` + `08fa86e94` +
 `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` each received fresh independent built-in
@@ -22,12 +22,13 @@ independent built-in `default` `REVIEW CLEAN`, and Task `.3B` implemented and fo
 verified-edit-epoch selection. Task `.4` then completed ordered proof steps 1-11 green and stopped at
 the progress-acceptance expected-fact red in step 12. Task `.3C` commit `961a36574` received fresh
 independent built-in `default` `REVIEW CLEAN`. Task `.3D` applied exactly the two authorized phrase
-changes, then focused proof exposed a later malformed-synthetic-identity red. Task `.3E` is the
-current docs-first reconciliation gate; Task `.3F` is blocked until `.3E` is committed and
-fresh-review-clean, and Task `.4` resumes from the beginning only after `.3F` completes. No
-implementation commit or
-implementation review-clean result exists;
-`CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
+changes, then focused proof exposed a later malformed-synthetic-identity red. Task `.3E` commit
+`4615d9e3c` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.3F` repaired and
+focus-proved the exact seven logical / fourteen physical synthetic output identities. Task `.4`
+preserved a later checkpoint-filter red caused by generic test helpers carrying false call identity,
+made the bounded helper-only repair, and reran the complete ordered wall green. This atomic
+implementation/proof commit is fresh-review-pending; it is not review-clean. The packet remains
+active, so `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Required Commit Gate
 
@@ -257,7 +258,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     `7f12cdd2d4c0c92ea08027b3610f22f5168c5ad99b973b0ed3cbcc508cbf98db`; its original eight-file
     portion remains `70ed522cc30f8e4fb3f36f946502105e440f7719c1917fe41c399e13876884c2`.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.3E — Land and fresh-review the synthetic fixture identity docs gate — CURRENT.**
+- [x] **R6-GAP-DET-REPLAY-STALL.3E — Land and fresh-review the synthetic fixture identity docs gate — REVIEW-CLEAN.**
   - Unexpected witness: after `.3D`'s exact two-phrase repair, focused progress acceptance exits `101`
     because `synthetic-implementation-advancing` is `InsufficientEvidence`, not `Advancing`; log
     `/tmp/r6-task3d-progress-acceptance.log`.
@@ -283,8 +284,9 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - Authority: no operator decision is required because malformed synthetic output identities
     violate the already-selected truthful call-pairing contract; this is not a new product or semantic
     choice.
+  - Receipt: commit `4615d9e3c` received fresh independent built-in `default` `REVIEW CLEAN`.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.3F — Repair and focus-prove synthetic fixture output identities — BLOCKED ON `.3E`.**
+- [x] **R6-GAP-DET-REPLAY-STALL.3F — Repair and focus-prove synthetic fixture output identities — COMPLETE.**
   - Activation: only after `.3E` is committed and fresh-review-clean.
   - Files: exactly the `rows.archival.jsonl` and `rows.compact.jsonl` files for
     `synthetic-implementation-advancing` and `synthetic-zero-verifier-anti-flap` under
@@ -297,8 +299,13 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     postures unchanged; stop with the complete candidate unstaged.
   - Do not edit another row, fixture, expected contract, source, test, packet/canonical mirror,
     native/adapted/real fixture, or an identified call without an output.
+  - Receipt: deterministic audit passed `16` bundles / `32` row files / `8,388` rows with all seven
+    locked logical outputs present as `14` matching physical `function_call_output` identities; log
+    `/tmp/r6-task4d-00-identity-audit.log`. Exact progress acceptance passed `1 / 1`, preserving both
+    locked postures; log `/tmp/r6-task4d-12.log`. The four fixture-row files are included in the
+    complete atomic candidate and no other progress fixture row was edited.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.4 — Run exact integrated proof, commit, and close fresh review — STOPPED AT STEP 12.**
+- [ ] **R6-GAP-DET-REPLAY-STALL.4 — Run exact integrated proof, commit, and close fresh review — COMMITTED, FRESH REVIEW PENDING.**
   - Partial receipt: proof steps 1-7 each pass `1 / 1`; step 8 `troubleshooting` passes `20 / 20`
     across library and integration targets; steps 9-11 each pass `1 / 1`. Step 12 first exposed the
     stale expected-fact wording recorded in `.3C`; after `.3D` applied the exact repair, focused proof
@@ -338,6 +345,31 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     tests, expected-disposition, TASKS, and ledger files; run staged GitNexus detect, cached diff check,
     and cached diff inspection; commit the implementation/proof atomically; then obtain fresh built-in
     `default` review and fix findings in new gated commits until `REVIEW CLEAN`.
+  - Preserved bounded-gap witness: the first from-the-beginning rerun reached step 13 and exposed six
+    delegation tests whose generic synthetic helpers assigned false call identities, causing
+    call-ID-exclusive pairing to withhold their outputs; log `/tmp/r6-task4c-13.log`. The bounded
+    helper-only repair keeps general helper rows ID-less and uses explicit identified helpers only
+    where delegation identity is semantically required, across the existing test modules/helpers in
+    `checkpoint/mod.rs`, `checkpoint/progress.rs`, `tests/checkpoints.rs`, and
+    `tests/dead_end_thrash.rs`. Audit log `/tmp/r6-task4d-00b-delegation-helper-audit.log` confirms the
+    general/identified split. No production scoring, recovery/state, comparability, compactor, schema,
+    replay-presentation, R7, or R8 seam changed.
+  - Final ordered proof receipt with `CARGO_TARGET_DIR=/tmp/r6-task4d-target`: steps 1-7 each passed
+    `1 / 1`; step 8 passed `20 / 20` (`10` library + `10` integration); exact `CTX-R6-02`, exact sticky
+    `CTX-R6-06`, frozen corpus, and progress acceptance each passed `1 / 1`; checkpoint filter passed
+    `62` library + `131` checkpoint integration plus all matching integration targets; full analyzer
+    passed `402 / 402` including `163` library, `8` acceptance, `133` checkpoints, `18`
+    `dead_end_thrash`, `3` progress acceptance, `22` truth-grounding, and `6` wrong-plan-branch tests.
+    Exact compactor normalization passed `1 / 1`; format, analyzer all-target check, analyzer all-target
+    clippy with `-D warnings`, and `git diff --check` were green. Logs:
+    `/tmp/r6-task4d-01.log` through `/tmp/r6-task4d-19.log`.
+  - Commit boundary: complete fourteen-file code/test/fixture candidate SHA-256
+    `ebe4e7156416ecf387ae1ef88a067cf1d05855f8fc1089e080e92e7824c5d8a3` plus this TASKS and the
+    proof ledger are committed atomically by this change. Final staged GitNexus detect is `medium`
+    across exactly `16` files / `54` symbols / `3` affected troubleshooting-tail flows, with no
+    `HIGH` or `CRITICAL` result; cached-diff check and complete inspection are clean. Fresh independent
+    built-in `default` review remains required; Task `.4` and the packet are not review-clean or
+    complete yet.
 
 - [ ] **R6-GAP-DET-REPLAY-STALL.5 — Land and review the narrow packet transition.**
   - Prerequisite: Task 4 review-clean.

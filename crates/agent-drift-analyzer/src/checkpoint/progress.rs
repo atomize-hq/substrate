@@ -512,13 +512,125 @@ fn assess_troubleshooting_progress(
     archetype_label: SessionArchetypeLabel,
 ) -> SessionProgress {
     let current_attempts = &analysis.interval.verification_attempts;
-    let Some(current) = current_attempts.last() else {
+    if current_attempts.is_empty() {
         return insufficient_progress(dimension, None, None);
+    }
+
+    let lane_results = current_attempts
+        .iter()
+        .enumerate()
+        .filter(|(current_index, current)| {
+            !current_attempts[current_index + 1..]
+                .iter()
+                .any(|later| attempts_are_comparable(current, later))
+        })
+        .map(|(current_index, current)| {
+            let current_lane_window = &current_attempts[..=current_index];
+            let prior_attempts =
+                comparable_attempts(analysis, current_lane_window, current, archetype_label);
+            (
+                current.command_row.event_index,
+                assess_troubleshooting_tail(analysis, dimension, current, &prior_attempts),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let newest_informative_tail_event = lane_results
+        .iter()
+        .rev()
+        .find(|(_, progress)| progress.status != ProgressStatus::InsufficientEvidence)
+        .map(|(tail_event, _)| *tail_event);
+    let latest_preceding_edit_event = newest_informative_tail_event.and_then(|tail_event| {
+        analysis
+            .interval
+            .command_attempts
+            .iter()
+            .filter(|attempt| attempt.role == CommandAttemptRole::Edit)
+            .filter(|attempt| attempt.command_row.event_index < tail_event)
+            .filter(|attempt| {
+                attempt
+                    .paths
+                    .iter()
+                    .any(|path| is_source_path(path) || is_test_path(path))
+            })
+            .map(|attempt| attempt.command_row.event_index)
+            .max()
+    });
+    let lane_results = lane_results
+        .into_iter()
+        .filter(|(tail_event, _)| {
+            latest_preceding_edit_event.is_none_or(|edit_event| *tail_event > edit_event)
+        })
+        .map(|(_, progress)| progress)
+        .collect();
+
+    aggregate_troubleshooting_lanes(dimension, lane_results)
+}
+
+fn aggregate_troubleshooting_lanes(
+    dimension: ProgressDimension,
+    lane_results: Vec<SessionProgress>,
+) -> SessionProgress {
+    if lane_results.len() == 1 {
+        return lane_results
+            .into_iter()
+            .next()
+            .expect("one troubleshooting lane");
+    }
+    let informative = lane_results
+        .into_iter()
+        .filter(|progress| progress.status != ProgressStatus::InsufficientEvidence)
+        .collect::<Vec<_>>();
+    if informative.is_empty() {
+        return insufficient_progress(dimension, None, None);
+    }
+    if informative.len() == 1 {
+        return informative
+            .into_iter()
+            .next()
+            .expect("one informative lane");
+    }
+
+    let has_status = |status| informative.iter().any(|progress| progress.status == status);
+    let has_advancing = has_status(ProgressStatus::Advancing);
+    let has_negative =
+        has_status(ProgressStatus::Stalled) || has_status(ProgressStatus::Regressing);
+    let status = if has_status(ProgressStatus::Mixed) || (has_advancing && has_negative) {
+        ProgressStatus::Mixed
+    } else if has_status(ProgressStatus::Regressing) {
+        ProgressStatus::Regressing
+    } else if has_status(ProgressStatus::Stalled) {
+        ProgressStatus::Stalled
+    } else {
+        ProgressStatus::Advancing
     };
-    let prior_attempts = comparable_attempts(analysis, current_attempts, current, archetype_label);
-    let best_failed = best_failed_attempt(&prior_attempts);
-    let best_clean = best_clean_attempt(&prior_attempts);
-    let latest_failed = latest_failed_attempt(&prior_attempts);
+    let mut confidence = informative
+        .iter()
+        .map(|progress| progress.confidence)
+        .min()
+        .expect("multiple informative lanes");
+    if status == ProgressStatus::Mixed {
+        confidence = confidence.min(Confidence::Medium);
+    }
+
+    let mut signals = Vec::new();
+    let mut counter_evidence = Vec::new();
+    for lane in informative {
+        signals.extend(lane.signals);
+        counter_evidence.extend(lane.counter_evidence);
+    }
+    progress_from_signals(status, dimension, confidence, signals, counter_evidence)
+}
+
+fn assess_troubleshooting_tail(
+    analysis: &CheckpointAnalysis,
+    dimension: ProgressDimension,
+    current: &VerificationAttempt,
+    prior_attempts: &[VerificationAttempt],
+) -> SessionProgress {
+    let best_failed = best_failed_attempt(prior_attempts);
+    let best_clean = best_clean_attempt(prior_attempts);
+    let latest_failed = latest_failed_attempt(prior_attempts);
 
     if current.outcome == AttemptOutcome::Clean {
         if let Some(previous_failed) = best_failed {
@@ -3096,6 +3208,414 @@ mod tests {
     }
 
     #[test]
+    fn troubleshooting_concurrent_clean_sibling_does_not_erase_repeated_failed_lane() {
+        let analysis = last_analysis(vec![
+            prompt_row(0, "turn-001", "/goal Troubleshoot the target lane."),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test target_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest target_lane ... FAILED\n\nfailures:\n    target_lane\n\nthread 'target_lane' panicked at crates/target/src/lib.rs:10:5:\nassertion `left == right` failed: target lane repeated\n  left: 1\n right: 2\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            prompt_row(
+                3,
+                "turn-002",
+                "/goal Re-run the target lane alongside an unrelated clean sibling.",
+            ),
+            tool_call_row(
+                4,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test target_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                5,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest target_lane ... FAILED\n\nfailures:\n    target_lane\n\nthread 'target_lane' panicked at crates/target/src/lib.rs:10:5:\nassertion `left == right` failed: target lane repeated\n  left: 1\n right: 2\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test sibling_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                7,
+                "turn-002",
+                "Exit code: 0\nrunning 1 test\ntest sibling_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_eq!(progress.confidence, Confidence::Medium);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert!(
+            progress
+                .supporting_evidence
+                .iter()
+                .all(|evidence| evidence.row.event_index != 6),
+            "unrelated clean sibling must not become failure-lane evidence"
+        );
+    }
+
+    #[test]
+    fn troubleshooting_advancing_lane_ignores_unrelated_insufficient_sibling() {
+        let analysis = last_analysis(vec![
+            prompt_row(0, "turn-001", "/goal Troubleshoot the advancing target lane."),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test advancing_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest advancing_lane ... FAILED\n\nfailures:\n    advancing_lane\n\nthread 'advancing_lane' panicked at crates/advancing/src/lib.rs:20:5:\nassertion failed: expected clean target\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            prompt_row(
+                3,
+                "turn-002",
+                "/goal Re-run the advancing lane alongside an unrelated clean sibling.",
+            ),
+            tool_call_row(
+                4,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test advancing_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                5,
+                "turn-002",
+                "Exit code: 0\nrunning 1 test\ntest advancing_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test unrelated_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                7,
+                "turn-002",
+                "Exit code: 0\nrunning 1 test\ntest unrelated_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Advancing);
+        assert_eq!(progress.confidence, Confidence::High);
+        assert_has_signal(&progress, ProgressSignalCode::VerificationClean);
+        assert!(
+            progress
+                .supporting_evidence
+                .iter()
+                .all(|evidence| evidence.row.event_index != 6),
+            "unrelated insufficient sibling must not change advancing-lane evidence"
+        );
+    }
+
+    #[test]
+    fn troubleshooting_conflicting_informative_lanes_aggregate_mixed() {
+        let analysis = last_analysis(vec![
+            prompt_row(0, "turn-001", "/goal Troubleshoot two independent lanes."),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test positive_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest positive_lane ... FAILED\n\nfailures:\n    positive_lane\n\nthread 'positive_lane' panicked at crates/positive/src/lib.rs:30:5:\nassertion failed: positive lane\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test negative_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                4,
+                "turn-001",
+                "Exit code: 0\nrunning 1 test\ntest negative_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            prompt_row(
+                5,
+                "turn-002",
+                "/goal Re-run both independent troubleshooting lanes.",
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test positive_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                7,
+                "turn-002",
+                "Exit code: 0\nrunning 1 test\ntest positive_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                8,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test negative_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                9,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest negative_lane ... FAILED\n\nfailures:\n    negative_lane\n\nthread 'negative_lane' panicked at crates/negative/src/lib.rs:40:5:\nassertion failed: negative lane\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Mixed);
+        assert_eq!(progress.confidence, Confidence::Medium);
+        assert!(progress
+            .signals
+            .iter()
+            .any(|signal| signal.polarity == SignalPolarity::Positive));
+        assert!(progress
+            .signals
+            .iter()
+            .any(|signal| signal.polarity == SignalPolarity::Negative));
+    }
+
+    #[test]
+    fn troubleshooting_regressing_dominates_only_negative_lanes() {
+        let analysis = last_analysis(vec![
+            prompt_row(0, "turn-001", "/goal Troubleshoot two negative lanes."),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test regressing_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 0\nrunning 1 test\ntest regressing_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test stalled_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                4,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest stalled_lane ... FAILED\n\nfailures:\n    stalled_lane\n\nthread 'stalled_lane' panicked at crates/stalled/src/lib.rs:50:5:\nassertion failed: stalled lane repeated\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            prompt_row(5, "turn-002", "/goal Re-run both negative lanes."),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test regressing_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                7,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest regressing_lane ... FAILED\n\nfailures:\n    regressing_lane\n\nthread 'regressing_lane' panicked at crates/regressing/src/lib.rs:60:5:\nassertion failed: regressing lane broke\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                8,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test stalled_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                9,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest stalled_lane ... FAILED\n\nfailures:\n    stalled_lane\n\nthread 'stalled_lane' panicked at crates/stalled/src/lib.rs:50:5:\nassertion failed: stalled lane repeated\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Regressing);
+        assert_eq!(progress.confidence, Confidence::Medium);
+        assert_has_signal(&progress, ProgressSignalCode::PreviouslyCleanScopeBroken);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert!(
+            progress
+                .signals
+                .iter()
+                .all(|signal| signal.polarity != SignalPolarity::Positive),
+            "regressing plus stalled must not invent positive evidence"
+        );
+    }
+
+    #[test]
+    fn troubleshooting_latest_verified_edit_epoch_supersedes_earlier_informative_lanes() {
+        let analysis = last_analysis(vec![
+            prompt_row(0, "turn-001", "/goal Verify an earlier independent lane."),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test earlier_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest earlier_lane ... FAILED\n\nfailures:\n    earlier_lane\n\nthread 'earlier_lane' panicked at crates/earlier/src/lib.rs:10:5:\nassertion failed: earlier lane\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test earlier_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                4,
+                "turn-001",
+                "Exit code: 0\nrunning 1 test\ntest earlier_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                5,
+                "turn-002",
+                "functions.apply_patch",
+                r#"{"command":"apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\n*** End Patch\nPATCH","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test terminal_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                7,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest terminal_lane ... FAILED\n\nfailures:\n    terminal_lane\n\nthread 'terminal_lane' panicked at crates/target/src/lib.rs:20:5:\nassertion failed: terminal lane repeated\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                8,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test terminal_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                9,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest terminal_lane ... FAILED\n\nfailures:\n    terminal_lane\n\nthread 'terminal_lane' panicked at crates/target/src/lib.rs:20:5:\nassertion failed: terminal lane repeated\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+        ]);
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_eq!(progress.confidence, Confidence::Medium);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert_lacks_signal(&progress, ProgressSignalCode::VerificationClean);
+    }
+
+    #[test]
+    fn troubleshooting_unverified_trailing_edit_does_not_erase_latest_informative_lane() {
+        let analysis = last_analysis(vec![
+            prompt_row(0, "turn-001", "/goal Verify an earlier independent lane."),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test earlier_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest earlier_lane ... FAILED\n\nfailures:\n    earlier_lane\n\nthread 'earlier_lane' panicked at crates/earlier/src/lib.rs:10:5:\nassertion failed: earlier lane\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test earlier_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                4,
+                "turn-001",
+                "Exit code: 0\nrunning 1 test\ntest earlier_lane ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                5,
+                "turn-002",
+                "functions.apply_patch",
+                r#"{"command":"apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/tests/checkpoints.rs\n*** End Patch\nPATCH","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                6,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test terminal_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                7,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest terminal_lane ... FAILED\n\nfailures:\n    terminal_lane\n\nthread 'terminal_lane' panicked at crates/target/src/lib.rs:20:5:\nassertion failed: terminal lane repeated\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                8,
+                "turn-002",
+                "functions.shell_command",
+                r#"{"command":"cargo test terminal_lane -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                9,
+                "turn-002",
+                "Exit code: 101\nrunning 1 test\ntest terminal_lane ... FAILED\n\nfailures:\n    terminal_lane\n\nthread 'terminal_lane' panicked at crates/target/src/lib.rs:20:5:\nassertion failed: terminal lane repeated\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out",
+            ),
+            tool_call_row(
+                10,
+                "turn-002",
+                "functions.apply_patch",
+                r#"{"command":"apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/tests/checkpoints.rs\n*** End Patch\nPATCH","workdir":"/repo"}"#,
+            ),
+        ]);
+
+        let progress = assess_troubleshooting_progress(
+            &analysis,
+            ProgressDimension::TroubleshootingFrontier,
+            SessionArchetypeLabel::Troubleshooting,
+        );
+
+        assert_eq!(progress.status, ProgressStatus::Stalled);
+        assert_eq!(progress.confidence, Confidence::Medium);
+        assert_has_signal(&progress, ProgressSignalCode::FailureSignatureRepeated);
+        assert_lacks_signal(&progress, ProgressSignalCode::VerificationClean);
+    }
+
+    #[test]
     fn annotate_zero_verifier_fallback_exposes_counter_evidence_for_empty_conservative_path() {
         let analysis = last_analysis(vec![
             prompt_row(
@@ -3392,7 +3912,7 @@ mod tests {
                 "turn-001",
                 "/goal Coordinate delegated findings without claiming child execution progress.",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 1,
                 "turn-001",
                 "spawn_agent",
@@ -3486,13 +4006,13 @@ AssertionError: expected advancing"#,
                 "turn-001",
                 "/goal Coordinate delegated work without overclaiming child progress.",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 1,
                 "turn-001",
                 "spawn_agent",
                 "{\"goal\":\"fix packet R5-4\"}",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 2,
                 "turn-001",
                 "wait_agent",
@@ -3561,13 +4081,13 @@ AssertionError: expected advancing"#,
                 "turn-001",
                 "/goal Coordinate delegated work without overclaiming child progress.",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 1,
                 "turn-001",
                 "spawn_agent",
                 r#"{"goal":"inspect packet R5-4"}"#,
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 2,
                 "turn-001",
                 "wait_agent",
@@ -3622,13 +4142,13 @@ AssertionError: expected advancing"#,
                 "turn-002",
                 "/goal Coordinate delegated work without overclaiming child progress.",
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 3,
                 "turn-002",
                 "spawn_agent",
                 r#"{"goal":"inspect delegated packet R5-75"}"#,
             ),
-            tool_call_row(
+            identified_tool_call_row(
                 4,
                 "turn-002",
                 "wait_agent",
@@ -3715,6 +4235,15 @@ AssertionError: expected advancing"#,
     }
 
     fn tool_call_row(
+        event_index: usize,
+        turn_id: &str,
+        _tool_name: &str,
+        text: &str,
+    ) -> CompactionRow {
+        row(event_index, turn_id, CompactionKind::ToolCall, text, None)
+    }
+
+    fn identified_tool_call_row(
         event_index: usize,
         turn_id: &str,
         tool_name: &str,
