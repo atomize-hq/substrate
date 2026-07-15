@@ -3825,6 +3825,111 @@ mod tests {
         (parent, authority, observation)
     }
 
+    fn start_additional_authority_session(authority: &HostSessionAuthority) {
+        let root = authority.read_a12a_root().unwrap();
+        let binding = WorkspaceBindingV1 {
+            workspace_root: root.bootstrap_home.clone(),
+            authority_store_root: root.bootstrap_home.clone(),
+            authority_store_id: root.authority_store_id.clone(),
+        };
+        let request = IssueHostSessionTransitionRequestV1 {
+            intent_id: "second-start-intent".into(),
+            issuer_request_id: "retained-worker-registration:second-transition-start".into(),
+            mode: HostSessionTransitionModeV1::Start,
+            authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+            orchestration_session_id: "second-session".into(),
+            shell_trace_session_id: "second-trace".into(),
+            caller: HostSessionTransitionCallerV1 {
+                kind: HostSessionTransitionCallerKindV1::PublicCli,
+                caller_participant_id: None,
+                auto_attach_obligation_id: None,
+                auto_attach_claim_owner: None,
+            },
+            source_authoritative_participant_id: None,
+            target_authoritative_participant_id: "second-orchestrator".into(),
+            target_participant_lease_token: b"second-start-lease".to_vec(),
+            run_id: "second-start-run".into(),
+            resulting_authoritative_lineage: vec!["second-orchestrator".into()],
+            workspace_binding: binding,
+            world_binding: Some(WorldBindingV1 {
+                world_id: "second-world".into(),
+                world_generation: 11,
+            }),
+            start_contract: StartContractMaterialV1 {
+                descriptor: AgentDescriptorV1 {
+                    schema_version: 1,
+                    agent_id: "codex-second".into(),
+                    backend_id: "cli:codex".into(),
+                    backend_kind: RuntimeBackendKindV1::Codex,
+                    protocol: "substrate.agent.session".into(),
+                    execution_scope: AgentExecutionScopeV1::Host,
+                    binary_path: "/usr/bin/codex".into(),
+                },
+                policy: PolicyObjectHashInputV1 {
+                    schema_version: 1,
+                    policy_revision: "r0-policy".into(),
+                    canonical_policy_snapshot_sha256:
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+                },
+                capabilities: HostAttachCapabilitiesV1 {
+                    session_resume: true,
+                    session_fork: true,
+                    session_stop: true,
+                    status_snapshot: true,
+                    event_stream: true,
+                },
+                launch_knobs: HostAttachLaunchKnobsV1 {
+                    requested_execution_scope: AgentExecutionScopeV1::Host,
+                    host_execution_client_start: HostAttachExecutionClientStartV1::StartNow,
+                    attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
+                },
+            },
+            transition_input: None,
+        };
+        let TransitionIssueOutcomeV1::Issued(issued) = authority
+            .issue_start_at(&request, timestamp("2026-07-14T13:00:00.000000000Z"), 300)
+            .unwrap()
+        else {
+            panic!("second Start issuance must commit")
+        };
+        let claim_request = ClaimHostSessionTransitionRequestV1 {
+            intent_id: issued.intent_id.clone(),
+            issuer_request_id: issued.issuer_request_id.clone(),
+            payload_commitment: issued.payload_commitment.clone(),
+            expected_intent_revision: issued.intent_revision,
+            claim_id: "second-start-claim".into(),
+            claimant_attempt_id: "second-start-attempt".into(),
+        };
+        let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+            .claim_start_at(
+                &claim_request,
+                timestamp("2026-07-14T13:01:00.000000000Z"),
+                30,
+            )
+            .unwrap()
+        else {
+            panic!("second Start claim must commit")
+        };
+        let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } = claimed.state
+        else {
+            panic!("second Start must remain claimed")
+        };
+        let application = ApplyHostSessionTransitionRequestV1 {
+            intent_id: claimed.intent_id,
+            issuer_request_id: claimed.issuer_request_id,
+            payload_commitment: claimed.payload_commitment,
+            expected_intent_revision: claimed.intent_revision,
+            claim_id: claim_request.claim_id,
+            expected_claim_revision: claim_revision,
+        };
+        assert!(matches!(
+            authority
+                .apply_start_at(&application, timestamp("2026-07-14T13:01:10.000000000Z"))
+                .unwrap(),
+            TransitionApplicationOutcomeV1::Applied(_)
+        ));
+    }
+
     fn plan(observation: AuthorityObservationV1) -> RetainedWorkerRegistrationPlanV1 {
         RetainedWorkerRegistrationPlanV1 {
             registration_request_id: "spawn-request-1".into(),
@@ -5704,6 +5809,36 @@ mod tests {
         }
     }
 
+    fn admission_plan_for_second_session(
+        authority: &HostSessionAuthority,
+        issuer_request_id: &str,
+        prompt: &str,
+        max_live_retained_workers: u64,
+    ) -> RetainedWorkerAdmissionPlanV1 {
+        let mut plan = admission_plan(
+            authority,
+            issuer_request_id,
+            prompt,
+            max_live_retained_workers,
+        );
+        let resolved = authority
+            .resolve_current_exact("second-session", None)
+            .unwrap();
+        let world_binding = resolved.authority.world_binding.clone().unwrap();
+        plan.spawn_request.orchestration_session_id = "second-session".into();
+        plan.spawn_request.caller_participant_id = "second-orchestrator".into();
+        plan.spawn_request.world_id = world_binding.world_id;
+        plan.spawn_request.world_generation = world_binding.world_generation;
+        plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        plan.policy_and_admission_cap.current_policy_ref = resolved
+            .authority
+            .current_policy_ref
+            .clone()
+            .expect("second started authority must bind policy");
+        plan.policy_and_admission_cap.current_policy = resolved.current_policy;
+        plan
+    }
+
     #[test]
     fn admission_cap_zero_rejects_without_slot_or_authority_mutation() {
         let (parent, authority, _) = started_authority();
@@ -6956,13 +7091,27 @@ mod tests {
     #[test]
     fn one_registry_may_hold_one_registration_head_in_each_session_bucket() {
         let (parent, authority, _) = started_authority();
+        start_additional_authority_session(&authority);
         let runtime = RetainedWorkerRuntime;
-        let plan = admission_plan(&authority, "multi-session-head-first", "first", 2);
+        let first_plan = admission_plan(&authority, "multi-session-head-first", "first", 2);
+        let second_plan =
+            admission_plan_for_second_session(&authority, "multi-session-head-second", "second", 2);
         assert_eq!(
             runtime
                 .register_admitted_worker_at(
                     &authority,
-                    &plan,
+                    &first_plan,
+                    Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
+                )
+                .unwrap_err()
+                .to_string(),
+            "injected crash while admission registration head"
+        );
+        assert_eq!(
+            runtime
+                .register_admitted_worker_at(
+                    &authority,
+                    &second_plan,
                     Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
                 )
                 .unwrap_err()
@@ -6973,35 +7122,17 @@ mod tests {
         let registry_path = parent
             .path()
             .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
-        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+        let registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
             &fs::read(&registry_path).unwrap(),
-            "decode multi-session registry fixture",
+            "decode production-path multi-session registry",
         )
         .unwrap();
-        let first = registry.records_by_session["r0-session"]
-            .values()
-            .next()
-            .unwrap()
-            .clone();
-        let mut second = first.clone();
-        second.issuer_request_id = "multi-session-head-second".into();
-        second.orchestration_session_id = "independent-session".into();
-        second.retained_participant_id = format!("rwp_{}", "22".repeat(16));
-        second.bootstrap_run_id = format!("rwr_{}", "33".repeat(16));
-        registry.records_by_session.insert(
-            second.orchestration_session_id.clone(),
-            BTreeMap::from([(second.retained_participant_id.clone(), second.clone())]),
-        );
-        registry.issuer_request_index.insert(
-            second.issuer_request_id.clone(),
-            RetainedWorkerAdmissionRecordLocatorV1 {
-                orchestration_session_id: second.orchestration_session_id.clone(),
-                retained_participant_id: second.retained_participant_id.clone(),
-            },
-        );
-        registry
-            .next_slot_sequence_by_session
-            .insert(second.orchestration_session_id.clone(), 2);
+        let first_locator = &registry.issuer_request_index["multi-session-head-first"];
+        let first = &registry.records_by_session[&first_locator.orchestration_session_id]
+            [&first_locator.retained_participant_id];
+        let second_locator = &registry.issuer_request_index["multi-session-head-second"];
+        let second = &registry.records_by_session[&second_locator.orchestration_session_id]
+            [&second_locator.retained_participant_id];
 
         assert!(matches!(
             first.state,
@@ -7011,6 +7142,9 @@ mod tests {
             second.state,
             RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
         ));
+        assert_eq!(first.orchestration_session_id, "r0-session");
+        assert_eq!(second.orchestration_session_id, "second-session");
+        assert_eq!(first.authority_store_id, second.authority_store_id);
         validate_admission_registry(
             &registry,
             &VersionedStateRoot::V2(authority.read_a12a_root().unwrap()),
@@ -7487,72 +7621,163 @@ mod tests {
 
     #[test]
     fn registration_head_and_advance_publication_crashes_reopen_and_retry_exactly() {
-        for (index, crash_point) in [
-            AdmissionRegistrationCrashPointV1::BeforeRegistrationHeadPublication,
-            AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication,
-            AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse,
-            AdmissionRegistrationCrashPointV1::BeforeAdmissionAdvancePublication,
-            AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication,
-            AdmissionRegistrationCrashPointV1::AfterAdmissionAdvancePublicationBeforeResponse,
+        for (index, (crash_point, publish_staged_before_directory_fsync)) in [
+            (
+                AdmissionRegistrationCrashPointV1::BeforeRegistrationHeadPublication,
+                false,
+            ),
+            (
+                AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication,
+                false,
+            ),
+            (
+                AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication,
+                true,
+            ),
+            (
+                AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse,
+                false,
+            ),
+            (
+                AdmissionRegistrationCrashPointV1::BeforeAdmissionAdvancePublication,
+                false,
+            ),
+            (
+                AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication,
+                false,
+            ),
+            (
+                AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication,
+                true,
+            ),
+            (
+                AdmissionRegistrationCrashPointV1::AfterAdmissionAdvancePublicationBeforeResponse,
+                false,
+            ),
         ]
         .into_iter()
         .enumerate()
         {
             let (parent, authority, _) = started_authority();
             let runtime = RetainedWorkerRuntime;
-            let issuer = format!("registration-publication-crash-{index}");
-            let plan = admission_plan(&authority, &issuer, "exact retry prompt", 3);
-            assert!(runtime
-                .register_admitted_worker_at(&authority, &plan, Some(crash_point))
-                .is_err());
+            let first_plan = admission_plan(
+                &authority,
+                &format!("registration-publication-first-{index}"),
+                "first request",
+                3,
+            );
+            let issuer = format!("registration-publication-queued-{index}");
+            let plan = admission_plan(&authority, &issuer, "exact queued retry prompt", 3);
+            let first_slot = runtime
+                .reserve_admission_slot(&authority, &first_plan)
+                .unwrap();
+            let queued = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+            runtime
+                .register_admitted_worker(&authority, &first_plan)
+                .unwrap();
+            assert!(matches!(
+                queued.record.state,
+                RetainedWorkerAdmissionStateV1::SlotReserved {
+                    slot_sequence: 2,
+                    ..
+                }
+            ));
+
+            let is_head_publication = matches!(
+                crash_point,
+                AdmissionRegistrationCrashPointV1::BeforeRegistrationHeadPublication
+                    | AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication
+                    | AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse
+            );
+            let failure = if is_head_publication {
+                runtime
+                    .prepare_admission_registration_head_with(
+                        &authority,
+                        &plan,
+                        &queued.record.retained_participant_id,
+                        timestamp("2026-07-15T20:00:00.000000000Z"),
+                        [140_u8.wrapping_add(index as u8); 16],
+                        Some(crash_point),
+                    )
+                    .map(drop)
+            } else {
+                runtime
+                    .register_admitted_worker_at(&authority, &plan, Some(crash_point))
+                    .map(drop)
+            };
+            assert!(
+                failure.is_err(),
+                "no success may be reported before the selected durable response boundary"
+            );
 
             let admission_root = parent
                 .path()
                 .join("home/authority-v1/retained-worker-admission-v1");
+            let registry_path = admission_root.join("registry-v1.json");
+            let tmp_root = admission_root.join("tmp");
+            if publish_staged_before_directory_fsync {
+                let staged = fs::read_dir(&tmp_root)
+                    .unwrap()
+                    .map(|entry| entry.unwrap().path())
+                    .collect::<Vec<_>>();
+                assert_eq!(staged.len(), 1);
+                fs::rename(&staged[0], &registry_path).unwrap();
+                fs::write(
+                    tmp_root.join(format!("admission-registry--{}.tmp", "ff".repeat(16))),
+                    b"conflicting orphan",
+                )
+                .unwrap();
+            }
             let registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
-                &fs::read(admission_root.join("registry-v1.json")).unwrap(),
+                &fs::read(&registry_path).unwrap(),
                 "decode crashed registration registry",
             )
             .unwrap();
             let locator = &registry.issuer_request_index[&issuer];
             let durable = &registry.records_by_session[&locator.orchestration_session_id]
                 [&locator.retained_participant_id];
-            match crash_point {
-                AdmissionRegistrationCrashPointV1::BeforeRegistrationHeadPublication
-                | AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication => {
+            if is_head_publication {
+                if publish_staged_before_directory_fsync
+                    || crash_point
+                        == AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse
+                {
+                    assert!(matches!(
+                        durable.state,
+                        RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+                    ));
+                } else {
                     assert!(matches!(
                         durable.state,
                         RetainedWorkerAdmissionStateV1::SlotReserved { .. }
                     ));
                 }
-                AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse
-                | AdmissionRegistrationCrashPointV1::BeforeAdmissionAdvancePublication
-                | AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication => {
-                    assert!(matches!(
-                        durable.state,
-                        RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
-                    ));
-                }
-                AdmissionRegistrationCrashPointV1::AfterAdmissionAdvancePublicationBeforeResponse => {
-                    assert!(matches!(
-                        durable.state,
-                        RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
-                    ));
-                }
-                AdmissionRegistrationCrashPointV1::WhileRegistrationHead
-                | AdmissionRegistrationCrashPointV1::AfterR0BeforeAdmissionAdvance => {
-                    unreachable!("the publication crash matrix excludes legacy crash points")
-                }
+            } else if publish_staged_before_directory_fsync
+                || crash_point
+                    == AdmissionRegistrationCrashPointV1::AfterAdmissionAdvancePublicationBeforeResponse
+            {
+                assert!(matches!(
+                    durable.state,
+                    RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+                ));
+            } else {
+                assert!(matches!(
+                    durable.state,
+                    RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+                ));
             }
-            let expected_temp_count = usize::from(matches!(
-                crash_point,
-                AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication
-                    | AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication
-            ));
-            assert_eq!(
-                fs::read_dir(admission_root.join("tmp")).unwrap().count(),
-                expected_temp_count
-            );
+            if publish_staged_before_directory_fsync {
+                assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 1);
+            } else {
+                let expected_temp_count = usize::from(matches!(
+                    crash_point,
+                    AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication
+                        | AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication
+                ));
+                assert_eq!(
+                    fs::read_dir(&tmp_root).unwrap().count(),
+                    expected_temp_count
+                );
+            }
 
             let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
             let retried = runtime.register_admitted_worker(&reopened, &plan).unwrap();
@@ -7560,10 +7785,22 @@ mod tests {
                 retried.record.state,
                 RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
             ));
-            assert_eq!(fs::read_dir(admission_root.join("tmp")).unwrap().count(), 0);
+            assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
             let joined = runtime.register_admitted_worker(&reopened, &plan).unwrap();
             assert!(joined.joined);
             assert_eq!(joined.record, retried.record);
+            let first = runtime
+                .read_admission_record(
+                    &reopened,
+                    "r0-session",
+                    &first_slot.record.retained_participant_id,
+                )
+                .unwrap()
+                .unwrap();
+            assert!(matches!(
+                first.state,
+                RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+            ));
         }
     }
 
