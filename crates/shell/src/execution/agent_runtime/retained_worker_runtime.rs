@@ -764,7 +764,7 @@ impl RetainedWorkerRuntime {
         if let Some(error) = semantic_failure {
             return Err(error);
         }
-        result.map_err(|error| {
+        let slot = result.map_err(|error| {
             #[cfg(test)]
             if error.to_string() == "injected retained admission initialization crash"
                 && crash_point == Some(AdmissionReservationCrashPointV1::AfterSlotReserved)
@@ -774,7 +774,11 @@ impl RetainedWorkerRuntime {
                 );
             }
             RetainedWorkerRuntimeError(error.to_string())
-        })
+        })?;
+        if slot.joined && admission_registration(&slot.record.state).is_some() {
+            self.validate_admitted_record_graph(authority, plan, &slot.record)?;
+        }
+        Ok(slot)
     }
 
     pub(crate) fn read_admission_record(
@@ -1951,6 +1955,14 @@ fn advance_registration_head_in_registry(
     verify_admission_record_fingerprint(root, plan, &record, secret_key)?;
     if let Some(registration) = admission_registration(&record.state) {
         validate_registration_result(authority_root, &record, registration, &post_r0_graph.result)?;
+        validate_post_r0_registered_graph(
+            root,
+            &record,
+            plan,
+            registration,
+            &post_r0_graph.result,
+            &post_r0_graph.resolved_target,
+        )?;
         return Ok((record, false));
     }
     if !matches!(
@@ -5962,6 +5974,46 @@ mod tests {
     }
 
     #[test]
+    fn idempotent_registration_advance_revalidates_the_complete_post_r0_graph() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "r0-idempotent-advance", "prompt", 3);
+        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let post_r0_graph = runtime
+            .resolve_admitted_record_graph(&authority, &admitted.record)
+            .unwrap();
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (admission_root, key_path) = initialized_admission_paths(&parent, &identity);
+        let registry_bytes = fs::read(admission_root.join("registry-v1.json")).unwrap();
+        let mut registry: RetainedWorkerAdmissionRegistryV1 =
+            decode_canonical(&registry_bytes, "decode fixture registry").unwrap();
+        registry
+            .records_by_session
+            .get_mut(&admitted.record.orchestration_session_id)
+            .unwrap()
+            .get_mut(&admitted.record.retained_participant_id)
+            .unwrap()
+            .current_policy_revision = "forged-policy-revision".into();
+        let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+            decode_canonical(&fs::read(key_path).unwrap(), "decode fixture key").unwrap();
+        let resolved = authority.resolve_current_exact("r0-session", None).unwrap();
+        let mut current_plan = plan.clone();
+        current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let authority_root = VersionedStateRoot::V2(authority.read_a12a_root().unwrap());
+
+        assert!(advance_registration_head_in_registry(
+            &mut registry,
+            &authority_root,
+            &current_plan,
+            &plan.exact_authority,
+            &admitted.record.retained_participant_id,
+            &envelope.secret_key,
+            &post_r0_graph,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn concurrent_transport_claim_has_one_durable_winner_and_never_steals() {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
@@ -6038,6 +6090,45 @@ mod tests {
         assert!(runtime
             .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id,)
             .is_err());
+        assert_eq!(fs::read(registry_path).unwrap(), forged);
+    }
+
+    #[test]
+    fn post_r0_slot_retry_rejects_substituted_bootstrap_continuity() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "slot-complete-join", "prompt", 3);
+        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (admission_root, key_path) = initialized_admission_paths(&parent, &identity);
+        let registry_path = admission_root.join("registry-v1.json");
+        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+            &fs::read(&registry_path).unwrap(),
+            "decode fixture registry",
+        )
+        .unwrap();
+        let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+            decode_canonical(&fs::read(key_path).unwrap(), "decode fixture key").unwrap();
+        let changed_bootstrap_run_id = "rwr_77777777777777777777777777777777";
+        let record = registry
+            .records_by_session
+            .get_mut(&admitted.record.orchestration_session_id)
+            .unwrap()
+            .get_mut(&admitted.record.retained_participant_id)
+            .unwrap();
+        record.bootstrap_run_id = changed_bootstrap_run_id.into();
+        record.canonical_spawn_fingerprint = canonical_spawn_fingerprint(
+            &identity.key_id,
+            &envelope.secret_key,
+            &plan,
+            &record.retained_participant_id,
+            changed_bootstrap_run_id,
+        )
+        .unwrap();
+        let forged = encode_canonical(&registry, "encode fixture registry").unwrap();
+        fs::write(&registry_path, &forged).unwrap();
+
+        assert!(runtime.reserve_admission_slot(&authority, &plan).is_err());
         assert_eq!(fs::read(registry_path).unwrap(), forged);
     }
 
