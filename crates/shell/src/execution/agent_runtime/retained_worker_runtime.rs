@@ -9,7 +9,12 @@
     reason = "R0 is a component proof and deliberately has no production ingress caller"
 )]
 
+use std::collections::BTreeMap;
 use std::fmt;
+
+use rand::RngCore;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use super::host_session_authority::canonical_json;
 #[cfg(test)]
@@ -17,11 +22,10 @@ use super::host_session_authority::facade::RetainedReservationCrashPointV1;
 use super::host_session_authority::facade::{
     ReservedRetainedWorkerRegistrationV1, RetainedWorkerAuthorityPreconditionV1,
 };
-#[cfg(test)]
-use super::host_session_authority::schema::TimestampV1;
 use super::host_session_authority::schema::{
-    AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1, PolicyObjectHashInputV1,
-    ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
+    AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1,
+    AuthorityObjectCommitmentV1, AuthorityObjectRefV1, PolicyObjectHashInputV1,
+    ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1, TimestampV1, WorldBindingV1,
 };
 use super::host_session_authority::store_schema::{
     RetainedWorkerAuthorityRegistrationRequestStateV1, RetainedWorkerAuthorityRegistrationV1,
@@ -62,6 +66,170 @@ pub(crate) struct ResolvedRetainedTargetV1 {
     pub(crate) current_policy: PolicyObjectHashInputV1,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RetainedWorkerAdmissionCommitmentAlgorithmV1 {
+    HmacSha256,
+}
+
+impl Serialize for RetainedWorkerAdmissionCommitmentAlgorithmV1 {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str("hmac_sha256")
+    }
+}
+
+impl<'de> Deserialize<'de> for RetainedWorkerAdmissionCommitmentAlgorithmV1 {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        if value == "hmac_sha256" {
+            Ok(Self::HmacSha256)
+        } else {
+            Err(serde::de::Error::custom(
+                "unsupported retained admission commitment algorithm",
+            ))
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedWorkerAdmissionCommitmentV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1,
+    pub(crate) key_id: String,
+    pub(crate) digest_hex: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedWorkerAdmissionRegistrationV1 {
+    pub(crate) registration_id: String,
+    pub(crate) retained_worker_ref: AuthorityObjectRefV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
+pub(crate) enum RetainedWorkerAdmissionStateV1 {
+    SlotReserved {
+        slot_sequence: u64,
+        reserved_at: TimestampV1,
+    },
+    AuthorityRegistrationHead {
+        authority_revision_expected: u64,
+        authority_record_commitment_expected: AuthorityObjectCommitmentV1,
+        head_acquired_at: TimestampV1,
+    },
+    PreTransportNonterminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+    },
+    TransportClaimedNonterminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        transport_claim_id: String,
+        claimed_at: TimestampV1,
+    },
+    Routable {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        stream_id: String,
+        registered_frame_sequence: u64,
+        registered_event_id: String,
+        registered_event_sequence: u64,
+        registered_at: TimestampV1,
+    },
+    InterruptedNonterminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        stream_id: Option<String>,
+        last_frame_sequence: Option<u64>,
+        interrupted_at: TimestampV1,
+    },
+    Terminal {
+        registration: RetainedWorkerAdmissionRegistrationV1,
+        stream_id: String,
+        terminal_frame_sequence: u64,
+        terminal_event_id: String,
+        terminal_event_sequence: u64,
+        exit_code: i32,
+        terminal_at: TimestampV1,
+    },
+    RejectedBeforeRegistration {
+        reason: String,
+        rejected_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RetainedWorkerAdmissionRecordV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) issuer_request_id: String,
+    pub(crate) canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) admission_authority_revision: u64,
+    pub(crate) admission_authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) retained_participant_id: String,
+    pub(crate) bootstrap_run_id: String,
+    pub(crate) backend_id: String,
+    pub(crate) protocol: String,
+    pub(crate) world_binding: WorldBindingV1,
+    pub(crate) current_policy_ref: AuthorityObjectRefV1,
+    pub(crate) current_policy_revision: String,
+    pub(crate) max_live_retained_workers: u64,
+    pub(crate) state: RetainedWorkerAdmissionStateV1,
+    pub(crate) record_revision: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RetainedWorkerAdmissionKeyHeaderV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    key_id: String,
+    created_at: TimestampV1,
+    algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1,
+}
+
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RetainedWorkerAdmissionKeyEnvelopeV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    key_id: String,
+    created_at: TimestampV1,
+    algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1,
+    secret_key: [u8; 32],
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RetainedWorkerAdmissionRecordLocatorV1 {
+    orchestration_session_id: String,
+    retained_participant_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RetainedWorkerAdmissionRegistryV1 {
+    schema_version: u32,
+    authority_store_id: String,
+    commitment_key: RetainedWorkerAdmissionKeyHeaderV1,
+    records_by_session: BTreeMap<String, BTreeMap<String, RetainedWorkerAdmissionRecordV1>>,
+    issuer_request_index: BTreeMap<String, RetainedWorkerAdmissionRecordLocatorV1>,
+    next_slot_sequence_by_session: BTreeMap<String, u64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedWorkerAdmissionKeyIdentityV1 {
+    pub(crate) authority_store_id: String,
+    pub(crate) key_id: String,
+    pub(crate) algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AdmissionInitializationCrashPointV1 {
+    BeforeKeyPublication,
+    AfterKeyPublication,
+}
+
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RetainedObjectPublicationCrashPointV1 {
@@ -85,6 +253,168 @@ impl std::error::Error for RetainedWorkerRuntimeError {}
 pub(crate) struct RetainedWorkerRuntime;
 
 impl RetainedWorkerRuntime {
+    pub(crate) fn initialize_admission_registry(
+        &self,
+        authority: &HostSessionAuthority,
+    ) -> Result<RetainedWorkerAdmissionKeyIdentityV1, RetainedWorkerRuntimeError> {
+        let mut key_entropy = [0_u8; 16];
+        let mut publication_nonce = [0_u8; 16];
+        let mut secret_key = [0_u8; 32];
+        let mut random = rand::rngs::OsRng;
+        random.fill_bytes(&mut key_entropy);
+        random.fill_bytes(&mut publication_nonce);
+        random.fill_bytes(&mut secret_key);
+        let created_at = TimestampV1::parse(
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        )
+        .map_err(|_| RetainedWorkerRuntimeError("create admission key timestamp".into()))?;
+        self.initialize_admission_registry_with(
+            authority,
+            created_at,
+            key_entropy,
+            publication_nonce,
+            secret_key,
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    fn initialize_admission_registry_at(
+        &self,
+        authority: &HostSessionAuthority,
+        created_at: TimestampV1,
+        key_entropy: [u8; 16],
+        publication_nonce: [u8; 16],
+        secret_key: [u8; 32],
+        crash_point: Option<AdmissionInitializationCrashPointV1>,
+    ) -> Result<RetainedWorkerAdmissionKeyIdentityV1, RetainedWorkerRuntimeError> {
+        self.initialize_admission_registry_with(
+            authority,
+            created_at,
+            key_entropy,
+            publication_nonce,
+            secret_key,
+            crash_point,
+        )
+    }
+
+    fn initialize_admission_registry_with(
+        &self,
+        authority: &HostSessionAuthority,
+        created_at: TimestampV1,
+        key_entropy: [u8; 16],
+        publication_nonce: [u8; 16],
+        secret_key: [u8; 32],
+        #[cfg(test)] crash_point: Option<AdmissionInitializationCrashPointV1>,
+        #[cfg(not(test))] _crash_point: Option<()>,
+    ) -> Result<RetainedWorkerAdmissionKeyIdentityV1, RetainedWorkerRuntimeError> {
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut semantic_failure = None;
+        let result = storage.transaction(|transaction| {
+            if let Some(registry_bytes) = transaction.read_registry()? {
+                let registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                    decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                    &mut semantic_failure,
+                )?;
+                let keys = transaction.read_keys()?;
+                return retain_semantic_error(
+                    validate_committed_admission_key(&authority_store_id, &registry, &keys),
+                    &mut semantic_failure,
+                );
+            }
+
+            for (orphan_name, _) in transaction.read_keys()? {
+                transaction.remove_key(&orphan_name)?;
+            }
+
+            let key_id = format!("adk_{}", lower_hex(&key_entropy));
+            let key_name = format!("{key_id}.key");
+            let nonce = lower_hex(&publication_nonce);
+            let key_temp_name = format!("admission-key--{nonce}.tmp");
+            let registry_temp_name = format!("admission-registry--{nonce}.tmp");
+            let envelope = RetainedWorkerAdmissionKeyEnvelopeV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.clone(),
+                key_id: key_id.clone(),
+                created_at: created_at.clone(),
+                algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256,
+                secret_key,
+            };
+            let envelope_bytes = retain_semantic_error(
+                encode_canonical(&envelope, "encode admission key envelope"),
+                &mut semantic_failure,
+            )?;
+            transaction.stage_key_temp(&key_temp_name, &envelope_bytes)?;
+            #[cfg(test)]
+            if crash_point == Some(AdmissionInitializationCrashPointV1::BeforeKeyPublication) {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                    ),
+                );
+            }
+            transaction.publish_staged_key_no_replace(&key_temp_name, &key_name)?;
+            #[cfg(test)]
+            if crash_point == Some(AdmissionInitializationCrashPointV1::AfterKeyPublication) {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                    ),
+                );
+            }
+            let header = RetainedWorkerAdmissionKeyHeaderV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.clone(),
+                key_id: key_id.clone(),
+                created_at,
+                algorithm: RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256,
+            };
+            let registry = RetainedWorkerAdmissionRegistryV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.clone(),
+                commitment_key: header,
+                records_by_session: BTreeMap::new(),
+                issuer_request_index: BTreeMap::new(),
+                next_slot_sequence_by_session: BTreeMap::new(),
+            };
+            let registry_bytes = retain_semantic_error(
+                encode_canonical(&registry, "encode admission registry"),
+                &mut semantic_failure,
+            )?;
+            transaction.publish_registry_no_replace(&registry_temp_name, &registry_bytes)?;
+            retain_semantic_error(
+                validate_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                ),
+                &mut semantic_failure,
+            )
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        result.map_err(|error| {
+            #[cfg(test)]
+            if error.to_string() == "injected retained admission initialization crash" {
+                if crash_point == Some(AdmissionInitializationCrashPointV1::BeforeKeyPublication) {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash before admission key publication".into(),
+                    );
+                }
+                if crash_point == Some(AdmissionInitializationCrashPointV1::AfterKeyPublication) {
+                    return RetainedWorkerRuntimeError(
+                        "injected crash after admission key publication".into(),
+                    );
+                }
+            }
+            RetainedWorkerRuntimeError(error.to_string())
+        })
+    }
+
     pub(crate) fn reserve_registration(
         &self,
         authority: &HostSessionAuthority,
@@ -485,6 +815,101 @@ impl RetainedWorkerRuntime {
             current_policy,
         })
     }
+}
+
+fn encode_canonical<T: Serialize>(
+    value: &T,
+    reason: &'static str,
+) -> Result<Vec<u8>, RetainedWorkerRuntimeError> {
+    canonical_json::to_vec(value).map_err(|_| RetainedWorkerRuntimeError(reason.into()))
+}
+
+fn decode_canonical<T: DeserializeOwned + Serialize>(
+    bytes: &[u8],
+    reason: &'static str,
+) -> Result<T, RetainedWorkerRuntimeError> {
+    let value =
+        canonical_json::from_slice(bytes).map_err(|_| RetainedWorkerRuntimeError(reason.into()))?;
+    if encode_canonical(&value, reason)? != bytes {
+        return Err(RetainedWorkerRuntimeError(reason.into()));
+    }
+    Ok(value)
+}
+
+fn retain_semantic_error<T>(
+    result: Result<T, RetainedWorkerRuntimeError>,
+    failure: &mut Option<RetainedWorkerRuntimeError>,
+) -> Result<T, super::host_session_authority::store::BootstrapError> {
+    result.map_err(|error| {
+        *failure = Some(error);
+        super::host_session_authority::store::BootstrapError::retained_admission_semantic()
+    })
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(HEX[(byte >> 4) as usize] as char);
+        encoded.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    encoded
+}
+
+fn validate_committed_admission_key(
+    authority_store_id: &str,
+    registry: &RetainedWorkerAdmissionRegistryV1,
+    keys: &[(String, Vec<u8>)],
+) -> Result<RetainedWorkerAdmissionKeyIdentityV1, RetainedWorkerRuntimeError> {
+    let header = &registry.commitment_key;
+    if registry.schema_version != 1
+        || registry.authority_store_id != authority_store_id
+        || header.schema_version != 1
+        || header.authority_store_id != authority_store_id
+        || header.algorithm != RetainedWorkerAdmissionCommitmentAlgorithmV1::HmacSha256
+        || !valid_key_id(&header.key_id)
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "committed admission registry header is invalid".into(),
+        ));
+    }
+    let expected_name = format!("{}.key", header.key_id);
+    let [(key_name, key_bytes)] = keys else {
+        return Err(RetainedWorkerRuntimeError(
+            "committed admission registry has no unique key".into(),
+        ));
+    };
+    if key_name != &expected_name {
+        return Err(RetainedWorkerRuntimeError(
+            "committed admission registry key identity is wrong".into(),
+        ));
+    }
+    let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+        decode_canonical(key_bytes, "committed admission key envelope is malformed")?;
+    if envelope.schema_version != 1
+        || envelope.authority_store_id != authority_store_id
+        || envelope.key_id != header.key_id
+        || envelope.created_at != header.created_at
+        || envelope.algorithm != header.algorithm
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "committed admission key envelope identity is inexact".into(),
+        ));
+    }
+    Ok(RetainedWorkerAdmissionKeyIdentityV1 {
+        authority_store_id: authority_store_id.to_owned(),
+        key_id: header.key_id.clone(),
+        algorithm: header.algorithm,
+    })
+}
+
+fn valid_key_id(value: &str) -> bool {
+    value.strip_prefix("adk_").is_some_and(|hex| {
+        hex.len() == 32
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    })
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
@@ -1781,6 +2206,7 @@ mod tests {
     const RETAINED_SUBPROCESS_STORE: &str = "SUBSTRATE_R0_RETAINED_SUBPROCESS_STORE";
     const RETAINED_SUBPROCESS_COMMITMENT: &str = "SUBSTRATE_R0_RETAINED_SUBPROCESS_COMMITMENT";
     const RETAINED_SUBPROCESS_VARIANT: &str = "SUBSTRATE_R0_RETAINED_SUBPROCESS_VARIANT";
+    const ADMISSION_INIT_SUBPROCESS_HOME: &str = "SUBSTRATE_B3_2A_ADMISSION_INIT_SUBPROCESS_HOME";
 
     #[test]
     fn retained_registration_subprocess_worker() {
@@ -1814,6 +2240,17 @@ mod tests {
         }
         RetainedWorkerRuntime
             .register_retained_target(&authority, &plan)
+            .unwrap();
+    }
+
+    #[test]
+    fn admission_initialization_subprocess_worker() {
+        let Some(home) = std::env::var_os(ADMISSION_INIT_SUBPROCESS_HOME) else {
+            return;
+        };
+        let authority = HostSessionAuthority::open(std::path::Path::new(&home)).unwrap();
+        RetainedWorkerRuntime
+            .initialize_admission_registry(&authority)
             .unwrap();
     }
 
@@ -1908,5 +2345,254 @@ mod tests {
         assert_eq!(authority_record.retained_worker_refs.len(), 1);
         assert_eq!(authority_record.authoritative_participant_lineage.len(), 2);
         assert_eq!(object_files(&object_root).len(), objects_before.len() + 3);
+    }
+
+    #[test]
+    fn admission_key_initialization_is_private_and_exactly_joined() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+
+        let first = runtime.initialize_admission_registry(&authority).unwrap();
+        let joined = runtime.initialize_admission_registry(&authority).unwrap();
+
+        assert_eq!(joined, first);
+        let admission_root = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        let key_path = admission_root
+            .join("keys")
+            .join(format!("{}.key", first.key_id));
+        let key_mode = fs::metadata(key_path).unwrap().permissions().mode() & 0o777;
+        let registry_mode = fs::metadata(admission_root.join("registry-v1.json"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(key_mode, 0o600);
+        assert_eq!(registry_mode, 0o600);
+    }
+
+    #[test]
+    fn admission_key_orphan_after_key_publication_is_reconciled_before_reinitialization() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let created_at = timestamp("2026-07-15T12:00:00.000000000Z");
+        let failure = runtime
+            .initialize_admission_registry_at(
+                &authority,
+                created_at.clone(),
+                [1_u8; 16],
+                [2_u8; 16],
+                [3_u8; 32],
+                Some(AdmissionInitializationCrashPointV1::AfterKeyPublication),
+            )
+            .unwrap_err();
+        assert_eq!(
+            failure.to_string(),
+            "injected crash after admission key publication"
+        );
+
+        let admission_root = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        assert!(!admission_root.join("registry-v1.json").exists());
+        assert_eq!(
+            fs::read_dir(admission_root.join("keys")).unwrap().count(),
+            1
+        );
+
+        let joined = runtime
+            .initialize_admission_registry_at(
+                &authority, created_at, [4_u8; 16], [5_u8; 16], [6_u8; 32], None,
+            )
+            .unwrap();
+        let key_names = fs::read_dir(admission_root.join("keys"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(key_names, vec![format!("{}.key", joined.key_id)]);
+    }
+
+    #[test]
+    fn admission_key_temp_before_publication_is_reconciled_before_reinitialization() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let failure = runtime
+            .initialize_admission_registry_at(
+                &authority,
+                timestamp("2026-07-15T12:01:00.000000000Z"),
+                [7_u8; 16],
+                [8_u8; 16],
+                [9_u8; 32],
+                Some(AdmissionInitializationCrashPointV1::BeforeKeyPublication),
+            )
+            .unwrap_err();
+        assert_eq!(
+            failure.to_string(),
+            "injected crash before admission key publication"
+        );
+        let admission_root = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        assert_eq!(fs::read_dir(admission_root.join("tmp")).unwrap().count(), 1);
+        assert_eq!(
+            fs::read_dir(admission_root.join("keys")).unwrap().count(),
+            0
+        );
+        assert!(!admission_root.join("registry-v1.json").exists());
+
+        let initialized = runtime.initialize_admission_registry(&authority).unwrap();
+        assert_eq!(fs::read_dir(admission_root.join("tmp")).unwrap().count(), 0);
+        assert_eq!(
+            fs::read_dir(admission_root.join("keys")).unwrap().count(),
+            1
+        );
+        assert!(admission_root
+            .join("keys")
+            .join(format!("{}.key", initialized.key_id))
+            .exists());
+    }
+
+    #[test]
+    fn concurrent_process_admission_key_initialization_exactly_joins_one_key() {
+        let (parent, authority, _) = started_authority();
+        let executable = std::env::current_exe().unwrap();
+        let test_name = "execution::agent_runtime::retained_worker_runtime::tests::admission_initialization_subprocess_worker";
+        let spawn = || {
+            Command::new(&executable)
+                .arg("--exact")
+                .arg(test_name)
+                .arg("--nocapture")
+                .arg("--test-threads=1")
+                .env(ADMISSION_INIT_SUBPROCESS_HOME, parent.path().join("home"))
+                .spawn()
+                .unwrap()
+        };
+        let mut first = spawn();
+        let mut second = spawn();
+        assert!(first.wait().unwrap().success());
+        assert!(second.wait().unwrap().success());
+
+        let joined = RetainedWorkerRuntime
+            .initialize_admission_registry(&authority)
+            .unwrap();
+        let admission_root = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        let key_names = fs::read_dir(admission_root.join("keys"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(key_names, vec![format!("{}.key", joined.key_id)]);
+        assert_eq!(fs::read_dir(admission_root.join("tmp")).unwrap().count(), 0);
+    }
+
+    fn initialized_admission_paths(
+        parent: &tempfile::TempDir,
+        identity: &RetainedWorkerAdmissionKeyIdentityV1,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
+        let admission_root = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        let key_path = admission_root
+            .join("keys")
+            .join(format!("{}.key", identity.key_id));
+        (admission_root, key_path)
+    }
+
+    #[test]
+    fn committed_admission_key_missing_fails_closed_without_registry_mutation() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (admission_root, key_path) = initialized_admission_paths(&parent, &identity);
+        let registry_before = fs::read(admission_root.join("registry-v1.json")).unwrap();
+        fs::remove_file(&key_path).unwrap();
+
+        assert!(runtime.initialize_admission_registry(&authority).is_err());
+        assert!(!key_path.exists());
+        assert_eq!(
+            fs::read(admission_root.join("registry-v1.json")).unwrap(),
+            registry_before
+        );
+    }
+
+    #[test]
+    fn committed_admission_key_malformed_fails_closed_without_repair() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (_, key_path) = initialized_admission_paths(&parent, &identity);
+        fs::write(&key_path, b"malformed-admission-key").unwrap();
+        let malformed = fs::read(&key_path).unwrap();
+
+        assert!(runtime.initialize_admission_registry(&authority).is_err());
+        assert_eq!(fs::read(key_path).unwrap(), malformed);
+    }
+
+    #[test]
+    fn committed_admission_key_wrong_store_fails_closed_without_repair() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (_, key_path) = initialized_admission_paths(&parent, &identity);
+        let mut envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+            decode_canonical(&fs::read(&key_path).unwrap(), "decode fixture key").unwrap();
+        envelope.authority_store_id = "as_00000000000000000000000000000000".into();
+        let substituted = encode_canonical(&envelope, "encode fixture key").unwrap();
+        fs::write(&key_path, &substituted).unwrap();
+
+        assert!(runtime.initialize_admission_registry(&authority).is_err());
+        assert_eq!(fs::read(key_path).unwrap(), substituted);
+    }
+
+    #[test]
+    fn committed_admission_key_wrong_key_identity_fails_closed_without_repair() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (_, key_path) = initialized_admission_paths(&parent, &identity);
+        let mut envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+            decode_canonical(&fs::read(&key_path).unwrap(), "decode fixture key").unwrap();
+        envelope.key_id = "adk_00000000000000000000000000000000".into();
+        let substituted = encode_canonical(&envelope, "encode fixture key").unwrap();
+        fs::write(&key_path, &substituted).unwrap();
+
+        assert!(runtime.initialize_admission_registry(&authority).is_err());
+        assert_eq!(fs::read(key_path).unwrap(), substituted);
+    }
+
+    #[test]
+    fn committed_admission_key_unreadable_mode_fails_closed_without_repair() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (_, key_path) = initialized_admission_paths(&parent, &identity);
+        fs::set_permissions(&key_path, fs::Permissions::from_mode(0o000)).unwrap();
+
+        assert!(runtime.initialize_admission_registry(&authority).is_err());
+        assert_eq!(
+            fs::metadata(key_path).unwrap().permissions().mode() & 0o777,
+            0
+        );
+    }
+
+    #[test]
+    fn committed_admission_key_symlink_is_rejected_without_following_target() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (_, key_path) = initialized_admission_paths(&parent, &identity);
+        let target = parent.path().join("outside-key-target");
+        fs::write(&target, b"outside").unwrap();
+        fs::remove_file(&key_path).unwrap();
+        std::os::unix::fs::symlink(&target, &key_path).unwrap();
+
+        assert!(runtime.initialize_admission_registry(&authority).is_err());
+        assert_eq!(fs::read(target).unwrap(), b"outside");
+        assert!(fs::symlink_metadata(key_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
     }
 }
