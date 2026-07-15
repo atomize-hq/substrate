@@ -1,14 +1,24 @@
 #![allow(unused_crate_dependencies)]
 
+mod support;
+
 use std::fs;
 
 use agent_drift_analyzer::{
-    analyze_bundle, AnalyzeRequest, Checkpoint, Confidence, DriftClass, DriftScore, DriftState,
-    ProgressDimension, ProgressSignalCode, ProgressStatus, SessionArchetype, SessionArchetypeLabel,
-    SessionProgress,
+    analyze_bundle, AnalyzeRequest, Checkpoint, Confidence, DelegationTopology, DriftClass,
+    DriftScore, DriftState, ProgressDimension, ProgressSignalCode, ProgressStatus,
+    SessionArchetype, SessionArchetypeLabel, SessionProgress,
+};
+use agent_session_compactor::{
+    BundleManifest, CompactionKind, CompactionRow, DelegationEvidenceRef, DelegationLink,
+    DelegationLinkState, SourceKind, UserMessageRole,
 };
 use camino::{Utf8Path, Utf8PathBuf};
+use support::BundleFixture;
 use tempfile::TempDir;
+
+const LINKED_PROGRESS_PARENT: &str = "r7-3-1-parent";
+const LINKED_PROGRESS_CHILD: &str = "r7-3-1-child";
 
 const NATIVE_PROGRESS_ACCEPTANCE_CASE_IDS: [&str; 9] = [
     "019e899c-453f-71f2-a99d-155848c7b081",
@@ -296,6 +306,249 @@ fn progress_acceptance_cases_match_expected_progress_contract() {
     for case_id in PROGRESS_ACCEPTANCE_CASE_IDS {
         assert_progress_case(case_id);
     }
+}
+
+#[test]
+fn linked_parent_and_child_keep_trajectory_local_progress() {
+    let fixture = linked_progress_fixture();
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze linked progress fixture");
+
+    let parent = final_checkpoint_for_session(&result, LINKED_PROGRESS_PARENT);
+    let child = final_checkpoint_for_session(&result, LINKED_PROGRESS_CHILD);
+    let child_archetype = child
+        .session_archetype
+        .as_ref()
+        .expect("linked child archetype");
+    let parent_progress = parent
+        .session_progress
+        .as_ref()
+        .expect("linked parent progress");
+    let child_progress = child
+        .session_progress
+        .as_ref()
+        .expect("linked child progress");
+
+    assert_eq!(
+        (
+            parent.delegation.topology,
+            parent.delegation.child_session_ids.as_slice(),
+            parent_progress.dimension,
+            parent_progress.status,
+        ),
+        (
+            DelegationTopology::DelegatingParent,
+            [LINKED_PROGRESS_CHILD.to_string()].as_slice(),
+            ProgressDimension::ParentVisibleOrchestration,
+            ProgressStatus::InsufficientEvidence,
+        ),
+        "the parent must reference the child while retaining parent-visible progress"
+    );
+    assert_eq!(
+        (
+            child.delegation.topology,
+            child.delegation.parent_session_id.as_deref(),
+            child.delegation.child_session_ids.as_slice(),
+            child_archetype.label,
+            child_progress.dimension,
+            child_progress.status,
+        ),
+        (
+            DelegationTopology::DelegatedChild,
+            Some(LINKED_PROGRESS_PARENT),
+            [].as_slice(),
+            SessionArchetypeLabel::VerificationCloseout,
+            ProgressDimension::VerificationCloseoutNarrowing,
+            ProgressStatus::Mixed,
+        ),
+        "the child must retain its own fail/edit/clean archetype and progress"
+    );
+    assert_checkpoint_evidence_stays_session_local(parent, LINKED_PROGRESS_PARENT);
+    assert_checkpoint_evidence_stays_session_local(child, LINKED_PROGRESS_CHILD);
+}
+
+fn linked_progress_fixture() -> BundleFixture {
+    let rows = linked_parent_rows()
+        .into_iter()
+        .chain(linked_child_rows())
+        .collect();
+    let fixture = BundleFixture::from_compact_rows(rows);
+    let manifest_path = fixture.input_dir.join("manifest.json");
+    let mut manifest: BundleManifest = read_json(manifest_path.as_ref());
+    manifest.delegation_links = vec![DelegationLink {
+        parent_session_id: LINKED_PROGRESS_PARENT.to_string(),
+        child_session_id: LINKED_PROGRESS_CHILD.to_string(),
+        child_origin_parent_session_id: Some(LINKED_PROGRESS_PARENT.to_string()),
+        depth: Some(1),
+        state: DelegationLinkState::Verified,
+        parent_evidence: vec![delegation_evidence(LINKED_PROGRESS_PARENT, 1)],
+        child_evidence: vec![delegation_evidence(LINKED_PROGRESS_CHILD, 0)],
+    }];
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize linked progress manifest"),
+    )
+    .expect("write linked progress manifest");
+    fixture
+}
+
+fn linked_parent_rows() -> Vec<CompactionRow> {
+    vec![
+        progress_row(
+            LINKED_PROGRESS_PARENT,
+            0,
+            CompactionKind::UserMessage,
+            "/goal Delegate the bounded child implementation and coordinate its result.",
+            None,
+        ),
+        progress_row(
+            LINKED_PROGRESS_PARENT,
+            1,
+            CompactionKind::ToolCall,
+            r#"{"task_name":"r7_3_1_child","message":"Implement and verify the bounded child target."}"#,
+            Some("spawn_agent"),
+        ),
+    ]
+}
+
+fn linked_child_rows() -> Vec<CompactionRow> {
+    vec![
+        progress_row(
+            LINKED_PROGRESS_CHILD,
+            0,
+            CompactionKind::UserMessage,
+            "/goal Implement only crates/child-target/src/lib.rs and verify child_target.",
+            None,
+        ),
+        progress_row(
+            LINKED_PROGRESS_CHILD,
+            1,
+            CompactionKind::ToolCall,
+            r#"{"command":"cargo test -p child-target child_target -- --exact","workdir":"/repo"}"#,
+            Some("functions.shell_command"),
+        ),
+        progress_row(
+            LINKED_PROGRESS_CHILD,
+            2,
+            CompactionKind::ToolOutput,
+            "Exit code: 101\nrunning 1 test\ntest child_target ... FAILED\n\nfailures:\n    child_target\n\nthread 'child_target' panicked at crates/child-target/src/lib.rs:10:5:\nassertion failed: child target\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out",
+            None,
+        ),
+        progress_row(
+            LINKED_PROGRESS_CHILD,
+            3,
+            CompactionKind::ToolCall,
+            r#"{"command":"apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/child-target/src/lib.rs\n*** End Patch\nPATCH","workdir":"/repo"}"#,
+            Some("functions.apply_patch"),
+        ),
+        progress_row(
+            LINKED_PROGRESS_CHILD,
+            4,
+            CompactionKind::ToolCall,
+            r#"{"command":"cargo test -p child-target child_target -- --exact","workdir":"/repo"}"#,
+            Some("functions.shell_command"),
+        ),
+        progress_row(
+            LINKED_PROGRESS_CHILD,
+            5,
+            CompactionKind::ToolOutput,
+            "Exit code: 0\nrunning 1 test\ntest child_target ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+            None,
+        ),
+    ]
+}
+
+fn progress_row(
+    session_id: &str,
+    event_index: usize,
+    kind: CompactionKind,
+    text: &str,
+    tool_name: Option<&str>,
+) -> CompactionRow {
+    CompactionRow {
+        source_file: Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl")),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some(session_id.to_string()),
+        turn_id: Some("turn-001".to_string()),
+        event_index,
+        line_number: event_index + 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind,
+        user_message_role: matches!(kind, CompactionKind::UserMessage)
+            .then_some(UserMessageRole::Prompt),
+        dedupe_identity: tool_name.map(|name| {
+            format!(
+                "{{\"call_id\":\"call-{session_id}-{event_index}\",\"name\":\"{name}\",\"type\":\"function_call\"}}"
+            )
+        }),
+        text: text.to_string(),
+        canonical_text: text.to_string(),
+        text_hash_hex: format!("hash-{session_id}-{event_index}"),
+    }
+}
+
+fn delegation_evidence(session_id: &str, event_index: usize) -> DelegationEvidenceRef {
+    DelegationEvidenceRef {
+        source_file: Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl")),
+        line_number: event_index + 1,
+        event_index,
+    }
+}
+
+fn final_checkpoint_for_session<'a>(
+    result: &'a agent_drift_analyzer::AnalyzeResult,
+    session_id: &str,
+) -> &'a Checkpoint {
+    result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .and_then(|session| session.checkpoints.last())
+        .unwrap_or_else(|| panic!("final checkpoint for {session_id}"))
+}
+
+fn assert_checkpoint_evidence_stays_session_local(checkpoint: &Checkpoint, session_id: &str) {
+    let archetype = checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("session archetype");
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+    let evidence = archetype
+        .supporting_evidence
+        .iter()
+        .chain(&archetype.counter_evidence)
+        .chain(&progress.supporting_evidence)
+        .chain(&progress.counter_evidence)
+        .chain(progress.signals.iter().flat_map(|signal| &signal.evidence));
+
+    assert!(
+        checkpoint
+            .boundary
+            .start
+            .source_file
+            .as_str()
+            .contains(session_id)
+            && checkpoint
+                .boundary
+                .end
+                .source_file
+                .as_str()
+                .contains(session_id),
+        "checkpoint boundary must remain on {session_id}"
+    );
+    assert!(
+        evidence
+            .into_iter()
+            .all(|item| item.row.source_file.as_str().contains(session_id)),
+        "archetype/progress evidence must remain on {session_id}"
+    );
 }
 
 #[test]
