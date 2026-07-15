@@ -3,8 +3,9 @@
 Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
 `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
 OPTION A ACCEPTED AND COMPLETE / TASK `.3` COMPLETE AT FOCUSED-CANDIDATE BOUNDARY / TASK `.3A`
-COMMIT `7812dd5ef` REVIEW-CLEAN / TASK `.3B` COMPLETE / TASK `.3C` DOCS GATE CURRENT / TASK `.3D`
-BLOCKED / TASK `.4` STOPPED AT ORDERED PROOF STEP 12** within
+COMMIT `7812dd5ef` REVIEW-CLEAN / TASK `.3B` COMPLETE / TASK `.3C` COMMIT `961a36574`
+REVIEW-CLEAN / TASK `.3D` COMPLETE AT TWO-PHRASE CANDIDATE BOUNDARY / TASK `.3E` DOCS GATE
+CURRENT / TASK `.3F` BLOCKED / TASK `.4` STOPPED AT ORDERED PROOF STEP 12** within
 `R6-REPLAY`. Trusted
 witness `60cde3dd7` preserves `CTX-R6-02` red. Task `.0` series `200725001` + `08fa86e94` +
 `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` each received fresh independent built-in
@@ -19,9 +20,12 @@ boundary: all five focused units are green and the complete eight-file candidate
 Task `.4` made one bounded single-lane preservation fix. Task `.3A` commit `7812dd5ef` received fresh
 independent built-in `default` `REVIEW CLEAN`, and Task `.3B` implemented and focus-proved the locked
 verified-edit-epoch selection. Task `.4` then completed ordered proof steps 1-11 green and stopped at
-the progress-acceptance expected-fact red in step 12. Task `.3C` is the current docs-first
-reconciliation gate; Task `.3D` is blocked until `.3C` is committed and fresh-review-clean, and Task
-`.4` resumes from the beginning only after `.3D` completes. No implementation commit or
+the progress-acceptance expected-fact red in step 12. Task `.3C` commit `961a36574` received fresh
+independent built-in `default` `REVIEW CLEAN`. Task `.3D` applied exactly the two authorized phrase
+changes, then focused proof exposed a later malformed-synthetic-identity red. Task `.3E` is the
+current docs-first reconciliation gate; Task `.3F` is blocked until `.3E` is committed and
+fresh-review-clean, and Task `.4` resumes from the beginning only after `.3F` completes. No
+implementation commit or
 implementation review-clean result exists;
 `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
 
@@ -174,7 +178,8 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
       remain unchanged.
   - Impact every additional existing symbol before editing it. Under selected Option A, do not edit
     `recovery_state`, `drift_state_for_score`, `assign_drift_states`, shared comparability, scorer
-    logic, compactor logic, raw fixtures, schemas, replay presentation, sentinel surfaces, R7, or R8.
+    logic, compactor logic, raw fixtures outside Task `.3F`'s exact four-file synthetic identity
+    exception, schemas, replay presentation, sentinel surfaces, R7, or R8.
   - TDD receipt: the focused pairing unit and four named troubleshooting units each pass `1 / 1`.
     Every authorized source/test/helper/expected-disposition edit is present in one complete
     eight-file **unstaged** candidate. Task `.3` did not stage, commit, or claim implementation
@@ -218,7 +223,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     `troubleshooting_unverified_trailing_edit_does_not_erase_latest_informative_lane` completed red,
     then green. The complete candidate remains unstaged.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.3C — Land and fresh-review the progress expected-fact docs gate — CURRENT.**
+- [x] **R6-GAP-DET-REPLAY-STALL.3C — Land and fresh-review the progress expected-fact docs gate — REVIEW-CLEAN.**
   - Unexpected witness: Task `.4` steps 1-7 each pass `1 / 1`; step 8 `troubleshooting` passes
     `20 / 20` across library and integration targets; steps 9-11 exact `CTX-R6-02`, sticky
     `CTX-R6-06`, and frozen corpus each pass `1 / 1`. Step 12
@@ -231,26 +236,74 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - Locked reconciliation: replace only `earlier later stage verification attempt` with
     `earlier clean verification attempt` and `later regressing verification attempt` with
     `later failing verification attempt`.
-  - Files: exactly this packet SPEC/PLAN/TASKS; do not edit canonical mirrors. Preserve the eight-file
-    candidate byte-for-byte, stage and commit only these docs through the required gate, and obtain
-    fresh built-in `default` review/fix cycles until `REVIEW CLEAN`.
+  - Files: exactly this packet SPEC/PLAN/TASKS; canonical mirrors remained untouched and the original
+    eight-file candidate was preserved byte-for-byte at patch SHA-256
+    `70ed522cc30f8e4fb3f36f946502105e440f7719c1917fe41c399e13876884c2`.
   - Authority: no operator decision is required because the classification and semantic authority do
     not change; only stale expected wording is reconciled to the corrected pairing facts.
+  - Receipt: commit `961a36574` received fresh independent built-in `default` `REVIEW CLEAN`.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.3D — Reconcile and focus-prove two progress expected facts — BLOCKED ON `.3C`.**
-  - Activation: only after `.3C` is committed and fresh-review-clean.
+- [x] **R6-GAP-DET-REPLAY-STALL.3D — Reconcile two progress expected facts and preserve the next red — COMPLETE AT EXACT-EDIT BOUNDARY.**
+  - Activation receipt: `.3C` commit `961a36574` is fresh-review-clean.
   - Files: exactly `crates/agent-drift-analyzer/tests/progress_acceptance.rs` and
     `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/real-reopen-regressing-019e894a-ord7/expected.json`.
-  - Change only the two phrases locked in `.3C`; do not edit source, another fixture, packet/canonical
-    docs, raw rows, status, dimension, confidence, signals, evidence minima, or other expected facts.
-  - Run exact `progress_acceptance_cases_match_expected_progress_contract` focused proof and stop with
-    the complete candidate unstaged. Task `.4` resumes from the beginning only after `.3D` completes.
+  - Receipt: changed only the two phrases locked in `.3C`; no source, other fixture, packet/canonical
+    docs, raw rows, status, dimension, confidence, signals, evidence minima, or other expected fact
+    changed.
+  - Focused `progress_acceptance_cases_match_expected_progress_contract` exits `101`; log
+    `/tmp/r6-task3d-progress-acceptance.log`. The next reported case,
+    `synthetic-implementation-advancing`, is `InsufficientEvidence`, not locked `Advancing`.
+  - The complete ten-file candidate remains unstaged at patch SHA-256
+    `7f12cdd2d4c0c92ea08027b3610f22f5168c5ad99b973b0ed3cbcc508cbf98db`; its original eight-file
+    portion remains `70ed522cc30f8e4fb3f36f946502105e440f7719c1917fe41c399e13876884c2`.
+
+- [ ] **R6-GAP-DET-REPLAY-STALL.3E — Land and fresh-review the synthetic fixture identity docs gate — CURRENT.**
+  - Unexpected witness: after `.3D`'s exact two-phrase repair, focused progress acceptance exits `101`
+    because `synthetic-implementation-advancing` is `InsufficientEvidence`, not `Advancing`; log
+    `/tmp/r6-task3d-progress-acceptance.log`.
+  - Diagnosis: in that synthetic fixture, verifier calls event `1` (`call-1`) and event `5`
+    (`call-5`) have semantic outputs events `2` and `6`, but the outputs are id-less and therefore do
+    not pair under the selected call-ID-exclusive contract. Event `4` (`call-4`) is `apply_patch`, has
+    no output, and needs no change.
+  - Complete deterministic malformed set: an audit of all `16` progress-acceptance bundles and `32`
+    archival/compact row files also finds id-less semantic outputs in
+    `synthetic-zero-verifier-anti-flap`: event `2` for `call-1`, event `4` for `call-3`, event `7` for
+    `call-6`, event `9` for `call-8`, and event `11` for `call-10`.
+  - Locked repair: in both archival and compact copies, add only matching `dedupe_identity` values
+    with `type: function_call_output` to those seven semantic outputs (`14` physical rows). Do not
+    change `call-4`, any other row, another fixture, an expected contract, source, test, packet or
+    canonical mirror, or any native/adapted/real fixture.
+  - Locked postures: keep `synthetic-implementation-advancing` at
+    `AutonomousImplementation / ImplementationVerificationWall / Advancing / Medium` with
+    `FailureFrontierAdvanced` and `WorkingSetConcentrated`; keep
+    `synthetic-zero-verifier-anti-flap` at `PlanningConvergence / InsufficientEvidence / Low`.
+  - Files: exactly this packet SPEC/PLAN/TASKS. Preserve the complete ten-file candidate byte-for-byte
+    at `7f12cdd2d4c0c92ea08027b3610f22f5168c5ad99b973b0ed3cbcc508cbf98db`; stage and commit only these
+    docs, then obtain fresh built-in `default` review/fix cycles until `REVIEW CLEAN`.
+  - Authority: no operator decision is required because malformed synthetic output identities
+    violate the already-selected truthful call-pairing contract; this is not a new product or semantic
+    choice.
+
+- [ ] **R6-GAP-DET-REPLAY-STALL.3F — Repair and focus-prove synthetic fixture output identities — BLOCKED ON `.3E`.**
+  - Activation: only after `.3E` is committed and fresh-review-clean.
+  - Files: exactly the `rows.archival.jsonl` and `rows.compact.jsonl` files for
+    `synthetic-implementation-advancing` and `synthetic-zero-verifier-anti-flap` under
+    `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/`.
+  - Add matching `function_call_output` identities only to implementation events `2` (`call-1`) and
+    `6` (`call-5`), and zero-verifier events `2` (`call-1`), `4` (`call-3`), `7` (`call-6`), `9`
+    (`call-8`), and `11` (`call-10`), in both archival/compact copies.
+  - Run a deterministic identity audit over all `16` bundles/`32` row files, then run exact
+    `progress_acceptance_cases_match_expected_progress_contract`. Both must be green with the locked
+    postures unchanged; stop with the complete candidate unstaged.
+  - Do not edit another row, fixture, expected contract, source, test, packet/canonical mirror,
+    native/adapted/real fixture, or an identified call without an output.
 
 - [ ] **R6-GAP-DET-REPLAY-STALL.4 — Run exact integrated proof, commit, and close fresh review — STOPPED AT STEP 12.**
   - Partial receipt: proof steps 1-7 each pass `1 / 1`; step 8 `troubleshooting` passes `20 / 20`
-    across library and integration targets; steps 9-11 each pass `1 / 1`. Step 12 exits `101` only on
-    the stale expected-fact wording recorded in `.3C`. No files were staged or committed.
-  - Resume only after Task `.3D` completes, then rerun the exact proof sequence from the beginning.
+    across library and integration targets; steps 9-11 each pass `1 / 1`. Step 12 first exposed the
+    stale expected-fact wording recorded in `.3C`; after `.3D` applied the exact repair, focused proof
+    exposed the later malformed synthetic identity red. No files were staged or committed.
+  - Resume only after Task `.3F` completes, then rerun the exact proof sequence from the beginning.
   - Verify in order:
 
     ```bash
@@ -305,6 +358,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   `dead_end_thrash Active / 30 / High`.
 - Committed-baseline defect: evidence names the successful siblings because `pair_output_rows` uses
   positional pairing across concurrent calls. The preserved uncommitted candidate corrects that
-  attribution. Task `.3` is complete at its focused-candidate boundary; `.3A` is review-clean and
-  `.3B` is complete. Task `.4` is stopped at ordered proof step 12 pending the `.3C`/`.3D`
-  expected-fact reconciliation. No implementation commit or review-clean result exists.
+  attribution. Task `.3` is complete at its focused-candidate boundary; `.3A` and `.3C` are
+  review-clean, while `.3B` and `.3D` are complete. Task `.4` is stopped at ordered proof step 12
+  pending the `.3E`/`.3F` synthetic output-identity reconciliation. No implementation commit or
+  review-clean result exists.
