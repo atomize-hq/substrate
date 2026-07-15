@@ -679,6 +679,15 @@ impl HostSessionAuthority {
         .map_err(store_error)
     }
 
+    pub(crate) fn read_authority_object_v2_at(
+        &self,
+        expected_root_revision: u64,
+        reference: &AuthorityObjectRefV1,
+    ) -> Result<Vec<u8>, AuthorityFacadeError> {
+        store::read_typed_object_v2_opened(&self.root, expected_root_revision, reference, None)
+            .map_err(store_error)
+    }
+
     #[cfg(test)]
     pub(crate) fn apply_reserved_retained_worker_registration_with_crash_point(
         &self,
