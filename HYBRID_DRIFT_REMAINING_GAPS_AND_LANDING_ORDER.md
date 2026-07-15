@@ -18,8 +18,11 @@ design, and the per-packet sets. R6 is **CLOSED** after `R6-CLOSE` / `CTX-R6-17`
 `455d0ed90` + `876ac55de` completed the R7 content/gate audit, made the R7 authority family
 implementation-ready, and received fresh independent built-in `default` `REVIEW CLEAN`.
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
-independent built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry only with packet `none`,
-`R7-0.1` is next, and no R7 task has started. The Ground Truth Sources list below is historical
+independent built-in `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet
+`none`. Docs-only `R7-0.1` is committed at landing candidate `a9e75f149`; its fresh independent
+review found this narrative-state blocker, so correction and fresh re-review are pending. `R7-0.2`
+is next only after the full fix series is fresh-review-clean and remains unstarted. Fixtures, all
+implementation, and `R7-1..R7-6` remain blocked. The Ground Truth Sources list below is historical
 context, not an exhaustive index of current authority.
 
 > **Historical status note (2026-07-04; superseded):** `R5`/`R5.5`/`R5.75`
@@ -97,8 +100,11 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is `R7-0` at entry only, with packet `none` and `R7-0.1` next but unstarted.
-`R7-PROMOTE` and its fresh-review-clean promotion series are complete; transition series
+The active follow-on is solely `R7-0`, with packet `none`. Docs-only `R7-0.1` is committed at
+landing candidate `a9e75f149`; its fresh independent review found this narrative-state blocker, so
+correction and fresh re-review are pending. `R7-0.2` is next only after the full fix series is
+fresh-review-clean and remains unstarted. Fixtures, all implementation, and `R7-1..R7-6` remain
+blocked. `R7-PROMOTE` and its fresh-review-clean promotion series are complete; transition series
 `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in `default` `REVIEW CLEAN`.
 The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
@@ -133,8 +139,12 @@ reconfirmed the four exact replay controls at `1 / 1` each, the Manifest E filte
 `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
 `R6-CLOSE` is complete and R6 is `CLOSED`. Promotion series `455d0ed90` + `876ac55de` is fresh
 independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` +
-`4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0` is
-active at entry only with packet `none`, `R7-0.1` is next, and no R7 task has started.
+`4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0`
+remains the sole active phase with packet `none`. Docs-only `R7-0.1` is committed at landing
+candidate `a9e75f149`; its fresh independent review found this narrative-state blocker, so
+correction and fresh re-review are pending. `R7-0.2` is next only after the full fix series is
+fresh-review-clean and remains unstarted. Fixtures, all implementation, and `R7-1..R7-6` remain
+blocked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -152,10 +162,11 @@ control.” The current honest sequence is:
    `e6d43eee9` + `61c9d5074` fresh independent `REVIEW CLEAN`, and keep `CTX-R6-06` plus the R6 family
    wall complete with active packet `none`
 7. keep completed `CTX-R6-17`, the terminal table, and R6 `CLOSED` authority reconciled
-8. keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de` and its
-   implementation-ready R7 authority content fixed; keep fresh-review-clean transition series
-   `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed and `R7-0` at entry only, without starting
-   `R7-0.1` or later work
+8. keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de` and transition
+   series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed; keep `R7-0` the sole active phase with
+   packet `none`; correct and freshly re-review the committed `R7-0.1` landing candidate
+   `a9e75f149`; start no `R7-0.2`, fixture, implementation, or `R7-1..R7-6` work before the full fix
+   series is fresh-review-clean
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -817,9 +828,11 @@ The 2026-07-15 `CTX-R6-17` receipt completed the terminal table: `dead_end_thras
 Promotion series `455d0ed90` + `876ac55de` completed the R7 content/gate audit, made the R7 authority
 family implementation-ready, and received fresh independent built-in `default` `REVIEW CLEAN`.
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
-independent built-in `default` `REVIEW CLEAN`; only `R7-0` is active at entry with packet `none`,
-`R7-0.1` is next, and `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted.
-`R7-1..R7-6` remain blocked.
+independent built-in `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet
+`none`. Docs-only `R7-0.1` is committed at landing candidate `a9e75f149`; its fresh independent
+review found this narrative-state blocker, so correction and fresh re-review are pending. `R7-0.2`
+is next only after the full fix series is fresh-review-clean and remains unstarted. Fixtures, all
+R7 implementation, and `R7-1..R7-6` remain blocked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -894,8 +907,11 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 `R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, `R5.75`, and R6 are landed and closed. Promotion series
 `455d0ed90` + `876ac55de` is fresh independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete and the
 implementation-ready R7 family is current. Transition series `6bf0ac6ad` + `4a887ee0c` +
-`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` is active at entry
-only with packet `none`; `R7-0.1` is next but has not started.
+`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` remains the sole
+active phase with packet `none`. Docs-only `R7-0.1` is committed at landing candidate `a9e75f149`;
+its fresh independent review found this narrative-state blocker, so correction and fresh re-review
+are pending. `R7-0.2` is next only after the full fix series is fresh-review-clean and remains
+unstarted. Fixtures, all implementation, and `R7-1..R7-6` remain blocked.
 
 The next honest work target is:
 
@@ -924,10 +940,12 @@ The next honest work target is:
   **Cutover complete**; `truth_grounding_gap`/`wrong_plan_branch`/`scoring/mod.rs`
   **Fit-for-purpose exception**; no merge/deprecation or deferral route
 - **current action:** keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de`
-  and the implementation-ready R7 authority content fixed; keep fresh-review-clean transition
-  series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed and `R7-0` active at entry only
-- keep `R7-0.1` next but unstarted; keep `R7-0.2` and all delegated-session implementation
-  unstarted until ordered by the phase; do not make R7 absorb ordinary single-session scorer gaps
+  and transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed; keep `R7-0` the sole active
+  phase with packet `none`; correct the accepted narrative-state blocker against the committed
+  docs-only `R7-0.1` landing candidate `a9e75f149`, then obtain fresh independent re-review
+- keep `R7-0.2` next only after the full `R7-0.1` fix series is fresh-review-clean and unstarted;
+  keep fixtures and all delegated-session implementation blocked; do not make R7 absorb ordinary
+  single-session scorer gaps
 - keep `R7-1..R7-6` blocked until their ordered predecessor exits review-clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
