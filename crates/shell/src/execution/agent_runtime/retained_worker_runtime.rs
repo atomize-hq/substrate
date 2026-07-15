@@ -437,10 +437,15 @@ impl RetainedWorkerRuntime {
                     &mut semantic_failure,
                 )?;
                 let keys = transaction.read_keys()?;
-                return retain_semantic_error(
+                let identity = retain_semantic_error(
                     validate_committed_admission_key(&authority_store_id, &registry, &keys),
                     &mut semantic_failure,
-                );
+                )?;
+                retain_semantic_error(
+                    validate_admission_registry(&registry, transaction.authority_root()),
+                    &mut semantic_failure,
+                )?;
+                return Ok(identity);
             }
 
             for (orphan_name, _) in transaction.read_keys()? {
@@ -500,14 +505,19 @@ impl RetainedWorkerRuntime {
                 &mut semantic_failure,
             )?;
             transaction.publish_registry_no_replace(&registry_temp_name, &registry_bytes)?;
-            retain_semantic_error(
+            let identity = retain_semantic_error(
                 validate_committed_admission_key(
                     &authority_store_id,
                     &registry,
                     &transaction.read_keys()?,
                 ),
                 &mut semantic_failure,
-            )
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            Ok(identity)
         });
         if let Some(error) = semantic_failure {
             return Err(error);
@@ -3345,11 +3355,21 @@ mod tests {
         let admission_root = parent
             .path()
             .join("home/authority-v1/retained-worker-admission-v1");
-        assert_eq!(fs::read_dir(admission_root.join("tmp")).unwrap().count(), 1);
         assert_eq!(
             fs::read_dir(admission_root.join("keys")).unwrap().count(),
-            0
+            1
         );
+        let staged_name = fs::read_dir(admission_root.join("keys"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .file_name()
+            .into_string()
+            .unwrap();
+        assert!(staged_name.starts_with("admission-key--"));
+        assert!(staged_name.ends_with(".tmp"));
+        assert_eq!(fs::read_dir(admission_root.join("tmp")).unwrap().count(), 0);
         assert!(!admission_root.join("registry-v1.json").exists());
 
         let initialized = runtime.initialize_admission_registry(&authority).unwrap();
@@ -3761,6 +3781,62 @@ mod tests {
             )
             .is_err());
         assert_eq!(fs::read(registry_path).unwrap(), malformed_bytes);
+    }
+
+    #[test]
+    fn admission_initialization_rejects_inexact_committed_registry_indices_and_records() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "registry-corruption", "prompt", 2);
+        let slot = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let original: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+            &fs::read(&registry_path).unwrap(),
+            "decode fixture registry",
+        )
+        .unwrap();
+
+        let mut variants = Vec::new();
+        let mut changed = original.clone();
+        changed
+            .issuer_request_index
+            .get_mut(&slot.record.issuer_request_id)
+            .unwrap()
+            .retained_participant_id = "rwp_ffffffffffffffffffffffffffffffff".into();
+        variants.push(changed);
+        let mut changed = original.clone();
+        changed
+            .next_slot_sequence_by_session
+            .insert(slot.record.orchestration_session_id.clone(), 1);
+        variants.push(changed);
+        let mut changed = original.clone();
+        changed
+            .records_by_session
+            .get_mut(&slot.record.orchestration_session_id)
+            .unwrap()
+            .get_mut(&slot.record.retained_participant_id)
+            .unwrap()
+            .authority_store_id = "as_00000000000000000000000000000000".into();
+        variants.push(changed);
+        let mut changed = original;
+        changed
+            .records_by_session
+            .get_mut(&slot.record.orchestration_session_id)
+            .unwrap()
+            .get_mut(&slot.record.retained_participant_id)
+            .unwrap()
+            .canonical_spawn_fingerprint
+            .key_id = "adk_ffffffffffffffffffffffffffffffff".into();
+        variants.push(changed);
+
+        for changed in variants {
+            let changed_bytes = encode_canonical(&changed, "encode fixture registry").unwrap();
+            fs::write(&registry_path, &changed_bytes).unwrap();
+            assert!(runtime.initialize_admission_registry(&authority).is_err());
+            assert_eq!(fs::read(&registry_path).unwrap(), changed_bytes);
+        }
     }
 
     #[test]

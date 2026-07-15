@@ -697,22 +697,22 @@ mod platform {
             temp_name: &str,
             bytes: &[u8],
         ) -> Result<(), BootstrapError> {
-            if !admission_temp_file_name(temp_name) {
+            if !admission_key_temp_file_name(temp_name) {
                 return Err(BootstrapError(
                     "retained admission key temp name is invalid",
                 ));
             }
             let mut temp = self
-                .tmp
+                .keys
                 .create_file(temp_name)
                 .map_err(|_| BootstrapError("create retained admission key temp"))?;
             temp.write_all(bytes)
                 .map_err(|_| BootstrapError("write retained admission key temp"))?;
             temp.sync()
                 .map_err(|_| BootstrapError("sync retained admission key temp"))?;
-            self.tmp
+            self.keys
                 .sync()
-                .map_err(|_| BootstrapError("sync retained admission temp directory"))
+                .map_err(|_| BootstrapError("sync retained admission key directory"))
         }
 
         pub(crate) fn publish_staged_key_no_replace(
@@ -720,16 +720,16 @@ mod platform {
             temp_name: &str,
             key_name: &str,
         ) -> Result<(), BootstrapError> {
-            if !admission_temp_file_name(temp_name) || !admission_key_file_name(key_name) {
+            if !admission_key_temp_file_name(temp_name) || !admission_key_file_name(key_name) {
                 return Err(BootstrapError(
                     "retained admission key publication name is invalid",
                 ));
             }
             let temp = self
-                .tmp
+                .keys
                 .open_file(temp_name)
                 .map_err(|_| BootstrapError("open retained admission key temp"))?;
-            self.tmp
+            self.keys
                 .rename_no_replace(temp_name, temp, &self.keys, key_name)
                 .map_err(|_| {
                     BootstrapError("publish retained admission key without replacement")
@@ -894,6 +894,7 @@ mod platform {
         };
         let keys = open_component(RETAINED_ADMISSION_KEYS_DIRECTORY)?;
         let tmp = open_component(RETAINED_ADMISSION_TEMP_DIRECTORY)?;
+        reconcile_retained_admission_key_temps(&keys)?;
         reconcile_retained_admission_temps(&tmp)?;
         admission
             .sync()
@@ -904,6 +905,36 @@ mod platform {
             keys,
             tmp,
         })
+    }
+
+    fn reconcile_retained_admission_key_temps(
+        keys: &TrustedDirectory,
+    ) -> Result<(), BootstrapError> {
+        let mut removed = false;
+        for entry in keys
+            .entries()
+            .map_err(|_| BootstrapError("enumerate retained admission keys"))?
+        {
+            if entry.kind != EntryKind::RegularFile {
+                return Err(BootstrapError("retained admission key layout is invalid"));
+            }
+            keys.revalidate_entry(&entry)
+                .map_err(|_| BootstrapError("retained admission key changed"))?;
+            if admission_key_file_name(&entry.name) {
+                continue;
+            }
+            if !admission_key_temp_file_name(&entry.name) {
+                return Err(BootstrapError("retained admission key layout is invalid"));
+            }
+            keys.unlink_file(&entry.name)
+                .map_err(|_| BootstrapError("remove retained admission key temp"))?;
+            removed = true;
+        }
+        if removed {
+            keys.sync()
+                .map_err(|_| BootstrapError("sync retained admission key directory"))?;
+        }
+        Ok(())
     }
 
     fn reconcile_retained_admission_temps(tmp: &TrustedDirectory) -> Result<(), BootstrapError> {
@@ -925,6 +956,17 @@ mod platform {
     fn admission_key_file_name(name: &str) -> bool {
         name.strip_suffix(".key").is_some_and(|key_id| {
             key_id.strip_prefix("adk_").is_some_and(|hex| {
+                hex.len() == 32
+                    && hex
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            })
+        })
+    }
+
+    fn admission_key_temp_file_name(name: &str) -> bool {
+        name.strip_prefix("admission-key--").is_some_and(|suffix| {
+            suffix.strip_suffix(".tmp").is_some_and(|hex| {
                 hex.len() == 32
                     && hex
                         .bytes()
