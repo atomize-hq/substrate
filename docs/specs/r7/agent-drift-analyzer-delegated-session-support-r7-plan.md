@@ -298,5 +298,6 @@ Sequential requirements:
 
 ## Open Questions
 
-No blocker for R7-1. Default-on linked closure, new drift taxonomy, and recursive depth remain
-evidence-gated decisions for later packets.
+No unresolved design question blocks future `R7-1` after `R7-0` exits review-clean. `R7-1` is
+currently phase-blocked, and `R7-0.1` and `R7-0.2` remain unstarted. Default-on linked closure, new
+drift taxonomy, and recursive depth remain evidence-gated decisions for later packets.
