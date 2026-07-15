@@ -635,6 +635,21 @@ impl HostSessionAuthority {
             .map_err(store_error)
     }
 
+    pub(crate) fn publish_reserved_retained_object(
+        &self,
+        reserved: &ReservedRetainedWorkerRegistrationV1,
+        reference: &AuthorityObjectRefV1,
+        bytes: &[u8],
+    ) -> Result<ObjectPublicationOutcomeV1, AuthorityFacadeError> {
+        store::publish_reserved_retained_object_opened(
+            &self.root,
+            &store_reservation(reserved),
+            reference,
+            bytes,
+        )
+        .map_err(store_error)
+    }
+
     #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn reserve_retained_worker_registration_at(
@@ -722,6 +737,21 @@ fn reserved_registration(
         descriptor_bytes: reserved.descriptor_bytes,
         resume_handle_bytes: reserved.resume_handle_bytes,
         retained_worker_bytes: reserved.retained_worker_bytes,
+        joined: reserved.joined,
+    }
+}
+
+fn store_reservation(
+    reserved: &ReservedRetainedWorkerRegistrationV1,
+) -> store::RetainedWorkerReservationV1 {
+    store::RetainedWorkerReservationV1 {
+        request: reserved.request.clone(),
+        descriptor_ref: reserved.descriptor_ref.clone(),
+        resume_handle_ref: reserved.resume_handle_ref.clone(),
+        retained_worker_ref: reserved.retained_worker_ref.clone(),
+        descriptor_bytes: reserved.descriptor_bytes.clone(),
+        resume_handle_bytes: reserved.resume_handle_bytes.clone(),
+        retained_worker_bytes: reserved.retained_worker_bytes.clone(),
         joined: reserved.joined,
     }
 }

@@ -43,6 +43,14 @@ pub(crate) struct RetainedWorkerRegistrationResultV1 {
     pub(crate) authority_revision_after: u64,
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RetainedObjectPublicationCrashPointV1 {
+    Descriptor,
+    ResumeHandle,
+    RetainedWorker,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RetainedWorkerRuntimeError(String);
 
@@ -170,6 +178,68 @@ impl RetainedWorkerRuntime {
             .validate()
             .map_err(|_| "validate retained-worker object")?;
         canonical_json::to_vec(&worker).map_err(|_| "encode retained-worker object")
+    }
+
+    pub(crate) fn publish_reserved_object_graph(
+        &self,
+        authority: &HostSessionAuthority,
+        reserved: &ReservedRetainedWorkerRegistrationV1,
+    ) -> Result<(), RetainedWorkerRuntimeError> {
+        self.publish_reserved_object_graph_with(authority, reserved, |_| Ok(()))
+    }
+
+    fn publish_reserved_object_graph_with(
+        &self,
+        authority: &HostSessionAuthority,
+        reserved: &ReservedRetainedWorkerRegistrationV1,
+        mut after_publication: impl FnMut(usize) -> Result<(), RetainedWorkerRuntimeError>,
+    ) -> Result<(), RetainedWorkerRuntimeError> {
+        for (index, (reference, bytes)) in [
+            (
+                &reserved.descriptor_ref,
+                reserved.descriptor_bytes.as_slice(),
+            ),
+            (
+                &reserved.resume_handle_ref,
+                reserved.resume_handle_bytes.as_slice(),
+            ),
+            (
+                &reserved.retained_worker_ref,
+                reserved.retained_worker_bytes.as_slice(),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            authority
+                .publish_reserved_retained_object(reserved, reference, bytes)
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+            after_publication(index)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn publish_reserved_object_graph_with_crash_point(
+        &self,
+        authority: &HostSessionAuthority,
+        reserved: &ReservedRetainedWorkerRegistrationV1,
+        crash_point: RetainedObjectPublicationCrashPointV1,
+    ) -> Result<(), RetainedWorkerRuntimeError> {
+        let stop_after = match crash_point {
+            RetainedObjectPublicationCrashPointV1::Descriptor => 0,
+            RetainedObjectPublicationCrashPointV1::ResumeHandle => 1,
+            RetainedObjectPublicationCrashPointV1::RetainedWorker => 2,
+        };
+        self.publish_reserved_object_graph_with(authority, reserved, |index| {
+            if index == stop_after {
+                Err(RetainedWorkerRuntimeError(
+                    "injected crash after retained object publication".into(),
+                ))
+            } else {
+                Ok(())
+            }
+        })
     }
 
     pub(crate) fn register_retained_target(
@@ -729,5 +799,164 @@ mod tests {
         .is_err());
         assert_eq!(authority.read_a12a_root().unwrap(), root_before);
         assert_eq!(object_files(&object_root), objects_before);
+    }
+
+    #[test]
+    fn exact_reserved_graph_publication_writes_three_orphans_without_root_mutation() {
+        let (_parent, authority, observation) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let reserved = runtime
+            .reserve_registration_at(
+                &authority,
+                &plan(observation),
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        let root_before = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+
+        runtime
+            .publish_reserved_object_graph(&authority, &reserved)
+            .expect("exact reserved graph must publish");
+
+        assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+        let objects_after = object_files(&object_root);
+        assert_eq!(objects_after.len(), objects_before.len() + 3);
+        assert!(objects_after
+            .iter()
+            .any(|path| path.ends_with(&format!("{}.obj", reserved.descriptor_ref.ref_id))));
+        assert!(objects_after
+            .iter()
+            .any(|path| path.ends_with(&format!("{}.obj", reserved.resume_handle_ref.ref_id))));
+        assert!(objects_after
+            .iter()
+            .any(|path| path.ends_with(&format!("{}.obj", reserved.retained_worker_ref.ref_id))));
+    }
+
+    #[test]
+    fn object_publication_crash_points_restart_and_exact_join() {
+        for crash_point in [
+            RetainedObjectPublicationCrashPointV1::Descriptor,
+            RetainedObjectPublicationCrashPointV1::ResumeHandle,
+            RetainedObjectPublicationCrashPointV1::RetainedWorker,
+        ] {
+            let (_parent, authority, observation) = started_authority();
+            let runtime = RetainedWorkerRuntime;
+            let reserved = runtime
+                .reserve_registration_at(
+                    &authority,
+                    &plan(observation),
+                    timestamp("2026-07-14T12:02:00.000000000Z"),
+                    None,
+                )
+                .unwrap();
+            let root_before = authority.read_a12a_root().unwrap();
+            let object_root = _parent.path().join("home/authority-v1/objects");
+            let objects_before = object_files(&object_root);
+
+            assert!(runtime
+                .publish_reserved_object_graph_with_crash_point(&authority, &reserved, crash_point,)
+                .is_err());
+            assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+            let durable_count = match crash_point {
+                RetainedObjectPublicationCrashPointV1::Descriptor => 1,
+                RetainedObjectPublicationCrashPointV1::ResumeHandle => 2,
+                RetainedObjectPublicationCrashPointV1::RetainedWorker => 3,
+            };
+            assert_eq!(
+                object_files(&object_root).len(),
+                objects_before.len() + durable_count
+            );
+
+            let restarted = HostSessionAuthority::open(&_parent.path().join("home")).unwrap();
+            runtime
+                .publish_reserved_object_graph(&restarted, &reserved)
+                .unwrap();
+            assert_eq!(restarted.read_a12a_root().unwrap(), root_before);
+            let completed = object_files(&object_root);
+            assert_eq!(completed.len(), objects_before.len() + 3);
+            runtime
+                .publish_reserved_object_graph(&restarted, &reserved)
+                .unwrap();
+            assert_eq!(object_files(&object_root), completed);
+            assert_eq!(restarted.read_a12a_root().unwrap(), root_before);
+        }
+    }
+
+    #[test]
+    fn substituted_reserved_graph_rejects_before_any_object_or_root_mutation() {
+        let (_parent, authority, observation) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let reserved = runtime
+            .reserve_registration_at(
+                &authority,
+                &plan(observation),
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        let root_before = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+        let mut conflicts = Vec::new();
+
+        let mut wrong_kind = reserved.clone();
+        wrong_kind.descriptor_ref.object_kind = crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1::Policy;
+        conflicts.push(wrong_kind);
+        let mut wrong_schema = reserved.clone();
+        wrong_schema.resume_handle_ref.schema_version = 2;
+        conflicts.push(wrong_schema);
+        let mut wrong_bytes = reserved.clone();
+        wrong_bytes.descriptor_bytes.push(b' ');
+        conflicts.push(wrong_bytes);
+        let mut wrong_commitment = reserved.clone();
+        wrong_commitment.retained_worker_ref.commitment =
+            crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into(),
+            };
+        conflicts.push(wrong_commitment);
+
+        let mut wrong_descriptor = reserved.clone();
+        let mut descriptor: AgentDescriptorHashInputV1 =
+            canonical_json::from_slice(&wrong_descriptor.descriptor_bytes).unwrap();
+        descriptor.descriptor.backend_id = "cli:substituted".into();
+        descriptor.descriptor.protocol = "substituted.protocol".into();
+        wrong_descriptor.descriptor_bytes = canonical_json::to_vec(&descriptor).unwrap();
+        conflicts.push(wrong_descriptor);
+
+        let mut wrong_resume = reserved.clone();
+        let mut resume: ResumeHandleHashInputV1 =
+            canonical_json::from_slice(&wrong_resume.resume_handle_bytes).unwrap();
+        resume.orchestration_session_id = "other-session".into();
+        resume.participant_id = "other-participant".into();
+        wrong_resume.resume_handle_bytes = canonical_json::to_vec(&resume).unwrap();
+        conflicts.push(wrong_resume);
+
+        let mut wrong_worker = reserved.clone();
+        let mut worker: RetainedWorkerObjectHashInputV1 =
+            canonical_json::from_slice(&wrong_worker.retained_worker_bytes).unwrap();
+        worker.world_binding.world_id = "other-world".into();
+        worker.world_binding.world_generation += 1;
+        worker.policy_ref.ref_id = "ao_77777777777777777777777777777777".into();
+        worker.descriptor_ref.ref_id = "ao_66666666666666666666666666666666".into();
+        worker.resume_handle_ref.ref_id = "ao_55555555555555555555555555555555".into();
+        wrong_worker.retained_worker_bytes = canonical_json::to_vec(&worker).unwrap();
+        conflicts.push(wrong_worker);
+
+        let mut wrong_request_scope = reserved.clone();
+        wrong_request_scope.request.world_binding.world_id = "other-world".into();
+        wrong_request_scope.request.current_policy_ref.ref_id =
+            "ao_44444444444444444444444444444444".into();
+        conflicts.push(wrong_request_scope);
+
+        for conflict in conflicts {
+            assert!(runtime
+                .publish_reserved_object_graph(&authority, &conflict)
+                .is_err());
+            assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+            assert_eq!(object_files(&object_root), objects_before);
+        }
     }
 }

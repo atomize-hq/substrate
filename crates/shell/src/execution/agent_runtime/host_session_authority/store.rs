@@ -126,6 +126,15 @@ pub(super) fn reserve_retained_worker_registration_opened(
     platform::reserve_retained_worker_registration_opened(root, input, build_worker)
 }
 
+pub(super) fn publish_reserved_retained_object_opened(
+    root: &TrustedAuthorityRoot,
+    reserved: &RetainedWorkerReservationV1,
+    reference: &crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1,
+    bytes: &[u8],
+) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+    platform::publish_reserved_retained_object_opened(root, reserved, reference, bytes)
+}
+
 #[cfg(test)]
 pub(super) fn reserve_retained_worker_registration_at_opened(
     root: &TrustedAuthorityRoot,
@@ -1325,6 +1334,88 @@ mod platform {
         })
     }
 
+    pub(super) fn publish_reserved_retained_object_opened(
+        root_handle: &TrustedAuthorityRoot,
+        reserved: &RetainedWorkerReservationV1,
+        reference: &AuthorityObjectRefV1,
+        bytes: &[u8],
+    ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root_handle, |transaction| {
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError(
+                    "retained object publication requires strict StateRootV2",
+                ));
+            };
+            let persisted = root
+                .retained_worker_registration_request_index
+                .get(&reserved.request.issuer_request_id)
+                .filter(|persisted| *persisted == &reserved.request)
+                .ok_or(BootstrapError(
+                    "retained object publication has no exact reservation",
+                ))?;
+            if !matches!(
+                persisted.state,
+                RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved
+            ) {
+                return Err(BootstrapError(
+                    "retained object publication reservation is not Reserved",
+                ));
+            }
+            validate_reservation_authority(
+                root,
+                &RetainedWorkerReservationInputV1 {
+                    issuer_request_id: persisted.issuer_request_id.clone(),
+                    orchestration_session_id: persisted.orchestration_session_id.clone(),
+                    expected_authority_store_id: root.authority_store_id.clone(),
+                    expected_authority_revision: persisted.authority_revision_before,
+                    expected_authority_commitment: persisted
+                        .authority_record_commitment_before
+                        .clone(),
+                    retained_participant_id: persisted.retained_participant_id.clone(),
+                    descriptor_bytes: reserved.descriptor_bytes.clone(),
+                    resume_handle_bytes: reserved.resume_handle_bytes.clone(),
+                },
+            )?;
+            validate_reserved_graph(
+                transaction.layout,
+                root,
+                persisted,
+                &reserved.descriptor_ref,
+                &reserved.descriptor_bytes,
+                &reserved.resume_handle_ref,
+                &reserved.resume_handle_bytes,
+                &reserved.retained_worker_ref,
+                &reserved.retained_worker_bytes,
+            )?;
+            let expected_bytes = if reference == &reserved.descriptor_ref {
+                &reserved.descriptor_bytes
+            } else if reference == &reserved.resume_handle_ref {
+                &reserved.resume_handle_bytes
+            } else if reference == &reserved.retained_worker_ref {
+                &reserved.retained_worker_bytes
+            } else {
+                return Err(BootstrapError(
+                    "retained object is outside the exact reserved graph",
+                ));
+            };
+            if bytes != expected_bytes {
+                return Err(BootstrapError(
+                    "retained object publication bytes differ from reservation",
+                ));
+            }
+            validate_orphan_candidate(transaction.layout, root, reference, bytes, None)?;
+            transaction.reconcile()?;
+            publish_or_join_orphan(
+                transaction.layout,
+                root,
+                reference,
+                bytes,
+                None,
+                system_material()?.key_nonce,
+            )
+        })
+    }
+
     fn validate_reservation_authority(
         root: &StateRootV2,
         input: &RetainedWorkerReservationInputV1,
@@ -2448,6 +2539,17 @@ mod platform {
     ) -> Result<RetainedWorkerReservationV1, BootstrapError> {
         Err(BootstrapError(
             "retained registration is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn publish_reserved_retained_object_opened(
+        _root: &TrustedAuthorityRoot,
+        _reserved: &RetainedWorkerReservationV1,
+        _reference: &AuthorityObjectRefV1,
+        _bytes: &[u8],
+    ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
+        Err(BootstrapError(
+            "retained object publication is unsupported on this platform",
         ))
     }
 
