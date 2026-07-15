@@ -52,6 +52,7 @@ pub(crate) struct RetainedWorkerRegistrationPlanV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RetainedWorkerRegistrationResultV1 {
     pub(crate) registration_id: String,
+    pub(crate) registration_commitment: AuthorityObjectCommitmentV1,
     pub(crate) authority_store_id: String,
     pub(crate) orchestration_session_id: String,
     pub(crate) retained_participant_id: String,
@@ -353,9 +354,15 @@ enum AdmissionHeadPreparationV1 {
     Queued,
 }
 
-struct AdmissionTransportClaimInputV1 {
+struct ResolvedPostR0RegisteredGraphV1 {
+    result: RetainedWorkerRegistrationResultV1,
+    resolved_target: ResolvedRetainedTargetV1,
+}
+
+struct AdmissionTransportClaimInputV1<'a> {
     claimed_at: TimestampV1,
     claim_entropy: [u8; 16],
+    post_r0_graph: Option<&'a ResolvedPostR0RegisteredGraphV1>,
 }
 
 #[cfg(test)]
@@ -856,6 +863,7 @@ impl RetainedWorkerRuntime {
             publication_nonce,
         )?;
         if let AdmissionHeadPreparationV1::Complete(record) = head {
+            self.validate_admitted_record_graph(authority, plan, &record)?;
             return Ok(RetainedWorkerAdmissionRegistrationOutcomeV1 {
                 record,
                 joined: true,
@@ -881,14 +889,17 @@ impl RetainedWorkerRuntime {
             ));
         }
         let resolved_target = self.resolve_retained_target(authority, &registration)?;
+        let post_r0_graph = ResolvedPostR0RegisteredGraphV1 {
+            result: registration,
+            resolved_target,
+        };
         let mut reconcile_nonce = [0_u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut reconcile_nonce);
         let record = self.advance_registration_head_after_r0(
             authority,
             plan,
             &record.retained_participant_id,
-            &registration,
-            &resolved_target,
+            &post_r0_graph,
             reconcile_nonce,
         )?;
         Ok(RetainedWorkerAdmissionRegistrationOutcomeV1 {
@@ -971,8 +982,7 @@ impl RetainedWorkerRuntime {
         authority: &HostSessionAuthority,
         plan: &RetainedWorkerAdmissionPlanV1,
         retained_participant_id: &str,
-        registration: &RetainedWorkerRegistrationResultV1,
-        resolved_target: &ResolvedRetainedTargetV1,
+        post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
         publication_nonce: [u8; 16],
     ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
         let resolved = authority
@@ -1015,8 +1025,7 @@ impl RetainedWorkerRuntime {
                     &plan.exact_authority,
                     retained_participant_id,
                     &envelope.secret_key,
-                    registration,
-                    resolved_target,
+                    post_r0_graph,
                 ),
                 &mut semantic_failure,
             )?;
@@ -1035,6 +1044,72 @@ impl RetainedWorkerRuntime {
             return Err(error);
         }
         result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
+    fn resolve_admitted_record_graph(
+        &self,
+        authority: &HostSessionAuthority,
+        record: &RetainedWorkerAdmissionRecordV1,
+    ) -> Result<ResolvedPostR0RegisteredGraphV1, RetainedWorkerRuntimeError> {
+        let admission_registration = admission_registration(&record.state).ok_or_else(|| {
+            RetainedWorkerRuntimeError("post-R0 admission has no registration".into())
+        })?;
+        let root = authority
+            .read_a12a_root()
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let registration = root
+            .retained_worker_registration_journal
+            .get(&admission_registration.registration_id)
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError("post-R0 admission registration is absent".into())
+            })?;
+        let result = RetainedWorkerRegistrationResultV1 {
+            registration_id: registration.registration_id.clone(),
+            registration_commitment: canonical_registration_commitment(registration)?,
+            authority_store_id: root.authority_store_id.clone(),
+            orchestration_session_id: registration.orchestration_session_id.clone(),
+            retained_participant_id: registration.retained_participant_id.clone(),
+            retained_worker_ref: registration.retained_worker_ref.clone(),
+            authority_revision_after: registration.authority_revision_after,
+            authority_record_commitment_after: registration
+                .authority_record_commitment_after
+                .clone(),
+        };
+        let resolved = self.resolve_retained_target(authority, &result)?;
+        Ok(ResolvedPostR0RegisteredGraphV1 {
+            result,
+            resolved_target: resolved,
+        })
+    }
+
+    fn validate_admitted_record_graph(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        record: &RetainedWorkerAdmissionRecordV1,
+    ) -> Result<(), RetainedWorkerRuntimeError> {
+        let post_r0_graph = self.resolve_admitted_record_graph(authority, record)?;
+        let resolved_authority = authority
+            .resolve_current_exact(&plan.spawn_request.orchestration_session_id, None)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let mut current_plan = plan.clone();
+        current_plan.exact_authority =
+            CanonicalExactCurrentAuthorityV1::from_resolved(&resolved_authority);
+        let root = authority
+            .read_a12a_root()
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        validate_admission_plan(&VersionedStateRoot::V2(root.clone()), &current_plan)?;
+        let registration = admission_registration(&record.state).ok_or_else(|| {
+            RetainedWorkerRuntimeError("post-R0 admission has no registration".into())
+        })?;
+        validate_post_r0_registered_graph(
+            &root,
+            record,
+            &current_plan,
+            registration,
+            &post_r0_graph.result,
+            &post_r0_graph.resolved_target,
+        )
     }
 
     pub(crate) fn claim_admission_transport(
@@ -1076,6 +1151,15 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let post_r0_graph = self
+            .read_admission_record(
+                authority,
+                &plan.spawn_request.orchestration_session_id,
+                retained_participant_id,
+            )?
+            .filter(|record| admission_registration(&record.state).is_some())
+            .map(|record| self.resolve_admitted_record_graph(authority, &record))
+            .transpose()?;
         let storage =
             super::host_session_authority::store::retained_worker_admission_storage_for_authority(
                 authority,
@@ -1114,6 +1198,7 @@ impl RetainedWorkerRuntime {
                     &AdmissionTransportClaimInputV1 {
                         claimed_at,
                         claim_entropy,
+                        post_r0_graph: post_r0_graph.as_ref(),
                     },
                 ),
                 &mut semantic_failure,
@@ -1348,8 +1433,10 @@ impl RetainedWorkerRuntime {
         let applied = authority
             .apply_reserved_retained_worker_registration(&reserved)
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let registration_commitment = canonical_registration_commitment(&applied.registration)?;
         Ok(RetainedWorkerRegistrationResultV1 {
             registration_id: applied.registration.registration_id.clone(),
+            registration_commitment,
             authority_store_id: plan.expected_authority.authority_store_id.clone(),
             orchestration_session_id: applied.registration.orchestration_session_id.clone(),
             retained_participant_id: applied.registration.retained_participant_id.clone(),
@@ -1412,6 +1499,7 @@ impl RetainedWorkerRuntime {
                 "retained target has no unique registration proof".into(),
             ));
         };
+        let registration_commitment = canonical_registration_commitment(registration)?;
         let requests = root
             .retained_worker_registration_request_index
             .values()
@@ -1422,7 +1510,8 @@ impl RetainedWorkerRuntime {
                 "retained target has no unique registration request".into(),
             ));
         };
-        if registration.orchestration_session_id != target.orchestration_session_id
+        if registration_commitment != target.registration_commitment
+            || registration.orchestration_session_id != target.orchestration_session_id
             || registration.retained_participant_id != target.retained_participant_id
             || registration.retained_worker_ref != target.retained_worker_ref
             || registration.authority_revision_after != target.authority_revision_after
@@ -1839,8 +1928,7 @@ fn advance_registration_head_in_registry(
     supplied_exact_authority: &CanonicalExactCurrentAuthorityV1,
     retained_participant_id: &str,
     secret_key: &[u8; 32],
-    registration_result: &RetainedWorkerRegistrationResultV1,
-    resolved_target: &ResolvedRetainedTargetV1,
+    post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, plan)?;
     let VersionedStateRoot::V2(root) = authority_root else {
@@ -1862,7 +1950,7 @@ fn advance_registration_head_in_registry(
     )?;
     verify_admission_record_fingerprint(root, plan, &record, secret_key)?;
     if let Some(registration) = admission_registration(&record.state) {
-        validate_registration_result(authority_root, &record, registration, registration_result)?;
+        validate_registration_result(authority_root, &record, registration, &post_r0_graph.result)?;
         return Ok((record, false));
     }
     if !matches!(
@@ -1876,14 +1964,19 @@ fn advance_registration_head_in_registry(
     let registration = admission_registration_from_hsa(root, &record)?.ok_or_else(|| {
         RetainedWorkerRuntimeError("R0 registration has not reached durable Applied truth".into())
     })?;
-    validate_registration_result(authority_root, &record, &registration, registration_result)?;
+    validate_registration_result(
+        authority_root,
+        &record,
+        &registration,
+        &post_r0_graph.result,
+    )?;
     validate_post_r0_registered_graph(
         root,
         &record,
         plan,
         &registration,
-        registration_result,
-        resolved_target,
+        &post_r0_graph.result,
+        &post_r0_graph.resolved_target,
     )?;
     record.state = RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration };
     record.record_revision = record
@@ -1906,7 +1999,7 @@ fn claim_transport_in_registry(
     supplied_exact_authority: &CanonicalExactCurrentAuthorityV1,
     retained_participant_id: &str,
     secret_key: &[u8; 32],
-    claim_input: &AdmissionTransportClaimInputV1,
+    claim_input: &AdmissionTransportClaimInputV1<'_>,
 ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, plan)?;
     let VersionedStateRoot::V2(root) = authority_root else {
@@ -1927,6 +2020,21 @@ fn claim_transport_in_registry(
         &record,
     )?;
     verify_admission_record_fingerprint(root, plan, &record, secret_key)?;
+    if let Some(registration) = admission_registration(&record.state) {
+        let Some(post_r0_graph) = claim_input.post_r0_graph else {
+            return Err(RetainedWorkerRuntimeError(
+                "transport claim has no complete post-R0 graph".into(),
+            ));
+        };
+        validate_post_r0_registered_graph(
+            root,
+            &record,
+            plan,
+            registration,
+            &post_r0_graph.result,
+            &post_r0_graph.resolved_target,
+        )?;
+    }
     let registration = match &record.state {
         RetainedWorkerAdmissionStateV1::PreTransportNonterminal { registration } => {
             registration.clone()
@@ -2062,6 +2170,18 @@ fn admission_registration_from_hsa(
     Ok(Some(admission_registration))
 }
 
+fn canonical_registration_commitment(
+    registration: &RetainedWorkerAuthorityRegistrationV1,
+) -> Result<AuthorityObjectCommitmentV1, RetainedWorkerRuntimeError> {
+    let canonical = encode_canonical(
+        registration,
+        "encode canonical retained-worker registration proof",
+    )?;
+    Ok(AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: lower_hex(&Sha256::digest(canonical)),
+    })
+}
+
 fn validate_registration_result(
     authority_root: &VersionedStateRoot,
     record: &RetainedWorkerAdmissionRecordV1,
@@ -2078,6 +2198,7 @@ fn validate_registration_result(
         .get(&registration.registration_id)
         .ok_or_else(|| RetainedWorkerRuntimeError("R0 result has no durable journal".into()))?;
     if result.registration_id != registration.registration_id
+        || result.registration_commitment != canonical_registration_commitment(durable)?
         || result.authority_store_id != record.authority_store_id
         || result.orchestration_session_id != record.orchestration_session_id
         || result.retained_participant_id != record.retained_participant_id
@@ -2114,12 +2235,14 @@ fn validate_post_r0_registered_graph(
         &plan.exact_authority,
         registration.authority_revision_after,
     )?;
+    let registration_commitment = canonical_registration_commitment(registration)?;
     let expected_internal_uaa_session_id = format!("uaa_{}", record.bootstrap_run_id);
 
     if resolved.registration != *registration
         || admission_registration.registration_id != registration.registration_id
         || admission_registration.retained_worker_ref != registration.retained_worker_ref
         || result.registration_id != registration.registration_id
+        || result.registration_commitment != registration_commitment
         || result.authority_store_id != record.authority_store_id
         || result.orchestration_session_id != registration.orchestration_session_id
         || result.retained_participant_id != registration.retained_participant_id
@@ -3005,12 +3128,44 @@ fn validate_admission_registration_against_authority(
         .ok_or_else(|| {
             RetainedWorkerRuntimeError("post-R0 admission registration is absent".into())
         })?;
-    if registration.registration_id != admission_registration.registration_id
+    let issuer_request_id = format!("retained-worker-registration:{}", record.issuer_request_id);
+    let request = root
+        .retained_worker_registration_request_index
+        .get(&issuer_request_id)
+        .ok_or_else(|| RetainedWorkerRuntimeError("post-R0 admission request is absent".into()))?;
+    canonical_registration_commitment(registration)?;
+    if registration.schema_version != 1
+        || registration.registration_id != admission_registration.registration_id
         || registration.orchestration_session_id != record.orchestration_session_id
         || registration.retained_participant_id != record.retained_participant_id
         || registration.retained_worker_ref != admission_registration.retained_worker_ref
         || registration.current_policy_ref != record.current_policy_ref
         || registration.world_binding != record.world_binding
+        || request.schema_version != 1
+        || request.issuer_request_id != registration.issuer_request_id
+        || request.registration_id != registration.registration_id
+        || request.orchestration_session_id != registration.orchestration_session_id
+        || request.authority_revision_before != registration.authority_revision_before
+        || request.authority_record_commitment_before
+            != registration.authority_record_commitment_before
+        || request.retained_participant_id != registration.retained_participant_id
+        || request.descriptor_ref_id != registration.descriptor_ref.ref_id
+        || request.descriptor_commitment != registration.descriptor_ref.commitment
+        || request.resume_handle_ref_id != registration.resume_handle_ref.ref_id
+        || request.resume_handle_commitment != registration.resume_handle_ref.commitment
+        || request.retained_worker_ref_id != registration.retained_worker_ref.ref_id
+        || request.retained_worker_commitment != registration.retained_worker_ref.commitment
+        || request.current_policy_ref != registration.current_policy_ref
+        || request.world_binding != registration.world_binding
+        || !matches!(
+            &request.state,
+            RetainedWorkerAuthorityRegistrationRequestStateV1::Applied {
+                authority_revision_after,
+                authority_record_commitment_after,
+            } if *authority_revision_after == registration.authority_revision_after
+                && authority_record_commitment_after
+                    == &registration.authority_record_commitment_after
+        )
     {
         return Err(RetainedWorkerRuntimeError(
             "post-R0 admission registration conflicts with authority truth".into(),
@@ -4177,6 +4332,11 @@ mod tests {
         conflict.registration_id = "rr_11111111111111111111111111111111".into();
         conflicts.push(conflict);
         let mut conflict = target.clone();
+        conflict.registration_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "aa".repeat(32),
+        };
+        conflicts.push(conflict);
+        let mut conflict = target.clone();
         conflict.retained_participant_id = "other-participant".into();
         conflicts.push(conflict);
         let mut conflict = target.clone();
@@ -4197,6 +4357,64 @@ mod tests {
                 .is_err());
             assert_eq!(authority.read_a12a_root().unwrap(), root_before);
             assert_eq!(object_files(&object_root), objects_before);
+        }
+    }
+
+    #[test]
+    fn registration_commitment_hashes_the_complete_canonical_r0_proof() {
+        let (_parent, authority, observation) = started_authority();
+        let result = RetainedWorkerRuntime
+            .register_retained_target(&authority, &plan(observation))
+            .unwrap();
+        let root = authority.read_a12a_root().unwrap();
+        let registration = root
+            .retained_worker_registration_journal
+            .get(&result.registration_id)
+            .unwrap();
+        let canonical = canonical_json::to_vec(registration).unwrap();
+        let expected = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: lower_hex(&Sha256::digest(&canonical)),
+        };
+        assert_eq!(result.registration_commitment, expected);
+        assert_eq!(
+            canonical_registration_commitment(registration).unwrap(),
+            expected
+        );
+
+        let mut variants = Vec::new();
+        let mut changed = registration.clone();
+        changed.registration_id = "rr_different".into();
+        variants.push(changed);
+        let mut changed = registration.clone();
+        changed.authority_revision_after += 1;
+        variants.push(changed);
+        let mut changed = registration.clone();
+        changed.authoritative_lineage_commitment_after =
+            AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "11".repeat(32),
+            };
+        variants.push(changed);
+        let mut changed = registration.clone();
+        changed.descriptor_ref.commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "22".repeat(32),
+        };
+        variants.push(changed);
+        let mut changed = registration.clone();
+        changed.resume_handle_ref.commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "33".repeat(32),
+        };
+        variants.push(changed);
+        let mut changed = registration.clone();
+        changed.retained_worker_ref.commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "44".repeat(32),
+        };
+        variants.push(changed);
+
+        for changed in variants {
+            assert_ne!(
+                canonical_registration_commitment(&changed).unwrap(),
+                result.registration_commitment
+            );
         }
     }
 
@@ -4235,6 +4453,9 @@ mod tests {
         assert_eq!(object_files(&object_root).len(), objects_before.len() + 1);
         let fake_target = RetainedWorkerRegistrationResultV1 {
             registration_id: "rr_88888888888888888888888888888888".into(),
+            registration_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "00".repeat(32),
+            },
             authority_store_id: observation.authority_store_id,
             orchestration_session_id: observation.orchestration_session_id,
             retained_participant_id: "orphan-participant".into(),
@@ -5520,6 +5741,7 @@ mod tests {
             .unwrap();
         let result = RetainedWorkerRegistrationResultV1 {
             registration_id: registration.registration_id.clone(),
+            registration_commitment: canonical_registration_commitment(registration).unwrap(),
             authority_store_id: root.authority_store_id.clone(),
             orchestration_session_id: registration.orchestration_session_id.clone(),
             retained_participant_id: registration.retained_participant_id.clone(),
@@ -5564,13 +5786,34 @@ mod tests {
         changed.resume_handle.participant_id = "rwp_different".into();
         variants.push(changed);
         let mut changed = resolved.clone();
+        changed.resume_handle.orchestration_session_id = "different-session".into();
+        variants.push(changed);
+        let mut changed = resolved.clone();
+        changed.resume_handle.backend_id = "cli:different".into();
+        variants.push(changed);
+        let mut changed = resolved.clone();
+        changed.resume_handle.protocol = "different.protocol".into();
+        variants.push(changed);
+        let mut changed = resolved.clone();
         changed.resume_handle.internal_uaa_session_id = "uaa_different".into();
         variants.push(changed);
         let mut changed = resolved.clone();
         changed.retained_worker.orchestration_session_id = "different-session".into();
         variants.push(changed);
         let mut changed = resolved.clone();
+        changed.retained_worker.participant_id = "rwp_different".into();
+        variants.push(changed);
+        let mut changed = resolved.clone();
         changed.retained_worker.world_binding.world_generation += 1;
+        variants.push(changed);
+        let mut changed = resolved.clone();
+        changed.retained_worker.descriptor_ref = resolved.registration.resume_handle_ref.clone();
+        variants.push(changed);
+        let mut changed = resolved.clone();
+        changed.retained_worker.resume_handle_ref = resolved.registration.descriptor_ref.clone();
+        variants.push(changed);
+        let mut changed = resolved.clone();
+        changed.retained_worker.policy_ref = resolved.registration.descriptor_ref.clone();
         variants.push(changed);
         let mut changed = resolved.clone();
         changed.current_policy.policy_revision = "different-policy".into();
@@ -5592,6 +5835,32 @@ mod tests {
         }
 
         let mut changed_result = result.clone();
+        changed_result.registration_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "55".repeat(32),
+        };
+        assert!(validate_post_r0_registered_graph(
+            &root,
+            &admitted.record,
+            &current_plan,
+            admission_registration,
+            &changed_result,
+            &resolved,
+        )
+        .is_err());
+
+        let mut changed_result = result.clone();
+        changed_result.authority_revision_after += 1;
+        assert!(validate_post_r0_registered_graph(
+            &root,
+            &admitted.record,
+            &current_plan,
+            admission_registration,
+            &changed_result,
+            &resolved,
+        )
+        .is_err());
+
+        let mut changed_result = result.clone();
         changed_result.authority_record_commitment_after =
             AuthorityObjectCommitmentV1::CanonicalSha256 {
                 digest_hex: "00".repeat(32),
@@ -5605,6 +5874,79 @@ mod tests {
             &resolved,
         )
         .is_err());
+
+        let zero_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "66".repeat(32),
+        };
+        let issuer_request_id = format!(
+            "retained-worker-registration:{}",
+            admitted.record.issuer_request_id
+        );
+        let mut changed_roots = Vec::new();
+        let mut changed = root.clone();
+        changed
+            .retained_worker_registration_request_index
+            .get_mut(&issuer_request_id)
+            .unwrap()
+            .descriptor_commitment = zero_commitment.clone();
+        changed_roots.push(changed);
+        let mut changed = root.clone();
+        changed
+            .retained_worker_registration_request_index
+            .get_mut(&issuer_request_id)
+            .unwrap()
+            .resume_handle_commitment = zero_commitment.clone();
+        changed_roots.push(changed);
+        let mut changed = root.clone();
+        changed
+            .retained_worker_registration_request_index
+            .get_mut(&issuer_request_id)
+            .unwrap()
+            .retained_worker_commitment = zero_commitment.clone();
+        changed_roots.push(changed);
+        let mut changed = root.clone();
+        changed
+            .retained_worker_registration_journal
+            .get_mut(&admission_registration.registration_id)
+            .unwrap()
+            .authoritative_lineage_commitment_after = zero_commitment.clone();
+        changed_roots.push(changed);
+        let mut changed = root.clone();
+        changed
+            .retained_worker_registration_journal
+            .get_mut(&admission_registration.registration_id)
+            .unwrap()
+            .descriptor_ref
+            .commitment = zero_commitment.clone();
+        changed_roots.push(changed);
+        let mut changed = root.clone();
+        changed
+            .retained_worker_registration_journal
+            .get_mut(&admission_registration.registration_id)
+            .unwrap()
+            .resume_handle_ref
+            .commitment = zero_commitment.clone();
+        changed_roots.push(changed);
+        let mut changed = root.clone();
+        changed
+            .retained_worker_registration_journal
+            .get_mut(&admission_registration.registration_id)
+            .unwrap()
+            .retained_worker_ref
+            .commitment = zero_commitment;
+        changed_roots.push(changed);
+
+        for changed_root in changed_roots {
+            assert!(validate_post_r0_registered_graph(
+                &changed_root,
+                &admitted.record,
+                &current_plan,
+                admission_registration,
+                &result,
+                &resolved,
+            )
+            .is_err());
+        }
 
         let mut changed_record = admitted.record.clone();
         changed_record.current_policy_revision = "different-policy".into();
@@ -5667,6 +6009,36 @@ mod tests {
         assert!(!later.newly_claimed);
         assert_eq!(later.record, claims[0].record);
         assert!(transport_claim_id.starts_with("rtc_"));
+    }
+
+    #[test]
+    fn transport_claim_rejects_a_post_r0_record_without_a_complete_graph_join() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "claim-complete-join", "prompt", 3);
+        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+            &fs::read(&registry_path).unwrap(),
+            "decode fixture registry",
+        )
+        .unwrap();
+        registry
+            .records_by_session
+            .get_mut(&admitted.record.orchestration_session_id)
+            .unwrap()
+            .get_mut(&admitted.record.retained_participant_id)
+            .unwrap()
+            .current_policy_revision = "forged-policy-revision".into();
+        let forged = encode_canonical(&registry, "encode fixture registry").unwrap();
+        fs::write(&registry_path, &forged).unwrap();
+
+        assert!(runtime
+            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id,)
+            .is_err());
+        assert_eq!(fs::read(registry_path).unwrap(), forged);
     }
 
     #[test]
