@@ -2925,6 +2925,8 @@ fn advance_admission_runtime_truth_in_registry(
                 || event.orchestration_session_id != record.orchestration_session_id
                 || event.run_id != record.bootstrap_run_id
                 || event.participant_id.as_deref() != Some(record.retained_participant_id.as_str())
+                || event.parent_participant_id.is_some()
+                || event.resumed_from_participant_id.is_some()
                 || event.backend_id.as_deref() != Some(record.backend_id.as_str())
                 || event.world_id.as_deref() != Some(record.world_binding.world_id.as_str())
                 || event.world_generation != Some(record.world_binding.world_generation)
@@ -2949,13 +2951,11 @@ fn advance_admission_runtime_truth_in_registry(
                     registered_frame_sequence,
                     registered_event_id,
                     registered_event_sequence,
-                    registered_at: existing_registered_at,
                     ..
                 } if stream_id == &frame_identity.stream_id
                     && *registered_frame_sequence == frame_identity.frame_sequence
                     && registered_event_id == &event_identity.event_id
-                    && *registered_event_sequence == event_identity.event_sequence
-                    && existing_registered_at == registered_at =>
+                    && *registered_event_sequence == event_identity.event_sequence =>
                 {
                     return Ok((record, false));
                 }
@@ -3015,14 +3015,12 @@ fn advance_admission_runtime_truth_in_registry(
                     terminal_event_id,
                     terminal_event_sequence,
                     exit_code: existing_exit_code,
-                    terminal_at: existing_terminal_at,
                     ..
                 } if stream_id == &frame_identity.stream_id
                     && *terminal_frame_sequence == frame_identity.frame_sequence
                     && terminal_event_id == &event_identity.event_id
                     && *terminal_event_sequence == event_identity.event_sequence
-                    && existing_exit_code == exit_code
-                    && existing_terminal_at == terminal_at =>
+                    && existing_exit_code == exit_code =>
                 {
                     return Ok((record, false));
                 }
@@ -7016,6 +7014,30 @@ mod tests {
             registered_runtime_truth(&plan, &claim.record, "stream-ambient-producer");
         registered.agent_id = "ambient-shell-telemetry-producer".to_string();
 
+        let mut inexact_lineage = registered.clone();
+        inexact_lineage.parent_participant_id = Some("unexpected-parent".to_string());
+        assert!(runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &frame,
+                &inexact_lineage,
+                timestamp("2026-07-15T21:00:00.000000000Z"),
+            )
+            .is_err());
+        assert_eq!(
+            runtime
+                .read_admission_record(
+                    &authority,
+                    &claim.record.orchestration_session_id,
+                    &claim.record.retained_participant_id,
+                )
+                .unwrap(),
+            Some(claim.record.clone()),
+            "inexact Registered lineage must not publish Routable"
+        );
+
         let routable = runtime
             .mark_admission_routable(
                 &authority,
@@ -7030,6 +7052,20 @@ mod tests {
             routable.state,
             RetainedWorkerAdmissionStateV1::Routable { .. }
         ));
+        let replayed = runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &frame,
+                &registered,
+                timestamp("2026-07-15T21:00:01.000000000Z"),
+            )
+            .unwrap();
+        assert_eq!(
+            replayed, routable,
+            "exact Registered replay must preserve its first observation timestamp"
+        );
 
         let mut inexact_member = registered;
         inexact_member.orchestration_session_id.push_str("-changed");
@@ -7055,11 +7091,46 @@ mod tests {
         let claim = runtime
             .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id)
             .unwrap();
+        let (registered_frame, registered_event) =
+            registered_runtime_truth(&plan, &claim.record, "stream-interrupted-live");
+        let routable = runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &registered_frame,
+                &registered_event,
+                timestamp("2026-07-15T21:09:00.000000000Z"),
+            )
+            .unwrap();
+        assert!(matches!(
+            routable.state,
+            RetainedWorkerAdmissionStateV1::Routable { .. }
+        ));
         let last_frame = RuntimeFrameIdentityV1 {
             schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
             stream_id: "stream-interrupted-live".to_string(),
             frame_sequence: 4,
         };
+        let inexact_terminal_event = RuntimeEventIdentityV1 {
+            event_id: "event-inexact-terminal".to_string(),
+            event_sequence: 2,
+        };
+        let mut inexact_terminal_identity =
+            RuntimeTerminalIdentityV1::from(&inexact_terminal_event);
+        inexact_terminal_identity.terminal_event_sequence += 1;
+        assert!(runtime
+            .mark_admission_terminal(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &last_frame,
+                &inexact_terminal_event,
+                &inexact_terminal_identity,
+                1,
+                timestamp("2026-07-15T21:09:30.000000000Z"),
+            )
+            .is_err());
         let interrupted = runtime
             .mark_admission_interrupted(
                 &authority,
@@ -7122,6 +7193,22 @@ mod tests {
             terminal.state,
             RetainedWorkerAdmissionStateV1::Terminal { exit_code: 143, .. }
         ));
+        let terminal_replay = runtime
+            .mark_admission_terminal(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                143,
+                timestamp("2026-07-15T21:13:00.000000000Z"),
+            )
+            .unwrap();
+        assert_eq!(
+            terminal_replay, terminal,
+            "exact Terminal replay must preserve its first observation timestamp"
+        );
         runtime
             .reserve_admission_slot(&authority, &blocked)
             .unwrap();

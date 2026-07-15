@@ -3576,8 +3576,32 @@ async fn execute_spawn_world_worker_stream(
     use transport_api_types::ExecuteStreamFrame;
 
     let (client, execute_request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root)
-            .context("failed to build member dispatch execute request for spawn_world_worker")?;
+        match build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root) {
+            Ok(built) => built,
+            Err(error) => {
+                if let Some((authority, plan)) = admission_runtime.as_ref() {
+                    let interrupted_at = TimestampV1::parse(
+                        chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                    )
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    RetainedWorkerRuntime
+                        .mark_admission_interrupted(
+                            authority,
+                            plan,
+                            &request.participant_id,
+                            None,
+                            interrupted_at,
+                        )
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    anyhow::bail!(
+                        "retained_bootstrap_interrupted: failed to construct world member dispatch transport"
+                    );
+                }
+                return Err(error).context(
+                    "failed to build member dispatch execute request for spawn_world_worker",
+                );
+            }
+        };
     let response = match client.execute_stream(execute_request).await {
         Ok(response) => response,
         Err(err) => {
@@ -3697,33 +3721,87 @@ async fn execute_spawn_world_worker_stream(
                     event,
                 } if event.kind == AgentEventKind::Registered => {
                     last_frame_identity = Some(frame_identity.clone());
-                    let launch_span_id = launch_span_id.clone().ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "spawn_world_worker registered without a streamed execute span_id"
-                        )
-                    })?;
+                    let launch_span_id = match launch_span_id.clone() {
+                        Some(launch_span_id) => launch_span_id,
+                        None => {
+                            if let Some((authority, plan)) = admission_runtime.as_ref() {
+                                let interrupted_at = TimestampV1::parse(
+                                    chrono::Utc::now()
+                                        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                                )
+                                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                                RetainedWorkerRuntime
+                                    .mark_admission_interrupted(
+                                        authority,
+                                        plan,
+                                        &request.participant_id,
+                                        last_frame_identity.as_ref(),
+                                        interrupted_at,
+                                    )
+                                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                            }
+                            anyhow::bail!(
+                                "spawn_world_worker registered without a streamed execute span_id"
+                            );
+                        }
+                    };
+                    let receipt = match receipt_from_registered_event(
+                        event.clone(),
+                        request,
+                        dispatch_request,
+                        launch_span_id,
+                    ) {
+                        Ok(receipt) => receipt,
+                        Err(error) => {
+                            if let Some((authority, plan)) = admission_runtime.as_ref() {
+                                let interrupted_at = TimestampV1::parse(
+                                    chrono::Utc::now()
+                                        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                                )
+                                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                                RetainedWorkerRuntime
+                                    .mark_admission_interrupted(
+                                        authority,
+                                        plan,
+                                        &request.participant_id,
+                                        last_frame_identity.as_ref(),
+                                        interrupted_at,
+                                    )
+                                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                            }
+                            return Err(error);
+                        }
+                    };
                     if let Some((authority, plan)) = admission_runtime.as_ref() {
                         let registered_at = TimestampV1::parse(
                             chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                         )
                         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-                        RetainedWorkerRuntime
-                            .mark_admission_routable(
-                                authority,
-                                plan,
-                                &request.participant_id,
-                                &frame_identity,
-                                &event,
-                                registered_at,
+                        if let Err(error) = RetainedWorkerRuntime.mark_admission_routable(
+                            authority,
+                            plan,
+                            &request.participant_id,
+                            &frame_identity,
+                            &event,
+                            registered_at,
+                        ) {
+                            let interrupted_at = TimestampV1::parse(
+                                chrono::Utc::now()
+                                    .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                             )
                             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                            RetainedWorkerRuntime
+                                .mark_admission_interrupted(
+                                    authority,
+                                    plan,
+                                    &request.participant_id,
+                                    last_frame_identity.as_ref(),
+                                    interrupted_at,
+                                )
+                                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                            return Err(anyhow::anyhow!(error.to_string()));
+                        }
                     }
-                    let receipt = receipt_from_registered_event(
-                        event,
-                        request,
-                        dispatch_request,
-                        launch_span_id,
-                    )?;
                     if let Some((authority, plan)) = admission_runtime.take() {
                         let retained_participant_id = request.participant_id.clone();
                         tokio::spawn(async move {
@@ -3751,13 +3829,16 @@ async fn execute_spawn_world_worker_stream(
                                             exit,
                                             ..
                                         } => {
-                                            if let Ok(terminal_at) = TimestampV1::parse(
+                                            last_frame_identity = Some(frame_identity.clone());
+                                            let terminalized = TimestampV1::parse(
                                                 chrono::Utc::now().to_rfc3339_opts(
                                                     chrono::SecondsFormat::Nanos,
                                                     true,
                                                 ),
-                                            ) {
-                                                let _ = RetainedWorkerRuntime
+                                            )
+                                            .map_err(|error| error.to_string())
+                                            .and_then(|terminal_at| {
+                                                RetainedWorkerRuntime
                                                     .mark_admission_terminal(
                                                         &authority,
                                                         &plan,
@@ -3767,9 +3848,14 @@ async fn execute_spawn_world_worker_stream(
                                                         &terminal_identity,
                                                         exit,
                                                         terminal_at,
-                                                    );
+                                                    )
+                                                    .map(|_| ())
+                                                    .map_err(|error| error.to_string())
+                                            });
+                                            if terminalized.is_ok() {
+                                                return;
                                             }
-                                            return;
+                                            break 'observe;
                                         }
                                         ExecuteStreamFrame::Error { frame_identity, .. } => {
                                             last_frame_identity = Some(frame_identity);
@@ -3794,17 +3880,34 @@ async fn execute_spawn_world_worker_stream(
                                 }
                             }
 
-                            if let Ok(interrupted_at) = TimestampV1::parse(
+                            match TimestampV1::parse(
                                 chrono::Utc::now()
                                     .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
                             ) {
-                                let _ = RetainedWorkerRuntime.mark_admission_interrupted(
-                                    &authority,
-                                    &plan,
-                                    &retained_participant_id,
-                                    last_frame_identity.as_ref(),
-                                    interrupted_at,
-                                );
+                                Ok(interrupted_at) => {
+                                    if let Err(error) = RetainedWorkerRuntime
+                                        .mark_admission_interrupted(
+                                            &authority,
+                                            &plan,
+                                            &retained_participant_id,
+                                            last_frame_identity.as_ref(),
+                                            interrupted_at,
+                                        )
+                                    {
+                                        warn!(
+                                            participant_id = %retained_participant_id,
+                                            orchestration_session_id = %plan.spawn_request.orchestration_session_id,
+                                            failure = %error,
+                                            "retained worker observer failed closed while persisting interruption truth"
+                                        );
+                                    }
+                                }
+                                Err(error) => warn!(
+                                    participant_id = %retained_participant_id,
+                                    orchestration_session_id = %plan.spawn_request.orchestration_session_id,
+                                    failure = %error,
+                                    "retained worker observer failed closed while timestamping interruption truth"
+                                ),
                             }
                         });
                     }

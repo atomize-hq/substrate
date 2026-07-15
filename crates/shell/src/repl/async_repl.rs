@@ -8202,6 +8202,9 @@ async fn start_remote_member_runtime_with_prepared(
                 .to_string(),
         });
     };
+    #[cfg(target_os = "linux")]
+    let retained_worker_admission = retained_worker_admission
+        .map(|(authority, admission_plan)| (Arc::new(authority), admission_plan));
 
     let runtime_role = {
         manifest
@@ -8271,13 +8274,100 @@ async fn start_remote_member_runtime_with_prepared(
     );
 
     let workspace_root = PathBuf::from(startup_context.snapshot().workspace_root.clone());
-    let (client, request, _agent_id) =
-        build_agent_client_and_member_dispatch_request_for_cwd(&transport_request, &workspace_root)
-            .map_err(runtime_bootstrap_failure_from_anyhow)?;
-    let response = client
-        .execute_stream(request)
-        .await
-        .map_err(runtime_bootstrap_failure_from_anyhow)?;
+    let (client, request, _agent_id) = match build_agent_client_and_member_dispatch_request_for_cwd(
+        &transport_request,
+        &workspace_root,
+    ) {
+        Ok(built) => built,
+        Err(error) => {
+            #[cfg(target_os = "linux")]
+            if let Some((authority, admission_plan)) = retained_worker_admission.as_ref() {
+                let retained_participant_id = retained_worker_launch_authority
+                    .as_ref()
+                    .map(|proof| proof.retained_participant_id.as_str())
+                    .ok_or_else(|| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: "authority-managed retained Spawn omitted participant proof"
+                            .to_string(),
+                    })?;
+                let interrupted_at = TimestampV1::parse(
+                        chrono::Utc::now()
+                            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                    )
+                    .map_err(|error| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "failed to timestamp retained-worker transport construction interruption: {error}"
+                        ),
+                    })?;
+                RetainedWorkerRuntime
+                        .mark_admission_interrupted(
+                            authority,
+                            admission_plan,
+                            retained_participant_id,
+                            None,
+                            interrupted_at,
+                        )
+                        .map_err(|error| RuntimeBootstrapFailure {
+                            exit_code: 1,
+                            message: format!(
+                                "failed to persist retained-worker transport construction interruption: {error}"
+                            ),
+                        })?;
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: "failed to construct world-scoped retained member runtime transport"
+                        .to_string(),
+                });
+            }
+            return Err(runtime_bootstrap_failure_from_anyhow(error));
+        }
+    };
+    let response = match client.execute_stream(request).await {
+        Ok(response) => response,
+        Err(error) => {
+            #[cfg(target_os = "linux")]
+            if let Some((authority, admission_plan)) = retained_worker_admission.as_ref() {
+                let retained_participant_id = retained_worker_launch_authority
+                    .as_ref()
+                    .map(|proof| proof.retained_participant_id.as_str())
+                    .ok_or_else(|| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: "authority-managed retained Spawn omitted participant proof"
+                            .to_string(),
+                    })?;
+                let interrupted_at = TimestampV1::parse(
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                )
+                .map_err(|error| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "failed to timestamp retained-worker launch interruption: {error}"
+                    ),
+                })?;
+                RetainedWorkerRuntime
+                    .mark_admission_interrupted(
+                        authority,
+                        admission_plan,
+                        retained_participant_id,
+                        None,
+                        interrupted_at,
+                    )
+                    .map_err(|error| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "failed to persist retained-worker launch interruption: {error}"
+                        ),
+                    })?;
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: "world-scoped retained member runtime stream launch failed"
+                        .to_string(),
+                });
+            }
+            return Err(runtime_bootstrap_failure_from_anyhow(error));
+        }
+    };
 
     let (retained_orchestration_snapshot, retained_manifest_snapshot) = {
         let mut orchestration_guard = startup_context
@@ -8316,6 +8406,8 @@ async fn start_remote_member_runtime_with_prepared(
     let runtime_role_for_events = runtime_role.clone();
     let run_id_for_events = run_id.clone();
     let span_id_for_events = Arc::clone(&span_id);
+    #[cfg(target_os = "linux")]
+    let retained_worker_admission_for_startup = retained_worker_admission.clone();
     #[cfg(target_os = "linux")]
     let retained_worker_admission_for_events = retained_worker_admission;
     #[cfg(target_os = "linux")]
@@ -8857,15 +8949,67 @@ async fn start_remote_member_runtime_with_prepared(
             message: "runtime startup signalled ready without a surfaced UAA session handle"
                 .to_string(),
         })?;
-    let resolved_span_id = span_id
+    let observed_span_id = span_id
         .lock()
         .expect("remote member span mutex poisoned")
-        .clone()
-        .ok_or_else(|| RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: "runtime startup signalled ready without a streamed execute span_id"
-                .to_string(),
-        })?;
+        .clone();
+    let resolved_span_id = match observed_span_id {
+        Some(resolved_span_id) => resolved_span_id,
+        None => {
+            #[cfg(target_os = "linux")]
+            if authority_managed {
+                shutdown_requested.store(true, Ordering::SeqCst);
+                if let Some(task) = observe_task.take() {
+                    task.abort();
+                    let _ = task.await;
+                }
+                let (authority, admission_plan) = retained_worker_admission_for_startup
+                    .as_ref()
+                    .ok_or_else(|| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message:
+                            "authority-managed retained Spawn omitted durable admission context"
+                                .to_string(),
+                    })?;
+                let retained_participant_id = retained_worker_launch_authority
+                    .as_ref()
+                    .map(|proof| proof.retained_participant_id.as_str())
+                    .ok_or_else(|| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: "authority-managed retained Spawn omitted participant proof"
+                            .to_string(),
+                    })?;
+                let interrupted_at = TimestampV1::parse(
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                )
+                .map_err(|error| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "failed to timestamp retained-worker missing-Start interruption: {error}"
+                    ),
+                })?;
+                RetainedWorkerRuntime
+                    .mark_admission_interrupted(
+                        authority,
+                        admission_plan,
+                        retained_participant_id,
+                        None,
+                        interrupted_at,
+                    )
+                    .map_err(|error| RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "failed to persist retained-worker missing-Start interruption: {error}"
+                        ),
+                    })?;
+            }
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "runtime startup signalled ready without a streamed execute span_id"
+                    .to_string(),
+            });
+        }
+    };
     let (stop_orchestration_session_id, stop_participant_id) =
         runtime_stop_transport_ids(&manifest);
     let (cancel_tx, cancel_rx) = private_cancel_request_channel();
@@ -15885,6 +16029,7 @@ mod tests {
             let observed_proofs_for_server = Arc::clone(&observed_proofs);
             let world_server = tokio::spawn(async move {
                 let mut launch_stream = None::<(tokio::net::UnixStream, String, String)>;
+                let mut missing_start_stream = None::<tokio::net::UnixStream>;
                 while let Ok((mut stream, _)) = listener.accept().await {
                     let Some((header, body)) = read_test_world_http_request(&mut stream).await
                     else {
@@ -15909,7 +16054,19 @@ mod tests {
                             .expect("authority-managed Spawn must use member dispatch");
                         let adapter = match member_dispatch.initial_prompt.as_deref() {
                             Some("drive the direct production adapter") => "direct",
+                            Some("exercise direct terminal conflict") => {
+                                "direct-terminal-conflict"
+                            }
+                            Some("exercise direct invalid registration") => {
+                                "direct-invalid-registered"
+                            }
                             Some("own the failing integration investigation") => "toolbox",
+                            Some("exercise toolbox stream-open interruption") => {
+                                "toolbox-open-fail"
+                            }
+                            Some("exercise toolbox missing-start interruption") => {
+                                "toolbox-missing-start"
+                            }
                             other => panic!("unexpected authority-managed prompt: {other:?}"),
                         };
                         let proof = member_dispatch
@@ -15928,19 +16085,31 @@ mod tests {
                             .expect("observed proofs mutex")
                             .push((adapter.to_string(), proof));
 
+                        if adapter == "toolbox-open-fail" {
+                            write_test_world_http_json(
+                                &mut stream,
+                                "500 Internal Server Error",
+                                r#"{"error":"forced stream-open failure"}"#,
+                            )
+                            .await;
+                            continue;
+                        }
+
                         let stream_id = format!("rts_{adapter}_authority_spawn");
                         let span_id = format!("spn_{adapter}_authority_spawn");
                         let registered_event_id = format!("evt_{adapter}_authority_registered");
 
                         start_test_world_chunked_stream(&mut stream).await;
-                        write_test_world_stream_frame(
-                            &mut stream,
-                            &ExecuteStreamFrame::Start {
-                                frame_identity: test_world_frame_identity(&stream_id, 1),
-                                span_id: span_id.clone(),
-                            },
-                        )
-                        .await;
+                        if adapter != "toolbox-missing-start" {
+                            write_test_world_stream_frame(
+                                &mut stream,
+                                &ExecuteStreamFrame::Start {
+                                    frame_identity: test_world_frame_identity(&stream_id, 1),
+                                    span_id: span_id.clone(),
+                                },
+                            )
+                            .await;
+                        }
                         let registered_identity = transport_api_types::RuntimeEventIdentityV1 {
                             event_id: registered_event_id,
                             event_sequence: 1,
@@ -15957,9 +16126,16 @@ mod tests {
                                         "session": {"id": format!("thread-{adapter}-authority-spawn")}
                                     }),
                                     agent_id: execute.agent_id,
-                                    orchestration_session_id: member_dispatch
-                                        .orchestration_session_id
-                                        .clone(),
+                                    orchestration_session_id: if adapter
+                                        == "direct-invalid-registered"
+                                    {
+                                        format!(
+                                            "{}-changed",
+                                            member_dispatch.orchestration_session_id
+                                        )
+                                    } else {
+                                        member_dispatch.orchestration_session_id.clone()
+                                    },
                                     run_id: member_dispatch.run_id.clone(),
                                     parent_run_id: None,
                                     participant_id: Some(member_dispatch.participant_id.clone()),
@@ -15981,20 +16157,32 @@ mod tests {
                             },
                         )
                         .await;
-                        if adapter == "direct" {
+                        if adapter == "direct-invalid-registered" {
+                            finish_test_world_chunked_stream(&mut stream).await;
+                            continue;
+                        }
+                        if adapter == "toolbox-missing-start" {
+                            missing_start_stream = Some(stream);
+                            continue;
+                        }
+                        if adapter == "direct" || adapter == "direct-terminal-conflict" {
                             let terminal_event = transport_api_types::RuntimeEventIdentityV1 {
-                                event_id: "evt_direct_authority_terminal".to_string(),
+                                event_id: format!("evt_{adapter}_authority_terminal"),
                                 event_sequence: 2,
                             };
+                            let mut terminal_identity =
+                                transport_api_types::RuntimeTerminalIdentityV1::from(
+                                    &terminal_event,
+                                );
+                            if adapter == "direct-terminal-conflict" {
+                                terminal_identity.terminal_event_sequence += 1;
+                            }
                             write_test_world_stream_frame(
                                 &mut stream,
                                 &ExecuteStreamFrame::Exit {
                                     frame_identity: test_world_frame_identity(&stream_id, 3),
                                     event_identity: terminal_event.clone(),
-                                    terminal_identity:
-                                        transport_api_types::RuntimeTerminalIdentityV1::from(
-                                            &terminal_event,
-                                        ),
+                                    terminal_identity,
                                     exit: 0,
                                     span_id,
                                     scopes_used: Vec::new(),
@@ -16048,6 +16236,7 @@ mod tests {
                         )
                         .await;
                         finish_test_world_chunked_stream(&mut launch_stream).await;
+                        drop(missing_start_stream.take());
                         return;
                     }
                     write_test_world_http_json(
@@ -16117,6 +16306,113 @@ mod tests {
             assert_eq!(direct_spawn.world_id, world_binding.world_id);
             assert_eq!(direct_spawn.world_generation, world_binding.world_generation);
 
+            let authority = HostSessionAuthority::from_trusted_root(
+                TrustedAuthorityRoot::open(&substrate_home)
+                    .expect("reopen toolbox authority root"),
+            )
+            .expect("reopen toolbox host-session authority");
+
+            let conflict_outcome = dispatch_orchestrator_world_request(
+                &startup_context.store,
+                WorldDispatchRequestV1 {
+                    request_id: Some("req_direct_terminal_conflict".to_string()),
+                    idempotency_key: Some("idem_direct_terminal_conflict".to_string()),
+                    orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                    caller_participant_id: Some(host_participant_id.clone()),
+                    action: WorldDispatchActionV1::SpawnWorldWorker,
+                    mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                    target_backend_id: Some("cli:codex-world".to_string()),
+                    task_run_id: None,
+                    target_participant_id: None,
+                    world_id: Some(world_binding.world_id.clone()),
+                    world_generation: Some(world_binding.world_generation),
+                    payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                        prompt: "exercise direct terminal conflict".to_string(),
+                    }),
+                },
+            )
+            .await
+            .expect("direct Spawn returns only after exact Registered truth");
+            assert!(matches!(
+                conflict_outcome,
+                WorldDispatchOutcomeV1::SpawnWorldWorker(_)
+            ));
+            let conflict_proof = observed_proofs
+                .lock()
+                .expect("observed proofs mutex")
+                .iter()
+                .find(|(adapter, _)| adapter == "direct-terminal-conflict")
+                .map(|(_, proof)| proof.clone())
+                .expect("terminal-conflict direct adapter must serialize the proof");
+            tokio::time::timeout(Duration::from_secs(3), async {
+                loop {
+                    let record = RetainedWorkerRuntime
+                        .read_admission_record(
+                            &authority,
+                            &conflict_proof.orchestration_session_id,
+                            &conflict_proof.retained_participant_id,
+                        )
+                        .expect("read terminal-conflict admission")
+                        .expect("terminal-conflict admission");
+                    if matches!(
+                        record.state,
+                        crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+                    ) {
+                        break;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .expect("mismatched direct Exit must become InterruptedNonterminal");
+
+            let invalid_registered_error = dispatch_orchestrator_world_request(
+                &startup_context.store,
+                WorldDispatchRequestV1 {
+                    request_id: Some("req_direct_invalid_registered".to_string()),
+                    idempotency_key: Some("idem_direct_invalid_registered".to_string()),
+                    orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                    caller_participant_id: Some(host_participant_id.clone()),
+                    action: WorldDispatchActionV1::SpawnWorldWorker,
+                    mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                    target_backend_id: Some("cli:codex-world".to_string()),
+                    task_run_id: None,
+                    target_participant_id: None,
+                    world_id: Some(world_binding.world_id.clone()),
+                    world_generation: Some(world_binding.world_generation),
+                    payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                        prompt: "exercise direct invalid registration".to_string(),
+                    }),
+                },
+            )
+            .await
+            .expect_err("inexact direct Registered truth must fail closed");
+            assert!(
+                !invalid_registered_error
+                    .to_string()
+                    .contains("exercise direct invalid registration"),
+                "Spawn prompt bytes must not be copied into the returned protocol error"
+            );
+            let invalid_registered_proof = observed_proofs
+                .lock()
+                .expect("observed proofs mutex")
+                .iter()
+                .find(|(adapter, _)| adapter == "direct-invalid-registered")
+                .map(|(_, proof)| proof.clone())
+                .expect("invalid-Registered direct adapter must serialize the proof");
+            let invalid_registered_record = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &invalid_registered_proof.orchestration_session_id,
+                    &invalid_registered_proof.retained_participant_id,
+                )
+                .expect("read invalid-Registered admission")
+                .expect("invalid-Registered admission");
+            assert!(matches!(
+                invalid_registered_record.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+            ));
+
             let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
             ensure_internal_toolbox_transport_registered(
                 Some(&mut host_runtime),
@@ -16180,17 +16476,17 @@ mod tests {
             assert_eq!(spawn.target_backend_id, "cli:codex-world");
             assert_eq!(spawn.world_id, world_binding.world_id);
             assert_eq!(spawn.world_generation, world_binding.world_generation);
-            let observed_proofs = observed_proofs
+            let observed_proofs_snapshot = observed_proofs
                 .lock()
                 .expect("observed proofs mutex")
                 .clone();
-            let direct_proof = observed_proofs
+            let direct_proof = observed_proofs_snapshot
                 .iter()
                 .find(|(adapter, _)| adapter == "direct")
                 .map(|(_, proof)| proof)
                 .cloned()
                 .expect("direct production adapter must serialize the launch proof");
-            let proof = observed_proofs
+            let proof = observed_proofs_snapshot
                 .iter()
                 .find(|(adapter, _)| adapter == "toolbox")
                 .map(|(_, proof)| proof)
@@ -16221,11 +16517,6 @@ mod tests {
                     .is_none(),
                 "direct authority-managed Spawn must not activate the legacy participant writer"
             );
-            let authority = HostSessionAuthority::from_trusted_root(
-                TrustedAuthorityRoot::open(&substrate_home)
-                    .expect("reopen toolbox authority root"),
-            )
-            .expect("reopen toolbox host-session authority");
             let direct_terminal = tokio::time::timeout(Duration::from_secs(3), async {
                 loop {
                     let record = RetainedWorkerRuntime
@@ -16304,6 +16595,146 @@ mod tests {
                 prompt_path.exists(),
                 "spawned retained worker must publish its prompt transport so current runtime rules can steer it"
             );
+
+            let open_failure_prompt = "exercise toolbox stream-open interruption";
+            let open_failure_request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_open_failure".to_string()),
+                idempotency_key: Some("idem_toolbox_open_failure".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(host_participant_id.clone()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: open_failure_prompt.to_string(),
+                }),
+            };
+            let open_failure_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                let request = open_failure_request.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(&transport_path, &request).await
+                }
+            });
+            let open_failure_dispatch = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for toolbox stream-open failure request")
+                .expect("toolbox stream-open failure request");
+            handle_internal_toolbox_dispatch_request(
+                open_failure_dispatch,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let open_failure = tokio::time::timeout(Duration::from_secs(3), open_failure_task)
+                .await
+                .expect("toolbox stream-open failure must remain bounded")
+                .expect("toolbox stream-open failure task")
+                .expect_err("toolbox stream-open failure must fail closed");
+            assert!(
+                open_failure
+                    .to_string()
+                    .contains("world-scoped retained member runtime stream launch failed")
+            );
+            assert!(
+                !open_failure.to_string().contains(open_failure_prompt),
+                "toolbox stream-open error must not copy Spawn prompt bytes"
+            );
+            let open_failure_proof = observed_proofs
+                .lock()
+                .expect("observed proofs mutex")
+                .iter()
+                .find(|(adapter, _)| adapter == "toolbox-open-fail")
+                .map(|(_, proof)| proof.clone())
+                .expect("toolbox stream-open failure must serialize the exact proof");
+            let open_failure_record = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &open_failure_proof.orchestration_session_id,
+                    &open_failure_proof.retained_participant_id,
+                )
+                .expect("read toolbox stream-open failure admission")
+                .expect("toolbox stream-open failure admission");
+            assert!(matches!(
+                open_failure_record.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+            ));
+
+            let missing_start_prompt = "exercise toolbox missing-start interruption";
+            let missing_start_request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_missing_start".to_string()),
+                idempotency_key: Some("idem_toolbox_missing_start".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(host_participant_id.clone()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: missing_start_prompt.to_string(),
+                }),
+            };
+            let missing_start_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                let request = missing_start_request.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(&transport_path, &request).await
+                }
+            });
+            let missing_start_dispatch = tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                .await
+                .expect("timed out waiting for toolbox missing-Start request")
+                .expect("toolbox missing-Start request");
+            handle_internal_toolbox_dispatch_request(
+                missing_start_dispatch,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let missing_start = tokio::time::timeout(Duration::from_secs(3), missing_start_task)
+                .await
+                .expect("toolbox missing-Start handling must remain bounded while peer stays open")
+                .expect("toolbox missing-Start task")
+                .expect_err("toolbox missing-Start must fail closed");
+            assert!(
+                missing_start
+                    .to_string()
+                    .contains("without a streamed execute span_id")
+            );
+            assert!(
+                !missing_start.to_string().contains(missing_start_prompt),
+                "toolbox missing-Start error must not copy Spawn prompt bytes"
+            );
+            let missing_start_proof = observed_proofs
+                .lock()
+                .expect("observed proofs mutex")
+                .iter()
+                .find(|(adapter, _)| adapter == "toolbox-missing-start")
+                .map(|(_, proof)| proof.clone())
+                .expect("toolbox missing-Start must serialize the exact proof");
+            let missing_start_record = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &missing_start_proof.orchestration_session_id,
+                    &missing_start_proof.retained_participant_id,
+                )
+                .expect("read toolbox missing-Start admission")
+                .expect("toolbox missing-Start admission");
+            assert!(matches!(
+                missing_start_record.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+            ));
 
             shutdown_host_orchestrator_runtime(
                 host_runtime,
