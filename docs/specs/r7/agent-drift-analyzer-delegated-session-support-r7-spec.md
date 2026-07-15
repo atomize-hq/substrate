@@ -26,8 +26,8 @@ NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 
 ## Implementation Promotion Gate — Promotion Complete, R7-0 Active At Entry Only
 
-This document is now implementation-ready authority. The R6 prerequisites audited by the active
-`R7-PROMOTE` phase are satisfied:
+This document is now implementation-ready authority. The R6 prerequisites audited during the
+now-complete `R7-PROMOTE` phase are satisfied:
 
 1. the R6 scorer-by-context applicability audit is complete;
 2. every material scoring surface has exactly one terminal disposition: **Cutover complete**,
