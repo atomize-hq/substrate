@@ -249,8 +249,10 @@ impl<'a> StoreLayout<'a> {
         {
             let valid = matches!(
                 (entry.name.as_str(), entry.kind),
-                ("lock" | "tmp" | "objects" | "keys", EntryKind::Directory)
-                    | (ROOT_FILE | INIT_FILE, EntryKind::RegularFile)
+                (
+                    "lock" | "tmp" | "objects" | "keys" | "retained-worker-admission-v1",
+                    EntryKind::Directory
+                ) | (ROOT_FILE | INIT_FILE, EntryKind::RegularFile)
             );
             if !valid {
                 return Err(StoreError("authority layout contains an unknown entry"));
