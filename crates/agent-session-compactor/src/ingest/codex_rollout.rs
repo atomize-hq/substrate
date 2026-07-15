@@ -8,35 +8,59 @@ use serde_json::Value;
 
 use crate::discovery::DiscoveredSessionArtifact;
 
+/// Exact source location of a rollout record used to derive linkage metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RolloutRowProvenance {
+    /// Rollout JSONL file containing the record.
     pub source_file: Utf8PathBuf,
+    /// One-based physical line number in `source_file`.
     pub line_number: usize,
+    /// Zero-based ingested event ordinal; parse failures consume an ordinal.
     pub event_index: usize,
 }
 
+/// Parent-side delegation observed by matching a `spawn_agent` call to its output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParentSpawnResult {
+    /// Session identifier of the rollout containing the matched call and output.
     pub parent_session_id: String,
+    /// Child session identifier parsed from the output's `agent_id` field.
     pub child_session_id: String,
+    /// Call identifier shared by the `spawn_agent` call and its output.
     pub call_id: String,
+    /// Source location of the `spawn_agent` function-call record.
     pub spawn_call_provenance: RolloutRowProvenance,
+    /// Source location of the matching function-call-output record.
     pub spawn_result_provenance: RolloutRowProvenance,
 }
 
+/// Child-side delegation origin recorded in a rollout's session metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildSessionOrigin {
+    /// Session identifier declared by the child rollout's session metadata.
     pub child_session_id: String,
+    /// Parent thread identifier declared by `source.subagent.thread_spawn`.
     pub parent_session_id: String,
+    /// Delegation depth declared by `source.subagent.thread_spawn`.
     pub depth: u32,
+    /// Optional agent nickname recorded by the spawning runtime.
     pub agent_nickname: Option<String>,
+    /// Optional agent role recorded by the spawning runtime.
     pub agent_role: Option<String>,
+    /// Source location of the session-metadata record declaring the origin.
     pub provenance: RolloutRowProvenance,
 }
 
+/// Delegation linkage observations derived from one ingested rollout.
+///
+/// A parent rollout can contain multiple matched spawn results. A child rollout
+/// contributes at most one origin: the first valid origin-bearing session
+/// metadata record in ingestion order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RolloutLinkageMetadata {
+    /// Matched parent-side spawn results, in output-record ingestion order.
     pub parent_spawn_results: Vec<ParentSpawnResult>,
+    /// First valid child-side origin, when the rollout declares one.
     pub child_origin: Option<ChildSessionOrigin>,
 }
 
@@ -83,6 +107,46 @@ pub struct IngestedRolloutFile {
     pub parse_failures: Vec<RolloutParseFailure>,
 }
 
+/// Extracts explicit parent- and child-side delegation linkage from a rollout.
+///
+/// Parent-side linkage requires a `spawn_agent` function call and a
+/// function-call output with the same `call_id`; the output must be JSON with a
+/// string `agent_id`. Child-side linkage requires a session-metadata `source`
+/// matching `subagent.thread_spawn`. Missing or malformed linkage fields are
+/// omitted rather than inferred. Every returned observation retains the source
+/// file, physical line, and ingested event ordinal of the records that proved it.
+///
+/// # Examples
+///
+/// ```
+/// use std::fs;
+///
+/// use agent_session_compactor::{extract_rollout_linkage_metadata, ingest_rollout_file};
+/// use camino::Utf8Path;
+/// use tempfile::tempdir;
+///
+/// let temp_dir = tempdir()?;
+/// let path = temp_dir.path().join("rollout-parent.jsonl");
+/// fs::write(
+///     &path,
+///     concat!(
+///         "{\"type\":\"session_meta\",\"payload\":{\"id\":\"parent\"}}\n",
+///         "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"spawn_agent\",\"call_id\":\"call-1\"}}\n",
+///         "{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call_output\",\"call_id\":\"call-1\",\"output\":\"{\\\"agent_id\\\":\\\"child\\\"}\"}}\n",
+///     ),
+/// )?;
+/// let path = Utf8Path::from_path(&path).expect("temporary path is valid UTF-8");
+/// let rollout = ingest_rollout_file(path)?;
+///
+/// let metadata = extract_rollout_linkage_metadata(&rollout);
+/// let spawn = metadata.parent_spawn_results.first().expect("matched spawn");
+/// assert_eq!(spawn.child_session_id, "child");
+/// assert_eq!(spawn.spawn_call_provenance.line_number, 2);
+/// assert_eq!(spawn.spawn_call_provenance.event_index, 1);
+/// assert_eq!(spawn.spawn_result_provenance.line_number, 3);
+/// assert_eq!(spawn.spawn_result_provenance.source_file, rollout.source_file);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn extract_rollout_linkage_metadata(rollout: &IngestedRolloutFile) -> RolloutLinkageMetadata {
     let mut spawn_calls = BTreeMap::<&str, Vec<&IngestedRolloutRecord>>::new();
     for record in &rollout.records {
