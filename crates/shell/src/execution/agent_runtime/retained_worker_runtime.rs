@@ -359,6 +359,11 @@ struct ResolvedPostR0RegisteredGraphV1 {
     resolved_target: ResolvedRetainedTargetV1,
 }
 
+struct ResolvedPostR0RegistryGraphV1 {
+    current_exact_authority: CanonicalExactCurrentAuthorityV1,
+    registered_graph: ResolvedPostR0RegisteredGraphV1,
+}
+
 struct AdmissionTransportClaimInputV1<'a> {
     claimed_at: TimestampV1,
     claim_entropy: [u8; 16],
@@ -648,6 +653,7 @@ impl RetainedWorkerRuntime {
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
         self.initialize_admission_registry(authority)?;
+        let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
         let storage =
             super::host_session_authority::store::retained_worker_admission_storage_for_authority(
                 authority,
@@ -673,6 +679,14 @@ impl RetainedWorkerRuntime {
             )?;
             retain_semantic_error(
                 validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_complete_post_r0_registry_graphs(
+                    &registry,
+                    transaction.authority_root(),
+                    &post_r0_graphs,
+                ),
                 &mut semantic_failure,
             )?;
             if let Some(locator) = registry.issuer_request_index.get(&plan.issuer_request_id) {
@@ -1058,6 +1072,14 @@ impl RetainedWorkerRuntime {
         let admission_registration = admission_registration(&record.state).ok_or_else(|| {
             RetainedWorkerRuntimeError("post-R0 admission has no registration".into())
         })?;
+        self.resolve_admission_registration_graph(authority, admission_registration)
+    }
+
+    fn resolve_admission_registration_graph(
+        &self,
+        authority: &HostSessionAuthority,
+        admission_registration: &RetainedWorkerAdmissionRegistrationV1,
+    ) -> Result<ResolvedPostR0RegisteredGraphV1, RetainedWorkerRuntimeError> {
         let root = authority
             .read_a12a_root()
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
@@ -1114,6 +1136,106 @@ impl RetainedWorkerRuntime {
             &post_r0_graph.result,
             &post_r0_graph.resolved_target,
         )
+    }
+
+    fn resolve_all_post_r0_registry_graphs(
+        &self,
+        authority: &HostSessionAuthority,
+    ) -> Result<BTreeMap<(String, String), ResolvedPostR0RegistryGraphV1>, RetainedWorkerRuntimeError>
+    {
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut semantic_failure = None;
+        let registrations = storage.transaction(|transaction| {
+            let Some(registry_bytes) = transaction.read_registry()? else {
+                return Ok(Vec::new());
+            };
+            let registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                )
+                .map(drop),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            let VersionedStateRoot::V2(root) = transaction.authority_root() else {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_semantic(),
+                );
+            };
+            let mut found = Vec::new();
+            for record in registry
+                .records_by_session
+                .values()
+                .flat_map(BTreeMap::values)
+            {
+                let registration = if let Some(registration) = admission_registration(&record.state)
+                {
+                    Some(registration.clone())
+                } else if matches!(
+                    record.state,
+                    RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+                ) {
+                    retain_semantic_error(
+                        admission_registration_from_hsa(root, record),
+                        &mut semantic_failure,
+                    )?
+                } else {
+                    None
+                };
+                if let Some(registration) = registration {
+                    found.push((record.clone(), registration));
+                }
+            }
+            Ok(found)
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        let registrations =
+            registrations.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let mut graphs = BTreeMap::new();
+        for (record, registration) in registrations {
+            let registered_graph =
+                self.resolve_admission_registration_graph(authority, &registration)?;
+            let current = authority
+                .resolve_current_exact(&record.orchestration_session_id, None)
+                .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+            let key = (
+                record.orchestration_session_id.clone(),
+                record.retained_participant_id.clone(),
+            );
+            if graphs
+                .insert(
+                    key,
+                    ResolvedPostR0RegistryGraphV1 {
+                        current_exact_authority: CanonicalExactCurrentAuthorityV1::from_resolved(
+                            &current,
+                        ),
+                        registered_graph,
+                    },
+                )
+                .is_some()
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "post-R0 registry graph identity is duplicated".into(),
+                ));
+            }
+        }
+        Ok(graphs)
     }
 
     pub(crate) fn claim_admission_transport(
@@ -2233,6 +2355,43 @@ fn validate_post_r0_registered_graph(
     result: &RetainedWorkerRegistrationResultV1,
     resolved: &ResolvedRetainedTargetV1,
 ) -> Result<(), RetainedWorkerRuntimeError> {
+    validate_post_r0_registered_graph_against_expectation(
+        root,
+        record,
+        &plan.exact_authority,
+        &plan.descriptor_and_runtime_plan.descriptor,
+        &plan.policy_and_admission_cap.current_policy_ref,
+        &plan.policy_and_admission_cap.current_policy,
+        admission_registration,
+        result,
+        resolved,
+    )
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the complete registered graph is intentionally explicit"
+)]
+fn validate_post_r0_registered_graph_against_expectation(
+    root: &StateRootV2,
+    record: &RetainedWorkerAdmissionRecordV1,
+    current_exact_authority: &CanonicalExactCurrentAuthorityV1,
+    expected_descriptor: &AgentDescriptorV1,
+    expected_policy_ref: &AuthorityObjectRefV1,
+    expected_policy: &PolicyObjectHashInputV1,
+    admission_registration: &RetainedWorkerAdmissionRegistrationV1,
+    result: &RetainedWorkerRegistrationResultV1,
+    resolved: &ResolvedRetainedTargetV1,
+) -> Result<(), RetainedWorkerRuntimeError> {
+    let SessionNamespaceRecordV1::Authority(current_authority) = root
+        .session_namespace_map
+        .get(&record.orchestration_session_id)
+        .ok_or_else(|| RetainedWorkerRuntimeError("post-R0 graph session is absent".into()))?
+    else {
+        return Err(RetainedWorkerRuntimeError(
+            "post-R0 graph session has no authority".into(),
+        ));
+    };
     let registration = root
         .retained_worker_registration_journal
         .get(&admission_registration.registration_id)
@@ -2244,13 +2403,22 @@ fn validate_post_r0_registered_graph(
         .ok_or_else(|| RetainedWorkerRuntimeError("post-R0 graph has no request".into()))?;
     let resulting_authority = reconstruct_exact_authority_at_revision(
         root,
-        &plan.exact_authority,
+        current_exact_authority,
         registration.authority_revision_after,
     )?;
     let registration_commitment = canonical_registration_commitment(registration)?;
     let expected_internal_uaa_session_id = format!("uaa_{}", record.bootstrap_run_id);
+    let current_authority_commitment = canonical_authority_commitment(current_authority)?;
+    let current_lineage_commitment = canonical_lineage_commitment(current_authority)?;
 
-    if resolved.registration != *registration
+    if current_exact_authority.authority_store_id != root.authority_store_id
+        || current_exact_authority.orchestration_session_id != record.orchestration_session_id
+        || current_exact_authority.authority_revision != current_authority.authority_revision
+        || current_exact_authority.authority_record_commitment != current_authority_commitment
+        || current_exact_authority.authoritative_lineage_commitment != current_lineage_commitment
+        || current_exact_authority.authority != **current_authority
+        || current_exact_authority.current_policy != *expected_policy
+        || resolved.registration != *registration
         || admission_registration.registration_id != registration.registration_id
         || admission_registration.retained_worker_ref != registration.retained_worker_ref
         || result.registration_id != registration.registration_id
@@ -2318,8 +2486,8 @@ fn validate_post_r0_registered_graph(
             .current_policy_revision
             .as_deref()
             != Some(record.current_policy_revision.as_str())
-        || resolved.current_authority_revision != plan.exact_authority.authority_revision
-        || resolved.descriptor != plan.descriptor_and_runtime_plan.descriptor
+        || resolved.current_authority_revision != current_exact_authority.authority_revision
+        || resolved.descriptor != *expected_descriptor
         || resolved.descriptor.execution_scope != AgentExecutionScopeV1::World
         || resolved.descriptor.backend_id != record.backend_id
         || resolved.descriptor.protocol != record.protocol
@@ -2334,12 +2502,71 @@ fn validate_post_r0_registered_graph(
         || resolved.retained_worker.descriptor_ref != registration.descriptor_ref
         || resolved.retained_worker.resume_handle_ref != registration.resume_handle_ref
         || resolved.retained_worker.policy_ref != record.current_policy_ref
-        || resolved.current_policy != plan.policy_and_admission_cap.current_policy
+        || resolved.current_policy != *expected_policy
         || resolved.current_policy.policy_revision != record.current_policy_revision
-        || plan.policy_and_admission_cap.current_policy_ref != record.current_policy_ref
+        || expected_policy_ref != &record.current_policy_ref
     {
         return Err(RetainedWorkerRuntimeError(
             "post-R0 registered graph is inexact".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_complete_post_r0_registry_graphs(
+    registry: &RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+    resolved_graphs: &BTreeMap<(String, String), ResolvedPostR0RegistryGraphV1>,
+) -> Result<(), RetainedWorkerRuntimeError> {
+    let VersionedStateRoot::V2(root) = authority_root else {
+        return Err(RetainedWorkerRuntimeError(
+            "complete post-R0 registry validation requires V2 authority".into(),
+        ));
+    };
+    let mut validated_count = 0_usize;
+    for record in registry
+        .records_by_session
+        .values()
+        .flat_map(BTreeMap::values)
+    {
+        let registration = if let Some(registration) = admission_registration(&record.state) {
+            Some(registration.clone())
+        } else if matches!(
+            record.state,
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        ) {
+            admission_registration_from_hsa(root, record)?
+        } else {
+            None
+        };
+        let Some(registration) = registration else {
+            continue;
+        };
+        let key = (
+            record.orchestration_session_id.clone(),
+            record.retained_participant_id.clone(),
+        );
+        let resolved = resolved_graphs.get(&key).ok_or_else(|| {
+            RetainedWorkerRuntimeError("complete post-R0 registry graph is absent".into())
+        })?;
+        validate_post_r0_registered_graph_against_expectation(
+            root,
+            record,
+            &resolved.current_exact_authority,
+            &resolved.registered_graph.resolved_target.descriptor,
+            &record.current_policy_ref,
+            &resolved.registered_graph.resolved_target.current_policy,
+            &registration,
+            &resolved.registered_graph.result,
+            &resolved.registered_graph.resolved_target,
+        )?;
+        validated_count = validated_count.checked_add(1).ok_or_else(|| {
+            RetainedWorkerRuntimeError("complete post-R0 graph count overflow".into())
+        })?;
+    }
+    if validated_count != resolved_graphs.len() {
+        return Err(RetainedWorkerRuntimeError(
+            "complete post-R0 registry graph snapshot is inexact".into(),
         ));
     }
     Ok(())
@@ -4887,6 +5114,45 @@ mod tests {
         (admission_root, key_path)
     }
 
+    fn forge_admission_bootstrap_identity(
+        parent: &tempfile::TempDir,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        record: &RetainedWorkerAdmissionRecordV1,
+        changed_bootstrap_run_id: &str,
+    ) -> (std::path::PathBuf, Vec<u8>) {
+        let identity = RetainedWorkerRuntime
+            .initialize_admission_registry(authority)
+            .unwrap();
+        let (admission_root, key_path) = initialized_admission_paths(parent, &identity);
+        let registry_path = admission_root.join("registry-v1.json");
+        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+            &fs::read(&registry_path).unwrap(),
+            "decode fixture registry",
+        )
+        .unwrap();
+        let envelope: RetainedWorkerAdmissionKeyEnvelopeV1 =
+            decode_canonical(&fs::read(key_path).unwrap(), "decode fixture key").unwrap();
+        let changed = registry
+            .records_by_session
+            .get_mut(&record.orchestration_session_id)
+            .unwrap()
+            .get_mut(&record.retained_participant_id)
+            .unwrap();
+        changed.bootstrap_run_id = changed_bootstrap_run_id.into();
+        changed.canonical_spawn_fingerprint = canonical_spawn_fingerprint(
+            &identity.key_id,
+            &envelope.secret_key,
+            plan,
+            &changed.retained_participant_id,
+            changed_bootstrap_run_id,
+        )
+        .unwrap();
+        let forged = encode_canonical(&registry, "encode fixture registry").unwrap();
+        fs::write(&registry_path, &forged).unwrap();
+        (registry_path, forged)
+    }
+
     #[test]
     fn committed_admission_key_missing_fails_closed_without_registry_mutation() {
         let (parent, authority, _) = started_authority();
@@ -6129,6 +6395,71 @@ mod tests {
         fs::write(&registry_path, &forged).unwrap();
 
         assert!(runtime.reserve_admission_slot(&authority, &plan).is_err());
+        assert_eq!(fs::read(registry_path).unwrap(), forged);
+    }
+
+    #[test]
+    fn new_slot_reservation_joins_every_existing_post_r0_graph() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let existing_plan = admission_plan(&authority, "existing-complete-join", "prompt", 3);
+        let admitted = runtime
+            .register_admitted_worker(&authority, &existing_plan)
+            .unwrap();
+        let (registry_path, forged) = forge_admission_bootstrap_identity(
+            &parent,
+            &authority,
+            &existing_plan,
+            &admitted.record,
+            "rwr_88888888888888888888888888888888",
+        );
+        let new_plan = admission_plan(&authority, "new-slot-complete-join", "prompt", 3);
+
+        assert!(runtime
+            .reserve_admission_slot(&authority, &new_plan)
+            .is_err());
+        assert_eq!(fs::read(registry_path).unwrap(), forged);
+    }
+
+    #[test]
+    fn new_slot_reservation_joins_an_applied_r0_head_graph() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let existing_plan = admission_plan(&authority, "applied-head-complete-join", "prompt", 3);
+        let slot = runtime
+            .reserve_admission_slot(&authority, &existing_plan)
+            .unwrap();
+        runtime
+            .register_admitted_worker_at(
+                &authority,
+                &existing_plan,
+                Some(AdmissionRegistrationCrashPointV1::AfterR0BeforeAdmissionAdvance),
+            )
+            .unwrap_err();
+        let head = runtime
+            .read_admission_record(
+                &authority,
+                &slot.record.orchestration_session_id,
+                &slot.record.retained_participant_id,
+            )
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            head.state,
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        ));
+        let (registry_path, forged) = forge_admission_bootstrap_identity(
+            &parent,
+            &authority,
+            &existing_plan,
+            &head,
+            "rwr_99999999999999999999999999999999",
+        );
+        let new_plan = admission_plan(&authority, "after-applied-head", "prompt", 3);
+
+        assert!(runtime
+            .reserve_admission_slot(&authority, &new_plan)
+            .is_err());
         assert_eq!(fs::read(registry_path).unwrap(), forged);
     }
 
