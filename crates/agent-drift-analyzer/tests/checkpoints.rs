@@ -5,11 +5,15 @@ mod support;
 use std::fs;
 
 use agent_drift_analyzer::{
-    AnalyzeRequest, AnalyzeResult, Confidence, DriftClass, DriftState, ObjectiveClass,
-    ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTargetKind,
-    ProgressDimension, ProgressSignalCode, ProgressStatus, SessionArchetypeLabel,
+    AnalyzeRequest, AnalyzeResult, Checkpoint, ChildWorkVisibility, Confidence, DelegationTopology,
+    DriftClass, DriftState, ObjectiveClass, ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind,
+    ObjectiveSourceKind, ObjectiveTargetKind, ProgressDimension, ProgressSignalCode,
+    ProgressStatus, SessionArchetypeLabel,
 };
-use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
+use agent_session_compactor::{
+    BundleManifest, CompactionKind, CompactionRow, DelegationEvidenceRef, DelegationLink,
+    DelegationLinkState, SourceKind, UserMessageRole,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde_json::{json, Value};
 use support::{analyze_sample_bundle, load_sample_bundle, BundleFixture};
@@ -7638,6 +7642,361 @@ fn checkpoints_r5_75_witnesses_stay_outside_frontier_advancement_after_r6_1_2() 
         .signals
         .iter()
         .any(|signal| signal.code == ProgressSignalCode::VerificationClean));
+}
+
+#[test]
+fn checkpoints_parent_wait_and_child_advance_keep_separate_trajectory_statuses() {
+    let result = analyze_cross_trajectory_rows(
+        parent_wait_rows(),
+        child_advancing_rows(),
+        DelegationLinkState::Verified,
+    );
+    let parent = cross_trajectory_checkpoint(&result, CROSS_TRAJECTORY_PARENT);
+    let child = cross_trajectory_checkpoint(&result, CROSS_TRAJECTORY_CHILD);
+    let parent_progress = parent.session_progress.as_ref().expect("parent progress");
+    let child_progress = child.session_progress.as_ref().expect("child progress");
+
+    assert_eq!(
+        parent.delegation.topology,
+        DelegationTopology::DelegatingParent
+    );
+    assert_eq!(
+        parent.delegation.child_session_ids,
+        [CROSS_TRAJECTORY_CHILD.to_string()]
+    );
+    assert_eq!(
+        parent.delegation.child_work_visibility,
+        ChildWorkVisibility::Linked
+    );
+    assert_eq!(
+        parent_progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(parent_progress.status, ProgressStatus::InsufficientEvidence);
+    assert_eq!(
+        child.delegation.topology,
+        DelegationTopology::DelegatedChild
+    );
+    assert_eq!(
+        child.delegation.parent_session_id.as_deref(),
+        Some(CROSS_TRAJECTORY_PARENT)
+    );
+    assert_eq!(
+        child_progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(child_progress.status, ProgressStatus::Advancing);
+    assert_cross_trajectory_evidence_is_local(parent, CROSS_TRAJECTORY_PARENT);
+    assert_cross_trajectory_evidence_is_local(child, CROSS_TRAJECTORY_CHILD);
+}
+
+#[test]
+fn checkpoints_parent_clean_orchestration_does_not_inherit_child_stall() {
+    let result = analyze_cross_trajectory_rows(
+        parent_clean_orchestration_rows(),
+        child_stalled_rows(),
+        DelegationLinkState::Verified,
+    );
+    let parent = cross_trajectory_checkpoint(&result, CROSS_TRAJECTORY_PARENT);
+    let child = cross_trajectory_checkpoint(&result, CROSS_TRAJECTORY_CHILD);
+    let parent_progress = parent.session_progress.as_ref().expect("parent progress");
+    let child_progress = child.session_progress.as_ref().expect("child progress");
+
+    assert_eq!(
+        parent_progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(parent_progress.status, ProgressStatus::InsufficientEvidence);
+    assert_eq!(
+        child_progress.dimension,
+        ProgressDimension::TroubleshootingFrontier
+    );
+    assert_eq!(child_progress.status, ProgressStatus::Stalled);
+    assert_cross_trajectory_evidence_is_local(parent, CROSS_TRAJECTORY_PARENT);
+    assert_cross_trajectory_evidence_is_local(child, CROSS_TRAJECTORY_CHILD);
+}
+
+#[test]
+fn checkpoints_missing_child_keeps_parent_opaque_without_fabricated_trajectory() {
+    let result = analyze_cross_trajectory_rows(
+        parent_clean_orchestration_rows(),
+        Vec::new(),
+        DelegationLinkState::ParentOnly,
+    );
+    let parent = cross_trajectory_checkpoint(&result, CROSS_TRAJECTORY_PARENT);
+    let parent_progress = parent.session_progress.as_ref().expect("parent progress");
+
+    assert_eq!(
+        parent.delegation.topology,
+        DelegationTopology::DelegatingParent
+    );
+    assert_eq!(
+        parent.delegation.child_work_visibility,
+        ChildWorkVisibility::Opaque
+    );
+    assert!(parent.delegation.child_session_ids.is_empty());
+    assert_eq!(
+        parent_progress.dimension,
+        ProgressDimension::ParentVisibleOrchestration
+    );
+    assert_eq!(parent_progress.status, ProgressStatus::InsufficientEvidence);
+    assert!(result
+        .sessions
+        .iter()
+        .all(|session| session.session_id != CROSS_TRAJECTORY_CHILD));
+    assert_cross_trajectory_evidence_is_local(parent, CROSS_TRAJECTORY_PARENT);
+}
+
+const CROSS_TRAJECTORY_PARENT: &str = "r7-3-2-parent";
+const CROSS_TRAJECTORY_CHILD: &str = "r7-3-2-child";
+
+fn analyze_cross_trajectory_rows(
+    parent_rows: Vec<CompactionRow>,
+    child_rows: Vec<CompactionRow>,
+    state: DelegationLinkState,
+) -> AnalyzeResult {
+    let has_child = !child_rows.is_empty();
+    let fixture =
+        BundleFixture::from_compact_rows(parent_rows.into_iter().chain(child_rows).collect());
+    let manifest_path = fixture.input_dir.join("manifest.json");
+    let mut manifest: BundleManifest = serde_json::from_str(
+        &fs::read_to_string(&manifest_path).expect("read cross-trajectory manifest"),
+    )
+    .expect("parse cross-trajectory manifest");
+    manifest.delegation_links = vec![DelegationLink {
+        parent_session_id: CROSS_TRAJECTORY_PARENT.to_string(),
+        child_session_id: CROSS_TRAJECTORY_CHILD.to_string(),
+        child_origin_parent_session_id: has_child.then(|| CROSS_TRAJECTORY_PARENT.to_string()),
+        depth: has_child.then_some(1),
+        state,
+        parent_evidence: vec![cross_trajectory_evidence(CROSS_TRAJECTORY_PARENT, 1)],
+        child_evidence: if has_child {
+            vec![cross_trajectory_evidence(CROSS_TRAJECTORY_CHILD, 0)]
+        } else {
+            Vec::new()
+        },
+    }];
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize cross-trajectory manifest"),
+    )
+    .expect("write cross-trajectory manifest");
+
+    agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze cross-trajectory fixture")
+}
+
+fn parent_wait_rows() -> Vec<CompactionRow> {
+    rehome_rows(
+        CROSS_TRAJECTORY_PARENT,
+        vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Delegate the bounded implementation and wait for the child result.",
+            ),
+            identified_tool_call_row(
+                1,
+                "turn-001",
+                "spawn_agent",
+                r#"{"task_name":"r7_3_2_child","message":"Implement the bounded child target."}"#,
+            ),
+            identified_tool_call_row(2, "turn-001", "wait_agent", r#"{"timeout_ms":30000}"#),
+            tool_output_row(3, "turn-001", "The delegated child is still running."),
+            prompt_row(
+                4,
+                "turn-002",
+                "/goal Continue waiting without claiming the child implementation as parent progress.",
+            ),
+            identified_tool_call_row(5, "turn-002", "wait_agent", r#"{"timeout_ms":30000}"#),
+            tool_output_row(6, "turn-002", "The delegated child remains active."),
+        ],
+    )
+}
+
+fn parent_clean_orchestration_rows() -> Vec<CompactionRow> {
+    rehome_rows(
+        CROSS_TRAJECTORY_PARENT,
+        vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Dispatch the bounded child task and keep orchestration healthy.",
+            ),
+            identified_tool_call_row(
+                1,
+                "turn-001",
+                "spawn_agent",
+                r#"{"task_name":"r7_3_2_child","message":"Troubleshoot the bounded child target."}"#,
+            ),
+            identified_tool_call_row(2, "turn-001", "wait_agent", r#"{"timeout_ms":30000}"#),
+            tool_output_row(
+                3,
+                "turn-001",
+                "The child dispatch is healthy and remains in progress.",
+            ),
+        ],
+    )
+}
+
+fn child_advancing_rows() -> Vec<CompactionRow> {
+    rehome_rows(
+        CROSS_TRAJECTORY_CHILD,
+        vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot why the child checkpoints::captures_progress target is blocked.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,200p' crates/agent-drift-analyzer/src/checkpoint/progress.rs","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                2,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                3,
+                "turn-001",
+                "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\n --> crates/agent-drift-analyzer/src/checkpoint/progress.rs:12:34\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+            ),
+            tool_call_row(
+                4,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' crates/agent-drift-analyzer/src/checkpoint/progress.rs","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                5,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                6,
+                "turn-001",
+                "Exit code: 101\nerror[E0425]: cannot find value `progress` in this scope\n --> crates/agent-drift-analyzer/src/checkpoint/progress.rs:12:34\ncould not compile `agent-drift-analyzer` (lib test) due to 1 previous error",
+            ),
+            tool_call_row(
+                7,
+                "turn-001",
+                "functions.apply_patch",
+                r#"{"command":"apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: crates/agent-drift-analyzer/src/checkpoint/progress.rs\n*** End Patch\nPATCH","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                8,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                9,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+            ),
+        ],
+    )
+}
+
+fn child_stalled_rows() -> Vec<CompactionRow> {
+    rehome_rows(
+        CROSS_TRAJECTORY_CHILD,
+        vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot checkpoints::captures_progress without changing scope.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,160p' crates/agent-drift-analyzer/src/checkpoint/progress.rs","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                2,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                3,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+            ),
+            tool_call_row(
+                4,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"sed -n '1,120p' crates/agent-drift-analyzer/src/checkpoint/progress.rs","workdir":"/repo"}"#,
+            ),
+            tool_call_row(
+                5,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --nocapture","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                6,
+                "turn-001",
+                "Exit code: 101\nrunning 1 test\ntest checkpoints::captures_progress ... FAILED\n\nfailures:\n    checkpoints::captures_progress\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out\nAssertionError: expected advancing",
+            ),
+        ],
+    )
+}
+
+fn rehome_rows(session_id: &str, rows: Vec<CompactionRow>) -> Vec<CompactionRow> {
+    rows.into_iter()
+        .map(|mut row| {
+            row.source_file = Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl"));
+            row.session_id = Some(session_id.to_string());
+            row
+        })
+        .collect()
+}
+
+fn cross_trajectory_evidence(session_id: &str, event_index: usize) -> DelegationEvidenceRef {
+    DelegationEvidenceRef {
+        source_file: Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl")),
+        line_number: event_index + 1,
+        event_index,
+    }
+}
+
+fn cross_trajectory_checkpoint<'a>(result: &'a AnalyzeResult, session_id: &str) -> &'a Checkpoint {
+    result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .and_then(|session| session.checkpoints.last())
+        .unwrap_or_else(|| panic!("final checkpoint for {session_id}"))
+}
+
+fn assert_cross_trajectory_evidence_is_local(checkpoint: &Checkpoint, session_id: &str) {
+    let progress = checkpoint
+        .session_progress
+        .as_ref()
+        .expect("session progress");
+    let evidence = progress
+        .supporting_evidence
+        .iter()
+        .chain(&progress.counter_evidence)
+        .chain(progress.signals.iter().flat_map(|signal| &signal.evidence));
+
+    assert!(
+        evidence
+            .into_iter()
+            .all(|item| item.row.source_file.as_str().contains(session_id)),
+        "progress evidence must remain on {session_id}"
+    );
 }
 
 fn prompt_row(event_index: usize, turn_id: &str, text: &str) -> CompactionRow {
