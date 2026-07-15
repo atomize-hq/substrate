@@ -3,12 +3,14 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT IMPLEMENTATION-READY**
+Status: **IMPLEMENTATION-READY CONTENT / R7-PROMOTE CONTENT AND GATE AUDIT COMPLETE / TRANSITION
+COMMIT PENDING / R7-0 NOT STARTED**
 
 ## Assumptions I'm Making
 
-1. R6 is **CLOSED**; `R6-CLOSE` and `CTX-R6-17` are complete. This satisfies the `R7-PROMOTE` entry
-   gate but does not itself promote this draft or authorize implementation.
+1. R6 is **CLOSED**; `R6-CLOSE` and `CTX-R6-17` are complete. The `R7-PROMOTE` content and gate audit
+   is also complete, but its narrow status-transition commit is still pending and `R7-0` is not
+   active.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -21,10 +23,10 @@ Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / 
 6. R8 still owns broad sentinel interpretation consolidation. R7 may add only compatibility and
    compact presentation required to carry the new analyzer semantics end to end.
 
-## Implementation Promotion Gate — Entry Satisfied, Promotion Not Executed
+## Implementation Promotion Gate — Content Audit Complete, Transition Pending
 
-This document remains design-ready draft work, not implementation authority. The R6 prerequisites
-for the active `R7-PROMOTE` phase are satisfied:
+This document is now implementation-ready authority. The R6 prerequisites audited by the active
+`R7-PROMOTE` phase are satisfied:
 
 1. the R6 scorer-by-context applicability audit is complete;
 2. every material scoring surface has exactly one terminal disposition: **Cutover complete**,
@@ -34,9 +36,11 @@ for the active `R7-PROMOTE` phase are satisfied:
 4. the named R6 closure controls are resolved and the R6 finding is `CLOSED`; and
 5. root landing-order authority, the R6 MAP, root SPEC/tasks, and all R7 gate/status sections agree.
 
-The separate `R7-PROMOTE` phase must still reconcile the preserved draft family to
-implementation-ready before any unchecked R7 implementation task can start. R7 must extend the
-stable ordinary single-session baseline; it must not absorb baseline scorer semantics.
+The `R7-PROMOTE` content and gate audit is complete. A separate narrow status-transition commit must
+still reconcile the canonical phase mirrors and receive independent review before `R7-0` can start.
+Until then, `R7-PROMOTE` remains current with packet `none`, and no unchecked R7 task is authorized
+to execute. R7 must extend the stable ordinary single-session baseline; it must not absorb baseline
+scorer semantics.
 
 ## Objective
 

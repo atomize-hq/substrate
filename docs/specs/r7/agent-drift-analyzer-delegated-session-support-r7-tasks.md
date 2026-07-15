@@ -3,22 +3,36 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT IMPLEMENTATION-READY**
+Status: **IMPLEMENTATION-READY CONTENT / R7-PROMOTE CONTENT AND GATE AUDIT COMPLETE / TRANSITION
+COMMIT PENDING / R7-0 NOT STARTED**
 
-All unchecked items remain inactive. The R6 closure prerequisites are satisfied, so
-`R7-PROMOTE` is active at entry only; that separate docs/status phase must reconcile this preserved
-draft family to implementation-ready before any unchecked task can start. This R6 closeout checks
-off no R7 promotion or implementation task.
+The `R7-PROMOTE` content/gate audit is complete and recorded below. Its separate narrow
+status-transition commit is still pending, so `R7-PROMOTE` remains the current phase with packet
+`none`. Every `R7-0..R7-6` item remains unchecked and inactive; neither `R7-0.1` nor `R7-0.2` has
+started.
+
+## R7-PROMOTE: Implementation-Readiness Audit
+
+- [x] **R7-PROMOTE.1: Reconcile the R7 authority family to implementation-ready content.**
+  - Acceptance: MAP/SPEC/PLAN/TASKS lock reciprocal structured direct links, compactor-only raw
+    parsing, analyzer-owned typed topology, separate parent/child trajectories, direct children
+    only, no new drift class by default, minimal sentinel compatibility, and the R8 exclusion.
+  - Verify: focused status/contract `rg`, complete four-file diff inspection, and `git diff --check`
+  - Files: `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
+  - Dependencies: review-clean R6 `CLOSED` authority
+  - Receipt: content and gate audit complete; narrow phase-transition commit pending; no `R7-0`
+    implementation item started
+  - Scope: medium, docs only
 
 ## R7-0: Docs Lock And Evidence Matrix
 
-- [x] **R7-0.1: Preserve the R7 spec/plan/tasks family as draft design work.**
-  - Acceptance: historical draft preservation recorded the `dead_end_thrash` core plus reciprocal
-    direct linkage, separate trajectories, and R8 boundaries without claiming implementation
-    readiness. R6 is now closed; the draft remains preserved pending `R7-PROMOTE`.
+- [ ] **R7-0.1: Freeze the implementation-ready R7 family at phase entry.**
+  - Acceptance: the landed family records the `dead_end_thrash` core plus reciprocal direct
+    linkage, separate trajectories, and R8 boundaries, and the review-clean transition identifies
+    `R7-0` as the sole active phase before fixture work begins.
   - Verify: `rg -n "R6-1|reciprocal|separate trajector|R8" docs/specs/r6/MAP.md docs/specs/r7`
   - Files: `docs/specs/r6/MAP.md`, `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
-  - Dependencies: R6 closure finding for any implementation use
+  - Dependencies: review-clean `R7-PROMOTE` phase transition
   - Scope: medium, docs only
 
 - [ ] **R7-0.2: Add sanitized raw-link fixture matrix.**

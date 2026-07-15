@@ -1,9 +1,10 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
-Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT
-IMPLEMENTATION-READY**. This planning scaffold was created on 2026-07-12 and is preserved as useful
-design work. `R7-PROMOTE` is the sole active phase with packet `none`; no R7 promotion or
-implementation task has started.
+Status: **IMPLEMENTATION-READY CONTENT / R7-PROMOTE CONTENT AND GATE AUDIT COMPLETE /
+TRANSITION COMMIT PENDING / R7-0 NOT STARTED**. The preserved planning scaffold has been reconciled
+into implementation-ready authority. `R7-PROMOTE` remains the sole active phase with packet `none`
+until a separate narrow status-transition commit lands and is review-clean; neither `R7-0.1` nor
+`R7-0.2` has started.
 
 ## R6 Handoff
 
@@ -22,14 +23,14 @@ and the broader R6 closure charter is now closed:
   evidence did not appear.
 
 R6 is **CLOSED**. `R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are complete. The closure authority is
-`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. Commit `99efda8f9` remains draft
-planning history, not authority that the preserved R7 family is already implementation-ready.
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. Commit `99efda8f9` remains historical
+planning input, not authority for the current R7 phase status.
 
 The R6 promotion entry gate is satisfied: every material scoring surface has a terminal disposition,
 the broad R6 acceptance claims are proven or narrowed honestly, the named closure controls are
-resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. `R7-PROMOTE` must now reconcile
-the preserved MAP/SPEC/PLAN/TASKS to implementation-ready in a separate docs/status phase. This R6
-closeout does not perform that promotion or begin implementation.
+resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. The `R7-PROMOTE` content and
+gate audit has now reconciled the preserved MAP/SPEC/PLAN/TASKS to implementation-ready. This
+content landing does not complete the narrow phase-status transition or begin `R7-0`.
 
 ## Live Linkage Evidence
 
@@ -62,8 +63,9 @@ semantics. Ordinary parent-visible orchestration may still be described as paren
 
 ## Packet Order
 
-The packet order below is design-ready but **inactive** until the active `R7-PROMOTE` phase itself
-completes. Its R6 entry gate is satisfied; promotion has not yet been performed.
+The packet order below is implementation-ready but **inactive** while the narrow `R7-PROMOTE`
+status-transition commit is pending. `R7-PROMOTE` remains current; `R7-0` may begin only after that
+transition lands and is independently review-clean.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.
