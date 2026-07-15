@@ -246,17 +246,21 @@ transition is committed and a fresh independent reviewer says `REVIEW CLEAN`.
 
 ## Full R6 Ledger Coverage
 
+This table records historical `R6-C.1` packet ownership, not current execution status. The listed
+controls completed through their authorized phase sequence; R6 is now **CLOSED**, with only
+`R7-PROMOTE` active at entry.
+
 | IDs | R6-C.1 disposition |
 |---|---|
-| `CTX-R6-01`, `CTX-R6-02` | Exact integrated controls specified above; execution remains `R6-REPLAY`. |
-| `CTX-R6-03` through `CTX-R6-05` | Open `dead_end_thrash` controls in `R6-C.1-CONTROLS`. |
-| `CTX-R6-06` | Existing exact frozen-corpus preservation control is specified above; execution stays `R6-REPLAY` and must preserve three cleared plus one sticky `HistoricalOnly / 20 / unflagged` posture. `Recovered / 20 / unflagged` is historical baseline only, not current authority. |
-| `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no reopen here. |
-| `CTX-R6-09` through `CTX-R6-13` | Open `truth_grounding_gap` controls in `R6-C.1-CONTROLS`. |
-| `CTX-R6-14`, `CTX-R6-15` | Open `wrong_plan_branch` controls in `R6-C.1-CONTROLS`. |
-| `CTX-R6-16` | Source-only dispatcher ordering proof; no focused order test. |
+| `CTX-R6-01`, `CTX-R6-02` | Exact integrated controls specified above; historical execution ownership routed to `R6-REPLAY` and is complete. |
+| `CTX-R6-03` through `CTX-R6-05` | Completed `dead_end_thrash` controls historically owned by `R6-C.1-CONTROLS`. |
+| `CTX-R6-06` | The exact frozen-corpus preservation control specified above completed under historical `R6-REPLAY` ownership and preserved three cleared plus one sticky `HistoricalOnly / 20 / unflagged` posture. `Recovered / 20 / unflagged` is historical baseline only, not current authority. |
+| `CTX-R6-07`, `CTX-R6-08` | Semantic scorer completion and the fixture-integrity/live-path distinction remain preserved; no reopen here. |
+| `CTX-R6-09` through `CTX-R6-13` | Completed `truth_grounding_gap` controls historically owned by `R6-C.1-CONTROLS`. |
+| `CTX-R6-14`, `CTX-R6-15` | Completed `wrong_plan_branch` controls historically owned by `R6-C.1-CONTROLS`. |
+| `CTX-R6-16` | Completed source-only dispatcher ordering proof; no focused order test. |
 | `CTX-R6-17` | CLOSED in later `R6-CLOSE`; this packet did not fill it. |
-| `CTX-R6-18` | Preserve the proven historical/superseded labels. |
+| `CTX-R6-18` | Proven historical/superseded labels remain preserved. |
 
 ## Boundaries
 

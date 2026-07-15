@@ -32,7 +32,7 @@ Hard decisions:
   controls. Historical `CTX-R6-15` remains preserved at `59f098b35`; implementation/review-fix series
   `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW
   CLEAN` with exact target `0 / Low / Cleared`, unflagged, empty evidence. Its terminal scorer
-  terminal scorer disposition is **Fit-for-purpose exception**.
+  disposition is **Fit-for-purpose exception**.
 - Transitive data availability is not behavioral integration; non-applicable context is an explicit
   fit-for-purpose decision, not missing plumbing.
 - The semantic acceptance corpus-shape test proves fixture integrity; the separate live

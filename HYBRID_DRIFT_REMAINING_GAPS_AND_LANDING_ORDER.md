@@ -786,7 +786,8 @@ review-clean `d13f0a71c`), complete `R6-GAP-TGG-TRUTH-PATH-ACTION` (`CTX-R6-12`,
 proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and complete
 `R6-GAP-WPB-EMPTY-AUTHORITY` (`CTX-R6-15`, `59f098b35`; implementation/review-fix series
 `6b42e5476` + `e65df2561` + `cd4e24119` fresh independent `REVIEW CLEAN`). The frozen dead-end
-corpus still proves invariance rather than comparative integrated improvement. R6 remains partial.
+corpus still proves invariance rather than comparative integrated improvement. At that historical
+replay boundary, R6 remained partial.
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
 `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Replay
 completed `CTX-R6-01` and `CTX-R6-02`. Historical witness `60cde3dd7` is preserved;
