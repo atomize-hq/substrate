@@ -20,9 +20,10 @@ use super::host_session_authority::facade::{
 #[cfg(test)]
 use super::host_session_authority::schema::TimestampV1;
 use super::host_session_authority::schema::{
-    AgentDescriptorHashInputV1, AgentDescriptorV1, ResumeHandleHashInputV1,
+    AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1, ResumeHandleHashInputV1,
     RetainedWorkerObjectHashInputV1,
 };
+use super::host_session_authority::validation::ValidatedCanonicalV1;
 use super::host_session_authority::HostSessionAuthority;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -119,20 +120,33 @@ impl RetainedWorkerRuntime {
     fn immutable_inputs(
         plan: &RetainedWorkerRegistrationPlanV1,
     ) -> Result<(Vec<u8>, Vec<u8>), RetainedWorkerRuntimeError> {
-        let descriptor_bytes = canonical_json::to_vec(&AgentDescriptorHashInputV1 {
+        let descriptor = AgentDescriptorHashInputV1 {
             schema_version: 1,
             descriptor: plan.descriptor.clone(),
-        })
-        .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
-        let resume_handle_bytes = canonical_json::to_vec(&ResumeHandleHashInputV1 {
+        };
+        descriptor
+            .validate()
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        if descriptor.descriptor.execution_scope != AgentExecutionScopeV1::World {
+            return Err(RetainedWorkerRuntimeError(
+                "retained descriptor must be world-scoped".into(),
+            ));
+        }
+        let descriptor_bytes = canonical_json::to_vec(&descriptor)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let resume_handle = ResumeHandleHashInputV1 {
             schema_version: 1,
             orchestration_session_id: plan.orchestration_session_id.clone(),
             participant_id: plan.retained_participant_id.clone(),
             backend_id: plan.descriptor.backend_id.clone(),
             protocol: plan.descriptor.protocol.clone(),
             internal_uaa_session_id: plan.internal_uaa_session_id.clone(),
-        })
-        .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        };
+        resume_handle
+            .validate()
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let resume_handle_bytes = canonical_json::to_vec(&resume_handle)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         Ok((descriptor_bytes, resume_handle_bytes))
     }
 
@@ -143,7 +157,7 @@ impl RetainedWorkerRuntime {
         policy_ref: &super::host_session_authority::schema::AuthorityObjectRefV1,
         world_binding: &super::host_session_authority::schema::WorldBindingV1,
     ) -> Result<Vec<u8>, &'static str> {
-        canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
+        let worker = RetainedWorkerObjectHashInputV1 {
             schema_version: 1,
             orchestration_session_id: plan.orchestration_session_id.clone(),
             participant_id: plan.retained_participant_id.clone(),
@@ -151,8 +165,11 @@ impl RetainedWorkerRuntime {
             descriptor_ref: descriptor_ref.clone(),
             resume_handle_ref: resume_handle_ref.clone(),
             policy_ref: policy_ref.clone(),
-        })
-        .map_err(|_| "encode retained-worker object")
+        };
+        worker
+            .validate()
+            .map_err(|_| "validate retained-worker object")?;
+        canonical_json::to_vec(&worker).map_err(|_| "encode retained-worker object")
     }
 
     pub(crate) fn register_retained_target(
@@ -643,5 +660,74 @@ mod tests {
         authority.current_policy_ref.as_mut().unwrap().ref_id =
             "ao_88888888888888888888888888888888".into();
         assert!(validate(&changed_policy).is_err());
+    }
+
+    #[test]
+    fn runtime_owned_object_validation_rejects_before_hsa_mutation() {
+        let (_parent, authority, observation) = started_authority();
+        let valid = plan(observation);
+        let root_before = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+
+        let mut malformed_descriptor = valid.clone();
+        malformed_descriptor.descriptor.agent_id.clear();
+        assert!(RetainedWorkerRuntime
+            .reserve_registration_at(
+                &authority,
+                &malformed_descriptor,
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+        assert_eq!(object_files(&object_root), objects_before);
+
+        let mut malformed_resume = valid.clone();
+        malformed_resume.internal_uaa_session_id.clear();
+        assert!(RetainedWorkerRuntime
+            .reserve_registration_at(
+                &authority,
+                &malformed_resume,
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+        assert_eq!(object_files(&object_root), objects_before);
+
+        let canonical = |ref_id: &str,
+                         object_kind: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1| {
+            crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectRefV1 {
+                ref_id: ref_id.into(),
+                object_kind,
+                schema_version: 1,
+                commitment: crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".into(),
+                },
+            }
+        };
+        assert!(RetainedWorkerRuntime::retained_worker_bytes(
+            &valid,
+            &canonical(
+                "ao_11111111111111111111111111111111",
+                crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1::AgentDescriptor,
+            ),
+            &canonical(
+                "ao_22222222222222222222222222222222",
+                crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1::ResumeHandle,
+            ),
+            &canonical(
+                "ao_33333333333333333333333333333333",
+                crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectKindV1::Policy,
+            ),
+            &WorldBindingV1 {
+                world_id: String::new(),
+                world_generation: 7,
+            },
+        )
+        .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+        assert_eq!(object_files(&object_root), objects_before);
     }
 }
