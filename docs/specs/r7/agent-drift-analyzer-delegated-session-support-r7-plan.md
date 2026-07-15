@@ -207,8 +207,11 @@ R7-2 behavior/static checkpoint receipt: at implementation HEAD `75a353e46`, inp
 delegation matches pass `39` total (`25` library + `4` checkpoint + `8` delegation-context + `2`
 export); checkpoint matches pass `172` total (`36` library + `134` checkpoints + `1` export + `1`
 truth-grounding); full analyzer passes `417 / 417`; formatting, analyzer clippy `-D warnings`, and
-diff checks are green. No R7-3, R7-4, sentinel, or R8 work leaked in. R7-2 and `CTX-R7-03` remain
-open until this checkpoint-doc receipt receives fresh independent review.
+diff checks are green. No R7-3, R7-4, sentinel, or R8 work leaked in. Checkpoint-doc receipt
+`78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, so R7-2 is `COMPLETE` and
+`CTX-R7-03` is `PROVEN`. Only R7-3 is active at entry with `ACTIVE_PACKET: none`; this narrow
+transition receipt remains pending fresh independent review. R7-3.1 is unchecked and unstarted,
+and no R7-3 production work has begun.
 
 ## Phase 3: Separate Parent And Child Progress
 
