@@ -3,7 +3,8 @@
 Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
 `d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
 OPTION A ACCEPTED AND COMPLETE / TASK `.3` COMPLETE AT FOCUSED-CANDIDATE BOUNDARY / TASK `.3A`
-DOCS GATE CURRENT / TASK `.3B` BLOCKED / TASK `.4` STOPPED AT EXACT PROOF STEP 7** within
+COMMIT `7812dd5ef` REVIEW-CLEAN / TASK `.3B` COMPLETE / TASK `.3C` DOCS GATE CURRENT / TASK `.3D`
+BLOCKED / TASK `.4` STOPPED AT ORDERED PROOF STEP 12** within
 `R6-REPLAY`. Witness commit `60cde3dd7`
 preserves the trusted `CTX-R6-02` behavioral red. Task `.0` docs-gate/review-fix series `200725001` +
 `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` decision receipt `d788f45c9` each received
@@ -20,11 +21,12 @@ authority/expected-disposition change is present in the unstaged candidate, but 
 complete proof, green walls, a committed candidate, or implementation review-clean status. Task `.3`
 completed its focused-candidate boundary within
 fresh-review-clean amendment `d631e0c56` + `6498c343f`: all five focused units are green and the
-complete eight-file candidate remains unstaged. Task `.4` then made one bounded single-lane
-preservation fix, reran proof steps 1-6 green, and stopped at the unexpected exact `CTX-R6-02` red in
-step 7. Task `.3A` is the current same-packet docs-first authority gate; Task `.3B` implementation and
-its two focused red/green tests are blocked until `.3A` is committed and fresh-review-clean. Task `.4`
-resumes only after `.3B` completes.
+complete eight-file candidate remains unstaged. Task `.3A` commit `7812dd5ef` received fresh
+independent built-in `default` `REVIEW CLEAN`, and Task `.3B` implemented and focus-proved the locked
+verified-edit-epoch selection. Task `.4` reran ordered proof steps 1-11 green, then stopped at the
+progress-acceptance expected-fact red in step 12. Task `.3C` is the current docs-first reconciliation
+gate; Task `.3D` is blocked until `.3C` is committed and fresh-review-clean. Task `.4` resumes from the
+beginning only after `.3D` completes.
 `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Objective And Preserved Witness
@@ -101,8 +103,9 @@ stopping instead.
 ## Acceptance And Exact Proof
 
 Task `.3` used the first five focused unit commands below for TDD red/green and completed the full
-unstaged implementation candidate. Task `.3B` owns the two verified-edit-epoch unit tests added below.
-Task `.4` reruns every focused unit and owns the exact integrated/packet proof sequence, result
+unstaged implementation candidate. Task `.3B` completed the two verified-edit-epoch unit tests added
+below. Task `.3D` owns only the two-file expected-fact reconciliation described below. Task `.4`
+reruns every focused unit and owns the exact integrated/packet proof sequence, result
 recording, staging, staged GitNexus/cached-diff gates, atomic implementation/proof commit, and fresh
 review/fix loop.
 
@@ -172,24 +175,26 @@ excludes the failed target lane, producing `InsufficientEvidence`. Its GitNexus 
 `f898d61e7` is LOW (`4` direct, `12` total, `0` processes, `2` modules). Shared comparability helpers
 must not be changed under the current authority.
 
-Task `.3` subsequently completed the selected lane implementation and its five focused units. The
-current eight-file unstaged candidate, including Task `.4`'s bounded preservation of an existing
+Task `.3` subsequently completed the selected lane implementation and its five focused units. Task
+`.3A` commit `7812dd5ef` then locked the verified-edit-epoch refinement and received fresh independent
+built-in `default` `REVIEW CLEAN`; Task `.3B` implemented it and made both named focused tests green.
+The current eight-file unstaged candidate, including Task `.4`'s bounded preservation of an existing
 single-lane result, has patch SHA-256
-`8aa064a9899d6351d115f83a2574acc12aca4b4bc0a10aeb438abda14680650f`. Task `.4` proof steps 1-5
-each pass `1 / 1`, and the `troubleshooting` filter in step 6 passes `18 / 18`. Exact `CTX-R6-02` in
-step 7 exits `101` because checkpoint `5` is `Mixed / Medium` instead of locked `Stalled / Medium`.
-The failure log is `/tmp/r6-task4-07-ctx-r6-02-exact.log`; the preserved checkpoint diagnostic is
-`/tmp/r6-task4-debug-ctx-checkpoint5.json`. No files were staged or committed.
+`70ed522cc30f8e4fb3f36f946502105e440f7719c1917fe41c399e13876884c2`.
 
-The checkpoint diagnostic proves that truthful lane construction is intact but aggregation crosses
-verified edit epochs. Current-checkpoint lane tails `392` and `393` are `Advancing`, tail `474` is
-`Stalled`, and tail `475` is `InsufficientEvidence`. The latest source/test edit before the newest
-informative tail is event `463`. Event `486` is inside checkpoint `5` (boundary `489`), but its
-would-be verifying calls `492`/`493` and outputs `495`/`496` are outside checkpoint `5`; within that
-checkpoint, event `486` is therefore a trailing unverified edit. Aggregating all informative tails
-therefore produces the unexpected
-`Mixed`, while the locked `CTX-R6-02` contract requires the terminal proven frontier to remain
-`Stalled`.
+Task `.4` ordered proof steps 1-7 each pass `1 / 1`; step 8 passes the `troubleshooting` filter at
+`20 / 20` across library and integration targets; and exact `CTX-R6-02`, sticky `CTX-R6-06`, and the
+frozen corpus each pass `1 / 1` in steps 9-11. Step 12
+`progress_acceptance_cases_match_expected_progress_contract` exits `101` only because case
+`real-reopen-regressing-019e894a-ord7` still requires stale wording. The preserved log is
+`/tmp/r6-task4b-12-progress-acceptance.log`. No files were staged or committed.
+
+The case remains `TroubleshootingFrontier / Regressing / High` with
+`PreviouslyCleanScopeBroken`; status, dimension, confidence, signals, evidence minima, and raw rows
+are unchanged. Truthful call-ID pairing exposes the stable facts as clean event `109 -> 116`, exit
+`0`, followed by failing event `636 -> 638`, exit `101`. Only the stale phrases
+`earlier later stage verification attempt` and `later regressing verification attempt` must become
+`earlier clean verification attempt` and `later failing verification attempt`, respectively.
 
 Task `.2A` asked the operator to preserve both the `CTX-R6-02` Stalled/Active contract and the then-frozen
 `CTX-R6-06` Recovered contract while accepting a docs-first amendment beyond `attempt.rs`, including
@@ -280,7 +285,7 @@ Task `.2B` Option A selects this implementation boundary for current Task `.3`:
    unit red/green; Task `.4` then runs focused `CTX-R6-02`/sticky proof before the checkpoint,
    progress-corpus, `dead_end_thrash`, full-analyzer, compactor normalization, and static walls.
 
-Task `.3A` locks this same-packet refinement without changing any preceding lane-tail, direct
+Task `.3A` locked this same-packet refinement without changing any preceding lane-tail, direct
 comparability, aggregation-table, forbidden-seam, Task `.2B`, or sticky authority:
 
 1. compute every current-checkpoint lane-tail result and identify the newest informative tail;
@@ -299,24 +304,40 @@ aggregation, so the result is `Stalled`. Event `486` is inside checkpoint `5` (b
 its would-be verifying calls `492`/`493` and outputs `495`/`496` are outside checkpoint `5`; as a
 trailing unverified edit within checkpoint `5`, it does not erase that result.
 
-No operator decision is required: `CTX-R6-02` remains locked at `Stalled / Active`, and Task `.2B`
-changed only sticky `CTX-R6-06`. This amendment reconciles the unexpected red inside those authorities.
-Task `.3A` edits only this packet's SPEC/PLAN/TASKS; canonical mirrors remain untouched.
+No operator decision was required: `CTX-R6-02` remained locked at `Stalled / Active`, and Task `.2B`
+changed only sticky `CTX-R6-06`. Commit `7812dd5ef` reconciled the unexpected red inside those
+authorities and received fresh independent built-in `default` `REVIEW CLEAN`. Task `.3B` then
+implemented the refinement and completed both focused red/green tests without widening the authorized
+seam.
+
+Task `.3C` records the ordered step-12 progress-acceptance red and locks the narrow expected-fact
+reconciliation in exactly this packet's SPEC/PLAN/TASKS; canonical mirrors remain untouched. Task
+`.3D`, blocked until `.3C` is committed and fresh-review-clean, may edit exactly:
+
+- `crates/agent-drift-analyzer/tests/progress_acceptance.rs`; and
+- `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/real-reopen-regressing-019e894a-ord7/expected.json`.
+
+Within those two files, replace only the stale fact wording with `earlier clean verification attempt`
+and `later failing verification attempt`. Do not edit source, another fixture, packet/canonical docs,
+raw rows, status, dimension, confidence, signals, evidence minima, or any other expected fact. No
+operator decision is required because the runtime classification and all semantic authority remain
+unchanged; this is a truthful expected-fact reconciliation after corrected call-ID pairing.
 
 Under Option A, do not edit `recovery_state`, `drift_state_for_score`, `assign_drift_states`,
 shared comparability, scorer logic, compactor logic, raw fixtures, sentinel surfaces, R7, or R8.
 
 ## Commit, Review, And Exit
 
-Task `.3` is complete at its focused-candidate boundary. Task `.3A` must be committed and
-fresh-review-clean before Task `.3B` implements the verified-edit-epoch refinement and runs the two
-named focused tests red/green. Task `.4` then resumes by rerunning the exact proof sequence and records
+Task `.3` is complete at its focused-candidate boundary. Task `.3A` commit `7812dd5ef` is
+fresh-review-clean and Task `.3B` is complete. Task `.3C` must be committed and fresh-review-clean
+before Task `.3D` performs the exact two-file expected-fact reconciliation and focused proof. Task
+`.4` then resumes from the beginning by rerunning the exact proof sequence and records
 actual integrated/packet proof results in packet TASKS and the replay ledger, then stages only
 intended files and runs
 `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, `git diff --cached --check`, and
 inspects `git diff --cached`. It commits the implementation/proof atomically and dispatches a fresh
 built-in `default` reviewer. Apply findings in a new gated commit and repeat with a fresh reviewer
-until clean. Tasks `.3A` and `.3B` must not stage the preserved implementation candidate, commit it,
+until clean. Tasks `.3C` and `.3D` must not stage the preserved implementation candidate, commit it,
 or claim implementation review-clean.
 
 This packet exits only after the docs gate, every required operator decision, the authorized bounded
