@@ -25,7 +25,7 @@ Primary source memos:
 | **RG-EVENT-01** | Runtime event/frame identity, ordering, and exact terminal event | **Partially resolved: B0 producer clauses landed; B2.1 consumer clauses open** | B0 landed the canonical V1 carrier in `common`/`transport-api-types` and producer assignment in ordinary `world-service` task streams plus retained launch/turn streams. Each accepted producer stream has one non-empty UUIDv7 stream ID; all frames share one positive gap-free frame counter; semantic Event/Exit items share one positive event counter and stable UUIDv7 IDs; Exit is the final semantic event and exactly matches its terminal identity. Canonical clone/re-emission preserves bytes. Concurrent stdout/stderr assignment is serialized through enqueue. Typed host decoding forwards identity unchanged, rejects missing/malformed runtime identity, and does not convert Error, EOF, stream exhaustion, or diagnostic non-live state into terminal truth. B2.1 durable replay, duplicate/gap/reorder/conflict rejection, restart observation, and journaling do not exist yet. | Preserve all B0 producer and negative-host gates. B2.1 must make byte-identical replay a no-op, reject conflicting reuse, gaps, reorder, and frames after terminal, and prove restart-safe durable observation without treating EOF/error/process state as completion. | B0, B2.1 |
 | **RG-RECEIPT-01** | `run_world_task` blocks until terminal exit | **Unresolved; B1/B2.1 sequencing blocker identified** | `execute_run_world_task_stream` registers a temporary active record, consumes through `ExecuteStreamFrame::Exit`, publishes terminal state, and only then returns; guard drop removes the active record. The preserved B1 core persists the exact accepted record first and then reaches that legacy writer, which correctly rejects the activated authority store. | B1-3a/B1-3b may be review-clean without closure. B2.1-1 replaces post-acceptance legacy registration with the durable supervisor claim; B2.1-2 preserves this blocking call as a waiter; joint closeout proves no accepted path attempts the legacy writer. Only B2.2 later returns `ActiveEphemeralTaskReceiptV1` before exit. | B1, B2.1, B2.2 |
 | **RG-RECEIPT-02** | `continue_world_worker` blocks until terminal exit | **Unresolved; confirmed design deviation** | `execute_continue_world_worker_stream_for_turn_kind` consumes until `Exit`; `continue_world_worker` returns only afterward. Existing model-visible outcome has no active-run receipt or immutable policy commitment. | After B1 acceptance, B2.1 observation, and C1 event truth, B2.2 returns `ActiveRetainedTurnReceiptV1` before exit; B3.2 preserves clean-turn worker continuity and the host can continue or park. | B2.2, B3.2 |
-| **RG-RECEIPT-03** | Active receipt inspection and caller-drop survival | **Unresolved; receipt-core and supervisor ownership now sequenced** | Current active task identity is foreground-scoped and removed by guard drop; retained turns have no durable accepted active-run receipt. The accepted B1 WIP anchor survives independently, but the next ephemeral operation still invokes the legacy guard-owned writer. | B1-3a/B1-3b preallocate and durably create only the immutable acknowledged acceptance record. B2.1-1 claims that exact record for both work families before any later frame, B2.1-2 supplies inspect/wait compatibility over supervisor truth, and B2.1-3 preserves observation across restart. Caller/waiter/guard drop never deletes accepted or supervised truth. B1 and B2.1 close jointly; B2.2 later exposes early return. | B1, B2.1, B2.2 |
+| **RG-RECEIPT-03** | Active receipt inspection and caller-drop survival | **Unresolved; receipt-core and supervisor ownership sequenced; R0 retained-target component clause satisfied** | Current active task identity is foreground-scoped and removed by guard drop; retained turns have no durable accepted active-run receipt. The accepted B1 WIP anchor survives independently, but the next ephemeral operation still invokes the legacy guard-owned writer. R0 now exact-resolves one durable retained target and contiguous authority proof, but deliberately has no production ingress or accepted-run semantics. | B1-3a/B1-3b preallocate and durably create only the immutable acknowledged acceptance record. B2.1-1 claims that exact record for both work families before any later frame, B2.1-2 supplies inspect/wait compatibility over supervisor truth, and B2.1-3 preserves observation across restart. Caller/waiter/guard drop never deletes accepted or supervised truth. B1 and B2.1 close jointly; B2.2 later exposes early return. | B1, B2.1, B2.2 |
 | **RG-RECEIPT-04** | Ephemeral `needs_retained_followup` remains a terminal non-retained result | **Partially implemented; target receipt semantics unproven** | The lifecycle design and current terminal enum preserve `NeedsRetainedFollowup`, but the durable active receipt contract did not state how it closes without becoming retained work. | B2.1 records `NeedsRetainedFollowup` only in immutable supervisor terminal closeout while leaving the B1 acceptance record unchanged; it promises no retained participant or continue route, creates no hidden retained worker/conversational obligation, and requires an explicit policy-checked spawn for ongoing work. | B2.1 |
 | **RG-SUP-01** | Supervisor idempotent frame/event processing | **Unresolved; B0 identity prerequisite satisfied and B1 handoff blocker isolated** | B0 supplies exact stable stream/frame/event/terminal identity, but foreground loops still own observation. In the preserved B1 path, immutable acceptance precedes the legacy ephemeral writer; there is no durable supervisor claim/journal, and retained turns remain foreground-only. | B2.1-1 establishes the no-gap claim from exact B1 acceptance; B2.1-2 makes exact duplicate frames/events no-ops, rejects gaps/reorder/conflicts/post-terminal frames, and prevents stale observer writes; C1 later proves duplicate replay creates no duplicate obligation. | B0, B1, B2.1, C1 |
 | **RG-SUP-02** | Supervisor restart and reconciliation | **Unresolved** | No first-class restart-safe supervisor owns nonterminal accepted work; the process-local cancel wait tracker and foreground guard cannot recover after caller/process loss. | B2.1-3 discovers every nonterminal claim from durable supervisor state, resumes the exact B0 cursor through producer replay/reconciliation, rejects stale observers, and never fabricates terminal success or a complete cut from EOF, timeout, PID/helper/socket/readiness/process state, local error, or ambiguous/missing terminal truth. | B2.1 |
@@ -48,7 +48,7 @@ Primary source memos:
 | **RG-POLICY-03** | Immutable active snapshots and retained worker caps | **Unresolved** | Current task/continue outcomes do not commit immutable dispatch policy snapshots; retained manifests do not hold the target worker-cap contract. | Active run retains accepted hash across parent changes; future turn recomputes parent ∧ cap ∧ turn patch; parent broadening never broadens worker; parent narrowing narrows or invalidates next turn; fork inherits cap. | E2 |
 | **RG-SYNC-01** | Host-visible write sync semantics | **Unresolved/open debug bucket** | Debug evidence warns that task completion does not prove a host-visible file; current docs/runtime distinguish host-visible overlay behavior from full isolation/reconciliation. | Matrix proves: host-visible allowed write visibility, host-visible denied write, full-isolation non-visibility before reconciliation, explicit reconciliation result, retained-turn behavior, and narrowed allowlist behavior. | E4 |
 | **RG-WORKER-EXIT-01** | Non-zero Codex/UAA worker-turn exit semantics | **Unresolved/open debug bucket** | `codex exited non-zero` remains separate from repaired routing/stop seams; current blocking outcome can conflate runtime failure with authority/liveness loss. | Non-zero turn closes active receipt as durable `Failed` with exit diagnostics and policy/session/world joins; retained worker/session authority is preserved or explicitly invalidated for a stated lifecycle reason; no false success/attention loss. | B3.2, D3 |
-| **RG-OBS-01** | First-class world-dispatch observability | **Unresolved; B0 carrier clause satisfied** | B0 exposes exact producer-originated stream/frame/event/terminal identity on ordinary and retained runtime frames, with strict decoding and canonical byte proof. The B1 core can persist acceptance, but the accepted production path is not observable end-to-end while ephemeral work next attempts the rejected legacy writer and retained work remains foreground-owned. | Remaining clause owners are explicit: B1 receipt-core acceptance, B2.1 supervisor claim/restart/journal/terminal observation, their joint production closeout, B3.1 producer semantic normalization plus typed worker event, C1 materialization/cut, B4 cancel, D2 broker operations, E2 policy commitments, and E3 non-secret credential-handoff state. B3.1 cannot start before the joint closeout. D3 alone owns final end-to-end integration closure, proving those facts join by request/active-run/session/world IDs without secret payloads or secret-derived fingerprints. | B0, B1, B2.1, B3.1, C1, B4, D2, E2, E3, D3 |
+| **RG-OBS-01** | First-class world-dispatch observability | **Unresolved; B0 carrier and R0 retained-target component clauses satisfied** | B0 exposes exact producer-originated stream/frame/event/terminal identity on ordinary and retained runtime frames, with strict decoding and canonical byte proof. R0 now provides exact retained-target registration and authority ancestry resolution without production ingress. The B1 core can persist acceptance, but the accepted production path is not observable end-to-end while ephemeral work next attempts the rejected legacy writer and retained work remains foreground-owned. | Remaining clause owners are explicit: B1 receipt-core acceptance, B2.1 supervisor claim/restart/journal/terminal observation, their joint production closeout, B3.1 producer semantic normalization plus typed worker event, C1 materialization/cut, B4 cancel, D2 broker operations, E2 policy commitments, and E3 non-secret credential-handoff state. B3.1 cannot start before the joint closeout. D3 alone owns final end-to-end integration closure, proving those facts join by request/active-run/session/world IDs without secret payloads or secret-derived fingerprints. | B0, B1, B2.1, B3.1, C1, B4, D2, E2, E3, D3 |
 
 `RG-AUTH-03` A1.2 proof additionally requires Start/Attach transport to remain retained until
 closed startup evidence binds exact store/session/intent/claim/claimant-attempt/run/application/authority/
@@ -288,8 +288,9 @@ branch. This paragraph records the A1.1e closeout conclusion at that time; its o
 statement is superseded by the Case B production-ingress audit below. Do not restore or modify the
 broad A1.2 checkpoint, and do not begin A1.2b before the joint closeout → B3.1 → C1 corridor lands.
 That historical next-packet statement is now superseded: bounded A1.2a, A1.2a-WB, and A1.2a-S are
-landed and independently review-clean. B1/B2.1-R0 is next and has not begun. A1.3 is not
-dependency-ready, and A1 as a whole remains incomplete and non-landable.
+landed and independently review-clean. B1/B2.1-R0 is also landed and independently review-clean
+through `bb3eefba`; B3.2a is next and has not begun. A1.3 is not dependency-ready, and A1 as a
+whole remains incomplete and non-landable.
 
 ## A1.2a, A1.2a-WB, and A1.2a-S recorded result
 
@@ -331,7 +332,7 @@ assertions. No new failure name, assertion change, fixture weakening, or test su
 involved. These progressed failures remain explicit inputs to their later owning packets and are
 not counted as A1.2a-S closure of the B1/B2.1 joint differential gate. Reviewer
 `/root/a12a_s_runtime_review_1` completed read-only with verdict CLEAN. No seam is promoted;
-B1/B2.1-R0 is next and has not begun.
+B1/B2.1-R0 is now independently review-clean through `bb3eefba`; B3.2a is next and has not begun.
 
 ## B0 closeout evidence
 
@@ -397,8 +398,8 @@ at the same legacy StateStore-root preflight. Neither is counted as B0 proof. Th
 `RG-OBS-01` are satisfied. B2.1 consumer clauses remain open. B1-3a/B1-3b receipt-core recovery is
 dependency-ready; B2.1 becomes ready only after that core is review-clean, and neither packet is
 production-complete before their joint closeout. The former A1.2a-WB and A1.2a-S blockers are now
-satisfied; the joint closeout remains blocked on B1/B2.1-R0, B3.2a, and B1/B2.1-0, while B3.1, C1,
-and A1.2b are not ready. A1.2a, A1.2a-WB, and A1.2a-S are landed; the preserved broad A1.2
+satisfied; B1/B2.1-R0 is now review-clean, so the joint closeout remains blocked on B3.2a and
+B1/B2.1-0, while B3.1, C1, and A1.2b are not ready. A1.2a, A1.2a-WB, and A1.2a-S are landed; the preserved broad A1.2
 checkpoint remains
 untouched at
 `18bea80b75ad2c59c7b635851b14552e380585f2`. No seam is promoted.
@@ -539,8 +540,50 @@ A1.2a and authorized only the subsequently reviewed A1.2a-WB implementation in `
 boundary. At that point it did not authorize any other facade behavior or A1.2a-S and required WB
 to be implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
 That authorization state is superseded by the recorded review-clean WB and A1.2a-S closeout above.
-B1/B2.1-R0 is now the exact next packet and has not begun; B3.2a, B1/B2.1-0, runtime-WIP
-restoration, and later implementation remain unauthorized here.
+B1/B2.1-R0 is now review-clean through `bb3eefba`; B3.2a is the exact next packet and has not
+begun. B1/B2.1-0, runtime-WIP restoration, and later implementation remain unauthorized here.
+
+## B1/B2.1-R0 recorded result
+
+B1/B2.1-R0 started from exact source commit
+`f630835ab3715f957b0f49697e104c40d591305e`; preservation branch
+`feat/preserve-b1-b2-1-r0-f630835a` was pushed at that exact commit before editing. R0-1 is
+`ace6cebd`, `e3768c3f`, `6154dc97`, and `6ec5eb78`; R0-2 is `5582039a`; R0-3 is
+`3f4464b7`; R0-4 is `23993184` plus review remediation `0d5225f3`; final integration remediation
+is `bb3eefba`. The source range changes only the eight-file subset of the authorized R0 allowlist:
+`agent_runtime/{mod.rs,retained_worker_runtime.rs}` plus
+`host_session_authority/{facade.rs,store.rs,store_schema.rs,store_tests.rs}` and
+`host_session_authority/store/platform/{layout.rs,object_persistence.rs}`.
+
+The component durably reserves the domain-separated retained-registration request before any
+object write, fixes the caller-supplied participant and every registration/object identity,
+commitment, expected authority value, policy, world, backend, protocol, and timestamp, publishes
+only the exact immutable descriptor/resume/worker graph, and atomically applies one non-transition
+authority link. Exact resolution proves store/session/lineage/ref/object/policy/world joins and one
+unique contiguous Start-to-R0 ancestry whose highest proof revision equals current authority.
+Crash/restart windows, lost response, deterministic Reserved-to-Applied publication interleaving,
+and identical/conflicting two-process contention converge or fail closed with no unauthorized root
+or object mutation. An Applied retry with a different valid authority-store ID is rejected without
+mutation. Startup ownership stays Pending and retains its original expected revision.
+
+Final Linux component proof is retained runtime `25 passed / 0 failed`, full
+HostSessionAuthority `132 / 0`, explicit strict V1/V2 decoding, object reachability/index/orphan,
+key lifecycle/rotation, crash/restart, and cross-process checks green, shell all-target Clippy with
+warnings denied green, and `cargo check --workspace --all-targets`, formatting, and diff checks
+green. The final serial shell wall is `923 passed / 161 failed / 0 ignored` against exact starting
+`898 / 161 / 0`: all 25 additions are R0-only passing tests; `PassToFail`, `NewFail`,
+`FailToPass`, removed/renamed/substituted/weakened tests, and ignored-test changes are zero. All 161
+inherited failure names and normalized bodies are identical after replacing only generated
+`aos_<ID>` values. There is no unexplained production-path `FailToPass`, so `RegressionMasked` did
+not trigger.
+
+Fresh read-only packet reviewers `/root/r0_1_clean_review`, `/root/r0_2_review`,
+`/root/r0_3_review`, and `/root/r0_4_rereview` returned CLEAN. The first R0-4 reviewer found the
+Reserved-to-Applied publication race fixed by `0d5225f3`; the first final integration reviewer
+found the Applied retry store-ID gap fixed by `bb3eefba`. Fresh reviewer
+`/root/r0_final_integration_rereview` returned final CLEAN. This is component proof only: R0 has no
+production ingress caller, supplies no e2e or live doctor/smoke proof, and has no native macOS
+claim. No seam is promoted, B3.2a was not begun, and B3.2a is the next packet.
 
 ## Baseline behaviors that all tracks preserve
 

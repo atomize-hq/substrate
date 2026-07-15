@@ -166,8 +166,9 @@ existing fully materialized `PreparedAgentRuntime`. The authority-managed path p
 activated legacy session/participant/snapshot writes, carries the exact bound capability into the
 live toolbox context, and leaves startup ownership Pending. It does not change fork/member prepared
 runtime construction or adopt helper plans, public Attach/Resume, startup outcome reconciliation,
-or any post-turn behavior. No seam is promoted; B1/B2.1-R0 is next and has not begun.
-B1/B2.1-R0 then lets RetainedWorkerRuntime create the immutable retained object graph and requires
+or any post-turn behavior. B1/B2.1-R0 is now landed and independently review-clean through
+`bb3eefba`; no seam is promoted, and B3.2a is next and has not begun.
+B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before
 object publication, then atomically append exactly its participant to lineage, add its validated

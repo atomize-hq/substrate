@@ -1682,7 +1682,8 @@ The implementation boundary is exactly `transition.rs`, colocated `transition_te
 binding unchanged and may not reject an authority already accepted and persisted under the matrix
 through the obsolete `Host + Some` rule. All other facade behavior is outside scope. This
 write/read boundary is review-clean through `275f9fa2`, and the dependent A1.2a-S adoption is
-review-clean through `2f2fecb3`; B1/B2.1-R0 is next and has not begun.
+review-clean through `2f2fecb3`; B1/B2.1-R0 is review-clean through `bb3eefba`, and B3.2a is next
+and has not begun.
 
 ## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
