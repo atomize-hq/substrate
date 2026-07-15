@@ -4,7 +4,9 @@ use agent_session_compactor::{CompactionKind, CompactionRow};
 use camino::Utf8Path;
 use serde_json::Value;
 
-use crate::checkpoint::{Confidence, EvidenceRef, TaskFrame};
+use crate::checkpoint::{
+    ChildWorkVisibility, Confidence, DelegationTopology, EvidenceRef, TaskFrame,
+};
 use crate::context::ContextPack;
 use crate::input::{extract_path_hints, parse_tool_payload, BundleSession};
 
@@ -20,30 +22,13 @@ const EXPLICIT_CHILD_LINK_SIGNALS: [&str; 4] = [
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DelegationContext {
+pub(crate) struct DelegationInference {
     pub topology: Option<DelegationTopology>,
     pub child_work_visibility: Option<ChildWorkVisibility>,
     pub confidence: Option<Confidence>,
     pub markers: Vec<String>,
     pub supporting_evidence: Vec<EvidenceRef>,
     pub counter_evidence: Vec<EvidenceRef>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum DelegationTopology {
-    SingleAgent,
-    DelegatingParent,
-    DelegatedChild,
-    MixedOrAmbiguous,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum ChildWorkVisibility {
-    None,
-    Partial,
-    Opaque,
 }
 
 pub fn infer_task_frame(context: &ContextPack) -> TaskFrame {
@@ -77,7 +62,7 @@ pub fn infer_task_frame(context: &ContextPack) -> TaskFrame {
 pub(crate) fn infer_delegation_context(
     session: &BundleSession,
     context: &ContextPack,
-) -> DelegationContext {
+) -> DelegationInference {
     let marker_evidence = collect_marker_evidence(delegation_rows(session));
     let context_signal_evidence = collect_context_signal_evidence(
         session,
@@ -95,7 +80,7 @@ pub(crate) fn infer_delegation_context(
     let counter_evidence =
         infer_delegation_counter_evidence(context, &marker_evidence, &context_signal_evidence);
 
-    DelegationContext {
+    DelegationInference {
         topology: None,
         child_work_visibility: None,
         confidence: None,

@@ -12,8 +12,7 @@ use crate::{
     context::extract_verification_commands, context::focusable_directive_rows,
     context::CommandObservation, context::ContextPack, context::ObjectiveSummary,
     inference::infer_delegation_context, inference::infer_task_frame,
-    inference::ChildWorkVisibility, inference::DelegationContext, inference::DelegationTopology,
-    scoring::DriftStateHint, scoring::ScoredDrift,
+    inference::DelegationInference, scoring::DriftStateHint, scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use attempt::{
@@ -27,14 +26,14 @@ pub use export::{
     ConfidenceDistribution, ExportError, ExportResult,
 };
 pub use schema::{
-    Checkpoint, CheckpointBoundary, CheckpointDiagnostics, Confidence, DriftClass, DriftScore,
-    DriftState, EvidenceRef, ObjectiveClass, ObjectiveConstraint, ObjectiveConstraintKind,
-    ObjectiveEvidenceSpan, ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind,
-    ObjectiveSourceKind, ObjectiveTarget, ObjectiveTargetKind, ObjectiveUnknown, ProgressDimension,
-    ProgressSignal, ProgressSignalCode, ProgressStatus, RequestedDeliverable,
-    RequestedDeliverableKind, SessionArchetype, SessionArchetypeLabel, SessionProgress,
-    SignalPolarity, SignalStrength, StructuredObjective, SuccessCondition, TaskFrame,
-    TurnActivityMix, TurnContext, TurnExecutionMode,
+    Checkpoint, CheckpointBoundary, CheckpointDiagnostics, ChildWorkVisibility, Confidence,
+    DelegationContext, DelegationTopology, DriftClass, DriftScore, DriftState, EvidenceRef,
+    ObjectiveClass, ObjectiveConstraint, ObjectiveConstraintKind, ObjectiveEvidenceSpan,
+    ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTarget,
+    ObjectiveTargetKind, ObjectiveUnknown, ProgressDimension, ProgressSignal, ProgressSignalCode,
+    ProgressStatus, RequestedDeliverable, RequestedDeliverableKind, SessionArchetype,
+    SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength, StructuredObjective,
+    SuccessCondition, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 
 const MAX_ROWS_PER_CHECKPOINT: usize = 64;
@@ -46,7 +45,7 @@ pub(crate) struct CheckpointAnalysis {
     pub current: CheckpointSlice,
     pub previous: Option<CheckpointSlice>,
     pub sanctioned_replan: bool,
-    pub delegation: DelegationContext,
+    pub delegation: DelegationInference,
     pub interval: IntervalSlice,
     pub turn_context: TurnContext,
     pub repetition: RepetitionSlice,
@@ -321,7 +320,7 @@ pub(crate) fn kickoff_anchor_for_ordinal(
         .and_then(|(anchor_ordinal, structured)| (ordinal >= *anchor_ordinal).then_some(structured))
 }
 
-fn classify_checkpoint_delegation(mut delegation: DelegationContext) -> DelegationContext {
+fn classify_checkpoint_delegation(mut delegation: DelegationInference) -> DelegationInference {
     let topology = derive_delegation_topology(&delegation);
     let child_work_visibility = derive_child_work_visibility(&delegation, topology);
     let confidence = derive_delegation_confidence(&delegation, topology, child_work_visibility);
@@ -350,7 +349,7 @@ fn structured_matches_confident_task_statement(
         && structured.unknowns.is_empty()
 }
 
-fn derive_delegation_topology(delegation: &DelegationContext) -> DelegationTopology {
+fn derive_delegation_topology(delegation: &DelegationInference) -> DelegationTopology {
     if delegation.markers.is_empty() {
         return DelegationTopology::SingleAgent;
     }
@@ -368,7 +367,7 @@ fn derive_delegation_topology(delegation: &DelegationContext) -> DelegationTopol
 }
 
 fn derive_child_work_visibility(
-    delegation: &DelegationContext,
+    delegation: &DelegationInference,
     topology: DelegationTopology,
 ) -> ChildWorkVisibility {
     if matches!(topology, DelegationTopology::SingleAgent) {
@@ -382,7 +381,7 @@ fn derive_child_work_visibility(
     ChildWorkVisibility::Opaque
 }
 
-fn delegation_supports_partial_child_visibility(delegation: &DelegationContext) -> bool {
+fn delegation_supports_partial_child_visibility(delegation: &DelegationInference) -> bool {
     delegation.supporting_evidence.iter().any(|evidence| {
         evidence
             .reason
@@ -391,13 +390,14 @@ fn delegation_supports_partial_child_visibility(delegation: &DelegationContext) 
 }
 
 fn derive_delegation_confidence(
-    delegation: &DelegationContext,
+    delegation: &DelegationInference,
     topology: DelegationTopology,
     child_work_visibility: ChildWorkVisibility,
 ) -> Confidence {
     match topology {
         DelegationTopology::SingleAgent => Confidence::High,
         DelegationTopology::DelegatingParent => match child_work_visibility {
+            ChildWorkVisibility::Linked => Confidence::High,
             ChildWorkVisibility::Partial => Confidence::Medium,
             ChildWorkVisibility::Opaque => {
                 if delegation.counter_evidence.is_empty() {
@@ -457,7 +457,7 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
     let session_archetype = build_session_archetype(analysis);
     let session_progress = build_session_progress(analysis, &session_archetype);
     Checkpoint {
-        schema_version: "v0.7".to_string(),
+        schema_version: "v0.8".to_string(),
         session_id: analysis.session_id.clone(),
         checkpoint_id: format!("{}:{ordinal:04}", analysis.session_id),
         ordinal,
@@ -468,9 +468,33 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         structured_objective: analysis.current.context.objective.structured.clone(),
         session_archetype: Some(session_archetype),
         session_progress: Some(session_progress),
+        delegation: public_delegation_context(&analysis.delegation),
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
+    }
+}
+
+fn public_delegation_context(delegation: &DelegationInference) -> DelegationContext {
+    let topology = delegation
+        .topology
+        .unwrap_or_else(|| derive_delegation_topology(delegation));
+    let child_work_visibility = delegation
+        .child_work_visibility
+        .unwrap_or_else(|| derive_child_work_visibility(delegation, topology));
+    let confidence = delegation.confidence.unwrap_or_else(|| {
+        derive_delegation_confidence(delegation, topology, child_work_visibility)
+    });
+
+    DelegationContext {
+        topology,
+        parent_session_id: None,
+        child_session_ids: Vec::new(),
+        child_work_visibility,
+        confidence,
+        markers: delegation.markers.clone(),
+        supporting_evidence: delegation.supporting_evidence.clone(),
+        counter_evidence: delegation.counter_evidence.clone(),
     }
 }
 
@@ -1376,7 +1400,7 @@ fn repeated_failure_evidence(analysis: &CheckpointAnalysis, reason: &str) -> Vec
         .collect()
 }
 
-fn delegation_evidence(delegation: &DelegationContext, reason: &str) -> Vec<EvidenceRef> {
+fn delegation_evidence(delegation: &DelegationInference, reason: &str) -> Vec<EvidenceRef> {
     delegation
         .supporting_evidence
         .iter()
@@ -3329,11 +3353,11 @@ mod tests {
         let delegation = &analyses[0].delegation;
         assert_eq!(
             delegation.topology,
-            Some(crate::inference::DelegationTopology::DelegatingParent)
+            Some(crate::checkpoint::DelegationTopology::DelegatingParent)
         );
         assert_eq!(
             delegation.child_work_visibility,
-            Some(crate::inference::ChildWorkVisibility::Partial)
+            Some(crate::checkpoint::ChildWorkVisibility::Partial)
         );
         assert_eq!(
             delegation.confidence,
@@ -3387,11 +3411,11 @@ mod tests {
         let delegation = &analyses[1].delegation;
         assert_eq!(
             delegation.topology,
-            Some(crate::inference::DelegationTopology::MixedOrAmbiguous)
+            Some(crate::checkpoint::DelegationTopology::MixedOrAmbiguous)
         );
         assert_eq!(
             delegation.child_work_visibility,
-            Some(crate::inference::ChildWorkVisibility::Opaque)
+            Some(crate::checkpoint::ChildWorkVisibility::Opaque)
         );
         assert_eq!(
             delegation.confidence,

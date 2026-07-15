@@ -5,7 +5,7 @@ use std::{
 
 use agent_session_compactor::RowRef;
 
-use crate::inference::{ChildWorkVisibility, DelegationTopology};
+use crate::checkpoint::{ChildWorkVisibility, DelegationTopology};
 
 use super::attempt::{
     verification_target_from_command, AttemptOutcome, CommandAttempt, CommandAttemptRole,
@@ -451,6 +451,7 @@ fn parent_visible_orchestration_progress(
 
     let confidence = match visibility {
         ChildWorkVisibility::Opaque => Confidence::Low,
+        ChildWorkVisibility::Linked => Confidence::Medium,
         ChildWorkVisibility::Partial => Confidence::Medium,
         ChildWorkVisibility::None => Confidence::Low,
     };
@@ -2281,6 +2282,7 @@ fn has_parent_visible_orchestration_evidence(
         })
         && match visibility {
             ChildWorkVisibility::Opaque => true,
+            ChildWorkVisibility::Linked => true,
             ChildWorkVisibility::Partial => true,
             ChildWorkVisibility::None => false,
         };

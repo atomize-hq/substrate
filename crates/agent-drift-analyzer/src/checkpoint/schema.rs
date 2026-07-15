@@ -26,6 +26,92 @@ pub struct EvidenceRef {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DelegationContext {
+    pub topology: DelegationTopology,
+    pub parent_session_id: Option<String>,
+    pub child_session_ids: Vec<String>,
+    pub child_work_visibility: ChildWorkVisibility,
+    pub confidence: Confidence,
+    pub markers: Vec<String>,
+    pub supporting_evidence: Vec<EvidenceRef>,
+    pub counter_evidence: Vec<EvidenceRef>,
+}
+
+#[derive(Deserialize)]
+struct RawDelegationContext {
+    topology: DelegationTopology,
+    parent_session_id: NullableSessionId,
+    child_session_ids: Vec<String>,
+    child_work_visibility: ChildWorkVisibility,
+    confidence: Confidence,
+    markers: Vec<String>,
+    supporting_evidence: Vec<EvidenceRef>,
+    counter_evidence: Vec<EvidenceRef>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum NullableSessionId {
+    Value(String),
+    Null(()),
+}
+
+impl<'de> Deserialize<'de> for DelegationContext {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawDelegationContext::deserialize(deserializer)?;
+        Ok(Self {
+            topology: raw.topology,
+            parent_session_id: match raw.parent_session_id {
+                NullableSessionId::Value(session_id) => Some(session_id),
+                NullableSessionId::Null(()) => None,
+            },
+            child_session_ids: raw.child_session_ids,
+            child_work_visibility: raw.child_work_visibility,
+            confidence: raw.confidence,
+            markers: raw.markers,
+            supporting_evidence: raw.supporting_evidence,
+            counter_evidence: raw.counter_evidence,
+        })
+    }
+}
+
+impl Default for DelegationContext {
+    fn default() -> Self {
+        Self {
+            topology: DelegationTopology::SingleAgent,
+            parent_session_id: None,
+            child_session_ids: Vec::new(),
+            child_work_visibility: ChildWorkVisibility::None,
+            confidence: Confidence::High,
+            markers: Vec::new(),
+            supporting_evidence: Vec::new(),
+            counter_evidence: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum DelegationTopology {
+    SingleAgent,
+    DelegatingParent,
+    DelegatedChild,
+    MixedOrAmbiguous,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ChildWorkVisibility {
+    None,
+    Linked,
+    Partial,
+    Opaque,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StructuredObjective {
     pub objective_class: ObjectiveClass,
@@ -408,6 +494,7 @@ pub struct Checkpoint {
     pub session_archetype: Option<SessionArchetype>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_progress: Option<SessionProgress>,
+    pub delegation: DelegationContext,
     pub drift_scores: Vec<DriftScore>,
     pub expected_next_step: String,
     pub flagged: bool,
@@ -430,6 +517,8 @@ struct RawCheckpoint {
     pub session_archetype: Option<SessionArchetype>,
     #[serde(default)]
     pub session_progress: Option<SessionProgress>,
+    #[serde(default)]
+    pub delegation: Option<DelegationContext>,
     pub drift_scores: Vec<DriftScore>,
     pub expected_next_step: String,
     pub flagged: bool,
@@ -454,6 +543,17 @@ impl RawCheckpoint {
             ));
         }
 
+        let delegation = match self.delegation {
+            Some(delegation) => delegation,
+            None if schema_requires_delegation(&self.schema_version) => {
+                return Err(format!(
+                    "checkpoint schema {} requires delegation",
+                    self.schema_version
+                ));
+            }
+            None => DelegationContext::default(),
+        };
+
         Ok(Checkpoint {
             schema_version: self.schema_version,
             session_id: self.session_id,
@@ -466,6 +566,7 @@ impl RawCheckpoint {
             structured_objective: self.structured_objective,
             session_archetype: self.session_archetype,
             session_progress: self.session_progress,
+            delegation,
             drift_scores: self.drift_scores,
             expected_next_step: self.expected_next_step,
             flagged: self.flagged,
@@ -485,9 +586,13 @@ impl<'de> Deserialize<'de> for Checkpoint {
 }
 
 fn schema_requires_session_archetype(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.5" | "v0.6" | "v0.7")
+    matches!(schema_version, "v0.5" | "v0.6" | "v0.7" | "v0.8")
 }
 
 fn schema_requires_session_progress(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.6" | "v0.7")
+    matches!(schema_version, "v0.6" | "v0.7" | "v0.8")
+}
+
+fn schema_requires_delegation(schema_version: &str) -> bool {
+    matches!(schema_version, "v0.8")
 }

@@ -19,13 +19,14 @@ pub mod input;
 pub mod scoring;
 
 pub use checkpoint::{
-    Checkpoint, CheckpointBoundary, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
-    ObjectiveClass, ObjectiveConstraint, ObjectiveConstraintKind, ObjectiveEvidenceSpan,
-    ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTarget,
-    ObjectiveTargetKind, ObjectiveUnknown, ProgressDimension, ProgressSignal, ProgressSignalCode,
-    ProgressStatus, RequestedDeliverable, RequestedDeliverableKind, SessionArchetype,
-    SessionArchetypeLabel, SessionProgress, SignalPolarity, SignalStrength, StructuredObjective,
-    SuccessCondition, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+    Checkpoint, CheckpointBoundary, ChildWorkVisibility, Confidence, DelegationContext,
+    DelegationTopology, DriftClass, DriftScore, DriftState, EvidenceRef, ObjectiveClass,
+    ObjectiveConstraint, ObjectiveConstraintKind, ObjectiveEvidenceSpan, ObjectiveIntent,
+    ObjectiveRole, ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTarget, ObjectiveTargetKind,
+    ObjectiveUnknown, ProgressDimension, ProgressSignal, ProgressSignalCode, ProgressStatus,
+    RequestedDeliverable, RequestedDeliverableKind, SessionArchetype, SessionArchetypeLabel,
+    SessionProgress, SignalPolarity, SignalStrength, StructuredObjective, SuccessCondition,
+    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 pub use input::{AnalyzerSurface, BundleSession, InputBundle, InputError};
 

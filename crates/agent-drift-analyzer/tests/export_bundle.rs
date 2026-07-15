@@ -584,7 +584,7 @@ fn export_bundle_serializes_v0_2_checkpoint_diagnostics() {
     assert_eq!(checkpoints.len(), 2);
     assert!(checkpoints
         .iter()
-        .all(|checkpoint| checkpoint.schema_version == "v0.7"));
+        .all(|checkpoint| checkpoint.schema_version == "v0.8"));
     assert!(checkpoints
         .iter()
         .all(|checkpoint| checkpoint.session_progress.is_some()));
@@ -1229,6 +1229,7 @@ fn fixture_checkpoint(
         },
         session_archetype: None,
         session_progress: None,
+        delegation: agent_drift_analyzer::DelegationContext::default(),
         drift_scores: [
             DriftClass::WrongPlanBranch,
             DriftClass::TruthGroundingGap,

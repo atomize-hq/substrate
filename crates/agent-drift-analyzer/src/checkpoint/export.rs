@@ -8,11 +8,11 @@ use time::OffsetDateTime;
 
 use super::checkpoint_analyses;
 use crate::checkpoint::{
-    Checkpoint, Confidence, DriftClass, ProgressDimension, ProgressStatus, SessionArchetype,
-    SessionArchetypeLabel, SessionProgress, StructuredObjective, TaskFrame, TurnActivityMix,
-    TurnContext, TurnExecutionMode,
+    Checkpoint, ChildWorkVisibility, Confidence, DelegationTopology, DriftClass, ProgressDimension,
+    ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress, StructuredObjective,
+    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
-use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
+use crate::inference::DelegationInference;
 use crate::input::BundleSession;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -555,7 +555,7 @@ struct SessionSummary {
     diagnostics: SessionDiagnostics,
     spacing: SpacingAccumulator,
     checkpoints: Vec<Checkpoint>,
-    delegation_by_ordinal: BTreeMap<usize, DelegationContext>,
+    delegation_by_ordinal: BTreeMap<usize, DelegationInference>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -962,7 +962,7 @@ fn format_checkpoint_turn_context(turn_context: Option<&TurnContext>) -> String 
     parts.join(" ")
 }
 
-fn format_checkpoint_delegation(delegation: Option<&DelegationContext>) -> String {
+fn format_checkpoint_delegation(delegation: Option<&DelegationInference>) -> String {
     let Some(delegation) = delegation else {
         return "unavailable".to_string();
     };
@@ -1061,6 +1061,7 @@ fn format_delegation_topology(topology: DelegationTopology) -> &'static str {
 fn format_child_work_visibility(visibility: ChildWorkVisibility) -> &'static str {
     match visibility {
         ChildWorkVisibility::None => "none",
+        ChildWorkVisibility::Linked => "linked",
         ChildWorkVisibility::Partial => "partial",
         ChildWorkVisibility::Opaque => "opaque",
     }

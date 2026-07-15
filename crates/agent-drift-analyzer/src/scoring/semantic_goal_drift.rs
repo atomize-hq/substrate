@@ -2,12 +2,12 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use crate::checkpoint::{
-    CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
-    ObjectiveClass, ObjectiveConstraint, ObjectiveConstraintKind, ObjectiveEvidenceSpan,
-    ObjectiveTarget, StructuredObjective,
+    CheckpointAnalysis, ChildWorkVisibility, Confidence, DelegationTopology, DriftClass,
+    DriftScore, DriftState, EvidenceRef, ObjectiveClass, ObjectiveConstraint,
+    ObjectiveConstraintKind, ObjectiveEvidenceSpan, ObjectiveTarget, StructuredObjective,
 };
 use crate::context::ObjectiveSummary;
-use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
+use crate::inference::DelegationInference;
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const CURRENT_GOAL_REASON_PREFIX: &str = "semantic goal drift current goal:";
@@ -360,7 +360,7 @@ fn has_stable_distinguishing_term(
 /// A checkpoint whose parent delegates work to a child it cannot observe (`DelegatingParent` +
 /// `Opaque`). The scorer only sees parent-side orchestration here, so it must not read parent-side
 /// objective churn as drift without a concrete, parent-visible target anchor on both sides.
-fn is_opaque_delegated_parent(delegation: &DelegationContext) -> bool {
+fn is_opaque_delegated_parent(delegation: &DelegationInference) -> bool {
     matches!(
         delegation.topology,
         Some(DelegationTopology::DelegatingParent)
@@ -1567,15 +1567,16 @@ mod tests {
         RequestedDeliverable, RequestedDeliverableKind, StructuredObjective, SuccessCondition,
         TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
     };
+    use crate::checkpoint::{ChildWorkVisibility, DelegationTopology};
     use crate::context::{
         CandidateTruthArtifact, CommandObservation, ContextPack, ObjectiveSummary, ToolObservation,
         WorkingSetPath,
     };
-    use crate::inference::{ChildWorkVisibility, DelegationContext, DelegationTopology};
+    use crate::inference::DelegationInference;
     use crate::input::BundleSession;
 
-    fn opaque_delegating_parent() -> DelegationContext {
-        DelegationContext {
+    fn opaque_delegating_parent() -> DelegationInference {
+        DelegationInference {
             topology: Some(DelegationTopology::DelegatingParent),
             child_work_visibility: Some(ChildWorkVisibility::Opaque),
             confidence: Some(Confidence::Medium),
@@ -1653,7 +1654,7 @@ mod tests {
             false,
         );
         // Partial visibility relies on the stable-term backstop, not hard suppression (codex §5).
-        analysis.delegation = DelegationContext {
+        analysis.delegation = DelegationInference {
             child_work_visibility: Some(ChildWorkVisibility::Partial),
             ..opaque_delegating_parent()
         };
@@ -3622,7 +3623,7 @@ mod tests {
                 task_frame: task_frame.clone(),
             }),
             sanctioned_replan,
-            delegation: DelegationContext {
+            delegation: DelegationInference {
                 topology: None,
                 child_work_visibility: None,
                 confidence: None,

@@ -11,7 +11,7 @@ use agent_drift_analyzer::{
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 use camino::{Utf8Path, Utf8PathBuf};
-use serde_json::Value;
+use serde_json::{json, Value};
 use support::{analyze_sample_bundle, load_sample_bundle, BundleFixture};
 use tempfile::TempDir;
 use time::macros::datetime;
@@ -34,7 +34,11 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     let checkpoints = &first.sessions[0].checkpoints;
     assert_eq!(checkpoints.len(), 2);
     assert_eq!(checkpoints[0].session_id, "session-alpha");
-    assert_eq!(checkpoints[0].schema_version, "v0.7");
+    assert_eq!(checkpoints[0].schema_version, "v0.8");
+    assert_eq!(
+        checkpoints[0].delegation.topology,
+        agent_drift_analyzer::DelegationTopology::SingleAgent
+    );
     assert!(checkpoints[0].session_archetype.is_some());
     assert!(checkpoints[0].session_progress.is_some());
     assert_eq!(checkpoints[0].ordinal, 1);
@@ -49,7 +53,7 @@ fn checkpoints_are_deterministic_and_session_scoped() {
     assert_eq!(first_turn.checkpoints_in_turn, 1);
     assert_eq!(first_turn.prompts_observed_in_session, 1);
     assert_eq!(checkpoints[1].ordinal, 2);
-    assert_eq!(checkpoints[1].schema_version, "v0.7");
+    assert_eq!(checkpoints[1].schema_version, "v0.8");
     assert!(checkpoints[1].session_archetype.is_some());
     assert!(checkpoints[1].session_progress.is_some());
     let second_turn = checkpoints[1]
@@ -106,6 +110,7 @@ fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_7() {
 
     let mut missing_v0_7_progress =
         serde_json::to_value(&checkpoint).expect("serialize checkpoint");
+    missing_v0_7_progress["schema_version"] = Value::String("v0.7".to_string());
     missing_v0_7_progress
         .as_object_mut()
         .expect("checkpoint object")
@@ -118,6 +123,7 @@ fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_7() {
 
     let mut missing_v0_7_archetype =
         serde_json::to_value(&checkpoint).expect("serialize checkpoint");
+    missing_v0_7_archetype["schema_version"] = Value::String("v0.7".to_string());
     missing_v0_7_archetype
         .as_object_mut()
         .expect("checkpoint object")
@@ -130,8 +136,126 @@ fn checkpoints_keep_legacy_session_progress_loads_but_fail_closed_for_v0_7() {
 
     let round_tripped: agent_drift_analyzer::Checkpoint =
         serde_json::from_value(serde_json::to_value(&checkpoint).expect("serialize checkpoint"))
-            .expect("v0.7 checkpoint with progress should round-trip");
+            .expect("v0.8 checkpoint with progress and delegation should round-trip");
     assert_eq!(round_tripped, checkpoint);
+}
+
+#[test]
+fn checkpoints_v0_8_require_delegation_and_all_contract_members() {
+    let checkpoint = analyze_sample_bundle().sessions[0].checkpoints[0].clone();
+    let mut v0_8 = serde_json::to_value(checkpoint).expect("serialize checkpoint");
+    v0_8["schema_version"] = Value::String("v0.8".to_string());
+    v0_8["delegation"] = linked_parent_delegation_json();
+
+    serde_json::from_value::<agent_drift_analyzer::Checkpoint>(v0_8.clone())
+        .expect("complete v0.8 delegation contract should deserialize");
+
+    for field in [
+        "delegation",
+        "topology",
+        "parent_session_id",
+        "child_session_ids",
+        "child_work_visibility",
+        "confidence",
+        "markers",
+        "supporting_evidence",
+        "counter_evidence",
+    ] {
+        let mut missing = v0_8.clone();
+        if field == "delegation" {
+            missing
+                .as_object_mut()
+                .expect("checkpoint object")
+                .remove(field);
+        } else {
+            missing["delegation"]
+                .as_object_mut()
+                .expect("delegation object")
+                .remove(field);
+        }
+
+        let error = match serde_json::from_value::<agent_drift_analyzer::Checkpoint>(missing) {
+            Ok(checkpoint) => {
+                panic!("v0.8 must reject missing delegation member {field}: {checkpoint:?}")
+            }
+            Err(error) => error,
+        };
+        let message = error.to_string();
+        assert!(message.contains("v0.8") || message.contains(field));
+    }
+}
+
+#[test]
+fn checkpoints_v0_8_delegation_round_trip_preserves_order_and_linked_visibility() {
+    let checkpoint = analyze_sample_bundle().sessions[0].checkpoints[0].clone();
+    let mut value = serde_json::to_value(checkpoint).expect("serialize checkpoint");
+    value["schema_version"] = Value::String("v0.8".to_string());
+    value["delegation"] = linked_parent_delegation_json();
+
+    let parsed: agent_drift_analyzer::Checkpoint =
+        serde_json::from_value(value).expect("deserialize v0.8 checkpoint");
+    assert_eq!(
+        parsed.delegation.topology,
+        agent_drift_analyzer::DelegationTopology::DelegatingParent
+    );
+    assert_eq!(
+        parsed.delegation.child_work_visibility,
+        agent_drift_analyzer::ChildWorkVisibility::Linked
+    );
+    let round_tripped = serde_json::to_value(parsed).expect("serialize v0.8 checkpoint");
+
+    assert_eq!(round_tripped["delegation"], linked_parent_delegation_json());
+    assert_eq!(
+        round_tripped["delegation"]["child_session_ids"],
+        json!(["child-b", "child-a"]),
+        "checkpoint serialization must preserve the analyzer-owned child ordering"
+    );
+    assert_eq!(
+        round_tripped["delegation"]["child_work_visibility"],
+        "linked"
+    );
+}
+
+#[test]
+fn checkpoints_v0_7_without_delegation_load_with_single_agent_compatibility_default() {
+    let checkpoint = analyze_sample_bundle().sessions[0].checkpoints[0].clone();
+    let mut legacy = serde_json::to_value(checkpoint).expect("serialize checkpoint");
+    legacy["schema_version"] = Value::String("v0.7".to_string());
+    legacy
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("delegation");
+
+    let parsed: agent_drift_analyzer::Checkpoint =
+        serde_json::from_value(legacy).expect("v0.7 checkpoint without delegation stays loadable");
+    let reserialized = serde_json::to_value(parsed).expect("serialize compatible checkpoint");
+
+    assert_eq!(
+        reserialized["delegation"],
+        json!({
+            "topology": "single_agent",
+            "parent_session_id": null,
+            "child_session_ids": [],
+            "child_work_visibility": "none",
+            "confidence": "high",
+            "markers": [],
+            "supporting_evidence": [],
+            "counter_evidence": [],
+        })
+    );
+}
+
+fn linked_parent_delegation_json() -> Value {
+    json!({
+        "topology": "delegating_parent",
+        "parent_session_id": null,
+        "child_session_ids": ["child-b", "child-a"],
+        "child_work_visibility": "linked",
+        "confidence": "high",
+        "markers": ["spawn_agent"],
+        "supporting_evidence": [],
+        "counter_evidence": [],
+    })
 }
 
 #[test]
