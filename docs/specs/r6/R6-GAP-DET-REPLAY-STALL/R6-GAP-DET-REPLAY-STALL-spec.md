@@ -17,8 +17,9 @@ R7/R8. After it became review-clean, later phase-owned replay passed exact contr
 Manifest E family wall, full analyzer `402 / 402`, and diff check; proof/fix series `b1791c1e3` +
 `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`.
 `R6-REPLAY` is complete, `R6-CLOSE` is active at entry only, active packet is `none`, and
-`CTX-R6-17` is next in a fresh next-phase session. R6 remains **PARTIAL**; no terminal disposition,
-R7, or R8 work has started.
+`CTX-R6-17` is next in a fresh next-phase session. R6 remains **PARTIAL**; this transition assigns
+no additional terminal disposition. The existing `semantic_goal_drift` `Cutover complete`
+disposition remains unchanged, and no R7/R8 work starts.
 
 ## Objective And Preserved Witness
 

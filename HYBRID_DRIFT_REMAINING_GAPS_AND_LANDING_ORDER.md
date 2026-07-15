@@ -796,8 +796,9 @@ Manifest E family wall passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 1
 independent built-in `default` `REVIEW CLEAN`. Sticky `CTX-R6-06` authority remains
 `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only.
 R6 remains **PARTIAL**: `R6-REPLAY` is complete, active packet is `none`, and `R6-CLOSE` is active
-at entry only with `CTX-R6-17` next in a fresh next-phase session. No terminal disposition, R7, or
-R8 work has started.
+at entry only with `CTX-R6-17` next in a fresh next-phase session. This transition assigns no
+additional terminal disposition: the existing `semantic_goal_drift` `Cutover complete` disposition
+remains unchanged, and no R7/R8 work starts.
 
 ## Packet R7: Full Delegated-Session Support
 
