@@ -287,18 +287,18 @@ from that A1.1e closeout. A1.2 work exposed the cycle and remains preserved out 
 branch. This paragraph records the A1.1e closeout conclusion at that time; its old next-packet/order
 statement is superseded by the Case B production-ingress audit below. Do not restore or modify the
 broad A1.2 checkpoint, and do not begin A1.2b before the joint closeout → B3.1 → C1 corridor lands.
-That historical next-packet statement is now superseded: bounded A1.2a is landed and review-clean,
-and A1.2a-WB is the exact prerequisite before A1.2a-S. A1.3 is not dependency-ready, and A1 as a
-whole remains incomplete and non-landable.
+That historical next-packet statement is now superseded: bounded A1.2a, A1.2a-WB, and A1.2a-S are
+landed and independently review-clean. B1/B2.1-R0 is next and has not begun. A1.3 is not
+dependency-ready, and A1 as a whole remains incomplete and non-landable.
 
-## A1.2a recorded result and A1.2a-WB prerequisite
+## A1.2a, A1.2a-WB, and A1.2a-S recorded result
 
 A1.2a is landed and published through `b5f2b4f8dd7d9f650c462cd4626a562cacc1d27f`. Its bounded
 commit chain is strict V2 greenfield upgrade `ab2af5a4`, strict V2 dispatch `91d7e491`, atomic Start
 issuance `eba02f17`, atomic claim/application `e25896a9`, terminal-handoff hash-input documentation
 `a66096be`, and terminal/current-authority read completion `b5f2b4f8`. Independent review is clean.
 The exact shell-library baseline at that commit is `876 passed / 171 failed / 0 ignored`; the 171
-failures are the inherited legacy-writer/preflight set. A1.2a-S has no edits or commits.
+failures are the inherited legacy-writer/preflight set.
 
 The newly bounded prerequisite order is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0**.
 A1.2a-WB owns only the Host/world-binding write/read correction in `transition.rs`, its colocated
@@ -306,8 +306,32 @@ A1.2a-WB owns only the Host/world-binding write/read correction in `transition.r
 accept and return the exact authority persisted under the same four-case matrix; all other facade
 behavior remains outside scope. The packet does not change schemas, canonical JSON bytes, golden
 vectors, V1/V2 fixtures, migrations, compatibility behavior, already-persisted objects, authority
-fields, or world capability/policy enforcement. A1.2a-S may begin only after A1.2a-WB is
-documentation-clean, implementation-clean, independently reviewed, and published.
+fields, or world capability/policy enforcement. Its docs commits are `09b7ba6d` and `7ab20f1c`;
+runtime commit `275f9fa2` is independently review-clean.
+
+A1.2a-S runtime commit `2f2fecb3` is independently review-clean. It changes only
+`crates/shell/src/repl/async_repl.rs`: the ordinary internal greenfield host path now creates an
+identity-free unpersisted proposal, obtains the exact optional world binding, applies or exact-joins
+Start before transport or legacy persistence, materializes `PreparedAgentRuntime` only from the
+applied authority, carries `RuntimeAuthorityContext::Bound` to the internal toolbox, performs zero
+activated legacy session/participant/snapshot writes, and leaves startup ownership Pending. Exact
+`Host + Some` and `Host + None` tests, the six host runtime lifecycle tests, and all 132
+HostSessionAuthority tests pass; formatting, focused Clippy with warnings denied, and diff checks
+pass. The post-review serial shell wall is `898 passed / 161 failed / 0 ignored` against the exact
+starting `876 / 171 / 0`: 10 exact `FailToPass`, zero `PassToFail`, zero `NewFail`, and no removed or
+renamed test. The 10 improvements are the six existing startup/shutdown proofs now exercising
+Pending authority with zero activated legacy writes and four existing dispatch-validation proofs
+that now reach their unchanged assertions after canonical Start application. The remaining 161 are
+all inherited failure names, but they are not all the same normalized failure: a first-panic
+signature audit classifies 137 as `FailToSameFailure` and 24 as `FailToChangedFailure`. Those 24
+advance past the removed early Start preflight to separately gated seams: 10 reach the canonical
+live-orchestrator-parent requirement, four reach the still-missing canonical orchestration-session
+consumer, eight reach a later legacy-writer boundary, and two reach their unchanged downstream
+assertions. No new failure name, assertion change, fixture weakening, or test substitution is
+involved. These progressed failures remain explicit inputs to their later owning packets and are
+not counted as A1.2a-S closure of the B1/B2.1 joint differential gate. Reviewer
+`/root/a12a_s_runtime_review_1` completed read-only with verdict CLEAN. No seam is promoted;
+B1/B2.1-R0 is next and has not begun.
 
 ## B0 closeout evidence
 
@@ -372,9 +396,10 @@ at the same legacy StateStore-root preflight. Neither is counted as B0 proof. Th
 `RG-EVENT-01`, prerequisite clauses of `RG-SUP-01` and `RG-MSG-01`, and carrier clause of
 `RG-OBS-01` are satisfied. B2.1 consumer clauses remain open. B1-3a/B1-3b receipt-core recovery is
 dependency-ready; B2.1 becomes ready only after that core is review-clean, and neither packet is
-production-complete before their joint closeout. The joint closeout is now additionally blocked on
-A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0; B3.1, C1, and A1.2b are not ready. A1.2a is
-landed; the preserved broad A1.2 checkpoint remains
+production-complete before their joint closeout. The former A1.2a-WB and A1.2a-S blockers are now
+satisfied; the joint closeout remains blocked on B1/B2.1-R0, B3.2a, and B1/B2.1-0, while B3.1, C1,
+and A1.2b are not ready. A1.2a, A1.2a-WB, and A1.2a-S are landed; the preserved broad A1.2
+checkpoint remains
 untouched at
 `18bea80b75ad2c59c7b635851b14552e380585f2`. No seam is promoted.
 
@@ -408,11 +433,13 @@ persistence capabilities.
 
 ## B1/B2.1 `RegressionMasked` stop and ownership disposition
 
-The post-review production-ingress audit selects **Case B — canonical production input is
-missing**. A1.1e provides an exact reader, but `resolve_exact` requires an already-current
-`SessionNamespaceRecordV1::Authority`; no landed production path creates that authority. The
-current prepared dispatcher also consumes legacy session/caller/target record shapes absent from
-the exact read, and `live_retained_worker_count` drives steering even though
+The post-review production-ingress audit selected **Case B — canonical production input is
+missing** because A1.1e provided only an exact reader whose `resolve_exact` required an
+already-current `SessionNamespaceRecordV1::Authority`; at that audit point no production path
+created the authority. A1.2a and A1.2a-S now boundedly satisfy that creator/adopter gap for the
+ordinary internal greenfield host path. The prepared dispatcher still consumes legacy
+session/caller/target record shapes absent from the exact retained-target read, and
+`live_retained_worker_count` drives steering even though
 `retained_worker_refs` carry no live/terminal state. Neither a legacy `authoritative_live`
 composite nor a count of all refs is an acceptable replacement.
 
@@ -506,12 +533,14 @@ may close the joint packet. `PassToFail`, `FailToChangedFailure`, `Removed`,
 `RenamedOrSubstituted`, `NewFail`, and `NewIgnored` must all remain zero, and every retained failure
 must preserve its normalized signature.
 
-This docs-only correction records landed A1.2a and authorizes only the subsequently reviewed
-A1.2a-WB implementation in `transition.rs`, `transition_tests.rs`, and the exact
-`facade.rs::HostSessionAuthority::resolve_current_exact` boundary. It does not authorize any other
-facade behavior, A1.2a-S, B1/B2.1-R0, B3.2a, B1/B2.1-0, runtime-WIP restoration, or later
-implementation. The exact next packet after independent clean documentation review is A1.2a-WB; it
-must be implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
+Historical A1.2a-WB authorization record: the preceding docs-only correction recorded landed
+A1.2a and authorized only the subsequently reviewed A1.2a-WB implementation in `transition.rs`,
+`transition_tests.rs`, and the exact `facade.rs::HostSessionAuthority::resolve_current_exact`
+boundary. At that point it did not authorize any other facade behavior or A1.2a-S and required WB
+to be implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
+That authorization state is superseded by the recorded review-clean WB and A1.2a-S closeout above.
+B1/B2.1-R0 is now the exact next packet and has not begun; B3.2a, B1/B2.1-0, runtime-WIP
+restoration, and later implementation remain unauthorized here.
 
 ## Baseline behaviors that all tracks preserve
 

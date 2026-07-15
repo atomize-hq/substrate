@@ -154,19 +154,19 @@ the legacy active-task writer. A1.2a is landed and independently review-clean th
 strict greenfield-only V1-to-V2 root upgrade, reservation/issuance/application, initial authority
 birth, exact retry, and the typed read surface required to resolve that already-current authority.
 It has no Attach/Resume, obligation, correlation-supply, or public-consumer adoption.
-A1.2a-WB is the exact bounded prerequisite now inserted before A1.2a-S. It corrects only the Start
+A1.2a-WB is landed and independently review-clean through `275f9fa2`. It corrects only the Start
 write/read matrix so issuance, application/persistence, and exact current-authority resolution all
 accept Host runtime placement with either no session world binding or an exact session world
-binding, while World placement still requires an exact binding. It does not change a schema,
-canonical JSON bytes, golden vectors, persisted objects, or participant placement. A1.2a-S depends
-on review-clean A1.2a-WB and then adopts only the ordinary internal greenfield host Start path: a
-distinct identity-free proposal is applied after the real dormant-launch adapter has the optional
-world binding and only
-then becomes the existing fully materialized `PreparedAgentRuntime`. It replaces that path's legacy
-session/participant writes with the applied A1.2a result, carries the bound capability into the
+binding, while World placement still requires an exact binding. It changes no schema, canonical
+JSON bytes, golden vectors, persisted objects, participant placement, or world capability/policy
+semantics. A1.2a-S is landed and independently review-clean through `2f2fecb3`. It adopts only the
+ordinary internal greenfield host Start path: a distinct identity-free proposal is applied after
+the real dormant-launch adapter has the exact optional world binding and only then becomes the
+existing fully materialized `PreparedAgentRuntime`. The authority-managed path performs zero
+activated legacy session/participant/snapshot writes, carries the exact bound capability into the
 live toolbox context, and leaves startup ownership Pending. It does not change fork/member prepared
-runtime construction or adopt helper plans,
-public Attach/Resume, startup outcome reconciliation, or any post-turn behavior.
+runtime construction or adopt helper plans, public Attach/Resume, startup outcome reconciliation,
+or any post-turn behavior. No seam is promoted; B1/B2.1-R0 is next and has not begun.
 B1/B2.1-R0 then lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before

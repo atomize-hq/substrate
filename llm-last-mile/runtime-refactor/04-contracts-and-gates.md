@@ -1680,8 +1680,9 @@ unchanged.
 The implementation boundary is exactly `transition.rs`, colocated `transition_tests.rs`, and
 `facade.rs::HostSessionAuthority::resolve_current_exact`. The reader must return the exact persisted
 binding unchanged and may not reject an authority already accepted and persisted under the matrix
-through the obsolete `Host + Some` rule. All other facade behavior is outside scope, and A1.2a-S
-remains blocked until this write/read boundary is review-clean.
+through the obsolete `Host + Some` rule. All other facade behavior is outside scope. This
+write/read boundary is review-clean through `275f9fa2`, and the dependent A1.2a-S adoption is
+review-clean through `2f2fecb3`; B1/B2.1-R0 is next and has not begun.
 
 ## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
@@ -2734,10 +2735,12 @@ verify, reinterpret, log as observability evidence, or use it as obligation sema
 ### B1/B2.1 bounded read-only dispatch-authority adapter
 
 The implementability audit selects **Case B**. This adapter is not implementation-authorized until
-the corrected A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0 sequence is independently review-clean. A1.1e can read an exact
-current authority but cannot create one, and the source branch has no production creator/adopter.
-The current prepared type also combines B-owned accepted/inspection routing with retained-worker
-admission data that has no canonical live-state representation.
+the corrected A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0 sequence is independently
+review-clean. A1.1e alone could read exact current authority but could not create it; A1.2a,
+A1.2a-WB, and A1.2a-S now satisfy the bounded ordinary-internal-host creator/adopter portion of
+that sequence. B1/B2.1-R0, B3.2a, and B1/B2.1-0 remain open. The current prepared type also combines
+B-owned accepted/inspection routing with retained-worker admission data that has no canonical
+live-state representation.
 
 The authority/retained branch is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0 → B3.2a**. The independently
 preserved B1 receipt → B2.1 supervisor branch first joins it at **B1/B2.1-0**, after which the hard
