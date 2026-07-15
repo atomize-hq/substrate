@@ -378,6 +378,7 @@ impl LiveSessionCoordinator {
         compact_codex_sessions(&RunConfig {
             codex_home: self.request.codex_home.clone(),
             session_id: Some(self.request.session_id.clone()),
+            include_linked_children: false,
             output_dir: self.compactor_output_dir(),
             generated_at: None,
         })?;

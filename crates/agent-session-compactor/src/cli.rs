@@ -17,6 +17,9 @@ pub struct Cli {
     pub codex_home: Option<Utf8PathBuf>,
     #[arg(long)]
     pub session_id: Option<String>,
+    /// Include only reciprocally verified depth-1 children of `--session-id`.
+    #[arg(long, requires = "session_id")]
+    pub include_linked_children: bool,
     #[arg(long)]
     pub output_dir: Utf8PathBuf,
 }
@@ -26,6 +29,7 @@ impl Cli {
         RunConfig {
             codex_home: self.codex_home.clone(),
             session_id: self.session_id.clone(),
+            include_linked_children: self.include_linked_children,
             output_dir: self.output_dir.clone(),
             generated_at: Some(OffsetDateTime::now_utc()),
         }

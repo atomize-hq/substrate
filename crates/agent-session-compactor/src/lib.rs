@@ -40,10 +40,36 @@ pub use normalize::{
     normalize_rollout_file, CompactionKind, CompactionRow, SourceKind, UserMessageRole,
 };
 
+/// Configuration for one deterministic Codex session compaction run.
+///
+/// Ordinary filename-filtered discovery remains the default. Setting
+/// `include_linked_children` to `true` explicitly selects the verified direct-child closure and
+/// requires a non-empty `session_id`.
+///
+/// # Examples
+///
+/// ```
+/// use agent_session_compactor::RunConfig;
+/// use camino::Utf8PathBuf;
+///
+/// let config = RunConfig {
+///     codex_home: Some(Utf8PathBuf::from("/tmp/.codex")),
+///     session_id: Some("session-parent".to_string()),
+///     include_linked_children: false,
+///     output_dir: Utf8PathBuf::from("/tmp/compact-bundle"),
+///     generated_at: None,
+/// };
+///
+/// assert!(!config.include_linked_children);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunConfig {
     pub codex_home: Option<Utf8PathBuf>,
     pub session_id: Option<String>,
+    /// Opt into the exact reciprocal depth-1 child closure for `session_id`.
+    ///
+    /// When false, session discovery retains its historical filename-filtered behavior.
+    pub include_linked_children: bool,
     pub output_dir: Utf8PathBuf,
     pub generated_at: Option<OffsetDateTime>,
 }
@@ -71,12 +97,40 @@ pub fn run() -> anyhow::Result<()> {
 
 pub fn compact_codex_sessions(config: &RunConfig) -> Result<CompactionRunResult, CompactorError> {
     let codex_home = resolve_codex_home(config.codex_home.clone())?;
-    let discovery_options = DiscoverOptions {
-        codex_home: Some(codex_home.clone()),
-        session_id: config.session_id.clone(),
+    let (ingested_rollouts, linkage_metadata) = if config.include_linked_children {
+        let requested_session_id = config
+            .session_id
+            .as_deref()
+            .ok_or(DiscoveryError::LinkedChildrenRequireSessionId)?;
+        let artifacts = discover_session_artifacts(&DiscoverOptions {
+            codex_home: Some(codex_home.clone()),
+            session_id: None,
+        })?;
+        let all_rollouts = ingest_rollout_artifacts(&artifacts)?;
+        let closure = discovery::select_direct_linked_closure(requested_session_id, &all_rollouts)?;
+        let ingested_rollouts = all_rollouts
+            .iter()
+            .filter(|rollout| closure.included_source_files.contains(&rollout.source_file))
+            .cloned()
+            .collect::<Vec<_>>();
+        let linkage_metadata = all_rollouts
+            .iter()
+            .filter(|rollout| closure.linkage_source_files.contains(&rollout.source_file))
+            .map(extract_rollout_linkage_metadata)
+            .collect::<Vec<_>>();
+        (ingested_rollouts, linkage_metadata)
+    } else {
+        let artifacts = discover_session_artifacts(&DiscoverOptions {
+            codex_home: Some(codex_home.clone()),
+            session_id: config.session_id.clone(),
+        })?;
+        let ingested_rollouts = ingest_rollout_artifacts(&artifacts)?;
+        let linkage_metadata = ingested_rollouts
+            .iter()
+            .map(extract_rollout_linkage_metadata)
+            .collect::<Vec<_>>();
+        (ingested_rollouts, linkage_metadata)
     };
-    let artifacts = discover_session_artifacts(&discovery_options)?;
-    let ingested_rollouts = ingest_rollout_artifacts(&artifacts)?;
 
     if ingested_rollouts.is_empty() {
         return Err(CompactorError::NoRolloutFiles { codex_home });
@@ -91,10 +145,6 @@ pub fn compact_codex_sessions(config: &RunConfig) -> Result<CompactionRunResult,
     let source_files = ingested_rollouts
         .iter()
         .map(|rollout| rollout.source_file.clone())
-        .collect::<Vec<_>>();
-    let linkage_metadata = ingested_rollouts
-        .iter()
-        .map(extract_rollout_linkage_metadata)
         .collect::<Vec<_>>();
     let manifest = export_bundle(&ExportBundleRequest {
         codex_home: &codex_home,
