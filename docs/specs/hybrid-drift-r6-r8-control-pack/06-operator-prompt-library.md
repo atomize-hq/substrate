@@ -303,25 +303,22 @@ result, current phase status, and the next eligible interaction.
 
 ## Current Phase Invocation
 
-`R6-REPLAY` is complete with packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is preserved;
-bounded implementation/proof commit `6eda87e60` and packet transition series `1ff592823` +
-`7839a7f47` are fresh independent built-in `default` `REVIEW CLEAN`. Phase-owned exact `CTX-R6-01`,
-exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`; the Manifest E family
-filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes
-`402 / 402`; diff check is green. Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074`
-received fresh independent built-in `default` `REVIEW CLEAN`, so no ordinary replay gap remains.
-Current sticky authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains
-historical baseline only. `R6-CLOSE` is active at entry only with active packet `none`; its first
-work is `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh phase session.
-The transition does not itself complete any remaining terminal-disposition reconciliation, mark the
-R6 finding `CLOSED`, or begin R7/R8 work. Existing `semantic_goal_drift` **Cutover complete** and
-`scoring/mod.rs` **Fit-for-purpose exception** dispositions remain unchanged.
+R6 is `CLOSED`. `R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are complete with active packet `none`.
+The 2026-07-15 close receipt reconfirms exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and
+exact `CTX-R6-06` at `1 / 1` each; Manifest E family filters at `21 / 21`, `58 / 58`, `22 / 22`,
+`6 / 6`, and `169 / 169`; full analyzer with all suites green; and `git diff --check` green. The
+terminal table is `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**;
+`truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
 
-Next eligible Prompt 1 invocation, after this narrow transition is fresh-review-clean: use Prompt 1
-above unchanged with these filled phase selectors:
+`R7-PROMOTE` is active at entry only because the R6 closure gate is satisfied. The preserved R7
+MAP/SPEC/PLAN/TASKS remain draft and not implementation-ready; this closeout checks off no R7
+promotion or implementation task and starts no R7/R8 implementation.
+
+Next eligible Prompt 1 invocation, after the R6-close transition itself is committed and fresh-review-clean:
+use Prompt 1 above unchanged with these filled phase selectors:
 
 ```text
-PHASE_ID: R6-CLOSE
+PHASE_ID: R7-PROMOTE
 ACTIVE_PACKET: none
 ```
 

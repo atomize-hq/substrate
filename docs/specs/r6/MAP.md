@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY COMPLETE; R6-CLOSE ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; PACKET TRANSITION `1ff592823` + `7839a7f47` AND PHASE-OWNED PROOF/FIX SERIES `b1791c1e3` + `e6d43eee9` + `61c9d5074` FRESH INDEPENDENT REVIEW-CLEAN; CTX-R6-17 NEXT IN A FRESH PHASE SESSION** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; historical `CTX-R6-02` witness `60cde3dd7` remains preserved. Exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. This transition assigns no new terminal disposition; the finding remains partial and R7 remains blocked. Closure authority is
+Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; ACTIVE PACKET NONE; R7-PROMOTE ACTIVE AT ENTRY ONLY WITH ITS R6-CLOSURE GATE SATISFIED; R7 DRAFTS NOT YET IMPLEMENTATION-READY** as of 2026-07-15. Preserved review-clean proof series remain authoritative. The 2026-07-15 exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completes with all suites green; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. No R7 promotion or implementation task has started. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
@@ -329,12 +329,12 @@ fact does **not** prove the broader scorer-context charter closed:
 
 As of the 2026-07-12 audit, R6 was therefore **PARTIAL / CLOSURE AUDIT REQUIRED**, not closed for
 sequencing, and the next authorized work was the acceptance-first `R6-C.1` packet. That statement is
-historical; the current disposition is recorded below. R7 design documents remain preserved as
-**DRAFT / BLOCKED ON R6 CLOSURE DECISION**; no R7 implementation begins until the finding is updated
-to `CLOSED`, every material scoring surface has one of the four terminal dispositions (**Cutover
-complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6
-with justification**), and the authority stack agrees. An ordinary “still open” state cannot pass
-the R6 closure gate.
+historical; the current disposition is recorded below. At that historical boundary, R7 design
+documents remained preserved as **DRAFT / BLOCKED ON R6 CLOSURE DECISION** until the finding was
+updated to `CLOSED`, every material scoring surface had one of the four terminal dispositions
+(**Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
+outside R6 with justification**), and the authority stack agreed. The later `CTX-R6-17` receipt
+satisfied that entry gate; it did not itself promote the R7 drafts.
 
 ## R6-C.1 Control Disposition Update (2026-07-13)
 
@@ -352,8 +352,8 @@ code changed. In matrix order the preserved routes are:
    independent built-in `default` `REVIEW CLEAN`; exact target is `0 / Low / Cleared`, unflagged,
    with empty evidence, and its protected/family/checkpoint/full-analyzer/static walls are green.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**. `R6-REPLAY` is complete and `R6-CLOSE` is active at
-entry only with active packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is preserved;
+R6 is **CLOSED**. `R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are complete with active packet `none`.
+Historical `CTX-R6-02` witness `60cde3dd7` is preserved;
 review-clean commit
 `6eda87e60` completes `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` with exact true-stall proof, the
 complete ordered packet wall, full analyzer `402 / 402`, and static gates. Packet transition series
@@ -362,11 +362,11 @@ replay controls pass `4 x 1 / 1`; the R6 family wall passes `21 / 21`, `58 / 58`
 `6 / 6`, `169 / 169`, full analyzer `402 / 402`, and diff check. Current sticky authority is
 `HistoricalOnly / 20`, unflagged, while `Recovered / 20` is historical baseline only. Proof/fix
 series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default`
-`REVIEW CLEAN`; no ordinary replay gap remains. `CTX-R6-17` terminal-disposition and authority
-reconciliation is next in a fresh `R6-CLOSE` session. This transition assigns no additional terminal
-disposition; the existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
-**Fit-for-purpose exception** dispositions remain unchanged. It does not mark the R6 finding
-`CLOSED`.
+`REVIEW CLEAN`; no ordinary replay gap remains. The 2026-07-15 `CTX-R6-17` receipt reconfirms the
+exact replay controls, the five Manifest E family filters, the full analyzer all-suites wall, and
+`git diff --check`, then completes the terminal table. `R7-PROMOTE` is active at entry only because
+the R6 closure gate is satisfied; the preserved R7 family remains draft and not
+implementation-ready, and no R7 promotion or implementation task has started.
 
 ## Non-Goals For This Rescope
 

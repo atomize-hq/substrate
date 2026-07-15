@@ -1,36 +1,35 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
-Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**. This planning scaffold was created on
-2026-07-12 and is preserved as useful design work. It is not implementation authority and no R7
-implementation has started.
+Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT
+IMPLEMENTATION-READY**. This planning scaffold was created on 2026-07-12 and is preserved as useful
+design work. `R7-PROMOTE` is the sole active phase with packet `none`; no R7 promotion or
+implementation task has started.
 
 ## R6 Handoff
 
 The attached planning direction correctly identified delegated-session opacity as the next major
 architectural gap. Its proposed new `dead_end_thrash` cutover would duplicate the landed R6-1 core,
-but the broader R6 closure charter remains partial:
+and the broader R6 closure charter is now closed:
 
 - `R6-1` already cut `dead_end_thrash` over to analyzer-owned `SessionProgress`, including
   troubleshooting-frontier advancement suppression and non-advancing stall evidence.
 - `R6-2`, `R6-3`, and the `R6-3.X.2B` / `2C` / `2D` chain landed the semantic-goal-drift consumer,
   rolling comparison, target hygiene, weighted relation routing, and explicit decision semantics.
 - `R6-3.X.3` remains deferred. No new semantic-goal-drift work starts without new failing evidence.
-- `truth_grounding_gap` and `wrong_plan_branch` retain their current behavior while the narrow
-  scorer-applicability acceptance controls determine whether they are fit-for-purpose exceptions or
-  have bounded gaps.
+- `truth_grounding_gap` and `wrong_plan_branch` completed their bounded gaps and are terminal
+  **Fit-for-purpose exception** surfaces.
 - conditional `R6-4` progress-reset migration remains deferred because the required reset-error
   evidence did not appear.
 
-R6 is therefore **PARTIAL / CLOSURE AUDIT REQUIRED**, not closed for sequencing. The closure
-authority is `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. Commit `99efda8f9` is
-preserved as draft planning history, not authority that R6 is closed or R7 is implementation-ready.
+R6 is **CLOSED**. `R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are complete. The closure authority is
+`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. Commit `99efda8f9` remains draft
+planning history, not authority that the preserved R7 family is already implementation-ready.
 
-R7 can be promoted only after the R6 applicability audit is complete; every material scoring
-surface has exactly one terminal disposition — **Cutover complete**, **Fit-for-purpose exception**,
-**Merged/deprecated**, or **Explicitly deferred outside R6 with justification**; the broad R6
-acceptance claims have behavioral proof or have been narrowed honestly; the named R6 closure
-controls are resolved; and the R6 finding plus root/R6/R7 authority stack all say `CLOSED`.
-Ordinary “still open” is not a promotion-eligible disposition.
+The R6 promotion entry gate is satisfied: every material scoring surface has a terminal disposition,
+the broad R6 acceptance claims are proven or narrowed honestly, the named closure controls are
+resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. `R7-PROMOTE` must now reconcile
+the preserved MAP/SPEC/PLAN/TASKS to implementation-ready in a separate docs/status phase. This R6
+closeout does not perform that promotion or begin implementation.
 
 ## Live Linkage Evidence
 
@@ -63,7 +62,8 @@ semantics. Ordinary parent-visible orchestration may still be described as paren
 
 ## Packet Order
 
-The packet order below is design-ready but **inactive** until the promotion gate above is satisfied.
+The packet order below is design-ready but **inactive** until the active `R7-PROMOTE` phase itself
+completes. Its R6 entry gate is satisfied; promotion has not yet been performed.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

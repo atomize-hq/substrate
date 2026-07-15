@@ -3,11 +3,11 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
+Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT IMPLEMENTATION-READY**
 
-This implementation plan is inactive. Preserve it as design-ready draft work until
-`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` reaches `CLOSED`; do not execute any
-phase before that gate.
+This implementation plan remains inactive design-ready draft work. R6 is `CLOSED`, satisfying the
+entry gate for the separate `R7-PROMOTE` docs/status phase, but this plan has not been promoted and
+no R7 implementation phase may execute yet.
 
 ## Overview
 
@@ -47,11 +47,10 @@ for child work.
 
 ## Dependency Graph
 
-The entire graph is blocked on the R6 closure gate: applicability audit complete; every material
-scoring surface assigned exactly one terminal disposition (**Cutover complete**,
-**Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with
-justification**), with no ordinary “still open” state; broad acceptance proven or narrowed honestly;
-named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`.
+The R6 closure entry gate is satisfied: applicability audit complete; every material scoring
+surface assigned exactly one terminal disposition; broad acceptance proven or narrowed honestly;
+named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`. The graph
+remains inactive until `R7-PROMOTE` explicitly reconciles this draft family to implementation-ready.
 
 ```text
 R7-0 docs + sanitized evidence matrix
@@ -80,8 +79,8 @@ R7-6 minimal sentinel replay/live compatibility
 ### R7-0.1 Freeze the family contract
 
 - Land `MAP`, `SPEC`, `PLAN`, and `TASKS` before implementation.
-- Record that the `dead_end_thrash` progress-aware core is landed while the broad R6 closure audit
-  remains partial.
+- Record that the `dead_end_thrash` progress-aware core is landed and R6 is closed while preserving
+  the separate R7 promotion boundary.
 - Freeze direct-only reciprocal linkage and parent/child progress separation.
 
 Verification checkpoint:

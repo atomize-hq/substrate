@@ -6,14 +6,13 @@ Canonical authority:
 Execution context router:
 `docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md`
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
+Status: **CLOSED**
 
-Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation next in a fresh phase session)**
+Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 is `CLOSED`; `R6-CLOSE` and `CTX-R6-17` are complete; the promotion entry gate is satisfied; preserved R7 drafts remain not implementation-ready and no R7 promotion or implementation task has started)**
 
-The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
-closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
-gaps without mechanically injecting typed outcomes, turn context, archetype, or progress into
-scorers where those layers are not semantically relevant.
+The scoped R6 packets, acceptance controls, named gaps, replay closeout, and terminal-disposition
+reconciliation are complete. R6 is closed for sequencing. The next active objective is the separate
+docs/status-only `R7-PROMOTE` phase; it must not begin delegated-session implementation.
 
 Hard decisions:
 
@@ -23,17 +22,17 @@ Hard decisions:
 - `dead_end_thrash` now has focused `CTX-R6-04` proof at `0 / Low / Cleared`, unflagged, with empty
   evidence after production series `bcd94bf4f` + `931e50c85` + `d13f0a71c` received fresh built-in
   `default` `REVIEW CLEAN`; `R6-GAP-DET-OPAQUE-PARENT` is complete. Its frozen four-case corpus
-  remains posture invariance, not comparative integrated improvement, and no terminal scorer
-  disposition is assigned before `R6-CLOSE`.
+  remains posture invariance, not comparative integrated improvement; its terminal disposition is
+  **Cutover complete**.
 - `truth_grounding_gap` now passes the bounded truth-path action-before-read and cross-checkpoint
   provenance controls; `R6-GAP-TGG-TRUTH-PATH-ACTION` is complete after final proof-receipt series
   `fee9c2b16` + `6674a8316` received fresh independent built-in `default` `REVIEW CLEAN`. Its
-  terminal scorer disposition remains reserved for `R6-CLOSE`.
+  terminal scorer disposition is **Fit-for-purpose exception**.
 - `wrong_plan_branch` passed its read-only, sanctioned-replan, delegated-parent, and empty-authority
   controls. Historical `CTX-R6-15` remains preserved at `59f098b35`; implementation/review-fix series
   `6b42e5476` + `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW
   CLEAN` with exact target `0 / Low / Cleared`, unflagged, empty evidence. Its terminal scorer
-  disposition remains reserved for `R6-CLOSE`.
+  terminal scorer disposition is **Fit-for-purpose exception**.
 - Transitive data availability is not behavioral integration; non-applicable context is an explicit
   fit-for-purpose decision, not missing plumbing.
 - The semantic acceptance corpus-shape test proves fixture integrity; the separate live
@@ -59,8 +58,10 @@ Hard decisions:
   implementation and complete ordered proof; exact `CTX-R6-02` is green at its locked
   `Stalled / Active` contract, full analyzer proof is `402 / 402`, and a fresh independent built-in
   `default` reviewer returned `REVIEW CLEAN`.
-- R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
-  single-session scorer semantics.
+- `scoring/mod.rs` is dispatcher/routing infrastructure rather than a fifth scorer; its terminal
+  disposition is **Fit-for-purpose exception**.
+- R7 remains a preserved draft family. Its R6 closure entry gate is satisfied and `R7-PROMOTE` is
+  active at entry only, but the drafts are not implementation-ready until that phase is completed.
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
@@ -82,15 +83,11 @@ passed exact `CTX-R6-01`, exact `CTX-R6-02`, the renamed sticky control, and exa
 `402 / 402`; `git diff --check` is green. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` +
 `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority
 remains `HistoricalOnly / 20`, unflagged, with old `Recovered / 20` retained only as historical
-baseline. `R6-REPLAY` is complete with no ordinary replay gap open; `R6-CLOSE` is active at entry
-only with `CTX-R6-17` next in a fresh phase session. This transition assigns no additional terminal
-disposition; the existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
-**Fit-for-purpose exception** dispositions remain unchanged. It does not mark the R6 finding
-`CLOSED` or start R7/R8 work.
-
-R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
-behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7
-authority documents reconciled. Each material scoring surface must end in exactly one terminal
-category: **Cutover complete**, **Fit-for-purpose exception**,
-**Merged/deprecated**, or **Explicitly deferred outside R6 with justification**. Ordinary “still
-open” is not a closure disposition.
+baseline. On 2026-07-15, `CTX-R6-17` reconfirmed the four exact replay controls at `1 / 1` each, the
+Manifest E filters at `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, the full analyzer
+with all suites green, and `git diff --check`. It assigns `dead_end_thrash` and
+`semantic_goal_drift` **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and
+`scoring/mod.rs` **Fit-for-purpose exception**. No merge/deprecation or deferral route is used.
+The R6 finding is `CLOSED`, `R6-CLOSE` is complete, and `R7-PROMOTE` is active at entry only with
+packet `none`. This closeout does not promote the R7 drafts, check off a promotion or implementation
+task, or begin R7/R8 implementation.

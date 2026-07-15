@@ -14,9 +14,10 @@ records:
 This file is the repo-root landing-order narrative for the hybrid-drift stack. Authority for the
 current R6 closure decision lives in
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`, then `docs/specs/r6/MAP.md`, the R6
-design, and the per-packet sets. The scoped R6 packets have landed, but R6 is **PARTIAL / CLOSURE
-AUDIT REQUIRED** until the named acceptance controls close. The Ground Truth Sources list below is
-historical context, not an exhaustive index of current authority.
+design, and the per-packet sets. R6 is **CLOSED** after `R6-CLOSE` / `CTX-R6-17`; `R7-PROMOTE` is
+active at entry only with its R6-closure gate satisfied. The preserved R7 drafts remain not
+implementation-ready until that separate promotion phase completes. The Ground Truth Sources list
+below is historical context, not an exhaustive index of current authority.
 
 > **Historical status note (2026-07-04; superseded):** `R5`/`R5.5`/`R5.75`
 > structured-objective work had advanced well beyond the older root sequence, through `R6` scorer
@@ -32,10 +33,10 @@ historical context, not an exhaustive index of current authority.
 > history; it does not override the current closure correction below, and it does not reopen the
 > now-closed `semantic_goal_drift` family without a new failing witness.
 
-> **Closure correction (2026-07-12):** scoped R6 packet landing is not authority that the broad R6
-> scorer-context charter is closed. The live status is **PARTIAL / CLOSURE AUDIT REQUIRED** per
-> `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. R7 documents are design-ready drafts
-> but blocked from implementation until that finding reaches `CLOSED`.
+> **Historical closure correction (2026-07-12; superseded 2026-07-15):** scoped R6 packet landing
+> alone was not authority that the broad R6 scorer-context charter was closed. The later
+> `CTX-R6-17` receipt completed the terminal table and updated the canonical finding to `CLOSED`.
+> This note preserves the earlier boundary; it does not override current `R7-PROMOTE` entry status.
 
 ## Ground Truth Sources
 
@@ -93,9 +94,9 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is now `R6-CLOSE` at entry only; the open work is no longer archetype
-identification, first-cut progress export, `R5.75`, the R6 acceptance-control matrix, or a named
-scorer gap.
+The active follow-on is now `R7-PROMOTE` at entry only; the open work is no longer archetype
+identification, first-cut progress export, `R5.75`, the R6 acceptance-control matrix, a named scorer
+gap, replay closeout, or R6 terminal-disposition reconciliation.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -119,11 +120,12 @@ and exact `CTX-R6-06` each pass `1 / 1`; the R6 family wall and full analyzer `4
 Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` records those results and received fresh
 independent built-in `default` `REVIEW CLEAN`. Current sticky authority remains
 `HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` remains historical evidence
-only. `R6-REPLAY` is complete with no ordinary replay gap open. `R6-CLOSE` is active at entry only;
-its first work is `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh phase
-session. This transition assigns no additional terminal disposition; the existing
-`semantic_goal_drift` **Cutover complete** and `scoring/mod.rs` **Fit-for-purpose exception**
-dispositions remain unchanged, and the transition does not mark the R6 finding `CLOSED`.
+only. `R6-REPLAY` is complete with no ordinary replay gap open. On 2026-07-15, `CTX-R6-17`
+reconfirmed the four exact replay controls at `1 / 1` each, the Manifest E filters at `21 / 21`,
+`58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, the full analyzer with all suites green, and
+`git diff --check`. It assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus
+`truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
+`R6-CLOSE` is complete and R6 is `CLOSED`; `R7-PROMOTE` is active at entry only.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -140,9 +142,9 @@ control.” The current honest sequence is:
    packet transition series `1ff592823` + `7839a7f47` and replay proof/fix series `b1791c1e3` +
    `e6d43eee9` + `61c9d5074` fresh independent `REVIEW CLEAN`, and keep `CTX-R6-06` plus the R6 family
    wall complete with active packet `none`
-7. execute `CTX-R6-17` terminal-disposition and authority reconciliation in fresh `R6-CLOSE`; only
-   then may the R6 finding become `CLOSED`
-8. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
+7. keep completed `CTX-R6-17`, the terminal table, and R6 `CLOSED` authority reconciled
+8. execute the separate docs/status-only `R7-PROMOTE` phase without beginning delegated-session
+   implementation; only after promotion may bounded R7 implementation begin
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -797,10 +799,10 @@ Manifest E family wall passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 1
 `402 / 402`, and diff check. Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh
 independent built-in `default` `REVIEW CLEAN`. Sticky `CTX-R6-06` authority remains
 `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only.
-R6 remains **PARTIAL**: `R6-REPLAY` is complete, active packet is `none`, and `R6-CLOSE` is active
-at entry only with `CTX-R6-17` next in a fresh next-phase session. This transition assigns no
-additional terminal disposition: the existing `semantic_goal_drift` `Cutover complete` disposition
-remains unchanged, and no R7/R8 work starts.
+The 2026-07-15 `CTX-R6-17` receipt completed the terminal table: `dead_end_thrash` and
+`semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and
+`scoring/mod.rs` **Fit-for-purpose exception**. R6 is **CLOSED**, `R6-CLOSE` is complete, and only
+`R7-PROMOTE` is active at entry with no R7 promotion or implementation task started.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -872,9 +874,8 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 ## Immediate Next Action
 
-`R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, and `R5.75` are landed. The scoped R6 packet history is also
-landed, but the broad R6 scorer-context charter is **PARTIAL / CLOSURE AUDIT REQUIRED**. The next
-authority is `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`.
+`R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, `R5.75`, and R6 are landed and closed. The next authority is
+the preserved R7 draft family plus the active `R7-PROMOTE` gate/status surfaces.
 
 The next honest work target is:
 
@@ -896,18 +897,17 @@ The next honest work target is:
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
 - authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`
-- **current action:** keep review-clean implementation/proof commit `6eda87e60`, review-clean packet
-  transition series `1ff592823` + `7839a7f47`, review-clean replay proof/fix series `b1791c1e3` +
-  `e6d43eee9` + `61c9d5074`, and completed `CTX-R6-01`/`02`/`06` replay plus the green R6 family
-  wall. `R6-REPLAY` is complete, active packet is `none`, and `R6-CLOSE` is active at entry only.
-  Execute `CTX-R6-17` in a fresh phase session only after this transition is fresh-review-clean;
-  keep the remaining terminal-disposition reconciliation unstarted and R7 blocked until then
-- close R6 only after every material scoring surface has exactly one terminal disposition —
-  **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
-  outside R6 with justification** — and the broad acceptance wording is proven or narrowed
-  honestly; an ordinary “still open” state cannot pass closure
-- preserve full delegated-session support as design-ready R7 draft work, blocked on an R6 `CLOSED`
-  decision; do not begin R7 implementation or make it absorb ordinary single-session scorer gaps
+- keep review-clean implementation/proof commit `6eda87e60`, review-clean packet transition series
+  `1ff592823` + `7839a7f47`, review-clean replay proof/fix series `b1791c1e3` + `e6d43eee9` +
+  `61c9d5074`, and completed `CTX-R6-01`/`02`/`06` replay plus the green R6 family wall
+- keep completed `CTX-R6-17` and its terminal table: `dead_end_thrash`/`semantic_goal_drift`
+  **Cutover complete**; `truth_grounding_gap`/`wrong_plan_branch`/`scoring/mod.rs`
+  **Fit-for-purpose exception**; no merge/deprecation or deferral route
+- **current action:** execute only `R7-PROMOTE` as a fresh docs/status promotion phase. Its entry gate
+  is satisfied, but the preserved R7 drafts are not implementation-ready and no R7 promotion or
+  implementation task has started
+- preserve full delegated-session support as design-ready R7 draft work until promotion completes;
+  do not begin R7 implementation or make it absorb ordinary single-session scorer gaps
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.

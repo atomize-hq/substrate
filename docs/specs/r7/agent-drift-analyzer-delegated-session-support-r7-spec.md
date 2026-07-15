@@ -3,12 +3,12 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
+Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT IMPLEMENTATION-READY**
 
 ## Assumptions I'm Making
 
-1. The scoped R6 packets are landed, but R6 is **PARTIAL / CLOSURE AUDIT REQUIRED**. R7 does not
-   advance until `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` reaches `CLOSED`.
+1. R6 is **CLOSED**; `R6-CLOSE` and `CTX-R6-17` are complete. This satisfies the `R7-PROMOTE` entry
+   gate but does not itself promote this draft or authorize implementation.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -21,9 +21,10 @@ Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
 6. R8 still owns broad sentinel interpretation consolidation. R7 may add only compatibility and
    compact presentation required to carry the new analyzer semantics end to end.
 
-## Implementation Promotion Gate
+## Implementation Promotion Gate — Entry Satisfied, Promotion Not Executed
 
-This document is design-ready draft work, not implementation authority. Promote it only when:
+This document remains design-ready draft work, not implementation authority. The R6 prerequisites
+for the active `R7-PROMOTE` phase are satisfied:
 
 1. the R6 scorer-by-context applicability audit is complete;
 2. every material scoring surface has exactly one terminal disposition: **Cutover complete**,
@@ -31,10 +32,11 @@ This document is design-ready draft work, not implementation authority. Promote 
    justification**; ordinary “still open” does not qualify;
 3. the broad R6 acceptance claims have behavioral proof or have been narrowed honestly;
 4. the named R6 closure controls are resolved and the R6 finding is `CLOSED`; and
-5. root landing-order authority, the R6 MAP, root SPEC/tasks, and all R7 statuses agree.
+5. root landing-order authority, the R6 MAP, root SPEC/tasks, and all R7 gate/status sections agree.
 
-R7 must extend a stable ordinary single-session baseline; it must not absorb unresolved baseline
-scorer semantics.
+The separate `R7-PROMOTE` phase must still reconcile the preserved draft family to
+implementation-ready before any unchecked R7 implementation task can start. R7 must extend the
+stable ordinary single-session baseline; it must not absorb baseline scorer semantics.
 
 ## Objective
 

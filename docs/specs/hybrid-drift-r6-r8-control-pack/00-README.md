@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-CLOSE — ACTIVE AT ENTRY ONLY; active packet none; R6-REPLAY complete after proof/fix series b1791c1e3 + e6d43eee9 + 61c9d5074 received fresh independent review-clean; CTX-R6-17 terminal-disposition and authority reconciliation next in a fresh phase session`
+**Current work phase:** `R7-PROMOTE — ACTIVE AT ENTRY ONLY; active packet none; R6 CLOSED; R6-CLOSE and CTX-R6-17 complete; R7 promotion entry gate satisfied; preserved R7 drafts remain not implementation-ready; no R7 promotion or implementation task started`
 
-**Last repo-truth verification:** packet transition series `1ff592823` + `7839a7f47` and phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` are fresh independent built-in `default` `REVIEW CLEAN`; phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay gap remains; this transition assigns no additional terminal disposition and does not close the R6 finding. The existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs` **Fit-for-purpose exception** dispositions remain unchanged.
+**Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -38,8 +38,9 @@ wall passed `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`, `truth_gro
 `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, full analyzer `402 / 402`, and diff check.
 `HistoricalOnly / 20`, unflagged remains current sticky authority and `Recovered / 20` historical
 baseline only. The phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh
-independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete and `R6-CLOSE` is active at
-entry only. `CTX-R6-17` is the next work in a fresh phase session. R7/R8 remain blocked as owned.
+independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete. The later 2026-07-15
+`CTX-R6-17` receipt closes R6 and `R6-CLOSE`. `R7-PROMOTE` is active at entry only; R7
+implementation and R8 remain blocked as owned.
 
 ## Purpose
 

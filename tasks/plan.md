@@ -6,9 +6,9 @@ Canonical authority:
 Execution context router:
 `docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md`
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
+Status: **CLOSED**
 
-Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation next in a fresh phase session)**
+Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 is `CLOSED`; `R6-CLOSE` and `CTX-R6-17` are complete; promotion entry gate satisfied; R7 drafts not yet implementation-ready; no R7 task started)**
 
 ## Dependency Order
 
@@ -40,12 +40,14 @@ Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-RE
    `402 / 402`, and diff check was green. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` +
    `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; no ordinary replay gap
    remains.
-9. **ACTIVE AT ENTRY ONLY — R6-CLOSE / CTX-R6-17:** update the finding to `CLOSED` only when every
-   material scoring surface has exactly one terminal disposition — **Cutover complete**,
-   **Fit-for-purpose exception**, **Merged/deprecated**, or
-   **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
-   proven or narrowed honestly. Ordinary “still open” is not a closure disposition.
-10. Only then promote the preserved R7 drafts to implementation-ready.
+9. **COMPLETE — R6-CLOSE / CTX-R6-17:** the 2026-07-15 exact replay controls pass `4 x 1 / 1`, the
+   Manifest E filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, the full
+   analyzer is green across all suites, and `git diff --check` passes. Terminal table:
+   `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`,
+   `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
+10. **ACTIVE AT ENTRY ONLY — R7-PROMOTE:** reconcile the preserved R7 drafts to
+    implementation-ready only inside the separate promotion phase. No promotion or implementation
+    task is started by the R6 closeout.
 
 ## Execution Rules
 
@@ -80,7 +82,7 @@ and exact frozen-corpus controls each pass `1 / 1`. The manifest family wall pas
 authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline
 only. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent
 built-in `default` `REVIEW CLEAN`, so `R6-REPLAY` is complete and no ordinary replay gap remains.
-`R6-CLOSE` is active at entry only with `CTX-R6-17` next in a fresh phase session. This transition
-completes no remaining terminal-disposition reconciliation, does not mark the finding `CLOSED`, and
-authorizes no R7/R8 work. Existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
-**Fit-for-purpose exception** dispositions remain unchanged.
+The 2026-07-15 `CTX-R6-17` receipt reconfirms the four exact replay controls, the five Manifest E
+family filters, full analyzer all-suites green, and `git diff --check`. R6 is `CLOSED` and
+`R6-CLOSE` is complete. `R7-PROMOTE` is active at entry only with packet `none`; the preserved R7
+drafts remain not implementation-ready, and no R7 promotion or implementation task has started.

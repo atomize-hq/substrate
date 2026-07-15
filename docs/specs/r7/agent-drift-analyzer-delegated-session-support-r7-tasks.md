@@ -3,22 +3,19 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: **DRAFT / BLOCKED ON R6 CLOSURE DECISION**
+Status: **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT IMPLEMENTATION-READY**
 
-All unchecked items are inactive until
-`docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` reaches `CLOSED`. The exact gate is:
-the applicability audit is complete; every material scoring surface is assigned exactly one of
-**Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
-outside R6 with justification**; ordinary “still open” is not eligible;
-broad R6 acceptance claims are behaviorally proven or narrowed honestly; named closure controls are
-resolved; and the root/R6/R7 authority stack agrees.
+All unchecked items remain inactive. The R6 closure prerequisites are satisfied, so
+`R7-PROMOTE` is active at entry only; that separate docs/status phase must reconcile this preserved
+draft family to implementation-ready before any unchecked task can start. This R6 closeout checks
+off no R7 promotion or implementation task.
 
 ## R7-0: Docs Lock And Evidence Matrix
 
 - [x] **R7-0.1: Preserve the R7 spec/plan/tasks family as draft design work.**
-  - Acceptance: R6 docs state the `dead_end_thrash` core landed but broad R6 closure remains partial;
-    the R7 map, spec, plan, and tasks define reciprocal direct linkage, separate trajectories, and
-    R8 boundaries without claiming implementation readiness.
+  - Acceptance: historical draft preservation recorded the `dead_end_thrash` core plus reciprocal
+    direct linkage, separate trajectories, and R8 boundaries without claiming implementation
+    readiness. R6 is now closed; the draft remains preserved pending `R7-PROMOTE`.
   - Verify: `rg -n "R6-1|reciprocal|separate trajector|R8" docs/specs/r6/MAP.md docs/specs/r7`
   - Files: `docs/specs/r6/MAP.md`, `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
   - Dependencies: R6 closure finding for any implementation use

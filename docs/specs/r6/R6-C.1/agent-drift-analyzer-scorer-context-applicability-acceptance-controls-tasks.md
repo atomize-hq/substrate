@@ -1,6 +1,6 @@
 # Tasks: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **HANDOFF TRACKING — R6-C.1-CONTROLS AND R6-REPLAY COMPLETE; R6-CLOSE ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; PACKET TRANSITION `1ff592823` + `7839a7f47` AND PHASE-OWNED PROOF/FIX SERIES `b1791c1e3` + `e6d43eee9` + `61c9d5074` FRESH INDEPENDENT REVIEW-CLEAN; CTX-R6-17 NEXT IN A FRESH PHASE SESSION** on 2026-07-14. The
+Status: **HANDOFF TRACKING — R6-C.1-CONTROLS, R6-REPLAY, AND R6-CLOSE COMPLETE; R6 CLOSED; CTX-R6-17 COMPLETE; R7-PROMOTE ACTIVE AT ENTRY ONLY; R7 DRAFTS NOT YET IMPLEMENTATION-READY** on 2026-07-15. The
 specification-lock task, all thirteen synthetic controls, their reviewed family checkpoints, the
 controls wall, and source-only `CTX-R6-16` dispatcher adjudication are complete. The controls wall
 preserved exactly three named reds: `CTX-R6-04`, `CTX-R6-12`, and `CTX-R6-15`, requiring
@@ -23,8 +23,9 @@ Packet transition series `1ff592823` + `7839a7f47` is also fresh independent bui
 filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes
 `402 / 402`; diff check is green. Sticky authority remains `HistoricalOnly / 20`, unflagged; old
 `Recovered / 20` remains historical baseline only. Proof/fix series `b1791c1e3` + `e6d43eee9` +
-`61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete,
-`R6-CLOSE` is active at entry only, and R7/R8 remain blocked as owned.
+`61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY`,
+`R6-CLOSE`, and `CTX-R6-17` are complete. `R7-PROMOTE` is active at entry only; R7 implementation
+and R8 remain blocked as owned.
 
 ## Required Staged Commit Gate
 
@@ -502,7 +503,8 @@ before that reconciled transition is committed and fresh-review-clean.
     independent `REVIEW CLEAN`; packet transition series `1ff592823` + `7839a7f47` is also fresh
     independent `REVIEW CLEAN`; active packet is `none`; phase-owned `CTX-R6-06` and the family wall
     are green, and proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent
-    built-in `default` `REVIEW CLEAN`. `R6-REPLAY` is complete; `R6-CLOSE` is active at entry only.
+    built-in `default` `REVIEW CLEAN`. `R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are complete;
+    `R7-PROMOTE` is active at entry only.
 
 ## R6-C.1.6 — Replay-Owned Controls, Handoff Status
 
@@ -545,8 +547,8 @@ before that reconciled transition is committed and fresh-review-clean.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
   - Boundary: no additional terminal disposition or R7/R8 work is part of this replay receipt.
     Packet transition series `1ff592823` + `7839a7f47` and phase-owned proof/fix series `b1791c1e3` +
-    `e6d43eee9` + `61c9d5074` are fresh-review-clean. `R6-REPLAY` is complete; `R6-CLOSE` is active at
-    entry only.
+    `e6d43eee9` + `61c9d5074` are fresh-review-clean. Historical receipt boundary: `R6-REPLAY` was
+    complete and `R6-CLOSE` remained next; the later `CTX-R6-17` closeout is complete.
 
 - [x] **R6-C.1.6.3 — Execute frozen-corpus preservation (`CTX-R6-06`) in `R6-REPLAY`.**
   - Existing exact test:
@@ -566,7 +568,7 @@ before that reconciled transition is committed and fresh-review-clean.
     `/tmp/r6-ctx06-04-frozen-corpus.log`.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture`.
   - Ownership: this replay-owned control is complete and its proof receipt is fresh-review-clean;
-    terminal-disposition ownership now belongs only to `CTX-R6-17` in `R6-CLOSE`.
+    terminal-disposition ownership later completed through `CTX-R6-17` in `R6-CLOSE`.
 
 - [x] **R6-C.1.6.4 — Run the Manifest E R6 family wall.**
   - Commands ran in manifest order with `CARGO_TARGET_DIR=/tmp/r6-ctx06-target`.
@@ -576,17 +578,16 @@ before that reconciled transition is committed and fresh-review-clean.
     `1 / 1` before the sticky/frozen controls. Logs:
     `/tmp/r6-ctx06-01-advancing.log` through `/tmp/r6-ctx06-11-diff-check.log`.
   - Boundary: the phase proof is complete and proof/fix series `b1791c1e3` + `e6d43eee9` +
-    `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`. `R6-REPLAY` is complete and
-    `R6-CLOSE` is active at entry only. No additional terminal disposition or R7/R8 work is part of
-    this receipt; the existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
-    **Fit-for-purpose exception** dispositions remain unchanged.
+    `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`. Historical receipt boundary:
+    `R6-REPLAY` was complete and `R6-CLOSE` remained next; no terminal disposition or R7/R8 work was
+    part of that receipt. The later `CTX-R6-17` closeout completed the terminal table.
 
 ## Explicit Exclusions
 
 - [ ] `CTX-R6-07` and `CTX-R6-08` remain preserved semantic completion/integrity proof; no
   `semantic_goal_drift` work occurs absent new failing behavior evidence.
 - [ ] No replay-closeout execution occurs in `R6-C.1-SPEC` or `R6-C.1-CONTROLS`.
-- [ ] `CTX-R6-17` remains open for `R6-CLOSE`; the remaining R6 terminal-disposition reconciliation
-  is not claimed complete, and no R6 closure is claimed.
+- [x] `CTX-R6-17` completed the terminal-disposition reconciliation in later `R6-CLOSE`; R6 is
+  `CLOSED`, and only `R7-PROMOTE` is active at entry with no R7 task started.
 - [ ] `CTX-R6-18` historical/superseded labels remain proven and unchanged.
 - [ ] No R7 or R8 task starts or absorbs an R6 baseline gap.

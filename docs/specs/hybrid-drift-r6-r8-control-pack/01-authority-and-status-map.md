@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** packet transition series `1ff592823` + `7839a7f47` and phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` fresh independent built-in `default` `REVIEW CLEAN`; exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each `1 / 1`; Manifest E family filters `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer `402 / 402`; diff check green.
+**Verified against:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; Manifest E family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check green.
 
-**Current phase:** `R6-CLOSE` (**ACTIVE AT ENTRY ONLY**; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation is next in a fresh phase session)
+**Current phase:** `R7-PROMOTE` (**ACTIVE AT ENTRY ONLY**; active packet: `none`; R6 is `CLOSED`; `R6-CLOSE` and `CTX-R6-17` are complete; the R7 promotion entry gate is satisfied; preserved R7 drafts remain not implementation-ready and no promotion/implementation task has started)
 
 ## How To Resolve Truth
 
@@ -23,8 +23,8 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY COMPLETE / R6-CLOSE ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve review-clean packet transition series `1ff592823` + `7839a7f47`, review-clean phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074`, green `CTX-R6-01`/`02`/`06` replay and family wall, current sticky `HistoricalOnly / 20`, unflagged, and historical-only `Recovered / 20` baseline. Execute `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh `R6-CLOSE` phase session. Keep R7/R8 blocked. |
-| R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
+| R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
+| R7 | **DRAFT / R7-PROMOTE ACTIVE AT ENTRY ONLY / R6 CLOSURE GATE SATISFIED / NOT IMPLEMENTATION-READY** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Execute only the separate docs/status promotion phase. Do not begin R7 implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -46,10 +46,10 @@ themselves prove the broader R6 charter closed.
 
 | Surface | Interim audit posture | R6 terminal requirement |
 |---|---|---|
-| `dead_end_thrash` | `CTX-R6-04` proven focused; `R6-GAP-DET-OPAQUE-PARENT` complete after production series through `d13f0a71c` received fresh `REVIEW CLEAN` | TBD at `R6-CLOSE`: **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred outside R6 with justification**. |
+| `dead_end_thrash` | Integrated advancing/stall replay, frozen-corpus invariance, and focused gap/family proof green | **Cutover complete**. |
 | `semantic_goal_drift` | Cutover complete by design | **Cutover complete**. Revisit only if a new failing behavioral witness appears. |
-| `truth_grounding_gap` | `CTX-R6-12` and the bounded cross-checkpoint provenance controls pass; `R6-GAP-TGG-TRUTH-PATH-ACTION` complete after final proof-receipt series `fee9c2b16` + `6674a8316` received fresh `REVIEW CLEAN` | TBD at `R6-CLOSE`: one of the four exact terminal categories. |
-| `wrong_plan_branch` | Historical `CTX-R6-15` red remains preserved at `59f098b35`; implementation/review-fix series `6b42e5476` + `e65df2561` + `cd4e24119` is fresh independent built-in `default` `REVIEW CLEAN`; exact target is `0 / Low / Cleared`, unflagged, empty evidence; `R6-GAP-WPB-EMPTY-AUTHORITY` is complete | TBD at `R6-CLOSE`: one of the four exact terminal categories after replay. |
+| `truth_grounding_gap` | `CTX-R6-12`, cross-checkpoint provenance, applicability controls, and `22 / 22` family proof green | **Fit-for-purpose exception**. |
+| `wrong_plan_branch` | Historical `CTX-R6-15` red preserved at `59f098b35`; review-clean fix makes exact target `0 / Low / Cleared`, unflagged, empty evidence; `6 / 6` family proof green | **Fit-for-purpose exception**. |
 | `scoring/mod.rs` | Dispatcher infrastructure | **Fit-for-purpose exception** as routing infrastructure; not a fifth scorer. |
 
 ## R6-C.0A Remediation Result
@@ -73,15 +73,16 @@ R6, complete the terminal scorer-disposition table, or unblock R7.
 
 ## R7 Authority
 
-R7 remains a preserved draft family:
+R7 remains a preserved draft family while `R7-PROMOTE` is active at entry only:
 
 - `docs/specs/r7/MAP.md`
 - `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 - `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 - `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Promotion requires an R6 `CLOSED` finding and only terminal scorer dispositions. Promotion is a
-docs/status change before implementation begins.
+The R6 `CLOSED` and terminal-disposition entry gate is satisfied. Promotion remains a separate
+docs/status change before implementation begins; this R6 closeout does not make the drafts
+implementation-ready or check off any R7 promotion/implementation task.
 
 ## R8 Authority
 

@@ -6,9 +6,9 @@ Canonical authority:
 Execution context router:
 `docs/specs/hybrid-drift-r6-r8-control-pack/00-README.md`
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
+Status: **CLOSED**
 
-Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation next in a fresh phase session)**
+Current phase: **`R7-PROMOTE` (ACTIVE AT ENTRY ONLY; active packet: `none`; R6 is `CLOSED`; `R6-CLOSE` and `CTX-R6-17` are complete; promotion entry gate satisfied; R7 drafts not yet implementation-ready; no R7 task started)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -85,11 +85,15 @@ Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-RE
 - [x] Land the narrow `R6-REPLAY -> R6-CLOSE` phase transition by this change without starting the
   remaining terminal-disposition reconciliation work. Fresh independent review of the transition is
   required before the next phase session starts.
-- [ ] In `R6-CLOSE`, assign every terminal scorer disposition and update the R6 finding and authority
-  stack to `CLOSED` through `CTX-R6-17`; do not start that work until the narrow phase transition is
-  review-clean.
-- [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.
+- [x] Complete `R6-CLOSE` and `CTX-R6-17`: on 2026-07-15 exact replay controls passed `4 x 1 / 1`,
+  Manifest E filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, full
+  analyzer completed with all suites green, and `git diff --check` passed. Assign
+  `dead_end_thrash`/`semantic_goal_drift` **Cutover complete** and
+  `truth_grounding_gap`/`wrong_plan_branch`/`scoring/mod.rs` **Fit-for-purpose exception**; mark R6
+  `CLOSED`.
+- [ ] In the separate active `R7-PROMOTE` phase, promote the preserved R7 drafts to
+  implementation-ready. This R6 closeout does not check off or begin that task.
 - [ ] Begin bounded direct-child delegated-session support only after promotion.
 
 The R7 task ledger is intentionally preserved under `docs/specs/r7/`, but none of its implementation
-items are active while this ledger remains partial.
+items are active until the separate `R7-PROMOTE` phase completes.

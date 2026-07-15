@@ -2,7 +2,7 @@
 
 Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
 INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION SERIES `1ff592823` + `7839a7f47` FRESH
-INDEPENDENT `REVIEW CLEAN`**; `R6-REPLAY` is now complete and active packet remains `none`. Witness `60cde3dd7` remains
+INDEPENDENT `REVIEW CLEAN`**; `R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are now complete; R6 is `CLOSED`; active packet remains `none`; `R7-PROMOTE` is active at entry only and no R7 task has started. Witness `60cde3dd7` remains
 the historical behavioral-red receipt. The bounded implementation/proof commit `6eda87e60` closes
 `CTX-R6-02`: exact selected control `1 / 1` preserves checkpoint `5`
 `TroubleshootingFrontier / Stalled / Medium` and flagged `Active / 30 / High` while attributing only
@@ -16,10 +16,9 @@ only. This packet transition itself did not run `CTX-R6-06`, the replay family w
 R7/R8. After it became review-clean, later phase-owned replay passed exact controls `4 x 1 / 1`, the
 Manifest E family wall, full analyzer `402 / 402`, and diff check; proof/fix series `b1791c1e3` +
 `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`.
-`R6-REPLAY` is complete, `R6-CLOSE` is active at entry only, active packet is `none`, and
-`CTX-R6-17` is next in a fresh next-phase session. R6 remains **PARTIAL**; this transition assigns
-no additional terminal disposition. The existing `semantic_goal_drift` `Cutover complete`
-disposition remains unchanged, and no R7/R8 work starts.
+`R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are complete; active packet is `none`; R6 is **CLOSED**.
+The 2026-07-15 close receipt assigns the complete terminal table and activates only `R7-PROMOTE` at
+entry. The preserved R7 drafts remain not implementation-ready, and no R7/R8 implementation starts.
 
 ## Objective And Preserved Witness
 
@@ -373,6 +372,5 @@ Authority-only transition series `1ff592823` + `7839a7f47` completes `CTX-R6-02`
 clears the active packet to `none`, returned control to then-active `R6-REPLAY`, and is fresh
 independent built-in `default` `REVIEW CLEAN`. Later phase-owned `CTX-R6-06` replay and the R6
 family wall are green; proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh
-independent built-in `default` `REVIEW CLEAN`. The later narrow phase transition activates
-`R6-CLOSE` at entry only with `CTX-R6-17` next; this packet itself did not activate `R6-CLOSE` or
-start R7/R8.
+independent built-in `default` `REVIEW CLEAN`. The later 2026-07-15 `CTX-R6-17` receipt completes `R6-CLOSE` and closes R6; this packet itself
+did not activate `R6-CLOSE` or start R7/R8.

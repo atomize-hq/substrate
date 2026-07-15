@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS AND R6-REPLAY COMPLETE; R6-CLOSE ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; PACKET TRANSITION `1ff592823` + `7839a7f47` AND PHASE-OWNED PROOF/FIX SERIES `b1791c1e3` + `e6d43eee9` + `61c9d5074` FRESH INDEPENDENT REVIEW-CLEAN; CTX-R6-17 NEXT IN A FRESH PHASE SESSION** on 2026-07-14. Historical `CTX-R6-02` witness `60cde3dd7` remains preserved. Phase-owned exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Sticky `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No additional terminal disposition is assigned by the phase transition; the existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs` **Fit-for-purpose exception** dispositions remain unchanged.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS, R6-REPLAY, AND R6-CLOSE COMPLETE; R6 CLOSED; CTX-R6-17 COMPLETE; R7-PROMOTE ACTIVE AT ENTRY ONLY; R7 DRAFTS NOT YET IMPLEMENTATION-READY** on 2026-07-15. Preserved review-clean proof series remain authoritative; the 2026-07-15 exact replay controls pass `4 x 1 / 1`, Manifest E filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, full analyzer is all-suites green, and diff check is green. The terminal table is `dead_end_thrash`/`semantic_goal_drift` **Cutover complete** and `truth_grounding_gap`/`wrong_plan_branch`/`scoring/mod.rs` **Fit-for-purpose exception**. No R7 task has started.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -341,8 +341,8 @@ cases and one `HistoricalOnly / 20 / unflagged` case. The old `Recovered / 20 / 
 historical clean-baseline evidence only. The complete Manifest E family wall is also green at
 `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 169`, full analyzer `402 / 402`, and diff check.
 Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in
-`default` `REVIEW CLEAN`; `R6-REPLAY` is complete and no ordinary replay gap remains. `R6-CLOSE`
-is active at entry only with `CTX-R6-17` next in a fresh phase session. Fixture-shape mismatches for
+`default` `REVIEW CLEAN`; `R6-REPLAY` is complete and no ordinary replay gap remains. `R6-CLOSE` and
+`CTX-R6-17` are complete; `R7-PROMOTE` is active at entry only with packet `none`. Fixture-shape mismatches for
 `CTX-R6-01`/`02` remain rejected or replaced; they do not create a production gap.
 
 ## Ledger And Status Update Points
@@ -356,7 +356,7 @@ is active at entry only with `CTX-R6-17` next in a fresh phase session. Fixture-
 | Active gap docs gate | First task only: create the three canonical scorer-specific gap docs atomically, commit and fresh-review/fix until clean, then replace subledger `TO CREATE` path markers with the review-clean docs commit. No production or no-code proof yet. |
 | Active gap | After the docs gate only: owning gap docs/code/control row, named-gap subledger entry, and actual proof receipts. If an earlier fix already made its witness green, use the no-code receipt path and cite that causal commit. No other gap and no terminal scorer disposition. |
 | Gap transition | After review-clean gap docs plus a review-clean fix/no-code receipt, apply the full transition manifest; update all three R6-C.1 statuses and named-gap subledger atomically; close only the active gap; activate the next named gap as docs-gate-only or, after the final gap, `R6-REPLAY`. |
-| Replay / close | `CTX-R6-01`/`02`/`06` remain `R6-REPLAY`; terminal scorer disposition remains `R6-CLOSE`. |
+| Replay / close | Historical ownership: `CTX-R6-01`/`02`/`06` belonged to `R6-REPLAY` and terminal disposition belonged to `R6-CLOSE`; both are now complete. |
 
 ## Full R6 Ledger Coverage
 
@@ -369,7 +369,7 @@ is active at entry only with `CTX-R6-17` next in a fresh phase session. Fixture-
 | `CTX-R6-09` through `CTX-R6-13` | Row-atomic `truth_grounding_gap` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-14`, `CTX-R6-15` | Row-atomic `wrong_plan_branch` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-16` | Source-only dispatcher ordering proof; no focused behavior test. |
-| `CTX-R6-17` | Terminal scorer table remains open for `R6-CLOSE`. |
+| `CTX-R6-17` | CLOSED: terminal scorer table complete in `R6-CLOSE`; preserve the R7 promotion boundary. |
 | `CTX-R6-18` | Preserve proven historical/superseded labels. |
 
 ## Exact Planned Test Inventory
