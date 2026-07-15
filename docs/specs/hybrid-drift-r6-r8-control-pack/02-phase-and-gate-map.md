@@ -20,7 +20,7 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R6-C.1-CONTROLS` | COMPLETE | Acceptance controls only | SATISFIED — R6-C.1 docs landed and received fresh `REVIEW CLEAN` at `ea19b39a7` | SATISFIED — all thirteen controls have deterministic results (`10 PASS / 3 preserved RED`) and the controls wall is recorded at `5618f7864`. |
 | [`R6-GAP-*`](05-proof-decision-regression-ledger.md#named-r6-gap-status-subledger) | COMPLETE | One bounded scorer-specific gap phase per proven red | SATISFIED — the named-gap subledger instantiated all three preserved reds sequentially | SATISFIED — every named witness has review-clean focused proof and the final authority transition is landed. |
 | `R6-REPLAY` | COMPLETE | Bounded real-rollout/replay closeout | SATISFIED — controls and all conditional fixes complete; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; active packet `none` | SATISFIED — phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`; exact replay controls pass `4 x 1 / 1`, family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, full analyzer passes `402 / 402`, and diff check is green. Sticky authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay gap remains. |
-| `R6-CLOSE` | COMPLETE | R6 `CLOSED` authority reconciliation | SATISFIED — replay closeout proof receipt is fresh-review-clean and no ordinary gap is open | SATISFIED — `CTX-R6-17` assigns every material surface a terminal disposition and all root/R6/R7 gate/status docs agree. |
+| `R6-CLOSE` | COMPLETE | R6 `CLOSED` authority reconciliation | SATISFIED — replay closeout proof receipt is fresh-review-clean and no ordinary gap is open | SATISFIED — `CTX-R6-17` assigns every material surface a terminal disposition; all root/R6/R7 gate/status docs agree; and transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. |
 | `R7-PROMOTE` | ACTIVE — ENTRY ONLY | Promote preserved R7 drafts to implementation-ready | SATISFIED — R6 finding says `CLOSED`, terminal scorer table is complete, and authority stack agrees | R7 MAP/SPEC/PLAN/TASKS and root mirrors agree that the family is implementation-ready; implementation has not yet started. |
 | `R7-0..R7-6` | BLOCKED | Bounded direct-child delegated-session support | R7 promoted | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
@@ -52,9 +52,10 @@ On 2026-07-15, `CTX-R6-17` reconfirmed the four exact replay controls at `1 / 1`
 family filters at `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, the full analyzer with
 all suites green, and `git diff --check`. It assigns `dead_end_thrash` and `semantic_goal_drift`
 **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs`
-**Fit-for-purpose exception**. `R6-CLOSE` is complete and R6 is `CLOSED`. `R7-PROMOTE` is active at
-entry only with packet `none`; the preserved R7 family remains draft and not implementation-ready,
-and no R7 promotion or implementation task has started.
+**Fit-for-purpose exception**. Transition/review-fix series `13b14d5f1` + `50446e6d6` is fresh
+independent built-in `default` `REVIEW CLEAN` with no actionable findings. `R6-CLOSE` is complete and
+R6 is `CLOSED`. `R7-PROMOTE` is active at entry only with packet `none`; the preserved R7 family
+remains draft and not implementation-ready, and no R7 promotion or implementation task has started.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

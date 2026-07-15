@@ -309,13 +309,15 @@ exact `CTX-R6-06` at `1 / 1` each; Manifest E family filters at `21 / 21`, `58 /
 `6 / 6`, and `169 / 169`; full analyzer with all suites green; and `git diff --check` green. The
 terminal table is `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**;
 `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
+R6-close transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent built-in
+`default` `REVIEW CLEAN` with no actionable findings.
 
 `R7-PROMOTE` is active at entry only because the R6 closure gate is satisfied. The preserved R7
 MAP/SPEC/PLAN/TASKS remain draft and not implementation-ready; this closeout checks off no R7
 promotion or implementation task and starts no R7/R8 implementation.
 
-Next eligible Prompt 1 invocation, after the R6-close transition itself is committed and fresh-review-clean:
-use Prompt 1 above unchanged with these filled phase selectors:
+The R6-close transition is committed and fresh-review-clean. The next eligible Prompt 1 invocation
+uses Prompt 1 above unchanged with these filled phase selectors:
 
 ```text
 PHASE_ID: R7-PROMOTE
