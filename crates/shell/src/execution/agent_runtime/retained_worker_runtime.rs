@@ -20,6 +20,10 @@ use substrate_common::agent_events::{
     AgentEvent, AgentEventKind, RuntimeEventIdentityV1, RuntimeFrameIdentityV1,
     RuntimeTerminalIdentityV1,
 };
+use transport_api_types::{
+    RetainedWorkerAdmissionCommitmentCarrierV1, RetainedWorkerAuthorityObjectCommitmentV1,
+    RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerLaunchWorldBindingV1,
+};
 
 use super::host_session_authority::canonical_json;
 #[cfg(test)]
@@ -394,6 +398,10 @@ enum AdmissionRuntimeTruthInputV1<'a> {
         terminal_identity: &'a RuntimeTerminalIdentityV1,
         exit_code: i32,
         terminal_at: TimestampV1,
+    },
+    Interrupted {
+        last_frame_identity: Option<&'a RuntimeFrameIdentityV1>,
+        interrupted_at: TimestampV1,
     },
 }
 
@@ -1698,6 +1706,96 @@ impl RetainedWorkerRuntime {
         result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
     }
 
+    pub(crate) fn launch_authority_proof_for_claim(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        claim: &RetainedWorkerTransportClaimV1,
+    ) -> Result<RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerRuntimeError> {
+        let durable = self
+            .read_admission_record(
+                authority,
+                &claim.record.orchestration_session_id,
+                &claim.record.retained_participant_id,
+            )?
+            .ok_or_else(|| {
+                RetainedWorkerRuntimeError("transport claim admission record is absent".into())
+            })?;
+        if durable != claim.record {
+            return Err(RetainedWorkerRuntimeError(
+                "transport claim is not the exact durable admission record".into(),
+            ));
+        }
+        let RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal {
+            registration,
+            transport_claim_id,
+            ..
+        } = &durable.state
+        else {
+            return Err(RetainedWorkerRuntimeError(
+                "launch proof requires the exact durable transport claim".into(),
+            ));
+        };
+        self.validate_admitted_record_graph(authority, plan, &durable)?;
+        let graph = self.resolve_admitted_record_graph(authority, &durable)?;
+        if registration.registration_id != graph.result.registration_id
+            || registration.retained_worker_ref != graph.result.retained_worker_ref
+            || durable.issuer_request_id != plan.issuer_request_id
+            || durable.orchestration_session_id != plan.spawn_request.orchestration_session_id
+            || durable.retained_participant_id != graph.result.retained_participant_id
+            || durable.backend_id != plan.descriptor_and_runtime_plan.descriptor.backend_id
+            || durable.protocol != plan.descriptor_and_runtime_plan.descriptor.protocol
+            || durable.world_binding.world_id != plan.spawn_request.world_id
+            || durable.world_binding.world_generation != plan.spawn_request.world_generation
+            || durable.current_policy_ref != plan.policy_and_admission_cap.current_policy_ref
+            || durable.current_policy_revision
+                != plan.policy_and_admission_cap.current_policy.policy_revision
+        {
+            return Err(RetainedWorkerRuntimeError(
+                "launch proof inputs conflict with the exact admission/R0 graph".into(),
+            ));
+        }
+
+        let proof = RetainedWorkerLaunchAuthorityProofV1 {
+            schema_version: 1,
+            authority_store_id: durable.authority_store_id.clone(),
+            issuer_request_id: durable.issuer_request_id.clone(),
+            canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+                schema_version: durable.canonical_spawn_fingerprint.schema_version,
+                algorithm: "hmac-sha-256".to_string(),
+                key_id: durable.canonical_spawn_fingerprint.key_id.clone(),
+                digest_hex: durable.canonical_spawn_fingerprint.digest_hex.clone(),
+            },
+            registration_id: graph.result.registration_id.clone(),
+            registration_commitment: project_launch_commitment(
+                &graph.result.registration_commitment,
+            ),
+            authority_revision_after: graph.result.authority_revision_after,
+            authority_record_commitment_after: project_launch_commitment(
+                &graph.result.authority_record_commitment_after,
+            ),
+            orchestration_session_id: durable.orchestration_session_id.clone(),
+            caller_participant_id: plan.spawn_request.caller_participant_id.clone(),
+            retained_participant_id: durable.retained_participant_id.clone(),
+            bootstrap_run_id: durable.bootstrap_run_id.clone(),
+            transport_claim_id: transport_claim_id.clone(),
+            backend_id: durable.backend_id.clone(),
+            protocol: durable.protocol.clone(),
+            world_binding: RetainedWorkerLaunchWorldBindingV1 {
+                world_id: durable.world_binding.world_id.clone(),
+                world_generation: durable.world_binding.world_generation,
+            },
+            current_policy_ref_id: durable.current_policy_ref.ref_id.clone(),
+            current_policy_revision: durable.current_policy_revision.clone(),
+            retained_worker_ref_id: graph.result.retained_worker_ref.ref_id.clone(),
+            retained_worker_commitment: project_launch_commitment(
+                &graph.result.retained_worker_ref.commitment,
+            ),
+        };
+        proof.validate().map_err(RetainedWorkerRuntimeError)?;
+        Ok(proof)
+    }
+
     pub(crate) fn mark_admission_routable(
         &self,
         authority: &HostSessionAuthority,
@@ -1741,6 +1839,25 @@ impl RetainedWorkerRuntime {
                 terminal_identity,
                 exit_code,
                 terminal_at,
+            },
+        )
+    }
+
+    pub(crate) fn mark_admission_interrupted(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        last_frame_identity: Option<&RuntimeFrameIdentityV1>,
+        interrupted_at: TimestampV1,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        self.publish_admission_runtime_truth(
+            authority,
+            plan,
+            retained_participant_id,
+            &AdmissionRuntimeTruthInputV1::Interrupted {
+                last_frame_identity,
+                interrupted_at,
             },
         )
     }
@@ -2801,12 +2918,10 @@ fn advance_admission_runtime_truth_in_registry(
                     "Registered runtime truth requires exact event identity".into(),
                 )
             })?;
+            // `AgentEvent.agent_id` identifies the execute-envelope telemetry producer on this
+            // route, not the selected retained-worker descriptor. The descriptor and runtime plan
+            // were already exact-joined by the admission fingerprint, R0 graph, and launch proof.
             if event.kind != AgentEventKind::Registered
-                || event.agent_id
-                    != supplied_plan
-                        .descriptor_and_runtime_plan
-                        .descriptor
-                        .agent_id
                 || event.orchestration_session_id != record.orchestration_session_id
                 || event.run_id != record.bootstrap_run_id
                 || event.participant_id.as_deref() != Some(record.retained_participant_id.as_str())
@@ -2927,6 +3042,53 @@ fn advance_admission_runtime_truth_in_registry(
                 terminal_at: terminal_at.clone(),
             }
         }
+        AdmissionRuntimeTruthInputV1::Interrupted {
+            last_frame_identity,
+            interrupted_at,
+        } => {
+            if let Some(frame_identity) = last_frame_identity {
+                frame_identity
+                    .validate()
+                    .map_err(RetainedWorkerRuntimeError)?;
+            }
+            let next_stream_id = last_frame_identity.map(|identity| identity.stream_id.clone());
+            let next_frame_sequence = last_frame_identity.map(|identity| identity.frame_sequence);
+            match &record.state {
+                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. } => {}
+                RetainedWorkerAdmissionStateV1::Routable {
+                    stream_id,
+                    registered_frame_sequence,
+                    ..
+                } if next_stream_id
+                    .as_ref()
+                    .is_none_or(|observed| observed == stream_id)
+                    && next_frame_sequence
+                        .is_none_or(|observed| observed >= *registered_frame_sequence) => {}
+                RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                    stream_id,
+                    last_frame_sequence,
+                    ..
+                } if stream_id == &next_stream_id
+                    && last_frame_sequence == &next_frame_sequence =>
+                {
+                    return Ok((record, false));
+                }
+                RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+                    return Ok((record, false));
+                }
+                _ => {
+                    return Err(RetainedWorkerRuntimeError(
+                        "interrupted runtime truth conflicts with durable admission state".into(),
+                    ));
+                }
+            }
+            RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                registration,
+                stream_id: next_stream_id,
+                last_frame_sequence: next_frame_sequence,
+                interrupted_at: interrupted_at.clone(),
+            }
+        }
     };
     record.state = next_state;
     record.record_revision = record
@@ -3026,6 +3188,27 @@ fn canonical_registration_commitment(
     Ok(AuthorityObjectCommitmentV1::CanonicalSha256 {
         digest_hex: lower_hex(&Sha256::digest(canonical)),
     })
+}
+
+fn project_launch_commitment(
+    commitment: &AuthorityObjectCommitmentV1,
+) -> RetainedWorkerAuthorityObjectCommitmentV1 {
+    match commitment {
+        AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => {
+            RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: digest_hex.clone(),
+            }
+        }
+        AuthorityObjectCommitmentV1::StoreHmacSha256 {
+            key_id,
+            domain,
+            digest_hex,
+        } => RetainedWorkerAuthorityObjectCommitmentV1::StoreHmacSha256 {
+            key_id: key_id.clone(),
+            domain: domain.clone(),
+            digest_hex: digest_hex.clone(),
+        },
+    }
 }
 
 fn validate_registration_result(
@@ -6817,6 +7000,131 @@ mod tests {
             event_sequence: 1,
         });
         (frame, event)
+    }
+
+    #[test]
+    fn registered_truth_uses_exact_member_identity_not_ambient_telemetry_producer() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "registered-telemetry-producer", "prompt", 2);
+        runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let claim = runtime
+            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id)
+            .unwrap();
+        let (frame, mut registered) =
+            registered_runtime_truth(&plan, &claim.record, "stream-ambient-producer");
+        registered.agent_id = "ambient-shell-telemetry-producer".to_string();
+
+        let routable = runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &frame,
+                &registered,
+                timestamp("2026-07-15T21:00:00.000000000Z"),
+            )
+            .unwrap();
+        assert!(matches!(
+            routable.state,
+            RetainedWorkerAdmissionStateV1::Routable { .. }
+        ));
+
+        let mut inexact_member = registered;
+        inexact_member.orchestration_session_id.push_str("-changed");
+        assert!(runtime
+            .mark_admission_routable(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &frame,
+                &inexact_member,
+                timestamp("2026-07-15T21:00:00.000000000Z"),
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn interrupted_nonterminal_remains_live_until_exact_terminal_truth() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "interrupted-live", "prompt", 1);
+        runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let claim = runtime
+            .claim_admission_transport(&authority, &plan, &admitted.record.retained_participant_id)
+            .unwrap();
+        let last_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "stream-interrupted-live".to_string(),
+            frame_sequence: 4,
+        };
+        let interrupted = runtime
+            .mark_admission_interrupted(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                Some(&last_frame),
+                timestamp("2026-07-15T21:10:00.000000000Z"),
+            )
+            .unwrap();
+        assert!(matches!(
+            interrupted.state,
+            RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                ref stream_id,
+                last_frame_sequence: Some(4),
+                ..
+            } if stream_id.as_deref() == Some("stream-interrupted-live")
+        ));
+        let joined = runtime
+            .mark_admission_interrupted(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                Some(&last_frame),
+                timestamp("2026-07-15T21:11:00.000000000Z"),
+            )
+            .unwrap();
+        assert_eq!(
+            joined, interrupted,
+            "repeated interruption is an exact no-op"
+        );
+
+        let blocked = admission_plan(&authority, "interrupted-blocked", "next", 1);
+        assert!(runtime
+            .reserve_admission_slot(&authority, &blocked)
+            .is_err());
+
+        let terminal_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: last_frame.stream_id,
+            frame_sequence: 5,
+        };
+        let terminal_event = RuntimeEventIdentityV1 {
+            event_id: "event-interrupted-terminal".to_string(),
+            event_sequence: 1,
+        };
+        let terminal_identity = RuntimeTerminalIdentityV1::from(&terminal_event);
+        let terminal = runtime
+            .mark_admission_terminal(
+                &authority,
+                &plan,
+                &claim.record.retained_participant_id,
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                143,
+                timestamp("2026-07-15T21:12:00.000000000Z"),
+            )
+            .unwrap();
+        assert!(matches!(
+            terminal.state,
+            RetainedWorkerAdmissionStateV1::Terminal { exit_code: 143, .. }
+        ));
+        runtime
+            .reserve_admission_slot(&authority, &blocked)
+            .unwrap();
     }
 
     #[test]

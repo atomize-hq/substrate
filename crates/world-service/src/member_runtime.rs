@@ -126,6 +126,7 @@ impl MemberRuntimeManager {
         binding: SharedWorldBindingSnapshot,
         placement: LinuxWorldPlacementContext,
     ) -> Result<Response> {
+        validate_retained_worker_launch_authority_proof(&dispatch, &binding)?;
         let actual_binary = validate_member_runtime_binary(&dispatch)?;
         let PreparedMemberRuntimeLauncher {
             launcher_path,
@@ -648,6 +649,50 @@ impl MemberRuntimeManager {
             None => Err(missing_retained_slot_error(&retained_key).into()),
         }
     }
+}
+
+fn validate_retained_worker_launch_authority_proof(
+    dispatch: &MemberDispatchRequestV1,
+    binding: &SharedWorldBindingSnapshot,
+) -> Result<()> {
+    let managed_identity =
+        dispatch.participant_id.starts_with("rwp_") || dispatch.run_id.starts_with("rwr_");
+    let Some(proof) = dispatch.retained_worker_launch_authority.as_ref() else {
+        if managed_identity {
+            return Err(crate::service::BadRequestError::new(
+                "authority-managed retained member dispatch requires retained_worker_launch_authority"
+                    .to_string(),
+            )
+            .into());
+        }
+        return Ok(());
+    };
+    proof.validate().map_err(|error| {
+        crate::service::BadRequestError::new(format!(
+            "invalid retained_worker_launch_authority: {error}"
+        ))
+    })?;
+    if proof.orchestration_session_id != dispatch.orchestration_session_id
+        || proof.orchestration_session_id != binding.orchestration_session_id
+        || proof.retained_participant_id != dispatch.participant_id
+        || proof.caller_participant_id != dispatch.orchestrator_participant_id
+        || proof.backend_id != dispatch.backend_id
+        || proof.protocol != dispatch.protocol
+        || proof.bootstrap_run_id != dispatch.run_id
+        || proof.world_binding.world_id != dispatch.world_id
+        || proof.world_binding.world_id != binding.world_id
+        || proof.world_binding.world_generation != dispatch.world_generation
+        || proof.world_binding.world_generation != binding.world_generation
+        || dispatch.parent_participant_id.is_some()
+        || dispatch.resumed_from_participant_id.is_some()
+    {
+        return Err(crate::service::BadRequestError::new(
+            "retained_worker_launch_authority conflicts with member dispatch or exact world binding"
+                .to_string(),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn validate_member_runtime_binary(
@@ -1722,6 +1767,210 @@ fn should_preserve_retained_member_after_clean_bootstrap(
 mod tests {
     use super::*;
     use std::fs;
+
+    fn sample_authority_managed_dispatch() -> MemberDispatchRequestV1 {
+        use transport_api_types::{
+            ResolvedMemberRuntimeDescriptorV1, RetainedWorkerAdmissionCommitmentCarrierV1,
+            RetainedWorkerAuthorityObjectCommitmentV1, RetainedWorkerLaunchAuthorityProofV1,
+            RetainedWorkerLaunchWorldBindingV1,
+        };
+        let commitment = |value: char| RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: value.to_string().repeat(64),
+        };
+        MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "rwp_member".to_string(),
+            orchestrator_participant_id: "ash_orchestrator".to_string(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            run_id: "rwr_bootstrap".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 7,
+            initial_prompt: Some("start".to_string()),
+            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/bin/true".to_string(),
+            },
+            retained_worker_launch_authority: Some(RetainedWorkerLaunchAuthorityProofV1 {
+                schema_version: 1,
+                authority_store_id: "has_fixture".to_string(),
+                issuer_request_id: "req_fixture".to_string(),
+                canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+                    schema_version: 1,
+                    algorithm: "hmac-sha-256".to_string(),
+                    key_id: "adk_fixture".to_string(),
+                    digest_hex: "a".repeat(64),
+                },
+                registration_id: "rwr_registration".to_string(),
+                registration_commitment: commitment('b'),
+                authority_revision_after: 2,
+                authority_record_commitment_after: commitment('c'),
+                orchestration_session_id: "orch_123".to_string(),
+                caller_participant_id: "ash_orchestrator".to_string(),
+                retained_participant_id: "rwp_member".to_string(),
+                bootstrap_run_id: "rwr_bootstrap".to_string(),
+                transport_claim_id: "rtc_claim".to_string(),
+                backend_id: "cli:codex".to_string(),
+                protocol: "substrate.agent.session".to_string(),
+                world_binding: RetainedWorkerLaunchWorldBindingV1 {
+                    world_id: "world_123".to_string(),
+                    world_generation: 7,
+                },
+                current_policy_ref_id: "ao_policy".to_string(),
+                current_policy_revision: "policy-1".to_string(),
+                retained_worker_ref_id: "ao_worker".to_string(),
+                retained_worker_commitment: commitment('d'),
+            }),
+        }
+    }
+
+    #[test]
+    fn retained_launch_authority_requires_exact_dispatch_and_world_binding() {
+        let binding = sample_world_binding();
+        let request = sample_authority_managed_dispatch();
+        validate_retained_worker_launch_authority_proof(&request, &binding).expect("exact proof");
+
+        let mut missing = request.clone();
+        missing.retained_worker_launch_authority = None;
+        let error = validate_retained_worker_launch_authority_proof(&missing, &binding)
+            .expect_err("managed identity must require proof");
+        assert!(error
+            .to_string()
+            .contains("requires retained_worker_launch_authority"));
+
+        let mut legacy = request.clone();
+        legacy.participant_id = "ash_pre_activation_member".to_string();
+        legacy.run_id = "run_pre_activation_bootstrap".to_string();
+        legacy.retained_worker_launch_authority = None;
+        validate_retained_worker_launch_authority_proof(&legacy, &binding)
+            .expect("explicit pre-activation compatibility identity may omit proof");
+
+        for changed in [
+            "session",
+            "participant",
+            "caller",
+            "backend",
+            "protocol",
+            "run",
+            "world",
+            "generation",
+        ] {
+            let mut conflict = request.clone();
+            match changed {
+                "session" => conflict.orchestration_session_id.push_str("-changed"),
+                "participant" => conflict.participant_id.push_str("-changed"),
+                "caller" => conflict.orchestrator_participant_id.push_str("-changed"),
+                "backend" => conflict.backend_id.push_str("-changed"),
+                "protocol" => conflict.protocol.push_str("-changed"),
+                "run" => conflict.run_id.push_str("-changed"),
+                "world" => conflict.world_id.push_str("-changed"),
+                "generation" => conflict.world_generation += 1,
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_retained_worker_launch_authority_proof(&conflict, &binding).is_err(),
+                "{changed} mismatch must fail closed"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn authority_managed_launch_rejects_missing_malformed_or_mismatched_proof_before_binary()
+    {
+        let temp = tempfile::tempdir().expect("member launch placement");
+        let placement = LinuxWorldPlacementContext {
+            working_dir: temp.path().to_path_buf(),
+            cgroup_path: temp.path().join("unused-cgroup"),
+            require_cgroup_attach: false,
+        };
+        let binding = sample_world_binding();
+
+        let mut missing = sample_authority_managed_dispatch();
+        missing.resolved_runtime.binary_path =
+            temp.path().join("missing-runtime").display().to_string();
+        missing.retained_worker_launch_authority = None;
+        let missing_error = match MemberRuntimeManager::new()
+            .launch(
+                "ambient-shell".to_string(),
+                HashMap::new(),
+                "spn_missing_proof".to_string(),
+                missing,
+                binding.clone(),
+                placement.clone(),
+            )
+            .await
+        {
+            Ok(_) => panic!("missing authority-managed proof must fail before launch"),
+            Err(error) => error,
+        };
+        assert!(
+            missing_error
+                .to_string()
+                .contains("requires retained_worker_launch_authority"),
+            "missing proof must win over missing binary: {missing_error:#}"
+        );
+
+        let mut malformed = sample_authority_managed_dispatch();
+        malformed.resolved_runtime.binary_path =
+            temp.path().join("missing-runtime").display().to_string();
+        malformed
+            .retained_worker_launch_authority
+            .as_mut()
+            .expect("fixture proof")
+            .schema_version = 2;
+        let malformed_error = match MemberRuntimeManager::new()
+            .launch(
+                "ambient-shell".to_string(),
+                HashMap::new(),
+                "spn_malformed_proof".to_string(),
+                malformed,
+                binding.clone(),
+                placement.clone(),
+            )
+            .await
+        {
+            Ok(_) => panic!("malformed authority-managed proof must fail before launch"),
+            Err(error) => error,
+        };
+        assert!(
+            malformed_error
+                .to_string()
+                .contains("unsupported retained_worker_launch_authority.schema_version"),
+            "malformed proof must win over missing binary: {malformed_error:#}"
+        );
+
+        let mut mismatched = sample_authority_managed_dispatch();
+        mismatched.resolved_runtime.binary_path =
+            temp.path().join("missing-runtime").display().to_string();
+        mismatched
+            .retained_worker_launch_authority
+            .as_mut()
+            .expect("fixture proof")
+            .backend_id = "cli:other".to_string();
+        let mismatched_error = match MemberRuntimeManager::new()
+            .launch(
+                "ambient-shell".to_string(),
+                HashMap::new(),
+                "spn_mismatched_proof".to_string(),
+                mismatched,
+                binding,
+                placement,
+            )
+            .await
+        {
+            Ok(_) => panic!("mismatched authority-managed proof must fail before launch"),
+            Err(error) => error,
+        };
+        assert!(
+            mismatched_error
+                .to_string()
+                .contains("conflicts with member dispatch or exact world binding"),
+            "mismatched proof must win over missing binary: {mismatched_error:#}"
+        );
+    }
 
     fn sample_submit_turn_request() -> MemberTurnSubmitRequestV1 {
         MemberTurnSubmitRequestV1 {

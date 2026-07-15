@@ -23,7 +23,7 @@ use transport_api_client::AgentClient;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use transport_api_types::{
     ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
-    MemberTurnSubmitRequestV1,
+    MemberTurnSubmitRequestV1, RetainedWorkerLaunchAuthorityProofV1,
 };
 use uuid::Uuid;
 
@@ -67,7 +67,7 @@ use crate::execution::agent_runtime::host_session_authority::schema::{
     HostAttachCapabilitiesV1, HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1,
     HostAttachModePreferenceV1, HostSessionAuthorityPreconditionV1,
     HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
-    PolicyObjectHashInputV1, RuntimeBackendKindV1, WorkspaceBindingV1, WorldBindingV1,
+    PolicyObjectHashInputV1, RuntimeBackendKindV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
 use crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentStateV2;
 use crate::execution::agent_runtime::host_session_authority::transition::{
@@ -82,6 +82,10 @@ use crate::execution::agent_runtime::host_session_authority::{
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::retained_worker_runtime::{
+    RetainedWorkerAdmissionPlanV1, RetainedWorkerRuntime,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::session::AgentRuntimeForkParticipantInit;
@@ -128,10 +132,14 @@ use crate::execution::get_terminal_size;
 #[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::dispatch_run_world_task_request_with_started_task_run_id_tx;
 #[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::prepare_authority_bound_spawn_world_worker;
+#[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::prepare_fork_world_worker_bootstrap;
+#[cfg(target_os = "macos")]
+use crate::execution::orchestrator_world_dispatch::prepare_spawn_world_worker_bootstrap;
 use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
-    prepare_spawn_world_worker_bootstrap,
+    PreparedSpawnWorldWorkerBootstrap,
 };
 use crate::execution::prompt_fulfillment::{
     PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
@@ -1803,6 +1811,9 @@ struct PreparedAgentRuntime {
     startup_context: RuntimeOrchestrationContext,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     run_id: String,
+    retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
+    #[cfg(target_os = "linux")]
+    retained_worker_admission: Option<(HostSessionAuthority, RetainedWorkerAdmissionPlanV1)>,
     startup_extensions: BTreeMap<String, serde_json::Value>,
 }
 
@@ -3031,6 +3042,9 @@ fn apply_greenfield_host_start_from_authority(
         },
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
+        retained_worker_launch_authority: None,
+        #[cfg(target_os = "linux")]
+        retained_worker_admission: None,
         startup_extensions: BTreeMap::new(),
     })
 }
@@ -3377,6 +3391,9 @@ fn prepare_hidden_owner_helper_runtime(
         },
         manifest: Arc::new(Mutex::new(manifest)),
         run_id: plan.participant.run_id.clone(),
+        retained_worker_launch_authority: None,
+        #[cfg(target_os = "linux")]
+        retained_worker_admission: None,
         startup_extensions: owner_helper_startup_extensions(plan)?,
     })
 }
@@ -4213,6 +4230,9 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         startup_context,
         manifest,
         run_id,
+        retained_worker_launch_authority: _retained_worker_launch_authority,
+        #[cfg(target_os = "linux")]
+            retained_worker_admission: _retained_worker_admission,
         startup_extensions,
     } = prepared;
     let runtime_role = {
@@ -7145,7 +7165,83 @@ async fn handle_internal_toolbox_world_dispatch_request(
                 dispatch_orchestrator_world_request(&startup_context.store, request).await?;
             Ok(outcome)
         }
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        WorldDispatchActionV1::SpawnWorldWorker => {
+            let spawn = prepare_authority_bound_spawn_world_worker(request.validate()?)?;
+            let prompt = match &spawn.request.payload {
+                WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) => {
+                    prompt.clone()
+                }
+                _ => anyhow::bail!(
+                    "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+                ),
+            };
+            let request_id = spawn.request.request_id.clone();
+            let mode = spawn.request.mode;
+            let prepared_runtime =
+                prepare_member_runtime_startup_from_authority_registration(startup_context, spawn)
+                    .map_err(|failure| anyhow::anyhow!(failure.message))?;
+            let runtime = start_remote_member_runtime_with_prepared(
+                Some(prepared_runtime),
+                Some(prompt),
+                agent_printer,
+                telemetry,
+            )
+            .await
+            .map_err(|failure| anyhow::anyhow!(failure.message))?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: spawn_world_worker did not return a retained runtime"
+                )
+            })?;
+            let manifest = runtime_manifest_snapshot(&runtime);
+            let launch_span_id = runtime_launch_span_id(&runtime).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: spawn_world_worker did not retain a launch span"
+                )
+            })?;
+            let target_backend_id = runtime_backend_id(&runtime);
+            let participant_id = manifest.handle.participant_id.clone();
+            let world_id = manifest.handle.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!("retained_bootstrap_failed: retained member omitted world_id")
+            })?;
+            let world_generation = manifest.handle.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "retained_bootstrap_failed: retained member omitted world_generation"
+                )
+            })?;
+            let orchestrator_participant_id = manifest
+                .handle
+                .orchestrator_participant_id
+                .clone()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "retained_bootstrap_failed: retained member omitted orchestrator_participant_id"
+                    )
+                })?;
+            let summary = format!(
+                "spawn_world_worker launched retained worker {} on backend {}; launch receipt is authoritative but ongoing steering remains out of scope for this packet",
+                participant_id, target_backend_id
+            );
+            let outcome = WorldDispatchOutcomeV1::SpawnWorldWorker(SpawnWorldWorkerOutcomeV1 {
+                request_id,
+                orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode,
+                participant_id,
+                orchestrator_participant_id,
+                parent_participant_id: manifest.handle.parent_participant_id.clone(),
+                resumed_from_participant_id: manifest.handle.resumed_from_participant_id.clone(),
+                target_backend_id,
+                world_id,
+                world_generation,
+                launch_span_id,
+                summary,
+            });
+            member_runtimes.insert(retained_member_runtime_storage_key(&runtime), runtime);
+            Ok(outcome)
+        }
+        #[cfg(target_os = "macos")]
         WorldDispatchActionV1::SpawnWorldWorker => {
             let prepared = prepare_orchestrator_world_dispatch(&startup_context.store, request)?;
             let spawn = prepare_spawn_world_worker_bootstrap(prepared)?;
@@ -7582,6 +7678,9 @@ fn prepare_fork_child_runtime_startup_for_descriptor(
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
+        retained_worker_launch_authority: None,
+        #[cfg(target_os = "linux")]
+        retained_worker_admission: None,
         startup_extensions: BTreeMap::new(),
     })
 }
@@ -7656,6 +7755,147 @@ fn prepare_member_runtime_startup_for_descriptor(
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
+        retained_worker_launch_authority: None,
+        #[cfg(target_os = "linux")]
+        retained_worker_admission: None,
+        startup_extensions: BTreeMap::new(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn validate_remote_retained_start_authority_proof(
+    authority: &HostSessionAuthority,
+    admission_plan: &RetainedWorkerAdmissionPlanV1,
+    proof: &RetainedWorkerLaunchAuthorityProofV1,
+) -> std::result::Result<(), RuntimeBootstrapFailure> {
+    proof
+        .validate()
+        .map_err(|message| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("invalid retained-worker launch authority proof: {message}"),
+        })?;
+    let runtime = RetainedWorkerRuntime;
+    let registration = runtime
+        .register_admitted_worker(authority, admission_plan)
+        .map_err(|error| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "retained-worker launch authority no longer exact-joins R0 admission: {error}"
+            ),
+        })?;
+    let claim = runtime
+        .claim_admission_transport(
+            authority,
+            admission_plan,
+            &registration.record.retained_participant_id,
+        )
+        .map_err(|error| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "retained-worker launch authority no longer exact-joins transport claim: {error}"
+            ),
+        })?;
+    let expected = runtime
+        .launch_authority_proof_for_claim(authority, admission_plan, &claim)
+        .map_err(|error| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "retained-worker launch authority cannot be reprojected from durable truth: {error}"
+            ),
+        })?;
+    if expected != *proof {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message:
+                "retained-worker launch authority proof conflicts with durable R0/admission truth"
+                    .to_string(),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_member_runtime_startup_from_authority_registration(
+    startup_context: &RuntimeOrchestrationContext,
+    spawn: PreparedSpawnWorldWorkerBootstrap,
+) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
+    let request = spawn.request;
+    let descriptor = spawn.descriptor;
+    let authority = spawn.authority;
+    let admission_plan = spawn.admission_plan;
+    let proof = spawn.launch_authority_proof;
+    ensure_member_backend_allowed(startup_context, &descriptor)?;
+
+    let RuntimeAuthorityContext::Bound(current) = &startup_context.authority else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message:
+                "retained-worker authority-managed Spawn requires bound host-session authority"
+                    .to_string(),
+        });
+    };
+    let canonical_descriptor = &admission_plan.descriptor_and_runtime_plan.descriptor;
+    let expected_backend_kind = match descriptor.backend_kind {
+        AgentRuntimeBackendKind::Codex => RuntimeBackendKindV1::Codex,
+        AgentRuntimeBackendKind::ClaudeCode => RuntimeBackendKindV1::ClaudeCode,
+    };
+    if startup_context.orchestration_session_id() != request.orchestration_session_id
+        || current.observation.authority_store_id
+            != admission_plan.exact_authority.authority_store_id
+        || current.observation.orchestration_session_id
+            != admission_plan.exact_authority.orchestration_session_id
+        || current.caller.participant_id != request.caller_participant_id
+        || canonical_descriptor.agent_id != descriptor.agent_id
+        || canonical_descriptor.backend_id != descriptor.backend_id
+        || canonical_descriptor.backend_kind != expected_backend_kind
+        || canonical_descriptor.protocol != descriptor.protocol
+        || canonical_descriptor.execution_scope != AgentExecutionScopeV1::World
+        || canonical_descriptor.binary_path != descriptor.binary_path.display().to_string()
+        || proof.orchestration_session_id != request.orchestration_session_id
+        || proof.caller_participant_id != request.caller_participant_id
+        || proof.backend_id != request.target_backend_id
+        || proof.world_binding.world_id != request.world_id
+        || proof.world_binding.world_generation != request.world_generation
+    {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "retained-worker authority-managed Spawn conflicts with exact session, caller, descriptor, or world truth"
+                .to_string(),
+        });
+    }
+    validate_remote_retained_start_authority_proof(&authority, &admission_plan, &proof)?;
+
+    let world = AgentRuntimeParticipantWorldBinding {
+        world_id: proof.world_binding.world_id.clone(),
+        world_generation: proof.world_binding.world_generation,
+    };
+    let mut manifest = AgentRuntimeSessionManifest::new_member_participant(
+        &descriptor,
+        proof.orchestration_session_id.clone(),
+        proof.retained_participant_id.clone(),
+        proof.caller_participant_id.clone(),
+        None,
+        Some(world),
+        proof.transport_claim_id.clone(),
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!(
+            "failed to construct authority-managed retained member compatibility view: {err:#}"
+        ),
+    })?;
+    manifest.internal.latest_run_id = Some(proof.bootstrap_run_id.clone());
+    let member_dispatch_parity = MemberDispatchParitySubset::from_descriptor(&descriptor);
+
+    Ok(PreparedAgentRuntime {
+        descriptor,
+        member_dispatch_parity: Some(member_dispatch_parity),
+        prompt_fulfillment: None,
+        startup_context: startup_context.clone(),
+        manifest: Arc::new(Mutex::new(manifest)),
+        run_id: proof.bootstrap_run_id.clone(),
+        retained_worker_launch_authority: Some(proof),
+        retained_worker_admission: Some((authority, admission_plan)),
         startup_extensions: BTreeMap::new(),
     })
 }
@@ -7773,6 +8013,7 @@ fn build_member_dispatch_transport_request(
         initial_prompt,
         backend_kind: member_runtime_backend_kind(parity.backend_kind),
         binary_path: parity.binary_path.display().to_string(),
+        retained_worker_launch_authority: prepared.retained_worker_launch_authority.clone(),
     })
 }
 
@@ -7927,8 +8168,40 @@ async fn start_remote_member_runtime_with_prepared(
         startup_context,
         manifest,
         run_id,
+        retained_worker_launch_authority,
+        #[cfg(target_os = "linux")]
+        retained_worker_admission,
         startup_extensions: _startup_extensions,
     } = prepared;
+
+    #[cfg(target_os = "linux")]
+    let authority_managed = match (
+        retained_worker_launch_authority.as_ref(),
+        retained_worker_admission.as_ref(),
+    ) {
+        (Some(proof), Some((authority, admission_plan))) => {
+            validate_remote_retained_start_authority_proof(authority, admission_plan, proof)?;
+            true
+        }
+        (None, None) => false,
+        _ => {
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "retained-worker launch proof and durable admission context must be present together"
+                    .to_string(),
+            });
+        }
+    };
+    #[cfg(target_os = "macos")]
+    let authority_managed = if retained_worker_launch_authority.is_none() {
+        false
+    } else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "macOS member dispatch does not accept authority-managed retained Spawn"
+                .to_string(),
+        });
+    };
 
     let runtime_role = {
         manifest
@@ -7946,21 +8219,23 @@ async fn start_remote_member_runtime_with_prepared(
             &startup_context.effective_config,
             &startup_context.base_policy,
         )));
-    let persist_participant_result = {
-        let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
-        startup_context.store.persist_participant(&manifest_guard)
-    };
-    if let Err(err) = persist_participant_result {
-        mark_runtime_startup_failed(
-            &startup_context.store,
-            &startup_context.orchestration_session,
-            &manifest,
-            &format!("failed to persist agent runtime participant record: {err:#}"),
-        );
-        return Err(RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: format!("failed to persist agent runtime participant record: {err:#}"),
-        });
+    if !authority_managed {
+        let persist_participant_result = {
+            let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+            startup_context.store.persist_participant(&manifest_guard)
+        };
+        if let Err(err) = persist_participant_result {
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &format!("failed to persist agent runtime participant record: {err:#}"),
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!("failed to persist agent runtime participant record: {err:#}"),
+            });
+        }
     }
 
     let orchestration_snapshot = startup_context
@@ -8014,15 +8289,17 @@ async fn start_remote_member_runtime_with_prepared(
         orchestration_guard.touch_active();
         (orchestration_guard.clone(), manifest_guard.clone())
     };
-    persist_runtime_snapshots(
-        &startup_context.store,
-        &retained_orchestration_snapshot,
-        &retained_manifest_snapshot,
-    )
-    .map_err(|err| RuntimeBootstrapFailure {
-        exit_code: 1,
-        message: format!("failed to persist retained runtime ownership: {err:#}"),
-    })?;
+    if !authority_managed {
+        persist_runtime_snapshots(
+            &startup_context.store,
+            &retained_orchestration_snapshot,
+            &retained_manifest_snapshot,
+        )
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist retained runtime ownership: {err:#}"),
+        })?;
+    }
 
     let shutdown_requested = Arc::new(AtomicBool::new(false));
     let cancel_requested = Arc::new(AtomicBool::new(false));
@@ -8039,21 +8316,33 @@ async fn start_remote_member_runtime_with_prepared(
     let runtime_role_for_events = runtime_role.clone();
     let run_id_for_events = run_id.clone();
     let span_id_for_events = Arc::clone(&span_id);
+    #[cfg(target_os = "linux")]
+    let retained_worker_admission_for_events = retained_worker_admission;
+    #[cfg(target_os = "linux")]
+    let retained_worker_participant_id_for_events = retained_worker_launch_authority
+        .as_ref()
+        .map(|proof| proof.retained_participant_id.clone());
 
     let observe_task = tokio::spawn(async move {
         let mut body = std::pin::pin!(response.into_body());
         let mut buffer = Vec::new();
         let mut terminal_observation = RemoteRuntimeTerminalObservation::default();
         let mut protocol_interruption = None::<String>;
+        #[cfg(target_os = "linux")]
+        let mut last_authoritative_frame_identity = None;
+        #[cfg(target_os = "linux")]
+        let mut durable_terminal_observed = false;
 
         'stream: while let Some(frame) = body.as_mut().frame().await {
             let frame = match frame {
                 Ok(frame) => frame,
                 Err(err) => {
                     terminal_observation.mark_interrupted();
-                    protocol_interruption = Some(format!(
-                        "world-scoped member runtime stream transport error: {err}"
-                    ));
+                    protocol_interruption = Some(if authority_managed {
+                        "world-scoped retained member runtime stream transport failed".to_string()
+                    } else {
+                        format!("world-scoped member runtime stream transport error: {err}")
+                    });
                     break;
                 }
             };
@@ -8081,14 +8370,66 @@ async fn start_remote_member_runtime_with_prepared(
 
                 match frame {
                     ExecuteStreamFrame::Start {
+                        frame_identity,
                         span_id: stream_span_id,
-                        ..
                     } => {
+                        #[cfg(target_os = "linux")]
+                        {
+                            last_authoritative_frame_identity = Some(frame_identity);
+                        }
                         *span_id_for_events
                             .lock()
                             .expect("remote member span mutex poisoned") = Some(stream_span_id);
                     }
-                    ExecuteStreamFrame::Event { event, .. } => {
+                    ExecuteStreamFrame::Event {
+                        frame_identity,
+                        event,
+                    } => {
+                        #[cfg(target_os = "linux")]
+                        {
+                            last_authoritative_frame_identity = Some(frame_identity.clone());
+                            if event.kind
+                                == substrate_common::agent_events::AgentEventKind::Registered
+                            {
+                                if let Some((authority, admission_plan)) =
+                                    retained_worker_admission_for_events.as_ref()
+                                {
+                                    let registered_at = TimestampV1::parse(
+                                        chrono::Utc::now().to_rfc3339_opts(
+                                            chrono::SecondsFormat::Nanos,
+                                            true,
+                                        ),
+                                    )
+                                    .map_err(|error| error.to_string())
+                                    .and_then(|registered_at| {
+                                        let retained_participant_id =
+                                            retained_worker_participant_id_for_events
+                                                .as_deref()
+                                                .ok_or_else(|| {
+                                                    "authority admission omitted retained participant proof"
+                                                        .to_string()
+                                                })?;
+                                        RetainedWorkerRuntime
+                                            .mark_admission_routable(
+                                                authority,
+                                                admission_plan,
+                                                retained_participant_id,
+                                                &frame_identity,
+                                                &event,
+                                                registered_at,
+                                            )
+                                            .map(|_| ())
+                                            .map_err(|error| error.to_string())
+                                    });
+                                    if let Err(message) = registered_at {
+                                        protocol_interruption = Some(format!(
+                                            "retained-worker Registered truth failed closed: {message}"
+                                        ));
+                                        break 'stream;
+                                    }
+                                }
+                            }
+                        }
                         let mut startup_became_live = false;
                         let (orchestration_snapshot, manifest_snapshot) = {
                             let mut orchestration_guard = event_orchestration_session
@@ -8118,11 +8459,13 @@ async fn start_remote_member_runtime_with_prepared(
                             orchestration_guard.touch_active();
                             (orchestration_guard.clone(), manifest_guard.clone())
                         };
-                        let _ = persist_runtime_snapshots(
-                            &event_store,
-                            &orchestration_snapshot,
-                            &manifest_snapshot,
-                        );
+                        if !authority_managed {
+                            let _ = persist_runtime_snapshots(
+                                &event_store,
+                                &orchestration_snapshot,
+                                &manifest_snapshot,
+                            );
+                        }
                         let _ = publish_agent_event(event);
                         if startup_became_live {
                             let _ = publish_agent_event(build_runtime_message_event(
@@ -8138,7 +8481,59 @@ async fn start_remote_member_runtime_with_prepared(
                             );
                         }
                     }
-                    ExecuteStreamFrame::Exit { exit, .. } => {
+                    ExecuteStreamFrame::Exit {
+                        frame_identity,
+                        event_identity,
+                        terminal_identity,
+                        exit,
+                        ..
+                    } => {
+                        #[cfg(target_os = "linux")]
+                        {
+                            last_authoritative_frame_identity = Some(frame_identity.clone());
+                            if let Some((authority, admission_plan)) =
+                                retained_worker_admission_for_events.as_ref()
+                            {
+                                let terminal_at = TimestampV1::parse(
+                                    chrono::Utc::now().to_rfc3339_opts(
+                                        chrono::SecondsFormat::Nanos,
+                                        true,
+                                    ),
+                                )
+                                .map_err(|error| error.to_string())
+                                .and_then(|terminal_at| {
+                                    let retained_participant_id =
+                                        retained_worker_participant_id_for_events
+                                            .as_deref()
+                                            .ok_or_else(|| {
+                                                "authority admission omitted retained participant proof"
+                                                    .to_string()
+                                            })?;
+                                    RetainedWorkerRuntime
+                                        .mark_admission_terminal(
+                                            authority,
+                                            admission_plan,
+                                            retained_participant_id,
+                                            &frame_identity,
+                                            &event_identity,
+                                            &terminal_identity,
+                                            exit,
+                                            terminal_at,
+                                        )
+                                        .map(|_| ())
+                                        .map_err(|error| error.to_string())
+                                });
+                                match terminal_at {
+                                    Ok(()) => durable_terminal_observed = true,
+                                    Err(message) => {
+                                        protocol_interruption = Some(format!(
+                                            "retained-worker terminal truth failed closed: {message}"
+                                        ));
+                                        break 'stream;
+                                    }
+                                }
+                            }
+                        }
                         let mut startup_failure = None;
                         let (orchestration_snapshot, manifest_snapshot) = {
                             let mut orchestration_guard = event_orchestration_session
@@ -8213,11 +8608,13 @@ async fn start_remote_member_runtime_with_prepared(
                             }
                             (orchestration_guard.clone(), manifest_guard.clone())
                         };
-                        let _ = persist_runtime_snapshots(
-                            &event_store,
-                            &orchestration_snapshot,
-                            &manifest_snapshot,
-                        );
+                        if !authority_managed {
+                            let _ = persist_runtime_snapshots(
+                                &event_store,
+                                &orchestration_snapshot,
+                                &manifest_snapshot,
+                            );
+                        }
                         if let Some(reason) = startup_failure {
                             signal_runtime_startup(
                                 &startup_signal_for_events,
@@ -8226,19 +8623,76 @@ async fn start_remote_member_runtime_with_prepared(
                         }
                         break 'stream;
                     }
-                    ExecuteStreamFrame::Error { message, .. } => {
-                        protocol_interruption = Some(format!(
-                            "world-scoped member runtime reported a nonterminal transport error: {message}"
-                        ));
+                    ExecuteStreamFrame::Error {
+                        frame_identity,
+                        message,
+                    } => {
+                        #[cfg(target_os = "linux")]
+                        {
+                            last_authoritative_frame_identity = Some(frame_identity);
+                        }
+                        protocol_interruption = Some(if authority_managed {
+                            "world-scoped retained member runtime reported a nonterminal transport error"
+                                .to_string()
+                        } else {
+                            format!(
+                                "world-scoped member runtime reported a nonterminal transport error: {message}"
+                            )
+                        });
                         break 'stream;
                     }
-                    ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {}
+                    ExecuteStreamFrame::Stdout { frame_identity, .. }
+                    | ExecuteStreamFrame::Stderr { frame_identity, .. } => {
+                        #[cfg(target_os = "linux")]
+                        {
+                            last_authoritative_frame_identity = Some(frame_identity);
+                        }
+                    }
                 }
             }
         }
 
-        if terminal_observation.exact_terminal_observed() {
+        if terminal_observation.exact_terminal_observed()
+            && (!authority_managed || {
+                #[cfg(target_os = "linux")]
+                {
+                    durable_terminal_observed
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    false
+                }
+            })
+        {
             return;
+        }
+
+        #[cfg(target_os = "linux")]
+        if let (Some((authority, admission_plan)), Some(retained_participant_id)) = (
+            retained_worker_admission_for_events.as_ref(),
+            retained_worker_participant_id_for_events.as_deref(),
+        ) {
+            let interrupted = TimestampV1::parse(
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            )
+            .map_err(|error| error.to_string())
+            .and_then(|interrupted_at| {
+                RetainedWorkerRuntime
+                    .mark_admission_interrupted(
+                        authority,
+                        admission_plan,
+                        retained_participant_id,
+                        last_authoritative_frame_identity.as_ref(),
+                        interrupted_at,
+                    )
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            });
+            if let Err(message) = interrupted {
+                protocol_interruption.get_or_insert_with(|| {
+                    format!("retained-worker interruption truth failed closed: {message}")
+                });
+            }
         }
 
         let mut publish_events = Vec::new();
@@ -8284,8 +8738,13 @@ async fn start_remote_member_runtime_with_prepared(
             }
             (orchestration_guard.clone(), manifest_guard.clone())
         };
-        let _ =
-            persist_runtime_snapshots(&event_store, &orchestration_snapshot, &manifest_snapshot);
+        if !authority_managed {
+            let _ = persist_runtime_snapshots(
+                &event_store,
+                &orchestration_snapshot,
+                &manifest_snapshot,
+            );
+        }
         for event in publish_events {
             let _ = publish_agent_event(event);
         }
@@ -8300,27 +8759,29 @@ async fn start_remote_member_runtime_with_prepared(
     let mut observe_task = Some(observe_task);
     match tokio::time::timeout(Duration::from_secs(10), startup_rx).await {
         Ok(Ok(RuntimeStartupSignal::Running)) => {
-            if let Err(failure) = revalidate_retained_startup_after_running(
-                &startup_context.orchestration_session,
-                &manifest,
-                runtime_role.as_str(),
-            )
-            .await
-            {
-                abort_remote_member_bootstrap_runtime(
-                    &shutdown_requested,
-                    &client,
-                    &span_id,
-                    &mut observe_task,
-                )
-                .await;
-                mark_runtime_startup_failed(
-                    &startup_context.store,
+            if !authority_managed {
+                if let Err(failure) = revalidate_retained_startup_after_running(
                     &startup_context.orchestration_session,
                     &manifest,
-                    &failure.message,
-                );
-                return Err(failure);
+                    runtime_role.as_str(),
+                )
+                .await
+                {
+                    abort_remote_member_bootstrap_runtime(
+                        &shutdown_requested,
+                        &client,
+                        &span_id,
+                        &mut observe_task,
+                    )
+                    .await;
+                    mark_runtime_startup_failed(
+                        &startup_context.store,
+                        &startup_context.orchestration_session,
+                        &manifest,
+                        &failure.message,
+                    );
+                    return Err(failure);
+                }
             }
         }
         Ok(Ok(RuntimeStartupSignal::Failed(message))) => {
@@ -8345,12 +8806,14 @@ async fn start_remote_member_runtime_with_prepared(
             )
             .await;
             let message = "failed to establish attached control ownership".to_string();
-            mark_runtime_startup_failed(
-                &startup_context.store,
-                &startup_context.orchestration_session,
-                &manifest,
-                &message,
-            );
+            if !authority_managed {
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &message,
+                );
+            }
             return Err(RuntimeBootstrapFailure {
                 exit_code: 1,
                 message,
@@ -8365,12 +8828,14 @@ async fn start_remote_member_runtime_with_prepared(
             )
             .await;
             let message = "timed out waiting for world-scoped member control ownership".to_string();
-            mark_runtime_startup_failed(
-                &startup_context.store,
-                &startup_context.orchestration_session,
-                &manifest,
-                &message,
-            );
+            if !authority_managed {
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &message,
+                );
+            }
             return Err(RuntimeBootstrapFailure {
                 exit_code: 4,
                 message,
@@ -8422,12 +8887,14 @@ async fn start_remote_member_runtime_with_prepared(
             )
             .await;
             let message = format!("failed to register private cancel transport: {err:#}");
-            mark_runtime_startup_failed(
-                &startup_context.store,
-                &startup_context.orchestration_session,
-                &manifest,
-                &message,
-            );
+            if !authority_managed {
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &message,
+                );
+            }
             return Err(RuntimeBootstrapFailure {
                 exit_code: 1,
                 message,
@@ -8453,12 +8920,14 @@ async fn start_remote_member_runtime_with_prepared(
             )
             .await;
             let message = format!("failed to register private stop transport: {err:#}");
-            mark_runtime_startup_failed(
-                &startup_context.store,
-                &startup_context.orchestration_session,
-                &manifest,
-                &message,
-            );
+            if !authority_managed {
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &message,
+                );
+            }
             return Err(RuntimeBootstrapFailure {
                 exit_code: 1,
                 message,
@@ -8500,12 +8969,14 @@ async fn start_remote_member_runtime_with_prepared(
             )
             .await;
             let message = format!("failed to register private prompt transport: {err:#}");
-            mark_runtime_startup_failed(
-                &startup_context.store,
-                &startup_context.orchestration_session,
-                &manifest,
-                &message,
-            );
+            if !authority_managed {
+                mark_runtime_startup_failed(
+                    &startup_context.store,
+                    &startup_context.orchestration_session,
+                    &manifest,
+                    &message,
+                );
+            }
             return Err(RuntimeBootstrapFailure {
                 exit_code: 1,
                 message,
@@ -12086,6 +12557,123 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    async fn read_test_world_http_request(
+        stream: &mut tokio::net::UnixStream,
+    ) -> Option<(String, Vec<u8>)> {
+        use tokio::io::AsyncReadExt as _;
+
+        let mut bytes = Vec::new();
+        let mut header_end = None;
+        let mut content_length = None;
+        for _ in 0..64 {
+            let mut chunk = [0_u8; 1024];
+            let count = tokio::time::timeout(Duration::from_millis(250), stream.read(&mut chunk))
+                .await
+                .ok()?
+                .ok()?;
+            if count == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&chunk[..count]);
+            if header_end.is_none() {
+                if let Some(position) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
+                    header_end = Some(position + 4);
+                    let header = String::from_utf8_lossy(&bytes[..position + 4]);
+                    content_length = header.lines().find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().ok())
+                            .flatten()
+                    });
+                }
+            }
+            match (header_end, content_length) {
+                (Some(end), Some(length)) if bytes.len() >= end + length => {
+                    return Some((
+                        String::from_utf8_lossy(&bytes[..end]).into_owned(),
+                        bytes[end..end + length].to_vec(),
+                    ));
+                }
+                (Some(end), None) => {
+                    return Some((
+                        String::from_utf8_lossy(&bytes[..end]).into_owned(),
+                        Vec::new(),
+                    ));
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn write_test_world_http_json(
+        stream: &mut tokio::net::UnixStream,
+        status: &str,
+        body: &str,
+    ) {
+        use tokio::io::AsyncWriteExt as _;
+
+        let header = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(header.as_bytes()).await.unwrap();
+        stream.write_all(body.as_bytes()).await.unwrap();
+        stream.shutdown().await.unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn start_test_world_chunked_stream(stream: &mut tokio::net::UnixStream) {
+        use tokio::io::AsyncWriteExt as _;
+
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        stream.flush().await.unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn write_test_world_stream_frame(
+        stream: &mut tokio::net::UnixStream,
+        frame: &ExecuteStreamFrame,
+    ) {
+        use tokio::io::AsyncWriteExt as _;
+
+        let mut payload = serde_json::to_vec(frame).unwrap();
+        payload.push(b'\n');
+        stream
+            .write_all(format!("{:X}\r\n", payload.len()).as_bytes())
+            .await
+            .unwrap();
+        stream.write_all(&payload).await.unwrap();
+        stream.write_all(b"\r\n").await.unwrap();
+        stream.flush().await.unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn finish_test_world_chunked_stream(stream: &mut tokio::net::UnixStream) {
+        use tokio::io::AsyncWriteExt as _;
+
+        stream.write_all(b"0\r\n\r\n").await.unwrap();
+        stream.flush().await.unwrap();
+        stream.shutdown().await.unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn test_world_frame_identity(
+        stream_id: &str,
+        sequence: u64,
+    ) -> transport_api_types::RuntimeFrameIdentityV1 {
+        transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: stream_id.to_string(),
+            frame_sequence: sequence,
+        }
+    }
+
     #[cfg(unix)]
     fn private_authority_test_tempdir() -> TempDir {
         use std::os::unix::fs::PermissionsExt;
@@ -15287,6 +15875,190 @@ mod tests {
         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         rt.block_on(async {
+            let socket_path = temp.path().join("toolbox-authority-world.sock");
+            let listener = tokio::net::UnixListener::bind(&socket_path)
+                .expect("bind toolbox authority world socket");
+            let observed_proofs = Arc::new(Mutex::new(Vec::<(
+                String,
+                RetainedWorkerLaunchAuthorityProofV1,
+            )>::new()));
+            let observed_proofs_for_server = Arc::clone(&observed_proofs);
+            let world_server = tokio::spawn(async move {
+                let mut launch_stream = None::<(tokio::net::UnixStream, String, String)>;
+                while let Ok((mut stream, _)) = listener.accept().await {
+                    let Some((header, body)) = read_test_world_http_request(&mut stream).await
+                    else {
+                        continue;
+                    };
+                    let request_line = header.lines().next().unwrap_or_default();
+                    if request_line.starts_with("GET /v1/capabilities ") {
+                        write_test_world_http_json(
+                            &mut stream,
+                            "200 OK",
+                            r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                        )
+                        .await;
+                        continue;
+                    }
+                    if request_line.starts_with("POST /v1/execute/stream ") {
+                        let execute: transport_api_types::ExecuteRequest =
+                            serde_json::from_slice(&body)
+                                .expect("strict toolbox member execute request");
+                        let member_dispatch = execute
+                            .member_dispatch
+                            .expect("authority-managed Spawn must use member dispatch");
+                        let adapter = match member_dispatch.initial_prompt.as_deref() {
+                            Some("drive the direct production adapter") => "direct",
+                            Some("own the failing integration investigation") => "toolbox",
+                            other => panic!("unexpected authority-managed prompt: {other:?}"),
+                        };
+                        let proof = member_dispatch
+                            .retained_worker_launch_authority
+                            .clone()
+                            .expect("authority-managed Spawn must carry exact proof");
+                        assert_eq!(proof.orchestration_session_id, member_dispatch.orchestration_session_id);
+                        assert_eq!(proof.retained_participant_id, member_dispatch.participant_id);
+                        assert_eq!(proof.bootstrap_run_id, member_dispatch.run_id);
+                        assert_eq!(proof.backend_id, member_dispatch.backend_id);
+                        assert_eq!(proof.protocol, member_dispatch.protocol);
+                        assert_eq!(proof.world_binding.world_id, member_dispatch.world_id);
+                        assert_eq!(proof.world_binding.world_generation, member_dispatch.world_generation);
+                        observed_proofs_for_server
+                            .lock()
+                            .expect("observed proofs mutex")
+                            .push((adapter.to_string(), proof));
+
+                        let stream_id = format!("rts_{adapter}_authority_spawn");
+                        let span_id = format!("spn_{adapter}_authority_spawn");
+                        let registered_event_id = format!("evt_{adapter}_authority_registered");
+
+                        start_test_world_chunked_stream(&mut stream).await;
+                        write_test_world_stream_frame(
+                            &mut stream,
+                            &ExecuteStreamFrame::Start {
+                                frame_identity: test_world_frame_identity(&stream_id, 1),
+                                span_id: span_id.clone(),
+                            },
+                        )
+                        .await;
+                        let registered_identity = transport_api_types::RuntimeEventIdentityV1 {
+                            event_id: registered_event_id,
+                            event_sequence: 1,
+                        };
+                        write_test_world_stream_frame(
+                            &mut stream,
+                            &ExecuteStreamFrame::Event {
+                                frame_identity: test_world_frame_identity(&stream_id, 2),
+                                event: AgentEvent {
+                                    ts: chrono::Utc::now(),
+                                    kind: AgentEventKind::Registered,
+                                    data: serde_json::json!({
+                                        "schema": SESSION_HANDLE_SCHEMA_V1,
+                                        "session": {"id": format!("thread-{adapter}-authority-spawn")}
+                                    }),
+                                    agent_id: execute.agent_id,
+                                    orchestration_session_id: member_dispatch
+                                        .orchestration_session_id
+                                        .clone(),
+                                    run_id: member_dispatch.run_id.clone(),
+                                    parent_run_id: None,
+                                    participant_id: Some(member_dispatch.participant_id.clone()),
+                                    parent_participant_id: None,
+                                    resumed_from_participant_id: None,
+                                    backend_id: Some(member_dispatch.backend_id.clone()),
+                                    thread_id: Some(format!("thread-{adapter}-authority-spawn")),
+                                    role: Some(MEMBER_ROLE.to_string()),
+                                    world_id: Some(member_dispatch.world_id.clone()),
+                                    world_generation: Some(member_dispatch.world_generation),
+                                    cmd_id: None,
+                                    span_id: Some(span_id.clone()),
+                                    event_identity: Some(registered_identity),
+                                    channel: None,
+                                    identity_tuple: None,
+                                    placement_posture: None,
+                                    project: None,
+                                },
+                            },
+                        )
+                        .await;
+                        if adapter == "direct" {
+                            let terminal_event = transport_api_types::RuntimeEventIdentityV1 {
+                                event_id: "evt_direct_authority_terminal".to_string(),
+                                event_sequence: 2,
+                            };
+                            write_test_world_stream_frame(
+                                &mut stream,
+                                &ExecuteStreamFrame::Exit {
+                                    frame_identity: test_world_frame_identity(&stream_id, 3),
+                                    event_identity: terminal_event.clone(),
+                                    terminal_identity:
+                                        transport_api_types::RuntimeTerminalIdentityV1::from(
+                                            &terminal_event,
+                                        ),
+                                    exit: 0,
+                                    span_id,
+                                    scopes_used: Vec::new(),
+                                    fs_diff: None,
+                                    process_telemetry: Default::default(),
+                                },
+                            )
+                            .await;
+                            finish_test_world_chunked_stream(&mut stream).await;
+                            continue;
+                        }
+                        launch_stream = Some((stream, stream_id, span_id));
+                        continue;
+                    }
+                    if request_line.starts_with("POST /v1/execute/cancel ") {
+                        let cancel: ExecuteCancelRequestV1 = serde_json::from_slice(&body)
+                            .expect("strict toolbox execute cancel request");
+                        assert_eq!(cancel.span_id, "spn_toolbox_authority_spawn");
+                        assert_eq!(cancel.sig, "INT");
+                        let response = serde_json::to_string(
+                            &transport_api_types::ExecuteCancelResponseV1 {
+                                schema_version: 1,
+                                delivered: true,
+                            },
+                        )
+                        .expect("serialize toolbox execute cancel response");
+                        write_test_world_http_json(&mut stream, "200 OK", &response).await;
+
+                        let (mut launch_stream, stream_id, span_id) = launch_stream
+                            .take()
+                            .expect("cancel must follow the retained launch stream");
+                        let terminal_event = transport_api_types::RuntimeEventIdentityV1 {
+                            event_id: "evt_toolbox_authority_terminal".to_string(),
+                            event_sequence: 2,
+                        };
+                        write_test_world_stream_frame(
+                            &mut launch_stream,
+                            &ExecuteStreamFrame::Exit {
+                                frame_identity: test_world_frame_identity(&stream_id, 3),
+                                event_identity: terminal_event.clone(),
+                                terminal_identity:
+                                    transport_api_types::RuntimeTerminalIdentityV1::from(
+                                        &terminal_event,
+                                    ),
+                                exit: 130,
+                                span_id,
+                                scopes_used: Vec::new(),
+                                fs_diff: None,
+                                process_telemetry: Default::default(),
+                            },
+                        )
+                        .await;
+                        finish_test_world_chunked_stream(&mut launch_stream).await;
+                        return;
+                    }
+                    write_test_world_http_json(
+                        &mut stream,
+                        "404 Not Found",
+                        r#"{"error":"not_found"}"#,
+                    )
+                    .await;
+                }
+            });
+            let _world_socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
             let world_binding = PersistedWorldBinding {
                 world_id: "wld_toolbox_dispatch".to_string(),
                 world_generation: 9,
@@ -15314,6 +16086,36 @@ mod tests {
             .await
             .expect("host runtime start should succeed")
             .expect("host runtime");
+            let host_participant_id = runtime_manifest_snapshot(&host_runtime).handle.participant_id;
+
+            let direct_outcome = dispatch_orchestrator_world_request(
+                &startup_context.store,
+                WorldDispatchRequestV1 {
+                    request_id: Some("req_direct_spawn".to_string()),
+                    idempotency_key: Some("idem_direct_spawn".to_string()),
+                    orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                    caller_participant_id: Some(host_participant_id.clone()),
+                    action: WorldDispatchActionV1::SpawnWorldWorker,
+                    mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                    target_backend_id: Some("cli:codex-world".to_string()),
+                    task_run_id: None,
+                    target_participant_id: None,
+                    world_id: Some(world_binding.world_id.clone()),
+                    world_generation: Some(world_binding.world_generation),
+                    payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                        prompt: "drive the direct production adapter".to_string(),
+                    }),
+                },
+            )
+            .await
+            .expect("direct authority-managed Spawn must succeed");
+            let direct_spawn = match direct_outcome {
+                WorldDispatchOutcomeV1::SpawnWorldWorker(outcome) => outcome,
+                other => panic!("expected direct spawn outcome, got {other:?}"),
+            };
+            assert_eq!(direct_spawn.target_backend_id, "cli:codex-world");
+            assert_eq!(direct_spawn.world_id, world_binding.world_id);
+            assert_eq!(direct_spawn.world_generation, world_binding.world_generation);
 
             let (toolbox_tx, mut toolbox_rx) = internal_toolbox_dispatch_request_channel();
             ensure_internal_toolbox_transport_registered(
@@ -15378,59 +16180,120 @@ mod tests {
             assert_eq!(spawn.target_backend_id, "cli:codex-world");
             assert_eq!(spawn.world_id, world_binding.world_id);
             assert_eq!(spawn.world_generation, world_binding.world_generation);
-            let host_participant_id = runtime_manifest_snapshot(&host_runtime).handle.participant_id;
-            let persisted_participant = startup_context
-                .store
-                .load_participant(&spawn.participant_id)
-                .expect("load spawned participant")
-                .expect("spawned participant must persist");
+            let observed_proofs = observed_proofs
+                .lock()
+                .expect("observed proofs mutex")
+                .clone();
+            let direct_proof = observed_proofs
+                .iter()
+                .find(|(adapter, _)| adapter == "direct")
+                .map(|(_, proof)| proof)
+                .cloned()
+                .expect("direct production adapter must serialize the launch proof");
+            let proof = observed_proofs
+                .iter()
+                .find(|(adapter, _)| adapter == "toolbox")
+                .map(|(_, proof)| proof)
+                .cloned()
+                .expect("production adapter must serialize the launch proof");
+            assert_eq!(direct_proof.retained_participant_id, direct_spawn.participant_id);
+            assert_eq!(direct_proof.caller_participant_id, host_participant_id);
+            assert_eq!(proof.retained_participant_id, spawn.participant_id);
+            assert_eq!(proof.caller_participant_id, host_participant_id);
+            assert_eq!(proof.world_binding.world_id, world_binding.world_id);
+            assert_eq!(
+                proof.world_binding.world_generation,
+                world_binding.world_generation
+            );
             assert!(
-                persisted_participant.is_authoritative_live(),
-                "spawned participant must persist authoritative retained runtime ownership"
+                startup_context
+                    .store
+                    .load_participant(&spawn.participant_id)
+                    .expect("read legacy spawned participant")
+                    .is_none(),
+                "authority-managed Spawn must not activate the legacy participant writer"
             );
-            assert_eq!(
-                persisted_participant
-                    .handle
-                    .orchestrator_participant_id
-                    .as_deref(),
-                Some(host_participant_id.as_str()),
-                "spawned participant must retain exact host orchestrator linkage"
+            assert!(
+                startup_context
+                    .store
+                    .load_participant(&direct_spawn.participant_id)
+                    .expect("read direct legacy spawned participant")
+                    .is_none(),
+                "direct authority-managed Spawn must not activate the legacy participant writer"
             );
-            assert_eq!(
-                persisted_participant.handle.world_id.as_deref(),
-                Some(world_binding.world_id.as_str())
-            );
-            assert_eq!(
-                persisted_participant.handle.world_generation,
-                Some(world_binding.world_generation)
-            );
-            let persisted_session = startup_context
-                .store
-                .load_session(&startup_context.orchestration_session_id())
-                .expect("load orchestration session")
-                .expect("orchestration session must persist");
-            assert_eq!(
-                persisted_session.session.active_participant_id(),
-                Some(host_participant_id.as_str()),
-                "spawned worker must not replace the authoritative host participant"
-            );
-            assert_eq!(
-                persisted_session.session.world_id.as_deref(),
-                Some(world_binding.world_id.as_str())
-            );
-            assert_eq!(
-                persisted_session.session.world_generation,
-                Some(world_binding.world_generation)
-            );
-
-            let resolved = startup_context
-                .store
-                .resolve_public_turn_target(
-                    &startup_context.orchestration_session_id(),
-                    "cli:codex-world",
+            let authority = HostSessionAuthority::from_trusted_root(
+                TrustedAuthorityRoot::open(&substrate_home)
+                    .expect("reopen toolbox authority root"),
+            )
+            .expect("reopen toolbox host-session authority");
+            let direct_terminal = tokio::time::timeout(Duration::from_secs(3), async {
+                loop {
+                    let record = RetainedWorkerRuntime
+                        .read_admission_record(
+                            &authority,
+                            &direct_proof.orchestration_session_id,
+                            &direct_proof.retained_participant_id,
+                        )
+                        .expect("read direct retained admission")
+                        .expect("direct retained admission must exist");
+                    if matches!(
+                        record.state,
+                        crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::Terminal { .. }
+                    ) {
+                        break record;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .expect("timed out waiting for direct Spawn terminal truth");
+            assert!(matches!(
+                direct_terminal.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::Terminal {
+                    exit_code: 0,
+                    ..
+                }
+            ));
+            let routable_admission = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &proof.orchestration_session_id,
+                    &proof.retained_participant_id,
                 )
-                .expect("public turn target must rediscover the spawned retained worker");
-            assert_eq!(resolved.participant.handle.participant_id, spawn.participant_id);
+                .expect("read routable retained admission")
+                .expect("retained admission must exist");
+            assert!(matches!(
+                routable_admission.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::Routable { .. }
+            ));
+            assert!(
+                startup_context
+                    .store
+                    .load_session(&startup_context.orchestration_session_id())
+                    .expect("read legacy orchestration session")
+                    .is_none(),
+                "activated Spawn must not invoke the legacy session writer"
+            );
+            let current_authority = authority
+                .resolve_current_exact(&startup_context.orchestration_session_id(), None)
+                .expect("resolve exact current authority after Spawn");
+            assert_eq!(
+                current_authority.caller.participant_id, host_participant_id,
+                "Spawn must not replace the authoritative host participant"
+            );
+            let current_world = current_authority
+                .authority
+                .world_binding
+                .as_ref()
+                .expect("current authority must retain world binding");
+            assert_eq!(
+                current_world.world_id,
+                world_binding.world_id
+            );
+            assert_eq!(
+                current_world.world_generation,
+                world_binding.world_generation
+            );
 
             let prompt_path = private_prompt_transport_path(
                 &startup_context.store,
@@ -15454,6 +16317,25 @@ mod tests {
                 &mut telemetry,
             )
             .await;
+            let terminal_admission = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &proof.orchestration_session_id,
+                    &proof.retained_participant_id,
+                )
+                .expect("read terminal retained admission")
+                .expect("terminal retained admission must exist");
+            assert!(matches!(
+                terminal_admission.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::Terminal {
+                    exit_code: 130,
+                    ..
+                }
+            ));
+            tokio::time::timeout(Duration::from_secs(3), world_server)
+                .await
+                .expect("timed out joining toolbox authority world server")
+                .expect("toolbox authority world server task");
         });
         std::env::remove_var("SUBSTRATE_HOME");
     }
