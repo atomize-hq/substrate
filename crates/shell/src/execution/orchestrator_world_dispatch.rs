@@ -46,7 +46,23 @@ use crate::execution::agent_runtime::dispatch_contract::{
     StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1, WorkerForkPayloadV1,
 };
 #[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::schema::{
+    AgentDescriptorV1 as AuthorityAgentDescriptorV1,
+    AgentExecutionScopeV1 as AuthorityAgentExecutionScopeV1,
+    RuntimeBackendKindV1 as AuthorityRuntimeBackendKindV1, TimestampV1,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::host_session_authority::HostSessionAuthority;
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::retained_worker_runtime::{
+    CanonicalDescriptorAndRuntimePlanV1, CanonicalExactCurrentAuthorityV1,
+    CanonicalPolicyAndAdmissionCapV1, CanonicalValidatedSpawnRequestV1,
+    CanonicalWorkerSpawnPayloadV1, RetainedWorkerAdmissionPlanV1, RetainedWorkerRuntime,
+};
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
     ActiveEphemeralWorldTaskGuard, ActiveEphemeralWorldTaskRecord,
@@ -84,7 +100,7 @@ use crate::execution::routing::{
     build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
 };
 #[cfg(target_os = "linux")]
-use transport_api_types::ExecuteCancelRequestV1;
+use transport_api_types::{ExecuteCancelRequestV1, RetainedWorkerLaunchAuthorityProofV1};
 
 #[cfg(target_os = "linux")]
 const CONTINUE_WORLD_WORKER_ROUTER_IDENTITY: &str = "router::continue_world_worker";
@@ -498,6 +514,12 @@ pub(crate) async fn dispatch_orchestrator_world_request(
     store: &AgentRuntimeStateStore,
     request: WorldDispatchRequestV1,
 ) -> Result<WorldDispatchOutcomeV1> {
+    #[cfg(target_os = "linux")]
+    if request.action == WorldDispatchActionV1::SpawnWorldWorker {
+        let request = request.validate()?;
+        return spawn_prepared_world_worker(prepare_authority_bound_spawn_world_worker(request)?)
+            .await;
+    }
     let prepared = prepare_orchestrator_world_dispatch(store, request)?;
     dispatch_prepared_orchestrator_world_request(prepared).await
 }
@@ -585,6 +607,7 @@ async fn fork_world_worker(
             &workspace_root,
             &transport_request,
             &prepared.request,
+            None,
         )
         .await?;
         let lineage = match wait_for_fork_child_durable_publication(
@@ -1138,6 +1161,12 @@ pub(crate) struct PreparedSpawnWorldWorkerBootstrap {
     pub request: ValidatedWorldDispatchRequestV1,
     pub descriptor: crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
     pub workspace_root: PathBuf,
+    #[cfg(target_os = "linux")]
+    pub(crate) authority: HostSessionAuthority,
+    #[cfg(target_os = "linux")]
+    pub(crate) admission_plan: RetainedWorkerAdmissionPlanV1,
+    #[cfg(target_os = "linux")]
+    pub(crate) launch_authority_proof: RetainedWorkerLaunchAuthorityProofV1,
     _concurrency_guard: Option<WorldDispatchConcurrencyGuard>,
 }
 
@@ -1228,30 +1257,243 @@ async fn run_world_task_with_started_task_run_id_tx(
 pub(crate) fn prepare_spawn_world_worker_bootstrap(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<PreparedSpawnWorldWorkerBootstrap> {
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    #[cfg(target_os = "linux")]
+    {
+        prepare_authority_bound_spawn_world_worker(prepared.request)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+        let context = resolve_internal_dispatch_context(&workspace_root)?;
+        enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
+        let resolved = resolve_world_dispatch_contract(
+            &workspace_root,
+            &context,
+            &prepared.request,
+            "spawn_world_worker",
+        )?;
+        let descriptor = materialize_runtime_descriptor(&resolved).map_err(|err| {
+            anyhow::anyhow!(
+                "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
+                resolved.agent_id,
+                err.reason
+            )
+        })?;
+        let concurrency_guard =
+            acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
+
+        Ok(PreparedSpawnWorldWorkerBootstrap {
+            request: prepared.request,
+            descriptor,
+            workspace_root,
+            _concurrency_guard: concurrency_guard,
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn prepare_authority_bound_spawn_world_worker(
+    request: ValidatedWorldDispatchRequestV1,
+) -> Result<PreparedSpawnWorldWorkerBootstrap> {
+    if request.action != WorldDispatchActionV1::SpawnWorldWorker
+        || request.mode != WorldDispatchModeV1::Retained
+    {
+        anyhow::bail!(
+            "invalid_dispatch_action: authority-bound retained admission requires spawn_world_worker"
+        );
+    }
+    let WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) = &request.payload
+    else {
+        anyhow::bail!(
+            "invalid_dispatch_payload: action spawn_world_worker requires matching typed payload"
+        );
+    };
+    let bootstrap_home = substrate_common::paths::substrate_home()
+        .context("failed to resolve retained admission bootstrap home")?;
+    let trusted_root = TrustedAuthorityRoot::open(&bootstrap_home)
+        .map_err(|error| anyhow::anyhow!("failed to open retained admission authority: {error}"))?;
+    let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+        .map_err(|error| anyhow::anyhow!("failed to bind retained admission authority: {error}"))?;
+    let exact = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .map_err(|error| {
+            anyhow::anyhow!("failed to resolve retained admission authority: {error}")
+        })?;
+    if exact.caller.participant_id != request.caller_participant_id
+        || exact.authority.orchestration_session_id != request.orchestration_session_id
+        || exact
+            .authority
+            .world_binding
+            .as_ref()
+            .is_none_or(|binding| {
+                binding.world_id != request.world_id
+                    || binding.world_generation != request.world_generation
+            })
+    {
+        anyhow::bail!(
+            "stale_linkage: retained admission request does not exact-join current host authority"
+        );
+    }
+    let workspace_root = PathBuf::from(
+        &exact
+            .authority
+            .workspace_binding
+            .workspace_root
+            .physical_path,
+    );
     let context = resolve_internal_dispatch_context(&workspace_root)?;
-    enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
-    let resolved = resolve_world_dispatch_contract(
-        &workspace_root,
-        &context,
-        &prepared.request,
-        "spawn_world_worker",
-    )?;
-    let descriptor = materialize_runtime_descriptor(&resolved).map_err(|err| {
+    let steering_policy = context.base_policy.world_dispatch_policy();
+    if !steering_policy.enabled {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::WorldDispatchDisabled,
+            "host-to-world steering is disabled by effective policy",
+        ));
+    }
+    if !steering_policy
+        .allowed_actions
+        .iter()
+        .any(|value| value == request.action.as_str())
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::ActionNotAllowed,
+            format!(
+                "effective policy does not allow {}",
+                request.action.as_str()
+            ),
+        ));
+    }
+    if !steering_policy
+        .allowed_modes
+        .iter()
+        .any(|value| value == request.mode.as_str())
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::ModeNotAllowed,
+            format!("effective policy does not allow {}", request.mode.as_str()),
+        ));
+    }
+    if !steering_policy
+        .allowed_backends
+        .iter()
+        .any(|value| value == &request.target_backend_id)
+    {
+        return Err(steering_policy_denial(
+            WorldDispatchSteeringDenialV1::BackendNotAllowed,
+            format!(
+                "effective policy does not allow backend {}",
+                request.target_backend_id
+            ),
+        ));
+    }
+    let resolved_contract =
+        resolve_world_dispatch_contract(&workspace_root, &context, &request, "spawn_world_worker")?;
+    let descriptor = materialize_runtime_descriptor(&resolved_contract).map_err(|err| {
         anyhow::anyhow!(
             "runtime_start_failed: selected runtime '{}' is not runtime-realizable: {}",
-            resolved.agent_id,
+            resolved_contract.agent_id,
             err.reason
         )
     })?;
-    let concurrency_guard =
-        acquire_world_dispatch_concurrency_guard(&prepared, &context.base_policy)?;
+    let authority_descriptor = AuthorityAgentDescriptorV1 {
+        schema_version: 1,
+        agent_id: descriptor.agent_id.clone(),
+        backend_id: descriptor.backend_id.clone(),
+        backend_kind: match descriptor.backend_kind {
+            AgentRuntimeBackendKind::Codex => AuthorityRuntimeBackendKindV1::Codex,
+            AgentRuntimeBackendKind::ClaudeCode => AuthorityRuntimeBackendKindV1::ClaudeCode,
+        },
+        protocol: descriptor.protocol.clone(),
+        execution_scope: AuthorityAgentExecutionScopeV1::World,
+        binary_path: descriptor.binary_path.display().to_string(),
+    };
+    let current_policy_ref = exact.authority.current_policy_ref.clone().ok_or_else(|| {
+        anyhow::anyhow!("retained admission authority omits current policy reference")
+    })?;
+    let admission_plan = RetainedWorkerAdmissionPlanV1 {
+        issuer_request_id: request.request_id.clone(),
+        spawn_request: CanonicalValidatedSpawnRequestV1 {
+            schema_version: 1,
+            request_id: request.request_id.clone(),
+            idempotency_key: request.idempotency_key.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            caller_participant_id: request.caller_participant_id.clone(),
+            action: request.action.as_str().to_string(),
+            mode: request.mode.as_str().to_string(),
+            target_backend_id: request.target_backend_id.clone(),
+            task_run_id: request.task_run_id.clone(),
+            target_participant_id: request.target_participant_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            payload: CanonicalWorkerSpawnPayloadV1 {
+                prompt: prompt.clone(),
+            },
+        },
+        exact_authority: CanonicalExactCurrentAuthorityV1::from_resolved(&exact),
+        descriptor_and_runtime_plan: CanonicalDescriptorAndRuntimePlanV1 {
+            schema_version: 1,
+            descriptor: authority_descriptor,
+            runtime_role: "member".to_string(),
+            internal_uaa_session_id_domain: "substrate.retained-worker.internal-uaa-session.v1"
+                .to_string(),
+        },
+        policy_and_admission_cap: CanonicalPolicyAndAdmissionCapV1 {
+            schema_version: 1,
+            current_policy_ref,
+            current_policy: exact.current_policy.clone(),
+            dispatch_enabled: context.base_policy.agents_world_dispatch_enabled,
+            allowed_backends: context
+                .base_policy
+                .agents_world_dispatch_allowed_backends
+                .clone(),
+            allowed_actions: context
+                .base_policy
+                .agents_world_dispatch_allowed_actions
+                .clone(),
+            allowed_modes: context
+                .base_policy
+                .agents_world_dispatch_allowed_modes
+                .clone(),
+            same_session_only: context.base_policy.agents_world_dispatch_same_session_only,
+            same_world_binding_only: context
+                .base_policy
+                .agents_world_dispatch_same_world_binding_only,
+            allow_capability_narrowing: context
+                .base_policy
+                .agents_world_dispatch_allow_capability_narrowing,
+            max_live_retained_workers: context
+                .base_policy
+                .agents_world_dispatch_max_live_retained_workers
+                .into(),
+            max_concurrent_ephemeral: context
+                .base_policy
+                .agents_world_dispatch_max_concurrent_ephemeral
+                .into(),
+        },
+    };
+    let runtime = RetainedWorkerRuntime;
+    let registered = runtime
+        .register_admitted_worker(&authority, &admission_plan)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let claim = runtime
+        .claim_admission_transport(
+            &authority,
+            &admission_plan,
+            &registered.record.retained_participant_id,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let launch_authority_proof = runtime
+        .launch_authority_proof_for_claim(&authority, &admission_plan, &claim)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     Ok(PreparedSpawnWorldWorkerBootstrap {
-        request: prepared.request,
+        request,
         descriptor,
         workspace_root,
-        _concurrency_guard: concurrency_guard,
+        authority,
+        admission_plan,
+        launch_authority_proof,
+        _concurrency_guard: None,
     })
 }
 
@@ -1303,21 +1545,37 @@ pub(crate) fn prepare_fork_world_worker_bootstrap(
 async fn spawn_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
-    let prepared = prepare_spawn_world_worker_bootstrap(prepared)?;
+    spawn_prepared_world_worker(prepare_spawn_world_worker_bootstrap(prepared)?).await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn spawn_prepared_world_worker(
+    prepared: PreparedSpawnWorldWorkerBootstrap,
+) -> Result<WorldDispatchOutcomeV1> {
+    let PreparedSpawnWorldWorkerBootstrap {
+        request,
+        descriptor,
+        workspace_root,
+        authority,
+        admission_plan,
+        launch_authority_proof,
+        _concurrency_guard,
+    } = prepared;
     let transport_request =
-        build_spawn_world_worker_transport_request(&prepared.request, &prepared.descriptor)?;
+        build_spawn_world_worker_transport_request(&request, &descriptor, &launch_authority_proof)?;
     let receipt = execute_spawn_world_worker_stream(
-        &prepared.workspace_root,
+        &workspace_root,
         &transport_request,
-        &prepared.request,
+        &request,
+        Some((authority, admission_plan)),
     )
     .await?;
     let summary = summarize_spawn_world_worker_result(&receipt);
 
     Ok(WorldDispatchOutcomeV1::SpawnWorldWorker(
         SpawnWorldWorkerOutcomeV1 {
-            request_id: prepared.request.request_id,
-            orchestration_session_id: prepared.request.orchestration_session_id,
+            request_id: request.request_id,
+            orchestration_session_id: request.orchestration_session_id,
             action: WorldDispatchActionV1::SpawnWorldWorker,
             mode: WorldDispatchModeV1::Retained,
             participant_id: receipt.participant_id,
@@ -1458,15 +1716,19 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
         &resolved.source_participant,
         &descriptor,
     )?;
-    let receipt =
-        execute_spawn_world_worker_stream(&workspace_root, &transport_request, &prepared.request)
-            .await
-            .with_context(|| {
-                format_continue_world_worker_fork_command_bootstrap_failure(
-                    resolved.source_participant.participant_id(),
-                    "retained child bootstrap failed before authoritative registration",
-                )
-            })?;
+    let receipt = execute_spawn_world_worker_stream(
+        &workspace_root,
+        &transport_request,
+        &prepared.request,
+        None,
+    )
+    .await
+    .with_context(|| {
+        format_continue_world_worker_fork_command_bootstrap_failure(
+            resolved.source_participant.participant_id(),
+            "retained child bootstrap failed before authoritative registration",
+        )
+    })?;
     let lineage = match wait_for_fork_child_durable_publication(
         &prepared.store,
         resolved.orchestration_session_id(),
@@ -3010,6 +3272,7 @@ fn build_run_world_task_transport_request(
         initial_prompt: Some(prompt.clone()),
         backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
         binary_path: descriptor.binary_path.display().to_string(),
+        retained_worker_launch_authority: None,
     })
 }
 
@@ -3017,6 +3280,7 @@ fn build_run_world_task_transport_request(
 fn build_spawn_world_worker_transport_request(
     request: &ValidatedWorldDispatchRequestV1,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    launch_authority_proof: &RetainedWorkerLaunchAuthorityProofV1,
 ) -> Result<MemberDispatchTransportRequest> {
     let WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 { prompt }) = &request.payload
     else {
@@ -3025,20 +3289,37 @@ fn build_spawn_world_worker_transport_request(
         );
     };
 
+    launch_authority_proof
+        .validate()
+        .map_err(|error| anyhow::anyhow!(error))?;
+    if launch_authority_proof.issuer_request_id != request.request_id
+        || launch_authority_proof.orchestration_session_id != request.orchestration_session_id
+        || launch_authority_proof.caller_participant_id != request.caller_participant_id
+        || launch_authority_proof.backend_id != descriptor.backend_id
+        || launch_authority_proof.protocol != descriptor.protocol
+        || launch_authority_proof.world_binding.world_id != request.world_id
+        || launch_authority_proof.world_binding.world_generation != request.world_generation
+    {
+        anyhow::bail!(
+            "retained_launch_authority_mismatch: Spawn proof conflicts with exact request or runtime descriptor"
+        );
+    }
+
     Ok(MemberDispatchTransportRequest {
         orchestration_session_id: request.orchestration_session_id.clone(),
-        participant_id: format!("ash_{}", Uuid::now_v7()),
+        participant_id: launch_authority_proof.retained_participant_id.clone(),
         orchestrator_participant_id: request.caller_participant_id.clone(),
         parent_participant_id: None,
         resumed_from_participant_id: None,
         backend_id: descriptor.backend_id.clone(),
         protocol: descriptor.protocol.clone(),
-        run_id: request.request_id.clone(),
+        run_id: launch_authority_proof.bootstrap_run_id.clone(),
         world_id: request.world_id.clone(),
         world_generation: request.world_generation,
         initial_prompt: Some(prompt.clone()),
         backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
         binary_path: descriptor.binary_path.display().to_string(),
+        retained_worker_launch_authority: Some(launch_authority_proof.clone()),
     })
 }
 
@@ -3079,6 +3360,7 @@ fn build_fork_world_worker_transport_request(
         initial_prompt: Some(prompt.clone()),
         backend_kind: member_runtime_backend_kind(descriptor.backend_kind),
         binary_path: descriptor.binary_path.display().to_string(),
+        retained_worker_launch_authority: None,
     })
 }
 
@@ -3287,6 +3569,7 @@ async fn execute_spawn_world_worker_stream(
     workspace_root: &Path,
     request: &MemberDispatchTransportRequest,
     dispatch_request: &ValidatedWorldDispatchRequestV1,
+    mut admission_runtime: Option<(HostSessionAuthority, RetainedWorkerAdmissionPlanV1)>,
 ) -> Result<SpawnWorldWorkerReceipt> {
     use http_body_util::BodyExt as _;
     use substrate_common::agent_events::AgentEventKind;
@@ -3295,10 +3578,27 @@ async fn execute_spawn_world_worker_stream(
     let (client, execute_request, _agent_id) =
         build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root)
             .context("failed to build member dispatch execute request for spawn_world_worker")?;
-    let response = client
-        .execute_stream(execute_request)
-        .await
-        .inspect_err(|err| {
+    let response = match client.execute_stream(execute_request).await {
+        Ok(response) => response,
+        Err(err) => {
+            if let Some((authority, plan)) = admission_runtime.as_ref() {
+                let interrupted_at = TimestampV1::parse(
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                )
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                RetainedWorkerRuntime
+                    .mark_admission_interrupted(
+                        authority,
+                        plan,
+                        &request.participant_id,
+                        None,
+                        interrupted_at,
+                    )
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                anyhow::bail!(
+                    "retained_bootstrap_interrupted: world member dispatch stream launch failed"
+                );
+            }
             warn!(
                 participant_id = %request.participant_id,
                 orchestration_session_id = %request.orchestration_session_id,
@@ -3306,20 +3606,45 @@ async fn execute_spawn_world_worker_stream(
                 inner_error_debug = ?err,
                 "retained worker bootstrap stream launch failed before wrapper context"
             );
-        })
-        .with_context(|| {
-            format!(
-                "failed to launch world member dispatch stream for retained worker bootstrap {} in orchestration session {}",
-                request.participant_id, request.orchestration_session_id
-            )
-        })?;
+            return Err(err).with_context(|| {
+                format!(
+                    "failed to launch world member dispatch stream for retained worker bootstrap {} in orchestration session {}",
+                    request.participant_id, request.orchestration_session_id
+                )
+            });
+        }
+    };
 
-    let mut body = std::pin::pin!(response.into_body());
+    let mut body = Box::pin(response.into_body());
     let mut buffer = Vec::new();
     let mut launch_span_id = None::<String>;
+    let mut last_frame_identity = None;
 
     while let Some(frame) = body.as_mut().frame().await {
-        let frame = frame.map_err(|err| anyhow::anyhow!("stream frame error: {err}"))?;
+        let frame = match frame {
+            Ok(frame) => frame,
+            Err(err) => {
+                if let Some((authority, plan)) = admission_runtime.as_ref() {
+                    let interrupted_at = TimestampV1::parse(
+                        chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                    )
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    RetainedWorkerRuntime
+                        .mark_admission_interrupted(
+                            authority,
+                            plan,
+                            &request.participant_id,
+                            last_frame_identity.as_ref(),
+                            interrupted_at,
+                        )
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    anyhow::bail!(
+                        "retained_bootstrap_interrupted: world member dispatch stream transport failed"
+                    );
+                }
+                return Err(anyhow::anyhow!("stream frame error: {err}"));
+            }
+        };
         let Some(data) = frame.data_ref() else {
             continue;
         };
@@ -3334,46 +3659,237 @@ async fn execute_spawn_world_worker_stream(
             if payload.is_empty() {
                 continue;
             }
-            let frame: ExecuteStreamFrame = serde_json::from_slice(payload).with_context(|| {
-                format!(
-                    "invalid spawn_world_worker stream frame: {}",
-                    String::from_utf8_lossy(payload)
-                )
-            })?;
+            let frame: ExecuteStreamFrame = match serde_json::from_slice(payload) {
+                Ok(frame) => frame,
+                Err(error) => {
+                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                        let interrupted_at = TimestampV1::parse(
+                            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                        )
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                        RetainedWorkerRuntime
+                            .mark_admission_interrupted(
+                                authority,
+                                plan,
+                                &request.participant_id,
+                                last_frame_identity.as_ref(),
+                                interrupted_at,
+                            )
+                            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                        anyhow::bail!(
+                            "retained_bootstrap_interrupted: invalid world member dispatch stream frame"
+                        );
+                    }
+                    return Err(error).context("invalid spawn_world_worker stream frame");
+                }
+            };
 
             match frame {
-                ExecuteStreamFrame::Start { span_id, .. } => {
+                ExecuteStreamFrame::Start {
+                    frame_identity,
+                    span_id,
+                } => {
+                    last_frame_identity = Some(frame_identity);
                     launch_span_id = Some(span_id);
                 }
-                ExecuteStreamFrame::Event { event, .. }
-                    if event.kind == AgentEventKind::Registered =>
-                {
+                ExecuteStreamFrame::Event {
+                    frame_identity,
+                    event,
+                } if event.kind == AgentEventKind::Registered => {
+                    last_frame_identity = Some(frame_identity.clone());
                     let launch_span_id = launch_span_id.clone().ok_or_else(|| {
                         anyhow::anyhow!(
                             "spawn_world_worker registered without a streamed execute span_id"
                         )
                     })?;
-                    return receipt_from_registered_event(
+                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                        let registered_at = TimestampV1::parse(
+                            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                        )
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                        RetainedWorkerRuntime
+                            .mark_admission_routable(
+                                authority,
+                                plan,
+                                &request.participant_id,
+                                &frame_identity,
+                                &event,
+                                registered_at,
+                            )
+                            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    }
+                    let receipt = receipt_from_registered_event(
                         event,
                         request,
                         dispatch_request,
                         launch_span_id,
-                    );
+                    )?;
+                    if let Some((authority, plan)) = admission_runtime.take() {
+                        let retained_participant_id = request.participant_id.clone();
+                        tokio::spawn(async move {
+                            'observe: loop {
+                                while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n')
+                                {
+                                    let line: Vec<u8> = buffer.drain(..=pos).collect();
+                                    if line.len() <= 1 {
+                                        continue;
+                                    }
+                                    let payload = &line[..line.len() - 1];
+                                    if payload.is_empty() {
+                                        continue;
+                                    }
+                                    let Ok(frame) =
+                                        serde_json::from_slice::<ExecuteStreamFrame>(payload)
+                                    else {
+                                        break 'observe;
+                                    };
+                                    match frame {
+                                        ExecuteStreamFrame::Exit {
+                                            frame_identity,
+                                            event_identity,
+                                            terminal_identity,
+                                            exit,
+                                            ..
+                                        } => {
+                                            if let Ok(terminal_at) = TimestampV1::parse(
+                                                chrono::Utc::now().to_rfc3339_opts(
+                                                    chrono::SecondsFormat::Nanos,
+                                                    true,
+                                                ),
+                                            ) {
+                                                let _ = RetainedWorkerRuntime
+                                                    .mark_admission_terminal(
+                                                        &authority,
+                                                        &plan,
+                                                        &retained_participant_id,
+                                                        &frame_identity,
+                                                        &event_identity,
+                                                        &terminal_identity,
+                                                        exit,
+                                                        terminal_at,
+                                                    );
+                                            }
+                                            return;
+                                        }
+                                        ExecuteStreamFrame::Error { frame_identity, .. } => {
+                                            last_frame_identity = Some(frame_identity);
+                                            break 'observe;
+                                        }
+                                        ExecuteStreamFrame::Start { frame_identity, .. }
+                                        | ExecuteStreamFrame::Stdout { frame_identity, .. }
+                                        | ExecuteStreamFrame::Stderr { frame_identity, .. }
+                                        | ExecuteStreamFrame::Event { frame_identity, .. } => {
+                                            last_frame_identity = Some(frame_identity);
+                                        }
+                                    }
+                                }
+
+                                match body.as_mut().frame().await {
+                                    Some(Ok(frame)) => {
+                                        if let Some(data) = frame.data_ref() {
+                                            buffer.extend_from_slice(data);
+                                        }
+                                    }
+                                    Some(Err(_)) | None => break,
+                                }
+                            }
+
+                            if let Ok(interrupted_at) = TimestampV1::parse(
+                                chrono::Utc::now()
+                                    .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                            ) {
+                                let _ = RetainedWorkerRuntime.mark_admission_interrupted(
+                                    &authority,
+                                    &plan,
+                                    &retained_participant_id,
+                                    last_frame_identity.as_ref(),
+                                    interrupted_at,
+                                );
+                            }
+                        });
+                    }
+                    return Ok(receipt);
                 }
-                ExecuteStreamFrame::Event { .. }
-                | ExecuteStreamFrame::Stdout { .. }
-                | ExecuteStreamFrame::Stderr { .. } => {}
-                ExecuteStreamFrame::Exit { exit, .. } => {
+                ExecuteStreamFrame::Event { frame_identity, .. }
+                | ExecuteStreamFrame::Stdout { frame_identity, .. }
+                | ExecuteStreamFrame::Stderr { frame_identity, .. } => {
+                    last_frame_identity = Some(frame_identity);
+                }
+                ExecuteStreamFrame::Exit {
+                    frame_identity,
+                    event_identity,
+                    terminal_identity,
+                    exit,
+                    ..
+                } => {
+                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                        let terminal_at = TimestampV1::parse(
+                            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                        )
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                        RetainedWorkerRuntime
+                            .mark_admission_terminal(
+                                authority,
+                                plan,
+                                &request.participant_id,
+                                &frame_identity,
+                                &event_identity,
+                                &terminal_identity,
+                                exit,
+                                terminal_at,
+                            )
+                            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    }
                     anyhow::bail!(
                         "retained_bootstrap_failed: spawn_world_worker exited with status {} before authoritative registration",
                         exit
                     );
                 }
-                ExecuteStreamFrame::Error { message, .. } => {
+                ExecuteStreamFrame::Error {
+                    frame_identity,
+                    message,
+                } => {
+                    last_frame_identity = Some(frame_identity);
+                    if let Some((authority, plan)) = admission_runtime.as_ref() {
+                        let interrupted_at = TimestampV1::parse(
+                            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+                        )
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                        RetainedWorkerRuntime
+                            .mark_admission_interrupted(
+                                authority,
+                                plan,
+                                &request.participant_id,
+                                last_frame_identity.as_ref(),
+                                interrupted_at,
+                            )
+                            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                    }
+                    if admission_runtime.is_some() {
+                        anyhow::bail!(
+                            "retained_bootstrap_interrupted: world member dispatch reported a nonterminal error"
+                        );
+                    }
                     anyhow::bail!(message);
                 }
             }
         }
+    }
+
+    if let Some((authority, plan)) = admission_runtime.as_ref() {
+        let interrupted_at = TimestampV1::parse(
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        RetainedWorkerRuntime
+            .mark_admission_interrupted(
+                authority,
+                plan,
+                &request.participant_id,
+                last_frame_identity.as_ref(),
+                interrupted_at,
+            )
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     }
 
     anyhow::bail!(
@@ -6115,6 +6631,54 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_retained_launch_authority_proof(
+    ) -> transport_api_types::RetainedWorkerLaunchAuthorityProofV1 {
+        use transport_api_types::{
+            RetainedWorkerAdmissionCommitmentCarrierV1, RetainedWorkerAuthorityObjectCommitmentV1,
+            RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerLaunchWorldBindingV1,
+        };
+
+        RetainedWorkerLaunchAuthorityProofV1 {
+            schema_version: 1,
+            authority_store_id: "has_fixture".to_string(),
+            issuer_request_id: "req_spawn".to_string(),
+            canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+                schema_version: 1,
+                algorithm: "hmac-sha-256".to_string(),
+                key_id: "adk_fixture".to_string(),
+                digest_hex: "a".repeat(64),
+            },
+            registration_id: "rwr_fixture".to_string(),
+            registration_commitment: RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "b".repeat(64),
+            },
+            authority_revision_after: 2,
+            authority_record_commitment_after:
+                RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "c".repeat(64),
+                },
+            orchestration_session_id: "sess_dispatch".to_string(),
+            caller_participant_id: "orch_dispatch".to_string(),
+            retained_participant_id: "rwp_fixture".to_string(),
+            bootstrap_run_id: "rwr_bootstrap_fixture".to_string(),
+            transport_claim_id: "rtc_fixture".to_string(),
+            backend_id: "cli:codex-world".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            world_binding: RetainedWorkerLaunchWorldBindingV1 {
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            },
+            current_policy_ref_id: "ao_policy_fixture".to_string(),
+            current_policy_revision: "policy-fixture".to_string(),
+            retained_worker_ref_id: "ao_worker_fixture".to_string(),
+            retained_worker_commitment:
+                RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "d".repeat(64),
+                },
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_continue_submit_request() -> transport_api_types::MemberTurnSubmitRequestV1 {
         transport_api_types::MemberTurnSubmitRequestV1 {
             schema_version: 1,
@@ -6330,6 +6894,7 @@ mod tests {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path: binary_path.display().to_string(),
                 },
+                retained_worker_launch_authority: None,
             }),
         }
     }
@@ -17630,6 +18195,32 @@ agents:
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn build_run_world_task_transport_request_preserves_legacy_shape_without_spawn_authority() {
+        let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
+            agent_id: "codex-world".to_string(),
+            backend_id: "cli:codex-world".to_string(),
+            protocol: "substrate.agent.session".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            execution_scope: crate::execution::config_model::AgentExecutionScope::World,
+            binary_path: PathBuf::from("/bin/true"),
+        };
+
+        let request = sample_request();
+        let transport = build_run_world_task_transport_request(&request, &descriptor)
+            .expect("RunWorldTask transport");
+        assert_eq!(transport.orchestration_session_id, "sess_dispatch");
+        assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
+        assert_eq!(transport.backend_id, "cli:codex-world");
+        assert_eq!(transport.protocol, "substrate.agent.session");
+        assert_eq!(transport.run_id, "req_dispatch");
+        assert_eq!(transport.world_id, "world-17");
+        assert_eq!(transport.world_generation, 2);
+        assert_eq!(transport.initial_prompt.as_deref(), Some("hello world"));
+        assert_eq!(transport.retained_worker_launch_authority, None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn build_spawn_world_worker_transport_request_preserves_authoritative_binding() {
         let descriptor = crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor {
             agent_id: "codex-world".to_string(),
@@ -17641,8 +18232,9 @@ agents:
         };
 
         let request = sample_spawn_request();
-        let transport =
-            build_spawn_world_worker_transport_request(&request, &descriptor).expect("transport");
+        let proof = sample_retained_launch_authority_proof();
+        let transport = build_spawn_world_worker_transport_request(&request, &descriptor, &proof)
+            .expect("transport");
 
         assert_eq!(transport.orchestration_session_id, "sess_dispatch");
         assert_eq!(transport.orchestrator_participant_id, "orch_dispatch");
@@ -17653,11 +18245,9 @@ agents:
             transport.initial_prompt.as_deref(),
             Some("open a retained worker")
         );
-        assert!(
-            transport.participant_id.starts_with("ash_"),
-            "retained worker receipt should use participant-style identity: {}",
-            transport.participant_id
-        );
+        assert_eq!(transport.participant_id, "rwp_fixture");
+        assert_eq!(transport.run_id, "rwr_bootstrap_fixture");
+        assert_eq!(transport.retained_worker_launch_authority, Some(proof));
     }
 
     #[cfg(target_os = "linux")]
@@ -17696,6 +18286,7 @@ agents:
             "retained fork child should use participant-style identity: {}",
             transport.participant_id
         );
+        assert_eq!(transport.retained_worker_launch_authority, None);
     }
 
     #[cfg(target_os = "linux")]
@@ -17724,6 +18315,7 @@ agents:
             transport.parent_participant_id.as_deref(),
             Some("ash_member")
         );
+        assert_eq!(transport.retained_worker_launch_authority, None);
     }
 
     #[cfg(target_os = "linux")]
@@ -17824,6 +18416,7 @@ agents:
             initial_prompt: Some("open a retained worker".to_string()),
             backend_kind: transport_api_types::MemberRuntimeBackendKindV1::Codex,
             binary_path: "/bin/true".to_string(),
+            retained_worker_launch_authority: None,
         };
 
         let mut event = substrate_common::agent_events::AgentEvent {

@@ -76,6 +76,7 @@ fn make_member_dispatch_request(
                 backend_kind: MemberRuntimeBackendKindV1::Codex,
                 binary_path: binary_path.display().to_string(),
             },
+            retained_worker_launch_authority: None,
         }),
     }
 }

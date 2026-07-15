@@ -712,6 +712,254 @@ impl TryFrom<ResolvedMemberRuntimeDescriptorDef> for ResolvedMemberRuntimeDescri
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub enum RetainedWorkerAuthorityObjectCommitmentV1 {
+    CanonicalSha256 {
+        digest_hex: String,
+    },
+    StoreHmacSha256 {
+        key_id: String,
+        domain: String,
+        digest_hex: String,
+    },
+}
+
+impl RetainedWorkerAuthorityObjectCommitmentV1 {
+    fn validate(&self, field: &str) -> Result<(), String> {
+        match self {
+            Self::CanonicalSha256 { digest_hex } => {
+                validate_lowercase_sha256_digest(field, digest_hex)
+            }
+            Self::StoreHmacSha256 {
+                key_id,
+                domain,
+                digest_hex,
+            } => {
+                validate_non_empty_request_field(&format!("{field}.key_id"), key_id)?;
+                validate_non_empty_request_field(&format!("{field}.domain"), domain)?;
+                validate_lowercase_sha256_digest(field, digest_hex)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "RetainedWorkerAdmissionCommitmentCarrierDef")]
+pub struct RetainedWorkerAdmissionCommitmentCarrierV1 {
+    pub schema_version: u32,
+    pub algorithm: String,
+    pub key_id: String,
+    pub digest_hex: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RetainedWorkerAdmissionCommitmentCarrierDef {
+    schema_version: u32,
+    algorithm: String,
+    key_id: String,
+    digest_hex: String,
+}
+
+impl RetainedWorkerAdmissionCommitmentCarrierV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported retained_worker_launch_authority.canonical_spawn_fingerprint.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+        if self.algorithm != "hmac-sha-256" {
+            return Err(
+                "retained_worker_launch_authority.canonical_spawn_fingerprint.algorithm must be hmac-sha-256"
+                    .to_string(),
+            );
+        }
+        validate_non_empty_request_field(
+            "retained_worker_launch_authority.canonical_spawn_fingerprint.key_id",
+            &self.key_id,
+        )?;
+        validate_lowercase_sha256_digest(
+            "retained_worker_launch_authority.canonical_spawn_fingerprint",
+            &self.digest_hex,
+        )
+    }
+}
+
+impl TryFrom<RetainedWorkerAdmissionCommitmentCarrierDef>
+    for RetainedWorkerAdmissionCommitmentCarrierV1
+{
+    type Error = String;
+
+    fn try_from(value: RetainedWorkerAdmissionCommitmentCarrierDef) -> Result<Self, Self::Error> {
+        let commitment = Self {
+            schema_version: value.schema_version,
+            algorithm: value.algorithm,
+            key_id: value.key_id,
+            digest_hex: value.digest_hex,
+        };
+        commitment.validate()?;
+        Ok(commitment)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RetainedWorkerLaunchWorldBindingV1 {
+    pub world_id: String,
+    pub world_generation: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "RetainedWorkerLaunchAuthorityProofDef")]
+pub struct RetainedWorkerLaunchAuthorityProofV1 {
+    pub schema_version: u32,
+    pub authority_store_id: String,
+    pub issuer_request_id: String,
+    pub canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1,
+    pub registration_id: String,
+    pub registration_commitment: RetainedWorkerAuthorityObjectCommitmentV1,
+    pub authority_revision_after: u64,
+    pub authority_record_commitment_after: RetainedWorkerAuthorityObjectCommitmentV1,
+    pub orchestration_session_id: String,
+    pub caller_participant_id: String,
+    pub retained_participant_id: String,
+    pub bootstrap_run_id: String,
+    pub transport_claim_id: String,
+    pub backend_id: String,
+    pub protocol: String,
+    pub world_binding: RetainedWorkerLaunchWorldBindingV1,
+    pub current_policy_ref_id: String,
+    pub current_policy_revision: String,
+    pub retained_worker_ref_id: String,
+    pub retained_worker_commitment: RetainedWorkerAuthorityObjectCommitmentV1,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RetainedWorkerLaunchAuthorityProofDef {
+    schema_version: u32,
+    authority_store_id: String,
+    issuer_request_id: String,
+    canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1,
+    registration_id: String,
+    registration_commitment: RetainedWorkerAuthorityObjectCommitmentV1,
+    authority_revision_after: u64,
+    authority_record_commitment_after: RetainedWorkerAuthorityObjectCommitmentV1,
+    orchestration_session_id: String,
+    caller_participant_id: String,
+    retained_participant_id: String,
+    bootstrap_run_id: String,
+    transport_claim_id: String,
+    backend_id: String,
+    protocol: String,
+    world_binding: RetainedWorkerLaunchWorldBindingV1,
+    current_policy_ref_id: String,
+    current_policy_revision: String,
+    retained_worker_ref_id: String,
+    retained_worker_commitment: RetainedWorkerAuthorityObjectCommitmentV1,
+}
+
+impl RetainedWorkerLaunchAuthorityProofV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported retained_worker_launch_authority.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+        for (field, value) in [
+            ("authority_store_id", self.authority_store_id.as_str()),
+            ("issuer_request_id", self.issuer_request_id.as_str()),
+            ("registration_id", self.registration_id.as_str()),
+            (
+                "orchestration_session_id",
+                self.orchestration_session_id.as_str(),
+            ),
+            ("caller_participant_id", self.caller_participant_id.as_str()),
+            (
+                "retained_participant_id",
+                self.retained_participant_id.as_str(),
+            ),
+            ("bootstrap_run_id", self.bootstrap_run_id.as_str()),
+            ("transport_claim_id", self.transport_claim_id.as_str()),
+            ("backend_id", self.backend_id.as_str()),
+            ("protocol", self.protocol.as_str()),
+            (
+                "world_binding.world_id",
+                self.world_binding.world_id.as_str(),
+            ),
+            ("current_policy_ref_id", self.current_policy_ref_id.as_str()),
+            (
+                "current_policy_revision",
+                self.current_policy_revision.as_str(),
+            ),
+            (
+                "retained_worker_ref_id",
+                self.retained_worker_ref_id.as_str(),
+            ),
+        ] {
+            validate_non_empty_request_field(
+                &format!("retained_worker_launch_authority.{field}"),
+                value,
+            )?;
+        }
+        self.canonical_spawn_fingerprint.validate()?;
+        self.registration_commitment
+            .validate("retained_worker_launch_authority.registration_commitment")?;
+        self.authority_record_commitment_after
+            .validate("retained_worker_launch_authority.authority_record_commitment_after")?;
+        self.retained_worker_commitment
+            .validate("retained_worker_launch_authority.retained_worker_commitment")?;
+        Ok(())
+    }
+}
+
+impl TryFrom<RetainedWorkerLaunchAuthorityProofDef> for RetainedWorkerLaunchAuthorityProofV1 {
+    type Error = String;
+
+    fn try_from(value: RetainedWorkerLaunchAuthorityProofDef) -> Result<Self, Self::Error> {
+        let proof = Self {
+            schema_version: value.schema_version,
+            authority_store_id: value.authority_store_id,
+            issuer_request_id: value.issuer_request_id,
+            canonical_spawn_fingerprint: value.canonical_spawn_fingerprint,
+            registration_id: value.registration_id,
+            registration_commitment: value.registration_commitment,
+            authority_revision_after: value.authority_revision_after,
+            authority_record_commitment_after: value.authority_record_commitment_after,
+            orchestration_session_id: value.orchestration_session_id,
+            caller_participant_id: value.caller_participant_id,
+            retained_participant_id: value.retained_participant_id,
+            bootstrap_run_id: value.bootstrap_run_id,
+            transport_claim_id: value.transport_claim_id,
+            backend_id: value.backend_id,
+            protocol: value.protocol,
+            world_binding: value.world_binding,
+            current_policy_ref_id: value.current_policy_ref_id,
+            current_policy_revision: value.current_policy_revision,
+            retained_worker_ref_id: value.retained_worker_ref_id,
+            retained_worker_commitment: value.retained_worker_commitment,
+        };
+        proof.validate()?;
+        Ok(proof)
+    }
+}
+
+fn validate_lowercase_sha256_digest(field: &str, digest_hex: &str) -> Result<(), String> {
+    if digest_hex.len() != 64
+        || !digest_hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(format!(
+            "{field}.digest_hex must be exactly 64 lowercase hexadecimal characters"
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "MemberDispatchRequestDef")]
 pub struct MemberDispatchRequestV1 {
     #[serde(default = "member_dispatch_request_v1_default_schema_version")]
@@ -731,6 +979,8 @@ pub struct MemberDispatchRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_prompt: Option<String>,
     pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -753,6 +1003,8 @@ struct MemberDispatchRequestDef {
     #[serde(default)]
     initial_prompt: Option<String>,
     resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+    #[serde(default)]
+    retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
 }
 
 fn member_dispatch_request_v1_default_schema_version() -> u32 {
@@ -794,6 +1046,9 @@ impl MemberDispatchRequestV1 {
             self.initial_prompt.as_deref(),
         )?;
         self.resolved_runtime.validate()?;
+        if let Some(proof) = self.retained_worker_launch_authority.as_ref() {
+            proof.validate()?;
+        }
 
         if self.orchestrator_participant_id == self.participant_id {
             return Err(
@@ -838,6 +1093,7 @@ impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
             world_generation: value.world_generation,
             initial_prompt: value.initial_prompt,
             resolved_runtime: value.resolved_runtime,
+            retained_worker_launch_authority: value.retained_worker_launch_authority,
         };
         request.validate()?;
         Ok(request)
@@ -2897,6 +3153,82 @@ mod tests {
             .into_owned()
     }
 
+    fn sample_retained_worker_launch_authority_proof() -> RetainedWorkerLaunchAuthorityProofV1 {
+        RetainedWorkerLaunchAuthorityProofV1 {
+            schema_version: 1,
+            authority_store_id: "store_123".into(),
+            issuer_request_id: "request_123".into(),
+            canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+                schema_version: 1,
+                algorithm: "hmac-sha-256".into(),
+                key_id: "admission_key_123".into(),
+                digest_hex: "a".repeat(64),
+            },
+            registration_id: "registration_123".into(),
+            registration_commitment: RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "b".repeat(64),
+            },
+            authority_revision_after: 7,
+            authority_record_commitment_after:
+                RetainedWorkerAuthorityObjectCommitmentV1::StoreHmacSha256 {
+                    key_id: "authority_key_123".into(),
+                    domain: "substrate.host-session-authority.authority-record.v1".into(),
+                    digest_hex: "c".repeat(64),
+                },
+            orchestration_session_id: "orch_123".into(),
+            caller_participant_id: "ash_orch_123".into(),
+            retained_participant_id: "ash_member_123".into(),
+            bootstrap_run_id: "run_123".into(),
+            transport_claim_id: "transport_claim_123".into(),
+            backend_id: "cli:codex".into(),
+            protocol: "substrate.agent.session".into(),
+            world_binding: RetainedWorkerLaunchWorldBindingV1 {
+                world_id: "world_123".into(),
+                world_generation: 7,
+            },
+            current_policy_ref_id: "policy_ref_123".into(),
+            current_policy_revision: "policy_revision_123".into(),
+            retained_worker_ref_id: "retained_worker_ref_123".into(),
+            retained_worker_commitment:
+                RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "d".repeat(64),
+                },
+        }
+    }
+
+    #[test]
+    fn retained_worker_launch_authority_proof_is_closed_and_strictly_validated() {
+        let proof = sample_retained_worker_launch_authority_proof();
+        proof.validate().expect("valid launch-authority proof");
+
+        let json = serde_json::to_value(&proof).expect("serialize launch-authority proof");
+        let decoded: RetainedWorkerLaunchAuthorityProofV1 =
+            serde_json::from_value(json.clone()).expect("deserialize launch-authority proof");
+        assert_eq!(decoded, proof);
+
+        let mut changed_algorithm = json.clone();
+        changed_algorithm["canonical_spawn_fingerprint"]["algorithm"] =
+            serde_json::json!("sha-256");
+        assert!(
+            serde_json::from_value::<RetainedWorkerLaunchAuthorityProofV1>(changed_algorithm)
+                .is_err()
+        );
+
+        let mut uppercase_digest = json.clone();
+        uppercase_digest["canonical_spawn_fingerprint"]["digest_hex"] =
+            serde_json::json!("A".repeat(64));
+        assert!(
+            serde_json::from_value::<RetainedWorkerLaunchAuthorityProofV1>(uppercase_digest)
+                .is_err()
+        );
+
+        let mut unknown_field = json;
+        unknown_field["unexpected"] = serde_json::json!(true);
+        assert!(
+            serde_json::from_value::<RetainedWorkerLaunchAuthorityProofV1>(unknown_field).is_err()
+        );
+    }
+
     #[test]
     fn execute_request_member_dispatch_round_trip() {
         let binary_path = test_absolute_binary_path();
@@ -2947,11 +3279,16 @@ mod tests {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path: binary_path.clone(),
                 },
+                retained_worker_launch_authority: None,
             }),
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
         assert!(json.contains("\"member_dispatch\""));
+        assert!(
+            !json.contains("retained_worker_launch_authority"),
+            "legacy/Run/Fork None compatibility must preserve the pre-carrier wire shape"
+        );
 
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert!(back.cmd.is_empty());
@@ -2974,6 +3311,7 @@ mod tests {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path,
                 },
+                retained_worker_launch_authority: None,
             })
         );
     }

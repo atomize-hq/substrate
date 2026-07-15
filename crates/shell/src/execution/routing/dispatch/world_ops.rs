@@ -35,7 +35,8 @@ use transport_api_client::AgentClient;
 use transport_api_types::ExecuteCancelRequestV1;
 use transport_api_types::{
     ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
-    ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
+    ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1, RetainedWorkerLaunchAuthorityProofV1,
+    WorldFsMode,
 };
 #[cfg(target_os = "linux")]
 use world::LinuxLocalBackend;
@@ -270,6 +271,7 @@ pub(crate) struct MemberDispatchTransportRequest {
     pub initial_prompt: Option<String>,
     pub backend_kind: MemberRuntimeBackendKindV1,
     pub binary_path: String,
+    pub retained_worker_launch_authority: Option<RetainedWorkerLaunchAuthorityProofV1>,
 }
 
 fn build_execute_request(input: ExecuteRequestInput) -> ExecuteRequest {
@@ -322,6 +324,7 @@ fn build_member_dispatch_payload(
             backend_kind: request.backend_kind,
             binary_path: request.binary_path.clone(),
         },
+        retained_worker_launch_authority: request.retained_worker_launch_authority.clone(),
     }
 }
 
@@ -2623,6 +2626,7 @@ mod tests {
             initial_prompt: Some("first turn".to_string()),
             backend_kind: MemberRuntimeBackendKindV1::Codex,
             binary_path: "/usr/bin/codex".to_string(),
+            retained_worker_launch_authority: None,
         });
 
         assert_eq!(payload.schema_version, 1);
@@ -2643,6 +2647,7 @@ mod tests {
         assert_eq!(payload.world_id, "world_123");
         assert_eq!(payload.world_generation, 9);
         assert_eq!(payload.initial_prompt.as_deref(), Some("first turn"));
+        assert_eq!(payload.retained_worker_launch_authority, None);
         assert_eq!(
             payload.resolved_runtime,
             ResolvedMemberRuntimeDescriptorV1 {
@@ -2697,6 +2702,7 @@ mod tests {
                     initial_prompt: None,
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path: "/usr/bin/codex".to_string(),
+                    retained_worker_launch_authority: None,
                 },
             )),
         });
