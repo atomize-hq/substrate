@@ -5693,6 +5693,8 @@ mod tests {
         "SUBSTRATE_B3_2A_ADMISSION_RESERVATION_SUBPROCESS_PROMPT";
     const ADMISSION_RESERVATION_SUBPROCESS_CAP: &str =
         "SUBSTRATE_B3_2A_ADMISSION_RESERVATION_SUBPROCESS_CAP";
+    const ADMISSION_RESERVATION_SUBPROCESS_DROP_PROOF: &str =
+        "SUBSTRATE_B3_2A_ADMISSION_RESERVATION_SUBPROCESS_DROP_PROOF";
     const ADMISSION_HEAD_SUBPROCESS_HOME: &str = "SUBSTRATE_B3_2A_ADMISSION_HEAD_SUBPROCESS_HOME";
     const ADMISSION_HEAD_SUBPROCESS_ISSUER: &str =
         "SUBSTRATE_B3_2A_ADMISSION_HEAD_SUBPROCESS_ISSUER";
@@ -5779,7 +5781,12 @@ mod tests {
             .parse()
             .unwrap();
         let plan = admission_plan(&authority, &issuer, &prompt, cap);
-        let _ = RetainedWorkerRuntime.reserve_admission_slot(&authority, &plan);
+        let reservation = RetainedWorkerRuntime.reserve_admission_slot(&authority, &plan);
+        drop(plan);
+        if let Some(path) = std::env::var_os(ADMISSION_RESERVATION_SUBPROCESS_DROP_PROOF) {
+            fs::write(path, "creating request dropped").unwrap();
+        }
+        drop(reservation);
     }
 
     #[test]
@@ -5850,6 +5857,28 @@ mod tests {
             "decode re-presented admission authority",
         )
         .unwrap();
+        if matches!(mode.as_str(), "routable-join" | "terminal-join") {
+            let expected = RetainedWorkerRuntime
+                .read_admission_record(&authority, "r0-session", &participant_id)
+                .unwrap()
+                .unwrap();
+            invoke_no_steal_mutation(
+                &authority,
+                &plan,
+                &expected,
+                if mode == "routable-join" {
+                    NoStealMutationV1::RoutableJoin
+                } else {
+                    NoStealMutationV1::TerminalJoin
+                },
+            );
+            fs::write(
+                result_path.expect("runtime-truth worker requires a result path"),
+                "joined",
+            )
+            .unwrap();
+            return;
+        }
         let crash_point = match mode.as_str() {
             "claim" | "conflict" => None,
             "crash-after-publication" => {
@@ -6355,6 +6384,66 @@ mod tests {
         QueuedRegistration,
         RegistrationHead,
         TransportJoin,
+        RoutableJoin,
+        TerminalJoin,
+    }
+
+    fn exact_routable_truth(
+        plan: &RetainedWorkerAdmissionPlanV1,
+        record: &RetainedWorkerAdmissionRecordV1,
+    ) -> (RuntimeFrameIdentityV1, AgentEvent, TimestampV1) {
+        let RetainedWorkerAdmissionStateV1::Routable {
+            stream_id,
+            registered_frame_sequence,
+            registered_event_id,
+            registered_event_sequence,
+            registered_at,
+            ..
+        } = &record.state
+        else {
+            panic!("expected exact Routable admission truth")
+        };
+        let (mut frame, mut event) = registered_runtime_truth(plan, record, stream_id);
+        frame.frame_sequence = *registered_frame_sequence;
+        event.event_identity = Some(RuntimeEventIdentityV1 {
+            event_id: registered_event_id.clone(),
+            event_sequence: *registered_event_sequence,
+        });
+        (frame, event, registered_at.clone())
+    }
+
+    fn exact_terminal_truth(
+        record: &RetainedWorkerAdmissionRecordV1,
+    ) -> (
+        RuntimeFrameIdentityV1,
+        RuntimeEventIdentityV1,
+        RuntimeTerminalIdentityV1,
+        i32,
+        TimestampV1,
+    ) {
+        let RetainedWorkerAdmissionStateV1::Terminal {
+            stream_id,
+            terminal_frame_sequence,
+            terminal_event_id,
+            terminal_event_sequence,
+            exit_code,
+            terminal_at,
+            ..
+        } = &record.state
+        else {
+            panic!("expected exact Terminal admission truth")
+        };
+        let frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: stream_id.clone(),
+            frame_sequence: *terminal_frame_sequence,
+        };
+        let event = RuntimeEventIdentityV1 {
+            event_id: terminal_event_id.clone(),
+            event_sequence: *terminal_event_sequence,
+        };
+        let terminal = RuntimeTerminalIdentityV1::from(&event);
+        (frame, event, terminal, *exit_code, terminal_at.clone())
     }
 
     fn invoke_no_steal_mutation(
@@ -6394,6 +6483,64 @@ mod tests {
                 assert!(!joined.newly_claimed);
                 assert_eq!(joined.record, *expected);
             }
+            NoStealMutationV1::RoutableJoin => {
+                let (frame, event, registered_at) = exact_routable_truth(plan, expected);
+                let joined = runtime
+                    .mark_admission_routable(
+                        authority,
+                        plan,
+                        &expected.retained_participant_id,
+                        &frame,
+                        &event,
+                        registered_at,
+                    )
+                    .unwrap();
+                assert_eq!(joined, *expected);
+                let mut conflicting_event = event;
+                conflicting_event.event_identity.as_mut().unwrap().event_id += "-changed";
+                assert!(runtime
+                    .mark_admission_routable(
+                        authority,
+                        plan,
+                        &expected.retained_participant_id,
+                        &frame,
+                        &conflicting_event,
+                        exact_routable_truth(plan, expected).2,
+                    )
+                    .is_err());
+            }
+            NoStealMutationV1::TerminalJoin => {
+                let (frame, event, terminal, exit_code, terminal_at) =
+                    exact_terminal_truth(expected);
+                let joined = runtime
+                    .mark_admission_terminal(
+                        authority,
+                        plan,
+                        &expected.retained_participant_id,
+                        &frame,
+                        &event,
+                        &terminal,
+                        exit_code,
+                        terminal_at,
+                    )
+                    .unwrap();
+                assert_eq!(joined, *expected);
+                let mut conflicting_event = event;
+                conflicting_event.event_id += "-changed";
+                let conflicting_terminal = RuntimeTerminalIdentityV1::from(&conflicting_event);
+                assert!(runtime
+                    .mark_admission_terminal(
+                        authority,
+                        plan,
+                        &expected.retained_participant_id,
+                        &frame,
+                        &conflicting_event,
+                        &conflicting_terminal,
+                        exit_code,
+                        exact_terminal_truth(expected).4,
+                    )
+                    .is_err());
+            }
         }
 
         let mut changed = plan.clone();
@@ -6409,6 +6556,35 @@ mod tests {
             NoStealMutationV1::TransportJoin => runtime
                 .claim_admission_transport(authority, &changed, &expected.retained_participant_id)
                 .map(drop),
+            NoStealMutationV1::RoutableJoin => {
+                let (frame, event, registered_at) = exact_routable_truth(plan, expected);
+                runtime
+                    .mark_admission_routable(
+                        authority,
+                        &changed,
+                        &expected.retained_participant_id,
+                        &frame,
+                        &event,
+                        registered_at,
+                    )
+                    .map(drop)
+            }
+            NoStealMutationV1::TerminalJoin => {
+                let (frame, event, terminal, exit_code, terminal_at) =
+                    exact_terminal_truth(expected);
+                runtime
+                    .mark_admission_terminal(
+                        authority,
+                        &changed,
+                        &expected.retained_participant_id,
+                        &frame,
+                        &event,
+                        &terminal,
+                        exit_code,
+                        terminal_at,
+                    )
+                    .map(drop)
+            }
         };
         assert!(conflict.is_err());
     }
@@ -6455,7 +6631,9 @@ mod tests {
                     .unwrap()
                     .success());
             }
-            NoStealMutationV1::TransportJoin => {
+            NoStealMutationV1::TransportJoin
+            | NoStealMutationV1::RoutableJoin
+            | NoStealMutationV1::TerminalJoin => {
                 let test_name = "execution::agent_runtime::retained_worker_runtime::tests::transport_claim_subprocess_worker";
                 let result_path = parent.path().join("no-steal-subprocess-result");
                 assert!(Command::new(&executable)
@@ -6475,7 +6653,16 @@ mod tests {
                         &expected.retained_participant_id,
                     )
                     .env(TRANSPORT_CLAIM_SUBPROCESS_ENTROPY, "201")
-                    .env(TRANSPORT_CLAIM_SUBPROCESS_MODE, "claim")
+                    .env(
+                        TRANSPORT_CLAIM_SUBPROCESS_MODE,
+                        match mutation {
+                            NoStealMutationV1::TransportJoin => "claim",
+                            NoStealMutationV1::RoutableJoin => "routable-join",
+                            NoStealMutationV1::TerminalJoin => "terminal-join",
+                            NoStealMutationV1::QueuedRegistration
+                            | NoStealMutationV1::RegistrationHead => unreachable!(),
+                        },
+                    )
                     .env(TRANSPORT_CLAIM_SUBPROCESS_RESULT, &result_path)
                     .status()
                     .unwrap()
@@ -6483,6 +6670,46 @@ mod tests {
                 assert_eq!(fs::read_to_string(result_path).unwrap(), "joined");
             }
         }
+    }
+
+    fn admission_created_by_dropped_exited_caller(
+        parent: &tempfile::TempDir,
+        authority: &HostSessionAuthority,
+        issuer_request_id: &str,
+        prompt: &str,
+    ) -> (RetainedWorkerAdmissionPlanV1, RetainedWorkerAdmissionSlotV1) {
+        let drop_proof = parent
+            .path()
+            .join(format!("{issuer_request_id}-drop-proof"));
+        let test_name = "execution::agent_runtime::retained_worker_runtime::tests::admission_reservation_subprocess_worker";
+        assert!(Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg(test_name)
+            .arg("--nocapture")
+            .arg("--test-threads=1")
+            .env(
+                ADMISSION_RESERVATION_SUBPROCESS_HOME,
+                parent.path().join("home"),
+            )
+            .env(ADMISSION_RESERVATION_SUBPROCESS_ISSUER, issuer_request_id)
+            .env(ADMISSION_RESERVATION_SUBPROCESS_PROMPT, prompt)
+            .env(ADMISSION_RESERVATION_SUBPROCESS_CAP, "4")
+            .env(ADMISSION_RESERVATION_SUBPROCESS_DROP_PROOF, &drop_proof,)
+            .status()
+            .unwrap()
+            .success());
+        assert_eq!(
+            fs::read_to_string(&drop_proof).unwrap(),
+            "creating request dropped"
+        );
+        fs::remove_file(drop_proof).unwrap();
+
+        let re_presented = admission_plan(authority, issuer_request_id, prompt, 4);
+        let joined = RetainedWorkerRuntime
+            .reserve_admission_slot(authority, &re_presented)
+            .unwrap();
+        assert!(joined.joined);
+        (re_presented, joined)
     }
 
     fn assert_non_authoritative_matrix_preserves_record(
@@ -6515,14 +6742,9 @@ mod tests {
             assert_unchanged(authority);
         };
 
-        assert!(Command::new("sh")
-            .arg("-c")
-            .arg("exit 0")
-            .status()
-            .unwrap()
-            .success());
+        // The helper that created this exact admission explicitly dropped its creating request
+        // and then exited before `plan` was reconstructed and re-presented in this process.
         assert_attempt(authority);
-        drop(plan.clone());
         assert_attempt(authority);
         invoke_no_steal_mutation_from_another_pid(parent, plan, expected, mutation);
         assert_unchanged(authority);
@@ -6619,10 +6841,12 @@ mod tests {
         runtime
             .reserve_admission_slot(&slot_authority, &head_plan)
             .unwrap();
-        let slot_plan = admission_plan(&slot_authority, "no-steal-slot", "queued", 4);
-        let slot = runtime
-            .reserve_admission_slot(&slot_authority, &slot_plan)
-            .unwrap();
+        let (slot_plan, slot) = admission_created_by_dropped_exited_caller(
+            &slot_parent,
+            &slot_authority,
+            "no-steal-slot",
+            "queued",
+        );
         assert!(matches!(
             slot.record.state,
             RetainedWorkerAdmissionStateV1::SlotReserved { .. }
@@ -6636,7 +6860,12 @@ mod tests {
         );
 
         let (head_parent, head_authority, _) = started_authority();
-        let head_plan = admission_plan(&head_authority, "no-steal-head", "head", 4);
+        let (head_plan, _) = admission_created_by_dropped_exited_caller(
+            &head_parent,
+            &head_authority,
+            "no-steal-head",
+            "head",
+        );
         let failure = runtime
             .register_admitted_worker_at(
                 &head_authority,
@@ -6664,7 +6893,12 @@ mod tests {
         );
 
         let (claim_parent, claim_authority, _) = started_authority();
-        let claim_plan = admission_plan(&claim_authority, "no-steal-claim", "claim", 4);
+        let (claim_plan, _) = admission_created_by_dropped_exited_caller(
+            &claim_parent,
+            &claim_authority,
+            "no-steal-claim",
+            "claim",
+        );
         let admitted = runtime
             .register_admitted_worker(&claim_authority, &claim_plan)
             .unwrap();
@@ -6688,7 +6922,12 @@ mod tests {
         );
 
         let (routable_parent, routable_authority, _) = started_authority();
-        let routable_plan = admission_plan(&routable_authority, "no-steal-routable", "routable", 4);
+        let (routable_plan, _) = admission_created_by_dropped_exited_caller(
+            &routable_parent,
+            &routable_authority,
+            "no-steal-routable",
+            "routable",
+        );
         let routable_admitted = runtime
             .register_admitted_worker(&routable_authority, &routable_plan)
             .unwrap();
@@ -6719,11 +6958,16 @@ mod tests {
             &routable_authority,
             &routable_plan,
             &routable,
-            NoStealMutationV1::TransportJoin,
+            NoStealMutationV1::RoutableJoin,
         );
 
         let (terminal_parent, terminal_authority, _) = started_authority();
-        let terminal_plan = admission_plan(&terminal_authority, "no-steal-terminal", "terminal", 4);
+        let (terminal_plan, _) = admission_created_by_dropped_exited_caller(
+            &terminal_parent,
+            &terminal_authority,
+            "no-steal-terminal",
+            "terminal",
+        );
         let terminal_admitted = runtime
             .register_admitted_worker(&terminal_authority, &terminal_plan)
             .unwrap();
@@ -6776,7 +7020,7 @@ mod tests {
             &terminal_authority,
             &terminal_plan,
             &terminal,
-            NoStealMutationV1::TransportJoin,
+            NoStealMutationV1::TerminalJoin,
         );
     }
 
@@ -7533,6 +7777,39 @@ mod tests {
                 path.display()
             );
         }
+    }
+
+    #[test]
+    fn crash_after_slot_reserved_retries_to_the_committed_identity() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "slot-crash", "prompt", 2);
+        let failure = runtime
+            .reserve_admission_slot_at(
+                &authority,
+                &plan,
+                timestamp("2026-07-15T13:00:00.000000000Z"),
+                [11_u8; 16],
+                [12_u8; 16],
+                [13_u8; 16],
+                Some(AdmissionReservationCrashPointV1::AfterSlotReserved),
+            )
+            .unwrap_err();
+        assert_eq!(
+            failure.to_string(),
+            "injected crash after admission slot reservation"
+        );
+
+        let joined = runtime.reserve_admission_slot(&authority, &plan).unwrap();
+        assert!(joined.joined);
+        assert_eq!(
+            joined.record.retained_participant_id,
+            format!("rwp_{}", lower_hex(&[11_u8; 16]))
+        );
+        assert_eq!(
+            joined.record.bootstrap_run_id,
+            format!("rwr_{}", lower_hex(&[12_u8; 16]))
+        );
     }
 
     #[test]
