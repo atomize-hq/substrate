@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is complete and review-clean; transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default` `REVIEW CLEAN`; `R7-1.1` is next, unchecked, and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked; Prompt 1 for `R7-1` / `none` is prepared but not started)**
+Current phase: **`R7-1` (SOLE ACTIVE PHASE; active packet: `none`; R7-1 implementation and checkpoint complete; task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` fresh independent built-in `default` `REVIEW CLEAN`; checkpoint-doc review and separate phase-transition review pending; `R7-2..R7-6` and R8 blocked; no R7-2 work started)**
 
 ## Dependency Order
 
@@ -56,14 +56,19 @@ Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is 
     `REVIEW CLEAN`. Fixture-only `R7-0.2` commit `fa85cd4b8` also received fresh independent
     built-in `default` `REVIEW CLEAN`; focused `2 / 2`, compactor `25 / 25` including end-to-end
     `2 / 2`, and privacy scans over `24` rows are green with zero markers or raw UUIDs.
-12. **ACTIVE AT ENTRY ONLY — R7-1:** transition/fix series `339744dff` + `d20cac6a9` is fresh
-    independent built-in `default` `REVIEW CLEAN`; active packet is `none`. `R7-1.1` is next,
-    unchecked, and unstarted; production implementation remains unstarted, and `R7-2..R7-6` plus
-    R8 remain blocked. Prompt 1 selectors are prepared but have not been started.
+12. **ACTIVE / IMPLEMENTATION AND CHECKPOINT COMPLETE — R7-1:** transition/fix series `339744dff`
+    + `d20cac6a9` is fresh independent built-in `default` `REVIEW CLEAN`; active packet is `none`.
+    R7-1.1 series `e65127720` + `685cf843b`, R7-1.2 commit `4d122cd9f`, and R7-1.3 commit
+    `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`. Focused `6 / 6`, end-to-end
+    `6 / 6`, CLI `2 / 2`, full compactor `36` unit/integration plus `3` doctests, deterministic
+    ordering, and static/diff/GitNexus gates are green. Checkpoint-doc review and a separate phase-
+    transition commit/review remain pending. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has
+    started.
 
 ## Execution Rules
 
-- Do not begin `R7-1.1` in this completed `R7-0` phase run; Prompt 1 is prepared but not started.
+- Do not begin R7-2 until the R7-1 checkpoint-doc receipt and separate phase-transition update are
+  each committed and fresh-review-clean.
 - Do not reopen `semantic_goal_drift` without a new failing witness.
 - Do not add a common mega-context argument to every scorer.
 - Treat `dead_end_thrash` regression/delegation/turn-shape; truth-grounding applicability,
@@ -75,10 +80,11 @@ Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is 
 - Keep R7 reciprocal direct linkage, separate trajectories, direct-child-first support, and no-new-
   drift-class-by-default as implementation-ready authority decisions. `R7-0` is complete after
   `R7-0.1` and fixture-only `R7-0.2` commit `fa85cd4b8` each received fresh independent `REVIEW
-  CLEAN`. Transition/fix series `339744dff` + `d20cac6a9` is fresh independent `REVIEW CLEAN`, so
-  the narrow transition gate is satisfied. `R7-1.1` is the next authorized task only in a fresh
-  `R7-1` phase session; it remains unchecked and unstarted here, and Prompt 1 is prepared but was
-  not invoked. `R7-2..R7-6` and R8 remain blocked.
+  CLEAN`. Transition/fix series `339744dff` + `d20cac6a9` is fresh independent `REVIEW CLEAN`.
+  R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent
+  `REVIEW CLEAN`, and the R7-1 checkpoint is complete. Keep R7-1 as the sole active phase until the
+  checkpoint-doc receipt and separate phase-transition update are each committed and fresh-review-
+  clean. `R7-2..R7-6` and R8 remain blocked.
 - Run GitNexus impact analysis before any later symbol edit. Before every commit, stage only intended
   files with `git add -- <intended-files-only>`, run
   `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, run
@@ -109,5 +115,7 @@ series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-
 `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2`
 commit `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`.
 Transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default` `REVIEW
-CLEAN`. Only `R7-1` is active at entry with packet `none`; `R7-1.1` is next, unchecked, and
-unstarted, production R7 implementation remains unstarted, and `R7-2..R7-6` plus R8 remain blocked.
+CLEAN`. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh
+independent built-in `default` `REVIEW CLEAN`; the R7-1 checkpoint is complete. R7-1 remains the
+sole active phase with packet `none` pending checkpoint-doc review and the separate phase-transition
+review. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has started.

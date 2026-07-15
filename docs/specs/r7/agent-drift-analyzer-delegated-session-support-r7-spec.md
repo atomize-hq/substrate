@@ -3,11 +3,11 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
-`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-0 -> R7-1 TRANSITION/FIX SERIES `339744dff` +
-`d20cac6a9` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-1.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2..R7-6 AND R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT
-STARTED / PROMPT 1 PREPARED BUT NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-1.1 SERIES `e65127720` +
+`685cf843b`, R7-1.2 COMMIT `4d122cd9f`, AND R7-1.3 COMMIT `e865eee13` FRESH INDEPENDENT REVIEW
+CLEAN / R7-1 IMPLEMENTATION AND CHECKPOINT COMPLETE / CHECKPOINT DOC REVIEW AND SEPARATE PHASE-
+TRANSITION REVIEW PENDING / R7-1 SOLE ACTIVE PHASE / ACTIVE PACKET NONE / R7-2..R7-6 AND R8
+BLOCKED / NO R7-2 WORK STARTED**
 
 ## Assumptions I'm Making
 
@@ -17,9 +17,12 @@ STARTED / PROMPT 1 PREPARED BUT NOT STARTED**
    built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and
    fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`,
    completing `R7-0`. Transition/fix series `339744dff` + `d20cac6a9` also received fresh
-   independent built-in `default` `REVIEW CLEAN`. `R7-1` is active at entry only with packet
-   `none`; `R7-1.1` is next, unchecked, and unstarted. No production implementation work has
-   started, and `R7-2..R7-6` plus R8 remain blocked.
+   independent built-in `default` `REVIEW CLEAN`. `R7-1.1` series `e65127720` + `685cf843b`,
+   `R7-1.2` commit `4d122cd9f`, and `R7-1.3` commit `e865eee13` are fresh independent built-in
+   `default` `REVIEW CLEAN`. R7-1 implementation and its checkpoint are complete, but R7-1 remains
+   the sole active phase with packet `none` pending checkpoint-doc review and a separate committed
+   and fresh-review-clean phase transition. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has
+   started.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -32,7 +35,7 @@ STARTED / PROMPT 1 PREPARED BUT NOT STARTED**
 6. R8 still owns broad sentinel interpretation consolidation. R7 may add only compatibility and
    compact presentation required to carry the new analyzer semantics end to end.
 
-## Implementation Promotion Gate — Promotion Complete, R7-0 Complete, R7-1 at Entry
+## Implementation Promotion Gate — R7-1 Implementation And Checkpoint Complete, Transition Pending
 
 This document is now implementation-ready authority. The R6 prerequisites audited during the
 now-complete `R7-PROMOTE` phase are satisfied:
@@ -56,9 +59,15 @@ nested-depth residue, and single-agent raw shapes; focused parser/privacy proof 
 compactor proof is `25 / 25` including end-to-end `2 / 2`, privacy scans over `24` rows found zero
 private markers and zero raw UUIDs, and fresh independent review returned `REVIEW CLEAN`. `R7-0` is
 complete. Transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default`
-`REVIEW CLEAN`. `R7-1` is active at entry only with packet `none`, while `R7-1.1` remains next,
-unchecked, and unstarted. R7 must extend the stable ordinary single-session baseline and must not
-absorb baseline scorer semantics.
+`REVIEW CLEAN`. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh
+independent built-in `default` `REVIEW CLEAN`. Focused delegation-link proof passes `6 / 6`; direct-
+closure end-to-end and CLI proof pass `6 / 6` and `2 / 2`; the full compactor wall passes `36` unit/
+integration tests plus `3` doctests; formatting, clippy, diff, and staged GitNexus gates are green.
+Link/session/file ordering is deterministic, and no raw private rollout data was added. R7-1
+implementation and checkpoint are complete, but R7-1 remains the sole active phase with packet
+`none` pending fresh checkpoint-doc review and a separate committed and fresh-review-clean phase
+transition. R7-2 remains blocked and unstarted. R7 must continue to preserve the stable ordinary
+single-session baseline and must not absorb baseline scorer semantics.
 
 ## Objective
 

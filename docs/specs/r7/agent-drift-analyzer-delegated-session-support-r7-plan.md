@@ -3,11 +3,11 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
-`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-0 -> R7-1 TRANSITION/FIX SERIES `339744dff` +
-`d20cac6a9` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-1.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2..R7-6 AND R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT
-STARTED / PROMPT 1 PREPARED BUT NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-1.1 SERIES `e65127720` +
+`685cf843b`, R7-1.2 COMMIT `4d122cd9f`, AND R7-1.3 COMMIT `e865eee13` FRESH INDEPENDENT REVIEW
+CLEAN / R7-1 IMPLEMENTATION AND CHECKPOINT COMPLETE / CHECKPOINT DOC REVIEW AND SEPARATE PHASE-
+TRANSITION REVIEW PENDING / R7-1 SOLE ACTIVE PHASE / ACTIVE PACKET NONE / R7-2..R7-6 AND R8
+BLOCKED / NO R7-2 WORK STARTED**
 
 This implementation plan is reconciled and implementation-ready. R6 is `CLOSED`, and promotion
 series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so
@@ -15,9 +15,11 @@ series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `
 independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` +
 `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default`
 `REVIEW CLEAN`, completing `R7-0`. Transition/fix series `339744dff` + `d20cac6a9` also received
-fresh independent built-in `default` `REVIEW CLEAN`. `R7-1` is active at entry only with packet
-`none`; `R7-1.1` is next, unchecked, and unstarted. No production implementation work has started,
-and `R7-2..R7-6` plus R8 remain blocked.
+fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task series `e65127720` + `685cf843b`,
+`4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`. R7-1
+implementation and checkpoint are complete, but R7-1 remains the sole active phase with packet
+`none` pending fresh checkpoint-doc review and a separate committed and fresh-review-clean phase
+transition. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has started.
 
 ## Overview
 
@@ -65,8 +67,11 @@ independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55
 `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default`
 `REVIEW CLEAN`, completing `R7-0`. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`
 remains the review-clean `R7-0` entry receipt. Transition/fix series `339744dff` + `d20cac6a9` is
-the review-clean `R7-1` entry receipt. The graph is now at `R7-1` entry only with packet `none`;
-`R7-1.1` is next, unchecked, and unstarted.
+the review-clean `R7-1` entry receipt. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and
+`e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; the R7-1 checkpoint is
+complete. The graph remains at R7-1 with packet `none` until the checkpoint-doc receipt and a
+separate phase-transition update are each committed and fresh-review-clean. R7-2 remains blocked
+and unstarted.
 
 ```text
 R7-0 docs + sanitized evidence matrix
@@ -309,9 +314,9 @@ Sequential requirements:
 
 ## Open Questions
 
-No unresolved design question blocks `R7-1` implementation. Transition/fix series `339744dff` +
-`d20cac6a9` is fresh independent `REVIEW CLEAN`, so the narrow transition gate is satisfied. `R7-0`
-is complete; with packet `none`, `R7-1.1` is the next authorized task only in a fresh `R7-1` phase
-session and remains unchecked and unstarted here. Prompt 1 is prepared but was not invoked;
-`R7-2..R7-6` and R8 remain blocked. Default-on linked closure, new drift taxonomy, and recursive
-depth remain evidence-gated decisions for later packets.
+No unresolved design question emerged from R7-1 implementation. Task series `e65127720` +
+`685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent `REVIEW CLEAN`, and the R7-1
+checkpoint is complete. R7-1 remains the sole active phase with packet `none` until the checkpoint-
+doc receipt and a separate phase-transition update are each committed and fresh-review-clean.
+`R7-2..R7-6` and R8 remain blocked; no R7-2 work has started. Default-on linked closure, new drift
+taxonomy, and recursive depth remain evidence-gated decisions for later packets.

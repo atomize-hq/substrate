@@ -261,7 +261,8 @@ CLEAN`; `R7-PROMOTE` is complete. The narrow status transition series `6bf0ac6ad
 `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` each received
 fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
-`339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-1` is
-active at entry only with packet `none`; `R7-1.1` is next, unchecked, and unstarted. Production
-implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked. Prompt 1 for `R7-1` / `none`
-is prepared but has not been started.
+`339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
+series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in
+`default` `REVIEW CLEAN`; R7-1 implementation/checkpoint is complete. R7-1 remains the sole active
+phase with packet `none` pending checkpoint-doc review and the separate phase-transition review.
+`R7-2..R7-6` and R8 remain blocked; no R7-2 work has started.

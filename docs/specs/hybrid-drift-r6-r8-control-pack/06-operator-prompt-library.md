@@ -321,18 +321,24 @@ transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` also received fresh in
 The fixture proof is focused parser/privacy `2 / 2`, full compactor `25 / 25` including end-to-end
 `2 / 2`, and manual privacy scans over `24` rows with zero private markers and zero raw UUIDs. No
 production symbol changed. `R7-0` is complete and review-clean. Transition/fix series `339744dff` +
-`d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. Only `R7-1` is active at
-entry with packet `none`; `R7-1.1` is next, unchecked, and unstarted. Production implementation
-remains unstarted; `R7-2..R7-6` and R8 remain blocked.
+`d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1.1 series `e65127720`
++ `685cf843b`, R7-1.2 commit `4d122cd9f`, and R7-1.3 commit `e865eee13` each received fresh
+independent built-in `default` `REVIEW CLEAN`. The R7-1 implementation and behavior/static checkpoint
+are complete with focused `6 / 6`, end-to-end `6 / 6`, CLI `2 / 2`, full compactor `36` unit/
+integration plus `3` doctests, deterministic ordering, and green formatting/clippy/diff/GitNexus
+gates. No raw private rollout data was added. R7-1 remains the sole active phase with packet `none`
+pending fresh review of the checkpoint-doc receipt and a separate phase-transition commit/review.
+`R7-2..R7-6` and R8 remain blocked; no R7-2 work has started.
 
-The prepared Prompt 1 selectors for a fresh next-phase session are:
+The current Prompt 1 invocation used these selectors:
 
 ```text
 PHASE_ID: R7-1
 ACTIVE_PACKET: none
 ```
 
-Preparing these selectors does not start `R7-1` implementation. Prompt 1 has not been invoked.
+Do not prepare or invoke R7-2 selectors until the R7-1 checkpoint-doc receipt and separate phase-
+transition update are committed and fresh-review-clean.
 
 Historical resolved Task `.2B` decision report:
 

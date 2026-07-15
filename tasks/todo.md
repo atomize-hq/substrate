@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is complete and review-clean; transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default` `REVIEW CLEAN`; `R7-1.1` is next, unchecked, and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked; Prompt 1 for `R7-1` / `none` is prepared but not started)**
+Current phase: **`R7-1` (SOLE ACTIVE PHASE; active packet: `none`; R7-1 implementation and checkpoint complete; task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` fresh independent built-in `default` `REVIEW CLEAN`; checkpoint-doc review and separate phase-transition review pending; `R7-2..R7-6` and R8 blocked; no R7-2 work started)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -112,11 +112,22 @@ Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is 
 - [x] Freshly review the committed narrow `R7-0 -> R7-1` phase-transition update. The first review
   found status/bookkeeping blockers; fix `d20cac6a9` resolved them, and a fresh independent built-in
   `default` reviewer returned `REVIEW CLEAN` for series `339744dff` + `d20cac6a9`.
-- [ ] Start `R7-1.1` only in the next phase run. `R7-1` is active at entry only with packet `none`;
-  Prompt 1 selectors are prepared but have not been started.
+- [x] Complete R7-1.1 at implementation/docs series `e65127720` + `685cf843b`; fresh independent
+  built-in `default` review returned `REVIEW CLEAN`.
+- [x] Record operator decision `R7-1-HIGH-IMPACT-COMPACTOR-CONTRACT-01: A`, then complete R7-1.2 at
+  commit `4d122cd9f`; focused delegation-link proof passes `6 / 6`, and fresh independent built-in
+  `default` review returned `REVIEW CLEAN`.
+- [x] Complete R7-1.3 at commit `e865eee13`; end-to-end proof passes `6 / 6`, CLI proof passes `2 /
+  2`, and fresh independent built-in `default` review returned `REVIEW CLEAN`.
+- [x] Complete the R7-1 behavior/static checkpoint: full compactor passes `36` unit/integration
+  tests plus `3` doctests; link/session/file ordering is deterministic; formatting, clippy, diff,
+  and staged GitNexus gates are green; no raw private rollout data was added.
+- [ ] Freshly review and land the R7-1 checkpoint-doc receipt, then land and freshly review the
+  separate narrow R7-1 phase transition. Keep R7-1 as the sole active phase and do not start R7-2.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
 `R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.
-`R7-1` is active at entry only with packet `none`; transition/fix series `339744dff` + `d20cac6a9`
-is fresh independent built-in `default` `REVIEW CLEAN`, and `R7-1.1` is next, unchecked, and
-unstarted. Production implementation has not started; `R7-2..R7-6` plus R8 remain blocked.
+R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent
+built-in `default` `REVIEW CLEAN`; R7-1 implementation and checkpoint are complete. R7-1 remains
+the sole active phase with packet `none` pending checkpoint-doc review and the separate phase-
+transition review. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has started.

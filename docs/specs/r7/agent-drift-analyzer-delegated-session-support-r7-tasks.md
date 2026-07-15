@@ -3,11 +3,11 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
-`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-0 -> R7-1 TRANSITION/FIX SERIES `339744dff` +
-`d20cac6a9` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
-R7-1.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2..R7-6 AND R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT
-STARTED / PROMPT 1 PREPARED BUT NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-1.1 SERIES `e65127720` +
+`685cf843b`, R7-1.2 COMMIT `4d122cd9f`, AND R7-1.3 COMMIT `e865eee13` FRESH INDEPENDENT REVIEW
+CLEAN / R7-1 IMPLEMENTATION AND CHECKPOINT COMPLETE / CHECKPOINT DOC REVIEW AND SEPARATE PHASE-
+TRANSITION REVIEW PENDING / R7-1 SOLE ACTIVE PHASE / ACTIVE PACKET NONE / R7-2..R7-6 AND R8
+BLOCKED / NO R7-2 WORK STARTED**
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
@@ -16,9 +16,12 @@ CLEAN`. `R7-0.1` is complete after the exact contract `rg` passed; series `a9e75
 `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. Fixture-only
 `R7-0.2` commit `fa85cd4b8` also received fresh independent built-in `default` `REVIEW CLEAN`, so
 `R7-0` is complete. Transition/fix series `339744dff` + `d20cac6a9` also received fresh independent
-built-in `default` `REVIEW CLEAN`. `R7-1` is active at entry only with packet `none`; `R7-1.1` is
-next, unchecked, and unstarted. Production implementation remains unstarted; `R7-2..R7-6` plus R8
-remain blocked.
+built-in `default` `REVIEW CLEAN`. `R7-1.1` series `e65127720` + `685cf843b`, `R7-1.2` commit
+`4d122cd9f`, and `R7-1.3` commit `e865eee13` each received fresh independent built-in `default`
+`REVIEW CLEAN`. The R7-1 implementation and checkpoint are complete, but R7-1 remains the sole
+active phase with packet `none` until this checkpoint-doc update and a separate phase-transition
+update are each committed and fresh-review-clean. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work
+has started.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -75,39 +78,60 @@ remain blocked.
 
 Checkpoint receipt: all items above are complete and fresh-review-clean at fixture commit
 `fa85cd4b8`; `R7-0` is complete. Separate transition/fix series `339744dff` + `d20cac6a9` received
-fresh independent built-in `default` `REVIEW CLEAN`; Prompt 1 is prepared but not started.
+fresh independent built-in `default` `REVIEW CLEAN`. At that historical R7-0 boundary, Prompt 1 for
+R7-1 was prepared but had not started.
 
 ## R7-1: Compactor Linkage And Direct-Child Closure
 
-- [ ] **R7-1.1: Preserve parent spawn-result and child-origin metadata.**
+- [x] **R7-1.1: Preserve parent spawn-result and child-origin metadata.**
   - Acceptance: ingestion exposes parent child ids, child parent id/depth, and provenance without
     turning metadata into ordinary message text.
   - Verify: `cargo test -p agent-session-compactor ingest -- --nocapture`
   - Files: `crates/agent-session-compactor/src/ingest/codex_rollout.rs`, focused tests
   - Dependencies: R7-0.2
+  - Receipt: implementation/docs series `e65127720` + `685cf843b` received fresh independent
+    built-in `default` `REVIEW CLEAN`. Structured parent spawn-result and child-origin metadata,
+    including row provenance, remains outside ordinary normalized message text.
   - Scope: small
 
-- [ ] **R7-1.2: Add additive delegation link contract and reciprocal validation.**
+- [x] **R7-1.2: Add additive delegation link contract and reciprocal validation.**
   - Acceptance: only exact reciprocal links become `Verified`; one-sided/conflicting/self/duplicate
     cases remain typed non-semantic states; legacy manifests deserialize with no links.
   - Verify: `cargo test -p agent-session-compactor delegation_link -- --nocapture`
   - Files: `crates/agent-session-compactor/src/export/mod.rs`, `src/export/files.rs`, focused tests
   - Dependencies: R7-1.1
+  - Receipt: after operator decision `R7-1-HIGH-IMPACT-COMPACTOR-CONTRACT-01: A` accepted the bounded
+    additive contract impact, commit `4d122cd9f` received fresh independent built-in `default`
+    `REVIEW CLEAN`. Focused delegation-link proof passes `6 / 6`; exact reciprocal depth-1 links are
+    verified, non-reciprocal/conflicting/self/duplicate/malformed cases remain typed non-semantic
+    states, legacy v0.2 manifests default to no links, and link ordering is deterministic.
   - Scope: medium
 
-- [ ] **R7-1.3: Add explicit direct linked-child discovery.**
+- [x] **R7-1.3: Add explicit direct linked-child discovery.**
   - Acceptance: opt-in compaction includes verified direct children only, records deeper residue,
     and leaves ordinary `--session-id` behavior unchanged.
   - Verify: `cargo test -p agent-session-compactor --test end_to_end -- --nocapture`
   - Files: `crates/agent-session-compactor/src/discovery.rs`, `src/cli.rs`, `src/lib.rs`, end-to-end tests
   - Dependencies: R7-1.2
+  - Receipt: commit `e865eee13` received fresh independent built-in `default` `REVIEW CLEAN`.
+    End-to-end proof passes `6 / 6` and CLI proof passes `2 / 2`: the opt-in includes only exact
+    verified direct children, records deeper residue without recursive import, fails closed on
+    ambiguous/non-verified candidates, and preserves ordinary discovery when the option is absent.
   - Scope: medium
 
 ### Checkpoint R7-1
 
-- [ ] `cargo test -p agent-session-compactor -- --nocapture`
-- [ ] Manifest links and session/file ordering are deterministic.
-- [ ] `gitnexus detect-changes -r 97a0-substrate` shows only expected compactor flows.
+- [x] `cargo test -p agent-session-compactor -- --nocapture`
+- [x] Manifest links and session/file ordering are deterministic.
+- [x] `gitnexus detect-changes -r 97a0-substrate` shows only expected compactor flows.
+
+Checkpoint receipt: all R7-1 task commits are fresh independent built-in `default` `REVIEW CLEAN`.
+The full compactor wall passes `36` unit/integration tests plus `3` doctests; focused R7-1.2 proof
+passes `6 / 6`; R7-1.3 end-to-end and CLI proof pass `6 / 6` and `2 / 2`. Formatting, clippy, diff,
+and staged GitNexus gates are green. Deterministic link/session/file ordering is proven, and no raw
+private rollout data was added. This checkpoint-doc update still requires fresh independent review,
+followed by a separate committed and fresh-review-clean phase-transition update. Until then R7-1
+remains the sole active phase with packet `none`; R7-2 remains blocked and unstarted.
 
 ## R7-2: Analyzer Link Graph And Checkpoint v0.8
 
