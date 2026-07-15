@@ -741,7 +741,10 @@ mod platform {
             }
             self.keys
                 .unlink_file(key_name)
-                .map_err(|_| BootstrapError("remove retained admission orphan key"))
+                .map_err(|_| BootstrapError("remove retained admission orphan key"))?;
+            self.keys
+                .sync()
+                .map_err(|_| BootstrapError("sync retained admission key directory"))
         }
 
         pub(crate) fn publish_registry_no_replace(
