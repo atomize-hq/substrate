@@ -400,8 +400,14 @@ enum AdmissionReservationCrashPointV1 {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AdmissionRegistrationCrashPointV1 {
+    BeforeRegistrationHeadPublication,
+    DuringRegistrationHeadPublication,
+    AfterRegistrationHeadPublicationBeforeResponse,
     WhileRegistrationHead,
     AfterR0BeforeAdmissionAdvance,
+    BeforeAdmissionAdvancePublication,
+    DuringAdmissionAdvancePublication,
+    AfterAdmissionAdvancePublicationBeforeResponse,
 }
 
 #[cfg(test)]
@@ -772,6 +778,7 @@ impl RetainedWorkerRuntime {
                     &mut registry,
                     transaction.authority_root(),
                     &current_plan,
+                    plan,
                     &envelope.secret_key,
                     reserved_at,
                     participant_entropy,
@@ -895,12 +902,16 @@ impl RetainedWorkerRuntime {
         .map_err(|_| RetainedWorkerRuntimeError("create registration head timestamp".into()))?;
         let mut publication_nonce = [0_u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
-        let head = self.prepare_admission_registration_head(
+        let head = self.prepare_admission_registration_head_with(
             authority,
             plan,
             &slot.record.retained_participant_id,
             head_acquired_at,
             publication_nonce,
+            #[cfg(test)]
+            crash_point,
+            #[cfg(not(test))]
+            _crash_point,
         )?;
         if let AdmissionHeadPreparationV1::Complete(record) = head {
             self.validate_admitted_record_graph(authority, plan, &record)?;
@@ -935,12 +946,16 @@ impl RetainedWorkerRuntime {
         };
         let mut reconcile_nonce = [0_u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut reconcile_nonce);
-        let record = self.advance_registration_head_after_r0(
+        let record = self.advance_registration_head_after_r0_with(
             authority,
             plan,
             &record.retained_participant_id,
             &post_r0_graph,
             reconcile_nonce,
+            #[cfg(test)]
+            crash_point,
+            #[cfg(not(test))]
+            _crash_point,
         )?;
         Ok(RetainedWorkerAdmissionRegistrationOutcomeV1 {
             record,
@@ -955,6 +970,26 @@ impl RetainedWorkerRuntime {
         retained_participant_id: &str,
         head_acquired_at: TimestampV1,
         publication_nonce: [u8; 16],
+    ) -> Result<AdmissionHeadPreparationV1, RetainedWorkerRuntimeError> {
+        self.prepare_admission_registration_head_with(
+            authority,
+            plan,
+            retained_participant_id,
+            head_acquired_at,
+            publication_nonce,
+            None,
+        )
+    }
+
+    fn prepare_admission_registration_head_with(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        head_acquired_at: TimestampV1,
+        publication_nonce: [u8; 16],
+        #[cfg(test)] crash_point: Option<AdmissionRegistrationCrashPointV1>,
+        #[cfg(not(test))] _crash_point: Option<()>,
     ) -> Result<AdmissionHeadPreparationV1, RetainedWorkerRuntimeError> {
         let resolved = authority
             .resolve_current_exact(&plan.spawn_request.orchestration_session_id, None)
@@ -993,7 +1028,7 @@ impl RetainedWorkerRuntime {
                     &mut registry,
                     transaction.authority_root(),
                     &current_plan,
-                    &plan.exact_authority,
+                    plan,
                     retained_participant_id,
                     &envelope.secret_key,
                     head_acquired_at,
@@ -1007,7 +1042,37 @@ impl RetainedWorkerRuntime {
                 )?;
                 let temp_name =
                     format!("admission-registry--{}.tmp", lower_hex(&publication_nonce));
+                #[cfg(test)]
+                if crash_point
+                    == Some(AdmissionRegistrationCrashPointV1::BeforeRegistrationHeadPublication)
+                {
+                    return Err(
+                        super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                        ),
+                    );
+                }
+                #[cfg(test)]
+                if crash_point
+                    == Some(AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication)
+                {
+                    transaction.stage_registry_replacement_for_test(&temp_name, &bytes)?;
+                    return Err(
+                        super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                        ),
+                    );
+                }
                 transaction.replace_registry(&temp_name, &bytes)?;
+                #[cfg(test)]
+                if crash_point
+                    == Some(
+                        AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse,
+                    )
+                {
+                    return Err(
+                        super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                        ),
+                    );
+                }
             }
             Ok(preparation)
         });
@@ -1024,6 +1089,26 @@ impl RetainedWorkerRuntime {
         retained_participant_id: &str,
         post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
         publication_nonce: [u8; 16],
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        self.advance_registration_head_after_r0_with(
+            authority,
+            plan,
+            retained_participant_id,
+            post_r0_graph,
+            publication_nonce,
+            None,
+        )
+    }
+
+    fn advance_registration_head_after_r0_with(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
+        publication_nonce: [u8; 16],
+        #[cfg(test)] crash_point: Option<AdmissionRegistrationCrashPointV1>,
+        #[cfg(not(test))] _crash_point: Option<()>,
     ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
         let resolved = authority
             .resolve_current_exact(&plan.spawn_request.orchestration_session_id, None)
@@ -1062,7 +1147,7 @@ impl RetainedWorkerRuntime {
                     &mut registry,
                     transaction.authority_root(),
                     &current_plan,
-                    &plan.exact_authority,
+                    plan,
                     &AdmissionRegistrationAdvanceInputV1 {
                         retained_participant_id,
                         secret_key: &envelope.secret_key,
@@ -1078,7 +1163,37 @@ impl RetainedWorkerRuntime {
                 )?;
                 let temp_name =
                     format!("admission-registry--{}.tmp", lower_hex(&publication_nonce));
+                #[cfg(test)]
+                if crash_point
+                    == Some(AdmissionRegistrationCrashPointV1::BeforeAdmissionAdvancePublication)
+                {
+                    return Err(
+                        super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                        ),
+                    );
+                }
+                #[cfg(test)]
+                if crash_point
+                    == Some(AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication)
+                {
+                    transaction.stage_registry_replacement_for_test(&temp_name, &bytes)?;
+                    return Err(
+                        super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                        ),
+                    );
+                }
                 transaction.replace_registry(&temp_name, &bytes)?;
+                #[cfg(test)]
+                if crash_point
+                    == Some(
+                        AdmissionRegistrationCrashPointV1::AfterAdmissionAdvancePublicationBeforeResponse,
+                    )
+                {
+                    return Err(
+                        super::host_session_authority::store::BootstrapError::retained_admission_crash(
+                        ),
+                    );
+                }
             }
             Ok(record)
         });
@@ -1368,7 +1483,7 @@ impl RetainedWorkerRuntime {
                     &mut registry,
                     transaction.authority_root(),
                     &current_plan,
-                    &plan.exact_authority,
+                    plan,
                     retained_participant_id,
                     &envelope.secret_key,
                     &AdmissionTransportClaimInputV1 {
@@ -1985,12 +2100,9 @@ fn validate_supplied_admission_authority(
         current_exact_authority,
         record.admission_authority_revision,
     )?;
-    if supplied_exact_authority != current_exact_authority
-        && supplied_exact_authority != &admission_authority
-    {
+    if supplied_exact_authority != &admission_authority {
         return Err(RetainedWorkerRuntimeError(
-            "canonical admission authority proof is not the exact bound read or admission ancestor"
-                .into(),
+            "canonical admission authority proof is not the exact admission-time bound read".into(),
         ));
     }
     Ok(())
@@ -2030,13 +2142,13 @@ fn validate_admission_to_current_r0_only(
 fn prepare_registration_head_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
-    plan: &RetainedWorkerAdmissionPlanV1,
-    supplied_exact_authority: &CanonicalExactCurrentAuthorityV1,
+    current_plan: &RetainedWorkerAdmissionPlanV1,
+    supplied_plan: &RetainedWorkerAdmissionPlanV1,
     retained_participant_id: &str,
     secret_key: &[u8; 32],
     head_acquired_at: TimestampV1,
 ) -> Result<(AdmissionHeadPreparationV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, plan)?;
+    validate_admission_plan(authority_root, current_plan)?;
     let VersionedStateRoot::V2(root) = authority_root else {
         return Err(RetainedWorkerRuntimeError(
             "registration head requires strict V2 authority".into(),
@@ -2044,17 +2156,17 @@ fn prepare_registration_head_in_registry(
     };
     let mut record = registry
         .records_by_session
-        .get(&plan.spawn_request.orchestration_session_id)
+        .get(&current_plan.spawn_request.orchestration_session_id)
         .and_then(|records| records.get(retained_participant_id))
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
     validate_supplied_admission_authority(
         root,
-        &plan.exact_authority,
-        supplied_exact_authority,
+        &current_plan.exact_authority,
+        &supplied_plan.exact_authority,
         &record,
     )?;
-    verify_admission_record_fingerprint(root, plan, &record, secret_key)?;
+    verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
     match &record.state {
         RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
         | RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. }
@@ -2103,10 +2215,10 @@ fn prepare_registration_head_in_registry(
     if lowest.is_none_or(|(_, participant_id)| participant_id != retained_participant_id) {
         return Ok((AdmissionHeadPreparationV1::Queued, false));
     }
-    validate_admission_to_current_r0_only(root, &plan.exact_authority, &record)?;
+    validate_admission_to_current_r0_only(root, &current_plan.exact_authority, &record)?;
     record.state = RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
-        authority_revision_expected: plan.exact_authority.authority_revision,
-        authority_record_commitment_expected: plan
+        authority_revision_expected: current_plan.exact_authority.authority_revision,
+        authority_record_commitment_expected: current_plan
             .exact_authority
             .authority_record_commitment
             .clone(),
@@ -2126,27 +2238,21 @@ fn prepare_registration_head_in_registry(
 }
 
 fn verify_admission_record_fingerprint(
-    root: &StateRootV2,
-    current_plan: &RetainedWorkerAdmissionPlanV1,
+    supplied_plan: &RetainedWorkerAdmissionPlanV1,
     record: &RetainedWorkerAdmissionRecordV1,
     secret_key: &[u8; 32],
 ) -> Result<(), RetainedWorkerRuntimeError> {
-    let mut fingerprint_plan = current_plan.clone();
-    fingerprint_plan.exact_authority = reconstruct_exact_authority_at_revision(
-        root,
-        &current_plan.exact_authority,
-        record.admission_authority_revision,
-    )?;
     let fingerprint = canonical_spawn_fingerprint(
         &record.canonical_spawn_fingerprint.key_id,
         secret_key,
-        &fingerprint_plan,
+        supplied_plan,
         &record.retained_participant_id,
         &record.bootstrap_run_id,
     )?;
     if fingerprint != record.canonical_spawn_fingerprint
-        || fingerprint_plan.exact_authority.authority_store_id != record.authority_store_id
-        || fingerprint_plan.exact_authority.authority_record_commitment
+        || supplied_plan.exact_authority.authority_store_id != record.authority_store_id
+        || supplied_plan.exact_authority.authority_revision != record.admission_authority_revision
+        || supplied_plan.exact_authority.authority_record_commitment
             != record.admission_authority_record_commitment
     {
         return Err(RetainedWorkerRuntimeError(
@@ -2159,11 +2265,11 @@ fn verify_admission_record_fingerprint(
 fn advance_registration_head_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
-    plan: &RetainedWorkerAdmissionPlanV1,
-    supplied_exact_authority: &CanonicalExactCurrentAuthorityV1,
+    current_plan: &RetainedWorkerAdmissionPlanV1,
+    supplied_plan: &RetainedWorkerAdmissionPlanV1,
     input: &AdmissionRegistrationAdvanceInputV1<'_>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, plan)?;
+    validate_admission_plan(authority_root, current_plan)?;
     let VersionedStateRoot::V2(root) = authority_root else {
         return Err(RetainedWorkerRuntimeError(
             "registration advancement requires strict V2 authority".into(),
@@ -2171,17 +2277,17 @@ fn advance_registration_head_in_registry(
     };
     let mut record = registry
         .records_by_session
-        .get(&plan.spawn_request.orchestration_session_id)
+        .get(&current_plan.spawn_request.orchestration_session_id)
         .and_then(|records| records.get(input.retained_participant_id))
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
     validate_supplied_admission_authority(
         root,
-        &plan.exact_authority,
-        supplied_exact_authority,
+        &current_plan.exact_authority,
+        &supplied_plan.exact_authority,
         &record,
     )?;
-    verify_admission_record_fingerprint(root, plan, &record, input.secret_key)?;
+    verify_admission_record_fingerprint(supplied_plan, &record, input.secret_key)?;
     if let Some(registration) = admission_registration(&record.state) {
         validate_registration_result(
             authority_root,
@@ -2192,7 +2298,7 @@ fn advance_registration_head_in_registry(
         validate_post_r0_registered_graph(
             root,
             &record,
-            plan,
+            current_plan,
             registration,
             &input.post_r0_graph.result,
             &input.post_r0_graph.resolved_target,
@@ -2220,7 +2326,7 @@ fn advance_registration_head_in_registry(
     validate_post_r0_registered_graph(
         root,
         &record,
-        plan,
+        current_plan,
         &registration,
         &input.post_r0_graph.result,
         &input.post_r0_graph.resolved_target,
@@ -2242,13 +2348,13 @@ fn advance_registration_head_in_registry(
 fn claim_transport_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
-    plan: &RetainedWorkerAdmissionPlanV1,
-    supplied_exact_authority: &CanonicalExactCurrentAuthorityV1,
+    current_plan: &RetainedWorkerAdmissionPlanV1,
+    supplied_plan: &RetainedWorkerAdmissionPlanV1,
     retained_participant_id: &str,
     secret_key: &[u8; 32],
     claim_input: &AdmissionTransportClaimInputV1<'_>,
 ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, plan)?;
+    validate_admission_plan(authority_root, current_plan)?;
     let VersionedStateRoot::V2(root) = authority_root else {
         return Err(RetainedWorkerRuntimeError(
             "transport claim requires strict V2 authority".into(),
@@ -2256,17 +2362,17 @@ fn claim_transport_in_registry(
     };
     let mut record = registry
         .records_by_session
-        .get(&plan.spawn_request.orchestration_session_id)
+        .get(&current_plan.spawn_request.orchestration_session_id)
         .and_then(|records| records.get(retained_participant_id))
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
     validate_supplied_admission_authority(
         root,
-        &plan.exact_authority,
-        supplied_exact_authority,
+        &current_plan.exact_authority,
+        &supplied_plan.exact_authority,
         &record,
     )?;
-    verify_admission_record_fingerprint(root, plan, &record, secret_key)?;
+    verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
     if let Some(registration) = admission_registration(&record.state) {
         let Some(post_r0_graph) = claim_input.post_r0_graph else {
             return Err(RetainedWorkerRuntimeError(
@@ -2276,7 +2382,7 @@ fn claim_transport_in_registry(
         validate_post_r0_registered_graph(
             root,
             &record,
-            plan,
+            current_plan,
             registration,
             &post_r0_graph.result,
             &post_r0_graph.resolved_target,
@@ -2724,14 +2830,18 @@ fn admission_registration_plan(
 fn reserve_slot_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
-    plan: &RetainedWorkerAdmissionPlanV1,
+    current_plan: &RetainedWorkerAdmissionPlanV1,
+    supplied_plan: &RetainedWorkerAdmissionPlanV1,
     secret_key: &[u8; 32],
     reserved_at: TimestampV1,
     participant_entropy: [u8; 16],
     bootstrap_run_entropy: [u8; 16],
 ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
-    validate_admission_plan(authority_root, plan)?;
-    if let Some(locator) = registry.issuer_request_index.get(&plan.issuer_request_id) {
+    validate_admission_plan(authority_root, current_plan)?;
+    if let Some(locator) = registry
+        .issuer_request_index
+        .get(&supplied_plan.issuer_request_id)
+    {
         let record = registry
             .records_by_session
             .get(&locator.orchestration_session_id)
@@ -2744,37 +2854,52 @@ fn reserve_slot_in_registry(
                 "admission retry requires strict V2 authority".into(),
             ));
         };
-        let mut fingerprint_plan = plan.clone();
-        fingerprint_plan.exact_authority = reconstruct_exact_authority_at_revision(
+        validate_supplied_admission_authority(
             root,
-            &plan.exact_authority,
-            record.admission_authority_revision,
+            &current_plan.exact_authority,
+            &supplied_plan.exact_authority,
+            record,
         )?;
         let fingerprint = canonical_spawn_fingerprint(
             &registry.commitment_key.key_id,
             secret_key,
-            &fingerprint_plan,
+            supplied_plan,
             &record.retained_participant_id,
             &record.bootstrap_run_id,
         )?;
         if record.schema_version != 1
-            || record.authority_store_id != fingerprint_plan.exact_authority.authority_store_id
-            || record.issuer_request_id != plan.issuer_request_id
+            || record.authority_store_id != supplied_plan.exact_authority.authority_store_id
+            || record.issuer_request_id != supplied_plan.issuer_request_id
             || record.canonical_spawn_fingerprint != fingerprint
-            || record.orchestration_session_id != plan.spawn_request.orchestration_session_id
+            || record.orchestration_session_id
+                != supplied_plan.spawn_request.orchestration_session_id
             || record.admission_authority_revision
-                != fingerprint_plan.exact_authority.authority_revision
+                != supplied_plan.exact_authority.authority_revision
             || record.admission_authority_record_commitment
-                != fingerprint_plan.exact_authority.authority_record_commitment
-            || record.backend_id != plan.descriptor_and_runtime_plan.descriptor.backend_id
-            || record.protocol != plan.descriptor_and_runtime_plan.descriptor.protocol
-            || record.world_binding.world_id != plan.spawn_request.world_id
-            || record.world_binding.world_generation != plan.spawn_request.world_generation
-            || record.current_policy_ref != plan.policy_and_admission_cap.current_policy_ref
+                != supplied_plan.exact_authority.authority_record_commitment
+            || record.backend_id
+                != supplied_plan
+                    .descriptor_and_runtime_plan
+                    .descriptor
+                    .backend_id
+            || record.protocol
+                != supplied_plan
+                    .descriptor_and_runtime_plan
+                    .descriptor
+                    .protocol
+            || record.world_binding.world_id != supplied_plan.spawn_request.world_id
+            || record.world_binding.world_generation != supplied_plan.spawn_request.world_generation
+            || record.current_policy_ref
+                != supplied_plan.policy_and_admission_cap.current_policy_ref
             || record.current_policy_revision
-                != plan.policy_and_admission_cap.current_policy.policy_revision
+                != supplied_plan
+                    .policy_and_admission_cap
+                    .current_policy
+                    .policy_revision
             || record.max_live_retained_workers
-                != plan.policy_and_admission_cap.max_live_retained_workers
+                != supplied_plan
+                    .policy_and_admission_cap
+                    .max_live_retained_workers
         {
             return Err(RetainedWorkerRuntimeError(
                 "admission issuer retry changed canonical spawn bytes or bound scope".into(),
@@ -2786,6 +2911,12 @@ fn reserve_slot_in_registry(
         });
     }
 
+    if supplied_plan != current_plan {
+        return Err(RetainedWorkerRuntimeError(
+            "new admission slot requires the exact current bound read".into(),
+        ));
+    }
+    let plan = current_plan;
     let live_count = registry
         .records_by_session
         .values()
@@ -4913,6 +5044,8 @@ mod tests {
         "SUBSTRATE_B3_2A_ADMISSION_HEAD_SUBPROCESS_ISSUER";
     const ADMISSION_HEAD_SUBPROCESS_PROMPT: &str =
         "SUBSTRATE_B3_2A_ADMISSION_HEAD_SUBPROCESS_PROMPT";
+    const ADMISSION_HEAD_SUBPROCESS_EXACT_AUTHORITY: &str =
+        "SUBSTRATE_B3_2A_ADMISSION_HEAD_SUBPROCESS_EXACT_AUTHORITY";
     const ADMISSION_HEAD_SUBPROCESS_MODE: &str = "SUBSTRATE_B3_2A_ADMISSION_HEAD_SUBPROCESS_MODE";
     const TRANSPORT_CLAIM_SUBPROCESS_HOME: &str = "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_HOME";
     const TRANSPORT_CLAIM_SUBPROCESS_ISSUER: &str =
@@ -4923,6 +5056,8 @@ mod tests {
         "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_PARTICIPANT";
     const TRANSPORT_CLAIM_SUBPROCESS_ENTROPY: &str =
         "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_ENTROPY";
+    const TRANSPORT_CLAIM_SUBPROCESS_EXACT_AUTHORITY: &str =
+        "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_EXACT_AUTHORITY";
     const TRANSPORT_CLAIM_SUBPROCESS_MODE: &str = "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_MODE";
     const TRANSPORT_CLAIM_SUBPROCESS_RESULT: &str =
         "SUBSTRATE_B3_2A_TRANSPORT_CLAIM_SUBPROCESS_RESULT";
@@ -4994,6 +5129,11 @@ mod tests {
         let Some(home) = std::env::var_os(ADMISSION_HEAD_SUBPROCESS_HOME) else {
             return;
         };
+        if let Some(trace_path) = std::env::var_os("SHIM_TRACE_LOG") {
+            substrate_trace::set_global_trace_context(substrate_trace::TraceContext::default())
+                .unwrap();
+            substrate_trace::init_trace(Some(trace_path.into())).unwrap();
+        }
         let authority = HostSessionAuthority::open(std::path::Path::new(&home)).unwrap();
         let issuer = std::env::var(ADMISSION_HEAD_SUBPROCESS_ISSUER).unwrap();
         let mut prompt = std::env::var(ADMISSION_HEAD_SUBPROCESS_PROMPT).unwrap();
@@ -5001,7 +5141,14 @@ mod tests {
         if mode == "conflict" {
             prompt.push_str(" changed");
         }
-        let plan = admission_plan(&authority, &issuer, &prompt, 4);
+        let mut plan = admission_plan(&authority, &issuer, &prompt, 4);
+        plan.exact_authority = decode_canonical(
+            std::env::var(ADMISSION_HEAD_SUBPROCESS_EXACT_AUTHORITY)
+                .unwrap()
+                .as_bytes(),
+            "decode re-presented admission authority",
+        )
+        .unwrap();
         let result = RetainedWorkerRuntime.register_admitted_worker_at(
             &authority,
             &plan,
@@ -5033,7 +5180,14 @@ mod tests {
         let mode = std::env::var(TRANSPORT_CLAIM_SUBPROCESS_MODE).unwrap();
         let result_path =
             std::env::var_os(TRANSPORT_CLAIM_SUBPROCESS_RESULT).map(std::path::PathBuf::from);
-        let plan = admission_plan(&authority, &issuer, &prompt, 4);
+        let mut plan = admission_plan(&authority, &issuer, &prompt, 4);
+        plan.exact_authority = decode_canonical(
+            std::env::var(TRANSPORT_CLAIM_SUBPROCESS_EXACT_AUTHORITY)
+                .unwrap()
+                .as_bytes(),
+            "decode re-presented admission authority",
+        )
+        .unwrap();
         let crash_point = match mode.as_str() {
             "claim" | "conflict" => None,
             "crash-after-publication" => {
@@ -5967,9 +6121,9 @@ mod tests {
     fn queued_promotion_persists_no_request_prompt_payload_or_diagnostic_preimage() {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
-        let first_plan = admission_plan(&authority, "preimage-first", "ordinary first", 3);
+        let first_plan = admission_plan(&authority, "preimage-first", "ordinary first", 4);
         let marker = "B3.2a-QP-private-prompt-payload-marker-7f3ac491";
-        let queued_plan = admission_plan(&authority, "preimage-queued", marker, 3);
+        let queued_plan = admission_plan(&authority, "preimage-queued", marker, 4);
         runtime
             .reserve_admission_slot(&authority, &first_plan)
             .unwrap();
@@ -5994,7 +6148,7 @@ mod tests {
             &authority,
             "preimage-queued",
             "B3.2a-QP-conflicting-private-marker-90b9bd27",
-            3,
+            4,
         );
         let error = runtime
             .prepare_admission_registration_head(
@@ -6009,6 +6163,47 @@ mod tests {
         assert!(!error
             .to_string()
             .contains("B3.2a-QP-conflicting-private-marker-90b9bd27"));
+
+        let exact_authority = String::from_utf8(
+            encode_canonical(
+                &queued_plan.exact_authority,
+                "encode re-presented admission authority",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let trace_path = parent.path().join("configured-admission-trace.jsonl");
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("execution::agent_runtime::retained_worker_runtime::tests::admission_head_subprocess_worker")
+            .arg("--nocapture")
+            .arg("--test-threads=1")
+            .env(ADMISSION_HEAD_SUBPROCESS_HOME, parent.path().join("home"))
+            .env(ADMISSION_HEAD_SUBPROCESS_ISSUER, "preimage-queued")
+            .env(ADMISSION_HEAD_SUBPROCESS_PROMPT, marker)
+            .env(ADMISSION_HEAD_SUBPROCESS_EXACT_AUTHORITY, exact_authority)
+            .env(ADMISSION_HEAD_SUBPROCESS_MODE, "exact")
+            .env("SHIM_TRACE_LOG", &trace_path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "trace-enabled promotion subprocess failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout).replace(marker, "[REDACTED]"),
+            String::from_utf8_lossy(&output.stderr).replace(marker, "[REDACTED]")
+        );
+        for (name, diagnostics) in [
+            ("stdout", output.stdout.as_slice()),
+            ("stderr", output.stderr.as_slice()),
+        ] {
+            assert!(
+                !diagnostics
+                    .windows(marker.len())
+                    .any(|window| window == marker.as_bytes()),
+                "request/prompt preimage appeared in captured {name} diagnostics"
+            );
+        }
+        assert!(trace_path.is_file());
 
         for (path, bytes) in regular_file_contents(parent.path()) {
             assert!(
@@ -6364,6 +6559,29 @@ mod tests {
         assert_eq!(queued_records, 2);
         assert_eq!(head_records, 0);
 
+        let current_observation_substitution = admission_plan(
+            &authority,
+            "queued-exact-earliest",
+            "private queued prompt",
+            4,
+        );
+        assert_ne!(
+            current_observation_substitution
+                .exact_authority
+                .authority_revision,
+            earliest_plan.exact_authority.authority_revision
+        );
+        assert!(runtime
+            .prepare_admission_registration_head(
+                &authority,
+                &current_observation_substitution,
+                &earliest.record.retained_participant_id,
+                timestamp("2026-07-15T14:09:00.000000000Z"),
+                [80_u8; 16],
+            )
+            .is_err());
+        assert_eq!(fs::read(&registry_path).unwrap(), no_head_registry);
+
         let later_retry = runtime
             .prepare_admission_registration_head(
                 &authority,
@@ -6443,7 +6661,7 @@ mod tests {
             &mut changed_bootstrap_registry,
             &authority_root,
             &current_plan,
-            &earliest_plan.exact_authority,
+            &earliest_plan,
             &earliest.record.retained_participant_id,
             &envelope.secret_key,
             timestamp("2026-07-15T14:13:00.000000000Z"),
@@ -6565,6 +6783,14 @@ mod tests {
         runtime
             .register_admitted_worker(&authority, &first_plan)
             .unwrap();
+        let exact_authority = String::from_utf8(
+            encode_canonical(
+                &queued_plan.exact_authority,
+                "encode re-presented admission authority",
+            )
+            .unwrap(),
+        )
+        .unwrap();
 
         let executable = std::env::current_exe().unwrap();
         let test_name = "execution::agent_runtime::retained_worker_runtime::tests::admission_head_subprocess_worker";
@@ -6577,6 +6803,7 @@ mod tests {
                 .env(ADMISSION_HEAD_SUBPROCESS_HOME, parent.path().join("home"))
                 .env(ADMISSION_HEAD_SUBPROCESS_ISSUER, "concurrent-head-earliest")
                 .env(ADMISSION_HEAD_SUBPROCESS_PROMPT, "same queued prompt")
+                .env(ADMISSION_HEAD_SUBPROCESS_EXACT_AUTHORITY, &exact_authority)
                 .env(ADMISSION_HEAD_SUBPROCESS_MODE, "exact")
                 .spawn()
                 .unwrap()
@@ -6624,6 +6851,14 @@ mod tests {
         runtime
             .register_admitted_worker(&authority, &first_plan)
             .unwrap();
+        let exact_authority = String::from_utf8(
+            encode_canonical(
+                &queued_plan.exact_authority,
+                "encode re-presented admission authority",
+            )
+            .unwrap(),
+        )
+        .unwrap();
 
         let executable = std::env::current_exe().unwrap();
         let test_name = "execution::agent_runtime::retained_worker_runtime::tests::admission_head_subprocess_worker";
@@ -6639,6 +6874,7 @@ mod tests {
                     "conflicting-head-earliest",
                 )
                 .env(ADMISSION_HEAD_SUBPROCESS_PROMPT, "original queued prompt")
+                .env(ADMISSION_HEAD_SUBPROCESS_EXACT_AUTHORITY, &exact_authority)
                 .env(ADMISSION_HEAD_SUBPROCESS_MODE, mode)
                 .spawn()
                 .unwrap()
@@ -6715,6 +6951,71 @@ mod tests {
             first_slot.record.authority_store_id,
             second_slot.record.authority_store_id
         );
+    }
+
+    #[test]
+    fn one_registry_may_hold_one_registration_head_in_each_session_bucket() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "multi-session-head-first", "first", 2);
+        assert_eq!(
+            runtime
+                .register_admitted_worker_at(
+                    &authority,
+                    &plan,
+                    Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
+                )
+                .unwrap_err()
+                .to_string(),
+            "injected crash while admission registration head"
+        );
+
+        let registry_path = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
+        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+            &fs::read(&registry_path).unwrap(),
+            "decode multi-session registry fixture",
+        )
+        .unwrap();
+        let first = registry.records_by_session["r0-session"]
+            .values()
+            .next()
+            .unwrap()
+            .clone();
+        let mut second = first.clone();
+        second.issuer_request_id = "multi-session-head-second".into();
+        second.orchestration_session_id = "independent-session".into();
+        second.retained_participant_id = format!("rwp_{}", "22".repeat(16));
+        second.bootstrap_run_id = format!("rwr_{}", "33".repeat(16));
+        registry.records_by_session.insert(
+            second.orchestration_session_id.clone(),
+            BTreeMap::from([(second.retained_participant_id.clone(), second.clone())]),
+        );
+        registry.issuer_request_index.insert(
+            second.issuer_request_id.clone(),
+            RetainedWorkerAdmissionRecordLocatorV1 {
+                orchestration_session_id: second.orchestration_session_id.clone(),
+                retained_participant_id: second.retained_participant_id.clone(),
+            },
+        );
+        registry
+            .next_slot_sequence_by_session
+            .insert(second.orchestration_session_id.clone(), 2);
+
+        assert!(matches!(
+            first.state,
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        ));
+        assert!(matches!(
+            second.state,
+            RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+        ));
+        validate_admission_registry(
+            &registry,
+            &VersionedStateRoot::V2(authority.read_a12a_root().unwrap()),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -7174,7 +7475,7 @@ mod tests {
             &mut registry,
             &authority_root,
             &current_plan,
-            &plan.exact_authority,
+            &plan,
             &AdmissionRegistrationAdvanceInputV1 {
                 retained_participant_id: &admitted.record.retained_participant_id,
                 secret_key: &envelope.secret_key,
@@ -7182,6 +7483,88 @@ mod tests {
             },
         )
         .is_err());
+    }
+
+    #[test]
+    fn registration_head_and_advance_publication_crashes_reopen_and_retry_exactly() {
+        for (index, crash_point) in [
+            AdmissionRegistrationCrashPointV1::BeforeRegistrationHeadPublication,
+            AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication,
+            AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse,
+            AdmissionRegistrationCrashPointV1::BeforeAdmissionAdvancePublication,
+            AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication,
+            AdmissionRegistrationCrashPointV1::AfterAdmissionAdvancePublicationBeforeResponse,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (parent, authority, _) = started_authority();
+            let runtime = RetainedWorkerRuntime;
+            let issuer = format!("registration-publication-crash-{index}");
+            let plan = admission_plan(&authority, &issuer, "exact retry prompt", 3);
+            assert!(runtime
+                .register_admitted_worker_at(&authority, &plan, Some(crash_point))
+                .is_err());
+
+            let admission_root = parent
+                .path()
+                .join("home/authority-v1/retained-worker-admission-v1");
+            let registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
+                &fs::read(admission_root.join("registry-v1.json")).unwrap(),
+                "decode crashed registration registry",
+            )
+            .unwrap();
+            let locator = &registry.issuer_request_index[&issuer];
+            let durable = &registry.records_by_session[&locator.orchestration_session_id]
+                [&locator.retained_participant_id];
+            match crash_point {
+                AdmissionRegistrationCrashPointV1::BeforeRegistrationHeadPublication
+                | AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication => {
+                    assert!(matches!(
+                        durable.state,
+                        RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+                    ));
+                }
+                AdmissionRegistrationCrashPointV1::AfterRegistrationHeadPublicationBeforeResponse
+                | AdmissionRegistrationCrashPointV1::BeforeAdmissionAdvancePublication
+                | AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication => {
+                    assert!(matches!(
+                        durable.state,
+                        RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+                    ));
+                }
+                AdmissionRegistrationCrashPointV1::AfterAdmissionAdvancePublicationBeforeResponse => {
+                    assert!(matches!(
+                        durable.state,
+                        RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+                    ));
+                }
+                AdmissionRegistrationCrashPointV1::WhileRegistrationHead
+                | AdmissionRegistrationCrashPointV1::AfterR0BeforeAdmissionAdvance => {
+                    unreachable!("the publication crash matrix excludes legacy crash points")
+                }
+            }
+            let expected_temp_count = usize::from(matches!(
+                crash_point,
+                AdmissionRegistrationCrashPointV1::DuringRegistrationHeadPublication
+                    | AdmissionRegistrationCrashPointV1::DuringAdmissionAdvancePublication
+            ));
+            assert_eq!(
+                fs::read_dir(admission_root.join("tmp")).unwrap().count(),
+                expected_temp_count
+            );
+
+            let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+            let retried = runtime.register_admitted_worker(&reopened, &plan).unwrap();
+            assert!(matches!(
+                retried.record.state,
+                RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+            ));
+            assert_eq!(fs::read_dir(admission_root.join("tmp")).unwrap().count(), 0);
+            let joined = runtime.register_admitted_worker(&reopened, &plan).unwrap();
+            assert!(joined.joined);
+            assert_eq!(joined.record, retried.record);
+        }
     }
 
     #[test]
@@ -7299,10 +7682,16 @@ mod tests {
         let test_name = "execution::agent_runtime::retained_worker_runtime::tests::transport_claim_subprocess_worker";
         let spawn = |issuer: &str,
                      prompt: &str,
+                     exact_authority: &CanonicalExactCurrentAuthorityV1,
                      participant_id: &str,
                      entropy: u8,
                      mode: &str,
                      result_path: &std::path::Path| {
+            let exact_authority = String::from_utf8(
+                encode_canonical(exact_authority, "encode re-presented admission authority")
+                    .unwrap(),
+            )
+            .unwrap();
             Command::new(&executable)
                 .arg("--exact")
                 .arg(test_name)
@@ -7311,6 +7700,7 @@ mod tests {
                 .env(TRANSPORT_CLAIM_SUBPROCESS_HOME, parent.path().join("home"))
                 .env(TRANSPORT_CLAIM_SUBPROCESS_ISSUER, issuer)
                 .env(TRANSPORT_CLAIM_SUBPROCESS_PROMPT, prompt)
+                .env(TRANSPORT_CLAIM_SUBPROCESS_EXACT_AUTHORITY, exact_authority)
                 .env(TRANSPORT_CLAIM_SUBPROCESS_PARTICIPANT, participant_id)
                 .env(TRANSPORT_CLAIM_SUBPROCESS_ENTROPY, entropy.to_string())
                 .env(TRANSPORT_CLAIM_SUBPROCESS_MODE, mode)
@@ -7329,6 +7719,7 @@ mod tests {
         let mut first = spawn(
             "process-identical",
             "prompt",
+            &identical_plan.exact_authority,
             &participant_id,
             101,
             "claim",
@@ -7337,6 +7728,7 @@ mod tests {
         let mut second = spawn(
             "process-identical",
             "prompt",
+            &identical_plan.exact_authority,
             &participant_id,
             102,
             "claim",
@@ -7359,6 +7751,7 @@ mod tests {
         let mut crashed = spawn(
             "process-death",
             "prompt",
+            &death_plan.exact_authority,
             &death_participant_id,
             103,
             "crash-after-publication",
@@ -7399,6 +7792,7 @@ mod tests {
         let mut correct = spawn(
             "process-conflict",
             "prompt",
+            &conflict_plan.exact_authority,
             &conflict_participant_id,
             106,
             "claim",
@@ -7407,6 +7801,7 @@ mod tests {
         let mut conflicting = spawn(
             "process-conflict",
             "changed prompt",
+            &conflict_plan.exact_authority,
             &conflict_participant_id,
             107,
             "conflict",
