@@ -309,7 +309,9 @@ Sequential requirements:
 
 ## Open Questions
 
-No unresolved design question blocks `R7-1` implementation after the narrow transition exits fresh
-review-clean. `R7-0` is complete; `R7-1` is active at entry only with packet `none`, and `R7-1.1`
-is next and unstarted. Default-on linked closure, new drift taxonomy, and recursive depth remain
-evidence-gated decisions for later packets.
+No unresolved design question blocks `R7-1` implementation. Transition/fix series `339744dff` +
+`d20cac6a9` is fresh independent `REVIEW CLEAN`, so the narrow transition gate is satisfied. `R7-0`
+is complete; with packet `none`, `R7-1.1` is the next authorized task only in a fresh `R7-1` phase
+session and remains unchecked and unstarted here. Prompt 1 is prepared but was not invoked;
+`R7-2..R7-6` and R8 remain blocked. Default-on linked closure, new drift taxonomy, and recursive
+depth remain evidence-gated decisions for later packets.

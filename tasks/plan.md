@@ -75,8 +75,10 @@ Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0` is 
 - Keep R7 reciprocal direct linkage, separate trajectories, direct-child-first support, and no-new-
   drift-class-by-default as implementation-ready authority decisions. `R7-0` is complete after
   `R7-0.1` and fixture-only `R7-0.2` commit `fa85cd4b8` each received fresh independent `REVIEW
-  CLEAN`. `R7-1` is active at entry only with packet `none`; `R7-1.1` remains unstarted until the
-  narrow transition commit is fresh-review-clean.
+  CLEAN`. Transition/fix series `339744dff` + `d20cac6a9` is fresh independent `REVIEW CLEAN`, so
+  the narrow transition gate is satisfied. `R7-1.1` is the next authorized task only in a fresh
+  `R7-1` phase session; it remains unchecked and unstarted here, and Prompt 1 is prepared but was
+  not invoked. `R7-2..R7-6` and R8 remain blocked.
 - Run GitNexus impact analysis before any later symbol edit. Before every commit, stage only intended
   files with `git add -- <intended-files-only>`, run
   `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, run
