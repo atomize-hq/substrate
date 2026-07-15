@@ -2,7 +2,7 @@
 
 **Verified against:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; Manifest E family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check green; R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, R7-0.2 commit `fa85cd4b8`, and R7-0 -> R7-1 transition/fix series `339744dff` + `d20cac6a9` each received fresh independent built-in `default` `REVIEW CLEAN`. R7-0.2 focused parser/privacy proof is `2 / 2`, full compactor proof is `25 / 25` including end-to-end `2 / 2`, and privacy scans over `24` rows found zero markers and zero raw UUIDs without any production-symbol edit. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; focused R7-1.2 passes `6 / 6`, R7-1.3 end-to-end and CLI pass `6 / 6` and `2 / 2`, the full compactor wall passes `36` unit/integration tests plus `3` doctests, and formatting, clippy, diff, and staged GitNexus gates are green. Link/session/file ordering is deterministic, and no raw private rollout data was added.
 
-**Current phase:** `R7-1` (**SOLE ACTIVE PHASE**; active packet: `none`; R7-1 implementation and checkpoint are complete; task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; checkpoint-doc review and a separate committed phase-transition review remain pending; `R7-2..R7-6` and R8 remain blocked; no R7-2 work has started)
+**Current phase:** `R7-2` (**SOLE ACTIVE PHASE AT ENTRY ONLY**; active packet: `none`; R7-1 complete at fresh-review-clean checkpoint-doc commit `1cae7d693`; `R7-2.1` next, unchecked, and unstarted; R7-2 analyzer/production implementation unstarted; narrow transition candidate pending fresh review; `R7-3..R7-6` and R8 blocked)
 
 ## How To Resolve Truth
 
@@ -24,7 +24,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE AND REVIEW-CLEAN / R7-1 TASK SERIES FRESH INDEPENDENT REVIEW CLEAN / R7-1 IMPLEMENTATION AND CHECKPOINT COMPLETE / R7-1 SOLE ACTIVE PHASE / ACTIVE PACKET NONE / CHECKPOINT DOC REVIEW AND SEPARATE PHASE-TRANSITION REVIEW PENDING / R7-2..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Freshly review and land the R7-1 checkpoint-doc receipt, then execute the separate narrow phase-transition commit/review. Do not start R7-2. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE AND REVIEW-CLEAN / CHECKPOINT DOC COMMIT `1cae7d693` FRESH INDEPENDENT REVIEW CLEAN / R7-2 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE / R7-2.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED / NARROW TRANSITION CANDIDATE PENDING FRESH REVIEW / R7-3..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Commit and freshly review only the narrow transition candidate. Then use Prompt 1 selectors `R7-2` / `none` in a fresh phase session; do not start R7-2 work in this transition. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -73,9 +73,9 @@ R6, complete the terminal scorer-disposition table, or unblock R7.
 
 ## R7 Authority
 
-R7 is now an implementation-ready authority family. `R7-PROMOTE` and `R7-0` are complete, and
-R7-1 implementation/checkpoint work is complete while `R7-1` remains the sole active phase with
-packet `none` pending checkpoint-doc review and the separate phase-transition review:
+R7 is now an implementation-ready authority family. `R7-PROMOTE`, `R7-0`, and `R7-1` are complete.
+Only `R7-2` is active at entry with packet `none`; `R7-2.1` is next, unchecked, and unstarted, and
+R7-2 analyzer/production implementation has not started:
 
 - `docs/specs/r7/MAP.md`
 - `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
@@ -94,9 +94,11 @@ passes `2 / 2`, full compactor passes `25 / 25` including end-to-end `2 / 2`, an
 `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`.
 The R7-1 checkpoint is complete with focused `6 / 6`, end-to-end `6 / 6`, CLI `2 / 2`, full
 compactor `36` unit/integration plus `3` doctests, deterministic ordering, and green static/diff/
-GitNexus gates. No raw private rollout data was added. R7-1 remains the sole active phase with packet
-`none` until checkpoint-doc review and a separate phase-transition commit/review are complete.
-`R7-2..R7-6` plus R8 remain blocked; no R7-2 work has started.
+GitNexus gates. No raw private rollout data was added. Checkpoint-doc commit `1cae7d693` received
+fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is
+complete. Only R7-2 is active at entry with packet `none`; this transition candidate awaits fresh
+independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production
+implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
 
 ## R8 Authority
 

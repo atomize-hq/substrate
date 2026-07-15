@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-1` (SOLE ACTIVE PHASE; active packet: `none`; R7-1 implementation and checkpoint complete; task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` fresh independent built-in `default` `REVIEW CLEAN`; checkpoint-doc review and separate phase-transition review pending; `R7-2..R7-6` and R8 blocked; no R7-2 work started)**
+Current phase: **`R7-2` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`; R7-1 complete at fresh-review-clean checkpoint-doc commit `1cae7d693`; `R7-2.1` next, unchecked, and unstarted; R7-2 analyzer/production implementation unstarted; narrow transition candidate pending fresh review; `R7-3..R7-6` and R8 blocked)**
 
 The scoped R6 packets, acceptance controls, named gaps, replay closeout, and terminal-disposition
 reconciliation are complete. R6 is closed for sequencing. Promotion series `455d0ed90` +
@@ -22,9 +22,7 @@ built-in `default` `REVIEW CLEAN`. R7-1 task series `e65127720` + `685cf843b`, `
 `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`. The R7-1 checkpoint is complete
 with focused `6 / 6`, end-to-end `6 / 6`, CLI `2 / 2`, full compactor `36` unit/integration plus `3`
 doctests, deterministic ordering, and green formatting/clippy/diff/GitNexus gates. No raw private
-rollout data was added. R7-1 remains the sole active phase with packet `none` pending checkpoint-doc
-review and a separate phase-transition commit/review. `R7-2..R7-6` plus R8 remain blocked; no R7-2
-work has started.
+rollout data was added. Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
 
 Hard decisions:
 
@@ -80,9 +78,7 @@ Hard decisions:
   `R7-0`. Transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default`
   `REVIEW CLEAN`. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh
   independent built-in `default` `REVIEW CLEAN`; the R7-1 implementation/checkpoint is complete.
-  R7-1 remains the sole active phase with packet `none` until checkpoint-doc review and the separate
-  phase-transition review are complete. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has
-  started.
+  Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
@@ -118,5 +114,4 @@ commit `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`, comp
 Transition/fix series `339744dff` + `d20cac6a9` is fresh independent built-in `default` `REVIEW
 CLEAN`. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh
 independent built-in `default` `REVIEW CLEAN`; the R7-1 implementation/checkpoint is complete.
-R7-1 remains the sole active phase with packet `none` pending checkpoint-doc review and the separate
-phase-transition review. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has started.
+Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.

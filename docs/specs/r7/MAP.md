@@ -1,10 +1,9 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-1.1 SERIES `e65127720` +
-`685cf843b`, R7-1.2 COMMIT `4d122cd9f`, AND R7-1.3 COMMIT `e865eee13` FRESH INDEPENDENT REVIEW
-CLEAN / R7-1 IMPLEMENTATION AND CHECKPOINT COMPLETE / CHECKPOINT DOC REVIEW AND SEPARATE PHASE-
-TRANSITION REVIEW PENDING / R7-1 SOLE ACTIVE PHASE / ACTIVE PACKET NONE / R7-2..R7-6 AND R8
-BLOCKED / NO R7-2 WORK STARTED**. Promotion series
+Status: **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE / CHECKPOINT DOC COMMIT
+`1cae7d693` FRESH INDEPENDENT REVIEW CLEAN / R7-2 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
+R7-2.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED /
+NARROW TRANSITION CANDIDATE PENDING FRESH REVIEW / R7-3..R7-6 AND R8 BLOCKED**. Promotion series
 `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. The narrow
 `R7-PROMOTE -> R7-0` transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
 independent built-in `default` `REVIEW CLEAN`. The docs-only `R7-0.1` series `a9e75f149` +
@@ -13,9 +12,11 @@ independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix
 `339744dff` + `d20cac6a9` also received fresh independent built-in `default` `REVIEW CLEAN`.
 `R7-1.1` series `e65127720` + `685cf843b`, `R7-1.2` commit `4d122cd9f`, and `R7-1.3` commit
 `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`. R7-1 implementation and its
-checkpoint are complete, but R7-1 remains the sole active phase with packet `none` pending fresh
-review of the checkpoint-doc receipt and a separate phase-transition commit/review. R7-2 remains
-blocked and unstarted.
+checkpoint are complete. Checkpoint-doc commit `1cae7d693` received fresh independent built-in
+`default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at
+entry with packet `none`; this narrow transition candidate awaits fresh independent review.
+`R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started.
+`R7-3..R7-6` plus R8 remain blocked.
 
 ## R6 Handoff
 
@@ -55,9 +56,11 @@ are fresh independent built-in `default` `REVIEW CLEAN`. Focused delegation-link
 6`; linked-closure end-to-end and CLI proof pass `6 / 6` and `2 / 2`; the full compactor wall passes
 `36` unit/integration tests plus `3` doctests; formatting, clippy, diff, and staged GitNexus gates are
 green. Link/session/file ordering is deterministic, and no raw private rollout data was added.
-R7-1 implementation and checkpoint are complete, but R7-1 remains the sole active phase with packet
-`none` pending fresh review of this checkpoint-doc update and a separate committed and fresh-review-
-clean phase transition. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has started.
+Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`;
+this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and
+unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain
+blocked.
 
 ## Live Linkage Evidence
 
@@ -95,9 +98,11 @@ The packet order below is implementation-ready. `R7-0` is **complete** after `R7
 fixture-only `R7-0.2` commit `fa85cd4b8` each received fresh independent `REVIEW CLEAN`.
 Transition/fix series `339744dff` + `d20cac6a9` is also fresh independent built-in `default`
 `REVIEW CLEAN`. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh
-independent built-in `default` `REVIEW CLEAN`, and the R7-1 checkpoint is complete. `R7-1` remains
-the sole active phase with packet `none` pending checkpoint-doc review and the separate phase-
-transition review. `R7-2` is blocked and unstarted.
+independent built-in `default` `REVIEW CLEAN`, and the R7-1 checkpoint is complete. Checkpoint-doc
+commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
+R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow
+transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted;
+R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

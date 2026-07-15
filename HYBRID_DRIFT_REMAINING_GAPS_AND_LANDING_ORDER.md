@@ -27,8 +27,11 @@ found zero private markers and zero raw UUIDs. Transition/fix series `339744dff`
 received fresh independent built-in `default` `REVIEW CLEAN`, making the `R7-0 -> R7-1` boundary
 review-clean. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh
 independent built-in `default` `REVIEW CLEAN`, and the R7-1 implementation/checkpoint is complete.
-Only R7-1 remains active with packet `none` pending checkpoint-doc review and the separate phase-
-transition review. `R7-2..R7-6` and R8 remain blocked; no R7-2 work has started. The
+Checkpoint-doc commit `1cae7d693` is also fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`;
+this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and
+unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` and R8 remain
+blocked. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 > **Historical status note (2026-07-04; superseded):** `R5`/`R5.5`/`R5.75`
@@ -106,23 +109,25 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is solely R7-1 with packet `none`. Docs-only `R7-0.1` series
+The active follow-on is solely R7-2 at entry with packet `none`. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
 `339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
 series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in
 `default` `REVIEW CLEAN`; focused `6 / 6`, end-to-end `6 / 6`, CLI `2 / 2`, full compactor `36`
 unit/integration plus `3` doctests, deterministic ordering, and static/diff/GitNexus gates are green.
-No raw private rollout data was added. Checkpoint-doc review and a separate phase-transition review
-remain open; `R7-2..R7-6` plus R8 remain blocked. `R7-PROMOTE` and its fresh-review-clean promotion
-series are complete; entry
+No raw private rollout data was added. Checkpoint-doc commit `1cae7d693` is fresh independent
+built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. This narrow transition candidate
+awaits fresh independent review; `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/
+production implementation has not started; and `R7-3..R7-6` plus R8 remain blocked. `R7-PROMOTE`
+and its fresh-review-clean promotion series are complete; entry
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
 `default` `REVIEW CLEAN`.
 The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
 reconciliation, R7 promotion content, the `R7-0 -> R7-1` transition review, or R7-1 implementation.
-The next work is fresh review/landing of the R7-1 checkpoint-doc receipt followed by the separate
-narrow R7-1 phase-transition commit/review; R7-2 must not start yet.
+The next work is commit and fresh review of only the narrow R7-1 -> R7-2 transition candidate.
+Preparing Prompt 1 selectors for R7-2 does not invoke them or start R7-2 implementation.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -158,9 +163,12 @@ independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series `6bf0
 `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`.
 Transition/fix series `339744dff` + `d20cac6a9` received fresh independent built-in `default`
 `REVIEW CLEAN`. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh
-independent built-in `default` `REVIEW CLEAN`; R7-1 implementation/checkpoint is complete. R7-1
-remains the sole active phase with packet `none` pending checkpoint-doc review and the separate
-phase-transition review. `R7-2..R7-6` plus R8 remain blocked; no R7-2 work has started.
+independent built-in `default` `REVIEW CLEAN`; R7-1 implementation/checkpoint is complete.
+Checkpoint-doc commit `1cae7d693` is also fresh independent built-in `default` `REVIEW CLEAN`,
+satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`;
+this transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and
+unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain
+blocked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -182,8 +190,9 @@ control.” The current honest sequence is:
    series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, `R7-0.1` series `a9e75f149` + `55bea5fa5` +
    `faff68ac6`, `R7-0.2` commit `fa85cd4b8`, and review-clean transition/fix series `339744dff` +
    `d20cac6a9` fixed; keep `R7-0` complete; keep R7-1 task series `e65127720` + `685cf843b`,
-   `4d122cd9f`, and `e865eee13` fresh independent `REVIEW CLEAN`; keep only R7-1 active with packet
-   `none` pending checkpoint-doc review and the separate phase-transition review; do not start R7-2
+   `4d122cd9f`, and `e865eee13` plus checkpoint-doc commit `1cae7d693` fresh independent `REVIEW
+   CLEAN`; keep R7-1 complete; make only R7-2 active at entry with packet `none`; keep `R7-2.1`
+   next, unchecked, and unstarted; do not begin R7-2 analyzer/production implementation
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -850,9 +859,7 @@ independent built-in `default` `REVIEW CLEAN`. Docs-only `R7-0.1` series `a9e75f
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
 `339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
 series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in
-`default` `REVIEW CLEAN`; R7-1 implementation/checkpoint is complete. R7-1 remains the sole active
-phase with packet `none` pending checkpoint-doc review and a separate phase-transition review.
-`R7-2..R7-6` and R8 remain blocked; no R7-2 work has started.
+`default` `REVIEW CLEAN`; Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -932,9 +939,7 @@ implementation-ready R7 family is current. Transition series `6bf0ac6ad` + `4a88
 fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
 `339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
 series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in
-`default` `REVIEW CLEAN`; R7-1 implementation/checkpoint is complete. R7-1 remains the sole active
-phase with packet `none` pending checkpoint-doc review and a separate phase-transition review.
-`R7-2..R7-6` and R8 remain blocked; no R7-2 work has started.
+`default` `REVIEW CLEAN`; Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
 
 The next honest work target is:
 
@@ -967,12 +972,12 @@ The next honest work target is:
   `55bea5fa5` + `faff68ac6`, and fixture-only `R7-0.2` commit `fa85cd4b8` fixed; keep `R7-0`
   complete; keep transition/fix series `339744dff` + `d20cac6a9` at fresh independent built-in
   `default` `REVIEW CLEAN`; keep R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and
-  `e865eee13` fresh independent `REVIEW CLEAN`; keep only R7-1 active with packet `none`; freshly
-  review/land the checkpoint-doc receipt, then separately commit and freshly review the phase
-  transition without starting R7-2
+  `e865eee13` and checkpoint-doc commit `1cae7d693` fresh independent `REVIEW CLEAN`; keep R7-1
+  complete; commit and freshly review only the narrow R7-1 -> R7-2 transition candidate; keep
+  `R7-2.1` next, unchecked, and unstarted without starting R7-2 analyzer/production implementation
 - keep later delegated-session work blocked; do not make R7 absorb ordinary single-session scorer
   gaps
-- keep `R7-2..R7-6` blocked until their ordered predecessor exits review-clean
+- keep `R7-3..R7-6` blocked until their ordered predecessor exits review-clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.
