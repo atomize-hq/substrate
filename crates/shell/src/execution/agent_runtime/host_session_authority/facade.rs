@@ -22,7 +22,8 @@ use super::store::{
 use super::store_schema::{
     DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1,
     HostSessionStartupOwnershipApplicationV1, HostSessionTransitionIntentStateV2,
-    RetainedWorkerAuthorityRegistrationRequestV1, SessionNamespaceRecordV1, StateRootV1,
+    RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
+    SessionNamespaceRecordV1, StateRootV1,
 };
 use super::transition::{verify_applied_start, ApplyHostSessionTransitionRequestV1};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -85,6 +86,13 @@ pub(crate) enum RetainedReservationCrashPointV1 {
     AfterRootPublication,
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RetainedApplicationCrashPointV1 {
+    BeforeRootPublication,
+    AfterRootPublication,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RetainedWorkerAuthorityPreconditionV1 {
     pub(crate) authority_store_id: String,
@@ -101,6 +109,12 @@ pub(crate) struct ReservedRetainedWorkerRegistrationV1 {
     pub(crate) descriptor_bytes: Vec<u8>,
     pub(crate) resume_handle_bytes: Vec<u8>,
     pub(crate) retained_worker_bytes: Vec<u8>,
+    pub(crate) joined: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct AppliedRetainedWorkerRegistrationV1 {
+    pub(crate) registration: RetainedWorkerAuthorityRegistrationV1,
     pub(crate) joined: bool,
 }
 
@@ -647,6 +661,46 @@ impl HostSessionAuthority {
             reference,
             bytes,
         )
+        .map_err(store_error)
+    }
+
+    pub(crate) fn apply_reserved_retained_worker_registration(
+        &self,
+        reserved: &ReservedRetainedWorkerRegistrationV1,
+    ) -> Result<AppliedRetainedWorkerRegistrationV1, AuthorityFacadeError> {
+        store::apply_reserved_retained_worker_registration_opened(
+            &self.root,
+            &store_reservation(reserved),
+        )
+        .map(|applied| AppliedRetainedWorkerRegistrationV1 {
+            registration: applied.registration,
+            joined: applied.joined,
+        })
+        .map_err(store_error)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn apply_reserved_retained_worker_registration_with_crash_point(
+        &self,
+        reserved: &ReservedRetainedWorkerRegistrationV1,
+        crash_point: RetainedApplicationCrashPointV1,
+    ) -> Result<AppliedRetainedWorkerRegistrationV1, AuthorityFacadeError> {
+        store::apply_reserved_retained_worker_registration_with_crash_point_opened(
+            &self.root,
+            &store_reservation(reserved),
+            match crash_point {
+                RetainedApplicationCrashPointV1::BeforeRootPublication => {
+                    store::RetainedApplicationCrashPointV1::BeforeRootPublication
+                }
+                RetainedApplicationCrashPointV1::AfterRootPublication => {
+                    store::RetainedApplicationCrashPointV1::AfterRootPublication
+                }
+            },
+        )
+        .map(|applied| AppliedRetainedWorkerRegistrationV1 {
+            registration: applied.registration,
+            joined: applied.joined,
+        })
         .map_err(store_error)
     }
 

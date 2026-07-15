@@ -244,12 +244,19 @@ impl RetainedWorkerRuntime {
 
     pub(crate) fn register_retained_target(
         &self,
-        _authority: &HostSessionAuthority,
-        _plan: &RetainedWorkerRegistrationPlanV1,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerRegistrationPlanV1,
     ) -> Result<RetainedWorkerRegistrationResultV1, RetainedWorkerRuntimeError> {
-        Err(RetainedWorkerRuntimeError(
-            "retained registration is not implemented".into(),
-        ))
+        let reserved = self.reserve_registration(authority, plan)?;
+        self.publish_reserved_object_graph(authority, &reserved)?;
+        let applied = authority
+            .apply_reserved_retained_worker_registration(&reserved)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        Ok(RetainedWorkerRegistrationResultV1 {
+            registration_id: applied.registration.registration_id,
+            retained_participant_id: applied.registration.retained_participant_id,
+            authority_revision_after: applied.registration.authority_revision_after,
+        })
     }
 }
 
@@ -260,7 +267,7 @@ mod tests {
 
     use super::*;
     use crate::execution::agent_runtime::host_session_authority::facade::{
-        AuthorityObservationV1, HostSessionAuthority,
+        AuthorityObservationV1, HostSessionAuthority, RetainedApplicationCrashPointV1,
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AgentExecutionScopeV1, HostAttachCapabilitiesV1, HostAttachExecutionClientStartV1,
@@ -452,6 +459,15 @@ mod tests {
         visit(path, path, &mut found);
         found.sort();
         found
+    }
+
+    fn durable_authority_mut(
+        root: &mut crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV2,
+    ) -> &mut crate::execution::agent_runtime::host_session_authority::store_schema::DurableSessionAuthorityV1{
+        match root.session_namespace_map.get_mut("r0-session").unwrap() {
+            crate::execution::agent_runtime::host_session_authority::store_schema::SessionNamespaceRecordV1::Authority(authority) => authority.as_mut(),
+            _ => panic!("fixture must retain durable authority"),
+        }
     }
 
     #[test]
@@ -958,5 +974,321 @@ mod tests {
             assert_eq!(authority.read_a12a_root().unwrap(), root_before);
             assert_eq!(object_files(&object_root), objects_before);
         }
+    }
+
+    #[test]
+    fn atomic_registration_appends_only_the_reserved_authority_link() {
+        let (_parent, authority, observation) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = plan(observation);
+        let before = authority.read_a12a_root().unwrap();
+        let before_authority = match before.session_namespace_map.get("r0-session").unwrap() {
+            crate::execution::agent_runtime::host_session_authority::store_schema::SessionNamespaceRecordV1::Authority(authority) => authority.as_ref().clone(),
+            _ => panic!("production Start must establish durable authority"),
+        };
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+
+        let result = runtime
+            .register_retained_target(&authority, &plan)
+            .expect("exact retained registration must apply atomically");
+
+        let after = authority.read_a12a_root().unwrap();
+        let request = after
+            .retained_worker_registration_request_index
+            .get("retained-worker-registration:spawn-request-1")
+            .unwrap();
+        let journal = after
+            .retained_worker_registration_journal
+            .get(&request.registration_id)
+            .unwrap();
+        let after_authority = match after.session_namespace_map.get("r0-session").unwrap() {
+            crate::execution::agent_runtime::host_session_authority::store_schema::SessionNamespaceRecordV1::Authority(authority) => authority.as_ref(),
+            _ => panic!("retained registration must preserve durable authority"),
+        };
+
+        assert_eq!(after.root_revision, before.root_revision + 2);
+        assert_eq!(after.transition_intent_map, before.transition_intent_map);
+        assert_eq!(after.issuer_request_index, before.issuer_request_index);
+        assert_eq!(after.application_journal, before.application_journal);
+        assert_eq!(
+            after_authority.authority_revision,
+            before_authority.authority_revision + 1
+        );
+        assert_eq!(
+            after_authority.authoritative_participant_lineage,
+            [
+                before_authority
+                    .authoritative_participant_lineage
+                    .as_slice(),
+                std::slice::from_ref(&plan.retained_participant_id),
+            ]
+            .concat()
+        );
+        assert_eq!(
+            after_authority.retained_worker_refs,
+            [
+                before_authority.retained_worker_refs.as_slice(),
+                std::slice::from_ref(&journal.retained_worker_ref),
+            ]
+            .concat()
+        );
+        let mut expected_authority = before_authority.clone();
+        expected_authority.authority_revision += 1;
+        expected_authority
+            .authoritative_participant_lineage
+            .push(plan.retained_participant_id.clone());
+        expected_authority
+            .retained_worker_refs
+            .push(journal.retained_worker_ref.clone());
+        expected_authority.updated_at = request.registered_at.clone();
+        assert_eq!(*after_authority, expected_authority);
+        assert!(matches!(
+            &request.state,
+            crate::execution::agent_runtime::host_session_authority::store_schema::RetainedWorkerAuthorityRegistrationRequestStateV1::Applied {
+                authority_revision_after,
+                authority_record_commitment_after,
+            } if *authority_revision_after == after_authority.authority_revision
+                && authority_record_commitment_after == &journal.authority_record_commitment_after
+        ));
+        assert_eq!(
+            journal.authority_revision_before,
+            before_authority.authority_revision
+        );
+        assert_eq!(
+            journal.authority_revision_after,
+            after_authority.authority_revision
+        );
+        assert_eq!(journal.registered_at, request.registered_at);
+        assert_eq!(after.object_index.len(), before.object_index.len() + 3);
+        assert_eq!(object_files(&object_root).len(), objects_before.len() + 3);
+        assert_eq!(result.registration_id, request.registration_id);
+        assert_eq!(result.retained_participant_id, plan.retained_participant_id);
+        assert_eq!(
+            result.authority_revision_after,
+            after_authority.authority_revision
+        );
+    }
+
+    #[test]
+    fn final_root_crash_windows_restart_and_join_one_application() {
+        let (_parent, authority, observation) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let reserved = runtime
+            .reserve_registration_at(
+                &authority,
+                &plan(observation),
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        runtime
+            .publish_reserved_object_graph(&authority, &reserved)
+            .unwrap();
+        let reserved_root = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let durable_objects = object_files(&object_root);
+
+        assert!(authority
+            .apply_reserved_retained_worker_registration_with_crash_point(
+                &reserved,
+                RetainedApplicationCrashPointV1::BeforeRootPublication,
+            )
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), reserved_root);
+        assert_eq!(object_files(&object_root), durable_objects);
+
+        let restarted = HostSessionAuthority::open(&_parent.path().join("home")).unwrap();
+        let applied = restarted
+            .apply_reserved_retained_worker_registration(&reserved)
+            .unwrap();
+        assert!(!applied.joined);
+        let applied_root = restarted.read_a12a_root().unwrap();
+        let joined = restarted
+            .apply_reserved_retained_worker_registration(&reserved)
+            .unwrap();
+        assert!(joined.joined);
+        assert_eq!(joined.registration, applied.registration);
+        assert_eq!(restarted.read_a12a_root().unwrap(), applied_root);
+        assert_eq!(object_files(&object_root), durable_objects);
+
+        let (_parent, authority, observation) = started_authority();
+        let reserved = runtime
+            .reserve_registration_at(
+                &authority,
+                &plan(observation),
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        runtime
+            .publish_reserved_object_graph(&authority, &reserved)
+            .unwrap();
+        assert!(authority
+            .apply_reserved_retained_worker_registration_with_crash_point(
+                &reserved,
+                RetainedApplicationCrashPointV1::AfterRootPublication,
+            )
+            .is_err());
+        let applied_root = authority.read_a12a_root().unwrap();
+        assert!(matches!(
+            applied_root
+                .retained_worker_registration_request_index
+                .get(&reserved.request.issuer_request_id)
+                .unwrap()
+                .state,
+            crate::execution::agent_runtime::host_session_authority::store_schema::RetainedWorkerAuthorityRegistrationRequestStateV1::Applied { .. }
+        ));
+        let restarted = HostSessionAuthority::open(&_parent.path().join("home")).unwrap();
+        let joined = restarted
+            .apply_reserved_retained_worker_registration(&reserved)
+            .unwrap();
+        assert!(joined.joined);
+        assert_eq!(restarted.read_a12a_root().unwrap(), applied_root);
+    }
+
+    #[test]
+    fn application_rejects_missing_reserved_object_without_root_or_object_mutation() {
+        let (_parent, authority, observation) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let reserved = runtime
+            .reserve_registration_at(
+                &authority,
+                &plan(observation),
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        authority
+            .publish_reserved_retained_object(
+                &reserved,
+                &reserved.descriptor_ref,
+                &reserved.descriptor_bytes,
+            )
+            .unwrap();
+        authority
+            .publish_reserved_retained_object(
+                &reserved,
+                &reserved.resume_handle_ref,
+                &reserved.resume_handle_bytes,
+            )
+            .unwrap();
+        let root_before = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+
+        assert!(authority
+            .apply_reserved_retained_worker_registration(&reserved)
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+        assert_eq!(object_files(&object_root), objects_before);
+    }
+
+    #[test]
+    fn stale_parallel_reservation_rejects_application_with_zero_mutation() {
+        let (_parent, authority, observation) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let first_plan = plan(observation.clone());
+        let mut second_plan = plan(observation);
+        second_plan.registration_request_id = "spawn-request-2".into();
+        second_plan.retained_participant_id = "r0-retained-2".into();
+        second_plan.descriptor.agent_id = "codex-worker-2".into();
+        second_plan.internal_uaa_session_id = "uaa-retained-2".into();
+        let first = runtime
+            .reserve_registration_at(
+                &authority,
+                &first_plan,
+                timestamp("2026-07-14T12:02:00.000000000Z"),
+                None,
+            )
+            .unwrap();
+        let stale = runtime
+            .reserve_registration_at(
+                &authority,
+                &second_plan,
+                timestamp("2026-07-14T12:02:01.000000000Z"),
+                None,
+            )
+            .unwrap();
+        runtime
+            .publish_reserved_object_graph(&authority, &first)
+            .unwrap();
+        runtime
+            .publish_reserved_object_graph(&authority, &stale)
+            .unwrap();
+        authority
+            .apply_reserved_retained_worker_registration(&first)
+            .unwrap();
+        let root_before = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let objects_before = object_files(&object_root);
+
+        assert!(authority
+            .apply_reserved_retained_worker_registration(&stale)
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), root_before);
+        assert_eq!(object_files(&object_root), objects_before);
+    }
+
+    #[test]
+    fn strict_root_rejects_incomplete_or_noncontiguous_applied_registration() {
+        let (_parent, authority, observation) = started_authority();
+        RetainedWorkerRuntime
+            .register_retained_target(&authority, &plan(observation))
+            .unwrap();
+        let applied = authority.read_a12a_root().unwrap();
+        applied.validate().unwrap();
+        let request = applied
+            .retained_worker_registration_request_index
+            .values()
+            .next()
+            .unwrap()
+            .clone();
+
+        let mut missing_journal = applied.clone();
+        missing_journal.retained_worker_registration_journal.clear();
+        assert!(missing_journal.validate().is_err());
+
+        let mut reserved_with_journal = applied.clone();
+        reserved_with_journal
+            .retained_worker_registration_request_index
+            .get_mut(&request.issuer_request_id)
+            .unwrap()
+            .state = crate::execution::agent_runtime::host_session_authority::store_schema::RetainedWorkerAuthorityRegistrationRequestStateV1::Reserved;
+        assert!(reserved_with_journal.validate().is_err());
+
+        let mut missing_index = applied.clone();
+        missing_index
+            .object_index
+            .remove(&request.retained_worker_ref_id);
+        assert!(missing_index.validate().is_err());
+
+        let mut duplicate_lineage = applied.clone();
+        durable_authority_mut(&mut duplicate_lineage)
+            .authoritative_participant_lineage
+            .push(request.retained_participant_id.clone());
+        assert!(duplicate_lineage.validate().is_err());
+
+        let mut duplicate_worker_ref = applied.clone();
+        let worker_ref =
+            durable_authority_mut(&mut duplicate_worker_ref).retained_worker_refs[0].clone();
+        durable_authority_mut(&mut duplicate_worker_ref)
+            .retained_worker_refs
+            .push(worker_ref);
+        assert!(duplicate_worker_ref.validate().is_err());
+
+        let mut skipped_revision = applied.clone();
+        durable_authority_mut(&mut skipped_revision).authority_revision += 1;
+        assert!(skipped_revision.validate().is_err());
+
+        let mut forged_lineage_commitment = applied;
+        forged_lineage_commitment
+            .retained_worker_registration_journal
+            .get_mut(&request.registration_id)
+            .unwrap()
+            .authoritative_lineage_commitment_after = crate::execution::agent_runtime::host_session_authority::schema::AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".into(),
+            };
+        assert!(forged_lineage_commitment.validate().is_err());
     }
 }

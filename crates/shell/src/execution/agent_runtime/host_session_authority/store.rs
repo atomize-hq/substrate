@@ -135,6 +135,26 @@ pub(super) fn publish_reserved_retained_object_opened(
     platform::publish_reserved_retained_object_opened(root, reserved, reference, bytes)
 }
 
+pub(super) fn apply_reserved_retained_worker_registration_opened(
+    root: &TrustedAuthorityRoot,
+    reserved: &RetainedWorkerReservationV1,
+) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
+    platform::apply_reserved_retained_worker_registration_opened(root, reserved)
+}
+
+#[cfg(test)]
+pub(super) fn apply_reserved_retained_worker_registration_with_crash_point_opened(
+    root: &TrustedAuthorityRoot,
+    reserved: &RetainedWorkerReservationV1,
+    crash_point: RetainedApplicationCrashPointV1,
+) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
+    platform::apply_reserved_retained_worker_registration_with_crash_point_opened(
+        root,
+        reserved,
+        crash_point,
+    )
+}
+
 #[cfg(test)]
 pub(super) fn reserve_retained_worker_registration_at_opened(
     root: &TrustedAuthorityRoot,
@@ -442,6 +462,13 @@ pub(super) enum RetainedReservationCrashPointV1 {
     AfterRootPublication,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) enum RetainedApplicationCrashPointV1 {
+    BeforeRootPublication,
+    AfterRootPublication,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct RetainedWorkerReservationV1 {
     pub(super) request: crate::execution::agent_runtime::host_session_authority::store_schema::RetainedWorkerAuthorityRegistrationRequestV1,
@@ -457,6 +484,12 @@ pub(super) struct RetainedWorkerReservationV1 {
     pub(super) joined: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct RetainedWorkerApplicationV1 {
+    pub(super) registration: crate::execution::agent_runtime::host_session_authority::store_schema::RetainedWorkerAuthorityRegistrationV1,
+    pub(super) joined: bool,
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod platform {
     use std::fmt;
@@ -469,7 +502,8 @@ mod platform {
         BootstrapClassificationV1, BootstrapError, ExpectedRevisionsV1, GeneratedObjectV1,
         GreenfieldUpgradeCrashPointV1, InitializationCrashPointV1, InitializationMaterialV1,
         KeyLifecycleCrashPointV1, LegacyStateStoreCollectionV1, ObjectPublicationOutcomeV1,
-        ObjectVerificationContextV1, RetainedReservationCrashPointV1,
+        ObjectVerificationContextV1, RetainedApplicationCrashPointV1,
+        RetainedReservationCrashPointV1, RetainedWorkerApplicationV1,
         RetainedWorkerReservationInputV1, RetainedWorkerReservationV1, RootUpgradeOutcomeV1,
         TransactionCommitOutcomeV1, VersionedObjectVerificationParentIntentV1,
     };
@@ -479,11 +513,11 @@ mod platform {
     };
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AgentDescriptorHashInputV1, AgentExecutionScopeV1, ApplicationResultHashInputV1,
-        AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
-        CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1, HostAttachContractHashInputV1,
-        InputAcceptanceHashInputV1, PolicyObjectHashInputV1, PostTurnCompletionHashInputV1,
-        ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1, TerminalHandoffHashInputV1,
-        TerminalHandoffStateV1, TimestampV1,
+        AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
+        AuthorityObjectRefV1, CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
+        HostAttachContractHashInputV1, InputAcceptanceHashInputV1, PolicyObjectHashInputV1,
+        PostTurnCompletionHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
+        TerminalHandoffHashInputV1, TerminalHandoffStateV1, TimestampV1,
     };
     use crate::execution::agent_runtime::host_session_authority::store_format::{
         key_id, nonce, object_ref_id, store_id, validate_key_id, validate_ref_id,
@@ -499,8 +533,8 @@ mod platform {
         HostSessionTransitionIntentV1, HostSessionTransitionIntentV2,
         HostSessionTransitionTransportPayloadStateV1,
         RetainedWorkerAuthorityRegistrationRequestStateV1,
-        RetainedWorkerAuthorityRegistrationRequestV1, SessionNamespaceRecordV1, StateRootV1,
-        StateRootV2, VersionedStateRoot,
+        RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
+        SessionNamespaceRecordV1, StateRootV1, StateRootV2, VersionedStateRoot,
     };
     use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
         DirectoryEntry, EntryKind, TrustedAuthorityRoot, TrustedDirectory, TrustedFile,
@@ -1414,6 +1448,283 @@ mod platform {
                 system_material()?.key_nonce,
             )
         })
+    }
+
+    pub(super) fn apply_reserved_retained_worker_registration_opened(
+        root_handle: &TrustedAuthorityRoot,
+        reserved: &RetainedWorkerReservationV1,
+    ) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
+        apply_reserved_retained_worker_registration_opened_with(root_handle, reserved, None)
+    }
+
+    #[cfg(test)]
+    pub(super) fn apply_reserved_retained_worker_registration_with_crash_point_opened(
+        root_handle: &TrustedAuthorityRoot,
+        reserved: &RetainedWorkerReservationV1,
+        crash_point: RetainedApplicationCrashPointV1,
+    ) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
+        apply_reserved_retained_worker_registration_opened_with(
+            root_handle,
+            reserved,
+            Some(crash_point),
+        )
+    }
+
+    fn apply_reserved_retained_worker_registration_opened_with(
+        root_handle: &TrustedAuthorityRoot,
+        reserved: &RetainedWorkerReservationV1,
+        crash_point: Option<RetainedApplicationCrashPointV1>,
+    ) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
+        with_opened_existing_versioned_semantic_preflight(root_handle, |transaction| {
+            let VersionedStateRoot::V2(root) = &transaction.root else {
+                return Err(BootstrapError(
+                    "retained authority application requires strict StateRootV2",
+                ));
+            };
+            let persisted = root
+                .retained_worker_registration_request_index
+                .get(&reserved.request.issuer_request_id)
+                .ok_or(BootstrapError(
+                    "retained authority application has no reservation",
+                ))?;
+            let mut expected_request = reserved.request.clone();
+            expected_request.state = persisted.state.clone();
+            if &expected_request != persisted {
+                return Err(BootstrapError(
+                    "retained authority application reservation is inexact",
+                ));
+            }
+            validate_reserved_graph(
+                transaction.layout,
+                root,
+                persisted,
+                &reserved.descriptor_ref,
+                &reserved.descriptor_bytes,
+                &reserved.resume_handle_ref,
+                &reserved.resume_handle_bytes,
+                &reserved.retained_worker_ref,
+                &reserved.retained_worker_bytes,
+            )?;
+            for (reference, expected_bytes) in [
+                (
+                    &reserved.descriptor_ref,
+                    reserved.descriptor_bytes.as_slice(),
+                ),
+                (
+                    &reserved.resume_handle_ref,
+                    reserved.resume_handle_bytes.as_slice(),
+                ),
+                (
+                    &reserved.retained_worker_ref,
+                    reserved.retained_worker_bytes.as_slice(),
+                ),
+            ] {
+                let actual = transaction
+                    .layout
+                    .read_object_bytes(reference)
+                    .map_err(|_| BootstrapError("read reserved retained object"))?;
+                if actual != expected_bytes {
+                    return Err(BootstrapError(
+                        "reserved retained object bytes changed before application",
+                    ));
+                }
+                verify_object_bytes(transaction.layout, root, reference, &actual, None, false)?;
+            }
+            if matches!(
+                persisted.state,
+                RetainedWorkerAuthorityRegistrationRequestStateV1::Applied { .. }
+            ) {
+                let registration = root
+                    .retained_worker_registration_journal
+                    .get(&persisted.registration_id)
+                    .ok_or(BootstrapError(
+                        "applied retained registration has no exact journal",
+                    ))?;
+                return Ok(RetainedWorkerApplicationV1 {
+                    registration: registration.clone(),
+                    joined: true,
+                });
+            }
+            validate_reservation_authority(
+                root,
+                &RetainedWorkerReservationInputV1 {
+                    issuer_request_id: persisted.issuer_request_id.clone(),
+                    orchestration_session_id: persisted.orchestration_session_id.clone(),
+                    expected_authority_store_id: root.authority_store_id.clone(),
+                    expected_authority_revision: persisted.authority_revision_before,
+                    expected_authority_commitment: persisted
+                        .authority_record_commitment_before
+                        .clone(),
+                    retained_participant_id: persisted.retained_participant_id.clone(),
+                    descriptor_bytes: reserved.descriptor_bytes.clone(),
+                    resume_handle_bytes: reserved.resume_handle_bytes.clone(),
+                },
+            )?;
+            let SessionNamespaceRecordV1::Authority(current_authority) = root
+                .session_namespace_map
+                .get(&persisted.orchestration_session_id)
+                .ok_or(BootstrapError("retained application authority is absent"))?
+            else {
+                return Err(BootstrapError(
+                    "retained application authority record is not durable",
+                ));
+            };
+            if current_authority.current_policy_ref.as_ref() != Some(&persisted.current_policy_ref)
+                || current_authority.world_binding.as_ref() != Some(&persisted.world_binding)
+                || current_authority
+                    .authoritative_participant_lineage
+                    .contains(&persisted.retained_participant_id)
+                || current_authority
+                    .retained_worker_refs
+                    .contains(&reserved.retained_worker_ref)
+                || current_authority.updated_at.as_str() > persisted.registered_at.as_str()
+            {
+                return Err(BootstrapError(
+                    "retained application authority inputs are no longer exact",
+                ));
+            }
+
+            let mut next_authority = current_authority.as_ref().clone();
+            next_authority.authority_revision = next_authority
+                .authority_revision
+                .checked_add(1)
+                .ok_or(BootstrapError("retained authority revision overflow"))?;
+            next_authority
+                .authoritative_participant_lineage
+                .push(persisted.retained_participant_id.clone());
+            next_authority
+                .retained_worker_refs
+                .push(reserved.retained_worker_ref.clone());
+            next_authority.updated_at = persisted.registered_at.clone();
+            let authoritative_lineage_commitment_after =
+                AuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: canonical_sha256(&AuthoritativeLineageHashInputV1 {
+                        schema_version: 1,
+                        orchestration_session_id: persisted.orchestration_session_id.clone(),
+                        participant_ids: next_authority.authoritative_participant_lineage.clone(),
+                    })
+                    .map_err(|_| BootstrapError("commit retained authority lineage"))?,
+                };
+            let authority_record_commitment_after =
+                canonical_authority_commitment(&next_authority)?;
+            let registration = RetainedWorkerAuthorityRegistrationV1 {
+                schema_version: 1,
+                issuer_request_id: persisted.issuer_request_id.clone(),
+                registration_id: persisted.registration_id.clone(),
+                orchestration_session_id: persisted.orchestration_session_id.clone(),
+                authority_revision_before: persisted.authority_revision_before,
+                authority_record_commitment_before: persisted
+                    .authority_record_commitment_before
+                    .clone(),
+                authority_revision_after: next_authority.authority_revision,
+                authority_record_commitment_after: authority_record_commitment_after.clone(),
+                retained_participant_id: persisted.retained_participant_id.clone(),
+                authoritative_lineage_commitment_after,
+                descriptor_ref: reserved.descriptor_ref.clone(),
+                resume_handle_ref: reserved.resume_handle_ref.clone(),
+                retained_worker_ref: reserved.retained_worker_ref.clone(),
+                current_policy_ref: persisted.current_policy_ref.clone(),
+                world_binding: persisted.world_binding.clone(),
+                registered_at: persisted.registered_at.clone(),
+            };
+
+            let mut proposed = root.clone();
+            proposed.root_revision = proposed.root_revision.checked_add(1).ok_or(
+                BootstrapError("retained application root revision overflow"),
+            )?;
+            proposed.session_namespace_map.insert(
+                persisted.orchestration_session_id.clone(),
+                SessionNamespaceRecordV1::Authority(Box::new(next_authority)),
+            );
+            for (reference, bytes) in [
+                (
+                    &reserved.descriptor_ref,
+                    reserved.descriptor_bytes.as_slice(),
+                ),
+                (
+                    &reserved.resume_handle_ref,
+                    reserved.resume_handle_bytes.as_slice(),
+                ),
+                (
+                    &reserved.retained_worker_ref,
+                    reserved.retained_worker_bytes.as_slice(),
+                ),
+            ] {
+                insert_retained_present_index(&mut proposed, reference, bytes.len() as u64)?;
+            }
+            let next_request = proposed
+                .retained_worker_registration_request_index
+                .get_mut(&persisted.issuer_request_id)
+                .ok_or(BootstrapError(
+                    "retained reservation disappeared during application",
+                ))?;
+            next_request.state = RetainedWorkerAuthorityRegistrationRequestStateV1::Applied {
+                authority_revision_after: registration.authority_revision_after,
+                authority_record_commitment_after,
+            };
+            if proposed
+                .retained_worker_registration_journal
+                .insert(registration.registration_id.clone(), registration.clone())
+                .is_some()
+            {
+                return Err(BootstrapError(
+                    "retained registration journal identity already exists",
+                ));
+            }
+            let candidate = VersionedStateRoot::V2(proposed);
+            transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+            transaction.reconcile()?;
+            publish_versioned_replacement_root(
+                transaction.layout,
+                transaction.trusted_root,
+                &transaction.legacy,
+                &candidate,
+                system_material()?.root_nonce,
+                || {
+                    transaction.validate_publication_candidate(root.root_revision, &candidate)?;
+                    if crash_point == Some(RetainedApplicationCrashPointV1::BeforeRootPublication) {
+                        return Err(BootstrapError(
+                            "injected crash before retained authority root publication",
+                        ));
+                    }
+                    Ok(())
+                },
+            )?;
+            if crash_point == Some(RetainedApplicationCrashPointV1::AfterRootPublication) {
+                return Err(BootstrapError(
+                    "injected crash after retained authority root publication",
+                ));
+            }
+            Ok(RetainedWorkerApplicationV1 {
+                registration,
+                joined: false,
+            })
+        })
+    }
+
+    fn insert_retained_present_index(
+        root: &mut StateRootV2,
+        reference: &AuthorityObjectRefV1,
+        byte_length: u64,
+    ) -> Result<(), BootstrapError> {
+        let entry = AuthorityObjectIndexEntryV1 {
+            schema_version: 1,
+            ref_id: reference.ref_id.clone(),
+            object_kind: reference.object_kind,
+            object_schema_version: reference.schema_version,
+            byte_length,
+            storage_state: AuthorityObjectStorageStateV1::Present,
+        };
+        match root
+            .object_index
+            .insert(reference.ref_id.clone(), entry.clone())
+        {
+            None => Ok(()),
+            Some(existing) if existing == entry => Ok(()),
+            Some(_) => Err(BootstrapError(
+                "retained object index conflicts with existing authority",
+            )),
+        }
     }
 
     fn validate_reservation_authority(
@@ -2414,8 +2725,9 @@ mod platform {
     use super::RetainedReservationCrashPointV1;
     use super::{
         BootstrapClassificationV1, BootstrapError, GeneratedObjectV1, ObjectPublicationOutcomeV1,
-        ObjectVerificationContextV1, RetainedWorkerReservationInputV1, RetainedWorkerReservationV1,
-        RootUpgradeOutcomeV1, TrustedAuthorityRoot,
+        ObjectVerificationContextV1, RetainedApplicationCrashPointV1, RetainedWorkerApplicationV1,
+        RetainedWorkerReservationInputV1, RetainedWorkerReservationV1, RootUpgradeOutcomeV1,
+        TrustedAuthorityRoot,
     };
     #[cfg(test)]
     use crate::execution::agent_runtime::host_session_authority::schema::{
@@ -2550,6 +2862,26 @@ mod platform {
     ) -> Result<ObjectPublicationOutcomeV1, BootstrapError> {
         Err(BootstrapError(
             "retained object publication is unsupported on this platform",
+        ))
+    }
+
+    pub(super) fn apply_reserved_retained_worker_registration_opened(
+        _root: &TrustedAuthorityRoot,
+        _reserved: &RetainedWorkerReservationV1,
+    ) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
+        Err(BootstrapError(
+            "retained authority application is unsupported on this platform",
+        ))
+    }
+
+    #[cfg(test)]
+    pub(super) fn apply_reserved_retained_worker_registration_with_crash_point_opened(
+        _root: &TrustedAuthorityRoot,
+        _reserved: &RetainedWorkerReservationV1,
+        _crash_point: RetainedApplicationCrashPointV1,
+    ) -> Result<RetainedWorkerApplicationV1, BootstrapError> {
+        Err(BootstrapError(
+            "retained authority application is unsupported on this platform",
         ))
     }
 

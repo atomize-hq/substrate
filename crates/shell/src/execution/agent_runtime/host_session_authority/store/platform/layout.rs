@@ -1133,6 +1133,8 @@ impl<'a> StoreLayout<'a> {
         let mut processed = std::collections::BTreeSet::new();
         let mut attach_contracts = std::collections::BTreeMap::new();
         let mut descriptors = std::collections::BTreeMap::new();
+        let mut resume_handles = std::collections::BTreeMap::new();
+        let mut retained_workers = std::collections::BTreeMap::new();
         let mut terminal_handoffs = std::collections::BTreeMap::new();
         while let Some(ref_id) = pending.pop() {
             if !processed.insert(ref_id.clone()) {
@@ -1195,15 +1197,33 @@ impl<'a> StoreLayout<'a> {
                         .map_err(|_| StoreError("decode V2 agent descriptor graph"))?;
                     descriptors.insert(ref_id.clone(), value);
                 }
+                AuthorityObjectKindV1::RetainedWorker => {
+                    let value: RetainedWorkerObjectHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V2 retained worker graph"))?;
+                    for (reference, kind) in [
+                        (
+                            &value.descriptor_ref,
+                            AuthorityObjectKindV1::AgentDescriptor,
+                        ),
+                        (
+                            &value.resume_handle_ref,
+                            AuthorityObjectKindV1::ResumeHandle,
+                        ),
+                        (&value.policy_ref, AuthorityObjectKindV1::Policy),
+                    ] {
+                        add_expected_ref(&mut reachable, reference, kind, None)?;
+                    }
+                    retained_workers.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::ResumeHandle => {
+                    let value: ResumeHandleHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V2 resume handle graph"))?;
+                    resume_handles.insert(ref_id.clone(), value);
+                }
                 AuthorityObjectKindV1::TerminalHandoff => {
                     let value: TerminalHandoffHashInputV1 = canonical_json::from_slice(&bytes)
                         .map_err(|_| StoreError("decode V2 terminal handoff graph"))?;
                     terminal_handoffs.insert(ref_id.clone(), value);
-                }
-                AuthorityObjectKindV1::RetainedWorker | AuthorityObjectKindV1::ResumeHandle => {
-                    return Err(StoreError(
-                        "A1.2a V2 cannot reach retained or resume objects",
-                    ));
                 }
                 _ => {}
             }
@@ -1239,6 +1259,71 @@ impl<'a> StoreLayout<'a> {
                 {
                     return Err(StoreError("V2 attach contract and Start intent disagree"));
                 }
+            }
+        }
+        for (ref_id, worker) in &retained_workers {
+            let descriptor = descriptors
+                .get(&worker.descriptor_ref.ref_id)
+                .ok_or(StoreError("V2 retained descriptor is unreachable"))?;
+            let resume = resume_handles
+                .get(&worker.resume_handle_ref.ref_id)
+                .ok_or(StoreError("V2 retained resume handle is unreachable"))?;
+            if descriptor.descriptor.execution_scope != AgentExecutionScopeV1::World {
+                return Err(StoreError("V2 retained descriptor is not world-scoped"));
+            }
+            validate_resume_identity(
+                resume,
+                &worker.orchestration_session_id,
+                &worker.participant_id,
+                &descriptor.descriptor.backend_id,
+                &descriptor.descriptor.protocol,
+            )?;
+            let parents = root
+                .session_namespace_map
+                .values()
+                .filter_map(|record| match record {
+                    SessionNamespaceRecordV1::Authority(authority)
+                        if authority
+                            .retained_worker_refs
+                            .iter()
+                            .any(|reference| reference.ref_id == *ref_id) =>
+                    {
+                        Some(authority.as_ref())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let [authority] = parents.as_slice() else {
+                return Err(StoreError(
+                    "V2 retained worker has no unique authority parent",
+                ));
+            };
+            let registrations = root
+                .retained_worker_registration_journal
+                .values()
+                .filter(|registration| registration.retained_worker_ref.ref_id == *ref_id)
+                .collect::<Vec<_>>();
+            let [registration] = registrations.as_slice() else {
+                return Err(StoreError(
+                    "V2 retained worker has no unique registration parent",
+                ));
+            };
+            if worker.orchestration_session_id != authority.orchestration_session_id
+                || worker.orchestration_session_id != registration.orchestration_session_id
+                || worker.participant_id != registration.retained_participant_id
+                || !authority
+                    .authoritative_participant_lineage
+                    .contains(&worker.participant_id)
+                || authority.world_binding.as_ref() != Some(&worker.world_binding)
+                || authority.current_policy_ref.as_ref() != Some(&worker.policy_ref)
+                || worker.world_binding != registration.world_binding
+                || worker.descriptor_ref != registration.descriptor_ref
+                || worker.resume_handle_ref != registration.resume_handle_ref
+                || worker.policy_ref != registration.current_policy_ref
+            {
+                return Err(StoreError(
+                    "V2 retained object graph and authority disagree",
+                ));
             }
         }
         for intent in root.transition_intent_map.values() {

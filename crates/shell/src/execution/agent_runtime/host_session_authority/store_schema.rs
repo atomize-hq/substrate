@@ -4,7 +4,8 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use super::schema::{
-    AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1,
+    AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
+    AuthorityObjectRefV1, CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
     DurableSessionAuthorityOriginV1, HostPostTurnDispositionV1, HostSessionAuthorityPreconditionV1,
     HostSessionPostureV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
     HostSessionTransitionTerminalRejectionV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
@@ -942,6 +943,38 @@ impl StateRootV2 {
                             "applied retained registration has no journal",
                         ))?;
                     validate_applied_registration_request(request, journal)?;
+                    for (reference, expected_kind) in [
+                        (
+                            &journal.descriptor_ref,
+                            AuthorityObjectKindV1::AgentDescriptor,
+                        ),
+                        (
+                            &journal.resume_handle_ref,
+                            AuthorityObjectKindV1::ResumeHandle,
+                        ),
+                        (
+                            &journal.retained_worker_ref,
+                            AuthorityObjectKindV1::RetainedWorker,
+                        ),
+                    ] {
+                        let index =
+                            self.object_index
+                                .get(&reference.ref_id)
+                                .ok_or(StoreSchemaError(
+                                    "applied retained object has no index entry",
+                                ))?;
+                        if index.schema_version != 1
+                            || index.ref_id != reference.ref_id
+                            || index.object_kind != expected_kind
+                            || index.object_schema_version != reference.schema_version
+                            || index.byte_length == 0
+                            || index.storage_state != AuthorityObjectStorageStateV1::Present
+                        {
+                            return Err(StoreSchemaError(
+                                "applied retained object index is inexact",
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -976,6 +1009,102 @@ impl StateRootV2 {
                     "retained registration journal identity is invalid",
                 ));
             }
+        }
+        Ok(())
+    }
+
+    fn validate_retained_authority_descendant(
+        &self,
+        intent: &HostSessionTransitionIntentV2,
+        current: &DurableSessionAuthorityV1,
+        initial: &InitialTransitionApplicationJournalV1,
+    ) -> Result<(), StoreSchemaError> {
+        let mut expected = current.clone();
+        expected.authority_revision = initial.authority_revision_after;
+        expected.authoritative_participant_lineage = intent.resulting_authoritative_lineage.clone();
+        expected.retained_worker_refs.clear();
+        expected.internal_resume_handle_refs.clear();
+        expected.updated_at = initial.applied_at.clone();
+        let mut expected_commitment = authority_record_commitment(&expected)?;
+        if expected_commitment != initial.authority_record_commitment {
+            return Err(StoreSchemaError(
+                "initial authority is not the base of retained ancestry",
+            ));
+        }
+        let mut consumed = 0_usize;
+        while expected.authority_revision < current.authority_revision {
+            let candidates = self
+                .retained_worker_registration_journal
+                .values()
+                .filter(|registration| {
+                    registration.orchestration_session_id == expected.orchestration_session_id
+                        && registration.authority_revision_before == expected.authority_revision
+                        && registration.authority_record_commitment_before == expected_commitment
+                })
+                .collect::<Vec<_>>();
+            let [registration] = candidates.as_slice() else {
+                return Err(StoreSchemaError(
+                    "retained authority ancestry is not uniquely contiguous",
+                ));
+            };
+            if registration.authority_revision_after
+                != expected
+                    .authority_revision
+                    .checked_add(1)
+                    .ok_or(StoreSchemaError("retained authority revision overflow"))?
+                || expected.current_policy_ref.as_ref() != Some(&registration.current_policy_ref)
+                || expected.world_binding.as_ref() != Some(&registration.world_binding)
+                || expected
+                    .authoritative_participant_lineage
+                    .contains(&registration.retained_participant_id)
+                || expected
+                    .retained_worker_refs
+                    .contains(&registration.retained_worker_ref)
+            {
+                return Err(StoreSchemaError(
+                    "retained authority ancestry link is inconsistent",
+                ));
+            }
+            expected.authority_revision = registration.authority_revision_after;
+            expected
+                .authoritative_participant_lineage
+                .push(registration.retained_participant_id.clone());
+            expected
+                .retained_worker_refs
+                .push(registration.retained_worker_ref.clone());
+            expected.updated_at = registration.registered_at.clone();
+            let lineage_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: super::hash::canonical_sha256(&AuthoritativeLineageHashInputV1 {
+                    schema_version: 1,
+                    orchestration_session_id: expected.orchestration_session_id.clone(),
+                    participant_ids: expected.authoritative_participant_lineage.clone(),
+                })
+                .map_err(|_| StoreSchemaError("commit retained authority lineage"))?,
+            };
+            if lineage_commitment != registration.authoritative_lineage_commitment_after {
+                return Err(StoreSchemaError(
+                    "retained authority lineage commitment is inconsistent",
+                ));
+            }
+            expected_commitment = authority_record_commitment(&expected)?;
+            if expected_commitment != registration.authority_record_commitment_after {
+                return Err(StoreSchemaError(
+                    "retained authority record commitment is inconsistent",
+                ));
+            }
+            consumed += 1;
+        }
+        let session_registration_count = self
+            .retained_worker_registration_journal
+            .values()
+            .filter(|registration| {
+                registration.orchestration_session_id == current.orchestration_session_id
+            })
+            .count();
+        if consumed != session_registration_count || expected != *current {
+            return Err(StoreSchemaError(
+                "current authority is not the exact retained descendant",
+            ));
         }
         Ok(())
     }
@@ -1126,10 +1255,11 @@ impl StateRootV2 {
                 let SessionNamespaceRecordV1::Authority(authority) = namespace else {
                     return Err(StoreSchemaError("V2 applied Start has no authority"));
                 };
-                if authority.authority_revision != *authority_revision_after
+                if authority.authority_revision < *authority_revision_after
                     || authority.shell_trace_session_id != intent.shell_trace_session_id
-                    || authority.authoritative_participant_lineage
-                        != intent.resulting_authoritative_lineage
+                    || !authority
+                        .authoritative_participant_lineage
+                        .starts_with(&intent.resulting_authoritative_lineage)
                     || authority.active_authoritative_participant_id.as_ref()
                         != Some(active_authoritative_participant_id)
                     || authority.workspace_binding != intent.workspace_binding
@@ -1156,6 +1286,7 @@ impl StateRootV2 {
                 {
                     return Err(StoreSchemaError("V2 applied Start and journal disagree"));
                 }
+                self.validate_retained_authority_descendant(intent, authority, initial)?;
             }
             HostSessionTransitionIntentStateV2::Rejected {
                 reason,
@@ -1374,6 +1505,47 @@ fn validate_applied_registration_request(
     validate_registration_commitment(&journal.authoritative_lineage_commitment_after)
 }
 
+fn authority_record_commitment(
+    authority: &DurableSessionAuthorityV1,
+) -> Result<AuthorityObjectCommitmentV1, StoreSchemaError> {
+    super::hash::canonical_sha256(&DurableSessionAuthorityHashInputV1 {
+        schema_version: authority.schema_version,
+        orchestration_session_id: authority.orchestration_session_id.clone(),
+        shell_trace_session_id: authority.shell_trace_session_id.clone(),
+        authority_revision: authority.authority_revision,
+        origin: authority.origin.clone(),
+        authoritative_participant_lineage: authority.authoritative_participant_lineage.clone(),
+        active_authoritative_participant_id: authority.active_authoritative_participant_id.clone(),
+        workspace_binding: authority.workspace_binding.clone(),
+        world_binding: authority.world_binding.clone(),
+        host_attach_contract_ref: authority.host_attach_contract_ref.clone(),
+        retained_worker_refs: authority.retained_worker_refs.clone(),
+        internal_resume_handle_refs: authority.internal_resume_handle_refs.clone(),
+        lifecycle_posture: authority.lifecycle_posture,
+        current_policy_ref: authority.current_policy_ref.clone(),
+        current_policy_revision: authority.current_policy_revision.clone(),
+    })
+    .map(|digest_hex| AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex })
+    .map_err(|_| StoreSchemaError("commit durable retained authority"))
+}
+
+fn all_unique(values: &[String]) -> bool {
+    values
+        .iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
+        == values.len()
+}
+
+fn all_unique_refs(values: &[AuthorityObjectRefV1]) -> bool {
+    values
+        .iter()
+        .map(|reference| &reference.ref_id)
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
+        == values.len()
+}
+
 fn validate_namespace_record_identity(
     record: &SessionNamespaceRecordV1,
     authority_store_id: &str,
@@ -1387,8 +1559,10 @@ fn validate_namespace_record_identity(
             if authority.authority_revision == 0
                 || authority.workspace_binding.authority_store_id != authority_store_id
                 || &authority.workspace_binding.authority_store_root != bootstrap_home
-                || !authority.retained_worker_refs.is_empty()
                 || !authority.internal_resume_handle_refs.is_empty()
+                || authority.authoritative_participant_lineage.is_empty()
+                || !all_unique(&authority.authoritative_participant_lineage)
+                || !all_unique_refs(&authority.retained_worker_refs)
                 || authority
                     .active_authoritative_participant_id
                     .as_ref()

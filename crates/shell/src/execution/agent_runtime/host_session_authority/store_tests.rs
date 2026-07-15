@@ -3,11 +3,13 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::*;
 use crate::execution::agent_runtime::host_session_authority::canonical_json;
+use crate::execution::agent_runtime::host_session_authority::hash::canonical_sha256;
 use crate::execution::agent_runtime::host_session_authority::schema::{
     AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
-    DurableSessionAuthorityOriginV1, HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
-    HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
-    PolicyObjectHashInputV1, WorkspaceBindingV1,
+    DurableSessionAuthorityHashInputV1, DurableSessionAuthorityOriginV1,
+    HostSessionAuthorityPreconditionV1, HostSessionPostureV1, HostSessionTransitionCallerKindV1,
+    HostSessionTransitionCallerV1, HostSessionTransitionModeV1, PolicyObjectHashInputV1,
+    WorkspaceBindingV1,
 };
 use crate::execution::agent_runtime::host_session_authority::store_schema::{
     AuthorityObjectIndexEntryV1, AuthorityObjectStorageStateV1,
@@ -54,6 +56,31 @@ fn material(seed: u8) -> InitializationMaterialV1 {
 fn placeholder_commitment() -> AuthorityObjectCommitmentV1 {
     AuthorityObjectCommitmentV1::CanonicalSha256 {
         digest_hex: "ab".repeat(32),
+    }
+}
+
+fn authority_commitment(authority: &DurableSessionAuthorityV1) -> AuthorityObjectCommitmentV1 {
+    AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: canonical_sha256(&DurableSessionAuthorityHashInputV1 {
+            schema_version: authority.schema_version,
+            orchestration_session_id: authority.orchestration_session_id.clone(),
+            shell_trace_session_id: authority.shell_trace_session_id.clone(),
+            authority_revision: authority.authority_revision,
+            origin: authority.origin.clone(),
+            authoritative_participant_lineage: authority.authoritative_participant_lineage.clone(),
+            active_authoritative_participant_id: authority
+                .active_authoritative_participant_id
+                .clone(),
+            workspace_binding: authority.workspace_binding.clone(),
+            world_binding: authority.world_binding.clone(),
+            host_attach_contract_ref: authority.host_attach_contract_ref.clone(),
+            retained_worker_refs: authority.retained_worker_refs.clone(),
+            internal_resume_handle_refs: authority.internal_resume_handle_refs.clone(),
+            lifecycle_posture: authority.lifecycle_posture,
+            current_policy_ref: authority.current_policy_ref.clone(),
+            current_policy_revision: authority.current_policy_revision.clone(),
+        })
+        .unwrap(),
     }
 }
 
@@ -267,32 +294,42 @@ fn apply_placeholder_v2_start(root: &mut StateRootV2) {
         post_turn: Box::new(HostSessionPostTurnApplicationV1::NotApplicable),
         applied_at: applied_at.clone(),
     };
+    let authority = DurableSessionAuthorityV1 {
+        schema_version: 1,
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        shell_trace_session_id: intent.shell_trace_session_id.clone(),
+        authority_revision: 1,
+        origin: DurableSessionAuthorityOriginV1::StartIntent {
+            intent_id: intent.intent_id.clone(),
+            issuer_request_id: intent.issuer_request_id.clone(),
+            payload_commitment: intent.payload_commitment.clone(),
+        },
+        authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
+        active_authoritative_participant_id: Some(
+            intent.target_authoritative_participant_id.clone(),
+        ),
+        workspace_binding: intent.workspace_binding.clone(),
+        world_binding: intent.world_binding.clone(),
+        host_attach_contract_ref: Some(intent.host_attach_contract_ref.clone()),
+        retained_worker_refs: Vec::new(),
+        internal_resume_handle_refs: Vec::new(),
+        lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+        current_policy_ref: None,
+        current_policy_revision: None,
+        updated_at: applied_at.clone(),
+    };
+    let exact_authority_commitment = authority_commitment(&authority);
+    let HostSessionTransitionIntentStateV2::Applied {
+        authority_record_commitment,
+        ..
+    } = &mut intent.state
+    else {
+        panic!("fixture must remain applied")
+    };
+    *authority_record_commitment = exact_authority_commitment.clone();
     root.session_namespace_map.insert(
         intent.orchestration_session_id.clone(),
-        SessionNamespaceRecordV1::Authority(Box::new(DurableSessionAuthorityV1 {
-            schema_version: 1,
-            orchestration_session_id: intent.orchestration_session_id.clone(),
-            shell_trace_session_id: intent.shell_trace_session_id.clone(),
-            authority_revision: 1,
-            origin: DurableSessionAuthorityOriginV1::StartIntent {
-                intent_id: intent.intent_id.clone(),
-                issuer_request_id: intent.issuer_request_id.clone(),
-                payload_commitment: intent.payload_commitment.clone(),
-            },
-            authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
-            active_authoritative_participant_id: Some(
-                intent.target_authoritative_participant_id.clone(),
-            ),
-            workspace_binding: intent.workspace_binding.clone(),
-            world_binding: intent.world_binding.clone(),
-            host_attach_contract_ref: Some(intent.host_attach_contract_ref.clone()),
-            retained_worker_refs: Vec::new(),
-            internal_resume_handle_refs: Vec::new(),
-            lifecycle_posture: HostSessionPostureV1::ActiveAttached,
-            current_policy_ref: None,
-            current_policy_revision: None,
-            updated_at: applied_at.clone(),
-        })),
+        SessionNamespaceRecordV1::Authority(Box::new(authority)),
     );
     root.application_journal.insert(
         intent.intent_id.clone(),
@@ -302,7 +339,7 @@ fn apply_placeholder_v2_start(root: &mut StateRootV2) {
             initial_application: InitialTransitionApplicationJournalV1 {
                 authority_revision_before: None,
                 authority_revision_after: 1,
-                authority_record_commitment: placeholder_commitment(),
+                authority_record_commitment: exact_authority_commitment,
                 application_result_ref: application_result_ref.clone(),
                 applied_at,
             },
