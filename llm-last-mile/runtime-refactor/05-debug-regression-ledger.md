@@ -511,6 +511,23 @@ side table, environment carrier, alternate route, or hidden proof synthesis is p
 mechanical correction closes only the compiler-required literal scope and does not complete
 B3.2a.
 
+The carrier widening also requires exactly seven mechanical internal initialization sites. In
+`orchestrator_world_dispatch.rs`, `fork_world_worker` and
+`continue_world_worker_fork_command_bootstrap_after_delivery` pass only explicit `None` to the
+widened stream helper. In `async_repl.rs`, `apply_greenfield_host_start_from_authority`,
+`prepare_hidden_owner_helper_runtime`,
+`start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx`,
+`prepare_fork_child_runtime_startup_for_descriptor`, and
+`prepare_member_runtime_startup_for_descriptor` only initialize, destructure, or preserve the new
+optional retained-worker authority fields as `None`. This is compiler-required argument/field
+plumbing, not authority adoption: host Start keeps its established host-session authority,
+hidden-helper behavior is unchanged, fork stays outside B3.2a adoption, and legacy member
+preparation stays distinct from `prepare_member_runtime_startup_from_authority_registration`.
+Only the latter may carry `Some(exact proof/admission context)` for authority-managed retained
+Spawn. Missing authority on that managed path fails closed with no legacy fallback. No ownership,
+policy, lifecycle, transport, identity, lineage, error, outcome, or runtime behavior changes, and
+no further symbol or structural scope is authorized. B3.2a remains incomplete.
+
 B1/B2.1-0 removes the
 missing live-retained field and legacy session/caller inputs from B-owned RunWorldTask, ordinary
 retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait preparation while

@@ -3245,6 +3245,28 @@ explicit initializers. Both authority-managed B3.2a Spawn producers still requir
 serialization, and missing, malformed, or mismatched proof fails before process creation. B3.2a
 remains incomplete.
 
+The same compiler-required widening authorizes only seven additional production-symbol edits. In
+`crates/shell/src/execution/orchestrator_world_dispatch.rs`, `fork_world_worker` and
+`continue_world_worker_fork_command_bootstrap_after_delivery` may only pass explicit `None` for the
+optional retained-worker authority context to the widened stream helper. In
+`crates/shell/src/repl/async_repl.rs`, `apply_greenfield_host_start_from_authority`,
+`prepare_hidden_owner_helper_runtime`,
+`start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx`,
+`prepare_fork_child_runtime_startup_for_descriptor`, and
+`prepare_member_runtime_startup_for_descriptor` may only initialize, destructure, or preserve the
+new optional retained-worker launch-authority proof/admission fields as `None`. Those values grant
+no retained-worker launch authority: fork and fork continuation remain compatibility paths; Host
+Start retains only its A1.2a-S host-session authority; hidden-owner-helper behavior is unchanged;
+and `prepare_member_runtime_startup_for_descriptor` remains legacy pre-activation preparation,
+distinct from the B3.2a-only `prepare_member_runtime_startup_from_authority_registration` path.
+Only that authority-registration preparer may construct the paired
+`Some(exact RetainedWorkerLaunchAuthorityProofV1)` and exact admission context. An
+authority-managed retained Spawn with either value missing fails closed and cannot fall back to the
+legacy preparer or reinterpret generic `None` as compatibility. The seven exceptions change no
+packet ownership, policy, lifecycle, transport, identity, lineage, error, outcome, host-runtime,
+helper, legacy-member, or fork semantics and authorize no other structural change. B3.2a remains
+incomplete.
+
 The production order is exact:
 
 1. `dispatch_orchestrator_world_request` validates the raw request and routes only
