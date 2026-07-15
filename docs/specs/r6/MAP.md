@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE COMPLETE; R7 AUTHORITY IMPLEMENTATION-READY; R7-0 ACTIVE; ACTIVE PACKET NONE; R7-0.1 SERIES FRESH INDEPENDENT REVIEW CLEAN; R7-0.2 FIXTURE LANDING CANDIDATE, FRESH REVIEW PENDING; R7-1..R7-6 BLOCKED; PRODUCTION IMPLEMENTATION NOT STARTED** as of 2026-07-15. Promotion series `455d0ed90` + `876ac55de` and transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` each received fresh independent built-in `default` `REVIEW CLEAN`. Preserved review-clean R6 proof series remain authoritative. The 2026-07-15 exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completes with all suites green; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The review-clean docs-only `R7-0.1` series and fixture-only `R7-0.2` candidate change no R6 behavior. Closure authority is
+Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE AND R7-0 COMPLETE; R7 AUTHORITY IMPLEMENTATION-READY; R7-1 ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; R7-0.1 SERIES AND R7-0.2 COMMIT `fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN; R7-0 -> R7-1 TRANSITION COMMIT PENDING FRESH REVIEW; R7-1.1 NEXT AND UNSTARTED; R7-2..R7-6 AND R8 BLOCKED; PRODUCTION IMPLEMENTATION NOT STARTED** as of 2026-07-15. Promotion series `455d0ed90` + `876ac55de`, entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, and R7-0.2 commit `fa85cd4b8` each received fresh independent built-in `default` `REVIEW CLEAN`. Preserved review-clean R6 proof series remain authoritative. The 2026-07-15 exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completes with all suites green; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The review-clean docs-only `R7-0.1` series and fixture-only `R7-0.2` commit change no R6 behavior. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
@@ -367,10 +367,11 @@ exact replay controls, the five Manifest E family filters, the full analyzer all
 `git diff --check`, then completes the terminal table. Promotion series `455d0ed90` + `876ac55de`
 received fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE` and making
 the R7 authority family implementation-ready. Transition series `6bf0ac6ad` + `4a887ee0c` +
-`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0` remains the sole
-active phase with packet `none`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh
-independent built-in `default` `REVIEW CLEAN`. `R7-0.2` is a fixture-only landing candidate pending
-fresh review. No production implementation work has started, and `R7-1..R7-6` remain blocked.
+`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series
+`a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
+independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Only `R7-1` is active at entry
+with packet `none`; the narrow transition commit awaits fresh review. `R7-1.1` is next and
+unstarted. No production implementation work has started, and `R7-2..R7-6` plus R8 remain blocked.
 
 ## Non-Goals For This Rescope
 

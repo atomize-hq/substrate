@@ -8,17 +8,18 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE`, its entry transition, and `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` are fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.2` is a fixture-only landing candidate pending fresh review; production implementation remains unstarted; `R7-1..R7-6` remain blocked)**
+Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0.2` commit `fa85cd4b8` and the complete `R7-0` phase are fresh independent built-in `default` `REVIEW CLEAN`; the narrow `R7-0 -> R7-1` transition commit is pending fresh review; `R7-1.1` is next and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked)**
 
 The scoped R6 packets, acceptance controls, named gaps, replay closeout, and terminal-disposition
 reconciliation are complete. R6 is closed for sequencing. Promotion series `455d0ed90` +
 `876ac55de` reconciled the R7 authority family to implementation-ready content and received fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE`. The narrow status transition
 series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default`
-`REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` series
-`a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`.
-`R7-0.2` is a fixture-only landing candidate pending fresh review; production delegated-session
-implementation has not begun, and `R7-1..R7-6` remain blocked.
+`REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only
+`R7-0.2` commit `fa85cd4b8` each received fresh independent built-in `default` `REVIEW CLEAN`, so
+`R7-0` is complete. The narrow transition makes only `R7-1` active at entry with packet `none` and
+awaits fresh review. `R7-1.1` is next and unstarted; production delegated-session implementation
+has not begun, and `R7-2..R7-6` plus R8 remain blocked.
 
 Hard decisions:
 
@@ -69,10 +70,11 @@ Hard decisions:
 - The R7 authority family is implementation-ready after completed promotion series `455d0ed90` +
   `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-PROMOTE` is complete.
   Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in
-  `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet `none`. `R7-0.1` series
-  `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`.
-  `R7-0.2` is a fixture-only landing candidate pending fresh review. Production R7 implementation
-  remains unstarted; `R7-1..R7-6` remain blocked.
+  `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only
+  `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`, completing
+  `R7-0`. Only `R7-1` is active at entry with packet `none`; the narrow transition commit awaits
+  fresh review. `R7-1.1` is next and unstarted, production R7 implementation remains unstarted,
+  and `R7-2..R7-6` plus R8 remain blocked.
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
@@ -103,7 +105,8 @@ The R6 finding is `CLOSED` and `R6-CLOSE` is complete. Promotion series `455d0ed
 completed the R7 content/gate audit, made the R7 authority family implementation-ready, and received
 fresh independent built-in `default` `REVIEW CLEAN`; `R7-PROMOTE` is complete. The narrow transition
 series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default`
-`REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` series
-`a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`.
-`R7-0.2` is a fixture-only landing candidate pending fresh review. Production implementation
-remains unstarted; `R7-1..R7-6` and R8 remain blocked.
+`REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2`
+commit `fa85cd4b8` are fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`.
+Only `R7-1` is active at entry with packet `none`; the narrow transition commit awaits fresh
+review. `R7-1.1` is next and unstarted, production implementation remains unstarted, and
+`R7-2..R7-6` plus R8 remain blocked.

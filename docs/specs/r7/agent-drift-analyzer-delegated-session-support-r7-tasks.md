@@ -3,18 +3,20 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
-R7-0.1 SERIES FRESH INDEPENDENT REVIEW CLEAN / R7-0.2 FIXTURE LANDING CANDIDATE, FRESH REVIEW
-PENDING / R7-1..R7-6 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
+`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
+R7-0 -> R7-1 TRANSITION COMMIT PENDING FRESH REVIEW / R7-1.1 NEXT AND UNSTARTED / R7-2..R7-6 AND
+R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
 `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW
-CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` is complete at its
-docs-only landing candidate after the exact contract `rg` passed; series `a9e75f149` + `55bea5fa5`
-+ `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.2` is now a fixture-only
-landing candidate pending fresh review. Production implementation remains unstarted;
-`R7-1..R7-6` remain blocked.
+CLEAN`. `R7-0.1` is complete after the exact contract `rg` passed; series `a9e75f149` +
+`55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`. Fixture-only
+`R7-0.2` commit `fa85cd4b8` also received fresh independent built-in `default` `REVIEW CLEAN`, so
+`R7-0` is complete. `R7-1` is active at entry only with packet `none`; the narrow transition commit
+awaits fresh review. `R7-1.1` is next and unstarted. Production implementation remains unstarted;
+`R7-2..R7-6` plus R8 remain blocked.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -54,11 +56,12 @@ landing candidate pending fresh review. Production implementation remains unstar
   - Files: `crates/agent-session-compactor/tests/fixtures/delegation_links/**`, fixture README,
     `crates/agent-session-compactor/tests/delegation_link_fixtures.rs`
   - Dependencies: R7-0.1
-  - Receipt: fixture-only landing candidate pending fresh review. Twelve JSONL files / `24` rows
-    cover all seven accepted cases. The focused parser/privacy target passes `2 / 2`; full
-    `agent-session-compactor` passes `25 / 25`, including end-to-end `2 / 2`; JSON parsing,
-    formatting, and manual private-marker / raw-UUID scans pass with zero matches. No production
-    symbol changed, and no raw private rollout was copied.
+  - Receipt: fixture-only commit `fa85cd4b8` received fresh independent built-in `default` `REVIEW
+    CLEAN` with no actionable findings. Twelve JSONL files / `24` rows cover all seven accepted
+    cases. The focused parser/privacy target passes `2 / 2`; full `agent-session-compactor` passes
+    `25 / 25`, including end-to-end `2 / 2`; JSON parsing, formatting, and manual private-marker /
+    raw-UUID scans pass with zero matches. No production symbol changed, and no raw private rollout
+    was copied.
   - Scope: small
 
 ### Checkpoint R7-0
@@ -67,6 +70,9 @@ landing candidate pending fresh review. Production implementation remains unstar
 - [x] No raw private rollout is committed.
 - [x] No implementation symbol was edited; therefore no pre-edit symbol impact analysis was
   applicable to `R7-0.2`.
+
+Checkpoint receipt: all items above are complete and fresh-review-clean at fixture commit
+`fa85cd4b8`; `R7-0` is complete. The narrow phase-transition commit is a separate review boundary.
 
 ## R7-1: Compactor Linkage And Direct-Child Closure
 

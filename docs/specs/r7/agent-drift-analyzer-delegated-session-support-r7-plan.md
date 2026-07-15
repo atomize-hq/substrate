@@ -3,17 +3,19 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE / ACTIVE PACKET NONE /
-R7-0.1 SERIES FRESH INDEPENDENT REVIEW CLEAN / R7-0.2 FIXTURE LANDING CANDIDATE, FRESH REVIEW
-PENDING / R7-1..R7-6 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0 COMPLETE / R7-0.1 SERIES AND R7-0.2 COMMIT
+`fa85cd4b8` FRESH INDEPENDENT REVIEW CLEAN / R7-1 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE /
+R7-0 -> R7-1 TRANSITION COMMIT PENDING FRESH REVIEW / R7-1.1 NEXT AND UNSTARTED / R7-2..R7-6 AND
+R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
 
 This implementation plan is reconciled and implementation-ready. R6 is `CLOSED`, and promotion
 series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so
 `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
-independent built-in `default` `REVIEW CLEAN`; `R7-0` remains the sole active phase with packet
-`none`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in
-`default` `REVIEW CLEAN`. `R7-0.2` is a fixture-only landing candidate pending fresh review. No
-production implementation work has started, and `R7-1..R7-6` remain blocked.
+independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` +
+`faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default`
+`REVIEW CLEAN`, completing `R7-0`. `R7-1` is active at entry only with packet `none`; the narrow
+transition commit awaits fresh review. `R7-1.1` is next and unstarted. No production implementation
+work has started, and `R7-2..R7-6` plus R8 remain blocked.
 
 ## Overview
 
@@ -57,11 +59,11 @@ The R6 closure entry gate is satisfied: applicability audit complete; every mate
 surface assigned exactly one terminal disposition; broad acceptance proven or narrowed honestly;
 named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`. Promotion
 series `455d0ed90` + `876ac55de` completed the family content/gate audit and received fresh
-independent built-in `default` `REVIEW CLEAN`. The graph remains in `R7-0`; `R7-0.1` series
-`a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`.
-`R7-0.2` is a fixture-only landing candidate pending fresh review. Transition series `6bf0ac6ad` +
-`4a887ee0c` + `e83ebb430` remains the fresh independent built-in `default` `REVIEW CLEAN` entry
-receipt, and `R7-1` remains phase-blocked.
+independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` +
+`faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh independent built-in `default`
+`REVIEW CLEAN`, completing `R7-0`. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`
+remains the review-clean `R7-0` entry receipt. The graph is now at `R7-1` entry only with packet
+`none`; `R7-1.1` is next and unstarted until the narrow transition commit is fresh-review-clean.
 
 ```text
 R7-0 docs + sanitized evidence matrix
@@ -304,7 +306,7 @@ Sequential requirements:
 
 ## Open Questions
 
-No unresolved design question blocks future `R7-1` after `R7-0` exits review-clean. `R7-1` is
-currently phase-blocked. `R7-0.1` is fresh-review-clean; the `R7-0.2` fixture landing candidate
-awaits fresh review. Default-on linked closure, new drift taxonomy, and recursive depth remain
+No unresolved design question blocks `R7-1` implementation after the narrow transition exits fresh
+review-clean. `R7-0` is complete; `R7-1` is active at entry only with packet `none`, and `R7-1.1`
+is next and unstarted. Default-on linked closure, new drift taxonomy, and recursive depth remain
 evidence-gated decisions for later packets.

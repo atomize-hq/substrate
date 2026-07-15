@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE`, its entry transition, and `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` are fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.2` is a fixture-only landing candidate pending fresh review; production implementation remains unstarted; `R7-1..R7-6` remain blocked)**
+Current phase: **`R7-1` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-0.2` commit `fa85cd4b8` and the complete `R7-0` phase are fresh independent built-in `default` `REVIEW CLEAN`; the narrow `R7-0 -> R7-1` transition commit is pending fresh review; `R7-1.1` is next and unstarted; production implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -104,14 +104,16 @@ Current phase: **`R7-0` (ACTIVE; active packet: `none`; `R7-PROMOTE`, its entry 
   direct-child-first boundary, no-new-drift-class-by-default posture, and R8 exclusion. Series
   `a9e75f149` + `55bea5fa5` + `faff68ac6` is fresh independent built-in `default` `REVIEW CLEAN`;
   no fixture, product behavior, or implementation symbol changed in that series.
-- [x] Add the `R7-0.2` sanitized fixture matrix. The fixture-only landing candidate contains `12`
-  JSONL files / `24` rows across all seven cases; focused parser/privacy proof passes `2 / 2`, and
-  full compactor proof passes `25 / 25`, including end-to-end `2 / 2`. Manual privacy and format
-  gates are green; no production symbol or raw private rollout changed. Fresh review is pending.
-- [ ] Keep `R7-1` blocked until the `R7-0.2` candidate and narrow `R7-0 -> R7-1` phase transition
-  are committed and fresh-review-clean.
+- [x] Complete `R7-0.2` at fixture-only commit `fa85cd4b8`. Its `12` JSONL files / `24` rows cover
+  all seven cases; focused parser/privacy proof passes `2 / 2`, and full compactor proof passes
+  `25 / 25`, including end-to-end `2 / 2`. Manual privacy and format gates are green with zero
+  private markers and zero raw UUIDs; no production symbol or raw private rollout changed. A fresh
+  independent built-in `default` reviewer returned `REVIEW CLEAN` with no actionable findings.
+- [ ] Freshly review the committed narrow `R7-0 -> R7-1` phase-transition update. `R7-1` is active
+  at entry only with packet `none`; keep `R7-1.1` unstarted until this transition is review-clean.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
-`R7-0` remains the sole active phase with packet `none`. `R7-0.1` is fresh-review-clean; `R7-0.2`
-is a fixture-only landing candidate pending fresh review. Production implementation has not
-started; `R7-1..R7-6` remain blocked.
+`R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.
+`R7-1` is active at entry only with packet `none`; the narrow transition commit awaits fresh review
+and `R7-1.1` is next and unstarted. Production implementation has not started; `R7-2..R7-6` plus
+R8 remain blocked.

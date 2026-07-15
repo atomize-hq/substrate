@@ -316,17 +316,24 @@ The R6-close transition is committed and fresh-review-clean. R7 promotion series
 `876ac55de` completes `R7-PROMOTE`, makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready, and
 received fresh independent built-in `default` `REVIEW CLEAN`. Narrow `R7-PROMOTE -> R7-0`
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` also received fresh independent built-in
-`default` `REVIEW CLEAN`. `R7-0` remains the sole active phase with packet `none`. `R7-0.1` series
-`a9e75f149` + `55bea5fa5` + `faff68ac6` received fresh independent built-in `default` `REVIEW
-CLEAN`. `R7-0.2` is a fixture-only landing candidate with focused parser/privacy `2 / 2`, full
-compactor `25 / 25`, and manual privacy/format proof green; fresh independent review is pending.
-Production implementation remains unstarted; `R7-1..R7-6` and R8 remain blocked.
+`default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only
+`R7-0.2` commit `fa85cd4b8` each received fresh independent built-in `default` `REVIEW CLEAN`.
+The fixture proof is focused parser/privacy `2 / 2`, full compactor `25 / 25` including end-to-end
+`2 / 2`, and manual privacy scans over `24` rows with zero private markers and zero raw UUIDs. No
+production symbol changed. `R7-0` is complete. The narrow transition makes only `R7-1` active at
+entry with packet `none` and is pending fresh review; `R7-1.1` is next and unstarted. Production
+implementation remains unstarted; `R7-2..R7-6` and R8 remain blocked.
 
-The next required interaction is the normal fresh-review wall for the committed `R7-0.2` fixture
-landing candidate. Do not use Prompt 1 to restart the phase and do not begin `R7-1` until the full
-`R7-0` exit gate is fresh-review-clean. After a clean verdict, land and independently review the
-narrow `R7-0 -> R7-1` phase-transition update; do not start `R7-1` implementation in the same
-transition step.
+The next required interaction is the normal fresh-review wall for the committed narrow
+`R7-0 -> R7-1` transition. Do not begin `R7-1.1` until that commit is fresh-review-clean. After a
+clean verdict, the prepared Prompt 1 selectors for a fresh next-phase session are:
+
+```text
+PHASE_ID: R7-1
+ACTIVE_PACKET: none
+```
+
+Preparing these selectors does not start `R7-1` implementation.
 
 Historical resolved Task `.2B` decision report:
 
