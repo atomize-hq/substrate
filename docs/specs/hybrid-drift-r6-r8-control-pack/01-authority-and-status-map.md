@@ -2,7 +2,7 @@
 
 **Verified against:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; Manifest E family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check green; R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, R7-0.2 commit `fa85cd4b8`, and R7-0 -> R7-1 transition/fix series `339744dff` + `d20cac6a9` each received fresh independent built-in `default` `REVIEW CLEAN`. R7-0.2 focused parser/privacy proof is `2 / 2`, full compactor proof is `25 / 25` including end-to-end `2 / 2`, and privacy scans over `24` rows found zero markers and zero raw UUIDs without any production-symbol edit. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; focused R7-1.2 passes `6 / 6`, R7-1.3 end-to-end and CLI pass `6 / 6` and `2 / 2`, the full compactor wall passes `36` unit/integration tests plus `3` doctests, and formatting, clippy, diff, and staged GitNexus gates are green. Link/session/file ordering is deterministic, and no raw private rollout data was added.
 
-**Current phase:** `R7-2` (**SOLE ACTIVE PHASE AT ENTRY ONLY**; active packet: `none`; R7-1 complete at fresh-review-clean checkpoint-doc commit `1cae7d693`; `R7-2.1` next, unchecked, and unstarted; R7-2 analyzer/production implementation unstarted; narrow transition candidate pending fresh review; `R7-3..R7-6` and R8 blocked)
+**Current phase:** `R7-2` (**SOLE ACTIVE PHASE AT ENTRY ONLY**; active packet: `none`; R7-1 complete and `CTX-R7-02` proven; transition/fix series `6a8797c15` + `4ee469014` fresh independent review-clean; `CTX-R7-03` open; `R7-2.1` next, unchecked, and unstarted; R7-2 analyzer/production implementation unstarted; Prompt 1 selectors prepared and eligible but not invoked; `R7-3..R7-6` and R8 blocked)
 
 ## How To Resolve Truth
 
@@ -24,7 +24,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE AND REVIEW-CLEAN / CHECKPOINT DOC COMMIT `1cae7d693` FRESH INDEPENDENT REVIEW CLEAN / R7-2 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE / R7-2.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED / TRANSITION COMMIT `6a8797c15` COMMITTED BUT PENDING FRESH INDEPENDENT REVIEW / R7-3..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Review/fix/re-review only committed transition candidate `6a8797c15`. After that series is fresh-review-clean, use Prompt 1 selectors `R7-2` / `none` in a fresh phase session; do not start R7-2 work in this transition. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE, R7-0, AND R7-1 COMPLETE AND REVIEW-CLEAN / CHECKPOINT DOC COMMIT `1cae7d693` AND TRANSITION/FIX SERIES `6a8797c15` + `4ee469014` FRESH INDEPENDENT REVIEW CLEAN / `CTX-R7-02` PROVEN / R7-2 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE / `CTX-R7-03` OPEN / R7-2.1 NEXT, UNCHECKED, AND UNSTARTED / R7-2 ANALYZER/PRODUCTION IMPLEMENTATION UNSTARTED / R7-3..R7-6 AND R8 BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Prompt 1 selectors `R7-2` / `none` are prepared and eligible but have not been invoked. Start only R7-2.1 in a fresh phase session; do not treat selector preparation as implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -95,9 +95,12 @@ passes `2 / 2`, full compactor passes `25 / 25` including end-to-end `2 / 2`, an
 The R7-1 checkpoint is complete with focused `6 / 6`, end-to-end `6 / 6`, CLI `2 / 2`, full
 compactor `36` unit/integration plus `3` doctests, deterministic ordering, and green static/diff/
 GitNexus gates. No raw private rollout data was added. Checkpoint-doc commit `1cae7d693` received
-fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is
-complete. Only R7-2 is active at entry with packet `none`; this transition candidate awaits fresh
-independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production
+fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. Transition commit
+`6a8797c15` received `CHANGES REQUIRED` for stale uncommitted-state wording; fix `4ee469014`
+corrected it, and a fresh independent built-in `default` re-review returned `REVIEW CLEAN` for the
+full series. R7-1 remains complete and `CTX-R7-02` remains proven. Only R7-2 is active at entry with
+packet `none`; `CTX-R7-03` is open. Prompt 1 selectors `R7-2` / `none` are prepared and eligible but
+have not been invoked. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production
 implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
 
 ## R8 Authority

@@ -24,7 +24,7 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R7-PROMOTE` | COMPLETE | Promote the R7 authority family to implementation-ready | SATISFIED — R6 finding says `CLOSED`, terminal scorer table is complete, and authority stack agrees | SATISFIED — promotion series `455d0ed90` + `876ac55de` makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready and received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` also received fresh independent built-in `default` `REVIEW CLEAN`; no R7 task started. |
 | `R7-0` | COMPLETE | Docs lock and sanitized evidence matrix | SATISFIED — `R7-PROMOTE` is complete; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` and `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` are fresh independent `REVIEW CLEAN` | SATISFIED — fixture-only `R7-0.2` commit `fa85cd4b8` received fresh independent built-in `default` `REVIEW CLEAN`; focused parser/privacy passes `2 / 2`, full compactor passes `25 / 25` including end-to-end `2 / 2`, and privacy scans over `24` rows found zero private markers and zero raw UUIDs. No production symbol changed. |
 | `R7-1` | COMPLETE | Compactor linkage and direct-child closure | SATISFIED — `R7-0` exit gate and transition/fix series `339744dff` + `d20cac6a9` are fresh independent built-in `default` `REVIEW CLEAN` | SATISFIED — R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` plus behavior/static checkpoint and checkpoint-doc commit `1cae7d693` are complete and fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R7-02` is proven. |
-| `R7-2` | ACTIVE AT ENTRY ONLY / TRANSITION CANDIDATE PENDING FRESH REVIEW | Analyzer link graph and checkpoint v0.8 delegation contract | SATISFIED FOR ENTRY ONLY — `R7-1` exit gate is fresh-review-clean at `1cae7d693`; active packet is `none`; `R7-2.1` is next, unchecked, and unstarted | PENDING — `R7-2.1`, `R7-2.2`, and `R7-2.3` plus the R7-2 checkpoint are complete and fresh-review-clean. |
+| `R7-2` | ACTIVE AT ENTRY ONLY / `CTX-R7-03` OPEN / IMPLEMENTATION UNSTARTED | Analyzer link graph and checkpoint v0.8 delegation contract | SATISFIED FOR ENTRY ONLY — `R7-1` exit gate is fresh-review-clean at `1cae7d693`; transition/fix series `6a8797c15` + `4ee469014` is fresh independent built-in `default` `REVIEW CLEAN`; active packet is `none`; Prompt 1 selectors are prepared and eligible but have not been invoked; `R7-2.1` is next, unchecked, and unstarted | PENDING — `R7-2.1`, `R7-2.2`, and `R7-2.3` plus the R7-2 checkpoint are complete and fresh-review-clean. |
 | `R7-3..R7-6` | BLOCKED | Child-visible progress through minimal sentinel compatibility | `R7-2` exit gate review-clean, then each ordered predecessor phase complete | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
@@ -66,9 +66,12 @@ independent built-in `default` `REVIEW CLEAN`. `R7-0.1` series `a9e75f149` + `55
 fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task series `e65127720` + `685cf843b`,
 `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; checkpoint-doc
 commit `1cae7d693` is also fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1
-exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow transition
-candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2
-analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
+exit gate. Transition commit `6a8797c15` received `CHANGES REQUIRED` for stale uncommitted-state
+wording; fix `4ee469014` corrected it, and a fresh independent built-in `default` re-review returned
+`REVIEW CLEAN` for the full series. R7-1 remains complete, and only R7-2 is active at entry with
+packet `none`; `CTX-R7-03` is open. Prompt 1 selectors are prepared and eligible but have not been
+invoked. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not
+started. `R7-3..R7-6` plus R8 remain blocked.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

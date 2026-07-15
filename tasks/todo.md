@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-2` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`; R7-1 complete at fresh-review-clean checkpoint-doc commit `1cae7d693`; `R7-2.1` next, unchecked, and unstarted; R7-2 analyzer/production implementation unstarted; narrow transition candidate pending fresh review; `R7-3..R7-6` and R8 blocked)**
+Current phase: **`R7-2` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`; R7-1 complete at fresh-review-clean checkpoint-doc commit `1cae7d693`; `R7-2.1` next, unchecked, and unstarted; R7-2 analyzer/production implementation unstarted; transition/fix series `6a8797c15` + `4ee469014` fresh independent review-clean; `CTX-R7-03` open; Prompt 1 selectors prepared and eligible but not invoked; `R7-3..R7-6` and R8 blocked)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -124,11 +124,13 @@ Current phase: **`R7-2` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`;
   and staged GitNexus gates are green; no raw private rollout data was added.
 - [x] Freshly review and land the R7-1 checkpoint-doc receipt at `1cae7d693`; the fresh independent
   built-in `default` reviewer returned `REVIEW CLEAN`, satisfying the R7-1 exit gate.
-- [ ] Review/fix/re-review only committed narrow R7-1 -> R7-2 transition candidate `6a8797c15`,
-  which is pending fresh independent review. Keep `R7-2.1` next, unchecked, and unstarted; do not
-  begin R7-2 analyzer/production implementation.
+- [x] Review/fix/re-review narrow R7-1 -> R7-2 transition/fix series `6a8797c15` + `4ee469014`.
+  The first reviewer required correction of stale uncommitted-state wording; fix `4ee469014`
+  reconciled it, and a fresh independent built-in `default` reviewer returned exactly `REVIEW CLEAN`
+  for the full series. Keep `R7-2.1` next, unchecked, and unstarted; Prompt 1 selectors are prepared
+  and eligible but have not been invoked; do not begin R7-2 analyzer/production implementation.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
 `R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.
 R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent
-built-in `default` `REVIEW CLEAN`; Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; this narrow transition candidate awaits fresh independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.
+built-in `default` `REVIEW CLEAN`; Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only R7-2 is active at entry with packet `none`; transition/fix series `6a8797c15` + `4ee469014` received fresh independent built-in `default` `REVIEW CLEAN`. `CTX-R7-03` is open. Prompt 1 selectors `PHASE_ID: R7-2` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started. `R7-3..R7-6` plus R8 remain blocked.

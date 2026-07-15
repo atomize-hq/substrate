@@ -327,22 +327,24 @@ independent built-in `default` `REVIEW CLEAN`. The R7-1 implementation and behav
 are complete with focused `6 / 6`, end-to-end `6 / 6`, CLI `2 / 2`, full compactor `36` unit/
 integration plus `3` doctests, deterministic ordering, and green formatting/clippy/diff/GitNexus
 gates. No raw private rollout data was added. Checkpoint-doc commit `1cae7d693` also received fresh
-independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. Only
-R7-2 is active at entry with packet `none`; this narrow transition candidate awaits fresh
-independent review. `R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production
-implementation has not started. `R7-3..R7-6` and R8 remain blocked.
+independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. Transition commit
+`6a8797c15` then received `CHANGES REQUIRED` for stale uncommitted-state wording; fix commit
+`4ee469014` corrected it, and a fresh independent built-in `default` re-review returned exactly
+`REVIEW CLEAN` with no actionable findings for the full transition/fix series. R7-1 remains complete
+and `CTX-R7-02` remains proven. Only R7-2 is active at entry with packet `none`; `CTX-R7-03` is open;
+`R7-2.1` is next, unchecked, and unstarted; R7-2 analyzer/production implementation has not started.
+`R7-3..R7-6` and R8 remain blocked.
 
-Transition commit `6a8797c15` is committed but pending fresh independent review. After review/fix/
-re-review makes the committed candidate fresh-review-clean, the prepared Prompt 1 selectors for
-the next fresh phase session are:
+The review-clean transition/fix series makes these Prompt 1 selectors prepared and eligible for the
+next fresh phase session:
 
 ```text
 PHASE_ID: R7-2
 ACTIVE_PACKET: none
 ```
 
-Preparing these selectors does not invoke Prompt 1 or start R7-2 implementation. Do not invoke them
-until review/fix/re-review makes committed transition candidate `6a8797c15` fresh-review-clean.
+Preparing these selectors does not invoke Prompt 1 or start R7-2 implementation. They have not been
+invoked in this transition receipt.
 
 Historical resolved Task `.2B` decision report:
 
