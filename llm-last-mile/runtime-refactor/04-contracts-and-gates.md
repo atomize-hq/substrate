@@ -3228,6 +3228,23 @@ files may not introduce a production path, helper default, fixture-only authorit
 proof, alternate transport, side table, or weakened assertion. Authority-managed Spawn still
 requires the exact proof, and B3.2a remains incomplete.
 
+That Rust-literal requirement also authorizes exactly three production compatibility
+initializers and nothing else: `build_run_world_task_transport_request` and
+`build_fork_world_worker_transport_request` in
+`crates/shell/src/execution/orchestrator_world_dispatch.rs`, plus `convert_member_dispatch` in
+`crates/world-mac-lima/src/lib.rs`. Each may only name the new optional proof field as explicit
+`None`; every pre-existing backend, protocol, run, session, participant, lineage, world, prompt,
+runtime, route-selection, policy, placement, lifecycle, error, and outcome field remains
+byte-for-byte and behaviorally unchanged. `None` grants no retained-worker launch authority to
+RunWorldTask, ForkWorldWorker, or the macOS world-api conversion. This is not macOS
+authority-managed Spawn adoption and authorizes no edit to `crates/world-api/src/lib.rs`,
+`Service::execute`, or `convert_member_dispatch_request`. No default constructor, side table,
+environment carrier, alternate transport route, or hidden proof synthesis may replace these
+explicit initializers. Both authority-managed B3.2a Spawn producers still require
+`Some(exact RetainedWorkerLaunchAuthorityProofV1)` exact-joined to admission and R0 truth before
+serialization, and missing, malformed, or mismatched proof fails before process creation. B3.2a
+remains incomplete.
+
 The production order is exact:
 
 1. `dispatch_orchestrator_world_request` validates the raw request and routes only

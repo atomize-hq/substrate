@@ -496,7 +496,22 @@ and `MemberRuntimeManager::launch` validation. The live adapter cannot allocate 
 participant or invoke activated-store legacy writers. Exact Registered
 truth makes the target routable; only exact B0 terminal truth removes it from the live count, while
 every ambiguous interruption stays nonterminal and counted. Spawn policy/outcome/events remain
-unchanged. B1/B2.1-0 removes the
+unchanged.
+
+The B3.2a typed-carrier compatibility allowlist includes one exact mechanical correction because
+`#[serde(default)]` does not initialize Rust struct literals. RunWorldTask and ForkWorldWorker may
+set the new optional proof field to explicit `None` only in their existing transport builders, and
+macOS `convert_member_dispatch` may set it to explicit `None` only while preserving its existing
+world-api conversion. Those paths gain no retained-worker launch authority and retain every prior
+identity, lineage, backend, protocol, run, session, world, prompt, runtime, route, policy,
+placement, lifecycle, error, and outcome behavior. No world-api edit or macOS authority-managed
+Spawn adoption is authorized. Authority-managed B3.2a Spawn alone requires `Some(exact proof)` and
+fails closed before process creation on missing, malformed, or mismatched proof; no default helper,
+side table, environment carrier, alternate route, or hidden proof synthesis is permitted. This
+mechanical correction closes only the compiler-required literal scope and does not complete
+B3.2a.
+
+B1/B2.1-0 removes the
 missing live-retained field and legacy session/caller inputs from B-owned RunWorldTask, ordinary
 retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait preparation while
 leaving `WorkerContinueForkCommand`, retained Inspect/Cancel/Stop, fork, the already-landed B3.2a
