@@ -616,6 +616,7 @@ mod platform {
     }
 
     pub(crate) struct RetainedWorkerAdmissionStorageTransactionV1 {
+        authority_root: VersionedStateRoot,
         admission: TrustedDirectory,
         keys: TrustedDirectory,
         tmp: TrustedDirectory,
@@ -639,13 +640,18 @@ mod platform {
                         "retained admission capability authority store changed",
                     ));
                 }
-                let mut storage = open_retained_admission_transaction(transaction.layout)?;
+                let mut storage =
+                    open_retained_admission_transaction(transaction.layout, &transaction.root)?;
                 operation(&mut storage)
             })
         }
     }
 
     impl RetainedWorkerAdmissionStorageTransactionV1 {
+        pub(crate) fn authority_root(&self) -> &VersionedStateRoot {
+            &self.authority_root
+        }
+
         pub(crate) fn read_registry(&self) -> Result<Option<Vec<u8>>, BootstrapError> {
             match self
                 .admission
@@ -834,6 +840,7 @@ mod platform {
 
     fn open_retained_admission_transaction(
         layout: &StoreLayout<'_>,
+        authority_root: &VersionedStateRoot,
     ) -> Result<RetainedWorkerAdmissionStorageTransactionV1, BootstrapError> {
         let admission = match layout
             .authority
@@ -892,6 +899,7 @@ mod platform {
             .sync()
             .map_err(|_| BootstrapError("sync retained admission layout"))?;
         Ok(RetainedWorkerAdmissionStorageTransactionV1 {
+            authority_root: authority_root.clone(),
             admission,
             keys,
             tmp,
@@ -3087,9 +3095,11 @@ mod platform {
     use crate::execution::agent_runtime::host_session_authority::schema::{
         AuthorityObjectKindV1, AuthorityObjectRefV1, CanonicalDirectoryV1, WorldBindingV1,
     };
-    use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV1;
     #[cfg(test)]
     use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV2;
+    use crate::execution::agent_runtime::host_session_authority::store_schema::{
+        StateRootV1, VersionedStateRoot,
+    };
 
     pub(crate) struct LegacyStateStoreTransactionV1;
 
@@ -3115,6 +3125,10 @@ mod platform {
     }
 
     impl RetainedWorkerAdmissionStorageTransactionV1 {
+        pub(crate) fn authority_root(&self) -> &VersionedStateRoot {
+            panic!("retained admission transaction is unavailable on this platform")
+        }
+
         pub(crate) fn read_registry(&self) -> Result<Option<Vec<u8>>, BootstrapError> {
             Err(BootstrapError(
                 "retained admission storage is unsupported on this platform",
@@ -3154,6 +3168,16 @@ mod platform {
         }
 
         pub(crate) fn publish_registry_no_replace(
+            &self,
+            _temp_name: &str,
+            _bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+
+        pub(crate) fn replace_registry(
             &self,
             _temp_name: &str,
             _bytes: &[u8],
