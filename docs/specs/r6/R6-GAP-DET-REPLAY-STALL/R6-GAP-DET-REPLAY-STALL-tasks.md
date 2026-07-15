@@ -13,9 +13,10 @@ between frozen `Recovered` and canonical state semantics. The operator then repl
 `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.2B` is complete: current
 sticky `CTX-R6-06` authority is `HistoricalOnly / 20`, unflagged, and the old `Recovered / 20`
 expectation is historical baseline evidence only. This approved authority/expected-disposition change
-still awaits source/test/fixture-expected implementation and proof in Task `.3`. The uncommitted Task
-`.3` candidate is not proof or a review-clean result. Task `.4`, `CTX-R6-06` replay proof, the family
-wall, `R6-CLOSE`, and R7/R8 remain blocked.
+still awaits Task `.3` implementation preparation and Task `.4` integrated proof, commit, and review.
+The uncommitted Task `.3` candidate is not yet a complete proof-ready candidate or a review-clean
+result. Task `.4` is blocked until Task `.3` implementation/focused unit criteria are complete;
+`CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Required Commit Gate
 
@@ -119,10 +120,12 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. This selects current
     `HistoricalOnly / 20`, unflagged authority while preserving truthful pairing and canonical
     immediately-prior-`Active` transition semantics.
-  - Disposition: complete as an authority/expected-disposition decision only. The source, test,
-    fixture-expected, proof, commit, and implementation review work remains current Task `.3`.
+  - Disposition: complete as an authority/expected-disposition decision only. Task `.3` owns the
+    authorized source/test/helper/expected-disposition edits, focused TDD unit red/green, and a
+    complete unstaged candidate diff ready for proof. Task `.4` owns the integrated proof wall,
+    result recording, staging and commit gates, atomic implementation/proof commit, and fresh review.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.3 — Land the selected bounded pairing/progress fix — AUTHORIZED / CURRENT.**
+- [ ] **R6-GAP-DET-REPLAY-STALL.3 — Prepare the selected bounded pairing/progress implementation — AUTHORIZED / CURRENT.**
   - Initial candidate file: `crates/agent-drift-analyzer/src/checkpoint/attempt.rs`.
   - Change: call-ID-exclusive scanning when a command ID exists; no positional fallback in that lane;
     unchanged legacy adjacency/Error/Unknown fallback without an ID.
@@ -164,12 +167,20 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   - Impact every additional existing symbol before editing it. Under selected Option A, do not edit
     `recovery_state`, `drift_state_for_score`, `assign_drift_states`, shared comparability, scorer
     logic, compactor logic, raw fixtures, schemas, replay presentation, sentinel surfaces, R7, or R8.
+  - TDD boundary: establish red, then green, for the focused pairing unit and the four named focused
+    troubleshooting units while making the authorized source/test/helper/expected-disposition edits.
+    Task `.3` completes only when the full intended implementation is present as one complete
+    **unstaged** candidate diff ready for Task `.4` proof. Do not run the integrated/packet proof wall,
+    stage files, run staged GitNexus/cached-diff gates, commit, or claim implementation review-clean
+    in Task `.3`.
   - Current state: authorized but incomplete. Candidate patch SHA-256
     `030d3d3e97640ba8fd4cf71f29f886b2273ec6e653aefa622aacaeb7057fdae7`, backed up at
     `/tmp/r6-pairing-fix-secondary-red.patch`, remains uncommitted and unproven. Implement only the
     selected Task `.3` boundary; no recovery/state or other forbidden seam is authorized.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.4 — Run exact proof, commit, and close fresh review — BLOCKED.**
+- [ ] **R6-GAP-DET-REPLAY-STALL.4 — Run exact integrated proof, commit, and close fresh review — BLOCKED.**
+  - Activation: blocked until Task `.3` implementation/focused unit criteria are complete and its
+    complete intended candidate diff remains unstaged.
   - Verify in order:
 
     ```bash
@@ -198,8 +209,10 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     expected disposition alone becomes `HistoricalOnly / 20`, unflagged, with raw rows unchanged; the
     frozen `dead_end_thrash` corpus updates that sticky assertion while its other three postures remain
     unchanged; all walls green.
-  - Record exact results in this TASKS and the replay ledger, use the required commit gate, commit the
-    bounded fix/proof receipt, and obtain fresh built-in `default` `REVIEW CLEAN`.
+  - Record actual results in this TASKS and the replay ledger; stage only the intended implementation,
+    tests, expected-disposition, TASKS, and ledger files; run staged GitNexus detect, cached diff check,
+    and cached diff inspection; commit the implementation/proof atomically; then obtain fresh built-in
+    `default` review and fix findings in new gated commits until `REVIEW CLEAN`.
 
 - [ ] **R6-GAP-DET-REPLAY-STALL.5 — Land and review the narrow packet transition.**
   - Prerequisite: Task 4 review-clean.
@@ -220,4 +233,5 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   `dead_end_thrash Active / 30 / High`.
 - Committed-baseline defect: evidence names the successful siblings because `pair_output_rows` uses
   positional pairing across concurrent calls. The preserved uncommitted candidate corrects that
-  attribution, but the current Task `.3` implementation and proof have not yet landed.
+  attribution, but Task `.3` implementation preparation is incomplete and Task `.4` proof, commit,
+  and review have not begun.

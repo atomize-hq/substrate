@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Exact Task `.2B` Option-A reply makes sticky `CTX-R6-06` authority `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. Task `.3` implementation/proof remains pending. `CTX-R6-06` follows only after packet completion.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Exact Task `.2B` Option-A reply makes sticky `CTX-R6-06` authority `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. Task `.3` implementation preparation/focused unit red-green remains pending; Task `.4` owns integrated proof, commit, and review after Task `.3` completes. `CTX-R6-06` follows only after packet completion.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -331,8 +331,9 @@ complete and is never active alongside a gap.
   complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` +
   `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` Option A is accepted and complete by
   exact reply `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.3` is
-  authorized/current but remains incomplete with an uncommitted candidate and no implementation or
-  green-proof receipt; Task `.4` and later gates
+  authorized/current but its unstaged candidate has not completed the authorized edits and focused
+  TDD unit red/green. Task `.4` is blocked until those criteria complete, then owns integrated proof,
+  result recording, staging/gates, atomic commit, and fresh review; later gates
   remain blocked.
 - `CTX-R6-06` — run the existing frozen-corpus preservation control:
 
@@ -362,7 +363,7 @@ replaced in replay selection; they do not create a production gap.
 
 | IDs | Planned disposition |
 |---|---|
-| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Tasks `.2A` and `.2B` Option A are accepted and complete; packet amendment series `d631e0c56` + `6498c343f` is review-clean. Task `.3` is authorized/current but remains incomplete with an uncommitted candidate and no implementation/proof receipt; Task `.4` and later gates remain blocked. |
+| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Tasks `.2A` and `.2B` Option A are accepted and complete; packet amendment series `d631e0c56` + `6498c343f` is review-clean. Task `.3` is authorized/current but its unstaged implementation-preparation candidate remains incomplete. Task `.4` is blocked until Task `.3` implementation/focused unit criteria complete, then owns integrated proof, result recording, staging/gates, atomic commit, and fresh review; later gates remain blocked. |
 | `CTX-R6-03` through `CTX-R6-05` | Row-atomic `dead_end_thrash` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-06` | Existing frozen-corpus preservation control executes only in `R6-REPLAY`. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no `semantic_goal_drift` reopening. |

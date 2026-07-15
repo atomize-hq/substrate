@@ -18,7 +18,10 @@ complete: sticky `CTX-R6-06` authority is now `HistoricalOnly / 20`, unflagged, 
 authority/expected-disposition change pending source, test, and fixture-expected implementation; it
 does not claim that implementation, proof, green walls, a committed candidate, or implementation
 review-clean status exists. Task `.3` is authorized and current within fresh-review-clean amendment
-`d631e0c56` + `6498c343f`; the preserved candidate remains incomplete and uncommitted. Task `.4`,
+`d631e0c56` + `6498c343f`; it owns implementation preparation through focused TDD unit red/green and
+a complete unstaged candidate diff, and the preserved candidate remains incomplete. Task `.4` owns
+integrated proof, result recording, staging/commit gates, the atomic implementation/proof commit, and
+fresh review; it is blocked until Task `.3` implementation/focused unit criteria are complete.
 `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
 
 ## Objective And Preserved Witness
@@ -93,6 +96,11 @@ one-file change and proof wall below. This acceptance does not authorize scope o
 stopping instead.
 
 ## Acceptance And Exact Proof
+
+Task `.3` uses the first five focused unit commands below for TDD red/green while preparing the full
+unstaged implementation candidate. Task `.4` alone reruns those units and owns the entire exact
+integrated/packet proof sequence, result recording, staging, staged GitNexus/cached-diff gates, atomic
+implementation/proof commit, and fresh review/fix loop.
 
 Under selected Task `.2B` Option A, the implementation is acceptable only when:
 
@@ -204,7 +212,7 @@ RECOMMENDATION: A. It preserves truthful per-call evidence and the existing cano
 SAFE WORK ALREADY COMPLETED: Task .0 and Task .1 are review-clean; Task .2 and the accepted Task .2A scope decision are complete; the candidate, clean-baseline proof, and every secondary red are preserved but uncommitted.
 RESOLUTION: A. Reclassify sticky CTX-R6-06 to HistoricalOnly / 20, unflagged; preserve truthful pairing and canonical immediately-prior-Active transition semantics; authorize the bounded Task .3 amendment.
 REPLY RECEIVED: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A
-STILL BLOCKED: Task .4 until Task .3 implementation/proof/commit; CTX-R6-06 replay proof, family wall, packet transition, R6-CLOSE, and R7/R8.
+STILL BLOCKED: Task .4 until Task .3 implementation/focused unit criteria complete; CTX-R6-06 replay proof, family wall, packet transition, R6-CLOSE, and R7/R8.
 ```
 
 Task `.2B` Option A selects this implementation boundary for current Task `.3`:
@@ -243,18 +251,22 @@ Task `.2B` Option A selects this implementation boundary for current Task `.3`:
    `acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture` must update the
    sticky assertion to `HistoricalOnly / 20`, unflagged while its other three explicit postures remain
    unchanged; and
-8. run focused pairing/progress/`CTX-R6-02`/sticky proof before the checkpoint, progress-corpus,
-   `dead_end_thrash`, full-analyzer, compactor normalization, and static walls.
+8. leave all authorized edits as one complete unstaged candidate after the focused pairing/progress
+   unit red/green; Task `.4` then runs focused `CTX-R6-02`/sticky proof before the checkpoint,
+   progress-corpus, `dead_end_thrash`, full-analyzer, compactor normalization, and static walls.
 
 Under Option A, do not edit `recovery_state`, `drift_state_for_score`, `assign_drift_states`,
 shared comparability, scorer logic, compactor logic, raw fixtures, sentinel surfaces, R7, or R8.
 
 ## Commit, Review, And Exit
 
-Before every commit, stage only intended files, run
+Task `.4` activates only after Task `.3` implementation/focused unit criteria are complete. Task `.4`
+records actual integrated/packet proof results in packet TASKS and the replay ledger, then stages only
+intended files and runs
 `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, `git diff --cached --check`, and
-inspect `git diff --cached`. Commit each batch atomically and dispatch a fresh built-in `default`
-reviewer. Apply findings in a new commit and repeat with a fresh reviewer until clean.
+inspects `git diff --cached`. It commits the implementation/proof atomically and dispatches a fresh
+built-in `default` reviewer. Apply findings in a new gated commit and repeat with a fresh reviewer
+until clean. Task `.3` must not stage, commit, or claim implementation review-clean.
 
 This packet exits only after the docs gate, every required operator decision, the authorized bounded
 production fix, exact proof, proof receipt, and narrow authority transition are each committed and

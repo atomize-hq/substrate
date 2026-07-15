@@ -56,7 +56,9 @@ Hard decisions:
   `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.2B` is complete:
   sticky `CTX-R6-06` authority is now `HistoricalOnly / 20`, unflagged, while `Recovered / 20`
   remains historical clean-baseline evidence only. This authority/expected-disposition change is
-  approved pending its source/test/fixture-expected implementation and proof in current Task `.3`.
+  approved pending Task `.3` source/test/helper/expected-disposition preparation with focused TDD
+  unit red/green as a complete unstaged candidate, followed by Task `.4` integrated proof,
+  result recording, staging/gates, atomic implementation/proof commit, and fresh review.
 - R7 remains **DRAFT / BLOCKED ON R6 CLOSURE DECISION** and must not absorb unresolved ordinary
   single-session scorer semantics.
 
@@ -69,7 +71,7 @@ All three named gaps are now complete with review-clean focused proof. The final
 in this review series is landed, marks the prior aggregate `R6-GAP-*` set complete, and activates
 `R6-REPLAY`. Transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
 `default` `REVIEW CLEAN`. Replay has since completed `CTX-R6-01` and preserved trusted `CTX-R6-02`
-behavioral RED at `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` is the active packet. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.1` acceptance receipt `d788f45c9` also received fresh independent built-in `default` `REVIEW CLEAN`, and Task `.2` is complete. Task `.2A` Option A is accepted and complete; its packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. The operator explicitly selected Task `.2B` Option A with `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; current sticky authority is `HistoricalOnly / 20`, unflagged, with old `Recovered / 20` retained only as historical baseline. Task `.3` is authorized/current but remains incomplete with the preserved uncommitted pairing candidate; no source/test/fixture-expected implementation, green proof, commit, or implementation review-clean result is claimed. Task `.4` is blocked. `CTX-R6-06`, R6 closure, terminal
+behavioral RED at `60cde3dd7`; `R6-GAP-DET-REPLAY-STALL` is the active packet. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.1` acceptance receipt `d788f45c9` also received fresh independent built-in `default` `REVIEW CLEAN`, and Task `.2` is complete. Task `.2A` Option A is accepted and complete; its packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. The operator explicitly selected Task `.2B` Option A with `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; current sticky authority is `HistoricalOnly / 20`, unflagged, with old `Recovered / 20` retained only as historical baseline. Task `.3` is authorized/current but its preserved unstaged pairing candidate remains incomplete; it owns only authorized edits, focused TDD unit red/green, and production of a complete unstaged candidate. Task `.4` is blocked until Task `.3` implementation/focused unit criteria are complete, then owns integrated proof, result recording, staging/gates, atomic implementation/proof commit, and fresh review. No implementation commit or review-clean result is claimed. `CTX-R6-06`, R6 closure, terminal
 dispositions, successor execution, and all R7/R8 work remain blocked.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims

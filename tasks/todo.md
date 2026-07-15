@@ -72,9 +72,12 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
   baseline evidence only. This authority/expected-disposition change is approved but not yet
   implemented or proven.
 - [ ] Execute authorized/current packet Task `.3` within review-clean amendment `d631e0c56` +
-  `6498c343f`. The preserved candidate remains incomplete and uncommitted; source/test/fixture-expected
-  implementation, focused proof, commit, and fresh implementation review are pending. Task `.4`,
-  `CTX-R6-06`, focused scorer proof, full
+  `6498c343f`. The preserved unstaged candidate remains incomplete. Task `.3` owns the authorized
+  source/test/helper/expected-disposition edits, focused TDD unit red/green, and a complete unstaged
+  candidate ready for proof; it does not own staging, commit, or implementation review. Task `.4` is
+  blocked until those Task `.3` implementation/focused unit criteria are complete, then owns the exact
+  integrated/packet proof wall, result recording, staging/GitNexus/cached-diff gates, atomic
+  implementation/proof commit, and fresh review/fix loop. `CTX-R6-06`, focused scorer proof, full
   analyzer proof, and the replay family wall remain blocked.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.

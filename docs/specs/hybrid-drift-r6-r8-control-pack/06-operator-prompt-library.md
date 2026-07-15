@@ -309,8 +309,11 @@ built-in `default` `REVIEW CLEAN`. Exact reply
 `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` completes Task `.2B`: sticky
 `CTX-R6-06` current authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical
 baseline evidence only. Task `.3` is authorized/current, but its uncommitted pairing candidate remains
-incomplete and is not source/test/fixture-expected implementation proof or review-clean implementation.
-Task `.4`, `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, R7, and R8 remain blocked.
+incomplete and does not yet satisfy its implementation/focused unit criteria. Task `.3` owns only the
+authorized edits, focused TDD unit red/green, and a complete unstaged candidate. Task `.4` is blocked
+until those criteria are complete, then owns integrated proof, result recording, staging/gates, atomic
+implementation/proof commit, and fresh review. `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`,
+R7, and R8 remain blocked.
 
 Historical resolved Task `.2B` decision report:
 
@@ -329,7 +332,7 @@ RECOMMENDATION: A. It preserves truthful call attribution and the already-canoni
 SAFE WORK ALREADY COMPLETED: Task .2A and its packet amendment are fresh-review-clean; the candidate and secondary reds are preserved but uncommitted.
 RESOLUTION: A. Reclassify sticky CTX-R6-06 to HistoricalOnly / 20, unflagged; preserve truthful pairing and canonical transition semantics; authorize bounded Task .3.
 REPLY RECEIVED: DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A
-STILL BLOCKED: Task .4 until Task .3 proof/commit; CTX-R6-06 replay proof, family wall, packet transition, R6-CLOSE, and R7/R8.
+STILL BLOCKED: Task .4 until Task .3 implementation/focused unit criteria complete; Task .4 then owns integrated/packet proof, actual-result recording, intended-file staging, staged GitNexus and cached-diff gates, atomic implementation/proof commit, and fresh review/fix. CTX-R6-06 replay proof, family wall, packet transition, R6-CLOSE, and R7/R8 remain blocked.
 ```
 
 Historical resolved Task `.2B` Prompt 6 invocation:

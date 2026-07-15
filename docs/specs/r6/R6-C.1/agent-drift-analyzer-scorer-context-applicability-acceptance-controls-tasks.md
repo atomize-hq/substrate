@@ -16,7 +16,7 @@ CLEAN`. Authority transition series `56bb9966f` + `07a3b1fe5` also received fres
 built-in `default` `REVIEW CLEAN` and activates only `R6-REPLAY` with active packet `none`.
 `CTX-R6-01` implementation/fix series `a0089c8de` + `968a4377f` is also fresh independent built-in
 `default` `REVIEW CLEAN`. Trusted `CTX-R6-02` witness `60cde3dd7` preserves behavioral RED and routes
-to active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2` is complete; Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. Exact reply `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` completes Task `.2B`, makes sticky authority `HistoricalOnly / 20`, unflagged, and makes Task `.3` authorized/current; the candidate remains incomplete and uncommitted, and Task `.4` is blocked. `CTX-R6-06`, the family wall,
+to active packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2` is complete; Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. Exact reply `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` completes Task `.2B`, makes sticky authority `HistoricalOnly / 20`, unflagged, and makes Task `.3` authorized/current. Task `.3` implementation preparation/focused unit criteria remain incomplete; Task `.4` is blocked until they complete, then owns integrated proof, result recording, staging/gates, atomic commit, and fresh review. `CTX-R6-06`, the family wall,
 `R6-CLOSE`, and R7/R8 remain pending or blocked as owned.
 
 ## Required Staged Commit Gate
@@ -494,8 +494,9 @@ before that reconciled transition is committed and fresh-review-clean.
     `R6-GAP-DET-REPLAY-STALL` is the active packet. Task `.2A` Option A is accepted and complete;
     packet amendment series `d631e0c56` + `6498c343f` is fresh independent `REVIEW CLEAN`. Task
     `.2B` Option A is accepted and complete; Task `.3` is authorized/current but remains incomplete
-    with an uncommitted candidate and no implementation/proof receipt; Task
-    `.4` and later gates remain blocked.
+    with an unstaged implementation-preparation candidate that has not completed its focused unit
+    criteria. Task `.4` is blocked until those Task `.3` criteria are complete, then owns integrated
+    proof, result recording, staging/gates, atomic commit, and fresh review; later gates remain blocked.
 
 ## R6-C.1.6 — Replay-Owned Controls, Not Started Here
 
@@ -535,7 +536,9 @@ before that reconciled transition is committed and fresh-review-clean.
     Task `.2A` Option A is accepted and complete; packet amendment series `d631e0c56` +
     `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` Option A is accepted and complete;
     Task `.3` is authorized/current but remains incomplete with an uncommitted candidate and no
-    implementation/proof receipt, and Task `.4` is blocked.
+    focused-unit completion receipt. Task `.4` is blocked until Task `.3` implementation/focused unit
+    criteria complete, then owns integrated proof, result recording, staging/gates, atomic commit,
+    and fresh review.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
   - Boundary: no `CTX-R6-06`, family wall, terminal disposition, `R6-CLOSE`, or R7/R8 work yet.
 
@@ -549,8 +552,9 @@ before that reconciled transition is committed and fresh-review-clean.
     `Regressing / Active 40` to checkpoint `10` `Recovered 20`; truthful pairing instead yields
     checkpoint `9` `Advancing / HistoricalOnly 20` then checkpoint `10` `HistoricalOnly 20`.
     Expected-negative event `831 -> 837` and `recovery_state` are non-causal. Task `.2B` Option A
-    resolved expected authority; Task `.3` source/test/fixture-expected implementation and proof must
-    complete before this replay-owned control runs.
+    resolved expected authority. Task `.3` must complete source/test/helper/expected-disposition
+    preparation and focused TDD unit red/green; Task `.4` must then complete integrated proof, result
+    recording, staging/gates, atomic commit, and fresh review before this replay-owned control runs.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_frozen_dead_end_thrash_corpus_keeps_explicit_r6_1_3_posture -- --exact --nocapture`.
   - Ownership: execution and any preservation follow-up remain entirely in `R6-REPLAY`.
 

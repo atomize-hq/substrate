@@ -41,8 +41,11 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
    `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; Task `.2B` is complete and
    selects `HistoricalOnly / 20`, unflagged as current sticky authority while preserving the old
    `Recovered / 20` result only as historical baseline. Task `.3` is authorized/current within the
-   review-clean amendment but remains incomplete and uncommitted; source/test/fixture-expectation
-   implementation and proof are pending. Task `.4` is blocked until Task `.3` proof and commit.
+   review-clean amendment but remains incomplete; it owns the authorized
+   source/test/helper/expected-disposition edits, focused TDD unit red/green, and a complete unstaged
+   candidate ready for proof. Task `.4` is blocked until Task `.3` implementation/focused unit
+   criteria are complete, then owns the exact integrated/packet proof wall, actual-result recording,
+   staging/GitNexus/cached-diff gates, atomic implementation/proof commit, and fresh review/fix loop.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
@@ -78,6 +81,8 @@ received fresh independent built-in `default` `REVIEW CLEAN`. Task `.1` decision
 complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` +
 `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` Option A is accepted and complete by exact
 operator reply `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Current Task `.3`
-is authorized but incomplete with an uncommitted, unproven candidate; Task `.4` is blocked until Task
-`.3` proof and commit. No terminal scorer disposition, R6 close, or R7/R8 work
+is authorized but incomplete with an unstaged candidate that does not yet meet its implementation
+and focused-unit completion criteria. Task `.4` is blocked until those Task `.3` criteria are complete;
+it, not Task `.3`, owns integrated proof, result recording, staging/gates, atomic commit, and fresh
+review. No terminal scorer disposition, R6 close, or R7/R8 work
 is authorized yet.

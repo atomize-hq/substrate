@@ -13,8 +13,10 @@ docs-first amendment, not unconditional implementation. Diagnosis proves the req
 `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.2B` is complete and
 reclassifies current sticky `CTX-R6-06` authority to `HistoricalOnly / 20`, unflagged; `Recovered / 20`
 is historical baseline evidence only. This authority/expected-disposition change is approved, but its
-source/test/fixture-expectation implementation, proof, commit, and implementation review remain
-pending in current Task `.3`.
+authorized source/test/helper/expected-disposition edits, focused TDD unit red/green, and complete
+unstaged candidate remain pending in current Task `.3`. Task `.4` owns the integrated/packet proof
+wall, actual-result recording, staging and commit gates, atomic implementation/proof commit, and fresh
+review/fix loop.
 
 ## Decisions
 
@@ -104,7 +106,7 @@ Verified impacts at `f898d61e7`: `assess_troubleshooting_progress` LOW (`4 / 12 
 authority because diagnosis proves it is the wrong seam. All recovery/state functions remain
 forbidden unless a later explicit choice authorizes them.
 
-### 3. Implement The Selected Bounded Fix — Authorized And Current
+### 3. Prepare The Selected Bounded Implementation — Authorized And Current
 
 The original `attempt.rs` candidate remains preserved and uncommitted:
 
@@ -156,10 +158,19 @@ compactor logic, raw fixtures, public schemas, replay presentation, sentinel sur
 `CTX-R6-02` remains red at line `455`; analyzer-library, checkpoints-integration,
 `dead_end_thrash`, and progress-corpus walls are respectively `144/13`, `109/24`, `15/3`, and
 `2/1` pass/fail. These are preserved pre-implementation candidate results, not green proof. Task `.3`
-is now authorized to implement exactly the selected boundary; the candidate remains incomplete and
-uncommitted until that work and its proof land.
+is now authorized to prepare exactly the selected implementation boundary. Use TDD red/green for the
+focused pairing unit and four named troubleshooting units, and finish every authorized
+source/test/helper/expected-disposition edit as one complete unstaged candidate diff ready for proof.
+Task `.3` stops there: no integrated/packet proof wall, staging, staged GitNexus/cached-diff gate,
+commit, or implementation review-clean claim belongs to it. The current candidate remains incomplete.
 
-### 4. Prove, Commit, And Fresh-Review — Blocked
+### 4. Prove, Commit, And Fresh-Review — Blocked Until Task `.3` Implementation/Focused Unit Criteria Complete
+
+Task `.4` activates only after Task `.3` has produced the complete unstaged implementation candidate
+and completed its focused TDD unit red/green criteria. Task `.4` then owns the exact integrated/packet
+proof wall below, actual-result recording in packet TASKS and the replay ledger, staging only intended
+files, staged GitNexus detect, cached diff check and inspection, the atomic implementation/proof
+commit, and fresh built-in `default` review/fix cycles until clean.
 
 Run in order:
 
@@ -183,9 +194,10 @@ cargo clippy -p agent-drift-analyzer --all-targets -- -D warnings
 git diff --check
 ```
 
-The compactor command is optional confirmation only. Record exact results in TASKS and the replay
-ledger, run the staged detect/diff gate, commit atomically, and dispatch a fresh built-in `default`
-reviewer. Fix findings in new commits and repeat fresh review until clean.
+The compactor command is optional confirmation only. Record actual results in TASKS and the replay
+ledger, stage only intended files, run staged GitNexus detect plus cached diff check and inspection,
+commit the implementation/proof atomically, and dispatch a fresh built-in `default` reviewer. Fix
+findings in new gated commits and repeat fresh review until clean.
 
 ### 5. Transition Back To Replay And Stop The Packet
 
