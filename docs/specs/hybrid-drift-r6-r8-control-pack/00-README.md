@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R7-0 — ACTIVE AT ENTRY ONLY; active packet none; R7-PROMOTE COMPLETE; promotion series 455d0ed90 + 876ac55de fresh independent REVIEW CLEAN; narrow transition landed by this change with fresh transition review pending; R7-0.1 next; R7-0.1, R7-0.2, and all implementation unstarted`
+**Current work phase:** `R7-0 — ACTIVE AT ENTRY ONLY; active packet none; R7-PROMOTE COMPLETE; promotion series 455d0ed90 + 876ac55de fresh independent REVIEW CLEAN; transition series 6bf0ac6ad + 4a887ee0c + e83ebb430 fresh independent REVIEW CLEAN; R7-0.1 next; R7-0.1, R7-0.2, fixtures, and all implementation unstarted; R7-1..R7-6 blocked`
 
-**Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6` and R7 promotion series `455d0ed90` + `876ac55de` each received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. No R7 implementation has started.
+**Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, and R7 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` each received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. No R7 fixture or implementation work has started.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -41,9 +41,10 @@ baseline only. The phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c
 independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete. The later 2026-07-15
 `CTX-R6-17` receipt closes R6 and `R6-CLOSE`. Promotion series `455d0ed90` + `876ac55de` completes
 `R7-PROMOTE`, makes the R7 authority family implementation-ready, and received fresh independent
-built-in `default` `REVIEW CLEAN`. The narrow status transition is landed by this change with fresh
-transition review pending. `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and
-`R7-0.1`, `R7-0.2`, all R7 implementation, and R8 remain unstarted or blocked as owned.
+built-in `default` `REVIEW CLEAN`. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`
+received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` is active at entry only with
+packet `none`, `R7-0.1` is next, and `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain
+unstarted. `R7-1..R7-6` and R8 remain blocked.
 
 ## Purpose
 

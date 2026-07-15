@@ -8,9 +8,9 @@ NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 
 This implementation plan is reconciled and implementation-ready. R6 is `CLOSED`, and promotion
 series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so
-`R7-PROMOTE` is complete. The narrow transition is landed by this change and awaits fresh
-transition review; `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and no
-`R7-0.1`, `R7-0.2`, fixture, or implementation work has started.
+`R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
+independent built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry only with packet `none`,
+`R7-0.1` is next, and no `R7-0.1`, `R7-0.2`, fixture, or implementation work has started.
 
 ## Overview
 
@@ -55,7 +55,8 @@ surface assigned exactly one terminal disposition; broad acceptance proven or na
 named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`. Promotion
 series `455d0ed90` + `876ac55de` completed the family content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`. The graph is now at `R7-0` entry only; `R7-0.1` remains
-unstarted until this narrow transition receives fresh independent review.
+unstarted after transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent
+built-in `default` `REVIEW CLEAN`.
 
 ```text
 R7-0 docs + sanitized evidence matrix

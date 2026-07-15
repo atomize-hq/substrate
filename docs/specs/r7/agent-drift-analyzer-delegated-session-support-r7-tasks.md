@@ -7,10 +7,11 @@ Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY
 NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
-independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. The narrow transition
-is landed by this change and awaits fresh transition review. `R7-0` is active at entry only with
-packet `none`, and `R7-0.1` is next. Every `R7-0..R7-6` item remains unchecked; neither `R7-0.1`
-nor `R7-0.2`, and no fixture or implementation work, has started.
+independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
+`6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW
+CLEAN`. `R7-0` is active at entry only with packet `none`, and `R7-0.1` is next. Every `R7-0..R7-6`
+item remains unchecked; neither `R7-0.1` nor `R7-0.2`, and no fixture or implementation work, has
+started. `R7-1..R7-6` remain blocked.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -22,8 +23,9 @@ nor `R7-0.2`, and no fixture or implementation work, has started.
   - Files: `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
   - Dependencies: review-clean R6 `CLOSED` authority
   - Receipt: promotion series `455d0ed90` + `876ac55de` fresh independent built-in `default`
-    `REVIEW CLEAN`; the narrow transition is landed by this change with fresh transition review
-    pending; `R7-0` is active at entry only, `R7-0.1` is next, and no `R7-0` item has started
+    `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fresh independent
+    built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry only, `R7-0.1` is next, and no
+    `R7-0` item has started
   - Scope: medium, docs only
 
 ## R7-0: Docs Lock And Evidence Matrix

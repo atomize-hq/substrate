@@ -17,10 +17,10 @@ current R6 closure decision lives in
 design, and the per-packet sets. R6 is **CLOSED** after `R6-CLOSE` / `CTX-R6-17`. Promotion series
 `455d0ed90` + `876ac55de` completed the R7 content/gate audit, made the R7 authority family
 implementation-ready, and received fresh independent built-in `default` `REVIEW CLEAN`.
-`R7-PROMOTE` is complete. The narrow status transition is landed by this change with fresh
-transition review pending; `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and
-no R7 task has started. The Ground Truth Sources list below is historical context, not an exhaustive
-index of current authority.
+`R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
+independent built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry only with packet `none`,
+`R7-0.1` is next, and no R7 task has started. The Ground Truth Sources list below is historical
+context, not an exhaustive index of current authority.
 
 > **Historical status note (2026-07-04; superseded):** `R5`/`R5.5`/`R5.75`
 > structured-objective work had advanced well beyond the older root sequence, through `R6` scorer
@@ -98,10 +98,11 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 progress views for matching checkpoints.
 
 The active follow-on is `R7-0` at entry only, with packet `none` and `R7-0.1` next but unstarted.
-`R7-PROMOTE` and its fresh-review-clean promotion series are complete; the current narrow status
-transition awaits fresh independent review. The open work is no longer archetype identification,
-first-cut progress export, `R5.75`, the R6 acceptance-control matrix, a named scorer gap, replay
-closeout, R6 terminal-disposition reconciliation, or R7 promotion content.
+`R7-PROMOTE` and its fresh-review-clean promotion series are complete; transition series
+`6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in `default` `REVIEW CLEAN`.
+The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
+acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
+reconciliation, R7 promotion content, or transition review.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -131,9 +132,9 @@ reconfirmed the four exact replay controls at `1 / 1` each, the Manifest E filte
 `git diff --check`. It assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus
 `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**.
 `R6-CLOSE` is complete and R6 is `CLOSED`. Promotion series `455d0ed90` + `876ac55de` is fresh
-independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete. The narrow transition is landed by this
-change with fresh transition review pending; `R7-0` is active at entry only with packet `none`,
-`R7-0.1` is next, and no R7 task has started.
+independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series `6bf0ac6ad` +
+`4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0` is
+active at entry only with packet `none`, `R7-0.1` is next, and no R7 task has started.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -152,8 +153,9 @@ control.” The current honest sequence is:
    wall complete with active packet `none`
 7. keep completed `CTX-R6-17`, the terminal table, and R6 `CLOSED` authority reconciled
 8. keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de` and its
-   implementation-ready R7 authority content fixed; keep `R7-0` at entry only while this narrow
-   transition awaits fresh review, without starting `R7-0.1` or later work
+   implementation-ready R7 authority content fixed; keep fresh-review-clean transition series
+   `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed and `R7-0` at entry only, without starting
+   `R7-0.1` or later work
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -814,9 +816,10 @@ The 2026-07-15 `CTX-R6-17` receipt completed the terminal table: `dead_end_thras
 `scoring/mod.rs` **Fit-for-purpose exception**. R6 is **CLOSED** and `R6-CLOSE` is complete.
 Promotion series `455d0ed90` + `876ac55de` completed the R7 content/gate audit, made the R7 authority
 family implementation-ready, and received fresh independent built-in `default` `REVIEW CLEAN`.
-`R7-PROMOTE` is complete. The narrow transition is landed by this change with fresh transition
-review pending; only `R7-0` is active at entry with packet `none`, `R7-0.1` is next, and `R7-0.1`,
-`R7-0.2`, and all R7 implementation remain unstarted.
+`R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
+independent built-in `default` `REVIEW CLEAN`; only `R7-0` is active at entry with packet `none`,
+`R7-0.1` is next, and `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted.
+`R7-1..R7-6` remain blocked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -890,9 +893,9 @@ the narrower `R3.5` replay/live trigger-headline cutover.
 
 `R3.5`, `R3.75`, `R4`, `R5`, `R5.5`, `R5.75`, and R6 are landed and closed. Promotion series
 `455d0ed90` + `876ac55de` is fresh independent `REVIEW CLEAN`, so `R7-PROMOTE` is complete and the
-implementation-ready R7 family is current. The narrow transition is landed by this change and
-awaits fresh transition review. `R7-0` is active at entry only with packet `none`; `R7-0.1` is next
-but has not started.
+implementation-ready R7 family is current. Transition series `6bf0ac6ad` + `4a887ee0c` +
+`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` is active at entry
+only with packet `none`; `R7-0.1` is next but has not started.
 
 The next honest work target is:
 
@@ -921,10 +924,11 @@ The next honest work target is:
   **Cutover complete**; `truth_grounding_gap`/`wrong_plan_branch`/`scoring/mod.rs`
   **Fit-for-purpose exception**; no merge/deprecation or deferral route
 - **current action:** keep completed, fresh-review-clean promotion series `455d0ed90` + `876ac55de`
-  and the implementation-ready R7 authority content fixed; keep `R7-0` active at entry only while
-  the narrow transition landed by this change awaits fresh independent review
+  and the implementation-ready R7 authority content fixed; keep fresh-review-clean transition
+  series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` fixed and `R7-0` active at entry only
 - keep `R7-0.1` next but unstarted; keep `R7-0.2` and all delegated-session implementation
   unstarted until ordered by the phase; do not make R7 absorb ordinary single-session scorer gaps
+- keep `R7-1..R7-6` blocked until their ordered predecessor exits review-clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.

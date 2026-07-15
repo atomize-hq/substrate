@@ -10,8 +10,9 @@ NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 
 1. R6 is **CLOSED**; `R6-CLOSE` and `CTX-R6-17` are complete. Promotion series `455d0ed90` +
    `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is
-   complete. The narrow transition landed by this change makes `R7-0` active at entry only with
-   packet `none`; fresh transition review is pending, `R7-0.1` is next, and no R7 task has started.
+   complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent
+   built-in `default` `REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`; `R7-0.1` is
+   next, and no R7 task has started.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -39,11 +40,11 @@ now-complete `R7-PROMOTE` phase are satisfied:
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit, reconciled the
 canonical mirrors, and received fresh independent built-in `default` `REVIEW CLEAN`.
-`R7-PROMOTE` is complete. The narrow phase transition is landed by this change and awaits fresh
-transition review; it makes `R7-0` active at entry only with packet `none`, identifies `R7-0.1` as
-next, and authorizes no task execution yet. `R7-0.1`, `R7-0.2`, and all implementation remain
-unstarted. R7 must extend the stable ordinary single-session baseline; it must not absorb baseline
-scorer semantics.
+`R7-PROMOTE` is complete. Transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
+independent built-in `default` `REVIEW CLEAN`; it makes `R7-0` active at entry only with packet
+`none`, identifies `R7-0.1` as next, and authorizes no task execution yet. `R7-0.1`, `R7-0.2`,
+fixtures, and all implementation remain unstarted. R7 must extend the stable ordinary
+single-session baseline; it must not absorb baseline scorer semantics.
 
 ## Objective
 

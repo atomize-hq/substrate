@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOTE` is COMPLETE after promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; the narrow transition is landed by this change with fresh transition review pending; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, and all implementation remain unstarted)**
+Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOTE` is COMPLETE after promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, fixtures, and all implementation remain unstarted; `R7-1..R7-6` remain blocked)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -96,12 +96,12 @@ Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOT
 - [x] Complete `R7-PROMOTE.1`: promotion series `455d0ed90` + `876ac55de` reconciled the R7
   authority family to implementation-ready content and received fresh independent built-in
   `default` `REVIEW CLEAN`; it started no R7 implementation.
-- [x] Land the narrow `R7-PROMOTE -> R7-0` status transition by this change, marking `R7-PROMOTE`
-  complete and `R7-0` active at entry only with packet `none`. Fresh independent review of this
-  transition is required before the next phase session starts.
-- [ ] Execute `R7-0.1` next only after the transition is fresh-review-clean. `R7-0.1`, `R7-0.2`,
+- [x] Land and freshly review the narrow `R7-PROMOTE -> R7-0` status transition. Transition series
+  `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW
+  CLEAN`, marking `R7-PROMOTE` complete and `R7-0` active at entry only with packet `none`.
+- [ ] Execute `R7-0.1` next in a fresh phase session. `R7-0.1`, `R7-0.2`,
   fixtures, and all bounded direct-child delegated-session implementation remain unstarted.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready,
 `R7-0` is active at entry only with packet `none`, and `R7-0.1` is next. Every `R7-0..R7-6` item
-remains unchecked and unstarted while this narrow transition awaits fresh independent review.
+remains unchecked and unstarted; `R7-1..R7-6` remain blocked.

@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; Manifest E family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check green; R6-close transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent built-in `default` `REVIEW CLEAN`; and R7 promotion series `455d0ed90` + `876ac55de` completed `R7-PROMOTE` with fresh independent built-in `default` `REVIEW CLEAN` without starting implementation.
+**Verified against:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; Manifest E family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check green; R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, and R7 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` each received fresh independent built-in `default` `REVIEW CLEAN` without starting R7 fixture or implementation work.
 
-**Current phase:** `R7-0` (**ACTIVE AT ENTRY ONLY**; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE` is complete; the R7 authority family is implementation-ready; the narrow transition is landed by this change with fresh transition review pending; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted)
+**Current phase:** `R7-0` (**ACTIVE AT ENTRY ONLY**; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE` is complete; the R7 authority family is implementation-ready; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted; `R7-1..R7-6` remain blocked)
 
 ## How To Resolve Truth
 
@@ -24,7 +24,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE / R7-0.1 NEXT** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Freshly review the narrow transition landed by this change. Do not begin `R7-0.1`, `R7-0.2`, fixtures, or implementation in this transition session. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE / R7-0.1 NEXT** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Start a fresh `R7-0` session at `R7-0.1`; the prepared Prompt 1 is ready but not started. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -83,9 +83,10 @@ at entry only with packet `none`:
 
 The R6 `CLOSED` and terminal-disposition entry gate is satisfied. Promotion series `455d0ed90` +
 `876ac55de` completes `R7-PROMOTE`, makes the four R7 authority documents implementation-ready, and
-received fresh independent built-in `default` `REVIEW CLEAN`. The narrow status transition is
-landed by this change with fresh transition review pending. `R7-0.1` is next, while `R7-0.1`,
-`R7-0.2`, fixtures, and all R7 implementation remain unstarted.
+received fresh independent built-in `default` `REVIEW CLEAN`. Transition series `6bf0ac6ad` +
+`4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0.1` is
+next, while `R7-0.1`, `R7-0.2`, fixtures, and all R7 implementation remain unstarted. `R7-1..R7-6`
+remain blocked.
 
 ## R8 Authority
 

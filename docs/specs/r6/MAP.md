@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE COMPLETE; R7 AUTHORITY IMPLEMENTATION-READY; R7-0 ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; R7-0.1 NEXT; NO R7 TASK STARTED** as of 2026-07-15. Promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` is landed with fresh transition review pending. Preserved review-clean R6 proof series remain authoritative. The 2026-07-15 exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completes with all suites green; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. No R7 task has started. Closure authority is
+Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE COMPLETE; R7 AUTHORITY IMPLEMENTATION-READY; R7-0 ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; R7-0.1 NEXT; NO R7 TASK STARTED** as of 2026-07-15. Promotion series `455d0ed90` + `876ac55de` and transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` each received fresh independent built-in `default` `REVIEW CLEAN`. Preserved review-clean R6 proof series remain authoritative. The 2026-07-15 exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completes with all suites green; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. No R7 task has started. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
@@ -366,9 +366,9 @@ series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-
 exact replay controls, the five Manifest E family filters, the full analyzer all-suites wall, and
 `git diff --check`, then completes the terminal table. Promotion series `455d0ed90` + `876ac55de`
 received fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE` and making
-the R7 authority family implementation-ready. Transition series `6bf0ac6ad` + `4a887ee0c` is
-landed with fresh transition review pending; `R7-0` is active at entry only with packet `none`,
-`R7-0.1` is next, and no R7 task has started.
+the R7 authority family implementation-ready. Transition series `6bf0ac6ad` + `4a887ee0c` +
+`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0` is active at entry
+only with packet `none`, `R7-0.1` is next, and no R7 task has started.
 
 ## Non-Goals For This Rescope
 

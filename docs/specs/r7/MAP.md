@@ -3,8 +3,8 @@
 Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
 NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**. Promotion series
 `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. The narrow
-`R7-PROMOTE -> R7-0` status transition is landed by this change and awaits fresh transition review;
-it starts no `R7-0` task.
+`R7-PROMOTE -> R7-0` transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh
+independent built-in `default` `REVIEW CLEAN`. It starts no `R7-0` task.
 
 ## R6 Handoff
 
@@ -31,8 +31,9 @@ the broad R6 acceptance claims are proven or narrowed honestly, the named closur
 resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. Promotion series `455d0ed90`
 + `876ac55de` reconciled the preserved MAP/SPEC/PLAN/TASKS to implementation-ready authority and
 received fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE`. The narrow
-status transition landed by this change makes `R7-0` active at entry only with packet `none`; fresh
-transition review remains pending, `R7-0.1` is next, and neither `R7-0.1` nor `R7-0.2` has started.
+status transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in
+`default` `REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`; `R7-0.1` is next, and
+neither `R7-0.1` nor `R7-0.2` has started.
 
 ## Live Linkage Evidence
 
@@ -66,8 +67,8 @@ semantics. Ordinary parent-visible orchestration may still be described as paren
 ## Packet Order
 
 The packet order below is implementation-ready. `R7-0` is **active at entry only** with packet
-`none`; `R7-0.1` is next but may not begin until this narrow transition receives fresh independent
-review. No `R7-0.1`, `R7-0.2`, fixture, or implementation work is part of this status transition.
+`none`; its transition is fresh independent `REVIEW CLEAN`, and `R7-0.1` is next but remains
+unstarted. No `R7-0.1`, `R7-0.2`, fixture, or implementation work has started.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

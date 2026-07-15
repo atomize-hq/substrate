@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOTE` is COMPLETE after promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; the narrow transition is landed by this change with fresh transition review pending; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, and all implementation remain unstarted)**
+Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOTE` is COMPLETE after promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, fixtures, and all implementation remain unstarted; `R7-1..R7-6` remain blocked)**
 
 ## Dependency Order
 
@@ -51,9 +51,9 @@ Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOT
 10. **COMPLETE — R7-PROMOTE:** promotion series `455d0ed90` + `876ac55de` reconciled the R7
     authority family to implementation-ready content and received fresh independent built-in
     `default` `REVIEW CLEAN`.
-11. **ACTIVE AT ENTRY ONLY — R7-0:** the narrow status transition is landed by this change and
-    awaits fresh transition review. Active packet is `none`; `R7-0.1` is next, but `R7-0.1`,
-    `R7-0.2`, fixture work, and implementation have not started.
+11. **ACTIVE AT ENTRY ONLY — R7-0:** transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`
+    received fresh independent built-in `default` `REVIEW CLEAN`. Active packet is `none`; `R7-0.1`
+    is next, but `R7-0.1`, `R7-0.2`, fixture work, and implementation have not started.
 
 ## Execution Rules
 
@@ -68,7 +68,7 @@ Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOT
   the claim or the wording is narrowed.
 - Keep R7 reciprocal direct linkage, separate trajectories, direct-child-first support, and no-new-
   drift-class-by-default as implementation-ready authority decisions. `R7-0` is active at entry
-  only; do not start `R7-0.1` until the current narrow transition is independently review-clean.
+  only after its fresh-review-clean transition; `R7-0.1` is next but remains unstarted.
 - Run GitNexus impact analysis before any later symbol edit. Before every commit, stage only intended
   files with `git add -- <intended-files-only>`, run
   `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, run
@@ -95,5 +95,6 @@ family filters, full analyzer all-suites green, and `git diff --check`. Transiti
 findings. R6 is `CLOSED` and `R6-CLOSE` is complete. Promotion series `455d0ed90` + `876ac55de`
 completed the R7 content/gate audit, made the R7 authority family implementation-ready, and received
 fresh independent built-in `default` `REVIEW CLEAN`; `R7-PROMOTE` is complete. The narrow transition
-is landed by this change and awaits fresh transition review. `R7-0` is active at entry only with
-packet `none`, `R7-0.1` is next, and `R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted.
+series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` received fresh independent built-in `default`
+`REVIEW CLEAN`. `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and `R7-0.1`,
+`R7-0.2`, fixtures, and all R7 implementation remain unstarted. `R7-1..R7-6` remain blocked.
