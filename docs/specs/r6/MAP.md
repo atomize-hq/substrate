@@ -3,8 +3,7 @@
 Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE AND
 R7-0..R7-3 COMPLETE AND REVIEW-CLEAN; R7 AUTHORITY IMPLEMENTATION-READY; CHECKPOINT-DOC COMMIT
 `931c2701c` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN`; `CTX-R7-04` PROVEN; R7-4 SOLE
-ACTIVE PHASE AT ENTRY ONLY; ACTIVE PACKET NONE; CURRENT TRANSITION CANDIDATE PENDING FRESH
-INDEPENDENT REVIEW; R7-4.1 NEXT, UNCHECKED, AND UNSTARTED; R7-4 PRODUCTION/SCORER WORK UNSTARTED;
+ACTIVE PHASE AT ENTRY ONLY; ACTIVE PACKET NONE; TRANSITION/FIX SERIES `e077de489` + `3dd5ba943` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN`; FIRST REVIEW'S TWO P2 STALE-STATUS DEFECTS CORRECTED; R7-4.1 NEXT, UNCHECKED, AND UNSTARTED; R7-4 PRODUCTION/SCORER WORK UNSTARTED;
 R7-5..R7-6 AND R8 BLOCKED; PROMPT 1 SELECTORS `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` PREPARED
 AND ELIGIBLE BUT NOT INVOKED** as of 2026-07-15. Preserved review-clean R6 proof series remain authoritative.
 The review-clean R7 implementation series changes no R6 behavior. Closure authority is
@@ -389,7 +388,7 @@ commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh i
 `default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
 Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
 satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
-entry with packet `none`; the current transition candidate is pending fresh independent review.
+entry with packet `none`; transition/fix series `e077de489` + `3dd5ba943` received fresh independent built-in `default` `REVIEW CLEAN`. Its first review found exactly two P2 stale-status defects—the root landing-order narrative retained an R7-2-era paragraph, and the R7 spec retained a stale R7-3 behavior/receipt-review promotion-gate heading—and fix `3dd5ba943` corrected both.
 `R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
 `R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
 prepared and eligible but have not been invoked.

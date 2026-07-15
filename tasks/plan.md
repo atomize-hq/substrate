@@ -10,7 +10,7 @@ Status: **CLOSED**
 
 Current phase: **`R7-4` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`; R7-3
 complete at checkpoint-doc commit `931c2701c`, fresh independent review-clean; `CTX-R7-04` proven;
-current transition candidate pending fresh independent review; `R7-4.1` next, unchecked, and
+TRANSITION/FIX SERIES `e077de489` + `3dd5ba943` FRESH INDEPENDENT BUILT-IN `default` `REVIEW CLEAN`; FIRST REVIEW'S TWO P2 STALE-STATUS DEFECTS CORRECTED; `R7-4.1` next, unchecked, and
 unstarted; no R7-4 production/scorer work has started; `R7-5..R7-6` and R8 blocked; Prompt 1
 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` prepared and eligible but not invoked)**
 
@@ -76,17 +76,19 @@ selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` prepared and eligible but not
     R7-3.2 test-only commit `c7c6f35b8`, and checkpoint-doc commit `931c2701c` are fresh independent
     built-in `default` `REVIEW CLEAN`. R7-3.1, R7-3.2, and the behavior/static checkpoint are
     complete; the exit gate is satisfied and `CTX-R7-04` is proven.
-15. **ACTIVE AT ENTRY ONLY — R7-4 TRANSITION REVIEW GATE:** active packet is `none`. The current
-    transition candidate is pending fresh independent review. `R7-4.1` is next, unchecked, and
-    unstarted; no R7-4 production/scorer work has started. `R7-5..R7-6` plus R8 remain blocked.
+15. **ACTIVE AT ENTRY ONLY — R7-4:** active packet is `none`. Transition/fix series `e077de489` +
+    `3dd5ba943` received fresh independent built-in `default` `REVIEW CLEAN`. Its first review found
+    exactly two P2 stale-status defects—the root landing-order narrative retained an R7-2-era
+    paragraph, and the R7 spec retained a stale R7-3 behavior/receipt-review promotion-gate
+    heading—and fix `3dd5ba943` corrected both. `R7-4.1` is next, unchecked, and unstarted; no R7-4
+    production/scorer work has started. `R7-5..R7-6` plus R8 remain blocked.
     Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are prepared and eligible but have
     not been invoked.
 
 ## Execution Rules
 
-- Obtain fresh independent review for only the narrow R7-3 -> R7-4 transition candidate before
-  invoking the prepared R7-4 selectors or starting R7-4 work. Preserve the workspace-clippy
-  sentinel witness for R7-6.1.
+- Keep R7-4 at entry only until the prepared Prompt 1 selectors are invoked in a separate phase run.
+  Preserve the workspace-clippy sentinel witness for R7-6.1.
 - Do not reopen `semantic_goal_drift` without a new failing witness.
 - Do not add a common mega-context argument to every scorer.
 - Treat `dead_end_thrash` regression/delegation/turn-shape; truth-grounding applicability,
@@ -109,7 +111,8 @@ selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` prepared and eligible but not
   CLEAN`, R7-2 complete, and `CTX-R7-03` proven. Keep entry-authority repair `9fd9d9972`, test-only
   commits `f8dd04549` and `c7c6f35b8`, and checkpoint-doc commit `931c2701c` fresh independent
   `REVIEW CLEAN`; keep R7-3 complete and `CTX-R7-04` proven. Keep only R7-4 active at entry with
-  packet `none`; keep the current transition candidate pending fresh independent review; keep
+  packet `none`; keep transition/fix series `e077de489` + `3dd5ba943` fresh independent built-in
+  `default` `REVIEW CLEAN`, with the first review's two P2 stale-status defects corrected; keep
   `R7-4.1` unchecked and unstarted, all R7-4 production/scorer work unstarted, `R7-5..R7-6` plus R8
   blocked, and the prepared R7-4 selectors uninvoked.
 - Run GitNexus impact analysis before any later symbol edit. Before every commit, stage only intended
@@ -153,7 +156,7 @@ commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh i
 `default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
 Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
 satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Only R7-4 is active at
-entry with packet `none`; the current transition candidate is pending fresh independent review.
+entry with packet `none`; transition/fix series `e077de489` + `3dd5ba943` received fresh independent built-in `default` `REVIEW CLEAN`. Its first review found exactly two P2 stale-status defects—the root landing-order narrative retained an R7-2-era paragraph, and the R7 spec retained a stale R7-3 behavior/receipt-review promotion-gate heading—and fix `3dd5ba943` corrected both.
 `R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
 `R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
 prepared and eligible but have not been invoked.
