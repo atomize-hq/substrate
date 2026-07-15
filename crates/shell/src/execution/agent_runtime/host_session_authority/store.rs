@@ -769,6 +769,30 @@ mod platform {
             self.publish_registry(temp_name, bytes, true)
         }
 
+        #[cfg(test)]
+        pub(crate) fn stage_registry_replacement_for_test(
+            &self,
+            temp_name: &str,
+            bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            if !admission_temp_file_name(temp_name) {
+                return Err(BootstrapError(
+                    "retained admission registry temp name is invalid",
+                ));
+            }
+            let mut temp = self
+                .tmp
+                .create_file(temp_name)
+                .map_err(|_| BootstrapError("create retained admission registry temp"))?;
+            temp.write_all(bytes)
+                .map_err(|_| BootstrapError("write retained admission registry temp"))?;
+            temp.sync()
+                .map_err(|_| BootstrapError("sync retained admission registry temp"))?;
+            self.tmp
+                .sync()
+                .map_err(|_| BootstrapError("sync retained admission temp directory"))
+        }
+
         fn publish_registry(
             &self,
             temp_name: &str,
@@ -3220,6 +3244,17 @@ mod platform {
         }
 
         pub(crate) fn replace_registry(
+            &self,
+            _temp_name: &str,
+            _bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            Err(BootstrapError(
+                "retained admission storage is unsupported on this platform",
+            ))
+        }
+
+        #[cfg(test)]
+        pub(crate) fn stage_registry_replacement_for_test(
             &self,
             _temp_name: &str,
             _bytes: &[u8],
