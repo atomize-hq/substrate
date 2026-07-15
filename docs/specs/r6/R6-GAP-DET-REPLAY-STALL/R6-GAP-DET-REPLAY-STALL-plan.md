@@ -2,7 +2,7 @@
 
 Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
 INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION SERIES `1ff592823` + `7839a7f47` FRESH
-INDEPENDENT `REVIEW CLEAN`** within still-active `R6-REPLAY`; active packet is now `none`. The selected Option-A
+INDEPENDENT `REVIEW CLEAN`**; `R6-REPLAY` is now complete and active packet remains `none`. The selected Option-A
 pairing/progress implementation and expected-disposition changes landed atomically at `6eda87e60`.
 Exact `CTX-R6-02` is green at its locked `Stalled / Active` contract, full analyzer proof is
 `402 / 402`, and every ordered packet proof/static gate is green. A fresh independent built-in
@@ -10,8 +10,9 @@ Exact `CTX-R6-02` is green at its locked `Stalled / Active` contract, full analy
 `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged; clean-baseline `Recovered / 20`
 remains historical only. Authority-only transition series `1ff592823` + `7839a7f47` clears the
 packet without activating `R6-CLOSE` and is fresh independent built-in `default` `REVIEW CLEAN`.
-Later phase-owned `CTX-R6-06` replay and the R6 family wall are green; that proof receipt awaits
-fresh review.
+Later phase-owned `CTX-R6-06` replay and the R6 family wall are green; proof/fix series
+`b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`.
+The later narrow phase transition activates `R6-CLOSE` at entry only with `CTX-R6-17` next.
 
 ## Decisions
 
@@ -54,9 +55,9 @@ becomes CRITICAL or the boundary widens.
 independent `REVIEW CLEAN`. That decision authorized Tasks `.2`-`.4` only inside the locked
 `attempt.rs` boundary. Task `.2` is complete, but the Task `.3` candidate proved that boundary
 insufficient; Task `.2A` accepted the docs-first amendment. Task `.2B` Option A then resolved
-the semantic gate and made Task `.3` current; Task `.3` is now complete at its focused-candidate
-boundary. `CTX-R6-06`,
-`R6-CLOSE`, and R7/R8 remain blocked.
+the semantic gate, and Tasks `.3`-`.5` are complete at their recorded review-clean boundaries.
+Later phase-owned `CTX-R6-06` and the family wall are review-clean, `R6-REPLAY` is complete, and
+`R6-CLOSE` is active at entry only. R7/R8 remain blocked.
 
 ### 2. Reconfirm The Preserved Red — Complete
 
@@ -298,8 +299,10 @@ TASKS and the replay ledger.
 Commit `6eda87e60` is fresh independent `REVIEW CLEAN`; authority-only transition series
 `1ff592823` + `7839a7f47` marks `CTX-R6-02` and the packet complete, clears the active packet to
 `none`, keeps `R6-REPLAY` active, and is fresh independent built-in `default` `REVIEW CLEAN`.
-Phase-owned `CTX-R6-06` replay and the family wall later passed; their proof receipt is separate and
-fresh-review-pending. This packet does not activate `R6-CLOSE` or start R7/R8.
+Phase-owned `CTX-R6-06` replay and the family wall later passed; their separate proof/fix series
+`b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW
+CLEAN`. The later narrow phase transition activates `R6-CLOSE` at entry only with `CTX-R6-17` next;
+this packet itself did not activate `R6-CLOSE` or start R7/R8.
 
 ## Escalation Boundary
 

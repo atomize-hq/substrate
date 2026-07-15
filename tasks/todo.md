@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet: `none`; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; `CTX-R6-01`/`02`/`06` and the R6 family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)**
+Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation next in a fresh phase session)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -80,12 +80,14 @@ Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PEN
   unflagged and historical-only `Recovered / 20` baseline wording.
 - [x] Run the Manifest E family wall: `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`,
   `truth_grounding_gap 22 / 22`, `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, and full analyzer
-  `402 / 402`; `git diff --check` passed. Proof receipt is committed by this change and awaits fresh
-  independent review.
-- [ ] After this proof receipt is fresh-review-clean, land and independently review the narrow
-  `R6-REPLAY -> R6-CLOSE` phase transition without starting terminal-disposition work in this phase.
+  `402 / 402`; `git diff --check` passed. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` +
+  `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`.
+- [x] Land the narrow `R6-REPLAY -> R6-CLOSE` phase transition by this change without starting
+  terminal-disposition work. Fresh independent review of the transition is required before the
+  next phase session starts.
 - [ ] In `R6-CLOSE`, assign every terminal scorer disposition and update the R6 finding and authority
-  stack to `CLOSED`; do not start that work until the narrow phase transition is review-clean.
+  stack to `CLOSED` through `CTX-R6-17`; do not start that work until the narrow phase transition is
+  review-clean.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.
 - [ ] Begin bounded direct-child delegated-session support only after promotion.
 

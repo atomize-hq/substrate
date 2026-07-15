@@ -2,7 +2,7 @@
 
 Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
 INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION SERIES `1ff592823` + `7839a7f47` FRESH
-INDEPENDENT `REVIEW CLEAN`** within still-active `R6-REPLAY`; active packet is now `none`. Historical witness
+INDEPENDENT `REVIEW CLEAN`**; `R6-REPLAY` is now complete and active packet remains `none`. Historical witness
 `60cde3dd7` is preserved. Commit `6eda87e60` makes exact `CTX-R6-02` green with truthful call-ID
 pairing, terminal verified-edit-epoch lane semantics, and the locked `Stalled / Active` disposition.
 Its complete ordered proof passes seven focused controls, all `20` troubleshooting matches, exact
@@ -375,5 +375,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   that attribution and preserves the trusted disposition; its ordered proof is green and a fresh
   independent built-in `default` reviewer returned `REVIEW CLEAN`. The packet is complete and active
   packet is `none`; transition series `1ff592823` + `7839a7f47` is fresh independent `REVIEW CLEAN`.
-  Later phase-owned `CTX-R6-06` replay and the family wall are green; their separate proof receipt
-  awaits fresh review.
+  Later phase-owned `CTX-R6-06` replay and the family wall are green; their separate proof/fix series
+  `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW
+  CLEAN`. The later narrow phase transition activates `R6-CLOSE` at entry only with `CTX-R6-17`
+  next; this packet itself did not activate `R6-CLOSE`.

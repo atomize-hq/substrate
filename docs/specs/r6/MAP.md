@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; ACTIVE PACKET NONE; PACKET TRANSITION `1ff592823` + `7839a7f47` FRESH INDEPENDENT REVIEW-CLEAN; CTX-R6-01/02/06 AND R6 FAMILY WALL GREEN; NARROW R6-CLOSE TRANSITION NEXT ONLY AFTER RECEIPT REVIEW-CLEAN** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; historical `CTX-R6-02` witness `60cde3dd7` remains preserved. Exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. R6 close/R7 remain blocked while this proof receipt awaits fresh independent review. Closure authority is
+Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY COMPLETE; R6-CLOSE ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; PACKET TRANSITION `1ff592823` + `7839a7f47` AND PHASE-OWNED PROOF/FIX SERIES `b1791c1e3` + `e6d43eee9` + `61c9d5074` FRESH INDEPENDENT REVIEW-CLEAN; CTX-R6-17 NEXT IN A FRESH PHASE SESSION** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; historical `CTX-R6-02` witness `60cde3dd7` remains preserved. Exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. No terminal disposition is assigned; the finding remains partial and R7 remains blocked. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
@@ -352,15 +352,19 @@ code changed. In matrix order the preserved routes are:
    independent built-in `default` `REVIEW CLEAN`; exact target is `0 / Low / Cleared`, unflagged,
    with empty evidence, and its protected/family/checkpoint/full-analyzer/static walls are green.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**. `R6-REPLAY` is the sole active phase with active
-packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is preserved; review-clean commit
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**. `R6-REPLAY` is complete and `R6-CLOSE` is active at
+entry only with active packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is preserved;
+review-clean commit
 `6eda87e60` completes `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` with exact true-stall proof, the
 complete ordered packet wall, full analyzer `402 / 402`, and static gates. Packet transition series
 `1ff592823` + `7839a7f47` is fresh independent built-in `default` `REVIEW CLEAN`. Phase-owned exact
 replay controls pass `4 x 1 / 1`; the R6 family wall passes `21 / 21`, `58 / 58`, `22 / 22`,
 `6 / 6`, `169 / 169`, full analyzer `402 / 402`, and diff check. Current sticky authority is
-`HistoricalOnly / 20`, unflagged, while `Recovered / 20` is historical baseline only. This proof
-receipt awaits fresh review before the narrow `R6-REPLAY -> R6-CLOSE` transition.
+`HistoricalOnly / 20`, unflagged, while `Recovered / 20` is historical baseline only. Proof/fix
+series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default`
+`REVIEW CLEAN`; no ordinary replay gap remains. `CTX-R6-17` terminal-disposition and authority
+reconciliation is next in a fresh `R6-CLOSE` session. This transition assigns no terminal
+disposition and does not mark the R6 finding `CLOSED`.
 
 ## Non-Goals For This Rescope
 

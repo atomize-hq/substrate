@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet: `none`; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; `CTX-R6-01`/`02`/`06` and the R6 family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)**
+Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation next in a fresh phase session)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -79,11 +79,12 @@ gates, and received fresh independent built-in `default` `REVIEW CLEAN`. Packet 
 passed exact `CTX-R6-01`, exact `CTX-R6-02`, the renamed sticky control, and exact `CTX-R6-06` at
 `1 / 1` each. The R6 family wall passed `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`,
 `truth_grounding_gap 22 / 22`, `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, and full analyzer
-`402 / 402`; `git diff --check` is green. Current sticky authority remains `HistoricalOnly / 20`,
-unflagged, with old `Recovered / 20` retained only as historical baseline. `R6-REPLAY` remains
-active while this proof receipt awaits fresh independent review. After review-clean, a narrow
-transition may activate `R6-CLOSE`; no terminal disposition, successor execution, or R7/R8 work is
-authorized by this receipt.
+`402 / 402`; `git diff --check` is green. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` +
+`61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority
+remains `HistoricalOnly / 20`, unflagged, with old `Recovered / 20` retained only as historical
+baseline. `R6-REPLAY` is complete with no ordinary replay gap open; `R6-CLOSE` is active at entry
+only with `CTX-R6-17` next in a fresh phase session. This transition assigns no terminal disposition,
+does not mark the R6 finding `CLOSED`, and starts no R7/R8 work.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet: `none`; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; `CTX-R6-01`/`02`/`06` and the R6 family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)**
+Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation next in a fresh phase session)**
 
 ## Dependency Order
 
@@ -26,7 +26,7 @@ Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PEN
 7. **COMPLETE through fresh review-clean `6b42e5476` + `e65df2561` + `cd4e24119`:** the final named
    gap, `R6-GAP-WPB-EMPTY-AUTHORITY`, landed its bounded scorer fix, focused/family/checkpoint/full
    proof, receipt corrections, and fresh independent `REVIEW CLEAN`.
-8. **ACTIVE / REPLAY PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING:** authority transition series
+8. **COMPLETE — R6-REPLAY:** authority transition series
    `56bb9966f` + `07a3b1fe5` is fresh independent built-in `default` `REVIEW CLEAN`. Replay completed
    `CTX-R6-01`, then bounded packet `R6-GAP-DET-REPLAY-STALL` closed `CTX-R6-02`. Historical witness
    `60cde3dd7` is preserved; implementation/proof commit `6eda87e60` passes exact `CTX-R6-02`, seven
@@ -37,10 +37,12 @@ Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PEN
    keeps `R6-REPLAY` active, and is fresh independent built-in `default` `REVIEW CLEAN`.
    Phase-owned replay exact controls then passed `4 x 1 / 1`; the family filters passed
    `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169` in manifest order, full analyzer passed
-   `402 / 402`, and diff check was green. This proof receipt is the current fresh-review boundary.
-   Transition narrowly to `R6-CLOSE` only after it is review-clean.
-9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
-   disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
+   `402 / 402`, and diff check was green. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` +
+   `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; no ordinary replay gap
+   remains.
+9. **ACTIVE AT ENTRY ONLY — R6-CLOSE / CTX-R6-17:** update the finding to `CLOSED` only when every
+   material scoring surface has exactly one terminal disposition — **Cutover complete**,
+   **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
    proven or narrowed honestly. Ordinary “still open” is not a closure disposition.
 10. Only then promote the preserved R7 drafts to implementation-ready.
@@ -76,5 +78,8 @@ and exact frozen-corpus controls each pass `1 / 1`. The manifest family wall pas
 `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`, `truth_grounding_gap 22 / 22`,
 `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, full analyzer `402 / 402`, and diff check. Sticky
 authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline
-only. This proof receipt now awaits fresh independent review. No terminal scorer disposition,
-`R6-CLOSE` activation, or R7/R8 work is authorized yet.
+only. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent
+built-in `default` `REVIEW CLEAN`, so `R6-REPLAY` is complete and no ordinary replay gap remains.
+`R6-CLOSE` is active at entry only with `CTX-R6-17` next in a fresh phase session. This transition
+assigns no terminal scorer disposition, does not mark the finding `CLOSED`, and authorizes no R7/R8
+work.

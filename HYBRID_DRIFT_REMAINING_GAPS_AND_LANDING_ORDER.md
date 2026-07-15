@@ -93,8 +93,9 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is now `R6-REPLAY`; the open work is no longer archetype identification,
-first-cut progress export, `R5.75`, the R6 acceptance-control matrix, or a named scorer gap.
+The active follow-on is now `R6-CLOSE` at entry only; the open work is no longer archetype
+identification, first-cut progress export, `R5.75`, the R6 acceptance-control matrix, or a named
+scorer gap.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -115,10 +116,12 @@ normalization, and static gates. A fresh independent built-in `default` reviewer
 built-in `default` `REVIEW CLEAN`, completed the packet, cleared active packet to `none`, and kept
 `R6-REPLAY` active. Phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, the renamed sticky control,
 and exact `CTX-R6-06` each pass `1 / 1`; the R6 family wall and full analyzer `402 / 402` are green.
-Proof receipt `b1791c1e3` records those results and is fresh-review-pending. Current sticky authority
-remains `HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` remains historical
-evidence only. `R6-REPLAY` is active and proof-complete; only after the proof receipt is
-fresh-review-clean may the narrow transition to `R6-CLOSE` land.
+Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` records those results and received fresh
+independent built-in `default` `REVIEW CLEAN`. Current sticky authority remains
+`HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` remains historical evidence
+only. `R6-REPLAY` is complete with no ordinary replay gap open. `R6-CLOSE` is active at entry only;
+its first work is `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh phase
+session. This transition assigns no terminal disposition and does not mark the R6 finding `CLOSED`.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -132,10 +135,12 @@ control.” The current honest sequence is:
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
 5. keep the landed final gap-to-replay authority transition series `56bb9966f + 07a3b1fe5` at fresh independent `REVIEW CLEAN`
 6. keep `R6-GAP-DET-REPLAY-STALL` and `CTX-R6-02` complete at review-clean commit `6eda87e60`, keep
-   packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`, and keep
-   `CTX-R6-06` plus the R6 family wall complete with active packet `none`; freshly review proof
-   receipt `b1791c1e3`, then land only the narrow `R6-REPLAY -> R6-CLOSE` transition
-7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
+   packet transition series `1ff592823` + `7839a7f47` and replay proof/fix series `b1791c1e3` +
+   `e6d43eee9` + `61c9d5074` fresh independent `REVIEW CLEAN`, and keep `CTX-R6-06` plus the R6 family
+   wall complete with active packet `none`
+7. execute `CTX-R6-17` terminal-disposition and authority reconciliation in fresh `R6-CLOSE`; only
+   then may the R6 finding become `CLOSED`
+8. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -886,10 +891,11 @@ The next honest work target is:
 - authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`
 - **current action:** keep review-clean implementation/proof commit `6eda87e60`, review-clean packet
-  transition series `1ff592823` + `7839a7f47`, and completed `CTX-R6-01`/`02`/`06` replay plus the
-  green R6 family wall. Active packet is `none`; obtain fresh review of the proof receipt, then land
-  the narrow `R6-REPLAY -> R6-CLOSE` transition. Keep terminal dispositions and R7 blocked until
-  that transition is review-clean
+  transition series `1ff592823` + `7839a7f47`, review-clean replay proof/fix series `b1791c1e3` +
+  `e6d43eee9` + `61c9d5074`, and completed `CTX-R6-01`/`02`/`06` replay plus the green R6 family
+  wall. `R6-REPLAY` is complete, active packet is `none`, and `R6-CLOSE` is active at entry only.
+  Execute `CTX-R6-17` in a fresh phase session only after this transition is fresh-review-clean;
+  keep terminal dispositions and R7 blocked until then
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed

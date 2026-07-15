@@ -19,8 +19,8 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R6-C.1-SPEC` | COMPLETE | R6-C.1 SPEC/PLAN/TASKS | `R6-C.0A` complete | Expanded control matrix, expected decisions, files, commands, and stop rules landed and received fresh `REVIEW CLEAN` at `ea19b39a7`. |
 | `R6-C.1-CONTROLS` | COMPLETE | Acceptance controls only | SATISFIED — R6-C.1 docs landed and received fresh `REVIEW CLEAN` at `ea19b39a7` | SATISFIED — all thirteen controls have deterministic results (`10 PASS / 3 preserved RED`) and the controls wall is recorded at `5618f7864`. |
 | [`R6-GAP-*`](05-proof-decision-regression-ledger.md#named-r6-gap-status-subledger) | COMPLETE | One bounded scorer-specific gap phase per proven red | SATISFIED — the named-gap subledger instantiated all three preserved reds sequentially | SATISFIED — every named witness has review-clean focused proof and the final authority transition is landed. |
-| `R6-REPLAY` | ACTIVE — PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING | Bounded real-rollout/replay closeout | SATISFIED — controls and all conditional fixes complete; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; active packet `none` | BEHAVIORALLY SATISFIED / RECEIPT REVIEW PENDING — exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Sticky authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. Fresh-review this proof receipt before the narrow phase transition. |
-| `R6-CLOSE` | BLOCKED — REPLAY PROOF-RECEIPT REVIEW PENDING | R6 `CLOSED` authority reconciliation | Replay closeout proof receipt fresh-review-clean; no ordinary gap open | Every scorer has a terminal disposition and all root/R6/R7 status docs agree. |
+| `R6-REPLAY` | COMPLETE | Bounded real-rollout/replay closeout | SATISFIED — controls and all conditional fixes complete; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; active packet `none` | SATISFIED — phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`; exact replay controls pass `4 x 1 / 1`, family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, full analyzer passes `402 / 402`, and diff check is green. Sticky authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay gap remains. |
+| `R6-CLOSE` | ACTIVE — ENTRY ONLY / `CTX-R6-17` NEXT | R6 `CLOSED` authority reconciliation | SATISFIED — replay closeout proof receipt is fresh-review-clean and no ordinary gap is open | Every scorer has a terminal disposition and all root/R6/R7 status docs agree. |
 | `R7-PROMOTE` | BLOCKED | Promote preserved R7 drafts to implementation-ready | R6 finding says `CLOSED` | R7 MAP/SPEC/PLAN/TASKS and root mirrors agree; implementation has not yet started. |
 | `R7-0..R7-6` | BLOCKED | Bounded direct-child delegated-session support | R7 promoted | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
@@ -42,12 +42,15 @@ commit `6eda87e60` makes exact `CTX-R6-02` green at its locked `Stalled / Active
 complete ordered packet wall and full analyzer `402 / 402`, and received fresh independent built-in
 `default` `REVIEW CLEAN`. `R6-GAP-DET-REPLAY-STALL` and `CTX-R6-02` are complete. Packet transition
 series `1ff592823` + `7839a7f47` received fresh independent built-in `default` `REVIEW CLEAN`;
-`R6-REPLAY` remains active with packet `none`. Phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`,
+`R6-REPLAY` is complete with packet `none`. Phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`,
 renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`. The Manifest E family wall passes
 `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 169`, full analyzer `402 / 402`, and diff check.
-Sticky authority remains `HistoricalOnly / 20`, unflagged, and `Recovered / 20` remains historical
-baseline only. This proof receipt awaits fresh independent review before the narrow
-`R6-REPLAY -> R6-CLOSE` transition. No terminal scorer disposition or R7/R8 work begins here.
+Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in
+`default` `REVIEW CLEAN`, so no ordinary replay gap remains. Sticky authority remains
+`HistoricalOnly / 20`, unflagged, and `Recovered / 20` remains historical baseline only.
+`R6-CLOSE` is active at entry only; its first work is `CTX-R6-17` terminal-disposition and authority
+reconciliation in a fresh phase session. No terminal disposition, finding closure, or R7/R8 work is
+performed by this transition.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

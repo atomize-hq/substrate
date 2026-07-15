@@ -2,7 +2,7 @@
 
 Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
 INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION SERIES `1ff592823` + `7839a7f47` FRESH
-INDEPENDENT `REVIEW CLEAN`** within still-active `R6-REPLAY`; active packet is now `none`. Witness `60cde3dd7` remains
+INDEPENDENT `REVIEW CLEAN`**; `R6-REPLAY` is now complete and active packet remains `none`. Witness `60cde3dd7` remains
 the historical behavioral-red receipt. The bounded implementation/proof commit `6eda87e60` closes
 `CTX-R6-02`: exact selected control `1 / 1` preserves checkpoint `5`
 `TroubleshootingFrontier / Stalled / Medium` and flagged `Active / 30 / High` while attributing only
@@ -366,7 +366,9 @@ troubleshooting-tail flows with no HIGH or CRITICAL result, and cached gates wer
 independent built-in `default` reviewer returned `REVIEW CLEAN` for `6eda87e60`.
 
 Authority-only transition series `1ff592823` + `7839a7f47` completes `CTX-R6-02` and the packet,
-clears the active packet to `none`, returns control to still-active `R6-REPLAY`, and is fresh
+clears the active packet to `none`, returned control to then-active `R6-REPLAY`, and is fresh
 independent built-in `default` `REVIEW CLEAN`. Later phase-owned `CTX-R6-06` replay and the R6
-family wall are green; their proof receipt awaits fresh review. This packet does not activate
-`R6-CLOSE` or start R7/R8.
+family wall are green; proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh
+independent built-in `default` `REVIEW CLEAN`. The later narrow phase transition activates
+`R6-CLOSE` at entry only with `CTX-R6-17` next; this packet itself did not activate `R6-CLOSE` or
+start R7/R8.

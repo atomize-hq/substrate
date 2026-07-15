@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** packet transition series `1ff592823` + `7839a7f47` fresh independent built-in `default` `REVIEW CLEAN`; exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each `1 / 1`; Manifest E family filters `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer `402 / 402`; diff check green.
+**Verified against:** packet transition series `1ff592823` + `7839a7f47` and phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` fresh independent built-in `default` `REVIEW CLEAN`; exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each `1 / 1`; Manifest E family filters `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer `402 / 402`; diff check green.
 
-**Current phase:** `R6-REPLAY` (**ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING**; active packet: `none`; `CTX-R6-01`/`02`/`06` and family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)
+**Current phase:** `R6-CLOSE` (**ACTIVE AT ENTRY ONLY**; active packet: `none`; `R6-REPLAY` complete after phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R6-17` terminal-disposition and authority reconciliation is next in a fresh phase session)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve review-clean packet transition series `1ff592823` + `7839a7f47`, green `CTX-R6-01`/`02`/`06` replay, family wall, current sticky `HistoricalOnly / 20`, unflagged, and historical-only `Recovered / 20` baseline. Fresh-review this proof receipt; then land the narrow `R6-CLOSE` transition. Keep terminal dispositions and R7/R8 blocked. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY COMPLETE / R6-CLOSE ACTIVE AT ENTRY ONLY / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve review-clean packet transition series `1ff592823` + `7839a7f47`, review-clean phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074`, green `CTX-R6-01`/`02`/`06` replay and family wall, current sticky `HistoricalOnly / 20`, unflagged, and historical-only `Recovered / 20` baseline. Execute `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh `R6-CLOSE` phase session. Keep R7/R8 blocked. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 

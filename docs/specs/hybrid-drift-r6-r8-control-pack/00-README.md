@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-REPLAY — ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet none; packet transition 1ff592823 + 7839a7f47 review-clean; CTX-R6-01/02/06 and family wall green; narrow R6-CLOSE transition next only after this receipt is review-clean`
+**Current work phase:** `R6-CLOSE — ACTIVE AT ENTRY ONLY; active packet none; R6-REPLAY complete after proof/fix series b1791c1e3 + e6d43eee9 + 61c9d5074 received fresh independent review-clean; CTX-R6-17 terminal-disposition and authority reconciliation next in a fresh phase session`
 
-**Last repo-truth verification:** packet transition series `1ff592823` + `7839a7f47` fresh independent built-in `default` `REVIEW CLEAN`; phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each `1 / 1`; family filters `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer `402 / 402`; diff check green. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. This proof receipt is committed by this change and awaits fresh independent review.
+**Last repo-truth verification:** packet transition series `1ff592823` + `7839a7f47` and phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` are fresh independent built-in `default` `REVIEW CLEAN`; phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay gap remains; this transition assigns no terminal disposition and does not close the R6 finding.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -27,8 +27,9 @@ packet `none`. `CTX-R6-01` is complete through fresh independent review-clean se
 `968a4377f`. Expanded authoritative screening selected trusted depth-1 built-in `default` subagent
 rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; witness commit `60cde3dd7` preserves `CTX-R6-02`
 behavioral RED at `TroubleshootingFrontier / Stalled` and flagged `Active / 30 / High`, with failed
-calls `420`/`474` misattributed to successful siblings `421`/`475`. `R6-REPLAY` remains active and
-packet `R6-GAP-DET-REPLAY-STALL` is now complete. Historical witness `60cde3dd7` remains preserved;
+calls `420`/`474` misattributed to successful siblings `421`/`475`. At that packet boundary,
+`R6-REPLAY` remained active and packet `R6-GAP-DET-REPLAY-STALL` became complete. Historical witness
+`60cde3dd7` remains preserved;
 commit `6eda87e60` passes exact `CTX-R6-02`, the complete ordered packet wall, full analyzer `402 / 402`,
 and static gates and received fresh independent built-in `default` `REVIEW CLEAN`. Active packet is
 `none`. Packet transition series `1ff592823` + `7839a7f47` received fresh independent built-in
@@ -36,8 +37,9 @@ and static gates and received fresh independent built-in `default` `REVIEW CLEAN
 wall passed `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`, `truth_grounding_gap 22 / 22`,
 `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, full analyzer `402 / 402`, and diff check.
 `HistoricalOnly / 20`, unflagged remains current sticky authority and `Recovered / 20` historical
-baseline only. This proof receipt awaits fresh independent review; `R6-CLOSE` is the next narrow
-transition only after review-clean. R7/R8 remain blocked as owned.
+baseline only. The phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh
+independent built-in `default` `REVIEW CLEAN`; `R6-REPLAY` is complete and `R6-CLOSE` is active at
+entry only. `CTX-R6-17` is the next work in a fresh phase session. R7/R8 remain blocked as owned.
 
 ## Purpose
 

@@ -303,18 +303,26 @@ result, current phase status, and the next eligible interaction.
 
 ## Current Phase Invocation
 
-`R6-REPLAY` remains active with packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is
-preserved; bounded implementation/proof commit `6eda87e60` passes exact `CTX-R6-02`, the complete
-ordered packet wall, full analyzer `402 / 402`, and static gates and received fresh independent
-built-in `default` `REVIEW CLEAN`. This authority-only transition marks `CTX-R6-02` and
-`R6-GAP-DET-REPLAY-STALL` complete and clears the active packet. Packet transition series
-`1ff592823` + `7839a7f47` received fresh independent built-in `default` `REVIEW CLEAN`. Phase-owned
-exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`; the
-Manifest E family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full
-analyzer passes `402 / 402`; diff check is green. Current sticky authority remains
-`HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline only. This proof
-receipt is committed by this change and awaits fresh independent review. After review-clean, use a
-narrow transition to activate `R6-CLOSE`; do not begin terminal-disposition or R7/R8 work here.
+`R6-REPLAY` is complete with packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is preserved;
+bounded implementation/proof commit `6eda87e60` and packet transition series `1ff592823` +
+`7839a7f47` are fresh independent built-in `default` `REVIEW CLEAN`. Phase-owned exact `CTX-R6-01`,
+exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`; the Manifest E family
+filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes
+`402 / 402`; diff check is green. Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074`
+received fresh independent built-in `default` `REVIEW CLEAN`, so no ordinary replay gap remains.
+Current sticky authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains
+historical baseline only. `R6-CLOSE` is active at entry only with active packet `none`; its first
+work is `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh phase session.
+The transition does not itself assign a terminal disposition, mark the R6 finding `CLOSED`, or
+begin R7/R8 work.
+
+Next eligible Prompt 1 invocation, after this narrow transition is fresh-review-clean: use Prompt 1
+above unchanged with these filled phase selectors:
+
+```text
+PHASE_ID: R6-CLOSE
+ACTIVE_PACKET: none
+```
 
 Historical resolved Task `.2B` decision report:
 

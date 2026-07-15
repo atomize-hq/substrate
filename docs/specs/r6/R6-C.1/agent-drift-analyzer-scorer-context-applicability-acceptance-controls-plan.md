@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; ACTIVE PACKET NONE; PACKET TRANSITION `1ff592823` + `7839a7f47` FRESH INDEPENDENT REVIEW-CLEAN; CTX-R6-01/02/06 AND R6 FAMILY WALL GREEN** on 2026-07-14. Historical `CTX-R6-02` witness `60cde3dd7` remains preserved. Phase-owned exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Sticky `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. Narrow `R6-CLOSE` transition follows only after this proof receipt is fresh-review-clean.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS AND R6-REPLAY COMPLETE; R6-CLOSE ACTIVE AT ENTRY ONLY; ACTIVE PACKET NONE; PACKET TRANSITION `1ff592823` + `7839a7f47` AND PHASE-OWNED PROOF/FIX SERIES `b1791c1e3` + `e6d43eee9` + `61c9d5074` FRESH INDEPENDENT REVIEW-CLEAN; CTX-R6-17 NEXT IN A FRESH PHASE SESSION** on 2026-07-14. Historical `CTX-R6-02` witness `60cde3dd7` remains preserved. Phase-owned exact replay controls pass `4 x 1 / 1`; family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer passes `402 / 402`; diff check is green. Sticky `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No terminal disposition is assigned by the phase transition.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -340,8 +340,10 @@ The exact control passes `1 / 1`. The current expected posture is three `Cleared
 cases and one `HistoricalOnly / 20 / unflagged` case. The old `Recovered / 20 / unflagged` result is
 historical clean-baseline evidence only. The complete Manifest E family wall is also green at
 `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 169`, full analyzer `402 / 402`, and diff check.
-This proof receipt awaits fresh review before the narrow `R6-CLOSE` transition. Fixture-shape
-mismatches for `CTX-R6-01`/`02` remain rejected or replaced; they do not create a production gap.
+Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in
+`default` `REVIEW CLEAN`; `R6-REPLAY` is complete and no ordinary replay gap remains. `R6-CLOSE`
+is active at entry only with `CTX-R6-17` next in a fresh phase session. Fixture-shape mismatches for
+`CTX-R6-01`/`02` remain rejected or replaced; they do not create a production gap.
 
 ## Ledger And Status Update Points
 
@@ -362,7 +364,7 @@ mismatches for `CTX-R6-01`/`02` remain rejected or replaced; they do not create 
 |---|---|
 | `CTX-R6-01`, `CTX-R6-02` | Both complete/review-clean. Historical `CTX-R6-02` red `60cde3dd7` is preserved; implementation/proof commit `6eda87e60` and packet transition series `1ff592823` + `7839a7f47` are fresh independent `REVIEW CLEAN`. Active packet is `none`; phase-owned exact replays are green. |
 | `CTX-R6-03` through `CTX-R6-05` | Row-atomic `dead_end_thrash` controls execute in `R6-C.1-CONTROLS`. |
-| `CTX-R6-06` | Phase-owned frozen-corpus preservation and renamed sticky controls pass `1 / 1` each; proof receipt review pending. |
+| `CTX-R6-06` | Phase-owned frozen-corpus preservation and renamed sticky controls pass `1 / 1` each; proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no `semantic_goal_drift` reopening. |
 | `CTX-R6-09` through `CTX-R6-13` | Row-atomic `truth_grounding_gap` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-14`, `CTX-R6-15` | Row-atomic `wrong_plan_branch` controls execute in `R6-C.1-CONTROLS`. |
