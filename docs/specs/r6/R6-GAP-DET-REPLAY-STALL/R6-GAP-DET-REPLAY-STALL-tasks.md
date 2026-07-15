@@ -1,8 +1,8 @@
 # Tasks: R6-GAP-DET-REPLAY-STALL
 
 Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
-INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION COMMITTED BY THIS CHANGE, FRESH REVIEW
-PENDING** within still-active `R6-REPLAY`; active packet is now `none`. Historical witness
+INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION SERIES `1ff592823` + `7839a7f47` FRESH
+INDEPENDENT `REVIEW CLEAN`** within still-active `R6-REPLAY`; active packet is now `none`. Historical witness
 `60cde3dd7` is preserved. Commit `6eda87e60` makes exact `CTX-R6-02` green with truthful call-ID
 pairing, terminal verified-edit-epoch lane semantics, and the locked `Stalled / Active` disposition.
 Its complete ordered proof passes seven focused controls, all `20` troubleshooting matches, exact
@@ -352,12 +352,13 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     `HIGH` or `CRITICAL` result; cached-diff check and complete inspection are clean. Fresh independent
     built-in `default` reviewer returned `REVIEW CLEAN` for commit `6eda87e60`. Task `.4` is complete.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.5 — Land and review the narrow packet transition — COMMITTED BY THIS CHANGE / FRESH REVIEW PENDING.**
+- [x] **R6-GAP-DET-REPLAY-STALL.5 — Land and review the narrow packet transition — REVIEW-CLEAN.**
   - Prerequisite: Task 4 review-clean.
   - This transition marks `CTX-R6-02` and this packet complete, clears the active packet to `none`,
-    keeps `R6-REPLAY` active, and makes `CTX-R6-06` then the family wall next.
-  - Commit authority-only and run the staged gate. A fresh built-in `default` reviewer remains
-    required; fix any finding in a new gated commit and repeat fresh review until clean.
+    keeps `R6-REPLAY` active, and made `CTX-R6-06` then the family wall the next phase-owned work;
+    both later passed under the separate replay proof receipt.
+  - Result: transition commit `1ff592823` plus sticky-wording fix `7839a7f47` received fresh
+    independent built-in `default` `REVIEW CLEAN`.
   - Stop the packet after review-clean transition. Do not activate `R6-CLOSE` or start R7/R8.
 
 ## Preserved Witness Receipt
@@ -373,5 +374,6 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
   `pair_output_rows` used positional pairing across concurrent calls. Commit `6eda87e60` corrects
   that attribution and preserves the trusted disposition; its ordered proof is green and a fresh
   independent built-in `default` reviewer returned `REVIEW CLEAN`. The packet is complete and active
-  packet is `none`; fresh review of this separate authority transition is pending before
-  phase-owned `CTX-R6-06` replay proof and the family wall.
+  packet is `none`; transition series `1ff592823` + `7839a7f47` is fresh independent `REVIEW CLEAN`.
+  Later phase-owned `CTX-R6-06` replay and the family wall are green; their separate proof receipt
+  awaits fresh review.

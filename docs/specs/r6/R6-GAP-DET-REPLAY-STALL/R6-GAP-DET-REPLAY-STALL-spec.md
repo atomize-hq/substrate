@@ -1,8 +1,8 @@
 # R6-GAP-DET-REPLAY-STALL — Concurrent Replay Output Attribution
 
 Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
-INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION COMMITTED BY THIS CHANGE, FRESH REVIEW
-PENDING** within still-active `R6-REPLAY`; active packet is now `none`. Witness `60cde3dd7` remains
+INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION SERIES `1ff592823` + `7839a7f47` FRESH
+INDEPENDENT `REVIEW CLEAN`** within still-active `R6-REPLAY`; active packet is now `none`. Witness `60cde3dd7` remains
 the historical behavioral-red receipt. The bounded implementation/proof commit `6eda87e60` closes
 `CTX-R6-02`: exact selected control `1 / 1` preserves checkpoint `5`
 `TroubleshootingFrontier / Stalled / Medium` and flagged `Active / 30 / High` while attributing only
@@ -12,9 +12,10 @@ troubleshooting matches, exact sticky and frozen-corpus controls, progress accep
 matches, full analyzer `402 / 402`, compactor normalization, and static gates. A fresh independent
 built-in `default` reviewer returned `REVIEW CLEAN` for `6eda87e60`. Current sticky `CTX-R6-06`
 authority remains `HistoricalOnly / 20`, unflagged; `Recovered / 20` remains historical baseline
-only. This transition does not run `CTX-R6-06`, the replay family wall, `R6-CLOSE`, or R7/R8. Fresh
-review of the authority-only transition is required before phase-owned `CTX-R6-06` replay proof and
-then the R6 family wall begin.
+only. This packet transition itself did not run `CTX-R6-06`, the replay family wall, `R6-CLOSE`, or
+R7/R8. After it became review-clean, later phase-owned replay passed exact controls `4 x 1 / 1`, the
+Manifest E family wall, full analyzer `402 / 402`, and diff check; that separate proof receipt now
+awaits fresh review.
 
 ## Objective And Preserved Witness
 
@@ -364,7 +365,8 @@ are green. Staged detect reported medium risk across `16` files / `54` symbols /
 troubleshooting-tail flows with no HIGH or CRITICAL result, and cached gates were clean. A fresh
 independent built-in `default` reviewer returned `REVIEW CLEAN` for `6eda87e60`.
 
-This authority-only transition completes `CTX-R6-02` and the packet, clears the active packet to
-`none`, and returns control to still-active `R6-REPLAY`. Fresh independent review of this transition
-is required before phase-owned `CTX-R6-06` replay proof and then the R6 family wall begin. It does
-not activate `R6-CLOSE` or start R7/R8.
+Authority-only transition series `1ff592823` + `7839a7f47` completes `CTX-R6-02` and the packet,
+clears the active packet to `none`, returns control to still-active `R6-REPLAY`, and is fresh
+independent built-in `default` `REVIEW CLEAN`. Later phase-owned `CTX-R6-06` replay and the R6
+family wall are green; their proof receipt awaits fresh review. This packet does not activate
+`R6-CLOSE` or start R7/R8.

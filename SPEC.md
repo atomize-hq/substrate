@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` complete after implementation/proof commit `6eda87e60` received fresh independent `REVIEW CLEAN`; authority transition committed by this change and pending fresh review; `CTX-R6-06` then the R6 family wall next)**
+Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet: `none`; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; `CTX-R6-01`/`02`/`06` and the R6 family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)**
 
 The scoped R6 packets have landed, but the broader context-aware scorer-cutover charter is not
 closed for sequencing. The active objective is to close the smallest remaining behavioral-proof
@@ -73,12 +73,17 @@ in this review series is landed, marks the prior aggregate `R6-GAP-*` set comple
 `default` `REVIEW CLEAN`. Replay has since completed `CTX-R6-01` and `CTX-R6-02`. Historical witness
 `60cde3dd7` remains the preserved behavioral-red receipt; bounded implementation/proof commit
 `6eda87e60` passes exact `CTX-R6-02`, all ordered packet proof, full analyzer `402 / 402`, and static
-gates, and received fresh independent built-in `default` `REVIEW CLEAN`. This narrow authority
-transition marks `R6-GAP-DET-REPLAY-STALL` complete and clears the active packet to `none` while
-keeping `R6-REPLAY` active. Fresh review of the transition is pending; afterward `CTX-R6-06` replay
-proof and then the R6 family wall are next. Current sticky authority remains `HistoricalOnly / 20`,
-unflagged, with old `Recovered / 20` retained only as historical baseline. `R6-CLOSE`, terminal
-dispositions, successor execution, and all R7/R8 work remain blocked.
+gates, and received fresh independent built-in `default` `REVIEW CLEAN`. Packet transition series
+`1ff592823` + `7839a7f47` marks `R6-GAP-DET-REPLAY-STALL` complete, clears the active packet to
+`none`, and received fresh independent built-in `default` `REVIEW CLEAN`. Phase-owned replay then
+passed exact `CTX-R6-01`, exact `CTX-R6-02`, the renamed sticky control, and exact `CTX-R6-06` at
+`1 / 1` each. The R6 family wall passed `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`,
+`truth_grounding_gap 22 / 22`, `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, and full analyzer
+`402 / 402`; `git diff --check` is green. Current sticky authority remains `HistoricalOnly / 20`,
+unflagged, with old `Recovered / 20` retained only as historical baseline. `R6-REPLAY` remains
+active while this proof receipt awaits fresh independent review. After review-clean, a narrow
+transition may activate `R6-CLOSE`; no terminal disposition, successor execution, or R7/R8 work is
+authorized by this receipt.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

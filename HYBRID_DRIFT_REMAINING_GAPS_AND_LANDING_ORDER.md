@@ -779,10 +779,13 @@ Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent
 state has `CTX-R6-01` and `CTX-R6-02` complete. Historical witness `60cde3dd7` is preserved;
 implementation/proof commit `6eda87e60` passes the complete ordered packet wall, full analyzer
 `402 / 402`, and static gates and received fresh independent built-in `default` `REVIEW CLEAN`.
-This transition completes `R6-GAP-DET-REPLAY-STALL`, clears active packet to `none`, and keeps
-`R6-REPLAY` active. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged,
-while `Recovered / 20` remains historical baseline evidence only. Fresh transition review is
-pending; `CTX-R6-06` replay proof and the R6 family wall follow it.
+Packet transition series `1ff592823` + `7839a7f47` completes `R6-GAP-DET-REPLAY-STALL`, clears
+active packet to `none`, keeps `R6-REPLAY` active, and is fresh independent built-in `default`
+`REVIEW CLEAN`. Phase-owned exact replay controls passed `4 x 1 / 1`; the Manifest E family wall
+passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 169`, full analyzer `402 / 402`, and diff
+check. Sticky `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged, while
+`Recovered / 20` remains historical baseline evidence only. `R6-REPLAY` is proof-complete and
+awaits fresh review of this proof receipt before a narrow transition to `R6-CLOSE`.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -878,10 +881,11 @@ The next honest work target is:
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
 - authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`
-- **current action:** keep review-clean implementation/proof commit `6eda87e60`, `CTX-R6-02`, and
-  `R6-GAP-DET-REPLAY-STALL` complete. Active packet is `none`; obtain fresh review of this narrow
-  transition, then run phase-owned `CTX-R6-06` replay proof and the R6 family wall. Keep
-  `R6-CLOSE`, terminal dispositions, and R7 blocked
+- **current action:** keep review-clean implementation/proof commit `6eda87e60`, review-clean packet
+  transition series `1ff592823` + `7839a7f47`, and completed `CTX-R6-01`/`02`/`06` replay plus the
+  green R6 family wall. Active packet is `none`; obtain fresh review of the proof receipt, then land
+  the narrow `R6-REPLAY -> R6-CLOSE` transition. Keep terminal dispositions and R7 blocked until
+  that transition is review-clean
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed

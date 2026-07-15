@@ -1,16 +1,17 @@
 # Plan: R6-GAP-DET-REPLAY-STALL
 
 Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
-INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION COMMITTED BY THIS CHANGE, FRESH REVIEW
-PENDING** within still-active `R6-REPLAY`; active packet is now `none`. The selected Option-A
+INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION SERIES `1ff592823` + `7839a7f47` FRESH
+INDEPENDENT `REVIEW CLEAN`** within still-active `R6-REPLAY`; active packet is now `none`. The selected Option-A
 pairing/progress implementation and expected-disposition changes landed atomically at `6eda87e60`.
 Exact `CTX-R6-02` is green at its locked `Stalled / Active` contract, full analyzer proof is
 `402 / 402`, and every ordered packet proof/static gate is green. A fresh independent built-in
 `default` reviewer returned `REVIEW CLEAN` for that implementation/proof commit. Current sticky
 `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged; clean-baseline `Recovered / 20`
-remains historical only. This authority-only transition clears the packet without activating
-`R6-CLOSE`; after fresh transition review, phase-owned `CTX-R6-06` replay proof and then the R6
-family wall are next.
+remains historical only. Authority-only transition series `1ff592823` + `7839a7f47` clears the
+packet without activating `R6-CLOSE` and is fresh independent built-in `default` `REVIEW CLEAN`.
+Later phase-owned `CTX-R6-06` replay and the R6 family wall are green; that proof receipt awaits
+fresh review.
 
 ## Decisions
 
@@ -292,12 +293,13 @@ git diff --check
 The compactor command was optional confirmation only and passed. The actual results are recorded in
 TASKS and the replay ledger.
 
-### 5. Transition Back To Replay And Stop The Packet — Committed By This Change / Fresh Review Pending
+### 5. Transition Back To Replay And Stop The Packet — Review-Clean
 
-Commit `6eda87e60` is fresh independent `REVIEW CLEAN`, so this authority-only transition marks
-`CTX-R6-02` and the packet complete, clears the active packet to `none`, and keeps `R6-REPLAY`
-active. Fresh review of this transition must be clean before phase-owned `CTX-R6-06` replay proof
-and the family wall begin. Do not activate `R6-CLOSE` or start R7/R8.
+Commit `6eda87e60` is fresh independent `REVIEW CLEAN`; authority-only transition series
+`1ff592823` + `7839a7f47` marks `CTX-R6-02` and the packet complete, clears the active packet to
+`none`, keeps `R6-REPLAY` active, and is fresh independent built-in `default` `REVIEW CLEAN`.
+Phase-owned `CTX-R6-06` replay and the family wall later passed; their proof receipt is separate and
+fresh-review-pending. This packet does not activate `R6-CLOSE` or start R7/R8.
 
 ## Escalation Boundary
 

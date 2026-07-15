@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` complete after `6eda87e60` fresh independent `REVIEW CLEAN`; transition committed by this change and pending fresh review; `CTX-R6-06` then the R6 family wall next)**
+Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet: `none`; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; `CTX-R6-01`/`02`/`06` and the R6 family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -73,12 +73,19 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; `CTX-R6-02` and `R6
 - [x] Complete packet Tasks `.3`-`.4`; implementation/proof commit `6eda87e60` passes exact
   `CTX-R6-02`, the complete ordered packet wall, full analyzer `402 / 402`, and static gates, and a
   fresh independent built-in `default` reviewer returned `REVIEW CLEAN`.
-- [ ] Freshly review this narrow packet transition. It marks `CTX-R6-02` and
+- [x] Freshly review this narrow packet transition. Series `1ff592823` + `7839a7f47` marks `CTX-R6-02` and
   `R6-GAP-DET-REPLAY-STALL` complete, clears active packet to `none`, and keeps `R6-REPLAY` active.
-- [ ] After transition review-clean, run phase-owned `CTX-R6-06` replay proof and then the R6 family
-  wall. Preserve current sticky `HistoricalOnly / 20`, unflagged and historical-only
-  `Recovered / 20` baseline wording.
-- [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
+- [x] Run phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06`
+  replay controls: all four passed `1 / 1`, preserving current sticky `HistoricalOnly / 20`,
+  unflagged and historical-only `Recovered / 20` baseline wording.
+- [x] Run the Manifest E family wall: `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`,
+  `truth_grounding_gap 22 / 22`, `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, and full analyzer
+  `402 / 402`; `git diff --check` passed. Proof receipt is committed by this change and awaits fresh
+  independent review.
+- [ ] After this proof receipt is fresh-review-clean, land and independently review the narrow
+  `R6-REPLAY -> R6-CLOSE` phase transition without starting terminal-disposition work in this phase.
+- [ ] In `R6-CLOSE`, assign every terminal scorer disposition and update the R6 finding and authority
+  stack to `CLOSED`; do not start that work until the narrow phase transition is review-clean.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.
 - [ ] Begin bounded direct-child delegated-session support only after promotion.
 

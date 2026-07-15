@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` complete after `6eda87e60` fresh independent `REVIEW CLEAN`; transition committed by this change and pending fresh review; `CTX-R6-06` then the R6 family wall next)**
+Current phase: **`R6-REPLAY` (ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet: `none`; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; `CTX-R6-01`/`02`/`06` and the R6 family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)**
 
 ## Dependency Order
 
@@ -26,15 +26,19 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; `CTX-R6-02` and `R6
 7. **COMPLETE through fresh review-clean `6b42e5476` + `e65df2561` + `cd4e24119`:** the final named
    gap, `R6-GAP-WPB-EMPTY-AUTHORITY`, landed its bounded scorer fix, focused/family/checkpoint/full
    proof, receipt corrections, and fresh independent `REVIEW CLEAN`.
-8. **ACTIVE / PACKET COMPLETE / TRANSITION REVIEW PENDING:** authority transition series
+8. **ACTIVE / REPLAY PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING:** authority transition series
    `56bb9966f` + `07a3b1fe5` is fresh independent built-in `default` `REVIEW CLEAN`. Replay completed
    `CTX-R6-01`, then bounded packet `R6-GAP-DET-REPLAY-STALL` closed `CTX-R6-02`. Historical witness
    `60cde3dd7` is preserved; implementation/proof commit `6eda87e60` passes exact `CTX-R6-02`, seven
    focused controls, `20 / 20` troubleshooting matches, exact sticky and frozen-corpus controls,
    progress acceptance, checkpoint matches, full analyzer `402 / 402`, compactor normalization, and
    static gates. A fresh independent built-in `default` reviewer returned `REVIEW CLEAN`. This
-   authority-only transition clears the active packet to `none` and keeps `R6-REPLAY` active. Obtain
-   fresh transition review, then run phase-owned `CTX-R6-06` replay proof and the R6 family wall.
+   authority-only transition series `1ff592823` + `7839a7f47` clears the active packet to `none`,
+   keeps `R6-REPLAY` active, and is fresh independent built-in `default` `REVIEW CLEAN`.
+   Phase-owned replay exact controls then passed `4 x 1 / 1`; the family filters passed
+   `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169` in manifest order, full analyzer passed
+   `402 / 402`, and diff check was green. This proof receipt is the current fresh-review boundary.
+   Transition narrowly to `R6-CLOSE` only after it is review-clean.
 9. Update the finding to `CLOSED` only when every material scoring surface has exactly one terminal
    disposition — **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or
    **Explicitly deferred outside R6 with justification** — and every broad acceptance claim is
@@ -65,8 +69,12 @@ All three named gaps are complete. Final implementation/review-fix series `6b42e
 transition series `56bb9966f` + `07a3b1fe5` also received fresh independent built-in `default`
 `REVIEW CLEAN` and activated only `R6-REPLAY`. Commit `6eda87e60` now completes `CTX-R6-02` and
 `R6-GAP-DET-REPLAY-STALL` with the full ordered packet proof, full analyzer `402 / 402`, static gates,
-and fresh independent built-in `default` `REVIEW CLEAN`. This transition clears active packet to
-`none`, keeps `R6-REPLAY` active, and awaits fresh independent transition review. After that review,
-`CTX-R6-06` replay proof and then the R6 family wall are next. Sticky authority remains
-`HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline only. No terminal
-scorer disposition, R6 close, or R7/R8 work is authorized yet.
+and fresh independent built-in `default` `REVIEW CLEAN`. Packet transition series `1ff592823` +
+`7839a7f47` clears active packet to `none`, keeps `R6-REPLAY` active, and is fresh independent
+built-in `default` `REVIEW CLEAN`. Phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky,
+and exact frozen-corpus controls each pass `1 / 1`. The manifest family wall passes
+`dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`, `truth_grounding_gap 22 / 22`,
+`wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, full analyzer `402 / 402`, and diff check. Sticky
+authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline
+only. This proof receipt now awaits fresh independent review. No terminal scorer disposition,
+`R6-CLOSE` activation, or R7/R8 work is authorized yet.

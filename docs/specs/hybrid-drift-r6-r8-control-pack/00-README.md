@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; CTX-R6-02 and R6-GAP-DET-REPLAY-STALL complete after 6eda87e60 fresh independent REVIEW CLEAN; authority transition committed by this change and pending fresh review; CTX-R6-06 then the family wall next`
+**Current work phase:** `R6-REPLAY — ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING; active packet none; packet transition 1ff592823 + 7839a7f47 review-clean; CTX-R6-01/02/06 and family wall green; narrow R6-CLOSE transition next only after this receipt is review-clean`
 
-**Last repo-truth verification:** `CTX-R6-01` series review-clean; historical `CTX-R6-02` witness `60cde3dd7`; bounded implementation/proof commit `6eda87e60` passes the ordered packet wall and full analyzer `402 / 402` and received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. The authority-only packet transition is committed by this change and awaits fresh review.
+**Last repo-truth verification:** packet transition series `1ff592823` + `7839a7f47` fresh independent built-in `default` `REVIEW CLEAN`; phase-owned exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each `1 / 1`; family filters `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer `402 / 402`; diff check green. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. This proof receipt is committed by this change and awaits fresh independent review.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -31,9 +31,13 @@ calls `420`/`474` misattributed to successful siblings `421`/`475`. `R6-REPLAY` 
 packet `R6-GAP-DET-REPLAY-STALL` is now complete. Historical witness `60cde3dd7` remains preserved;
 commit `6eda87e60` passes exact `CTX-R6-02`, the complete ordered packet wall, full analyzer `402 / 402`,
 and static gates and received fresh independent built-in `default` `REVIEW CLEAN`. Active packet is
-`none`. `HistoricalOnly / 20`, unflagged remains current sticky authority and `Recovered / 20`
-historical baseline only. Fresh review of this transition is pending; afterward `CTX-R6-06` replay
-proof and the family wall are next. `R6-CLOSE` and R7/R8 remain blocked as owned.
+`none`. Packet transition series `1ff592823` + `7839a7f47` received fresh independent built-in
+`default` `REVIEW CLEAN`. Phase-owned exact replay controls then passed `4 x 1 / 1`; the R6 family
+wall passed `dead_end_thrash 21 / 21`, `semantic_goal_drift 58 / 58`, `truth_grounding_gap 22 / 22`,
+`wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, full analyzer `402 / 402`, and diff check.
+`HistoricalOnly / 20`, unflagged remains current sticky authority and `Recovered / 20` historical
+baseline only. This proof receipt awaits fresh independent review; `R6-CLOSE` is the next narrow
+transition only after review-clean. R7/R8 remain blocked as owned.
 
 ## Purpose
 

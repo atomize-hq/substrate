@@ -1,8 +1,8 @@
 # Authority And Status Map
 
-**Verified against:** `CTX-R6-01` review-clean; historical `CTX-R6-02` witness `60cde3dd7`; bounded implementation/proof commit `6eda87e60` complete and fresh independent built-in `default` `REVIEW CLEAN`; ordered packet wall and full analyzer `402 / 402` green.
+**Verified against:** packet transition series `1ff592823` + `7839a7f47` fresh independent built-in `default` `REVIEW CLEAN`; exact `CTX-R6-01`/`02`, renamed sticky, and exact `CTX-R6-06` each `1 / 1`; Manifest E family filters `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer `402 / 402`; diff check green.
 
-**Current phase:** `R6-REPLAY` (**ACTIVE**; active packet: `none`; `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` complete; transition committed by this change and pending fresh review; `CTX-R6-06` replay proof then family wall next)
+**Current phase:** `R6-REPLAY` (**ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING**; active packet: `none`; `CTX-R6-01`/`02`/`06` and family wall green; narrow `R6-CLOSE` transition next only after this proof receipt is fresh-review-clean)
 
 ## How To Resolve Truth
 
@@ -23,7 +23,7 @@ implementation begins until the authority stack is corrected explicitly.
 
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
-| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / ACTIVE PACKET NONE / CTX-R6-02 AND REPLAY-STALL PACKET COMPLETE / TRANSITION REVIEW PENDING** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve review-clean commit `6eda87e60`, full analyzer `402 / 402`, current sticky `HistoricalOnly / 20`, unflagged, and historical-only `Recovered / 20` baseline. Obtain fresh review of this authority transition; then run phase-owned `CTX-R6-06` replay proof and the R6 family wall. Keep R6 close and R7/R8 blocked. |
+| R6 | **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE / PROOF COMPLETE / PROOF-RECEIPT REVIEW PENDING / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve review-clean packet transition series `1ff592823` + `7839a7f47`, green `CTX-R6-01`/`02`/`06` replay, family wall, current sticky `HistoricalOnly / 20`, unflagged, and historical-only `Recovered / 20` baseline. Fresh-review this proof receipt; then land the narrow `R6-CLOSE` transition. Keep terminal dispositions and R7/R8 blocked. |
 | R7 | **DRAFT / BLOCKED ON R6 CLOSURE DECISION** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve draft design only. No implementation. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 

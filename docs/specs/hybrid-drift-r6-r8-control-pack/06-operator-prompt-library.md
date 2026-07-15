@@ -307,11 +307,14 @@ result, current phase status, and the next eligible interaction.
 preserved; bounded implementation/proof commit `6eda87e60` passes exact `CTX-R6-02`, the complete
 ordered packet wall, full analyzer `402 / 402`, and static gates and received fresh independent
 built-in `default` `REVIEW CLEAN`. This authority-only transition marks `CTX-R6-02` and
-`R6-GAP-DET-REPLAY-STALL` complete and clears the active packet. Current sticky `CTX-R6-06`
-authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline
-only. Fresh review of this transition is pending; after it is clean, continue the same `R6-REPLAY`
-phase with `CTX-R6-06` replay proof and then the R6 family wall. Do not activate `R6-CLOSE` or start
-R7/R8 in the packet transition.
+`R6-GAP-DET-REPLAY-STALL` complete and clears the active packet. Packet transition series
+`1ff592823` + `7839a7f47` received fresh independent built-in `default` `REVIEW CLEAN`. Phase-owned
+exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each pass `1 / 1`; the
+Manifest E family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full
+analyzer passes `402 / 402`; diff check is green. Current sticky authority remains
+`HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline only. This proof
+receipt is committed by this change and awaits fresh independent review. After review-clean, use a
+narrow transition to activate `R6-CLOSE`; do not begin terminal-disposition or R7/R8 work here.
 
 Historical resolved Task `.2B` decision report:
 
