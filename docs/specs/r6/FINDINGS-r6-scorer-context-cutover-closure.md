@@ -38,7 +38,8 @@ diff check is green. Current sticky authority remains `HistoricalOnly / 20`, unf
 `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW
 CLEAN`, so `R6-REPLAY` is complete with no ordinary replay gap open. `R6-CLOSE` is active at entry
 only; `CTX-R6-17` terminal-disposition and authority reconciliation is next in a fresh phase session.
-No terminal disposition is assigned and this finding remains **PARTIAL / CLOSURE AUDIT REQUIRED**.
+This transition assigns no new terminal disposition, and this finding remains
+**PARTIAL / CLOSURE AUDIT REQUIRED**.
 R7 remains design-ready draft work, but it is **not implementation-ready**.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
