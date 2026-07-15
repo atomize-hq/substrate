@@ -1176,7 +1176,8 @@ mod platform {
                     AuthorityObjectKindV1::RetainedWorker,
                     &worker_bytes,
                 )?;
-                if existing.orchestration_session_id != input.orchestration_session_id
+                if root.authority_store_id != input.expected_authority_store_id
+                    || existing.orchestration_session_id != input.orchestration_session_id
                     || existing.authority_revision_before != input.expected_authority_revision
                     || existing.authority_record_commitment_before
                         != input.expected_authority_commitment

@@ -1550,6 +1550,26 @@ mod tests {
     }
 
     #[test]
+    fn applied_retry_rejects_changed_authority_store_without_mutation() {
+        let (_parent, authority, observation) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = plan(observation);
+        runtime.register_retained_target(&authority, &plan).unwrap();
+        let applied_root = authority.read_a12a_root().unwrap();
+        let object_root = _parent.path().join("home/authority-v1/objects");
+        let applied_objects = object_files(&object_root);
+        let mut changed_store = plan;
+        changed_store.expected_authority.authority_store_id =
+            "as_11111111111111111111111111111111".into();
+
+        assert!(runtime
+            .register_retained_target(&authority, &changed_store)
+            .is_err());
+        assert_eq!(authority.read_a12a_root().unwrap(), applied_root);
+        assert_eq!(object_files(&object_root), applied_objects);
+    }
+
+    #[test]
     fn reserved_observation_joins_peer_application_during_publication() {
         let (_parent, authority, observation) = started_authority();
         let peer_authority = HostSessionAuthority::open(&_parent.path().join("home")).unwrap();
