@@ -14,8 +14,11 @@ built-in `default` reviewer returned `REVIEW CLEAN` for `6eda87e60`. Current sti
 authority remains `HistoricalOnly / 20`, unflagged; `Recovered / 20` remains historical baseline
 only. This packet transition itself did not run `CTX-R6-06`, the replay family wall, `R6-CLOSE`, or
 R7/R8. After it became review-clean, later phase-owned replay passed exact controls `4 x 1 / 1`, the
-Manifest E family wall, full analyzer `402 / 402`, and diff check; that separate proof receipt now
-awaits fresh review.
+Manifest E family wall, full analyzer `402 / 402`, and diff check; proof/fix series `b1791c1e3` +
+`e6d43eee9` + `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`.
+`R6-REPLAY` is complete, `R6-CLOSE` is active at entry only, active packet is `none`, and
+`CTX-R6-17` is next in a fresh next-phase session. R6 remains **PARTIAL**; no terminal disposition,
+R7, or R8 work has started.
 
 ## Objective And Preserved Witness
 

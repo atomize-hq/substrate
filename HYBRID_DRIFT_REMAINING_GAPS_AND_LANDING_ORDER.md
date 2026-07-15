@@ -784,17 +784,20 @@ proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and comple
 `6b42e5476` + `e65df2561` + `cd4e24119` fresh independent `REVIEW CLEAN`). The frozen dead-end
 corpus still proves invariance rather than comparative integrated improvement. R6 remains partial.
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
-`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Current replay
-state has `CTX-R6-01` and `CTX-R6-02` complete. Historical witness `60cde3dd7` is preserved;
+`REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Replay
+completed `CTX-R6-01` and `CTX-R6-02`. Historical witness `60cde3dd7` is preserved;
 implementation/proof commit `6eda87e60` passes the complete ordered packet wall, full analyzer
 `402 / 402`, and static gates and received fresh independent built-in `default` `REVIEW CLEAN`.
 Packet transition series `1ff592823` + `7839a7f47` completes `R6-GAP-DET-REPLAY-STALL`, clears
-active packet to `none`, keeps `R6-REPLAY` active, and is fresh independent built-in `default`
-`REVIEW CLEAN`. Phase-owned exact replay controls passed `4 x 1 / 1`; the Manifest E family wall
-passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 169`, full analyzer `402 / 402`, and diff
-check. Sticky `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged, while
-`Recovered / 20` remains historical baseline evidence only. `R6-REPLAY` is proof-complete and
-awaits fresh review of this proof receipt before a narrow transition to `R6-CLOSE`.
+active packet to `none`, returned control to then-active `R6-REPLAY`, and is fresh independent
+built-in `default` `REVIEW CLEAN`. Phase-owned exact replay controls passed `4 x 1 / 1`; the
+Manifest E family wall passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, `169 / 169`, full analyzer
+`402 / 402`, and diff check. Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh
+independent built-in `default` `REVIEW CLEAN`. Sticky `CTX-R6-06` authority remains
+`HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only.
+R6 remains **PARTIAL**: `R6-REPLAY` is complete, active packet is `none`, and `R6-CLOSE` is active
+at entry only with `CTX-R6-17` next in a fresh next-phase session. No terminal disposition, R7, or
+R8 work has started.
 
 ## Packet R7: Full Delegated-Session Support
 
