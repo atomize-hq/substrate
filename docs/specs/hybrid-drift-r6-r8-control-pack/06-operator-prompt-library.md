@@ -341,9 +341,13 @@ diff, and staged GitNexus gates are green within the recorded risk bounds. Publi
 v0.7, graph roles/ids, `Linked`/`Partial`, fail-closed conflicts, deterministic `RowRef` evidence,
 JSON-summary parity, and separate trajectories are proven with no R7-3/R7-4/sentinel/R8 leakage.
 
-R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. R7-2 remains the sole
-active phase with packet `none`; this checkpoint-doc receipt is a review candidate pending fresh independent review. The R7-2 exit gate and `CTX-R7-03` remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain blocked; `R7-3.1` is unchecked and unstarted. Do not
-prepare or invoke R7-3 Prompt 1 selectors yet.
+R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
+commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
+R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
+`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
+blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
+have not been invoked.
 
 Historical resolved Task `.2B` decision report:
 

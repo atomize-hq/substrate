@@ -24,8 +24,9 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R7-PROMOTE` | COMPLETE | Promote the R7 authority family to implementation-ready | SATISFIED — R6 finding says `CLOSED`, terminal scorer table is complete, and authority stack agrees | SATISFIED — promotion series `455d0ed90` + `876ac55de` makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready and received fresh independent built-in `default` `REVIEW CLEAN`; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` also received fresh independent built-in `default` `REVIEW CLEAN`; no R7 task started. |
 | `R7-0` | COMPLETE | Docs lock and sanitized evidence matrix | SATISFIED — `R7-PROMOTE` is complete; transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` and `R7-0.1` series `a9e75f149` + `55bea5fa5` + `faff68ac6` are fresh independent `REVIEW CLEAN` | SATISFIED — fixture-only `R7-0.2` commit `fa85cd4b8` received fresh independent built-in `default` `REVIEW CLEAN`; focused parser/privacy passes `2 / 2`, full compactor passes `25 / 25` including end-to-end `2 / 2`, and privacy scans over `24` rows found zero private markers and zero raw UUIDs. No production symbol changed. |
 | `R7-1` | COMPLETE | Compactor linkage and direct-child closure | SATISFIED — `R7-0` exit gate and transition/fix series `339744dff` + `d20cac6a9` are fresh independent built-in `default` `REVIEW CLEAN` | SATISFIED — R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` plus behavior/static checkpoint and checkpoint-doc commit `1cae7d693` are complete and fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R7-02` is proven. |
-| `R7-2` | ACTIVE / TASKS AND BEHAVIOR-STATIC CHECKPOINT COMPLETE / CHECKPOINT-DOC RECEIPT PENDING FRESH REVIEW / `CTX-R7-03` OPEN | Analyzer link graph and checkpoint v0.8 delegation contract | SATISFIED — `R7-1` exit gate is fresh-review-clean; active packet is `none`; operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded seam; R7-2 task commits `c60d05f77`, `9403c8a24`, and series `7af2ae517` + `75a353e46` are fresh independent `REVIEW CLEAN` | PENDING ONLY ON RECEIPT — R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete; obtain fresh independent review for this checkpoint-doc receipt. Do not complete `CTX-R7-03`, transition phase, or prepare R7-3 selectors before that review is clean. |
-| `R7-3..R7-6` | BLOCKED | Child-visible progress through minimal sentinel compatibility | `R7-2` exit gate review-clean, then each ordered predecessor phase complete | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
+| `R7-2` | COMPLETE | Analyzer link graph and checkpoint v0.8 delegation contract | SATISFIED — `R7-1` exit gate is fresh-review-clean; operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded seam | SATISFIED — R7-2 task commits `c60d05f77`, `9403c8a24`, and series `7af2ae517` + `75a353e46` plus behavior/static checkpoint and checkpoint-doc commit `78a168c09` are complete and fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R7-03` is proven. |
+| `R7-3` | ACTIVE AT ENTRY ONLY / CURRENT TRANSITION RECEIPT PENDING FRESH INDEPENDENT REVIEW | Child-visible progress separation | SATISFIED FOR ENTRY ONLY — `R7-2` exit gate is fresh-review-clean at checkpoint-doc commit `78a168c09`; active packet is `none`; `R7-3.1` is next, unchecked, and unstarted; R7-3 analyzer/production implementation has not started; Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but not invoked | PENDING — `R7-3.1`, `R7-3.2`, and the R7-3 checkpoint are complete and fresh-review-clean. |
+| `R7-4..R7-6` | BLOCKED | Delegated scorer guardrails through minimal sentinel compatibility | `R7-3` exit gate review-clean, then each ordered predecessor phase complete | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
@@ -72,10 +73,13 @@ wording; fix `4ee469014` corrected it, and a fresh independent built-in `default
 `9403c8a24`, plus R7-2.3 series `7af2ae517` + `75a353e46`, received fresh independent built-in
 `default` `REVIEW CLEAN`; the fix reconciled the summary-vs-checkpoint blocker. The R7-2 task and
 behavior/static checkpoint proof is complete: input `16 / 16`, delegation matches `39`, checkpoint
-matches `172`, full analyzer `417 / 417`, and static gates green. R7-2 remains the sole active phase
-with packet `none` while this checkpoint-doc receipt still requires fresh independent review. The
-R7-2 exit gate and `CTX-R7-03` remain open; `R7-3..R7-6` plus R8 remain blocked, `R7-3.1` is
-unchecked and unstarted, and no next-phase selectors are prepared or invoked.
+matches `172`, full analyzer `417 / 417`, and static gates green. Checkpoint-doc commit `78a168c09`
+received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-2 exit gate and
+proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet `none`; current
+transition receipt pending fresh independent review. `R7-3.1` is next, unchecked, and unstarted;
+R7-3 analyzer/production implementation has not started. `R7-4..R7-6` plus R8 remain blocked.
+Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but have not
+been invoked.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

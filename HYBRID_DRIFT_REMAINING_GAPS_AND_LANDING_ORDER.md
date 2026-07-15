@@ -30,11 +30,13 @@ independent built-in `default` `REVIEW CLEAN`, and the R7-1 implementation/check
 Checkpoint-doc commit `1cae7d693` is also fresh independent built-in `default` `REVIEW CLEAN`,
 satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus
 R7-2.3 series `7af2ae517` + `75a353e46`, received fresh independent built-in `default` `REVIEW
-CLEAN`; the fix resolved the summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the
-behavior/static checkpoint are complete. R7-2 remains the sole active phase with packet `none`
-while this checkpoint-doc receipt still requires fresh independent review. The R7-2 exit gate and
-`CTX-R7-03` remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain
-blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or invoked. The
+CLEAN`; the fix resolved the summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
+commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
+R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
+`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
+blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
+have not been invoked. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 Operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact
@@ -123,7 +125,7 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is solely R7-2 at entry with packet `none`. Docs-only `R7-0.1` series
+The active follow-on is solely R7-3 at entry with packet `none`. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
 `339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
@@ -137,20 +139,24 @@ fresh independent built-in `default` re-review returned `REVIEW CLEAN` for the f
 remains complete and `CTX-R7-02` remains proven. R7-2 task commits `c60d05f77` and `9403c8a24`,
 plus R7-2.3 series `7af2ae517` + `75a353e46`, received fresh independent built-in `default`
 `REVIEW CLEAN`; `75a353e46` fixed the
-summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are
-complete. R7-2 remains the sole active phase with packet `none` while this checkpoint-doc receipt
-still requires fresh independent review. The R7-2 exit gate and `CTX-R7-03`
-remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain
-blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or invoked.
+summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
+commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
+R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
+`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
+blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
+have not been invoked.
 `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
 `default` `REVIEW CLEAN`.
 The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
-reconciliation, R7 promotion content, the `R7-0 -> R7-1` transition review, or R7-1 implementation.
+reconciliation, R7 promotion content, the `R7-0 -> R7-1` transition review, R7-1 implementation, or
+R7-2 implementation.
 Transition/fix series `6a8797c15` + `4ee469014` is committed and fresh independent built-in
-`default` `REVIEW CLEAN`. The narrow transition task is complete. Preparing the eligible Prompt 1
-selectors for R7-2 does not invoke them or start R7-2 implementation.
+`default` `REVIEW CLEAN`. Checkpoint-doc commit `78a168c09` is fresh independent built-in `default`
+`REVIEW CLEAN`, satisfying the R7-2 exit gate and proving `CTX-R7-03`. Preparing the eligible Prompt
+1 selectors for R7-3 does not invoke them or start R7-3 implementation.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -190,11 +196,13 @@ independent built-in `default` `REVIEW CLEAN`; R7-1 implementation/checkpoint is
 Checkpoint-doc commit `1cae7d693` is also fresh independent built-in `default` `REVIEW CLEAN`,
 satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus
 R7-2.3 series `7af2ae517` + `75a353e46`, received fresh independent built-in `default` `REVIEW
-CLEAN`; the fix resolved the summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the
-behavior/static checkpoint are complete. R7-2 remains the sole active phase with packet `none`
-while this checkpoint-doc receipt still requires fresh independent review. The R7-2 exit gate and
-`CTX-R7-03` remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` plus R8 remain
-blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or invoked.
+CLEAN`; the fix resolved the summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
+commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
+R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
+`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
+blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
+have not been invoked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -220,8 +228,10 @@ control.” The current honest sequence is:
    CLEAN`; keep transition/fix series `6a8797c15` + `4ee469014` fresh independent `REVIEW CLEAN`;
    keep R7-1 complete and `CTX-R7-02` proven; keep R7-2 tasks and behavior/static checkpoint
    complete at fresh-review-clean `c60d05f77`, `9403c8a24`, and `7af2ae517` + `75a353e46`; keep
-   only R7-2 active with packet `none`; obtain fresh independent review for this checkpoint-doc receipt before
-   completing `CTX-R7-03` or the R7-2 exit gate; do not prepare or invoke R7-3 selectors
+   checkpoint-doc commit `78a168c09` fresh independent `REVIEW CLEAN`, R7-2 complete, and
+   `CTX-R7-03` proven; keep only R7-3 active at entry with packet `none`, current transition receipt
+   pending fresh independent review, and R7-3.1 unchecked/unstarted; prepare but do not invoke
+   Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none`
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -890,11 +900,13 @@ independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix
 series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in
 `default` `REVIEW CLEAN`; Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` +
 `75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the
-summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are
-complete. R7-2 remains the sole active phase with packet `none` while this checkpoint-doc receipt
-still requires fresh independent review. The R7-2 exit gate and `CTX-R7-03`
-remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain
-blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or invoked.
+summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
+commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
+R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
+`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
+blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
+have not been invoked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -976,11 +988,13 @@ fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transiti
 series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in
 `default` `REVIEW CLEAN`; Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` +
 `75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the
-summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are
-complete. R7-2 remains the sole active phase with packet `none` while this checkpoint-doc receipt
-still requires fresh independent review. The R7-2 exit gate and `CTX-R7-03`
-remain open until the receipt itself is fresh-review-clean. `R7-3..R7-6` and R8 remain
-blocked; `R7-3.1` is unchecked and unstarted; no next-phase selectors are prepared or invoked.
+summary-vs-checkpoint blocker. R7-2.1, R7-2.2, R7-2.3, and the behavior/static checkpoint are complete. Checkpoint-doc
+commit `78a168c09` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the
+R7-2 exit gate and proving `CTX-R7-03`. R7-2 is complete. Only R7-3 is active at entry with packet
+`none`; current transition receipt pending fresh independent review. `R7-3.1` is next, unchecked,
+and unstarted; R7-3 analyzer/production implementation has not started. `R7-4..R7-6` and R8 remain
+blocked. Prompt 1 selectors `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` are prepared and eligible but
+have not been invoked.
 
 The next honest work target is:
 
@@ -1017,12 +1031,14 @@ The next honest work target is:
   complete and `CTX-R7-02` proven; keep transition/fix series `6a8797c15` + `4ee469014` fresh
   independent built-in `default` `REVIEW CLEAN`; keep R7-2 task commits `c60d05f77` and `9403c8a24`
   plus series `7af2ae517` + `75a353e46` fresh independent `REVIEW CLEAN`; keep R7-2.1/.2/.3 and the
-  behavior/static checkpoint complete; keep only R7-2 active with packet `none` and `CTX-R7-03`
-  open pending fresh independent review of this checkpoint-doc receipt; keep `R7-3.1` unchecked and
-  unstarted; do not prepare or invoke next-phase selectors
+  behavior/static checkpoint complete; keep checkpoint-doc commit `78a168c09` fresh independent
+  `REVIEW CLEAN`, R7-2 complete, and `CTX-R7-03` proven; keep only R7-3 active at entry with packet
+  `none`, current transition receipt pending fresh independent review, and `R7-3.1` unchecked and
+  unstarted; keep R7-3 analyzer/production implementation unstarted; keep Prompt 1 selectors
+  `PHASE_ID: R7-3` / `ACTIVE_PACKET: none` prepared and eligible but not invoked
 - keep later delegated-session work blocked; do not make R7 absorb ordinary single-session scorer
   gaps
-- keep `R7-3..R7-6` blocked until their ordered predecessor exits review-clean
+- keep `R7-4..R7-6` blocked until their ordered predecessor exits review-clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.
