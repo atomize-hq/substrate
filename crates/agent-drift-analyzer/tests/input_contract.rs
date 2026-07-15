@@ -5,7 +5,8 @@ mod support;
 use std::fs;
 
 use agent_session_compactor::{
-    CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
+    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DelegationLink,
+    DelegationLinkState, RowRef, SourceKind, UserMessageRole,
 };
 use camino::Utf8PathBuf;
 use support::{load_sample_bundle, BundleFixture};
@@ -373,4 +374,228 @@ fn input_contract_fails_on_duplicate_manifest_file_ids() {
     let error = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
         .expect_err("duplicate manifest ids");
     assert!(error.to_string().contains("reuses source_file_id 0"));
+}
+
+#[test]
+fn input_contract_loads_verified_links_into_a_deterministic_direct_graph() {
+    let rows = vec![
+        session_row("session-parent", 0),
+        session_row("session-child-b", 1),
+        session_row("session-child-a", 2),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    write_delegation_links(
+        &fixture,
+        vec![
+            direct_link(
+                "session-parent",
+                "session-child-b",
+                DelegationLinkState::Verified,
+            ),
+            direct_link(
+                "session-parent",
+                "session-child-a",
+                DelegationLinkState::Verified,
+            ),
+        ],
+    );
+
+    let bundle = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect("verified direct links should load");
+
+    assert_eq!(
+        bundle
+            .delegation_graph
+            .by_session_id
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec!["session-child-a", "session-child-b", "session-parent"]
+    );
+    let parent = &bundle.delegation_graph.by_session_id["session-parent"];
+    assert!(parent.parent_links.is_empty());
+    assert_eq!(
+        parent
+            .child_links
+            .iter()
+            .map(|link| link.child_session_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["session-child-a", "session-child-b"]
+    );
+    assert_eq!(
+        bundle.delegation_graph.by_session_id["session-child-a"]
+            .parent_links
+            .first()
+            .map(|link| link.parent_session_id.as_str()),
+        Some("session-parent")
+    );
+    assert_eq!(
+        bundle.delegation_graph.by_session_id["session-child-b"]
+            .parent_links
+            .first()
+            .map(|link| link.parent_session_id.as_str()),
+        Some("session-parent")
+    );
+}
+
+#[test]
+fn input_contract_keeps_non_verified_links_out_of_the_semantic_graph() {
+    let rows = vec![
+        session_row("session-parent", 0),
+        session_row("session-child", 1),
+    ];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    write_delegation_links(
+        &fixture,
+        vec![
+            direct_link(
+                "session-parent",
+                "session-child",
+                DelegationLinkState::Verified,
+            ),
+            direct_link(
+                "session-parent",
+                "session-missing",
+                DelegationLinkState::ParentOnly,
+            ),
+            direct_link(
+                "session-conflicting-parent",
+                "session-child",
+                DelegationLinkState::ConflictingParent,
+            ),
+        ],
+    );
+
+    let bundle = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect("non-verified links should remain bounded evidence");
+
+    assert_eq!(bundle.manifest.delegation_links.len(), 3);
+    assert_eq!(bundle.delegation_graph.by_session_id.len(), 2);
+    assert_eq!(
+        bundle.delegation_graph.by_session_id["session-parent"]
+            .child_links
+            .iter()
+            .map(|link| link.child_session_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["session-child"]
+    );
+    assert_eq!(
+        bundle.delegation_graph.by_session_id["session-child"]
+            .parent_links
+            .first()
+            .map(|link| link.parent_session_id.as_str()),
+        Some("session-parent")
+    );
+}
+
+#[test]
+fn input_contract_rejects_verified_links_to_sessions_missing_from_the_bundle() {
+    assert_missing_verified_link_is_rejected(
+        "session-parent",
+        "session-parent",
+        "session-missing-child",
+        "session-missing-child",
+    );
+    assert_missing_verified_link_is_rejected(
+        "session-child",
+        "session-missing-parent",
+        "session-child",
+        "session-missing-parent",
+    );
+}
+
+#[test]
+fn input_contract_loads_legacy_v0_2_manifests_with_an_empty_link_graph() {
+    let fixture = BundleFixture::sample();
+    let manifest: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(fixture.input_dir.join("manifest.json")).expect("manifest"),
+    )
+    .expect("manifest json");
+    assert!(manifest.get("delegation_links").is_none());
+
+    let bundle = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect("legacy v0.2 manifest should load");
+
+    assert!(bundle.manifest.delegation_links.is_empty());
+    assert!(bundle.delegation_graph.by_session_id.is_empty());
+}
+
+fn session_row(session_id: &str, event_index: usize) -> CompactionRow {
+    CompactionRow {
+        source_file: Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl")),
+        source_kind: SourceKind::CodexRolloutJsonl,
+        session_id: Some(session_id.to_string()),
+        turn_id: None,
+        event_index,
+        line_number: event_index + 1,
+        row_ordinal: 0,
+        timestamp: None,
+        kind: CompactionKind::UserMessage,
+        user_message_role: Some(UserMessageRole::Prompt),
+        dedupe_identity: None,
+        text: format!("/goal Analyze {session_id}."),
+        canonical_text: format!("/goal Analyze {session_id}."),
+        text_hash_hex: format!("hash-{session_id}"),
+    }
+}
+
+fn direct_link(
+    parent_session_id: &str,
+    child_session_id: &str,
+    state: DelegationLinkState,
+) -> DelegationLink {
+    DelegationLink {
+        parent_session_id: parent_session_id.to_string(),
+        child_session_id: child_session_id.to_string(),
+        child_origin_parent_session_id: Some(parent_session_id.to_string()),
+        depth: Some(1),
+        state,
+        parent_evidence: Vec::new(),
+        child_evidence: Vec::new(),
+    }
+}
+
+fn write_delegation_links(fixture: &BundleFixture, delegation_links: Vec<DelegationLink>) {
+    let manifest_path = fixture.input_dir.join("manifest.json");
+    let mut manifest: BundleManifest =
+        serde_json::from_str(&fs::read_to_string(&manifest_path).expect("read bundle manifest"))
+            .expect("parse bundle manifest");
+    manifest.delegation_links = delegation_links;
+    fs::write(
+        manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize bundle manifest"),
+    )
+    .expect("write bundle manifest");
+}
+
+fn assert_missing_verified_link_is_rejected(
+    included_session_id: &str,
+    parent_session_id: &str,
+    child_session_id: &str,
+    expected_missing_session_id: &str,
+) {
+    let rows = vec![session_row(included_session_id, 0)];
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    write_delegation_links(
+        &fixture,
+        vec![direct_link(
+            parent_session_id,
+            child_session_id,
+            DelegationLinkState::Verified,
+        )],
+    );
+
+    let error = agent_drift_analyzer::input::load_bundle(&fixture.input_dir)
+        .expect_err("verified links require both sessions in the bundle");
+
+    assert!(matches!(
+        error,
+        agent_drift_analyzer::input::InputError::VerifiedDelegationSessionMissing {
+            parent_session_id: ref actual_parent_session_id,
+            child_session_id: ref actual_child_session_id,
+            missing_session_id: ref actual_missing_session_id,
+        } if actual_parent_session_id == parent_session_id
+            && actual_child_session_id == child_session_id
+            && actual_missing_session_id == expected_missing_session_id
+    ));
 }

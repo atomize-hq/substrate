@@ -3,8 +3,8 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 
 use agent_session_compactor::{
-    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DedupeGroupV0_2, ExportRowV0_2,
-    RowRef, RowRefV0_2,
+    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DedupeGroupV0_2, DelegationLink,
+    DelegationLinkState, ExportRowV0_2, RowRef, RowRefV0_2,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::de::DeserializeOwned;
@@ -27,6 +27,25 @@ pub struct BundleSession {
     pub compact_rows: Vec<CompactionRow>,
 }
 
+/// Analyzer-owned adjacency index containing only verified direct delegation links.
+///
+/// Non-verified observations remain available through [`InputBundle::manifest`]
+/// but never enter this semantic graph.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DelegationLinkGraph {
+    /// Verified direct-link adjacency keyed deterministically by included session id.
+    pub by_session_id: BTreeMap<String, SessionDelegationLinks>,
+}
+
+/// Verified direct links entering and leaving one included bundle session.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionDelegationLinks {
+    /// Links for which this session is the child.
+    pub parent_links: Vec<DelegationLink>,
+    /// Links for which this session is the parent.
+    pub child_links: Vec<DelegationLink>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InputBundle {
     pub manifest: BundleManifest,
@@ -34,6 +53,7 @@ pub struct InputBundle {
     pub compact_rows: Vec<CompactionRow>,
     pub dedupe_groups: Vec<DedupeGroup>,
     pub sessions: Vec<BundleSession>,
+    pub delegation_graph: DelegationLinkGraph,
     pub unscoped_archival_rows: Vec<CompactionRow>,
     pub unscoped_compact_rows: Vec<CompactionRow>,
     pub surface: AnalyzerSurface,
@@ -94,6 +114,14 @@ pub enum InputError {
     InsufficientContract { reason: String },
     #[error("compactor row ordering is unstable for session {session_id}")]
     UnstableOrdering { session_id: String },
+    #[error(
+        "verified delegation link {parent_session_id} -> {child_session_id} references session {missing_session_id} that is not included in the bundle"
+    )]
+    VerifiedDelegationSessionMissing {
+        parent_session_id: String,
+        child_session_id: String,
+        missing_session_id: String,
+    },
     #[error("dedupe audit references an archival row that is not present: {row:?}")]
     MissingDedupeRepresentative { row: RowRef },
 }
@@ -126,6 +154,7 @@ pub fn load_bundle(input_dir: &Utf8Path) -> Result<InputBundle, InputError> {
     validate_dedupe_refs(&archival_rows, &dedupe_groups)?;
 
     let sessions = build_sessions(input_dir, &archival_rows, &compact_rows)?;
+    let delegation_graph = build_delegation_graph(&manifest, &sessions)?;
     let unscoped_archival_rows = archival_rows
         .iter()
         .filter(|row| row.session_id.is_none())
@@ -144,6 +173,7 @@ pub fn load_bundle(input_dir: &Utf8Path) -> Result<InputBundle, InputError> {
         compact_rows,
         dedupe_groups,
         sessions,
+        delegation_graph,
         unscoped_archival_rows,
         unscoped_compact_rows,
         surface,
@@ -413,6 +443,73 @@ fn build_sessions(
         });
     }
     Ok(sessions)
+}
+
+fn build_delegation_graph(
+    manifest: &BundleManifest,
+    sessions: &[BundleSession],
+) -> Result<DelegationLinkGraph, InputError> {
+    let session_ids = sessions
+        .iter()
+        .map(|session| session.session_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut verified_links = manifest
+        .delegation_links
+        .iter()
+        .filter(|link| link.state == DelegationLinkState::Verified)
+        .cloned()
+        .collect::<Vec<_>>();
+    verified_links.sort_by(|left, right| {
+        (
+            &left.parent_session_id,
+            &left.child_session_id,
+            &left.child_origin_parent_session_id,
+            left.depth,
+            left.state,
+            &left.parent_evidence,
+            &left.child_evidence,
+        )
+            .cmp(&(
+                &right.parent_session_id,
+                &right.child_session_id,
+                &right.child_origin_parent_session_id,
+                right.depth,
+                right.state,
+                &right.parent_evidence,
+                &right.child_evidence,
+            ))
+    });
+    verified_links.dedup();
+
+    let mut graph = DelegationLinkGraph::default();
+    for link in verified_links {
+        let missing_session_id = [&link.parent_session_id, &link.child_session_id]
+            .into_iter()
+            .find(|session_id| !session_ids.contains(session_id.as_str()))
+            .cloned();
+        if let Some(missing_session_id) = missing_session_id {
+            return Err(InputError::VerifiedDelegationSessionMissing {
+                parent_session_id: link.parent_session_id,
+                child_session_id: link.child_session_id,
+                missing_session_id,
+            });
+        }
+
+        graph
+            .by_session_id
+            .entry(link.parent_session_id.clone())
+            .or_default()
+            .child_links
+            .push(link.clone());
+        graph
+            .by_session_id
+            .entry(link.child_session_id.clone())
+            .or_default()
+            .parent_links
+            .push(link);
+    }
+
+    Ok(graph)
 }
 
 fn validate_dedupe_refs(
