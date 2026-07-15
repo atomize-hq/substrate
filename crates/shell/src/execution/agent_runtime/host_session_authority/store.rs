@@ -23,6 +23,14 @@ pub(super) fn classify_opened(root: &TrustedAuthorityRoot) -> BootstrapClassific
     platform::classify_opened(root)
 }
 
+pub(crate) use platform::RetainedWorkerAdmissionStorageV1;
+
+pub(crate) fn retained_worker_admission_storage_for_authority(
+    authority: &super::facade::HostSessionAuthority,
+) -> Result<RetainedWorkerAdmissionStorageV1, BootstrapError> {
+    platform::retained_worker_admission_storage_opened(authority.trusted_root())
+}
+
 #[cfg(test)]
 pub(crate) fn bootstrap(path: &Path) -> Result<StateRootV1, BootstrapError> {
     platform::bootstrap(path)
@@ -407,6 +415,14 @@ impl BootstrapError {
     pub(super) fn transition_guard() -> Self {
         Self("transition publication guard failed")
     }
+
+    pub(crate) fn retained_admission_semantic() -> Self {
+        Self("retained admission semantic validation failed")
+    }
+
+    pub(crate) fn retained_admission_crash() -> Self {
+        Self("injected retained admission initialization crash")
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -546,6 +562,10 @@ mod platform {
     const ROOT_FILE: &str = "state-root-v1.json";
     const INIT_FILE: &str = "init-v1.json";
     const ROOT_LOCK_FILE: &str = "root.lock";
+    const RETAINED_ADMISSION_DIRECTORY: &str = "retained-worker-admission-v1";
+    const RETAINED_ADMISSION_REGISTRY_FILE: &str = "registry-v1.json";
+    const RETAINED_ADMISSION_KEYS_DIRECTORY: &str = "keys";
+    const RETAINED_ADMISSION_TEMP_DIRECTORY: &str = "tmp";
 
     #[path = "legacy.rs"]
     mod legacy;
@@ -589,6 +609,333 @@ mod platform {
         with_opened_existing_versioned_semantic_preflight, with_opened_semantic_preflight,
         SemanticPreflightMode,
     };
+
+    pub(crate) struct RetainedWorkerAdmissionStorageV1 {
+        root: TrustedAuthorityRoot,
+        authority_store_id: String,
+    }
+
+    pub(crate) struct RetainedWorkerAdmissionStorageTransactionV1 {
+        admission: TrustedDirectory,
+        keys: TrustedDirectory,
+        tmp: TrustedDirectory,
+    }
+
+    impl RetainedWorkerAdmissionStorageV1 {
+        pub(crate) fn authority_store_id(&self) -> &str {
+            &self.authority_store_id
+        }
+
+        pub(crate) fn transaction<T>(
+            &self,
+            operation: impl FnOnce(
+                &mut RetainedWorkerAdmissionStorageTransactionV1,
+            ) -> Result<T, BootstrapError>,
+        ) -> Result<T, BootstrapError> {
+            with_opened_existing_versioned_semantic_preflight(&self.root, |transaction| {
+                transaction.reconcile()?;
+                if transaction.root.authority_store_id() != self.authority_store_id {
+                    return Err(BootstrapError(
+                        "retained admission capability authority store changed",
+                    ));
+                }
+                let mut storage = open_retained_admission_transaction(transaction.layout)?;
+                operation(&mut storage)
+            })
+        }
+    }
+
+    impl RetainedWorkerAdmissionStorageTransactionV1 {
+        pub(crate) fn read_registry(&self) -> Result<Option<Vec<u8>>, BootstrapError> {
+            match self
+                .admission
+                .entry_kind(RETAINED_ADMISSION_REGISTRY_FILE)
+                .map_err(|_| BootstrapError("inspect retained admission registry"))?
+            {
+                None => Ok(None),
+                Some(EntryKind::RegularFile) => self
+                    .admission
+                    .open_file(RETAINED_ADMISSION_REGISTRY_FILE)
+                    .and_then(|file| file.read_all())
+                    .map(Some)
+                    .map_err(|_| BootstrapError("read retained admission registry")),
+                Some(_) => Err(BootstrapError("retained admission registry is unsafe")),
+            }
+        }
+
+        pub(crate) fn read_keys(&self) -> Result<Vec<(String, Vec<u8>)>, BootstrapError> {
+            let mut keys = Vec::new();
+            for entry in self
+                .keys
+                .entries()
+                .map_err(|_| BootstrapError("enumerate retained admission keys"))?
+            {
+                if entry.kind != EntryKind::RegularFile || !admission_key_file_name(&entry.name) {
+                    return Err(BootstrapError("retained admission key layout is invalid"));
+                }
+                self.keys
+                    .revalidate_entry(&entry)
+                    .map_err(|_| BootstrapError("retained admission key changed"))?;
+                let bytes = self
+                    .keys
+                    .open_file_entry(&entry)
+                    .and_then(|file| file.read_all())
+                    .map_err(|_| BootstrapError("read retained admission key"))?;
+                keys.push((entry.name, bytes));
+            }
+            Ok(keys)
+        }
+
+        pub(crate) fn stage_key_temp(
+            &self,
+            temp_name: &str,
+            bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            if !admission_temp_file_name(temp_name) {
+                return Err(BootstrapError(
+                    "retained admission key temp name is invalid",
+                ));
+            }
+            let mut temp = self
+                .tmp
+                .create_file(temp_name)
+                .map_err(|_| BootstrapError("create retained admission key temp"))?;
+            temp.write_all(bytes)
+                .map_err(|_| BootstrapError("write retained admission key temp"))?;
+            temp.sync()
+                .map_err(|_| BootstrapError("sync retained admission key temp"))?;
+            self.tmp
+                .sync()
+                .map_err(|_| BootstrapError("sync retained admission temp directory"))
+        }
+
+        pub(crate) fn publish_staged_key_no_replace(
+            &self,
+            temp_name: &str,
+            key_name: &str,
+        ) -> Result<(), BootstrapError> {
+            if !admission_temp_file_name(temp_name) || !admission_key_file_name(key_name) {
+                return Err(BootstrapError(
+                    "retained admission key publication name is invalid",
+                ));
+            }
+            let temp = self
+                .tmp
+                .open_file(temp_name)
+                .map_err(|_| BootstrapError("open retained admission key temp"))?;
+            self.tmp
+                .rename_no_replace(temp_name, temp, &self.keys, key_name)
+                .map_err(|_| {
+                    BootstrapError("publish retained admission key without replacement")
+                })?;
+            self.keys
+                .sync()
+                .map_err(|_| BootstrapError("sync retained admission key directory"))
+        }
+
+        pub(crate) fn remove_key(&self, key_name: &str) -> Result<(), BootstrapError> {
+            if !admission_key_file_name(key_name) {
+                return Err(BootstrapError(
+                    "retained admission orphan key name is invalid",
+                ));
+            }
+            self.keys
+                .unlink_file(key_name)
+                .map_err(|_| BootstrapError("remove retained admission orphan key"))
+        }
+
+        pub(crate) fn publish_registry_no_replace(
+            &self,
+            temp_name: &str,
+            bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            self.publish_registry(temp_name, bytes, false)
+        }
+
+        pub(crate) fn replace_registry(
+            &self,
+            temp_name: &str,
+            bytes: &[u8],
+        ) -> Result<(), BootstrapError> {
+            self.publish_registry(temp_name, bytes, true)
+        }
+
+        fn publish_registry(
+            &self,
+            temp_name: &str,
+            bytes: &[u8],
+            replace: bool,
+        ) -> Result<(), BootstrapError> {
+            if !admission_temp_file_name(temp_name) {
+                return Err(BootstrapError(
+                    "retained admission registry temp name is invalid",
+                ));
+            }
+            let mut temp = self
+                .tmp
+                .create_file(temp_name)
+                .map_err(|_| BootstrapError("create retained admission registry temp"))?;
+            temp.write_all(bytes)
+                .map_err(|_| BootstrapError("write retained admission registry temp"))?;
+            temp.sync()
+                .map_err(|_| BootstrapError("sync retained admission registry temp"))?;
+            if replace {
+                self.tmp
+                    .rename_replace(
+                        temp_name,
+                        temp,
+                        &self.admission,
+                        RETAINED_ADMISSION_REGISTRY_FILE,
+                    )
+                    .map_err(|_| BootstrapError("replace retained admission registry"))?;
+            } else {
+                self.tmp
+                    .rename_no_replace(
+                        temp_name,
+                        temp,
+                        &self.admission,
+                        RETAINED_ADMISSION_REGISTRY_FILE,
+                    )
+                    .map_err(|_| BootstrapError("publish retained admission registry"))?;
+            }
+            self.admission
+                .sync()
+                .map_err(|_| BootstrapError("sync retained admission directory"))
+        }
+    }
+
+    pub(super) fn retained_worker_admission_storage_opened(
+        opened: &TrustedAuthorityRoot,
+    ) -> Result<RetainedWorkerAdmissionStorageV1, BootstrapError> {
+        opened
+            .revalidate()
+            .map_err(|_| BootstrapError("revalidate retained admission authority root"))?;
+        let rebound =
+            TrustedAuthorityRoot::open(std::path::Path::new(&opened.identity().physical_path))
+                .map_err(|_| BootstrapError("open retained admission authority root"))?;
+        if rebound.identity() != opened.identity() {
+            return Err(BootstrapError(
+                "retained admission authority root identity mismatch",
+            ));
+        }
+        let authority_store_id =
+            with_opened_existing_versioned_semantic_preflight(&rebound, |transaction| {
+                transaction.reconcile()?;
+                Ok(transaction.root.authority_store_id().to_owned())
+            })?;
+        Ok(RetainedWorkerAdmissionStorageV1 {
+            root: rebound,
+            authority_store_id,
+        })
+    }
+
+    fn open_retained_admission_transaction(
+        layout: &StoreLayout<'_>,
+    ) -> Result<RetainedWorkerAdmissionStorageTransactionV1, BootstrapError> {
+        let admission = match layout
+            .authority
+            .entry_kind(RETAINED_ADMISSION_DIRECTORY)
+            .map_err(|_| BootstrapError("inspect retained admission directory"))?
+        {
+            None => layout
+                .authority
+                .create_directory(RETAINED_ADMISSION_DIRECTORY)
+                .map_err(|_| BootstrapError("create retained admission directory"))?,
+            Some(EntryKind::Directory) => layout
+                .authority
+                .open_directory(RETAINED_ADMISSION_DIRECTORY)
+                .map_err(|_| BootstrapError("open retained admission directory"))?,
+            Some(_) => return Err(BootstrapError("retained admission directory is unsafe")),
+        };
+        let entries = admission
+            .entries()
+            .map_err(|_| BootstrapError("enumerate retained admission directory"))?;
+        let registry_exists = entries.iter().any(|entry| {
+            entry.name == RETAINED_ADMISSION_REGISTRY_FILE && entry.kind == EntryKind::RegularFile
+        });
+        for entry in &entries {
+            let valid = matches!(
+                (entry.name.as_str(), entry.kind),
+                (
+                    RETAINED_ADMISSION_KEYS_DIRECTORY | RETAINED_ADMISSION_TEMP_DIRECTORY,
+                    EntryKind::Directory
+                ) | (RETAINED_ADMISSION_REGISTRY_FILE, EntryKind::RegularFile)
+            );
+            if !valid {
+                return Err(BootstrapError(
+                    "retained admission directory layout is invalid",
+                ));
+            }
+            admission
+                .revalidate_entry(entry)
+                .map_err(|_| BootstrapError("retained admission directory entry changed"))?;
+        }
+        let open_component = |name: &str| match admission
+            .entry_kind(name)
+            .map_err(|_| BootstrapError("inspect retained admission component"))?
+        {
+            Some(EntryKind::Directory) => admission
+                .open_directory(name)
+                .map_err(|_| BootstrapError("open retained admission component")),
+            None if !registry_exists => admission
+                .create_directory(name)
+                .map_err(|_| BootstrapError("create retained admission component")),
+            None | Some(_) => Err(BootstrapError("retained admission component is invalid")),
+        };
+        let keys = open_component(RETAINED_ADMISSION_KEYS_DIRECTORY)?;
+        let tmp = open_component(RETAINED_ADMISSION_TEMP_DIRECTORY)?;
+        reconcile_retained_admission_temps(&tmp)?;
+        admission
+            .sync()
+            .map_err(|_| BootstrapError("sync retained admission layout"))?;
+        Ok(RetainedWorkerAdmissionStorageTransactionV1 {
+            admission,
+            keys,
+            tmp,
+        })
+    }
+
+    fn reconcile_retained_admission_temps(tmp: &TrustedDirectory) -> Result<(), BootstrapError> {
+        for entry in tmp
+            .entries()
+            .map_err(|_| BootstrapError("enumerate retained admission temps"))?
+        {
+            if entry.kind != EntryKind::RegularFile || !admission_temp_file_name(&entry.name) {
+                return Err(BootstrapError("retained admission temp layout is invalid"));
+            }
+            tmp.revalidate_entry(&entry)
+                .map_err(|_| BootstrapError("retained admission temp changed"))?;
+            tmp.unlink_file(&entry.name)
+                .map_err(|_| BootstrapError("remove retained admission temp"))?;
+        }
+        Ok(())
+    }
+
+    fn admission_key_file_name(name: &str) -> bool {
+        name.strip_suffix(".key").is_some_and(|key_id| {
+            key_id.strip_prefix("adk_").is_some_and(|hex| {
+                hex.len() == 32
+                    && hex
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            })
+        })
+    }
+
+    fn admission_temp_file_name(name: &str) -> bool {
+        ["admission-key--", "admission-registry--"]
+            .into_iter()
+            .any(|prefix| {
+                name.strip_prefix(prefix)
+                    .and_then(|rest| rest.strip_suffix(".tmp"))
+                    .is_some_and(|hex| {
+                        hex.len() == 32
+                            && hex
+                                .bytes()
+                                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                    })
+            })
+    }
 
     pub(super) fn classify(path: &std::path::Path) -> BootstrapClassificationV1 {
         classify_checked(path).unwrap_or(BootstrapClassificationV1::CorruptOrUnsupported)
