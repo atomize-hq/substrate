@@ -258,7 +258,9 @@ That R6 closeout supplied only the `R7-PROMOTE` entry authority and completed no
 promotion series `455d0ed90` + `876ac55de` completed the R7 content/gate audit, made the R7
 MAP/SPEC/PLAN/TASKS implementation-ready, and received fresh independent built-in `default` `REVIEW
 CLEAN`; `R7-PROMOTE` is complete. The narrow status transition series `6bf0ac6ad` + `4a887ee0c` +
-`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. `R7-0` is active at entry
-with packet `none`. `R7-0.1` is complete at its docs-only landing candidate and awaits fresh
-independent review; `R7-0.2` is next only after that review is clean. Fixtures and all R7
-implementation remain unstarted; `R7-1..R7-6` remain blocked.
+`e83ebb430` received fresh independent built-in `default` `REVIEW CLEAN`. Docs-only `R7-0.1` series
+`a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` each received
+fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. `R7-1` is active at entry
+only with packet `none`; transition commit `339744dff` awaits fresh review. `R7-1.1` is next,
+unchecked, and unstarted. Production implementation remains unstarted; `R7-2..R7-6` and R8 remain
+blocked.

@@ -112,7 +112,8 @@ complete; entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is als
 built-in `default` `REVIEW CLEAN`.
 The open work is no longer archetype identification, first-cut progress export, `R5.75`, the R6
 acceptance-control matrix, a named scorer gap, replay closeout, R6 terminal-disposition
-reconciliation, R7 promotion content, or transition review.
+reconciliation, or R7 promotion content. Only fresh review of the narrow `R7-0 -> R7-1` transition
+commit remains at this phase boundary; do not start `R7-1.1` before it is fresh-review-clean.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +

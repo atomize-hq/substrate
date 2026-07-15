@@ -30,7 +30,7 @@ R8 BLOCKED / PRODUCTION IMPLEMENTATION NOT STARTED**
 6. R8 still owns broad sentinel interpretation consolidation. R7 may add only compatibility and
    compact presentation required to carry the new analyzer semantics end to end.
 
-## Implementation Promotion Gate — Promotion Complete, R7-0 Active
+## Implementation Promotion Gate — Promotion Complete, R7-0 Complete, R7-1 at Entry
 
 This document is now implementation-ready authority. The R6 prerequisites audited during the
 now-complete `R7-PROMOTE` phase are satisfied:
