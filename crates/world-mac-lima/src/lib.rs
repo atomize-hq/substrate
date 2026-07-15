@@ -731,6 +731,7 @@ fn convert_member_dispatch(
             ),
             binary_path: dispatch.resolved_runtime.binary_path.clone(),
         },
+        retained_worker_launch_authority: None,
     }
 }
 
@@ -939,6 +940,63 @@ mod tests {
             transport,
             Transport::UnixSocket | Transport::TCP | Transport::VSock
         );
+    }
+
+    #[test]
+    fn convert_member_dispatch_preserves_world_api_fields_and_adds_no_spawn_authority() {
+        let original = world_api::MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "participant_123".to_string(),
+            orchestrator_participant_id: "participant_root".to_string(),
+            parent_participant_id: Some("participant_parent".to_string()),
+            resumed_from_participant_id: Some("participant_previous".to_string()),
+            backend_id: "backend_123".to_string(),
+            protocol: "stdio".to_string(),
+            run_id: "run_123".to_string(),
+            world_id: "wld_123".to_string(),
+            world_generation: 7,
+            initial_prompt: Some("prompt".to_string()),
+            resolved_runtime: world_api::ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: world_api::MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/usr/bin/env".to_string(),
+            },
+        };
+
+        let converted = convert_member_dispatch(&original);
+        assert_eq!(converted.schema_version, original.schema_version);
+        assert_eq!(
+            converted.orchestration_session_id,
+            original.orchestration_session_id
+        );
+        assert_eq!(converted.participant_id, original.participant_id);
+        assert_eq!(
+            converted.orchestrator_participant_id,
+            original.orchestrator_participant_id
+        );
+        assert_eq!(
+            converted.parent_participant_id,
+            original.parent_participant_id
+        );
+        assert_eq!(
+            converted.resumed_from_participant_id,
+            original.resumed_from_participant_id
+        );
+        assert_eq!(converted.backend_id, original.backend_id);
+        assert_eq!(converted.protocol, original.protocol);
+        assert_eq!(converted.run_id, original.run_id);
+        assert_eq!(converted.world_id, original.world_id);
+        assert_eq!(converted.world_generation, original.world_generation);
+        assert_eq!(converted.initial_prompt, original.initial_prompt);
+        assert_eq!(
+            converted.resolved_runtime.binary_path,
+            original.resolved_runtime.binary_path
+        );
+        assert_eq!(
+            converted.resolved_runtime.backend_kind,
+            convert_member_runtime_backend_kind(original.resolved_runtime.backend_kind.clone())
+        );
+        assert_eq!(converted.retained_worker_launch_authority, None);
     }
 
     #[test]
