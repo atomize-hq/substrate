@@ -16,6 +16,10 @@ use rand::RngCore;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
+use substrate_common::agent_events::{
+    AgentEvent, AgentEventKind, RuntimeEventIdentityV1, RuntimeFrameIdentityV1,
+    RuntimeTerminalIdentityV1,
+};
 
 use super::host_session_authority::canonical_json;
 #[cfg(test)]
@@ -378,6 +382,21 @@ struct AdmissionTransportPublicationInputV1 {
     crash_point: Option<AdmissionTransportClaimCrashPointV1>,
 }
 
+enum AdmissionRuntimeTruthInputV1<'a> {
+    Registered {
+        frame_identity: &'a RuntimeFrameIdentityV1,
+        event: &'a AgentEvent,
+        registered_at: TimestampV1,
+    },
+    Terminal {
+        frame_identity: &'a RuntimeFrameIdentityV1,
+        event_identity: &'a RuntimeEventIdentityV1,
+        terminal_identity: &'a RuntimeTerminalIdentityV1,
+        exit_code: i32,
+        terminal_at: TimestampV1,
+    },
+}
+
 struct AdmissionRegistrationAdvanceInputV1<'a> {
     retained_participant_id: &'a str,
     secret_key: &'a [u8; 32],
@@ -400,6 +419,9 @@ enum AdmissionInitializationCrashPointV1 {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AdmissionReservationCrashPointV1 {
+    BeforeTempPersistence,
+    AfterTempFsync,
+    BeforeRegistryReplacementPublication,
     AfterSlotReserved,
 }
 
@@ -419,8 +441,9 @@ enum AdmissionRegistrationCrashPointV1 {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AdmissionTransportClaimCrashPointV1 {
-    BeforePublication,
-    DuringPublication,
+    BeforeTempPersistence,
+    AfterTempFsync,
+    BeforeRegistryReplacementPublication,
     AfterPublicationBeforeResponse,
 }
 
@@ -880,6 +903,36 @@ impl RetainedWorkerRuntime {
                 &mut semantic_failure,
             )?;
             let temp_name = format!("admission-registry--{}.tmp", lower_hex(&publication_nonce));
+            #[cfg(test)]
+            if crash_point == Some(AdmissionReservationCrashPointV1::BeforeTempPersistence) {
+                retain_semantic_error(
+                    Err(RetainedWorkerRuntimeError(
+                        "injected crash before admission slot temp persistence".into(),
+                    )),
+                    &mut semantic_failure,
+                )?;
+            }
+            #[cfg(test)]
+            if matches!(
+                crash_point,
+                Some(
+                    AdmissionReservationCrashPointV1::AfterTempFsync
+                        | AdmissionReservationCrashPointV1::BeforeRegistryReplacementPublication
+                )
+            ) {
+                transaction.stage_registry_replacement_for_test(&temp_name, &published)?;
+                let message = if crash_point
+                    == Some(AdmissionReservationCrashPointV1::AfterTempFsync)
+                {
+                    "injected crash after admission slot temp fsync"
+                } else {
+                    "injected crash before admission slot registry publication"
+                };
+                retain_semantic_error(
+                    Err(RetainedWorkerRuntimeError(message.into())),
+                    &mut semantic_failure,
+                )?;
+            }
             transaction.replace_registry(&temp_name, &published)?;
             #[cfg(test)]
             if crash_point == Some(AdmissionReservationCrashPointV1::AfterSlotReserved) {
@@ -1493,6 +1546,7 @@ impl RetainedWorkerRuntime {
     }
 
     #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
     fn claim_admission_transport_at(
         &self,
         authority: &HostSessionAuthority,
@@ -1583,11 +1637,11 @@ impl RetainedWorkerRuntime {
             if claim.newly_claimed {
                 #[cfg(test)]
                 if publication.crash_point
-                    == Some(AdmissionTransportClaimCrashPointV1::BeforePublication)
+                    == Some(AdmissionTransportClaimCrashPointV1::BeforeTempPersistence)
                 {
                     retain_semantic_error(
                         Err(RetainedWorkerRuntimeError(
-                            "injected crash before transport-claim publication".into(),
+                            "injected crash before transport-claim temp persistence".into(),
                         )),
                         &mut semantic_failure,
                     )?;
@@ -1601,14 +1655,24 @@ impl RetainedWorkerRuntime {
                     lower_hex(&publication.publication_nonce)
                 );
                 #[cfg(test)]
-                if publication.crash_point
-                    == Some(AdmissionTransportClaimCrashPointV1::DuringPublication)
+                if matches!(
+                    publication.crash_point,
+                    Some(
+                        AdmissionTransportClaimCrashPointV1::AfterTempFsync
+                            | AdmissionTransportClaimCrashPointV1::BeforeRegistryReplacementPublication
+                    )
+                )
                 {
                     transaction.stage_registry_replacement_for_test(&temp_name, &bytes)?;
+                    let message = if publication.crash_point
+                        == Some(AdmissionTransportClaimCrashPointV1::AfterTempFsync)
+                    {
+                        "injected crash after transport-claim temp fsync"
+                    } else {
+                        "injected crash before transport-claim registry publication"
+                    };
                     retain_semantic_error(
-                        Err(RetainedWorkerRuntimeError(
-                            "injected crash during transport-claim publication".into(),
-                        )),
+                        Err(RetainedWorkerRuntimeError(message.into())),
                         &mut semantic_failure,
                     )?;
                 }
@@ -1627,6 +1691,145 @@ impl RetainedWorkerRuntime {
                 }
             }
             Ok(claim)
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
+    pub(crate) fn mark_admission_routable(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        frame_identity: &RuntimeFrameIdentityV1,
+        event: &AgentEvent,
+        registered_at: TimestampV1,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        self.publish_admission_runtime_truth(
+            authority,
+            plan,
+            retained_participant_id,
+            &AdmissionRuntimeTruthInputV1::Registered {
+                frame_identity,
+                event,
+                registered_at,
+            },
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn mark_admission_terminal(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        frame_identity: &RuntimeFrameIdentityV1,
+        event_identity: &RuntimeEventIdentityV1,
+        terminal_identity: &RuntimeTerminalIdentityV1,
+        exit_code: i32,
+        terminal_at: TimestampV1,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        self.publish_admission_runtime_truth(
+            authority,
+            plan,
+            retained_participant_id,
+            &AdmissionRuntimeTruthInputV1::Terminal {
+                frame_identity,
+                event_identity,
+                terminal_identity,
+                exit_code,
+                terminal_at,
+            },
+        )
+    }
+
+    fn publish_admission_runtime_truth(
+        &self,
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        retained_participant_id: &str,
+        truth: &AdmissionRuntimeTruthInputV1<'_>,
+    ) -> Result<RetainedWorkerAdmissionRecordV1, RetainedWorkerRuntimeError> {
+        let resolved = authority
+            .resolve_current_exact(&plan.spawn_request.orchestration_session_id, None)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let mut current_plan = plan.clone();
+        current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut publication_nonce = [0_u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut publication_nonce);
+        let mut semantic_failure = None;
+        let result = storage.transaction(|transaction| {
+            let registry_bytes = transaction.read_registry()?.ok_or_else(
+                super::host_session_authority::store::BootstrapError::retained_admission_semantic,
+            )?;
+            let mut registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            let (_, envelope) = retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                ),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_complete_post_r0_registry_graphs(
+                    &registry,
+                    transaction.authority_root(),
+                    &post_r0_graphs,
+                ),
+                &mut semantic_failure,
+            )?;
+            let graph = post_r0_graphs
+                .get(&(
+                    plan.spawn_request.orchestration_session_id.clone(),
+                    retained_participant_id.to_owned(),
+                ))
+                .ok_or_else(
+                    super::host_session_authority::store::BootstrapError::retained_admission_semantic,
+                )?;
+            let (record, changed) = retain_semantic_error(
+                advance_admission_runtime_truth_in_registry(
+                    &mut registry,
+                    transaction.authority_root(),
+                    &current_plan,
+                    plan,
+                    retained_participant_id,
+                    &envelope.secret_key,
+                    &graph.registered_graph,
+                    truth,
+                ),
+                &mut semantic_failure,
+            )?;
+            if changed {
+                let bytes = retain_semantic_error(
+                    encode_canonical(&registry, "encode admission registry"),
+                    &mut semantic_failure,
+                )?;
+                transaction.replace_registry(
+                    &format!(
+                        "admission-registry--{}.tmp",
+                        lower_hex(&publication_nonce)
+                    ),
+                    &bytes,
+                )?;
+            }
+            Ok(record)
         });
         if let Some(error) = semantic_failure {
             return Err(error);
@@ -2535,6 +2738,210 @@ fn claim_transport_in_registry(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn advance_admission_runtime_truth_in_registry(
+    registry: &mut RetainedWorkerAdmissionRegistryV1,
+    authority_root: &VersionedStateRoot,
+    current_plan: &RetainedWorkerAdmissionPlanV1,
+    supplied_plan: &RetainedWorkerAdmissionPlanV1,
+    retained_participant_id: &str,
+    secret_key: &[u8; 32],
+    post_r0_graph: &ResolvedPostR0RegisteredGraphV1,
+    truth: &AdmissionRuntimeTruthInputV1<'_>,
+) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
+    validate_admission_plan(authority_root, current_plan)?;
+    let VersionedStateRoot::V2(root) = authority_root else {
+        return Err(RetainedWorkerRuntimeError(
+            "runtime truth requires strict V2 authority".into(),
+        ));
+    };
+    let mut record = registry
+        .records_by_session
+        .get(&current_plan.spawn_request.orchestration_session_id)
+        .and_then(|records| records.get(retained_participant_id))
+        .cloned()
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
+    validate_supplied_admission_authority(
+        root,
+        &current_plan.exact_authority,
+        &supplied_plan.exact_authority,
+        &record,
+    )?;
+    verify_admission_record_fingerprint(supplied_plan, &record, secret_key)?;
+    let registration = admission_registration(&record.state)
+        .cloned()
+        .ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "runtime truth cannot advance before exact R0 admission".into(),
+            )
+        })?;
+    validate_post_r0_registered_graph(
+        root,
+        &record,
+        current_plan,
+        &registration,
+        &post_r0_graph.result,
+        &post_r0_graph.resolved_target,
+    )?;
+
+    let next_state = match truth {
+        AdmissionRuntimeTruthInputV1::Registered {
+            frame_identity,
+            event,
+            registered_at,
+        } => {
+            frame_identity
+                .validate()
+                .map_err(RetainedWorkerRuntimeError)?;
+            event
+                .validate_identity_contract()
+                .map_err(RetainedWorkerRuntimeError)?;
+            let event_identity = event.event_identity.as_ref().ok_or_else(|| {
+                RetainedWorkerRuntimeError(
+                    "Registered runtime truth requires exact event identity".into(),
+                )
+            })?;
+            if event.kind != AgentEventKind::Registered
+                || event.agent_id
+                    != supplied_plan
+                        .descriptor_and_runtime_plan
+                        .descriptor
+                        .agent_id
+                || event.orchestration_session_id != record.orchestration_session_id
+                || event.run_id != record.bootstrap_run_id
+                || event.participant_id.as_deref() != Some(record.retained_participant_id.as_str())
+                || event.backend_id.as_deref() != Some(record.backend_id.as_str())
+                || event.world_id.as_deref() != Some(record.world_binding.world_id.as_str())
+                || event.world_generation != Some(record.world_binding.world_generation)
+            {
+                return Err(RetainedWorkerRuntimeError(
+                    "Registered runtime truth does not exactly identify the admitted worker".into(),
+                ));
+            }
+            match &record.state {
+                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. } => {
+                    RetainedWorkerAdmissionStateV1::Routable {
+                        registration,
+                        stream_id: frame_identity.stream_id.clone(),
+                        registered_frame_sequence: frame_identity.frame_sequence,
+                        registered_event_id: event_identity.event_id.clone(),
+                        registered_event_sequence: event_identity.event_sequence,
+                        registered_at: registered_at.clone(),
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::Routable {
+                    stream_id,
+                    registered_frame_sequence,
+                    registered_event_id,
+                    registered_event_sequence,
+                    registered_at: existing_registered_at,
+                    ..
+                } if stream_id == &frame_identity.stream_id
+                    && *registered_frame_sequence == frame_identity.frame_sequence
+                    && registered_event_id == &event_identity.event_id
+                    && *registered_event_sequence == event_identity.event_sequence
+                    && existing_registered_at == registered_at =>
+                {
+                    return Ok((record, false));
+                }
+                RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+                    return Ok((record, false));
+                }
+                _ => {
+                    return Err(RetainedWorkerRuntimeError(
+                        "Registered runtime truth conflicts with durable admission state".into(),
+                    ));
+                }
+            }
+        }
+        AdmissionRuntimeTruthInputV1::Terminal {
+            frame_identity,
+            event_identity,
+            terminal_identity,
+            exit_code,
+            terminal_at,
+        } => {
+            frame_identity
+                .validate()
+                .map_err(RetainedWorkerRuntimeError)?;
+            event_identity
+                .validate()
+                .map_err(RetainedWorkerRuntimeError)?;
+            terminal_identity
+                .validate()
+                .map_err(RetainedWorkerRuntimeError)?;
+            if !terminal_identity.matches_event(event_identity) {
+                return Err(RetainedWorkerRuntimeError(
+                    "terminal runtime truth does not name its exact event".into(),
+                ));
+            }
+            match &record.state {
+                RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. } => {}
+                RetainedWorkerAdmissionStateV1::Routable {
+                    stream_id,
+                    registered_frame_sequence,
+                    registered_event_sequence,
+                    ..
+                } if stream_id == &frame_identity.stream_id
+                    && *registered_frame_sequence < frame_identity.frame_sequence
+                    && *registered_event_sequence < event_identity.event_sequence => {}
+                RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                    stream_id,
+                    last_frame_sequence,
+                    ..
+                } if stream_id
+                    .as_ref()
+                    .is_none_or(|stream_id| stream_id == &frame_identity.stream_id)
+                    && last_frame_sequence
+                        .is_none_or(|sequence| sequence < frame_identity.frame_sequence) => {}
+                RetainedWorkerAdmissionStateV1::Terminal {
+                    stream_id,
+                    terminal_frame_sequence,
+                    terminal_event_id,
+                    terminal_event_sequence,
+                    exit_code: existing_exit_code,
+                    terminal_at: existing_terminal_at,
+                    ..
+                } if stream_id == &frame_identity.stream_id
+                    && *terminal_frame_sequence == frame_identity.frame_sequence
+                    && terminal_event_id == &event_identity.event_id
+                    && *terminal_event_sequence == event_identity.event_sequence
+                    && existing_exit_code == exit_code
+                    && existing_terminal_at == terminal_at =>
+                {
+                    return Ok((record, false));
+                }
+                _ => {
+                    return Err(RetainedWorkerRuntimeError(
+                        "terminal runtime truth conflicts with durable admission state".into(),
+                    ));
+                }
+            }
+            RetainedWorkerAdmissionStateV1::Terminal {
+                registration,
+                stream_id: frame_identity.stream_id.clone(),
+                terminal_frame_sequence: frame_identity.frame_sequence,
+                terminal_event_id: event_identity.event_id.clone(),
+                terminal_event_sequence: event_identity.event_sequence,
+                exit_code: *exit_code,
+                terminal_at: terminal_at.clone(),
+            }
+        }
+    };
+    record.state = next_state;
+    record.record_revision = record
+        .record_revision
+        .checked_add(1)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission record revision overflow".into()))?;
+    registry
+        .records_by_session
+        .get_mut(&record.orchestration_session_id)
+        .ok_or_else(|| RetainedWorkerRuntimeError("admission session bucket is absent".into()))?
+        .insert(record.retained_participant_id.clone(), record.clone());
+    validate_admission_registry(registry, authority_root)?;
+    Ok((record, true))
+}
+
 fn admission_registration_from_hsa(
     root: &StateRootV2,
     record: &RetainedWorkerAdmissionRecordV1,
@@ -2913,6 +3320,7 @@ fn admission_registration_plan(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn reserve_slot_in_registry(
     registry: &mut RetainedWorkerAdmissionRegistryV1,
     authority_root: &VersionedStateRoot,
@@ -3538,6 +3946,56 @@ fn validate_admission_registry(
                         ));
                     }
                 }
+                RetainedWorkerAdmissionStateV1::Routable {
+                    stream_id,
+                    registered_frame_sequence,
+                    registered_event_id,
+                    registered_event_sequence,
+                    ..
+                } => {
+                    if stream_id.trim().is_empty()
+                        || *registered_frame_sequence == 0
+                        || registered_event_id.trim().is_empty()
+                        || *registered_event_sequence == 0
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "admission routable identity is invalid".into(),
+                        ));
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::InterruptedNonterminal {
+                    stream_id,
+                    last_frame_sequence,
+                    ..
+                } => {
+                    if stream_id
+                        .as_ref()
+                        .is_some_and(|stream_id| stream_id.trim().is_empty())
+                        || last_frame_sequence == &Some(0)
+                        || (stream_id.is_none() && last_frame_sequence.is_some())
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "admission interruption identity is invalid".into(),
+                        ));
+                    }
+                }
+                RetainedWorkerAdmissionStateV1::Terminal {
+                    stream_id,
+                    terminal_frame_sequence,
+                    terminal_event_id,
+                    terminal_event_sequence,
+                    ..
+                } => {
+                    if stream_id.trim().is_empty()
+                        || *terminal_frame_sequence == 0
+                        || terminal_event_id.trim().is_empty()
+                        || *terminal_event_sequence == 0
+                    {
+                        return Err(RetainedWorkerRuntimeError(
+                            "admission terminal identity is invalid".into(),
+                        ));
+                    }
+                }
                 _ => {}
             }
             if head_count > 1 {
@@ -3761,6 +4219,11 @@ mod tests {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::process::Command;
+
+    use substrate_common::agent_events::{
+        AgentEvent, MessageEventKind, RuntimeEventIdentityV1, RuntimeFrameIdentityV1,
+        RuntimeTerminalIdentityV1, RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+    };
 
     use super::*;
     use crate::execution::agent_runtime::host_session_authority::facade::{
@@ -5354,6 +5817,10 @@ mod tests {
                 result.unwrap_err().to_string(),
                 "injected crash while admission registration head"
             ),
+            "blocked" => assert_eq!(
+                result.unwrap_err().to_string(),
+                "a lower-sequence admission slot owns the registration head"
+            ),
             "conflict" => assert!(result.is_err()),
             _ => panic!("unknown admission-head subprocess mode"),
         }
@@ -5883,47 +6350,154 @@ mod tests {
         contents
     }
 
-    fn persist_admission_state_for_no_steal_matrix(
+    #[derive(Clone, Copy)]
+    enum NoStealMutationV1 {
+        QueuedRegistration,
+        RegistrationHead,
+        TransportJoin,
+    }
+
+    fn invoke_no_steal_mutation(
+        authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
+        expected: &RetainedWorkerAdmissionRecordV1,
+        mutation: NoStealMutationV1,
+    ) {
+        let runtime = RetainedWorkerRuntime;
+        match mutation {
+            NoStealMutationV1::QueuedRegistration => assert_eq!(
+                runtime
+                    .register_admitted_worker_at(
+                        authority,
+                        plan,
+                        Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
+                    )
+                    .unwrap_err()
+                    .to_string(),
+                "a lower-sequence admission slot owns the registration head"
+            ),
+            NoStealMutationV1::RegistrationHead => assert_eq!(
+                runtime
+                    .register_admitted_worker_at(
+                        authority,
+                        plan,
+                        Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
+                    )
+                    .unwrap_err()
+                    .to_string(),
+                "injected crash while admission registration head"
+            ),
+            NoStealMutationV1::TransportJoin => {
+                let joined = runtime
+                    .claim_admission_transport(authority, plan, &expected.retained_participant_id)
+                    .unwrap();
+                assert!(!joined.newly_claimed);
+                assert_eq!(joined.record, *expected);
+            }
+        }
+
+        let mut changed = plan.clone();
+        changed.spawn_request.payload.prompt.push_str(" changed");
+        let conflict = match mutation {
+            NoStealMutationV1::QueuedRegistration | NoStealMutationV1::RegistrationHead => runtime
+                .register_admitted_worker_at(
+                    authority,
+                    &changed,
+                    Some(AdmissionRegistrationCrashPointV1::WhileRegistrationHead),
+                )
+                .map(drop),
+            NoStealMutationV1::TransportJoin => runtime
+                .claim_admission_transport(authority, &changed, &expected.retained_participant_id)
+                .map(drop),
+        };
+        assert!(conflict.is_err());
+    }
+
+    fn invoke_no_steal_mutation_from_another_pid(
         parent: &tempfile::TempDir,
-        record: &RetainedWorkerAdmissionRecordV1,
-        state: RetainedWorkerAdmissionStateV1,
-    ) -> RetainedWorkerAdmissionRecordV1 {
-        let registry_path = parent
-            .path()
-            .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
-        let mut registry: RetainedWorkerAdmissionRegistryV1 = decode_canonical(
-            &fs::read(&registry_path).unwrap(),
-            "decode no-steal registry fixture",
+        plan: &RetainedWorkerAdmissionPlanV1,
+        expected: &RetainedWorkerAdmissionRecordV1,
+        mutation: NoStealMutationV1,
+    ) {
+        let executable = std::env::current_exe().unwrap();
+        let exact_authority = String::from_utf8(
+            encode_canonical(
+                &plan.exact_authority,
+                "encode no-steal re-presented admission authority",
+            )
+            .unwrap(),
         )
         .unwrap();
-        let changed = registry
-            .records_by_session
-            .get_mut(&record.orchestration_session_id)
-            .unwrap()
-            .get_mut(&record.retained_participant_id)
-            .unwrap();
-        changed.state = state;
-        changed.record_revision += 1;
-        let changed = changed.clone();
-        fs::write(
-            registry_path,
-            encode_canonical(&registry, "encode no-steal registry fixture").unwrap(),
-        )
-        .unwrap();
-        changed
+        match mutation {
+            NoStealMutationV1::QueuedRegistration | NoStealMutationV1::RegistrationHead => {
+                let test_name = "execution::agent_runtime::retained_worker_runtime::tests::admission_head_subprocess_worker";
+                assert!(Command::new(&executable)
+                    .arg("--exact")
+                    .arg(test_name)
+                    .arg("--nocapture")
+                    .arg("--test-threads=1")
+                    .env(ADMISSION_HEAD_SUBPROCESS_HOME, parent.path().join("home"))
+                    .env(ADMISSION_HEAD_SUBPROCESS_ISSUER, &plan.issuer_request_id)
+                    .env(
+                        ADMISSION_HEAD_SUBPROCESS_PROMPT,
+                        &plan.spawn_request.payload.prompt,
+                    )
+                    .env(ADMISSION_HEAD_SUBPROCESS_EXACT_AUTHORITY, exact_authority)
+                    .env(
+                        ADMISSION_HEAD_SUBPROCESS_MODE,
+                        if matches!(mutation, NoStealMutationV1::QueuedRegistration) {
+                            "blocked"
+                        } else {
+                            "exact"
+                        },
+                    )
+                    .status()
+                    .unwrap()
+                    .success());
+            }
+            NoStealMutationV1::TransportJoin => {
+                let test_name = "execution::agent_runtime::retained_worker_runtime::tests::transport_claim_subprocess_worker";
+                let result_path = parent.path().join("no-steal-subprocess-result");
+                assert!(Command::new(&executable)
+                    .arg("--exact")
+                    .arg(test_name)
+                    .arg("--nocapture")
+                    .arg("--test-threads=1")
+                    .env(TRANSPORT_CLAIM_SUBPROCESS_HOME, parent.path().join("home"))
+                    .env(TRANSPORT_CLAIM_SUBPROCESS_ISSUER, &plan.issuer_request_id)
+                    .env(
+                        TRANSPORT_CLAIM_SUBPROCESS_PROMPT,
+                        &plan.spawn_request.payload.prompt,
+                    )
+                    .env(TRANSPORT_CLAIM_SUBPROCESS_EXACT_AUTHORITY, exact_authority)
+                    .env(
+                        TRANSPORT_CLAIM_SUBPROCESS_PARTICIPANT,
+                        &expected.retained_participant_id,
+                    )
+                    .env(TRANSPORT_CLAIM_SUBPROCESS_ENTROPY, "201")
+                    .env(TRANSPORT_CLAIM_SUBPROCESS_MODE, "claim")
+                    .env(TRANSPORT_CLAIM_SUBPROCESS_RESULT, &result_path)
+                    .status()
+                    .unwrap()
+                    .success());
+                assert_eq!(fs::read_to_string(result_path).unwrap(), "joined");
+            }
+        }
     }
 
     fn assert_non_authoritative_matrix_preserves_record(
         parent: &tempfile::TempDir,
         authority: &HostSessionAuthority,
+        plan: &RetainedWorkerAdmissionPlanV1,
         expected: &RetainedWorkerAdmissionRecordV1,
+        mutation: NoStealMutationV1,
     ) {
         let runtime = RetainedWorkerRuntime;
         let registry_path = parent
             .path()
             .join("home/authority-v1/retained-worker-admission-v1/registry-v1.json");
         let registry_before = fs::read(&registry_path).unwrap();
-        let assert_unchanged = || {
+        let assert_unchanged = |authority: &HostSessionAuthority| {
             assert_eq!(
                 runtime
                     .read_admission_record(
@@ -5936,48 +6510,24 @@ mod tests {
             );
             assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
         };
+        let assert_attempt = |authority: &HostSessionAuthority| {
+            invoke_no_steal_mutation(authority, plan, expected, mutation);
+            assert_unchanged(authority);
+        };
 
-        for _signal in [
-            "original caller process exit",
-            "caller drop",
-            "retry from another PID",
-            "same PID after restart",
-            "helper alive",
-            "helper dead",
-            "socket present",
-            "socket absent",
-            "endpoint reachable",
-            "endpoint unreachable",
-            "timeout",
-            "EOF",
-            "process liveness",
-            "observer loss",
-        ] {
-            assert_unchanged();
-        }
-
-        let executable = std::env::current_exe().unwrap();
-        let probe_name = "execution::agent_runtime::retained_worker_runtime::tests::non_authoritative_probe_subprocess_worker";
-        for _ in 0..2 {
-            assert!(Command::new(&executable)
-                .arg("--exact")
-                .arg(probe_name)
-                .arg("--nocapture")
-                .arg("--test-threads=1")
-                .env(NON_AUTHORITATIVE_PROBE_HOME, parent.path().join("home"))
-                .env(
-                    NON_AUTHORITATIVE_PROBE_SESSION,
-                    &expected.orchestration_session_id,
-                )
-                .env(
-                    NON_AUTHORITATIVE_PROBE_PARTICIPANT,
-                    &expected.retained_participant_id,
-                )
-                .status()
-                .unwrap()
-                .success());
-            assert_unchanged();
-        }
+        assert!(Command::new("sh")
+            .arg("-c")
+            .arg("exit 0")
+            .status()
+            .unwrap()
+            .success());
+        assert_attempt(authority);
+        drop(plan.clone());
+        assert_attempt(authority);
+        invoke_no_steal_mutation_from_another_pid(parent, plan, expected, mutation);
+        assert_unchanged(authority);
+        let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+        assert_attempt(&reopened);
 
         let mut helper = Command::new("sh")
             .arg("-c")
@@ -5985,38 +6535,66 @@ mod tests {
             .stdin(std::process::Stdio::piped())
             .spawn()
             .unwrap();
-        assert_unchanged();
+        assert_attempt(authority);
         helper.kill().unwrap();
         helper.wait().unwrap();
-        assert_unchanged();
+        assert_attempt(authority);
 
         let socket_path = parent.path().join("non-authoritative.sock");
         let listener = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
-        assert_unchanged();
+        assert_attempt(authority);
         let endpoint = std::os::unix::net::UnixStream::connect(&socket_path).unwrap();
-        assert_unchanged();
+        assert_attempt(authority);
         drop(endpoint);
         drop(listener);
         fs::remove_file(&socket_path).unwrap();
-        assert_unchanged();
+        assert_attempt(authority);
 
         let (mut eof_reader, eof_writer) = std::os::unix::net::UnixStream::pair().unwrap();
         drop(eof_writer);
         let mut eof = Vec::new();
         std::io::Read::read_to_end(&mut eof_reader, &mut eof).unwrap();
         assert!(eof.is_empty());
-        assert_unchanged();
+        assert_attempt(authority);
 
         let (_timeout_sender, timeout_receiver) = std::sync::mpsc::channel::<()>();
         assert!(matches!(
             timeout_receiver.recv_timeout(std::time::Duration::from_millis(1)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout)
         ));
-        assert_unchanged();
+        assert_attempt(authority);
         let (observer_sender, observer_receiver) = std::sync::mpsc::channel::<()>();
         drop(observer_receiver);
         assert!(observer_sender.send(()).is_err());
-        assert_unchanged();
+        assert_attempt(authority);
+    }
+
+    fn registered_runtime_truth(
+        plan: &RetainedWorkerAdmissionPlanV1,
+        record: &RetainedWorkerAdmissionRecordV1,
+        stream_id: &str,
+    ) -> (RuntimeFrameIdentityV1, AgentEvent) {
+        let frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: stream_id.into(),
+            frame_sequence: 1,
+        };
+        let mut event = AgentEvent::message(
+            plan.descriptor_and_runtime_plan.descriptor.agent_id.clone(),
+            record.orchestration_session_id.clone(),
+            record.bootstrap_run_id.clone(),
+            MessageEventKind::Registered,
+            "registered",
+        );
+        event.participant_id = Some(record.retained_participant_id.clone());
+        event.backend_id = Some(record.backend_id.clone());
+        event.world_id = Some(record.world_binding.world_id.clone());
+        event.world_generation = Some(record.world_binding.world_generation);
+        event.event_identity = Some(RuntimeEventIdentityV1 {
+            event_id: format!("event-{stream_id}-registered"),
+            event_sequence: 1,
+        });
+        (frame, event)
     }
 
     #[test]
@@ -6037,11 +6615,11 @@ mod tests {
 
         let (slot_parent, slot_authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
-        let head_plan = admission_plan(&slot_authority, "no-steal-slot-head", "head", 3);
+        let head_plan = admission_plan(&slot_authority, "no-steal-slot-head", "head", 4);
         runtime
             .reserve_admission_slot(&slot_authority, &head_plan)
             .unwrap();
-        let slot_plan = admission_plan(&slot_authority, "no-steal-slot", "queued", 3);
+        let slot_plan = admission_plan(&slot_authority, "no-steal-slot", "queued", 4);
         let slot = runtime
             .reserve_admission_slot(&slot_authority, &slot_plan)
             .unwrap();
@@ -6052,11 +6630,13 @@ mod tests {
         assert_non_authoritative_matrix_preserves_record(
             &slot_parent,
             &slot_authority,
+            &slot_plan,
             &slot.record,
+            NoStealMutationV1::QueuedRegistration,
         );
 
         let (head_parent, head_authority, _) = started_authority();
-        let head_plan = admission_plan(&head_authority, "no-steal-head", "head", 2);
+        let head_plan = admission_plan(&head_authority, "no-steal-head", "head", 4);
         let failure = runtime
             .register_admitted_worker_at(
                 &head_authority,
@@ -6078,11 +6658,13 @@ mod tests {
         assert_non_authoritative_matrix_preserves_record(
             &head_parent,
             &head_authority,
+            &head_plan,
             &head.record,
+            NoStealMutationV1::RegistrationHead,
         );
 
         let (claim_parent, claim_authority, _) = started_authority();
-        let claim_plan = admission_plan(&claim_authority, "no-steal-claim", "claim", 2);
+        let claim_plan = admission_plan(&claim_authority, "no-steal-claim", "claim", 4);
         let admitted = runtime
             .register_admitted_worker(&claim_authority, &claim_plan)
             .unwrap();
@@ -6100,11 +6682,13 @@ mod tests {
         assert_non_authoritative_matrix_preserves_record(
             &claim_parent,
             &claim_authority,
+            &claim_plan,
             &claim.record,
+            NoStealMutationV1::TransportJoin,
         );
 
         let (routable_parent, routable_authority, _) = started_authority();
-        let routable_plan = admission_plan(&routable_authority, "no-steal-routable", "routable", 2);
+        let routable_plan = admission_plan(&routable_authority, "no-steal-routable", "routable", 4);
         let routable_admitted = runtime
             .register_admitted_worker(&routable_authority, &routable_plan)
             .unwrap();
@@ -6115,29 +6699,31 @@ mod tests {
                 &routable_admitted.record.retained_participant_id,
             )
             .unwrap();
-        let registration = admission_registration(&routable_claim.record.state)
-            .unwrap()
-            .clone();
-        let routable = persist_admission_state_for_no_steal_matrix(
-            &routable_parent,
+        let (routable_frame, registered_event) = registered_runtime_truth(
+            &routable_plan,
             &routable_claim.record,
-            RetainedWorkerAdmissionStateV1::Routable {
-                registration,
-                stream_id: "stream-no-steal-routable".into(),
-                registered_frame_sequence: 1,
-                registered_event_id: "event-no-steal-routable".into(),
-                registered_event_sequence: 1,
-                registered_at: timestamp("2026-07-15T20:00:00.000000000Z"),
-            },
+            "stream-no-steal-routable",
         );
+        let routable = runtime
+            .mark_admission_routable(
+                &routable_authority,
+                &routable_plan,
+                &routable_claim.record.retained_participant_id,
+                &routable_frame,
+                &registered_event,
+                timestamp("2026-07-15T20:00:00.000000000Z"),
+            )
+            .unwrap();
         assert_non_authoritative_matrix_preserves_record(
             &routable_parent,
             &routable_authority,
+            &routable_plan,
             &routable,
+            NoStealMutationV1::TransportJoin,
         );
 
         let (terminal_parent, terminal_authority, _) = started_authority();
-        let terminal_plan = admission_plan(&terminal_authority, "no-steal-terminal", "terminal", 2);
+        let terminal_plan = admission_plan(&terminal_authority, "no-steal-terminal", "terminal", 4);
         let terminal_admitted = runtime
             .register_admitted_worker(&terminal_authority, &terminal_plan)
             .unwrap();
@@ -6148,26 +6734,49 @@ mod tests {
                 &terminal_admitted.record.retained_participant_id,
             )
             .unwrap();
-        let registration = admission_registration(&terminal_claim.record.state)
-            .unwrap()
-            .clone();
-        let terminal = persist_admission_state_for_no_steal_matrix(
-            &terminal_parent,
+        let (terminal_registered_frame, terminal_registered_event) = registered_runtime_truth(
+            &terminal_plan,
             &terminal_claim.record,
-            RetainedWorkerAdmissionStateV1::Terminal {
-                registration,
-                stream_id: "stream-no-steal-terminal".into(),
-                terminal_frame_sequence: 2,
-                terminal_event_id: "event-no-steal-terminal".into(),
-                terminal_event_sequence: 2,
-                exit_code: 0,
-                terminal_at: timestamp("2026-07-15T20:01:00.000000000Z"),
-            },
+            "stream-no-steal-terminal",
         );
+        runtime
+            .mark_admission_routable(
+                &terminal_authority,
+                &terminal_plan,
+                &terminal_claim.record.retained_participant_id,
+                &terminal_registered_frame,
+                &terminal_registered_event,
+                timestamp("2026-07-15T20:00:30.000000000Z"),
+            )
+            .unwrap();
+        let terminal_frame = RuntimeFrameIdentityV1 {
+            schema_version: RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: terminal_registered_frame.stream_id.clone(),
+            frame_sequence: 2,
+        };
+        let terminal_event = RuntimeEventIdentityV1 {
+            event_id: "event-stream-no-steal-terminal-exit".into(),
+            event_sequence: 2,
+        };
+        let terminal_identity = RuntimeTerminalIdentityV1::from(&terminal_event);
+        let terminal = runtime
+            .mark_admission_terminal(
+                &terminal_authority,
+                &terminal_plan,
+                &terminal_claim.record.retained_participant_id,
+                &terminal_frame,
+                &terminal_event,
+                &terminal_identity,
+                0,
+                timestamp("2026-07-15T20:01:00.000000000Z"),
+            )
+            .unwrap();
         assert_non_authoritative_matrix_preserves_record(
             &terminal_parent,
             &terminal_authority,
+            &terminal_plan,
             &terminal,
+            NoStealMutationV1::TransportJoin,
         );
     }
 
@@ -6927,36 +7536,150 @@ mod tests {
     }
 
     #[test]
-    fn crash_after_slot_reserved_retries_to_the_committed_identity() {
-        let (_parent, authority, _) = started_authority();
+    fn slot_reservation_publication_boundaries_reopen_and_retry_exactly() {
+        for (index, crash_point) in [
+            AdmissionReservationCrashPointV1::BeforeTempPersistence,
+            AdmissionReservationCrashPointV1::AfterTempFsync,
+            AdmissionReservationCrashPointV1::BeforeRegistryReplacementPublication,
+            AdmissionReservationCrashPointV1::AfterSlotReserved,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (parent, authority, _) = started_authority();
+            let runtime = RetainedWorkerRuntime;
+            runtime.initialize_admission_registry(&authority).unwrap();
+            let plan = admission_plan(
+                &authority,
+                &format!("slot-publication-crash-{index}"),
+                "prompt",
+                2,
+            );
+            let admission_root = parent
+                .path()
+                .join("home/authority-v1/retained-worker-admission-v1");
+            let registry_path = admission_root.join("registry-v1.json");
+            let tmp_root = admission_root.join("tmp");
+            let registry_before = fs::read(&registry_path).unwrap();
+            let participant_entropy = [11_u8.wrapping_add(index as u8); 16];
+            let bootstrap_entropy = [21_u8.wrapping_add(index as u8); 16];
+            let publication_nonce = [31_u8.wrapping_add(index as u8); 16];
+
+            let failure = runtime
+                .reserve_admission_slot_at(
+                    &authority,
+                    &plan,
+                    timestamp("2026-07-15T13:00:00.000000000Z"),
+                    participant_entropy,
+                    bootstrap_entropy,
+                    publication_nonce,
+                    Some(crash_point),
+                )
+                .unwrap_err();
+            let expected_failure = match crash_point {
+                AdmissionReservationCrashPointV1::BeforeTempPersistence => {
+                    "injected crash before admission slot temp persistence"
+                }
+                AdmissionReservationCrashPointV1::AfterTempFsync => {
+                    "injected crash after admission slot temp fsync"
+                }
+                AdmissionReservationCrashPointV1::BeforeRegistryReplacementPublication => {
+                    "injected crash before admission slot registry publication"
+                }
+                AdmissionReservationCrashPointV1::AfterSlotReserved => {
+                    "injected crash after admission slot reservation"
+                }
+            };
+            assert_eq!(failure.to_string(), expected_failure);
+            let durable_after_failure = fs::read(&registry_path).unwrap();
+            if crash_point == AdmissionReservationCrashPointV1::AfterSlotReserved {
+                assert_ne!(durable_after_failure, registry_before);
+                assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
+            } else {
+                assert_eq!(durable_after_failure, registry_before);
+                assert_eq!(
+                    fs::read_dir(&tmp_root).unwrap().count(),
+                    usize::from(matches!(
+                        crash_point,
+                        AdmissionReservationCrashPointV1::AfterTempFsync
+                            | AdmissionReservationCrashPointV1::BeforeRegistryReplacementPublication
+                    ))
+                );
+            }
+
+            fs::write(
+                tmp_root.join(format!("admission-registry--{}.tmp", "ed".repeat(16))),
+                b"conflicting slot orphan",
+            )
+            .unwrap();
+            let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+            let retried = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
+            assert_eq!(
+                retried.joined,
+                crash_point == AdmissionReservationCrashPointV1::AfterSlotReserved
+            );
+            assert!(matches!(
+                retried.record.state,
+                RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+            ));
+            if retried.joined {
+                assert_eq!(
+                    retried.record.retained_participant_id,
+                    format!("rwp_{}", lower_hex(&participant_entropy))
+                );
+                assert_eq!(
+                    retried.record.bootstrap_run_id,
+                    format!("rwr_{}", lower_hex(&bootstrap_entropy))
+                );
+            }
+            assert_eq!(fs::read_dir(&tmp_root).unwrap().count(), 0);
+            let joined = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
+            assert!(joined.joined);
+            assert_eq!(joined.record, retried.record);
+        }
+
+        let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
-        let plan = admission_plan(&authority, "slot-crash", "prompt", 2);
-        let failure = runtime
+        runtime.initialize_admission_registry(&authority).unwrap();
+        let plan = admission_plan(&authority, "slot-rename-before-dirsync", "prompt", 2);
+        let admission_root = parent
+            .path()
+            .join("home/authority-v1/retained-worker-admission-v1");
+        let registry_path = admission_root.join("registry-v1.json");
+        let tmp_root = admission_root.join("tmp");
+        let publication_nonce = [91_u8; 16];
+        assert!(runtime
             .reserve_admission_slot_at(
                 &authority,
                 &plan,
-                timestamp("2026-07-15T13:00:00.000000000Z"),
-                [11_u8; 16],
-                [12_u8; 16],
-                [13_u8; 16],
-                Some(AdmissionReservationCrashPointV1::AfterSlotReserved),
+                timestamp("2026-07-15T13:01:00.000000000Z"),
+                [92_u8; 16],
+                [93_u8; 16],
+                publication_nonce,
+                Some(AdmissionReservationCrashPointV1::AfterTempFsync),
             )
-            .unwrap_err();
+            .is_err());
+        fs::rename(
+            tmp_root.join(format!(
+                "admission-registry--{}.tmp",
+                lower_hex(&publication_nonce)
+            )),
+            &registry_path,
+        )
+        .unwrap();
+        fs::write(
+            tmp_root.join(format!("admission-registry--{}.tmp", "ec".repeat(16))),
+            b"conflicting slot orphan after rename",
+        )
+        .unwrap();
+        let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+        let retried = runtime.reserve_admission_slot(&reopened, &plan).unwrap();
+        assert!(retried.joined);
         assert_eq!(
-            failure.to_string(),
-            "injected crash after admission slot reservation"
+            retried.record.retained_participant_id,
+            format!("rwp_{}", lower_hex(&[92_u8; 16]))
         );
-
-        let joined = runtime.reserve_admission_slot(&authority, &plan).unwrap();
-        assert!(joined.joined);
-        assert_eq!(
-            joined.record.retained_participant_id,
-            format!("rwp_{}", lower_hex(&[11_u8; 16]))
-        );
-        assert_eq!(
-            joined.record.bootstrap_run_id,
-            format!("rwr_{}", lower_hex(&[12_u8; 16]))
-        );
+        assert_eq!(fs::read_dir(tmp_root).unwrap().count(), 0);
     }
 
     #[test]
@@ -8374,8 +9097,9 @@ mod tests {
     #[test]
     fn transport_claim_crash_boundaries_retry_exactly_without_duplicate_send_authority() {
         for (index, crash_point) in [
-            AdmissionTransportClaimCrashPointV1::BeforePublication,
-            AdmissionTransportClaimCrashPointV1::DuringPublication,
+            AdmissionTransportClaimCrashPointV1::BeforeTempPersistence,
+            AdmissionTransportClaimCrashPointV1::AfterTempFsync,
+            AdmissionTransportClaimCrashPointV1::BeforeRegistryReplacementPublication,
             AdmissionTransportClaimCrashPointV1::AfterPublicationBeforeResponse,
         ]
         .into_iter()
@@ -8402,17 +9126,21 @@ mod tests {
                 )
                 .unwrap_err();
             let expected_failure = match crash_point {
-                AdmissionTransportClaimCrashPointV1::BeforePublication => {
-                    "injected crash before transport-claim publication"
+                AdmissionTransportClaimCrashPointV1::BeforeTempPersistence => {
+                    "injected crash before transport-claim temp persistence"
                 }
-                AdmissionTransportClaimCrashPointV1::DuringPublication => {
-                    "injected crash during transport-claim publication"
+                AdmissionTransportClaimCrashPointV1::AfterTempFsync => {
+                    "injected crash after transport-claim temp fsync"
+                }
+                AdmissionTransportClaimCrashPointV1::BeforeRegistryReplacementPublication => {
+                    "injected crash before transport-claim registry publication"
                 }
                 AdmissionTransportClaimCrashPointV1::AfterPublicationBeforeResponse => {
                     "injected crash after transport-claim publication before response"
                 }
             };
             assert_eq!(failure.to_string(), expected_failure);
+            let staged_temp_count = fs::read_dir(admission_root.join("tmp")).unwrap().count();
             let durable_after_failure = runtime
                 .read_admission_record(&authority, "r0-session", &participant_id)
                 .unwrap()
@@ -8429,7 +9157,23 @@ mod tests {
                     RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
                 ));
                 assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+                assert_eq!(
+                    staged_temp_count,
+                    usize::from(matches!(
+                        crash_point,
+                        AdmissionTransportClaimCrashPointV1::AfterTempFsync
+                            | AdmissionTransportClaimCrashPointV1::BeforeRegistryReplacementPublication
+                    ))
+                );
             }
+
+            fs::write(
+                admission_root
+                    .join("tmp")
+                    .join(format!("admission-registry--{}.tmp", "eb".repeat(16))),
+                b"conflicting transport-claim orphan",
+            )
+            .unwrap();
 
             let retried = runtime
                 .claim_admission_transport_at(
@@ -8476,6 +9220,59 @@ mod tests {
             assert!(!no_steal.newly_claimed);
             assert_eq!(no_steal.record, retried.record);
         }
+
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let plan = admission_plan(&authority, "claim-rename-before-dirsync", "prompt", 3);
+        let admitted = runtime.register_admitted_worker(&authority, &plan).unwrap();
+        let participant_id = admitted.record.retained_participant_id.clone();
+        let identity = runtime.initialize_admission_registry(&authority).unwrap();
+        let (admission_root, _) = initialized_admission_paths(&parent, &identity);
+        let registry_path = admission_root.join("registry-v1.json");
+        let tmp_root = admission_root.join("tmp");
+        let publication_nonce = [111_u8; 16];
+        assert!(runtime
+            .claim_admission_transport_at(
+                &authority,
+                &plan,
+                &participant_id,
+                timestamp("2026-07-15T14:04:00.000000000Z"),
+                [112_u8; 16],
+                publication_nonce,
+                Some(AdmissionTransportClaimCrashPointV1::AfterTempFsync),
+            )
+            .is_err());
+        fs::rename(
+            tmp_root.join(format!(
+                "admission-registry--{}.tmp",
+                lower_hex(&publication_nonce)
+            )),
+            &registry_path,
+        )
+        .unwrap();
+        fs::write(
+            tmp_root.join(format!("admission-registry--{}.tmp", "ea".repeat(16))),
+            b"conflicting transport-claim orphan after rename",
+        )
+        .unwrap();
+        let reopened = HostSessionAuthority::open(&parent.path().join("home")).unwrap();
+        let retried = runtime
+            .claim_admission_transport_at(
+                &reopened,
+                &plan,
+                &participant_id,
+                timestamp("2026-07-15T14:04:00.000000000Z"),
+                [112_u8; 16],
+                [113_u8; 16],
+                None,
+            )
+            .unwrap();
+        assert!(!retried.newly_claimed);
+        assert!(matches!(
+            retried.record.state,
+            RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. }
+        ));
+        assert_eq!(fs::read_dir(tmp_root).unwrap().count(), 0);
     }
 
     #[test]
