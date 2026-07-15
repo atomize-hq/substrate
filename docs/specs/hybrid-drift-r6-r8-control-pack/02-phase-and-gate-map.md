@@ -21,8 +21,9 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | [`R6-GAP-*`](05-proof-decision-regression-ledger.md#named-r6-gap-status-subledger) | COMPLETE | One bounded scorer-specific gap phase per proven red | SATISFIED — the named-gap subledger instantiated all three preserved reds sequentially | SATISFIED — every named witness has review-clean focused proof and the final authority transition is landed. |
 | `R6-REPLAY` | COMPLETE | Bounded real-rollout/replay closeout | SATISFIED — controls and all conditional fixes complete; packet transition series `1ff592823` + `7839a7f47` fresh independent `REVIEW CLEAN`; active packet `none` | SATISFIED — phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`; exact replay controls pass `4 x 1 / 1`, family filters pass `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, full analyzer passes `402 / 402`, and diff check is green. Sticky authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay gap remains. |
 | `R6-CLOSE` | COMPLETE | R6 `CLOSED` authority reconciliation | SATISFIED — replay closeout proof receipt is fresh-review-clean and no ordinary gap is open | SATISFIED — `CTX-R6-17` assigns every material surface a terminal disposition; all root/R6/R7 gate/status docs agree; and transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent built-in `default` `REVIEW CLEAN` with no actionable findings. |
-| `R7-PROMOTE` | ACTIVE — CONTENT GATE COMPLETE / TRANSITION PENDING | Promote the R7 authority family to implementation-ready | SATISFIED — R6 finding says `CLOSED`, terminal scorer table is complete, and authority stack agrees | CONTENT SATISFIED — `R7-PROMOTE.1` and commit `455d0ed90` make the R7 MAP/SPEC/PLAN/TASKS implementation-ready. REMAINING — the narrow status transition lands and receives fresh independent review; R7 implementation remains unstarted. |
-| `R7-0..R7-6` | BLOCKED | Bounded direct-child delegated-session support | `R7-PROMOTE` transition committed and independently review-clean | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
+| `R7-PROMOTE` | COMPLETE | Promote the R7 authority family to implementation-ready | SATISFIED — R6 finding says `CLOSED`, terminal scorer table is complete, and authority stack agrees | SATISFIED — promotion series `455d0ed90` + `876ac55de` makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready and received fresh independent built-in `default` `REVIEW CLEAN`; no R7 task started. |
+| `R7-0` | ACTIVE — ENTRY ONLY / `R7-0.1` NEXT | Docs lock and sanitized evidence matrix | SATISFIED FOR ENTRY ONLY — `R7-PROMOTE` is complete; the narrow status transition is landed by this change and awaits fresh transition review before `R7-0.1` executes | `R7-0.1` contract freeze and `R7-0.2` sanitized linkage fixture matrix are committed and fresh-review-clean. |
+| `R7-1..R7-6` | BLOCKED | Compactor linkage through minimal sentinel compatibility | `R7-0` exit gate review-clean, then each ordered predecessor phase complete | R7 acceptance, real-corpus proof, and minimal sentinel compatibility are review-clean. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
@@ -53,10 +54,12 @@ family filters at `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`, the
 all suites green, and `git diff --check`. It assigns `dead_end_thrash` and `semantic_goal_drift`
 **Cutover complete** plus `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs`
 **Fit-for-purpose exception**. Transition/review-fix series `13b14d5f1` + `50446e6d6` is fresh
-independent built-in `default` `REVIEW CLEAN` with no actionable findings. `R6-CLOSE` is complete and R6 is `CLOSED`. `R7-PROMOTE.1` and content/gate audit commit
-`455d0ed90` make the R7 authority family implementation-ready. `R7-PROMOTE` remains active with
-packet `none` while the narrow phase-transition commit and independent review are pending;
-`R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted and inactive.
+independent built-in `default` `REVIEW CLEAN` with no actionable findings. `R6-CLOSE` is complete and
+R6 is `CLOSED`. Promotion series `455d0ed90` + `876ac55de` makes the R7 authority family
+implementation-ready and received fresh independent built-in `default` `REVIEW CLEAN`;
+`R7-PROMOTE` is complete. The narrow status transition is landed by this change with fresh
+transition review pending. `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and
+`R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

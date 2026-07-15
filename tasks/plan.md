@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-PROMOTE` (ACTIVE — CONTENT GATE COMPLETE / TRANSITION PENDING; active packet: `none`; R6 is `CLOSED`; `R7-PROMOTE.1` is complete; the R7 authority family is implementation-ready; the narrow phase-transition commit and independent review are pending; `R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted and inactive)**
+Current phase: **`R7-0` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R7-PROMOTE` is COMPLETE after promotion series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`; the narrow transition is landed by this change with fresh transition review pending; `R7-0.1` is next; `R7-0.1`, `R7-0.2`, and all implementation remain unstarted)**
 
 ## Dependency Order
 
@@ -48,9 +48,12 @@ Current phase: **`R7-PROMOTE` (ACTIVE — CONTENT GATE COMPLETE / TRANSITION PEN
    series `13b14d5f1` + `50446e6d6` received fresh independent built-in `default` `REVIEW CLEAN`
    with no actionable findings after `50446e6d6` resolved the first review's two P1 findings and one
    P3 finding.
-10. **CONTENT GATE COMPLETE / TRANSITION PENDING — R7-PROMOTE:** `R7-PROMOTE.1` reconciled the
-    R7 authority family to implementation-ready content. Land and independently review only the
-    narrow phase-transition update; do not start `R7-0.1`, `R7-0.2`, or any R7 implementation.
+10. **COMPLETE — R7-PROMOTE:** promotion series `455d0ed90` + `876ac55de` reconciled the R7
+    authority family to implementation-ready content and received fresh independent built-in
+    `default` `REVIEW CLEAN`.
+11. **ACTIVE AT ENTRY ONLY — R7-0:** the narrow status transition is landed by this change and
+    awaits fresh transition review. Active packet is `none`; `R7-0.1` is next, but `R7-0.1`,
+    `R7-0.2`, fixture work, and implementation have not started.
 
 ## Execution Rules
 
@@ -64,8 +67,8 @@ Current phase: **`R7-PROMOTE` (ACTIVE — CONTENT GATE COMPLETE / TRANSITION PEN
   improvement. Keep broad replay honesty partially / bounded proven until integrated replay closes
   the claim or the wording is narrowed.
 - Keep R7 reciprocal direct linkage, separate trajectories, direct-child-first support, and no-new-
-  drift-class-by-default as implementation-ready authority decisions, but inactive until the narrow
-  `R7-PROMOTE` phase transition is committed and independently review-clean.
+  drift-class-by-default as implementation-ready authority decisions. `R7-0` is active at entry
+  only; do not start `R7-0.1` until the current narrow transition is independently review-clean.
 - Run GitNexus impact analysis before any later symbol edit. Before every commit, stage only intended
   files with `git add -- <intended-files-only>`, run
   `npx gitnexus detect-changes --scope staged -r 97a0-substrate`, run
@@ -89,7 +92,8 @@ built-in `default` `REVIEW CLEAN`, so `R6-REPLAY` is complete and no ordinary re
 The 2026-07-15 `CTX-R6-17` receipt reconfirms the four exact replay controls, the five Manifest E
 family filters, full analyzer all-suites green, and `git diff --check`. Transition/review-fix series
 `13b14d5f1` + `50446e6d6` is fresh independent built-in `default` `REVIEW CLEAN` with no actionable
-findings. R6 is `CLOSED` and `R6-CLOSE` is complete. `R7-PROMOTE.1` has completed the R7 content/gate audit,
-so the R7 authority family is implementation-ready. `R7-PROMOTE` remains the sole active phase with
-packet `none` while the narrow phase-transition commit and independent review are pending;
-`R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted and inactive.
+findings. R6 is `CLOSED` and `R6-CLOSE` is complete. Promotion series `455d0ed90` + `876ac55de`
+completed the R7 content/gate audit, made the R7 authority family implementation-ready, and received
+fresh independent built-in `default` `REVIEW CLEAN`; `R7-PROMOTE` is complete. The narrow transition
+is landed by this change and awaits fresh transition review. `R7-0` is active at entry only with
+packet `none`, `R7-0.1` is next, and `R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted.

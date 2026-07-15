@@ -1,10 +1,10 @@
 # R7 Map: Bounded Delegated-Session Semantics
 
-Status: **IMPLEMENTATION-READY CONTENT / R7-PROMOTE CONTENT AND GATE AUDIT COMPLETE /
-TRANSITION COMMIT PENDING / R7-0 NOT STARTED**. The preserved planning scaffold has been reconciled
-into implementation-ready authority. `R7-PROMOTE` remains the sole active phase with packet `none`
-until a separate narrow status-transition commit lands and is review-clean; neither `R7-0.1` nor
-`R7-0.2` has started.
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
+NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**. Promotion series
+`455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`. The narrow
+`R7-PROMOTE -> R7-0` status transition is landed by this change and awaits fresh transition review;
+it starts no `R7-0` task.
 
 ## R6 Handoff
 
@@ -28,9 +28,11 @@ planning input, not authority for the current R7 phase status.
 
 The R6 promotion entry gate is satisfied: every material scoring surface has a terminal disposition,
 the broad R6 acceptance claims are proven or narrowed honestly, the named closure controls are
-resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. The `R7-PROMOTE` content and
-gate audit has now reconciled the preserved MAP/SPEC/PLAN/TASKS to implementation-ready. This
-content landing does not complete the narrow phase-status transition or begin `R7-0`.
+resolved, and the R6 finding plus root/R6/R7 gate/status stack agree. Promotion series `455d0ed90`
++ `876ac55de` reconciled the preserved MAP/SPEC/PLAN/TASKS to implementation-ready authority and
+received fresh independent built-in `default` `REVIEW CLEAN`, completing `R7-PROMOTE`. The narrow
+status transition landed by this change makes `R7-0` active at entry only with packet `none`; fresh
+transition review remains pending, `R7-0.1` is next, and neither `R7-0.1` nor `R7-0.2` has started.
 
 ## Live Linkage Evidence
 
@@ -63,9 +65,9 @@ semantics. Ordinary parent-visible orchestration may still be described as paren
 
 ## Packet Order
 
-The packet order below is implementation-ready but **inactive** while the narrow `R7-PROMOTE`
-status-transition commit is pending. `R7-PROMOTE` remains current; `R7-0` may begin only after that
-transition lands and is independently review-clean.
+The packet order below is implementation-ready. `R7-0` is **active at entry only** with packet
+`none`; `R7-0.1` is next but may not begin until this narrow transition receives fresh independent
+review. No `R7-0.1`, `R7-0.2`, fixture, or implementation work is part of this status transition.
 
 1. **R7-0 — docs lock and evidence fixtures.** Freeze the direct-link contract and sanitized
    positive/negative fixture matrix before production behavior changes.

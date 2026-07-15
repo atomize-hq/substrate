@@ -3,12 +3,14 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-plan.md`
 
-Status: **IMPLEMENTATION-READY CONTENT / R7-PROMOTE CONTENT AND GATE AUDIT COMPLETE / TRANSITION
-COMMIT PENDING / R7-0 NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
+NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 
-This implementation plan is reconciled and implementation-ready, but remains inactive. R6 is
-`CLOSED` and the `R7-PROMOTE` content/gate audit is complete; the separate narrow status-transition
-commit is still pending, so `R7-PROMOTE` remains current and no `R7-0` task may execute yet.
+This implementation plan is reconciled and implementation-ready. R6 is `CLOSED`, and promotion
+series `455d0ed90` + `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so
+`R7-PROMOTE` is complete. The narrow transition is landed by this change and awaits fresh
+transition review; `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and no
+`R7-0.1`, `R7-0.2`, fixture, or implementation work has started.
 
 ## Overview
 
@@ -50,9 +52,10 @@ for child work.
 
 The R6 closure entry gate is satisfied: applicability audit complete; every material scoring
 surface assigned exactly one terminal disposition; broad acceptance proven or narrowed honestly;
-named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`. The family
-content/gate audit is complete, but the graph remains inactive until the narrow `R7-PROMOTE`
-status-transition commit lands and is independently review-clean.
+named controls resolved; and the R6 finding plus authority stack updated to `CLOSED`. Promotion
+series `455d0ed90` + `876ac55de` completed the family content/gate audit and received fresh
+independent built-in `default` `REVIEW CLEAN`. The graph is now at `R7-0` entry only; `R7-0.1` remains
+unstarted until this narrow transition receives fresh independent review.
 
 ```text
 R7-0 docs + sanitized evidence matrix

@@ -3,13 +3,14 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
-Status: **IMPLEMENTATION-READY CONTENT / R7-PROMOTE CONTENT AND GATE AUDIT COMPLETE / TRANSITION
-COMMIT PENDING / R7-0 NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
+NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 
-The `R7-PROMOTE` content/gate audit is complete and recorded below. Its separate narrow
-status-transition commit is still pending, so `R7-PROMOTE` remains the current phase with packet
-`none`. Every `R7-0..R7-6` item remains unchecked and inactive; neither `R7-0.1` nor `R7-0.2` has
-started.
+Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
+independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. The narrow transition
+is landed by this change and awaits fresh transition review. `R7-0` is active at entry only with
+packet `none`, and `R7-0.1` is next. Every `R7-0..R7-6` item remains unchecked; neither `R7-0.1`
+nor `R7-0.2`, and no fixture or implementation work, has started.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -20,8 +21,9 @@ started.
   - Verify: focused status/contract `rg`, complete four-file diff inspection, and `git diff --check`
   - Files: `docs/specs/r7/{MAP.md,*-spec.md,*-plan.md,*-tasks.md}`
   - Dependencies: review-clean R6 `CLOSED` authority
-  - Receipt: content and gate audit complete; narrow phase-transition commit pending; no `R7-0`
-    implementation item started
+  - Receipt: promotion series `455d0ed90` + `876ac55de` fresh independent built-in `default`
+    `REVIEW CLEAN`; the narrow transition is landed by this change with fresh transition review
+    pending; `R7-0` is active at entry only, `R7-0.1` is next, and no `R7-0` item has started
   - Scope: medium, docs only
 
 ## R7-0: Docs Lock And Evidence Matrix

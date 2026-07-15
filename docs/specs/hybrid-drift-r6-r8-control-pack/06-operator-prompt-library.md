@@ -312,21 +312,23 @@ terminal table is `dead_end_thrash` and `semantic_goal_drift` **Cutover complete
 R6-close transition/review-fix series `13b14d5f1` + `50446e6d6` received fresh independent built-in
 `default` `REVIEW CLEAN` with no actionable findings.
 
-The R6-close transition is committed and fresh-review-clean. R7 content/gate audit commit
-`455d0ed90` completes `R7-PROMOTE.1` and makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready.
-`R7-PROMOTE` remains the sole active phase with packet `none`; its narrow phase-transition commit and
-independent review are still pending. `R7-0.1`, `R7-0.2`, and all R7/R8 implementation remain
-unstarted and inactive.
+The R6-close transition is committed and fresh-review-clean. R7 promotion series `455d0ed90` +
+`876ac55de` completes `R7-PROMOTE`, makes the R7 MAP/SPEC/PLAN/TASKS implementation-ready, and
+received fresh independent built-in `default` `REVIEW CLEAN`. The narrow `R7-PROMOTE -> R7-0`
+status transition is landed by this change with fresh transition review pending. `R7-0` is active
+at entry only with packet `none`; `R7-0.1` is next, while `R7-0.1`, `R7-0.2`, and all R7/R8
+implementation remain unstarted.
 
-The current Prompt 1 invocation remains in progress with these selectors:
+The next eligible Prompt 1 invocation is prepared with these selectors but is not started:
 
 ```text
-PHASE_ID: R7-PROMOTE
+PHASE_ID: R7-0
 ACTIVE_PACKET: none
 ```
 
-The only eligible work is to land and independently review the narrow `R7-PROMOTE` phase-transition
-update. Do not start `R7-0` or another phase.
+The only remaining work in this transition session is independent review of the narrow status
+transition and any bounded review fixes. Do not execute `R7-0.1`, `R7-0.2`, fixtures,
+implementation, or another phase here.
 
 Historical resolved Task `.2B` decision report:
 

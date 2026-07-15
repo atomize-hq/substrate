@@ -48,10 +48,12 @@ merge/deprecation, or deferral route.
 `CTX-R6-17` assigns the terminal table exactly as follows: `dead_end_thrash` and
 `semantic_goal_drift` are **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and
 dispatcher infrastructure `scoring/mod.rs` are **Fit-for-purpose exception**. R6 is **CLOSED** and
-`R6-CLOSE` is **COMPLETE**. The R7 promotion entry gate is satisfied. `R7-PROMOTE.1` has since
-completed the R7 content/gate audit, so the R7 authority family is implementation-ready.
-`R7-PROMOTE` remains the sole active phase with active packet `none` while its narrow phase-transition
-commit and independent review are pending; this R6 closeout itself began no R7 work.
+`R6-CLOSE` is **COMPLETE**. The R7 promotion entry gate is satisfied. Promotion series `455d0ed90` +
+`876ac55de` completed the R7 content/gate audit, made the R7 authority family implementation-ready,
+and received fresh independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. The
+narrow status transition is landed by this change with fresh transition review pending; `R7-0` is
+active at entry only with packet `none`, `R7-0.1` is next, and no R7 task has started. This R6
+closeout itself began no R7 work.
 
 This audit does **not** interpret R6 as requiring every scorer to consume typed outcomes, turn
 context, archetype, and progress. A scorer is complete when its chosen inputs match the behavior it
@@ -251,7 +253,9 @@ The R7 promotion entry gate is now satisfied because:
    bounded named gaps, replay closeout is complete, and this finding is **CLOSED**; and
 5. root landing-order authority, R6 MAP, root SPEC/tasks, and R7 status all agree.
 
-`R7-PROMOTE` is therefore **ACTIVE** with active packet `none`. That R6 closeout supplied only the
-entry authority and completed no R7 task. Since then, `R7-PROMOTE.1` has completed the R7 content/gate
-audit and made the R7 MAP/SPEC/PLAN/TASKS implementation-ready. The narrow phase-transition commit
-and independent review remain pending; `R7-0.1`, `R7-0.2`, and all R7 implementation remain inactive.
+That R6 closeout supplied only the `R7-PROMOTE` entry authority and completed no R7 task. Since then,
+promotion series `455d0ed90` + `876ac55de` completed the R7 content/gate audit, made the R7
+MAP/SPEC/PLAN/TASKS implementation-ready, and received fresh independent built-in `default` `REVIEW
+CLEAN`; `R7-PROMOTE` is complete. The narrow status transition is landed by this change with fresh
+transition review pending. `R7-0` is active at entry only with packet `none`, `R7-0.1` is next, and
+`R7-0.1`, `R7-0.2`, and all R7 implementation remain unstarted.

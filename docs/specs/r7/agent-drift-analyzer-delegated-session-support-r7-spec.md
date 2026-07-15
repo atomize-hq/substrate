@@ -3,14 +3,15 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: **IMPLEMENTATION-READY CONTENT / R7-PROMOTE CONTENT AND GATE AUDIT COMPLETE / TRANSITION
-COMMIT PENDING / R7-0 NOT STARTED**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE COMPLETE / R7-0 ACTIVE AT ENTRY ONLY / ACTIVE PACKET
+NONE / R7-0.1 NEXT / R7-0.1, R7-0.2, AND IMPLEMENTATION NOT STARTED**
 
 ## Assumptions I'm Making
 
-1. R6 is **CLOSED**; `R6-CLOSE` and `CTX-R6-17` are complete. The `R7-PROMOTE` content and gate audit
-   is also complete, but its narrow status-transition commit is still pending and `R7-0` is not
-   active.
+1. R6 is **CLOSED**; `R6-CLOSE` and `CTX-R6-17` are complete. Promotion series `455d0ed90` +
+   `876ac55de` received fresh independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is
+   complete. The narrow transition landed by this change makes `R7-0` active at entry only with
+   packet `none`; fresh transition review is pending, `R7-0.1` is next, and no R7 task has started.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -23,7 +24,7 @@ COMMIT PENDING / R7-0 NOT STARTED**
 6. R8 still owns broad sentinel interpretation consolidation. R7 may add only compatibility and
    compact presentation required to carry the new analyzer semantics end to end.
 
-## Implementation Promotion Gate — Content Audit Complete, Transition Pending
+## Implementation Promotion Gate — Promotion Complete, R7-0 Active At Entry Only
 
 This document is now implementation-ready authority. The R6 prerequisites audited by the active
 `R7-PROMOTE` phase are satisfied:
@@ -36,10 +37,12 @@ This document is now implementation-ready authority. The R6 prerequisites audite
 4. the named R6 closure controls are resolved and the R6 finding is `CLOSED`; and
 5. root landing-order authority, the R6 MAP, root SPEC/tasks, and all R7 gate/status sections agree.
 
-The `R7-PROMOTE` content and gate audit is complete. A separate narrow status-transition commit must
-still reconcile the canonical phase mirrors and receive independent review before `R7-0` can start.
-Until then, `R7-PROMOTE` remains current with packet `none`, and no unchecked R7 task is authorized
-to execute. R7 must extend the stable ordinary single-session baseline; it must not absorb baseline
+Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit, reconciled the
+canonical mirrors, and received fresh independent built-in `default` `REVIEW CLEAN`.
+`R7-PROMOTE` is complete. The narrow phase transition is landed by this change and awaits fresh
+transition review; it makes `R7-0` active at entry only with packet `none`, identifies `R7-0.1` as
+next, and authorizes no task execution yet. `R7-0.1`, `R7-0.2`, and all implementation remain
+unstarted. R7 must extend the stable ordinary single-session baseline; it must not absorb baseline
 scorer semantics.
 
 ## Objective
