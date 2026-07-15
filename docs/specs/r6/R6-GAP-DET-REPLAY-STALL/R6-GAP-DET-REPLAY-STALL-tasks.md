@@ -1,34 +1,16 @@
 # Tasks: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
-`d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
-OPTION A ACCEPTED AND COMPLETE / TASK `.3` COMPLETE AT FOCUSED-CANDIDATE BOUNDARY / TASK `.3A`
-COMMIT `7812dd5ef` REVIEW-CLEAN / TASK `.3B` COMPLETE / TASK `.3C` COMMIT `961a36574`
-REVIEW-CLEAN / TASK `.3D` COMPLETE / TASK `.3E` COMMIT `4615d9e3c` REVIEW-CLEAN / TASK `.3F`
-COMPLETE / TASK `.4` IMPLEMENTATION AND PROOF COMMITTED BY THIS CHANGE, FRESH REVIEW PENDING** within
-`R6-REPLAY`. Trusted
-witness `60cde3dd7` preserves `CTX-R6-02` red. Task `.0` series `200725001` + `08fa86e94` +
-`d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` each received fresh independent built-in
-`default` `REVIEW CLEAN`. Task `.2` is complete. The operator accepted Task `.2A` with
-`DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A` on 2026-07-14, authorizing this docs-first
-same-packet amendment but not unconditional implementation. Diagnosis proves an internal conflict
-between frozen `Recovered` and canonical state semantics. The operator then replied exactly
-`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.2B` is complete: current
-sticky `CTX-R6-06` authority is `HistoricalOnly / 20`, unflagged, and the old `Recovered / 20`
-expectation is historical baseline evidence only. Task `.3` is complete at its focused-candidate
-boundary: all five focused units are green and the complete eight-file candidate remains unstaged.
-Task `.4` made one bounded single-lane preservation fix. Task `.3A` commit `7812dd5ef` received fresh
-independent built-in `default` `REVIEW CLEAN`, and Task `.3B` implemented and focus-proved the locked
-verified-edit-epoch selection. Task `.4` then completed ordered proof steps 1-11 green and stopped at
-the progress-acceptance expected-fact red in step 12. Task `.3C` commit `961a36574` received fresh
-independent built-in `default` `REVIEW CLEAN`. Task `.3D` applied exactly the two authorized phrase
-changes, then focused proof exposed a later malformed-synthetic-identity red. Task `.3E` commit
-`4615d9e3c` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.3F` repaired and
-focus-proved the exact seven logical / fourteen physical synthetic output identities. Task `.4`
-preserved a later checkpoint-filter red caused by generic test helpers carrying false call identity,
-made the bounded helper-only repair, and reran the complete ordered wall green. This atomic
-implementation/proof commit is fresh-review-pending; it is not review-clean. The packet remains
-active, so `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
+Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
+INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION COMMITTED BY THIS CHANGE, FRESH REVIEW
+PENDING** within still-active `R6-REPLAY`; active packet is now `none`. Historical witness
+`60cde3dd7` is preserved. Commit `6eda87e60` makes exact `CTX-R6-02` green with truthful call-ID
+pairing, terminal verified-edit-epoch lane semantics, and the locked `Stalled / Active` disposition.
+Its complete ordered proof passes seven focused controls, all `20` troubleshooting matches, exact
+`CTX-R6-02`, exact sticky `CTX-R6-06`, frozen corpus, progress acceptance, checkpoint matches, full
+analyzer `402 / 402`, compactor normalization, and static gates. A fresh independent built-in
+`default` reviewer returned `REVIEW CLEAN`. Current sticky authority remains `HistoricalOnly / 20`,
+unflagged; old `Recovered / 20` remains historical baseline only. This transition assigns no terminal
+scorer disposition and does not run `CTX-R6-06`, the family wall, `R6-CLOSE`, or R7/R8.
 
 ## Required Commit Gate
 
@@ -305,7 +287,7 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     locked postures; log `/tmp/r6-task4d-12.log`. The four fixture-row files are included in the
     complete atomic candidate and no other progress fixture row was edited.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.4 — Run exact integrated proof, commit, and close fresh review — COMMITTED, FRESH REVIEW PENDING.**
+- [x] **R6-GAP-DET-REPLAY-STALL.4 — Run exact integrated proof, commit, and close fresh review — COMPLETE / REVIEW-CLEAN.**
   - Partial receipt: proof steps 1-7 each pass `1 / 1`; step 8 `troubleshooting` passes `20 / 20`
     across library and integration targets; steps 9-11 each pass `1 / 1`. Step 12 first exposed the
     stale expected-fact wording recorded in `.3C`; after `.3D` applied the exact repair, focused proof
@@ -368,15 +350,14 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
     proof ledger are committed atomically by this change. Final staged GitNexus detect is `medium`
     across exactly `16` files / `54` symbols / `3` affected troubleshooting-tail flows, with no
     `HIGH` or `CRITICAL` result; cached-diff check and complete inspection are clean. Fresh independent
-    built-in `default` review remains required; Task `.4` and the packet are not review-clean or
-    complete yet.
+    built-in `default` reviewer returned `REVIEW CLEAN` for commit `6eda87e60`. Task `.4` is complete.
 
-- [ ] **R6-GAP-DET-REPLAY-STALL.5 — Land and review the narrow packet transition.**
+- [ ] **R6-GAP-DET-REPLAY-STALL.5 — Land and review the narrow packet transition — COMMITTED BY THIS CHANGE / FRESH REVIEW PENDING.**
   - Prerequisite: Task 4 review-clean.
-  - Mark `CTX-R6-02` and this packet complete, clear the active packet, keep `R6-REPLAY` active, and
-    make `CTX-R6-06` then the family wall next.
-  - Commit authority-only, run the staged gate, dispatch a fresh built-in `default` reviewer, and fix
-    findings in new commits until clean.
+  - This transition marks `CTX-R6-02` and this packet complete, clears the active packet to `none`,
+    keeps `R6-REPLAY` active, and makes `CTX-R6-06` then the family wall next.
+  - Commit authority-only and run the staged gate. A fresh built-in `default` reviewer remains
+    required; fix any finding in a new gated commit and repeat fresh review until clean.
   - Stop the packet after review-clean transition. Do not activate `R6-CLOSE` or start R7/R8.
 
 ## Preserved Witness Receipt
@@ -388,9 +369,9 @@ and sent to another fresh reviewer until `REVIEW CLEAN`.
 - Later clean target/sibling: `492 -> 495`, `493 -> 496`.
 - Trusted disposition: checkpoint `5` `TroubleshootingFrontier / Stalled / Medium`; flagged
   `dead_end_thrash Active / 30 / High`.
-- Committed-baseline defect: evidence names the successful siblings because `pair_output_rows` uses
-  positional pairing across concurrent calls. The preserved uncommitted candidate corrects that
-  attribution. Task `.3` is complete at its focused-candidate boundary; `.3A` and `.3C` are
-  review-clean, while `.3B` and `.3D` are complete. Task `.4` is stopped at ordered proof step 12
-  pending the `.3E`/`.3F` synthetic output-identity reconciliation. No implementation commit or
-  review-clean result exists.
+- Historical committed-baseline defect: evidence named successful siblings because
+  `pair_output_rows` used positional pairing across concurrent calls. Commit `6eda87e60` corrects
+  that attribution and preserves the trusted disposition; its ordered proof is green and a fresh
+  independent built-in `default` reviewer returned `REVIEW CLEAN`. The packet is complete and active
+  packet is `none`; fresh review of this separate authority transition is pending before
+  phase-owned `CTX-R6-06` replay proof and the family wall.

@@ -1,30 +1,16 @@
 # Plan: R6-GAP-DET-REPLAY-STALL
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
-`d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
-OPTION A ACCEPTED AND COMPLETE / TASK `.3` COMPLETE AT FOCUSED-CANDIDATE BOUNDARY / TASK `.3A`
-COMMIT `7812dd5ef` REVIEW-CLEAN / TASK `.3B` COMPLETE / TASK `.3C` COMMIT `961a36574`
-REVIEW-CLEAN / TASK `.3D` COMPLETE AT TWO-PHRASE CANDIDATE BOUNDARY / TASK `.3E` DOCS GATE
-CURRENT / TASK `.3F` BLOCKED / TASK `.4` STOPPED AT ORDERED PROOF STEP 12** within
-`R6-REPLAY`. Witness `60cde3dd7` is preserved
-red. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` decision
-receipt `d788f45c9` each received fresh independent built-in `default` `REVIEW CLEAN`. Task `.2`
-reconfirmed the exact pre-edit red. On 2026-07-14 the operator accepted Task `.2A` with
-`DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A`. That scope decision authorized this
-docs-first amendment, not unconditional implementation. Diagnosis proves the requested frozen
-`Recovered` result conflicts with canonical state semantics. The operator then replied exactly
-`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.2B` is complete and
-reclassifies current sticky `CTX-R6-06` authority to `HistoricalOnly / 20`, unflagged; `Recovered / 20`
-is historical baseline evidence only. This authority/expected-disposition change is approved, but its
-authorized source/test/helper/expected-disposition edits and focused TDD unit red/green are complete
-at Task `.3`'s unstaged-candidate boundary. Task `.3A` commit `7812dd5ef` received fresh independent
-built-in `default` `REVIEW CLEAN`; Task `.3B` implemented and focus-proved the verified-edit-epoch
-refinement. Task `.4` reran ordered proof steps 1-11 green and stopped at the progress-acceptance
-expected-fact red in step 12. Task `.3C` commit `961a36574` received fresh independent built-in
-`default` `REVIEW CLEAN`. Task `.3D` applied exactly the two authorized phrase changes, then focused
-proof exposed a later malformed-synthetic-identity red. Task `.3E` is the current docs-first
-reconciliation gate; `.3F` is blocked until `.3E` is committed and fresh-review-clean, and Task `.4`
-resumes from the beginning only after `.3F` completes.
+Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
+INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION COMMITTED BY THIS CHANGE, FRESH REVIEW
+PENDING** within still-active `R6-REPLAY`; active packet is now `none`. The selected Option-A
+pairing/progress implementation and expected-disposition changes landed atomically at `6eda87e60`.
+Exact `CTX-R6-02` is green at its locked `Stalled / Active` contract, full analyzer proof is
+`402 / 402`, and every ordered packet proof/static gate is green. A fresh independent built-in
+`default` reviewer returned `REVIEW CLEAN` for that implementation/proof commit. Current sticky
+`CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged; clean-baseline `Recovered / 20`
+remains historical only. This authority-only transition clears the packet without activating
+`R6-CLOSE`; after fresh transition review, phase-owned `CTX-R6-06` replay proof and then the R6
+family wall are next.
 
 ## Decisions
 
@@ -230,7 +216,7 @@ Task `.3D` stopped with the complete ten-file candidate unstaged. Its patch SHA-
 `7f12cdd2d4c0c92ea08027b3610f22f5168c5ad99b973b0ed3cbcc508cbf98db`; the original eight-file
 portion remains at `70ed522cc30f8e4fb3f36f946502105e440f7719c1917fe41c399e13876884c2`.
 
-### 3E. Commit And Fresh-Review The Synthetic Fixture Identity Docs Gate — Current
+### 3E. Commit And Fresh-Review The Synthetic Fixture Identity Docs Gate — Complete / Review-Clean
 
 The call-ID-exclusive pairing selected by this packet correctly refuses to associate an identified
 command with an id-less output. In `synthetic-implementation-advancing`, verifier calls event `1`
@@ -250,13 +236,11 @@ packet/canonical mirror, native/adapted/real fixture, or a call without an outpu
 `FailureFrontierAdvanced` and `WorkingSetConcentrated`; preserve `synthetic-zero-verifier-anti-flap`
 at `PlanningConvergence / InsufficientEvidence / Low`.
 
-Preserve the complete ten-file candidate byte-for-byte at patch SHA-256
-`7f12cdd2d4c0c92ea08027b3610f22f5168c5ad99b973b0ed3cbcc508cbf98db`. Stage and commit only this
-SPEC/PLAN/TASKS gate, then obtain fresh built-in `default` review/fix cycles until `REVIEW CLEAN`.
-No operator decision is required: these malformed synthetic output identities violate the already
-selected truthful call-pairing contract rather than exposing a new product or semantic choice.
+Commit `4615d9e3c` landed this SPEC/PLAN/TASKS gate and received fresh independent built-in `default`
+`REVIEW CLEAN`. No operator decision was required because the malformed synthetic identities
+violated the selected truthful call-pairing contract.
 
-### 3F. Repair And Focus-Prove Synthetic Fixture Output Identities — Blocked On `.3E`
+### 3F. Repair And Focus-Prove Synthetic Fixture Output Identities — Complete
 
 After `.3E` is committed and fresh-review-clean, edit exactly:
 
@@ -265,21 +249,21 @@ After `.3E` is committed and fresh-review-clean, edit exactly:
 - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-zero-verifier-anti-flap/rows.archival.jsonl`; and
 - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-zero-verifier-anti-flap/rows.compact.jsonl`.
 
-Add the seven matching output identities in both archival/compact copies, run a deterministic
-identity audit over all `16` bundles/`32` row files, then run exact
-`progress_acceptance_cases_match_expected_progress_contract`. Stop with the complete candidate
-unstaged. Do not alter an expected posture or any surface outside the exact four-file authority.
+The seven matching output identities were added in both archival/compact copies. The deterministic
+audit passed all `16` bundles / `32` row files / `8,388` rows with seven logical and `14` physical
+locked identities, and exact progress acceptance passed `1 / 1`. No expected posture or surface
+outside the exact four-file authority changed.
 
-### 4. Prove, Commit, And Fresh-Review — Stopped At Ordered Proof Step 12
+### 4. Prove, Commit, And Fresh-Review — Complete / Review-Clean
 
-Task `.4` completed proof steps 1-7 at `1 / 1` each, step 8 `troubleshooting` at `20 / 20` across
-library and integration targets, and steps 9-11 at `1 / 1` each for exact `CTX-R6-02`, sticky
-`CTX-R6-06`, and the frozen corpus. Step 12 first exposed the two stale phrases recorded by `.3C`, and
-after `.3D` applied those phrases, focused proof exposed the later malformed synthetic identity red;
-log `/tmp/r6-task3d-progress-acceptance.log`. After `.3F`, Task `.4` reruns the exact proof wall below
-from the beginning, records actual results in TASKS and the
-replay ledger, stages only intended files, runs staged GitNexus detect plus cached checks, commits
-atomically, and enters fresh review/fix cycles.
+Task `.4` reran the exact proof wall below from the beginning and committed the complete
+implementation/proof candidate at `6eda87e60`. Seven focused controls passed `1 / 1`,
+`troubleshooting` passed `20 / 20`, all four exact acceptance/progress controls passed `1 / 1`,
+checkpoint matches passed `62` library + `131` integration plus matching targets, full analyzer
+passed `402 / 402`, compactor normalization passed `1 / 1`, and all static gates were green. Staged
+detect reported medium risk across exactly `16` files / `54` symbols / three affected flows, with no
+HIGH or CRITICAL result; cached gates were clean. A fresh independent built-in `default` reviewer
+returned `REVIEW CLEAN`.
 
 Run in order:
 
@@ -305,17 +289,15 @@ cargo clippy -p agent-drift-analyzer --all-targets -- -D warnings
 git diff --check
 ```
 
-The compactor command is optional confirmation only. Record actual results in TASKS and the replay
-ledger, stage only intended files, run staged GitNexus detect plus cached diff check and inspection,
-commit the implementation/proof atomically, and dispatch a fresh built-in `default` reviewer. Fix
-findings in new gated commits and repeat fresh review until clean.
+The compactor command was optional confirmation only and passed. The actual results are recorded in
+TASKS and the replay ledger.
 
-### 5. Transition Back To Replay And Stop The Packet
+### 5. Transition Back To Replay And Stop The Packet — Committed By This Change / Fresh Review Pending
 
-Only after the implementation/proof series is review-clean, make a separate narrow authority
-transition that marks `CTX-R6-02` complete, marks this active packet complete, clears the active
-packet, and leaves `R6-REPLAY` active with `CTX-R6-06` then the family wall next. Commit and obtain
-fresh independent review. Do not activate `R6-CLOSE` or start R7/R8.
+Commit `6eda87e60` is fresh independent `REVIEW CLEAN`, so this authority-only transition marks
+`CTX-R6-02` and the packet complete, clears the active packet to `none`, and keeps `R6-REPLAY`
+active. Fresh review of this transition must be clean before phase-owned `CTX-R6-06` replay proof
+and the family wall begin. Do not activate `R6-CLOSE` or start R7/R8.
 
 ## Escalation Boundary
 

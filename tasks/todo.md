@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **PARTIAL / CLOSURE AUDIT REQUIRED**
 
-Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; Task `.2A` Option A accepted and complete; packet amendment series `d631e0c56` + `6498c343f` fresh independent `REVIEW CLEAN`; Task `.2B` Option A accepted and complete; Task `.3` authorized/current but incomplete; Task `.4` blocked)**
+Current phase: **`R6-REPLAY` (ACTIVE; active packet: `none`; `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` complete after `6eda87e60` fresh independent `REVIEW CLEAN`; transition committed by this change and pending fresh review; `CTX-R6-06` then the R6 family wall next)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -69,16 +69,15 @@ Current phase: **`R6-REPLAY` (ACTIVE; active packet: `R6-GAP-DET-REPLAY-STALL`; 
   Event `831 -> 837` and `recovery_state` are non-causal; canonical `Recovered` requires the
   immediately previous same-class score to be `Active`. Selected Option A makes
   `HistoricalOnly / 20`, unflagged the current sticky authority; `Recovered / 20` is historical
-  baseline evidence only. This authority/expected-disposition change is approved but not yet
-  implemented or proven.
-- [ ] Execute authorized/current packet Task `.3` within review-clean amendment `d631e0c56` +
-  `6498c343f`. The preserved unstaged candidate remains incomplete. Task `.3` owns the authorized
-  source/test/helper/expected-disposition edits, focused TDD unit red/green, and a complete unstaged
-  candidate ready for proof; it does not own staging, commit, or implementation review. Task `.4` is
-  blocked until those Task `.3` implementation/focused unit criteria are complete, then owns the exact
-  integrated/packet proof wall, result recording, staging/GitNexus/cached-diff gates, atomic
-  implementation/proof commit, and fresh review/fix loop. `CTX-R6-06`, focused scorer proof, full
-  analyzer proof, and the replay family wall remain blocked.
+  baseline evidence only.
+- [x] Complete packet Tasks `.3`-`.4`; implementation/proof commit `6eda87e60` passes exact
+  `CTX-R6-02`, the complete ordered packet wall, full analyzer `402 / 402`, and static gates, and a
+  fresh independent built-in `default` reviewer returned `REVIEW CLEAN`.
+- [ ] Freshly review this narrow packet transition. It marks `CTX-R6-02` and
+  `R6-GAP-DET-REPLAY-STALL` complete, clears active packet to `none`, and keeps `R6-REPLAY` active.
+- [ ] After transition review-clean, run phase-owned `CTX-R6-06` replay proof and then the R6 family
+  wall. Preserve current sticky `HistoricalOnly / 20`, unflagged and historical-only
+  `Recovered / 20` baseline wording.
 - [ ] Update the R6 finding and authority stack to `CLOSED` after proof is complete.
 - [ ] Promote R7 from **DRAFT / BLOCKED ON R6 CLOSURE DECISION** to implementation-ready.
 - [ ] Begin bounded direct-child delegated-session support only after promotion.

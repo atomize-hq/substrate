@@ -106,23 +106,16 @@ that boundary. Its implementation/review-fix series `6b42e5476` + `e65df2561` + 
 also received fresh independent built-in `default` `REVIEW CLEAN`, completing the final named gap.
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
 `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Replay has since
-completed `CTX-R6-01` and preserved trusted `CTX-R6-02` behavioral RED at `60cde3dd7`; active packet
-`R6-GAP-DET-REPLAY-STALL` Task `.0` docs-gate/review-fix series `200725001` + `08fa86e94` +
-`d03f5a355` + `9edf564d3` received fresh independent built-in `default` `REVIEW CLEAN`. Task `.1`
-acceptance receipt `d788f45c9` also received fresh independent built-in `default` `REVIEW CLEAN`,
-and Task `.2` is complete. Task `.2A` Option A is accepted and complete; packet amendment series
-`d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. That amendment proves the
-sticky rollout's candidate transition is checkpoint `9` `Advancing / HistoricalOnly 20` to
-checkpoint `10` `HistoricalOnly 20`, rather than clean `f898d61e7` checkpoint `9`
-`Regressing / Active 40` to checkpoint `10` `Recovered 20`. Event `831 -> 837` and
-`recovery_state` are non-causal; the conflict is canonical `Recovered` requiring an immediately
-previous same-class `Active` score. The operator replied exactly
-`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; Task `.2B` is complete. Current
-sticky authority is `HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` is
-historical evidence only. This approved authority/expected-disposition change still awaits
-Task `.3` implementation preparation and Task `.4` integrated proof/commit/review. Task `.3` is
-authorized/current within the review-clean amendment but its unstaged candidate remains incomplete;
-Task `.4` is blocked until Task `.3` implementation/focused unit criteria are complete.
+completed `CTX-R6-01` and `CTX-R6-02`. Historical witness `60cde3dd7` is preserved; bounded packet
+`R6-GAP-DET-REPLAY-STALL` implementation/proof commit `6eda87e60` passes the exact true-stall
+contract, seven focused controls, all `20` troubleshooting matches, exact sticky and frozen-corpus
+controls, progress acceptance, checkpoint matches, full analyzer `402 / 402`, compactor
+normalization, and static gates. A fresh independent built-in `default` reviewer returned
+`REVIEW CLEAN`. The narrow authority transition committed by this change completes the packet,
+clears active packet to `none`, and keeps `R6-REPLAY` active. Current sticky authority remains
+`HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` remains historical evidence
+only. Fresh review of this transition is pending; then `CTX-R6-06` replay proof and the R6 family
+wall are next.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -135,11 +128,9 @@ control.” The current honest sequence is:
 3. keep `R6-GAP-DET-OPAQUE-PARENT` complete with its review-clean focused/family/checkpoint proof
 4. keep `R6-GAP-TGG-TRUTH-PATH-ACTION` complete with its review-clean implementation/proof series
 5. keep the landed final gap-to-replay authority transition series `56bb9966f + 07a3b1fe5` at fresh independent `REVIEW CLEAN`
-6. preserve completed Tasks `.2A` and `.2B` plus fresh-review-clean packet amendment series
-   `d631e0c56` + `6498c343f`; use Task `.3` only to prepare the selected Option-A
-   source/test/helper/expected-disposition edits with focused TDD unit red/green as a complete
-   unstaged candidate, then use Task `.4` for integrated proof, receipt recording, staging/gates,
-   atomic implementation/proof commit, and fresh review
+6. keep `R6-GAP-DET-REPLAY-STALL` and `CTX-R6-02` complete at review-clean commit `6eda87e60`;
+   freshly review this authority-only transition, then run `CTX-R6-06` replay proof and the R6
+   family wall with active packet `none`
 7. extend delegated-session semantics beyond the current downgrade boundary only after R6 closes (`R7`)
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
@@ -785,17 +776,13 @@ proof-receipt series `fee9c2b16` + `6674a8316` fresh `REVIEW CLEAN`), and comple
 corpus still proves invariance rather than comparative integrated improvement. R6 remains partial.
 Authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in `default`
 `REVIEW CLEAN`, marks aggregate `R6-GAP-*` complete, and activated only `R6-REPLAY`. Current replay
-state has `CTX-R6-01` complete and trusted `CTX-R6-02` behavioral RED at `60cde3dd7`, routed to active
-packet `R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` received fresh
-independent built-in `default` `REVIEW CLEAN`; Task `.1` decision receipt `d788f45c9` also received
-fresh independent `REVIEW CLEAN`, and Task `.2` is complete. Task `.2A` Option A is accepted and
-complete; packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW
-CLEAN`. Task `.2B` Option A is accepted and complete by exact reply
-`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; sticky `CTX-R6-06` current
-authority is `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline
-evidence only. Task `.3` is authorized/current, but its unstaged candidate is not yet a complete
-proof-ready implementation candidate; Task `.4` is blocked until Task `.3`
-implementation/focused unit criteria are complete, then owns integrated proof, commit, and review.
+state has `CTX-R6-01` and `CTX-R6-02` complete. Historical witness `60cde3dd7` is preserved;
+implementation/proof commit `6eda87e60` passes the complete ordered packet wall, full analyzer
+`402 / 402`, and static gates and received fresh independent built-in `default` `REVIEW CLEAN`.
+This transition completes `R6-GAP-DET-REPLAY-STALL`, clears active packet to `none`, and keeps
+`R6-REPLAY` active. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged,
+while `Recovered / 20` remains historical baseline evidence only. Fresh transition review is
+pending; `CTX-R6-06` replay proof and the R6 family wall follow it.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -891,13 +878,10 @@ The next honest work target is:
   `e65df2561` + `cd4e24119` received fresh independent built-in `default` `REVIEW CLEAN`
 - authority transition series `56bb9966f` + `07a3b1fe5` received fresh independent built-in
   `default` `REVIEW CLEAN`
-- **current action:** preserve completed Tasks `.2A` and `.2B` and fresh-review-clean packet amendment
-  series `d631e0c56` + `6498c343f`. Keep `R6-REPLAY` and packet
-  `R6-GAP-DET-REPLAY-STALL` active; execute authorized/current Task `.3` only within selected Option A.
-  The uncommitted candidate remains incomplete and is not proof or review-clean implementation. Keep
-  Task `.4` blocked until Task `.3` implementation/focused unit criteria are complete; Task `.4` then
-  owns the integrated/packet proof, result recording, staging/gates, atomic commit, and fresh review.
-  Keep `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7 blocked
+- **current action:** keep review-clean implementation/proof commit `6eda87e60`, `CTX-R6-02`, and
+  `R6-GAP-DET-REPLAY-STALL` complete. Active packet is `none`; obtain fresh review of this narrow
+  transition, then run phase-owned `CTX-R6-06` replay proof and the R6 family wall. Keep
+  `R6-CLOSE`, terminal dispositions, and R7 blocked
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed

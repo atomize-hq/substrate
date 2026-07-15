@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; trusted `CTX-R6-02` witness `60cde3dd7` remains the committed-baseline behavioral RED. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. The operator replied exactly `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`; Task `.2B` is complete and sets sticky `CTX-R6-06` current authority to `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. Task `.3` owns the pending authorized implementation preparation, focused TDD unit red/green, and complete unstaged candidate; it remains incomplete. Task `.4` is blocked until those criteria are complete, then owns integrated proof, result recording, staging/gates, atomic commit, and fresh review. `CTX-R6-06` replay proof remains blocked, and R6 close/R7 remain blocked. Closure authority is
+Status: **PARTIAL / CLOSURE AUDIT REQUIRED — R6-REPLAY ACTIVE; ACTIVE PACKET NONE; CTX-R6-02 AND R6-GAP-DET-REPLAY-STALL COMPLETE AFTER `6eda87e60` FRESH INDEPENDENT REVIEW-CLEAN; AUTHORITY TRANSITION COMMITTED BY THIS CHANGE AND PENDING FRESH REVIEW; CTX-R6-06 THEN R6 FAMILY WALL NEXT** as of 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; historical `CTX-R6-02` witness `60cde3dd7` remains preserved. Commit `6eda87e60` passes exact `CTX-R6-02`, the complete ordered packet wall, full analyzer `402 / 402`, and static gates and received fresh independent built-in `default` `REVIEW CLEAN`. Sticky `CTX-R6-06` current authority remains `HistoricalOnly / 20`, unflagged, while `Recovered / 20` remains historical baseline evidence only. Fresh transition review is pending before phase-owned `CTX-R6-06` replay proof and the R6 family wall. R6 close/R7 remain blocked. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
 2026-06-27 after `R5.75` closed. It is a **rescope** of the original
 `R6` packet, not its execution plan. The original `R6` line was written in the pre-`R5.75` landing
@@ -352,19 +352,13 @@ code changed. In matrix order the preserved routes are:
    independent built-in `default` `REVIEW CLEAN`; exact target is `0 / Low / Cleared`, unflagged,
    with empty evidence, and its protected/family/checkpoint/full-analyzer/static walls are green.
 
-R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**. `R6-REPLAY` is the sole active phase;
-trusted `CTX-R6-02` witness `60cde3dd7` routes to active packet `R6-GAP-DET-REPLAY-STALL`.
-Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt
-`d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete.
-Task `.2A` Option A is accepted and complete; packet amendment series `d631e0c56` + `6498c343f`
-received fresh independent `REVIEW CLEAN`. The amendment records clean `f898d61e7` checkpoint `9`
-`Regressing / Active 40` then checkpoint `10` `Recovered 20`, versus candidate checkpoint `9`
-`Advancing / HistoricalOnly 20` then checkpoint `10` `HistoricalOnly 20`; event `831 -> 837` and
-`recovery_state` are non-causal. Task `.2B` Option A is accepted and complete; current sticky
-authority is `HistoricalOnly / 20`, unflagged, while `Recovered / 20` is historical baseline only.
-Task `.3` is authorized/current but incomplete with an uncommitted candidate and no implementation
-or focused-unit completion receipt. Task `.4` is blocked until Task `.3` implementation/focused unit
-criteria are complete, then owns integrated proof, result recording, commit gates, and fresh review.
+R6 remains **PARTIAL / CLOSURE AUDIT REQUIRED**. `R6-REPLAY` is the sole active phase with active
+packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is preserved; review-clean commit
+`6eda87e60` completes `CTX-R6-02` and `R6-GAP-DET-REPLAY-STALL` with exact true-stall proof, the
+complete ordered packet wall, full analyzer `402 / 402`, and static gates. Current sticky authority
+is `HistoricalOnly / 20`, unflagged, while `Recovered / 20` is historical baseline only. Fresh
+review of this authority transition is pending; after it is clean, phase-owned `CTX-R6-06` replay
+proof and the R6 family wall are next.
 
 ## Non-Goals For This Rescope
 

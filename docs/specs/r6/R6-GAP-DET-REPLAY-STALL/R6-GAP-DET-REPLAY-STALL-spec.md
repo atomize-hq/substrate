@@ -1,36 +1,20 @@
 # R6-GAP-DET-REPLAY-STALL — Concurrent Replay Output Attribution
 
-Status: **ACTIVE PACKET / TASK `.0` DOCS-GATE REVIEW-CLEAN / TASK `.1` ACCEPTANCE RECEIPT
-`d788f45c9` REVIEW-CLEAN / TASK `.2` COMPLETE / TASK `.2A` ACCEPTED AND COMPLETE / TASK `.2B`
-OPTION A ACCEPTED AND COMPLETE / TASK `.3` COMPLETE AT FOCUSED-CANDIDATE BOUNDARY / TASK `.3A`
-COMMIT `7812dd5ef` REVIEW-CLEAN / TASK `.3B` COMPLETE / TASK `.3C` COMMIT `961a36574`
-REVIEW-CLEAN / TASK `.3D` COMPLETE AT TWO-PHRASE CANDIDATE BOUNDARY / TASK `.3E` DOCS GATE
-CURRENT / TASK `.3F` BLOCKED / TASK `.4` STOPPED AT ORDERED PROOF STEP 12** within
-`R6-REPLAY`. Witness commit `60cde3dd7`
-preserves the trusted `CTX-R6-02` behavioral red. Task `.0` docs-gate/review-fix series `200725001` +
-`08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` decision receipt `d788f45c9` each received
-fresh independent built-in `default` `REVIEW CLEAN`. The operator accepted Task `.2A` with
-`DECISION R6-REPLAY-STALL-POST-PAIRING-PROGRESS-01: A` on 2026-07-14. That scope decision authorized
-this docs-first same-packet amendment and accepted the recorded HIGH `recovery_state` boundary; it
-did not authorize an unconditional implementation. The amendment diagnosis proves that
-`recovery_state` is the wrong seam and that the requested frozen `Recovered` outcome conflicts with
-canonical state semantics. The operator then replied exactly
-`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` on 2026-07-14. Task `.2B` is
-complete: sticky `CTX-R6-06` authority is now `HistoricalOnly / 20`, unflagged, while the former
-`Recovered / 20` result remains historical clean-baseline evidence only. This approved
-authority/expected-disposition change is present in the unstaged candidate, but does not claim
-complete proof, green walls, a committed candidate, or implementation review-clean status. Task `.3`
-completed its focused-candidate boundary within
-fresh-review-clean amendment `d631e0c56` + `6498c343f`: all five focused units are green and the
-complete eight-file candidate remains unstaged. Task `.3A` commit `7812dd5ef` received fresh
-independent built-in `default` `REVIEW CLEAN`, and Task `.3B` implemented and focus-proved the locked
-verified-edit-epoch selection. Task `.4` reran ordered proof steps 1-11 green, then stopped at the
-progress-acceptance expected-fact red in step 12. Task `.3C` commit `961a36574` received fresh
-independent built-in `default` `REVIEW CLEAN`. Task `.3D` applied exactly the two authorized phrase
-changes, then focused proof exposed a later malformed-synthetic-identity red. Task `.3E` is the
-current docs-first reconciliation gate; Task `.3F` is blocked until `.3E` is committed and
-fresh-review-clean. Task `.4` resumes from the beginning only after `.3F` completes.
-`CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked.
+Status: **COMPLETE PACKET / TASK `.4` IMPLEMENTATION AND PROOF COMMIT `6eda87e60` FRESH
+INDEPENDENT `REVIEW CLEAN` / TASK `.5` AUTHORITY TRANSITION COMMITTED BY THIS CHANGE, FRESH REVIEW
+PENDING** within still-active `R6-REPLAY`; active packet is now `none`. Witness `60cde3dd7` remains
+the historical behavioral-red receipt. The bounded implementation/proof commit `6eda87e60` closes
+`CTX-R6-02`: exact selected control `1 / 1` preserves checkpoint `5`
+`TroubleshootingFrontier / Stalled / Medium` and flagged `Active / 30 / High` while attributing only
+failed targets `420 -> 423` and `474 -> 477`; clean siblings `421 -> 425` and `475 -> 479` are
+excluded. The complete ordered packet wall is green, including seven focused controls, all `20`
+troubleshooting matches, exact sticky and frozen-corpus controls, progress acceptance, checkpoint
+matches, full analyzer `402 / 402`, compactor normalization, and static gates. A fresh independent
+built-in `default` reviewer returned `REVIEW CLEAN` for `6eda87e60`. Current sticky `CTX-R6-06`
+authority remains `HistoricalOnly / 20`, unflagged; `Recovered / 20` remains historical baseline
+only. This transition does not run `CTX-R6-06`, the replay family wall, `R6-CLOSE`, or R7/R8. Fresh
+review of the authority-only transition is required before phase-owned `CTX-R6-06` replay proof and
+then the R6 family wall begin.
 
 ## Objective And Preserved Witness
 
@@ -342,8 +326,8 @@ Within those two files, it replaced only the stale fact wording with
 `earlier clean verification attempt` and `later failing verification attempt`. It then preserved the
 later synthetic identity red without widening scope.
 
-Task `.3E` locks the next repair in exactly this packet's SPEC/PLAN/TASKS; canonical mirrors remain
-untouched. Task `.3F`, blocked until `.3E` is committed and fresh-review-clean, may edit exactly:
+Task `.3E` landed its exact packet-doc gate at `4615d9e3c` and received fresh independent built-in
+`default` `REVIEW CLEAN`. Task `.3F` then edited exactly:
 
 - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-implementation-advancing/rows.archival.jsonl`;
 - `crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/synthetic-implementation-advancing/rows.compact.jsonl`;
@@ -355,9 +339,9 @@ In both archival/compact copies, add only matching `dedupe_identity` values with
 zero-verifier outputs `2` (`call-1`), `4` (`call-3`), `7` (`call-6`), `9` (`call-8`), and `11`
 (`call-10`). Do not change the output-less implementation `apply_patch` call `4`, another row,
 fixture, expected contract, source, test, packet/canonical mirror, native/adapted/real fixture, or
-any other surface. Task `.3F` must deterministically audit all `16` bundles/`32` row files and run
-exact `progress_acceptance_cases_match_expected_progress_contract`, then stop with the complete
-candidate unstaged.
+any other surface. Task `.3F`'s deterministic audit passed all `16` bundles / `32` row files /
+`8,388` rows with seven logical and `14` physical locked identities, and exact
+`progress_acceptance_cases_match_expected_progress_contract` passed `1 / 1`.
 
 The implementation fixture must remain
 `AutonomousImplementation / ImplementationVerificationWall / Advancing / Medium` with
@@ -372,23 +356,15 @@ synthetic identity exception, sentinel surfaces, R7, or R8.
 
 ## Commit, Review, And Exit
 
-Task `.3` is complete at its focused-candidate boundary. Task `.3A` commit `7812dd5ef` is
-fresh-review-clean and Task `.3B` is complete. Task `.3C` commit `961a36574` is fresh-review-clean,
-and Task `.3D` completed its exact two-file expected-fact reconciliation before preserving the later
-red. Task `.3E` must be committed and fresh-review-clean before Task `.3F` performs the exact
-four-file identity repair, all-`16`-bundle/all-`32`-file deterministic audit, and focused progress
-acceptance. Task `.4` then resumes from the beginning by rerunning the exact proof sequence and records
-actual integrated/packet proof results in packet TASKS and the replay ledger, then stages only
-intended files and runs
-`npx gitnexus detect-changes --scope staged -r 97a0-substrate`, `git diff --cached --check`, and
-inspects `git diff --cached`. It commits the implementation/proof atomically and dispatches a fresh
-built-in `default` reviewer. Apply findings in a new gated commit and repeat with a fresh reviewer
-until clean. Tasks `.3E` and `.3F` must not stage the preserved ten-file candidate, commit it, or
-claim implementation review-clean.
+Tasks `.3` through `.3F` are complete at their recorded boundaries. Task `.4` reran the ordered proof
+from the beginning and committed the implementation/proof atomically at `6eda87e60`; seven focused
+controls, all `20` troubleshooting matches, exact `CTX-R6-02`, exact sticky, frozen corpus, progress
+acceptance, checkpoint matches, full analyzer `402 / 402`, compactor normalization, and static gates
+are green. Staged detect reported medium risk across `16` files / `54` symbols / three affected
+troubleshooting-tail flows with no HIGH or CRITICAL result, and cached gates were clean. A fresh
+independent built-in `default` reviewer returned `REVIEW CLEAN` for `6eda87e60`.
 
-This packet exits only after the docs gate, every required operator decision, the authorized bounded
-production fix, exact proof, proof receipt, and narrow authority transition are each committed and
-fresh-review-clean. The current candidate and partial green proof are not a commit, complete proof
-receipt, or review-clean result.
-The transition completes `CTX-R6-02`, clears the active packet, and returns control to still-active
-`R6-REPLAY` with `CTX-R6-06` and its family wall next. It must not activate `R6-CLOSE` or start R7/R8.
+This authority-only transition completes `CTX-R6-02` and the packet, clears the active packet to
+`none`, and returns control to still-active `R6-REPLAY`. Fresh independent review of this transition
+is required before phase-owned `CTX-R6-06` replay proof and then the R6 family wall begin. It does
+not activate `R6-CLOSE` or start R7/R8.

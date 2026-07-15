@@ -4,9 +4,9 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R6-REPLAY — ACTIVE; active packet R6-GAP-DET-REPLAY-STALL; Task .2A Option A accepted and complete; amendment d631e0c56 + 6498c343f review-clean; Task .2B Option A accepted and complete; Task .3 authorized/current with uncommitted candidate incomplete; Task .4 blocked`
+**Current work phase:** `R6-REPLAY — ACTIVE; active packet none; CTX-R6-02 and R6-GAP-DET-REPLAY-STALL complete after 6eda87e60 fresh independent REVIEW CLEAN; authority transition committed by this change and pending fresh review; CTX-R6-06 then the family wall next`
 
-**Last repo-truth verification:** `CTX-R6-01` series review-clean; trusted committed-baseline `CTX-R6-02` witness `60cde3dd7`; Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` exact pre-edit red complete; Task `.2A` Option A accepted and complete; packet amendment series `d631e0c56` + `6498c343f` fresh independent `REVIEW CLEAN`; exact reply `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` completes Task `.2B`. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. Task `.3` owns implementation preparation through focused TDD unit red/green and a complete unstaged candidate; Task `.4` owns integrated proof, result recording, staging/gates, atomic commit, and fresh review.
+**Last repo-truth verification:** `CTX-R6-01` series review-clean; historical `CTX-R6-02` witness `60cde3dd7`; bounded implementation/proof commit `6eda87e60` passes the ordered packet wall and full analyzer `402 / 402` and received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. The authority-only packet transition is committed by this change and awaits fresh review.
 
 The `R6-C.1-CONTROLS` wall at `5618f7864` reconciled the thirteen synthetic controls as `10 PASS / 3
 preserved RED`, with no production change. The named routes are, in matrix order,
@@ -28,7 +28,12 @@ packet `none`. `CTX-R6-01` is complete through fresh independent review-clean se
 rollout `019eb311-c7ce-7f50-ae13-b51a5b5461c3`; witness commit `60cde3dd7` preserves `CTX-R6-02`
 behavioral RED at `TroubleshootingFrontier / Stalled` and flagged `Active / 30 / High`, with failed
 calls `420`/`474` misattributed to successful siblings `421`/`475`. `R6-REPLAY` remains active and
-the active packet is `R6-GAP-DET-REPLAY-STALL`. Task `.0` series `200725001` + `08fa86e94` + `d03f5a355` + `9edf564d3` and Task `.1` receipt `d788f45c9` received fresh independent built-in `default` `REVIEW CLEAN`; Task `.2` is complete. Task `.2A` Option A is accepted and complete; packet amendment series `d631e0c56` + `6498c343f` received fresh independent `REVIEW CLEAN`. Corrected causality is clean checkpoint `9` `Regressing / Active 40` then checkpoint `10` `Recovered 20`, versus candidate checkpoint `9` `Advancing / HistoricalOnly 20` then checkpoint `10` `HistoricalOnly 20`; event `831 -> 837` and `recovery_state` are non-causal. Task `.2B` Option A is accepted and complete; `HistoricalOnly / 20`, unflagged is current sticky authority and `Recovered / 20` historical baseline only. Task `.3` is authorized/current but its unstaged implementation-preparation candidate remains incomplete. Task `.4` is blocked until Task `.3` implementation/focused unit criteria are complete; it then owns integrated proof, receipt recording, staging/gates, atomic commit, and fresh review. `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`, and R7/R8 remain blocked as owned.
+packet `R6-GAP-DET-REPLAY-STALL` is now complete. Historical witness `60cde3dd7` remains preserved;
+commit `6eda87e60` passes exact `CTX-R6-02`, the complete ordered packet wall, full analyzer `402 / 402`,
+and static gates and received fresh independent built-in `default` `REVIEW CLEAN`. Active packet is
+`none`. `HistoricalOnly / 20`, unflagged remains current sticky authority and `Recovered / 20`
+historical baseline only. Fresh review of this transition is pending; afterward `CTX-R6-06` replay
+proof and the family wall are next. `R6-CLOSE` and R7/R8 remain blocked as owned.
 
 ## Purpose
 

@@ -301,19 +301,17 @@ Finish with where the resolution was recorded, resumed work and commits, verific
 result, current phase status, and the next eligible interaction.
 ```
 
-## Current Packet Invocation
+## Current Phase Invocation
 
-`R6-REPLAY` remains active with packet `R6-GAP-DET-REPLAY-STALL`. Task `.2A` Option A is accepted
-and complete; packet-only amendment series `d631e0c56` + `6498c343f` received fresh independent
-built-in `default` `REVIEW CLEAN`. Exact reply
-`DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A` completes Task `.2B`: sticky
-`CTX-R6-06` current authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical
-baseline evidence only. Task `.3` is authorized/current, but its uncommitted pairing candidate remains
-incomplete and does not yet satisfy its implementation/focused unit criteria. Task `.3` owns only the
-authorized edits, focused TDD unit red/green, and a complete unstaged candidate. Task `.4` is blocked
-until those criteria are complete, then owns integrated proof, result recording, staging/gates, atomic
-implementation/proof commit, and fresh review. `CTX-R6-06` replay proof, the family wall, `R6-CLOSE`,
-R7, and R8 remain blocked.
+`R6-REPLAY` remains active with packet `none`. Historical `CTX-R6-02` witness `60cde3dd7` is
+preserved; bounded implementation/proof commit `6eda87e60` passes exact `CTX-R6-02`, the complete
+ordered packet wall, full analyzer `402 / 402`, and static gates and received fresh independent
+built-in `default` `REVIEW CLEAN`. This authority-only transition marks `CTX-R6-02` and
+`R6-GAP-DET-REPLAY-STALL` complete and clears the active packet. Current sticky `CTX-R6-06`
+authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains historical baseline
+only. Fresh review of this transition is pending; after it is clean, continue the same `R6-REPLAY`
+phase with `CTX-R6-06` replay proof and then the R6 family wall. Do not activate `R6-CLOSE` or start
+R7/R8 in the packet transition.
 
 Historical resolved Task `.2B` decision report:
 

@@ -1,6 +1,6 @@
 # Plan: R6-C.1 — Scorer Context Applicability Acceptance Controls
 
-Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; R6-GAP-DET-REPLAY-STALL ACTIVE PACKET / TASK `.2A` OPTION A ACCEPTED AND COMPLETE / AMENDMENT `d631e0c56` + `6498c343f` REVIEW-CLEAN / TASK `.2B` OPTION A ACCEPTED AND COMPLETE / TASK `.3` AUTHORIZED AND CURRENT / TASK `.4` BLOCKED** on 2026-07-14. `CTX-R6-01` is fresh independent `REVIEW CLEAN`; `CTX-R6-02` witness `60cde3dd7` preserves the committed-baseline red. Exact Task `.2B` Option-A reply makes sticky `CTX-R6-06` authority `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. Task `.3` implementation preparation/focused unit red-green remains pending; Task `.4` owns integrated proof, commit, and review after Task `.3` completes. `CTX-R6-06` follows only after packet completion.
+Status: **APPROVED / LANDED — R6-C.1-CONTROLS COMPLETE; R6-REPLAY ACTIVE; ACTIVE PACKET NONE; CTX-R6-02 AND R6-GAP-DET-REPLAY-STALL COMPLETE AT `6eda87e60` FRESH INDEPENDENT REVIEW-CLEAN; TRANSITION REVIEW PENDING** on 2026-07-14. Historical `CTX-R6-02` witness `60cde3dd7` remains preserved; commit `6eda87e60` passes the complete ordered packet proof and full analyzer `402 / 402`. Sticky `CTX-R6-06` authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. `CTX-R6-06` replay proof and the R6 family wall follow fresh transition review.
 This plan is ordered and test-first.
 
 ## Plan Decisions
@@ -325,16 +325,10 @@ complete and is never active alongside a gap.
 
 - `CTX-R6-01` — complete and fresh independent `REVIEW CLEAN` at `a0089c8de` + `968a4377f`;
   trusted fixture `019f1ecb-b93a-7570-8d8d-9ce4e711880b` is `HistoricalOnly / 20 / High`, unflagged.
-- `CTX-R6-02` — trusted subagent fixture `019eb311-c7ce-7f50-ae13-b51a5b5461c3` is preserved
-  behavioral RED at `60cde3dd7` and routes to active packet `R6-GAP-DET-REPLAY-STALL`; packet docs
-  are review-clean, Option A for `R6-REPLAY-STALL-HIGH-IMPACT-ACCEPTANCE` is accepted, Task `.2` is
-  complete. Task `.2A` Option A is accepted and complete, and packet amendment series `d631e0c56` +
-  `6498c343f` is fresh independent `REVIEW CLEAN`. Task `.2B` Option A is accepted and complete by
-  exact reply `DECISION R6-REPLAY-STALL-POST-PAIRING-RECOVERED-SEMANTICS-02: A`. Task `.3` is
-  authorized/current but its unstaged candidate has not completed the authorized edits and focused
-  TDD unit red/green. Task `.4` is blocked until those criteria complete, then owns integrated proof,
-  result recording, staging/gates, atomic commit, and fresh review; later gates
-  remain blocked.
+- `CTX-R6-02` — complete. Historical trusted witness `60cde3dd7` is preserved; implementation/proof
+  commit `6eda87e60` passes exact `Stalled / Active`, the complete ordered packet wall, and full
+  analyzer `402 / 402` and received fresh independent built-in `default` `REVIEW CLEAN`. Active
+  packet is `none`; this transition awaits fresh review before `CTX-R6-06` and the family wall.
 - `CTX-R6-06` — run the existing frozen-corpus preservation control:
 
 ```bash
@@ -363,7 +357,7 @@ replaced in replay selection; they do not create a production gap.
 
 | IDs | Planned disposition |
 |---|---|
-| `CTX-R6-01`, `CTX-R6-02` | `CTX-R6-01` complete/review-clean; `CTX-R6-02` trusted behavioral RED at `60cde3dd7`, routed to active replay-stall packet. Tasks `.2A` and `.2B` Option A are accepted and complete; packet amendment series `d631e0c56` + `6498c343f` is review-clean. Task `.3` is authorized/current but its unstaged implementation-preparation candidate remains incomplete. Task `.4` is blocked until Task `.3` implementation/focused unit criteria complete, then owns integrated proof, result recording, staging/gates, atomic commit, and fresh review; later gates remain blocked. |
+| `CTX-R6-01`, `CTX-R6-02` | Both complete/review-clean. Historical `CTX-R6-02` red `60cde3dd7` is preserved; implementation/proof commit `6eda87e60` passes the ordered packet wall and full analyzer `402 / 402` and received fresh independent built-in `default` `REVIEW CLEAN`. Active packet is `none`; this transition awaits fresh review before `CTX-R6-06` and the family wall. |
 | `CTX-R6-03` through `CTX-R6-05` | Row-atomic `dead_end_thrash` controls execute in `R6-C.1-CONTROLS`. |
 | `CTX-R6-06` | Existing frozen-corpus preservation control executes only in `R6-REPLAY`. |
 | `CTX-R6-07`, `CTX-R6-08` | Preserve semantic scorer completion and fixture-integrity/live-path distinction; no `semantic_goal_drift` reopening. |
