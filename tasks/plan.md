@@ -81,5 +81,6 @@ authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains
 only. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` is fresh independent
 built-in `default` `REVIEW CLEAN`, so `R6-REPLAY` is complete and no ordinary replay gap remains.
 `R6-CLOSE` is active at entry only with `CTX-R6-17` next in a fresh phase session. This transition
-assigns no terminal scorer disposition, does not mark the finding `CLOSED`, and authorizes no R7/R8
-work.
+completes no remaining terminal-disposition reconciliation, does not mark the finding `CLOSED`, and
+authorizes no R7/R8 work. Existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
+**Fit-for-purpose exception** dispositions remain unchanged.

@@ -363,8 +363,10 @@ replay controls pass `4 x 1 / 1`; the R6 family wall passes `21 / 21`, `58 / 58`
 `HistoricalOnly / 20`, unflagged, while `Recovered / 20` is historical baseline only. Proof/fix
 series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independent built-in `default`
 `REVIEW CLEAN`; no ordinary replay gap remains. `CTX-R6-17` terminal-disposition and authority
-reconciliation is next in a fresh `R6-CLOSE` session. This transition assigns no terminal
-disposition and does not mark the R6 finding `CLOSED`.
+reconciliation is next in a fresh `R6-CLOSE` session. This transition assigns no additional terminal
+disposition; the existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
+**Fit-for-purpose exception** dispositions remain unchanged. It does not mark the R6 finding
+`CLOSED`.
 
 ## Non-Goals For This Rescope
 

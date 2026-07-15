@@ -121,7 +121,9 @@ independent built-in `default` `REVIEW CLEAN`. Current sticky authority remains
 `HistoricalOnly / 20`, unflagged, while clean-baseline `Recovered / 20` remains historical evidence
 only. `R6-REPLAY` is complete with no ordinary replay gap open. `R6-CLOSE` is active at entry only;
 its first work is `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh phase
-session. This transition assigns no terminal disposition and does not mark the R6 finding `CLOSED`.
+session. This transition assigns no additional terminal disposition; the existing
+`semantic_goal_drift` **Cutover complete** and `scoring/mod.rs` **Fit-for-purpose exception**
+dispositions remain unchanged, and the transition does not mark the R6 finding `CLOSED`.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -899,7 +901,7 @@ The next honest work target is:
   `e6d43eee9` + `61c9d5074`, and completed `CTX-R6-01`/`02`/`06` replay plus the green R6 family
   wall. `R6-REPLAY` is complete, active packet is `none`, and `R6-CLOSE` is active at entry only.
   Execute `CTX-R6-17` in a fresh phase session only after this transition is fresh-review-clean;
-  keep terminal dispositions and R7 blocked until then
+  keep the remaining terminal-disposition reconciliation unstarted and R7 blocked until then
 - close R6 only after every material scoring surface has exactly one terminal disposition —
   **Cutover complete**, **Fit-for-purpose exception**, **Merged/deprecated**, or **Explicitly deferred
   outside R6 with justification** — and the broad acceptance wording is proven or narrowed

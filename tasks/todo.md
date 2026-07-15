@@ -82,9 +82,9 @@ Current phase: **`R6-CLOSE` (ACTIVE AT ENTRY ONLY; active packet: `none`; `R6-RE
   `truth_grounding_gap 22 / 22`, `wrong_plan_branch 6 / 6`, `checkpoints 169 / 169`, and full analyzer
   `402 / 402`; `git diff --check` passed. Phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` +
   `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`.
-- [x] Land the narrow `R6-REPLAY -> R6-CLOSE` phase transition by this change without starting
-  terminal-disposition work. Fresh independent review of the transition is required before the
-  next phase session starts.
+- [x] Land the narrow `R6-REPLAY -> R6-CLOSE` phase transition by this change without starting the
+  remaining terminal-disposition reconciliation work. Fresh independent review of the transition is
+  required before the next phase session starts.
 - [ ] In `R6-CLOSE`, assign every terminal scorer disposition and update the R6 finding and authority
   stack to `CLOSED` through `CTX-R6-17`; do not start that work until the narrow phase transition is
   review-clean.

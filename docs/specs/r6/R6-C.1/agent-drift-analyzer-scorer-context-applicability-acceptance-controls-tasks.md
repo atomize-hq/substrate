@@ -543,9 +543,10 @@ before that reconciled transition is committed and fresh-review-clean.
     and a fresh independent built-in `default` reviewer returned `REVIEW CLEAN`. Packet is complete;
     active packet is `none`.
   - Verify: `cargo test -p agent-drift-analyzer --test acceptance_fixtures acceptance_fixtures_integrated_true_stall_stays_active -- --exact --nocapture`.
-  - Boundary: no terminal disposition or R7/R8 work is part of this replay receipt. Packet transition
-    series `1ff592823` + `7839a7f47` and phase-owned proof/fix series `b1791c1e3` + `e6d43eee9` +
-    `61c9d5074` are fresh-review-clean. `R6-REPLAY` is complete; `R6-CLOSE` is active at entry only.
+  - Boundary: no additional terminal disposition or R7/R8 work is part of this replay receipt.
+    Packet transition series `1ff592823` + `7839a7f47` and phase-owned proof/fix series `b1791c1e3` +
+    `e6d43eee9` + `61c9d5074` are fresh-review-clean. `R6-REPLAY` is complete; `R6-CLOSE` is active at
+    entry only.
 
 - [x] **R6-C.1.6.3 — Execute frozen-corpus preservation (`CTX-R6-06`) in `R6-REPLAY`.**
   - Existing exact test:
@@ -576,13 +577,16 @@ before that reconciled transition is committed and fresh-review-clean.
     `/tmp/r6-ctx06-01-advancing.log` through `/tmp/r6-ctx06-11-diff-check.log`.
   - Boundary: the phase proof is complete and proof/fix series `b1791c1e3` + `e6d43eee9` +
     `61c9d5074` is fresh independent built-in `default` `REVIEW CLEAN`. `R6-REPLAY` is complete and
-    `R6-CLOSE` is active at entry only. No terminal disposition or R7/R8 work is part of this receipt.
+    `R6-CLOSE` is active at entry only. No additional terminal disposition or R7/R8 work is part of
+    this receipt; the existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
+    **Fit-for-purpose exception** dispositions remain unchanged.
 
 ## Explicit Exclusions
 
 - [ ] `CTX-R6-07` and `CTX-R6-08` remain preserved semantic completion/integrity proof; no
   `semantic_goal_drift` work occurs absent new failing behavior evidence.
 - [ ] No replay-closeout execution occurs in `R6-C.1-SPEC` or `R6-C.1-CONTROLS`.
-- [ ] `CTX-R6-17` remains open for `R6-CLOSE`; no R6 terminal disposition or closure is claimed.
+- [ ] `CTX-R6-17` remains open for `R6-CLOSE`; the remaining R6 terminal-disposition reconciliation
+  is not claimed complete, and no R6 closure is claimed.
 - [ ] `CTX-R6-18` historical/superseded labels remain proven and unchanged.
 - [ ] No R7 or R8 task starts or absorbs an R6 baseline gap.

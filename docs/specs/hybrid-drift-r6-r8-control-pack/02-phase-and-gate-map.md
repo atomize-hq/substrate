@@ -49,8 +49,10 @@ Proof/fix series `b1791c1e3` + `e6d43eee9` + `61c9d5074` received fresh independ
 `default` `REVIEW CLEAN`, so no ordinary replay gap remains. Sticky authority remains
 `HistoricalOnly / 20`, unflagged, and `Recovered / 20` remains historical baseline only.
 `R6-CLOSE` is active at entry only; its first work is `CTX-R6-17` terminal-disposition and authority
-reconciliation in a fresh phase session. No terminal disposition, finding closure, or R7/R8 work is
-performed by this transition.
+reconciliation in a fresh phase session. This transition completes no remaining terminal-disposition
+reconciliation, does not close the finding, and starts no R7/R8 work. The existing
+`semantic_goal_drift` **Cutover complete** and `scoring/mod.rs` **Fit-for-purpose exception**
+dispositions remain unchanged.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

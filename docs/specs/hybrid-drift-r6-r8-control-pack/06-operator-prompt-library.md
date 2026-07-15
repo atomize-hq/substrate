@@ -313,8 +313,9 @@ received fresh independent built-in `default` `REVIEW CLEAN`, so no ordinary rep
 Current sticky authority remains `HistoricalOnly / 20`, unflagged; old `Recovered / 20` remains
 historical baseline only. `R6-CLOSE` is active at entry only with active packet `none`; its first
 work is `CTX-R6-17` terminal-disposition and authority reconciliation in a fresh phase session.
-The transition does not itself assign a terminal disposition, mark the R6 finding `CLOSED`, or
-begin R7/R8 work.
+The transition does not itself complete any remaining terminal-disposition reconciliation, mark the
+R6 finding `CLOSED`, or begin R7/R8 work. Existing `semantic_goal_drift` **Cutover complete** and
+`scoring/mod.rs` **Fit-for-purpose exception** dispositions remain unchanged.
 
 Next eligible Prompt 1 invocation, after this narrow transition is fresh-review-clean: use Prompt 1
 above unchanged with these filled phase selectors:

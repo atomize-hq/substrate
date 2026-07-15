@@ -180,7 +180,9 @@ Packet transition series `1ff592823` + `7839a7f47` is fresh independent `REVIEW 
 `CTX-R6-06` replay and the R6 family wall are green, and proof/fix series `b1791c1e3` + `e6d43eee9` +
 `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`. `R6-REPLAY` is complete,
 active packet is `none`, and `R6-CLOSE` is active at entry only with `CTX-R6-17` next. This
-transition does not assign a terminal disposition or mark this finding `CLOSED`.
+transition does not assign an additional terminal disposition; the existing `semantic_goal_drift`
+**Cutover complete** and `scoring/mod.rs` **Fit-for-purpose exception** dispositions remain
+unchanged. The transition does not mark this finding `CLOSED`.
 
 ## Verification Run For This Audit
 

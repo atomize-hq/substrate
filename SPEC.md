@@ -83,8 +83,10 @@ passed exact `CTX-R6-01`, exact `CTX-R6-02`, the renamed sticky control, and exa
 `61c9d5074` received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority
 remains `HistoricalOnly / 20`, unflagged, with old `Recovered / 20` retained only as historical
 baseline. `R6-REPLAY` is complete with no ordinary replay gap open; `R6-CLOSE` is active at entry
-only with `CTX-R6-17` next in a fresh phase session. This transition assigns no terminal disposition,
-does not mark the R6 finding `CLOSED`, and starts no R7/R8 work.
+only with `CTX-R6-17` next in a fresh phase session. This transition assigns no additional terminal
+disposition; the existing `semantic_goal_drift` **Cutover complete** and `scoring/mod.rs`
+**Fit-for-purpose exception** dispositions remain unchanged. It does not mark the R6 finding
+`CLOSED` or start R7/R8 work.
 
 R7 promotion requires the applicability audit to be complete, broad R6 acceptance claims
 behaviorally proven or narrowed honestly, the R6 finding updated to `CLOSED`, and all root/R6/R7

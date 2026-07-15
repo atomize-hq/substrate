@@ -9,8 +9,10 @@ Its complete ordered proof passes seven focused controls, all `20` troubleshooti
 `CTX-R6-02`, exact sticky `CTX-R6-06`, frozen corpus, progress acceptance, checkpoint matches, full
 analyzer `402 / 402`, compactor normalization, and static gates. A fresh independent built-in
 `default` reviewer returned `REVIEW CLEAN`. Current sticky authority remains `HistoricalOnly / 20`,
-unflagged; old `Recovered / 20` remains historical baseline only. This transition assigns no terminal
-scorer disposition and does not run `CTX-R6-06`, the family wall, `R6-CLOSE`, or R7/R8.
+unflagged; old `Recovered / 20` remains historical baseline only. This packet transition assigns no
+additional terminal scorer disposition; the existing `semantic_goal_drift` **Cutover complete** and
+`scoring/mod.rs` **Fit-for-purpose exception** dispositions remain unchanged. It does not run
+`CTX-R6-06`, the family wall, `R6-CLOSE`, or R7/R8.
 
 ## Required Commit Gate
 
