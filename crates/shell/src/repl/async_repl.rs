@@ -8424,6 +8424,7 @@ async fn start_remote_member_runtime_with_prepared(
         let mut last_authoritative_frame_identity = None;
         #[cfg(target_os = "linux")]
         let mut durable_terminal_observed = false;
+        let mut authority_registration_published = false;
 
         'stream: while let Some(frame) = body.as_mut().frame().await {
             let frame = match frame {
@@ -8477,6 +8478,40 @@ async fn start_remote_member_runtime_with_prepared(
                         frame_identity,
                         event,
                     } => {
+                        let canonical_authority_session_handle = if authority_managed
+                            && !authority_registration_published
+                        {
+                            if event.kind
+                                != substrate_common::agent_events::AgentEventKind::Registered
+                            {
+                                protocol_interruption = Some(
+                                    "world-scoped retained member runtime emitted a non-Registered readiness event"
+                                        .to_string(),
+                                );
+                                break 'stream;
+                            }
+                            let session_handle = event
+                                .data
+                                .get("schema")
+                                .and_then(serde_json::Value::as_str)
+                                .filter(|schema| *schema == SESSION_HANDLE_SCHEMA_V1)
+                                .and_then(|_| event.data.get("session"))
+                                .and_then(serde_json::Value::as_object)
+                                .and_then(|session| session.get("id"))
+                                .and_then(serde_json::Value::as_str)
+                                .filter(|session_id| !session_id.trim().is_empty())
+                                .map(str::to_owned);
+                            let Some(session_handle) = session_handle else {
+                                protocol_interruption = Some(
+                                    "world-scoped retained member runtime Registered readiness event omitted the canonical session handle"
+                                        .to_string(),
+                                );
+                                break 'stream;
+                            };
+                            Some(session_handle)
+                        } else {
+                            None
+                        };
                         #[cfg(target_os = "linux")]
                         {
                             last_authoritative_frame_identity = Some(frame_identity.clone());
@@ -8487,9 +8522,9 @@ async fn start_remote_member_runtime_with_prepared(
                                     retained_worker_admission_for_events.as_ref()
                                 {
                                     let registered_at = TimestampV1::parse(
-                                        chrono::Utc::now().to_rfc3339_opts(
-                                            chrono::SecondsFormat::Nanos,
-                                            true,
+                                    chrono::Utc::now().to_rfc3339_opts(
+                                        chrono::SecondsFormat::Nanos,
+                                        true,
                                         ),
                                     )
                                     .map_err(|error| error.to_string())
@@ -8513,11 +8548,14 @@ async fn start_remote_member_runtime_with_prepared(
                                             .map(|_| ())
                                             .map_err(|error| error.to_string())
                                     });
-                                    if let Err(message) = registered_at {
-                                        protocol_interruption = Some(format!(
+                                    match registered_at {
+                                        Ok(()) => authority_registration_published = true,
+                                        Err(message) => {
+                                            protocol_interruption = Some(format!(
                                             "retained-worker Registered truth failed closed: {message}"
                                         ));
-                                        break 'stream;
+                                            break 'stream;
+                                        }
                                     }
                                 }
                             }
@@ -8530,7 +8568,12 @@ async fn start_remote_member_runtime_with_prepared(
                             let mut manifest_guard = event_manifest
                                 .lock()
                                 .expect("runtime manifest mutex poisoned");
-                            if let Some(session_id) = extract_session_handle_id(Some(&event.data)) {
+                            let session_handle = if authority_managed {
+                                canonical_authority_session_handle.as_deref()
+                            } else {
+                                extract_session_handle_id(Some(&event.data))
+                            };
+                            if let Some(session_id) = session_handle {
                                 if manifest_guard.internal.uaa_session_id.as_deref()
                                     != Some(session_id)
                                 {
@@ -16027,9 +16070,12 @@ mod tests {
                 RetainedWorkerLaunchAuthorityProofV1,
             )>::new()));
             let observed_proofs_for_server = Arc::clone(&observed_proofs);
+            let (transport_claim_release_tx, transport_claim_release_rx) =
+                tokio::sync::oneshot::channel::<()>();
             let world_server = tokio::spawn(async move {
                 let mut launch_stream = None::<(tokio::net::UnixStream, String, String)>;
                 let mut missing_start_stream = None::<tokio::net::UnixStream>;
+                let mut transport_claim_release_rx = Some(transport_claim_release_rx);
                 while let Ok((mut stream, _)) = listener.accept().await {
                     let Some((header, body)) = read_test_world_http_request(&mut stream).await
                     else {
@@ -16060,12 +16106,21 @@ mod tests {
                             Some("exercise direct invalid registration") => {
                                 "direct-invalid-registered"
                             }
+                            Some("exercise direct transport claim contention") => {
+                                "direct-transport-claimed"
+                            }
                             Some("own the failing integration investigation") => "toolbox",
                             Some("exercise toolbox stream-open interruption") => {
                                 "toolbox-open-fail"
                             }
                             Some("exercise toolbox missing-start interruption") => {
                                 "toolbox-missing-start"
+                            }
+                            Some("exercise toolbox non-registered session handle") => {
+                                "toolbox-non-registered"
+                            }
+                            Some("exercise toolbox inexact Registered session handle") => {
+                                "toolbox-inexact-registered"
                             }
                             other => panic!("unexpected authority-managed prompt: {other:?}"),
                         };
@@ -16110,54 +16165,146 @@ mod tests {
                             )
                             .await;
                         }
+                        if adapter == "direct-transport-claimed" {
+                            if let Some(release_rx) = transport_claim_release_rx.take() {
+                                tokio::spawn(async move {
+                                    let _ = release_rx.await;
+                                    write_test_world_stream_frame(
+                                        &mut stream,
+                                        &ExecuteStreamFrame::Error {
+                                            frame_identity: test_world_frame_identity(
+                                                &stream_id,
+                                                2,
+                                            ),
+                                            message:
+                                                "forced post-claim pre-registration interruption"
+                                                    .to_string(),
+                                        },
+                                    )
+                                    .await;
+                                    finish_test_world_chunked_stream(&mut stream).await;
+                                });
+                            } else {
+                                write_test_world_stream_frame(
+                                    &mut stream,
+                                    &ExecuteStreamFrame::Error {
+                                        frame_identity: test_world_frame_identity(&stream_id, 2),
+                                        message: "duplicate transport invocation".to_string(),
+                                    },
+                                )
+                                .await;
+                                finish_test_world_chunked_stream(&mut stream).await;
+                            }
+                            continue;
+                        }
                         let registered_identity = transport_api_types::RuntimeEventIdentityV1 {
                             event_id: registered_event_id,
                             event_sequence: 1,
                         };
+                        let non_registered_session_handle = adapter == "toolbox-non-registered";
+                        let inexact_registered_session_handle =
+                            adapter == "toolbox-inexact-registered";
+                        let exact_registered_event = AgentEvent {
+                            ts: chrono::Utc::now(),
+                            kind: AgentEventKind::Registered,
+                            data: serde_json::json!({
+                                "schema": SESSION_HANDLE_SCHEMA_V1,
+                                "session": {"id": format!("thread-{adapter}-authority-spawn")}
+                            }),
+                            agent_id: execute.agent_id,
+                            orchestration_session_id: if adapter == "direct-invalid-registered" {
+                                format!(
+                                    "{}-changed",
+                                    member_dispatch.orchestration_session_id
+                                )
+                            } else {
+                                member_dispatch.orchestration_session_id.clone()
+                            },
+                            run_id: member_dispatch.run_id.clone(),
+                            parent_run_id: None,
+                            participant_id: Some(member_dispatch.participant_id.clone()),
+                            parent_participant_id: None,
+                            resumed_from_participant_id: None,
+                            backend_id: Some(member_dispatch.backend_id.clone()),
+                            thread_id: Some(format!("thread-{adapter}-authority-spawn")),
+                            role: Some(MEMBER_ROLE.to_string()),
+                            world_id: Some(member_dispatch.world_id.clone()),
+                            world_generation: Some(member_dispatch.world_generation),
+                            cmd_id: None,
+                            span_id: Some(span_id.clone()),
+                            event_identity: Some(registered_identity),
+                            channel: None,
+                            identity_tuple: None,
+                            placement_posture: None,
+                            project: None,
+                        };
+                        let mut first_readiness_event = exact_registered_event.clone();
+                        if non_registered_session_handle {
+                            first_readiness_event.kind = AgentEventKind::Status;
+                            first_readiness_event.data = serde_json::json!({
+                                "type": "thread.started",
+                                "thread_id": format!("thread-{adapter}-authority-spawn")
+                            });
+                        } else if inexact_registered_session_handle {
+                            first_readiness_event.data = serde_json::json!({
+                                "type": "thread.started",
+                                "thread_id": format!("thread-{adapter}-authority-spawn")
+                            });
+                        }
                         write_test_world_stream_frame(
                             &mut stream,
                             &ExecuteStreamFrame::Event {
                                 frame_identity: test_world_frame_identity(&stream_id, 2),
-                                event: AgentEvent {
-                                    ts: chrono::Utc::now(),
-                                    kind: AgentEventKind::Registered,
-                                    data: serde_json::json!({
-                                        "schema": SESSION_HANDLE_SCHEMA_V1,
-                                        "session": {"id": format!("thread-{adapter}-authority-spawn")}
-                                    }),
-                                    agent_id: execute.agent_id,
-                                    orchestration_session_id: if adapter
-                                        == "direct-invalid-registered"
-                                    {
-                                        format!(
-                                            "{}-changed",
-                                            member_dispatch.orchestration_session_id
-                                        )
-                                    } else {
-                                        member_dispatch.orchestration_session_id.clone()
-                                    },
-                                    run_id: member_dispatch.run_id.clone(),
-                                    parent_run_id: None,
-                                    participant_id: Some(member_dispatch.participant_id.clone()),
-                                    parent_participant_id: None,
-                                    resumed_from_participant_id: None,
-                                    backend_id: Some(member_dispatch.backend_id.clone()),
-                                    thread_id: Some(format!("thread-{adapter}-authority-spawn")),
-                                    role: Some(MEMBER_ROLE.to_string()),
-                                    world_id: Some(member_dispatch.world_id.clone()),
-                                    world_generation: Some(member_dispatch.world_generation),
-                                    cmd_id: None,
-                                    span_id: Some(span_id.clone()),
-                                    event_identity: Some(registered_identity),
-                                    channel: None,
-                                    identity_tuple: None,
-                                    placement_posture: None,
-                                    project: None,
-                                },
+                                event: first_readiness_event,
                             },
                         )
                         .await;
                         if adapter == "direct-invalid-registered" {
+                            finish_test_world_chunked_stream(&mut stream).await;
+                            continue;
+                        }
+                        if inexact_registered_session_handle {
+                            let mut late_status_event = exact_registered_event;
+                            late_status_event.kind = AgentEventKind::Status;
+                            late_status_event.data = serde_json::json!({
+                                "type": "thread.started",
+                                "thread_id": format!("thread-{adapter}-authority-spawn")
+                            });
+                            late_status_event.event_identity = Some(
+                                transport_api_types::RuntimeEventIdentityV1 {
+                                    event_id: format!("evt_{adapter}_late_status"),
+                                    event_sequence: 2,
+                                },
+                            );
+                            write_test_world_stream_frame(
+                                &mut stream,
+                                &ExecuteStreamFrame::Event {
+                                    frame_identity: test_world_frame_identity(&stream_id, 3),
+                                    event: late_status_event,
+                                },
+                            )
+                            .await;
+                            finish_test_world_chunked_stream(&mut stream).await;
+                            continue;
+                        }
+                        if non_registered_session_handle {
+                            let mut late_registered_event = exact_registered_event;
+                            late_registered_event.event_identity = Some(
+                                transport_api_types::RuntimeEventIdentityV1 {
+                                    event_id: format!(
+                                        "evt_{adapter}_late_authority_registered"
+                                    ),
+                                    event_sequence: 2,
+                                },
+                            );
+                            write_test_world_stream_frame(
+                                &mut stream,
+                                &ExecuteStreamFrame::Event {
+                                    frame_identity: test_world_frame_identity(&stream_id, 3),
+                                    event: late_registered_event,
+                                },
+                            )
+                            .await;
                             finish_test_world_chunked_stream(&mut stream).await;
                             continue;
                         }
@@ -16200,7 +16347,6 @@ mod tests {
                     if request_line.starts_with("POST /v1/execute/cancel ") {
                         let cancel: ExecuteCancelRequestV1 = serde_json::from_slice(&body)
                             .expect("strict toolbox execute cancel request");
-                        assert_eq!(cancel.span_id, "spn_toolbox_authority_spawn");
                         assert_eq!(cancel.sig, "INT");
                         let response = serde_json::to_string(
                             &transport_api_types::ExecuteCancelResponseV1 {
@@ -16210,6 +16356,14 @@ mod tests {
                         )
                         .expect("serialize toolbox execute cancel response");
                         write_test_world_http_json(&mut stream, "200 OK", &response).await;
+                        if matches!(
+                            cancel.span_id.as_str(),
+                            "spn_toolbox-non-registered_authority_spawn"
+                                | "spn_toolbox-inexact-registered_authority_spawn"
+                        ) {
+                            continue;
+                        }
+                        assert_eq!(cancel.span_id, "spn_toolbox_authority_spawn");
 
                         let (mut launch_stream, stream_id, span_id) = launch_stream
                             .take()
@@ -16311,6 +16465,171 @@ mod tests {
                     .expect("reopen toolbox authority root"),
             )
             .expect("reopen toolbox host-session authority");
+
+            let contention_prompt = "exercise direct transport claim contention";
+            let contention_request = WorldDispatchRequestV1 {
+                request_id: Some("req_direct_transport_claim_contention".to_string()),
+                idempotency_key: Some("idem_direct_transport_claim_contention".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(host_participant_id.clone()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: contention_prompt.to_string(),
+                }),
+            };
+            let first_contention_store = startup_context.store.clone();
+            let first_contention_request = contention_request.clone();
+            let first_contention_task = tokio::spawn(async move {
+                dispatch_orchestrator_world_request(
+                    &first_contention_store,
+                    first_contention_request,
+                )
+                .await
+            });
+            let contention_proof = tokio::time::timeout(Duration::from_secs(3), async {
+                loop {
+                    if let Some(proof) = observed_proofs
+                        .lock()
+                        .expect("observed proofs mutex")
+                        .iter()
+                        .find(|(adapter, _)| adapter == "direct-transport-claimed")
+                        .map(|(_, proof)| proof.clone())
+                    {
+                        break proof;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .expect("first transport claimant must reach the production adapter");
+            let snapshot_authority_files = |root: &Path| {
+                let authority_dir = root.join("authority-v1");
+                let mut pending = vec![authority_dir.clone()];
+                let mut snapshot = Vec::<(PathBuf, Vec<u8>)>::new();
+                while let Some(directory) = pending.pop() {
+                    for entry in fs::read_dir(&directory).expect("read authority directory") {
+                        let entry = entry.expect("read authority entry");
+                        let file_type = entry.file_type().expect("read authority entry type");
+                        if file_type.is_dir() {
+                            pending.push(entry.path());
+                        } else if file_type.is_file() {
+                            let relative = entry
+                                .path()
+                                .strip_prefix(&authority_dir)
+                                .expect("authority-relative path")
+                                .to_path_buf();
+                            snapshot.push((
+                                relative,
+                                fs::read(entry.path()).expect("read authority file"),
+                            ));
+                        }
+                    }
+                }
+                snapshot.sort_by(|left, right| left.0.cmp(&right.0));
+                snapshot
+            };
+            let authority_bytes_before_join = snapshot_authority_files(&substrate_home);
+            let joined_retry = tokio::time::timeout(
+                Duration::from_secs(3),
+                dispatch_orchestrator_world_request(
+                    &startup_context.store,
+                    contention_request.clone(),
+                ),
+            )
+            .await
+            .expect("joined transport claimant must return a bounded result")
+            .expect_err("joined transport claimant must not invoke transport");
+            assert!(
+                joined_retry
+                    .to_string()
+                    .contains("retained_spawn_transport_claimed"),
+                "joined retry must report exact durable TransportClaimedNonterminal truth: {joined_retry:#}"
+            );
+            assert!(
+                !joined_retry.to_string().contains(contention_prompt),
+                "joined retry error must not copy Spawn prompt bytes"
+            );
+            assert_eq!(
+                snapshot_authority_files(&substrate_home),
+                authority_bytes_before_join,
+                "joined transport claimant must not mutate durable authority or admission bytes"
+            );
+            assert_eq!(
+                observed_proofs
+                    .lock()
+                    .expect("observed proofs mutex")
+                    .iter()
+                    .filter(|(adapter, _)| adapter == "direct-transport-claimed")
+                    .count(),
+                1,
+                "concurrent exact retries must invoke transport exactly once"
+            );
+
+            let conflicting_prompt = "changed direct transport claim contention bytes";
+            let mut conflicting_request = contention_request.clone();
+            conflicting_request.payload =
+                WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: conflicting_prompt.to_string(),
+                });
+            let conflicting_retry = dispatch_orchestrator_world_request(
+                &startup_context.store,
+                conflicting_request,
+            )
+            .await
+            .expect_err("changed bytes must conflict without transport");
+            assert!(
+                !conflicting_retry.to_string().contains(conflicting_prompt),
+                "conflicting retry error must not copy changed Spawn prompt bytes"
+            );
+            assert_eq!(
+                snapshot_authority_files(&substrate_home),
+                authority_bytes_before_join,
+                "conflicting retry must not mutate durable authority or admission bytes"
+            );
+            assert_eq!(
+                observed_proofs
+                    .lock()
+                    .expect("observed proofs mutex")
+                    .iter()
+                    .filter(|(adapter, _)| adapter == "direct-transport-claimed")
+                    .count(),
+                1,
+                "conflicting retry must not invoke transport"
+            );
+
+            transport_claim_release_tx
+                .send(())
+                .expect("release first transport claimant");
+            let first_contention = tokio::time::timeout(
+                Duration::from_secs(3),
+                first_contention_task,
+            )
+            .await
+            .expect("first transport claimant must converge after interruption")
+            .expect("first transport claimant task")
+            .expect_err("interrupted first transport claimant must fail closed");
+            assert!(
+                !first_contention.to_string().contains(contention_prompt),
+                "first claimant error must not copy Spawn prompt bytes"
+            );
+            let contention_record = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &contention_proof.orchestration_session_id,
+                    &contention_proof.retained_participant_id,
+                )
+                .expect("read interrupted contention admission")
+                .expect("contention admission");
+            assert!(matches!(
+                contention_record.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+            ));
 
             let conflict_outcome = dispatch_orchestrator_world_request(
                 &startup_context.store,
@@ -16666,6 +16985,153 @@ mod tests {
                 crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
             ));
 
+            let non_registered_prompt = "exercise toolbox non-registered session handle";
+            let non_registered_request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_non_registered".to_string()),
+                idempotency_key: Some("idem_toolbox_non_registered".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(host_participant_id.clone()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: non_registered_prompt.to_string(),
+                }),
+            };
+            let non_registered_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(
+                        &transport_path,
+                        &non_registered_request,
+                    )
+                    .await
+                }
+            });
+            let non_registered_dispatch =
+                tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                    .await
+                    .expect("timed out waiting for non-Registered toolbox request")
+                    .expect("non-Registered toolbox request");
+            handle_internal_toolbox_dispatch_request(
+                non_registered_dispatch,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let non_registered =
+                tokio::time::timeout(Duration::from_secs(3), non_registered_task)
+                    .await
+                    .expect("non-Registered session handle must remain bounded")
+                    .expect("non-Registered session-handle task")
+                    .expect_err(
+                        "authority-managed Spawn must not accept a non-Registered session handle",
+                    );
+            assert!(
+                !non_registered.to_string().contains(non_registered_prompt),
+                "non-Registered startup error must not copy Spawn prompt bytes"
+            );
+            let non_registered_proof = observed_proofs
+                .lock()
+                .expect("observed proofs mutex")
+                .iter()
+                .find(|(adapter, _)| adapter == "toolbox-non-registered")
+                .map(|(_, proof)| proof.clone())
+                .expect("non-Registered toolbox adapter must serialize the exact proof");
+            let non_registered_record = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &non_registered_proof.orchestration_session_id,
+                    &non_registered_proof.retained_participant_id,
+                )
+                .expect("read non-Registered toolbox admission")
+                .expect("non-Registered toolbox admission");
+            assert!(matches!(
+                non_registered_record.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+            ));
+
+            let inexact_registered_prompt =
+                "exercise toolbox inexact Registered session handle";
+            let inexact_registered_request = WorldDispatchRequestV1 {
+                request_id: Some("req_toolbox_inexact_registered".to_string()),
+                idempotency_key: Some("idem_toolbox_inexact_registered".to_string()),
+                orchestration_session_id: Some(startup_context.orchestration_session_id()),
+                caller_participant_id: Some(host_participant_id.clone()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: crate::execution::agent_runtime::WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some(world_binding.world_id.clone()),
+                world_generation: Some(world_binding.world_generation),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: inexact_registered_prompt.to_string(),
+                }),
+            };
+            let inexact_registered_task = tokio::spawn({
+                let transport_path = transport_path.clone();
+                async move {
+                    request_internal_toolbox_world_dispatch(
+                        &transport_path,
+                        &inexact_registered_request,
+                    )
+                    .await
+                }
+            });
+            let inexact_registered_dispatch =
+                tokio::time::timeout(Duration::from_secs(3), toolbox_rx.recv())
+                    .await
+                    .expect("timed out waiting for inexact-Registered toolbox request")
+                    .expect("inexact-Registered toolbox request");
+            handle_internal_toolbox_dispatch_request(
+                inexact_registered_dispatch,
+                Some(&startup_context),
+                &mut member_runtimes,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+            let inexact_registered =
+                tokio::time::timeout(Duration::from_secs(3), inexact_registered_task)
+                    .await
+                    .expect("inexact Registered session handle must remain bounded")
+                    .expect("inexact Registered session-handle task")
+                    .expect_err(
+                        "authority-managed Spawn must reject an inexact Registered session handle",
+                    );
+            assert!(
+                !inexact_registered
+                    .to_string()
+                    .contains(inexact_registered_prompt),
+                "inexact Registered startup error must not copy Spawn prompt bytes"
+            );
+            let inexact_registered_proof = observed_proofs
+                .lock()
+                .expect("observed proofs mutex")
+                .iter()
+                .find(|(adapter, _)| adapter == "toolbox-inexact-registered")
+                .map(|(_, proof)| proof.clone())
+                .expect("inexact-Registered toolbox adapter must serialize the exact proof");
+            let inexact_registered_record = RetainedWorkerRuntime
+                .read_admission_record(
+                    &authority,
+                    &inexact_registered_proof.orchestration_session_id,
+                    &inexact_registered_proof.retained_participant_id,
+                )
+                .expect("read inexact-Registered toolbox admission")
+                .expect("inexact-Registered toolbox admission");
+            assert!(matches!(
+                inexact_registered_record.state,
+                crate::execution::agent_runtime::retained_worker_runtime::RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. }
+            ));
+
             let missing_start_prompt = "exercise toolbox missing-start interruption";
             let missing_start_request = WorldDispatchRequestV1 {
                 request_id: Some("req_toolbox_missing_start".to_string()),
@@ -16710,7 +17176,8 @@ mod tests {
             assert!(
                 missing_start
                     .to_string()
-                    .contains("without a streamed execute span_id")
+                    .contains("without a streamed execute span_id"),
+                "missing-Start failure changed unexpectedly: {missing_start:#}"
             );
             assert!(
                 !missing_start.to_string().contains(missing_start_prompt),
