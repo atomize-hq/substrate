@@ -36,7 +36,7 @@ impl std::fmt::Debug for WorldWorkReceiptRegistryStorageV1 {
 pub(crate) struct WorldWorkReceiptRegistryTransactionV1<'storage> {
     root: &'storage TrustedAuthorityRoot,
     authority_store_id: &'storage str,
-    locked_root: StateRootV1,
+    locked_root: VersionedStateRoot,
     authority_entry: DirectoryEntry,
     authority: TrustedDirectory,
     lock_entry: DirectoryEntry,
@@ -63,9 +63,9 @@ impl WorldWorkReceiptRegistryStorageV1 {
                 "B1 receipt authority root differs from expected identity",
             ));
         }
-        with_opened_existing_semantic_preflight(&root, |transaction| {
-            if transaction.root.authority_store_id != expected_authority_store_id
-                || transaction.root.bootstrap_home != *expected_root
+        with_opened_existing_versioned_semantic_preflight(&root, |transaction| {
+            if transaction.root.authority_store_id() != expected_authority_store_id
+                || transaction.root.bootstrap_home() != expected_root
             {
                 return Err(BootstrapError(
                     "B1 receipt authority store identity mismatch",
@@ -116,7 +116,7 @@ impl std::fmt::Debug for WorldWorkExecutionSupervisorStorageV1 {
 pub(crate) struct WorldWorkExecutionSupervisorTransactionV1<'storage> {
     root: &'storage TrustedAuthorityRoot,
     authority_store_id: &'storage str,
-    locked_root: StateRootV1,
+    locked_root: VersionedStateRoot,
     authority_entry: DirectoryEntry,
     authority: TrustedDirectory,
     lock_entry: DirectoryEntry,
@@ -143,9 +143,9 @@ impl WorldWorkExecutionSupervisorStorageV1 {
                 "B2.1 supervisor authority root differs from expected identity",
             ));
         }
-        with_opened_existing_semantic_preflight(&root, |transaction| {
-            if transaction.root.authority_store_id != expected_authority_store_id
-                || transaction.root.bootstrap_home != *expected_root
+        with_opened_existing_versioned_semantic_preflight(&root, |transaction| {
+            if transaction.root.authority_store_id() != expected_authority_store_id
+                || transaction.root.bootstrap_home() != expected_root
             {
                 return Err(BootstrapError(
                     "B2.1 supervisor authority store identity mismatch",
@@ -1074,20 +1074,35 @@ impl WorldWorkReceiptRegistryTransactionV1<'_> {
         self.verify_named_root_lock_scope()?;
         let layout = StoreLayout::open(self.root.directory())
             .map_err(|_| BootstrapError("open B1 receipt authority layout"))?;
-        let observed = layout
-            .semantic_preflight(self.root.identity())
-            .map_err(|_| BootstrapError("preflight B1 receipt authority store"))?;
-        if observed.classification != BootstrapClassificationV1::ValidExisting {
+        layout
+            .validate_closed_layout()
+            .map_err(|_| BootstrapError("revalidate B1 receipt authority layout"))?;
+        layout
+            .validate_temps()
+            .map_err(|_| BootstrapError("revalidate B1 receipt authority temps"))?;
+        let legacy = LegacyObservation::capture(layout.bootstrap)
+            .map_err(|_| BootstrapError("recapture B1 receipt authority legacy state"))?;
+        if legacy.has_artifact {
             return Err(BootstrapError(
-                "B1 receipt authority store is not valid existing state",
+                "legacy state appeared during B1 receipt transaction",
             ));
         }
-        let current = observed.root.ok_or(BootstrapError(
-            "B1 receipt authority preflight omitted current root",
-        ))?;
+        let current = layout
+            .read_existing_versioned_without_reconciliation(self.root.identity())
+            .map_err(|_| BootstrapError("preflight B1 receipt authority store"))?;
+        match &current {
+            VersionedStateRoot::V1(value) => layout
+                .validate_matching_marker_if_present(value)
+                .map_err(|_| BootstrapError("revalidate B1 receipt V1 initialization marker"))?,
+            VersionedStateRoot::V2(value) => {
+                layout
+                    .validate_matching_marker_if_present_v2(value)
+                    .map_err(|_| BootstrapError("revalidate B1 receipt V2 initialization marker"))?
+            }
+        }
         if current != self.locked_root
-            || current.authority_store_id != self.authority_store_id
-            || current.bootstrap_home != *self.root.identity()
+            || current.authority_store_id() != self.authority_store_id
+            || current.bootstrap_home() != self.root.identity()
         {
             return Err(BootstrapError(
                 "B1 receipt authority scope changed during transaction",
@@ -1194,13 +1209,34 @@ impl WorldWorkExecutionSupervisorTransactionV1<'_> {
         layout
             .validate_closed_layout()
             .map_err(|_| BootstrapError("revalidate B2.1 supervisor authority layout"))?;
+        layout
+            .validate_temps()
+            .map_err(|_| BootstrapError("revalidate B2.1 supervisor authority temps"))?;
+        let legacy = LegacyObservation::capture(layout.bootstrap)
+            .map_err(|_| BootstrapError("recapture B2.1 supervisor authority legacy state"))?;
+        if legacy.has_artifact {
+            return Err(BootstrapError(
+                "legacy state appeared during B2.1 supervisor transaction",
+            ));
+        }
         let observed = layout
-            .semantic_preflight(self.root.identity())
+            .read_existing_versioned_without_reconciliation(self.root.identity())
             .map_err(|_| BootstrapError("revalidate B2.1 supervisor authority store"))?;
-        if observed.classification != BootstrapClassificationV1::ValidExisting
-            || observed.root.as_ref() != Some(&self.locked_root)
-            || self.locked_root.bootstrap_home != *self.root.identity()
-            || self.locked_root.authority_store_id != self.authority_store_id
+        match &observed {
+            VersionedStateRoot::V1(value) => layout
+                .validate_matching_marker_if_present(value)
+                .map_err(|_| {
+                    BootstrapError("revalidate B2.1 supervisor V1 initialization marker")
+                })?,
+            VersionedStateRoot::V2(value) => layout
+                .validate_matching_marker_if_present_v2(value)
+                .map_err(|_| {
+                BootstrapError("revalidate B2.1 supervisor V2 initialization marker")
+            })?,
+        }
+        if observed != self.locked_root
+            || self.locked_root.bootstrap_home() != self.root.identity()
+            || self.locked_root.authority_store_id() != self.authority_store_id
         {
             return Err(BootstrapError("B2.1 supervisor authority scope changed"));
         }
@@ -1280,31 +1316,38 @@ fn begin_world_work_receipt_registry_transaction<'storage>(
     layout
         .validate_closed_layout()
         .map_err(|_| BootstrapError("validate B1 receipt authority layout"))?;
-    let observed = layout
-        .semantic_preflight(root.identity())
-        .map_err(|_| BootstrapError("preflight B1 receipt authority store"))?;
-    if observed.classification != BootstrapClassificationV1::ValidExisting {
+    let legacy = LegacyObservation::capture(layout.bootstrap)
+        .map_err(|_| BootstrapError("capture B1 receipt authority legacy state"))?;
+    if legacy.has_artifact {
         return Err(BootstrapError(
-            "B1 receipt authority store is not valid existing state",
+            "legacy state is incompatible with B1 receipt authority",
         ));
     }
-    let locked_root = observed.root.ok_or(BootstrapError(
-        "B1 receipt authority preflight omitted current root",
-    ))?;
-    if locked_root.bootstrap_home != *root.identity()
-        || locked_root.authority_store_id != expected_authority_store_id
+    let locked_root = layout
+        .read_existing_versioned_without_reconciliation(root.identity())
+        .map_err(|_| BootstrapError("preflight B1 receipt authority store"))?;
+    match &locked_root {
+        VersionedStateRoot::V1(value) => layout
+            .validate_matching_marker_if_present(value)
+            .map_err(|_| BootstrapError("validate B1 receipt V1 initialization marker"))?,
+        VersionedStateRoot::V2(value) => layout
+            .validate_matching_marker_if_present_v2(value)
+            .map_err(|_| BootstrapError("validate B1 receipt V2 initialization marker"))?,
+    }
+    if locked_root.bootstrap_home() != root.identity()
+        || locked_root.authority_store_id() != expected_authority_store_id
     {
         return Err(BootstrapError("B1 receipt authority scope mismatch"));
     }
-    layout
-        .reconcile_after_preflight(&locked_root)
-        .map_err(|_| BootstrapError("reconcile B1 receipt authority store"))?;
+    match &locked_root {
+        VersionedStateRoot::V1(value) => layout.reconcile_after_preflight(value),
+        VersionedStateRoot::V2(value) => layout.reconcile_after_preflight_v2(value),
+    }
+    .map_err(|_| BootstrapError("reconcile B1 receipt authority store"))?;
     let reconciled = layout
-        .semantic_preflight(root.identity())
+        .read_existing_versioned_without_reconciliation(root.identity())
         .map_err(|_| BootstrapError("revalidate reconciled B1 authority store"))?;
-    if reconciled.classification != BootstrapClassificationV1::ValidExisting
-        || reconciled.root.as_ref() != Some(&locked_root)
-    {
+    if reconciled != locked_root {
         return Err(BootstrapError(
             "B1 receipt authority changed during canonical preflight",
         ));
@@ -1387,31 +1430,38 @@ fn begin_world_work_execution_supervisor_transaction<'storage>(
     layout
         .validate_closed_layout()
         .map_err(|_| BootstrapError("validate B2.1 supervisor authority layout"))?;
-    let observed = layout
-        .semantic_preflight(root.identity())
-        .map_err(|_| BootstrapError("preflight B2.1 supervisor authority store"))?;
-    if observed.classification != BootstrapClassificationV1::ValidExisting {
+    let legacy = LegacyObservation::capture(layout.bootstrap)
+        .map_err(|_| BootstrapError("capture B2.1 supervisor authority legacy state"))?;
+    if legacy.has_artifact {
         return Err(BootstrapError(
-            "B2.1 supervisor authority store is not valid existing state",
+            "legacy state is incompatible with B2.1 supervisor authority",
         ));
     }
-    let locked_root = observed.root.ok_or(BootstrapError(
-        "B2.1 supervisor authority preflight omitted current root",
-    ))?;
-    if locked_root.bootstrap_home != *root.identity()
-        || locked_root.authority_store_id != expected_authority_store_id
+    let locked_root = layout
+        .read_existing_versioned_without_reconciliation(root.identity())
+        .map_err(|_| BootstrapError("preflight B2.1 supervisor authority store"))?;
+    match &locked_root {
+        VersionedStateRoot::V1(value) => layout
+            .validate_matching_marker_if_present(value)
+            .map_err(|_| BootstrapError("validate B2.1 supervisor V1 initialization marker"))?,
+        VersionedStateRoot::V2(value) => layout
+            .validate_matching_marker_if_present_v2(value)
+            .map_err(|_| BootstrapError("validate B2.1 supervisor V2 initialization marker"))?,
+    }
+    if locked_root.bootstrap_home() != root.identity()
+        || locked_root.authority_store_id() != expected_authority_store_id
     {
         return Err(BootstrapError("B2.1 supervisor authority scope mismatch"));
     }
-    layout
-        .reconcile_after_preflight(&locked_root)
-        .map_err(|_| BootstrapError("reconcile B2.1 supervisor authority store"))?;
+    match &locked_root {
+        VersionedStateRoot::V1(value) => layout.reconcile_after_preflight(value),
+        VersionedStateRoot::V2(value) => layout.reconcile_after_preflight_v2(value),
+    }
+    .map_err(|_| BootstrapError("reconcile B2.1 supervisor authority store"))?;
     let reconciled = layout
-        .semantic_preflight(root.identity())
+        .read_existing_versioned_without_reconciliation(root.identity())
         .map_err(|_| BootstrapError("revalidate reconciled B2.1 supervisor authority store"))?;
-    if reconciled.classification != BootstrapClassificationV1::ValidExisting
-        || reconciled.root.as_ref() != Some(&locked_root)
-    {
+    if reconciled != locked_root {
         return Err(BootstrapError(
             "B2.1 supervisor authority changed during canonical preflight",
         ));
