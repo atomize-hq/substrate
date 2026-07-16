@@ -22,7 +22,7 @@ Primary source memos:
 | **RG-AUTH-02** | Process/socket liveness used as durable truth | **Unresolved** | A0 classifies the exact PID/ownership/attachment/heartbeat/socket and ambient-host consumers: constructor-created attached truth, posture/session discovery, helper plan/mode/parent-role gating, participant and parent-session snapshot freshness, process-local snapshot-write arbitration, relative/fallback/re-read authority and workspace paths, effective-config env overrides, UID-selected binding birth/repair/replacement, process-local dispatch and auto-park registries, toolbox cancel's PID-filtered preflight, retained-runtime reuse/exit/replacement, naming-prefix continuity, daemon-memory admission/routing, helper reconciliation, private-stop-ownership-gated startup/parking, public-stop delivery gating, fork/resume PID-zero sentinels, endpoint/startup-prompt state used as durable truth, remote member startup around transport acceptance, fork lineage gated by stop-socket publication, lossy/long-path endpoint identity, last-writer toolbox rebind, hostname-targeted auto-attach, and private-stop fallback. The exact blocker shows `PID=0`, no handle, completed prior prompt, and pending successor prompt are non-authoritative observations. | Table-test every authority use of PID/socket/heartbeat/attached-client/helper/handle/readiness/prompt/ambient-path state and competing process-local writers: availability may classify delivery, but neither presence nor absence may create, delete, regress, rebind, or terminalize durable truth. Episode absence must not erase current parked authority. | A0, A1, A2, A3 |
 | **RG-AUTH-03** | Revision-bound host transition intent proof | **Unresolved** | `HiddenOwnerHelperLaunchPlan` currently carries authoritative `Start`/`Attach`/`ResumeOneTurn` mode, identity, lineage, workspace/world binding, descriptor, attach contract, resume handle, and input through arbitrary JSON. Plan load/removal and helper execution do not join a durable authority revision or greenfield-certificate-proven expected absence to a unique replay-safe intent. The parked-successor regression proves stale lifecycle/world-binding rejection is correct: pre-A1.1d `c800436d` and pre-rejection `f73e8a81` passed only while stale whole-session overwrite remained possible; `bdb1796d` and later revisions fail closed. A1.1d-1 through A1.1d-4 remain preserved and A1.1d-5 is focused-review clean on Linux, but integrated and native macOS closeout remain open; no seam promotion is claimed. | First prove A1.1 primitives without claiming production Start: genuinely absent versus initialization-pending, valid-existing, unsupported-pre-A1, and corrupt/unsupported roots; the same physical bootstrap home persisted in marker/root/certificate and used for StateStore/config/policy/inventory, including copied-home rejection; recognized temp cleanup and fail-closed unknown temps across crashes before/after temp fsync and rename; component-by-component no-follow traversal and complete safe enumeration of both pre-A1 authority collections, including ancestor identity/owner/mode/ACL and scan-to-publication replacement; any artifact rejected without parsing/conversion and any unreadable or unsafe collection failed closed. Every pre-A1 read-decide-write transaction must retain the opened physical root, descendants, exact identity, activation observation, and root lock through final `fsync`; a subprocess rename/replacement/rebind after lock acquisition must fail closed with the replacement root untouched and no successful transaction outcome. Post-activation writers reject before mutation and preactivation writers serialize on that same root lock. Exact retry treats reservations, tombstones, intents, issuer indexes, application journals, and object indexes as semantic occupancy and joins only complete matches. Rotation and retirement revalidate the complete reconciled candidate immediately before publication. Crash/restart, contention, temp reconciliation, publication durability, and exact retry converge. Then prove the A1.2 API alone can accept `ExpectedAbsent` only from the verified greenfield certificate, empty pre-A1 collections, and exact absence of the complete namespace-map key; it atomically issues its self-owned reservation and creates initial authority only while applying that intent. A1.3/A1.4 must still prove exclusive real public CLI/REPL/auto-attach adoption. Prove `Attach`/`ResumeOneTurn` from exact current parked or other enumerated authority against exact revision/hash with exact caller/source/target lineage, bootstrap-home/workspace/world binding, descriptor/attach/resume/policy/input commitments, unique intent/request identity, fixed expiry, canonical payload hashes, and retained transport reprojection. Application preserves lifecycle identity and world binding, revision-authorizes successor lineage and immutable input handoff, and never derives eligibility from PID/helper/handle/readiness/prompt state. Exercise every intent/input state and crashes after initialization marker/key/root publication, key publication/root selection/retirement, object publication, issue, plan load/removal, claim, authority commit, input acceptance, `ReleaseEligible` root commit, transport deletion, object-directory fsync, and `Released` root commit with transport present/already absent. Exact retry joins without a second namespace, authority revision, participant allocation, or delivery. Stale revisions, substituted plans, cross-kind refs, mismatched hash/identity/home/binding/descriptor, missing/copied certificate, compatibility-derived absence, pre-A1 artifacts, missing keys, expired intent, superseded claim, and conflicting replay fail closed. A1.3 must prove exclusive real public CLI/helper/REPL parked-turn and explicit-reattach adoption before the open, mandatory `RG-BASE-01` gate can close. The bounded A1.4 auto-attach producer uses the same contract. A1 closes only its scoped clauses of `RG-AUTH-01`/`RG-AUTH-02`; those ledger-wide gates remain unresolved for A2/A3. | A1.2, A1.3, A1.4 |
 | **RG-ADMISSION-01** | Abandoned retained-spawn admission recovery | **Unresolved; B3.2a deliberately supplies exact retry and conservative head-of-line blocking only** | B3.2a retains every abandoned `SlotReserved` or `AuthorityRegistrationHead` record as live, permits no later-slot overtaking, and authorizes no resolution from PID, timeout, caller disappearance, helper state, socket/endpoint state, observer loss, or process liveness. It does not add cancellation, abandonment, expiry, or a user-facing recovery verb. | Exact request retry rejoins the same admission. Remaining B3.2 supplies an authorized durable control that resolves an abandoned admission only by exact issuer request/admission-record/session/authority/policy/participant/state identity; repeated resolution is idempotent; terminal durable resolution alone releases the live admission count and permits the next eligible queued request; crashes before/after resolution converge. PID, timeout, caller disappearance, helper state, socket state, endpoint state, observer loss, and process liveness cannot resolve it. Cancellation/abandonment remains distinct from R0 rejection and from stopping an already-created worker. Partial R0 registration and post-R0/pre-transport or transport-ambiguous claims are exactly reconciled rather than deleted or blindly rolled back. B4 exposes the exact user/tool-facing inspect/cancel operation and distinct outcomes without owning the underlying state transition. | Remaining B3.2, B4 |
-| **RG-WORLD-ADOPT-01** | Exact HSA-bound generic world ownership adoption | **Unresolved; live authority-managed Spawn reproduces exact mismatch before member creation** | The bounded Linux live path reached admission, R0, the unique transport claim, and typed proof validation. HSA and the launch proof named the existing generic REPL world, but `Service::execute_stream` inferred `AttachOrCreate`, created a different shared-owner world, and correctly failed closed on `member_dispatch.world_id mismatch` before member process creation. The admission remains `InterruptedNonterminal`; no launch success is fabricated. | After strict `Some(exact proof)` validation and before member creation, `ExactBoundWorldOwnershipAdoptionV1` resolves the exact HSA world by ID/generation and durably adopts only that generic world as the exact session's active shared owner. World ID/generation and all HSA/RetainedWorkerRuntime bytes remain unchanged; no alternate world is created. Exact retry joins without rewrite; conflicting owner/session/policy/project/spec/generation and missing/corrupt/ambiguous/partial metadata fail closed without mutation. Crash/reopen plus exact retry is proved before temp creation/persistence, after temp write, after temp-file fsync, immediately before atomic rename, after rename but before parent-directory fsync, and after parent-directory fsync but before response. Temp presence is never semantic ownership; incomplete recognized temps receive only operation-bound cleanup and complete exact temps are revalidated and re-fsynced before publication. After rename but before parent-directory fsync, reopen proof covers both allowed shapes: an exact original generic final restarts publication, while an exact adopted final is revalidated and re-fsynced before join. Conflicting, missing, or ambiguous temp/final evidence fails without mutation; no success precedes required file and parent-directory durability. Adoption proves no launch/Registered/routability/terminal state. Compatibility `None`, ordinary execution, world enforcement/capability behavior, and non-Linux posture remain unchanged. Prompt/request markers are absent from metadata, storage, logs, traces, errors, and journal. Linux world-service/backend suites, doctor, ordinary execution, and bounded managed Spawn smoke pass. | B3.2a-WA, B3.2a closeout |
+| **RG-WORLD-ADOPT-01** | Exact HSA-bound generic world ownership adoption | **Resolved for bounded Linux B3.2a-WA; non-Linux remains unclaimed** | The first bounded Linux attempt correctly failed closed before member creation when legacy `AttachOrCreate` selected a different shared-owner world; its admission remains preserved `InterruptedNonterminal`. The review-clean implementation through `d0a70727c2bec2b2d6fe0754ea469c4682684dda` instead strict-validates `Some(exact proof)`, durably adopts the exact HSA-bound generic world before process creation, and preserves the Registered readiness contract. The final production-toolbox smoke joined HSA, receipt, and backend metadata on session `aos_27f14606e443f73927d2f892beabc704`, world `wld_019f6a96-bdf1-7db1-a5cc-58cbd0f370c9`, generation `0`, with one retained admission and no alternate world. | `ExactBoundWorldOwnershipAdoptionV1` resolves the exact HSA world by ID/generation and durably adopts only that generic world as the exact session's active shared owner. World ID/generation and all HSA/RetainedWorkerRuntime bytes remain unchanged; no alternate world is created. Exact retry joins without rewrite; conflicting owner/session/policy/project/spec/generation and missing/corrupt/ambiguous/partial metadata fail closed without mutation. Crash/reopen plus exact retry is proved before temp creation/persistence, after temp write, after temp-file fsync, immediately before atomic rename, after rename but before parent-directory fsync, and after parent-directory fsync but before response. Temp presence is never semantic ownership; incomplete recognized temps receive only operation-bound cleanup and complete exact temps are revalidated and re-fsynced before publication. After rename but before parent-directory fsync, reopen proof covers both allowed shapes: an exact original generic final restarts publication, while an exact adopted final is revalidated and re-fsynced before join. Conflicting, missing, or ambiguous temp/final evidence fails without mutation; no success precedes required file and parent-directory durability. Adoption proves no launch/Registered/routability/terminal state. Compatibility `None`, ordinary execution, world enforcement/capability behavior, and non-Linux posture remain unchanged. Prompt/request markers are absent from metadata, storage, logs, traces, errors, and journal. Linux world-service/backend suites, doctor, ordinary execution, and bounded managed Spawn smoke pass. | B3.2a-WA, B3.2a closeout |
 | **RG-CLOSE-01** | Private stop unreachable versus durable closeout | **Resolved baseline for exact retained stop; generalize without regression** | The debug chain proved exact retained source stop can succeed by detached durable closeout when private owner transport is unreachable; A0 records that bounded recovery and separately records public host stop's active-session delivery gate, where missing/refused transport blocks closeout. Neither current behavior is treated as the target owner model. | Exact valid target + unavailable private stop produces durable closeout when rules allow; live transport remains a fast path; invalid/ambiguous/mismatched target still fails closed; repeated closeout is idempotent. | A0, A2, B4 |
 | **RG-EVENT-01** | Runtime event/frame identity, ordering, and exact terminal event | **Partially resolved: B0 producer clauses landed; B2.1 consumer clauses open** | B0 landed the canonical V1 carrier in `common`/`transport-api-types` and producer assignment in ordinary `world-service` task streams plus retained launch/turn streams. Each accepted producer stream has one non-empty UUIDv7 stream ID; all frames share one positive gap-free frame counter; semantic Event/Exit items share one positive event counter and stable UUIDv7 IDs; Exit is the final semantic event and exactly matches its terminal identity. Canonical clone/re-emission preserves bytes. Concurrent stdout/stderr assignment is serialized through enqueue. Typed host decoding forwards identity unchanged, rejects missing/malformed runtime identity, and does not convert Error, EOF, stream exhaustion, or diagnostic non-live state into terminal truth. B2.1 durable replay, duplicate/gap/reorder/conflict rejection, restart observation, and journaling do not exist yet. | Preserve all B0 producer and negative-host gates. B2.1 must make byte-identical replay a no-op, reject conflicting reuse, gaps, reorder, and frames after terminal, and prove restart-safe durable observation without treating EOF/error/process state as completion. | B0, B2.1 |
 | **RG-RECEIPT-01** | `run_world_task` blocks until terminal exit | **Unresolved; B1/B2.1 sequencing blocker identified** | `execute_run_world_task_stream` registers a temporary active record, consumes through `ExecuteStreamFrame::Exit`, publishes terminal state, and only then returns; guard drop removes the active record. The preserved B1 core persists the exact accepted record first and then reaches that legacy writer, which correctly rejects the activated authority store. | B1-3a/B1-3b may be review-clean without closure. B2.1-1 replaces post-acceptance legacy registration with the durable supervisor claim; B2.1-2 preserves this blocking call as a waiter; joint closeout proves no accepted path attempts the legacy writer. Only B2.2 later returns `ActiveEphemeralTaskReceiptV1` before exit. | B1, B2.1, B2.2 |
@@ -291,8 +291,9 @@ statement is superseded by the Case B production-ingress audit below. Do not res
 broad A1.2 checkpoint, and do not begin A1.2b before the joint closeout → B3.1 → C1 corridor lands.
 That historical next-packet statement is now superseded: bounded A1.2a, A1.2a-WB, and A1.2a-S are
 landed and independently review-clean. B1/B2.1-R0 is also landed and independently review-clean
-through `bb3eefba`; B3.2a remains incomplete. A1.3 is not dependency-ready, and A1 as a
-whole remains incomplete and non-landable.
+through `bb3eefba`; B3.2a plus B3.2a-WA are independently review-clean through
+`d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 is next. A1.3 is not dependency-ready,
+and A1 as a whole remains incomplete and non-landable.
 
 ## A1.2a, A1.2a-WB, and A1.2a-S recorded result
 
@@ -334,7 +335,8 @@ assertions. No new failure name, assertion change, fixture weakening, or test su
 involved. These progressed failures remain explicit inputs to their later owning packets and are
 not counted as A1.2a-S closure of the B1/B2.1 joint differential gate. Reviewer
 `/root/a12a_s_runtime_review_1` completed read-only with verdict CLEAN. No seam is promoted;
-B1/B2.1-R0 is now independently review-clean through `bb3eefba`; B3.2a remains incomplete.
+B1/B2.1-R0 is independently review-clean through `bb3eefba`, and B3.2a plus B3.2a-WA are
+independently review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`.
 
 ## B0 closeout evidence
 
@@ -504,8 +506,8 @@ The first bounded Linux authority-managed live Spawn then exposed `RG-WORLD-ADOP
 binding and typed launch proof named the already-running generic REPL world; world-service inferred
 shared-owner `AttachOrCreate`, created a different world, and placement validation rejected the
 mismatch before member creation. This is correct fail-closed behavior but blocks product proof. The
-durable admission remains `InterruptedNonterminal`, and B3.2a-WA must not rewrite it or report launch
-success. The docs-first correction assigns only physical ownership metadata to world-service/Linux
+durable admission remained `InterruptedNonterminal`, and the B3.2a-WA correction was required not
+to rewrite it or report launch success. The docs-first correction assigns only physical ownership metadata to world-service/Linux
 backend: after existing strict `Some(exact proof)` validation, adopt the exact HSA-bound generic
 world as the same-ID/generation shared owner under trusted crash-durable publication, then launch.
 Exact retry joins; conflicts fail without mutation; no alternate world, HSA rebinding, world-api
@@ -541,7 +543,8 @@ preparation stays distinct from `prepare_member_runtime_startup_from_authority_r
 Only the latter may carry `Some(exact proof/admission context)` for authority-managed retained
 Spawn. Missing authority on that managed path fails closed with no legacy fallback. No ownership,
 policy, lifecycle, transport, identity, lineage, error, outcome, or runtime behavior changes, and
-no further symbol or structural scope is authorized. B3.2a remains incomplete.
+no further symbol or structural scope is authorized. That mechanical authorization did not itself
+complete B3.2a; the recorded B3.2a/B3.2a-WA result below now does.
 
 B1/B2.1-0 removes the
 missing live-retained field and legacy session/caller inputs from B-owned RunWorldTask, ordinary
@@ -599,9 +602,9 @@ A1.2a and authorized only the subsequently reviewed A1.2a-WB implementation in `
 boundary. At that point it did not authorize any other facade behavior or A1.2a-S and required WB
 to be implemented from its bounded contract rather than by restoring the broad A1.2 checkpoint.
 That authorization state is superseded by the recorded review-clean WB and A1.2a-S closeout above.
-B1/B2.1-R0 is now review-clean through `bb3eefba`; B3.2a remains incomplete and B3.2a-WA is its
-bounded physical-realization prerequisite before closeout. B1/B2.1-0 and later implementation
-remain unauthorized here.
+B1/B2.1-R0 is review-clean through `bb3eefba`; B3.2a plus B3.2a-WA are independently review-clean
+through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 and later implementation remain
+unauthorized here.
 
 ## B1/B2.1-R0 recorded result
 
@@ -643,7 +646,84 @@ Reserved-to-Applied publication race fixed by `0d5225f3`; the first final integr
 found the Applied retry store-ID gap fixed by `bb3eefba`. Fresh reviewer
 `/root/r0_final_integration_rereview` returned final CLEAN. This is component proof only: R0 has no
 production ingress caller, supplies no e2e or live doctor/smoke proof, and has no native macOS
-claim. No seam is promoted; B3.2a remains incomplete through its bounded B3.2a-WA prerequisite.
+claim. No seam was promoted by R0. B3.2a plus B3.2a-WA are now independently review-clean through
+`d0a70727c2bec2b2d6fe0754ea469c4682684dda` as recorded below.
+
+## B3.2a and B3.2a-WA recorded result
+
+B3.2a began from source commit `69b6cddc61578437d1cb1af95055fdb7e0b9c776`. The docs-first
+corrections are queued promotion `8726dface3e314c2e24aa95305cd69f01c8bb389`, abandoned-admission
+ownership `ba6253483ccabec151ce6077d1df1ce7067ac42b`, carrier compatibility literals
+`e1a248589a0d2cee1cedec33227f8b070515c664`, exact seven-symbol carrier plumbing
+`47e9ea0daa7982ac3fc3d4c85384af1b0490d563`, and exact-bound-world adoption
+`aa38c66badb46ee8d17855432438de1b66accdce`. The final prerequisite replay preserved the original
+20-commit runtime range at `feat/preserve-b3-2a-wa-runtime-1d2543c8` pointing to
+`1d2543c8ded723f22b1612bf5cb58be2d86fcc12`, then replayed it in exact order as
+`73bdd5640588c685c67e73cc4c9425e44c6213da` through
+`106f9c85c60ee1649b5c7ae88b47338da0402d5e`. The preserved and replayed aggregate ordinary patch
+SHA-256 is `ed417fdca7c26da46b6a51ba26af3e8939f997e9632eec7608931fe7a514107a`; the binary/full-index
+patch SHA-256 is `6c574c1655c1668537a159a01dd1dac120cad666ea9924a0206a05ac4d3ee671`.
+No preservation commit was merged.
+
+The replayed range supplies the RetainedWorkerRuntime-owned admission key and registry, exact
+complete-request HMAC fingerprint, conservative live cap, fixed participant/bootstrap run,
+serialized registration head, exact R0 join, and unique durable transport claim. Reconciliation
+advances and releases only the current head. A queued `SlotReserved` record with no head is valid;
+only complete exact re-presentation of the earliest request may acquire the head. Changed bytes,
+digest-only input, later-slot retry, PID/caller/helper/socket/endpoint/timeout/EOF/liveness state,
+and observer loss cannot promote, replace, renew, or steal. Request/prompt/payload preimages are
+not persisted. Publication-boundary, restart, contention, exact/conflicting retry, no-steal, cap,
+and complete fingerprint mismatch tests are green. `RG-ADMISSION-01` deliberately remains open for
+remaining B3.2/B4; B3.2a adds no cancellation, abandonment, reclamation, or recovery protocol.
+
+The typed carrier requires `Some(exact RetainedWorkerLaunchAuthorityProofV1)` on both
+authority-managed Spawn adapters and strict-validates it in the real transport-api
+`Service::execute_stream` member branch and again at `MemberRuntimeManager::launch`. RunWorldTask,
+ForkWorldWorker, fork continuation, Host Start, hidden helper, legacy member preparation, and macOS
+compatibility conversion carry explicit `None` and gain no retained-worker authority. The sole
+durable claimant launches transport; an exact joined claim does not reproject request bytes or
+resend. Exact Registered truth makes the admission routable, exact B0 terminal truth terminalizes
+it, and interruption/ambiguity remains nonterminal and counted. Authority-managed readiness now
+emits the exact Registered session-handle event before any bounded buffered pre-Registered status
+event; compatibility `None` retains its old ordering. WA commit
+`11933b310c6424fc01e5aea18121f39ddf807f6a` implements exact same-world ownership publication, and
+readiness remediation `d0a70727c2bec2b2d6fe0754ea469c4682684dda` closes the final live-path
+ordering defect.
+
+The Linux proof wall is green: complete HostSessionAuthority `132/132`, complete
+RetainedWorkerRuntime `81/81`, transport-api-types `54/54`, world `113 passed / 1 pre-existing
+ignored`, world-service `126/126` library tests plus all applicable integration targets, and the
+authority-managed readiness integration `5/5`. The direct internal-toolbox production-adapter test
+is green. Workspace all-target check, focused Clippy with warnings denied, formatting, and
+`git diff --check` pass. The serial shell differential is exact baseline
+`923 passed / 161 failed / 0 ignored` to current `981 / 160 / 0`: 57 added passing shell tests,
+zero removed/renamed/substituted/weakened tests, zero `PassToFail`, zero `NewFail`, and one
+causally proven `FailToPass`,
+`repl::async_repl::tests::orchestrator_world_dispatch_surface_spawns_authoritative_member_runtime`.
+All 160 retained failures preserve their normalized first-panic signatures. The additional
+readiness regression is a world-service integration test and does not alter that shell inventory.
+
+The final bounded Linux product proof used the reviewed installed world-service binary SHA-256
+`9f02fc27fa455c53ed8ab03a49125cb24b7aac38f528b8a8b3326d68d96dcf63`. World doctor returned
+`ok: true`; ordinary world execution returned `B3_2A_WA_ORDINARY_REVIEWED_OK`. The production
+internal-toolbox Spawn returned one successful receipt for session
+`aos_27f14606e443f73927d2f892beabc704`, participant
+`rwp_dd8856889e050e3b6d78795c2f1e8ad8`, world
+`wld_019f6a96-bdf1-7db1-a5cc-58cbd0f370c9`, generation `0`, and launch span
+`spn_019f6a97-ee72-7b92-a30d-7cdc98e7144c`. Backend metadata records that same world as the sole
+active shared owner for the same session; no alternate world exists. The unique prompt marker is
+absent from authority/admission objects, trace, backend metadata, workspace, service storage,
+errors, response, and system journal. Clean REPL shutdown produced exact terminal truth for this
+successful smoke; the earlier failed attempt remains separately preserved
+`InterruptedNonterminal` and was not rewritten.
+
+Fresh read-only reviewers `/root/b3_2a_3_review_3`, `/root/b3_2a_wa_docs_final_review_5`,
+`/root/b3_2a_wa_runtime_review_3`, `/root/b3_2a_readiness_review_5`, and
+`/root/b3_2a_final_integration_review_6` returned CLEAN for their final assigned ranges. The final
+integration reviewer inspected the complete `aa38c66b..d0a70727` runtime range plus differential
+and live artifacts and authorized documentation closeout. B3.2a and B3.2a-WA are review-clean on
+Linux. No seam is promoted, no native macOS or Windows proof is claimed, remaining B3.2/B4 work is
+unchanged, and B1/B2.1-0 has not begun.
 
 ## Baseline behaviors that all tracks preserve
 

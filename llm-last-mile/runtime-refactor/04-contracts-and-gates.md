@@ -1682,8 +1682,8 @@ The implementation boundary is exactly `transition.rs`, colocated `transition_te
 binding unchanged and may not reject an authority already accepted and persisted under the matrix
 through the obsolete `Host + Some` rule. All other facade behavior is outside scope. This
 write/read boundary is review-clean through `275f9fa2`, and the dependent A1.2a-S adoption is
-review-clean through `2f2fecb3`; B1/B2.1-R0 is review-clean through `bb3eefba`, and B3.2a remains
-incomplete.
+review-clean through `2f2fecb3`; B1/B2.1-R0 is review-clean through `bb3eefba`, and B3.2a plus
+B3.2a-WA are review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`.
 
 ## 1A. strict `HostSessionTransitionIntentV1`/`HostSessionTransitionIntentV2`
 
@@ -2739,8 +2739,9 @@ The implementability audit selects **Case B**. This adapter is not implementatio
 the corrected A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, B3.2a-WA, and B1/B2.1-0 sequence is independently
 review-clean. A1.1e alone could read exact current authority but could not create it; A1.2a,
 A1.2a-WB, and A1.2a-S now satisfy the bounded ordinary-internal-host creator/adopter portion of
-that sequence, and B1/B2.1-R0 is independently review-clean. B3.2a, B3.2a-WA, and B1/B2.1-0
-remain open. The current prepared type also combines
+that sequence, B1/B2.1-R0 is independently review-clean, and B3.2a plus B3.2a-WA are independently
+review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 remains open. The
+current prepared type also combines
 B-owned accepted/inspection routing with retained-worker admission data that has no canonical
 live-state representation.
 
@@ -3238,7 +3239,8 @@ unchanged. Any existing test that claims the authority-managed B3.2a route must 
 valid proof through the canonical production path instead; `None` is not valid there. These test
 files may not introduce a production path, helper default, fixture-only authority, alternate
 proof, alternate transport, side table, or weakened assertion. Authority-managed Spawn still
-requires the exact proof, and B3.2a remains incomplete.
+requires the exact proof. This mechanical authorization did not itself complete B3.2a; the
+recorded B3.2a/B3.2a-WA result in `05` now does.
 
 That Rust-literal requirement also authorizes exactly three production compatibility
 initializers and nothing else: `build_run_world_task_transport_request` and
@@ -3254,8 +3256,9 @@ authority-managed Spawn adoption and authorizes no edit to `crates/world-api/src
 environment carrier, alternate transport route, or hidden proof synthesis may replace these
 explicit initializers. Both authority-managed B3.2a Spawn producers still require
 `Some(exact RetainedWorkerLaunchAuthorityProofV1)` exact-joined to admission and R0 truth before
-serialization, and missing, malformed, or mismatched proof fails before process creation. B3.2a
-remains incomplete.
+serialization, and missing, malformed, or mismatched proof fails before process creation. This
+mechanical authorization did not itself complete B3.2a; the recorded B3.2a/B3.2a-WA result in `05`
+is review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`.
 
 The same compiler-required widening authorizes only seven additional production-symbol edits. In
 `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `fork_world_worker` and
@@ -3276,17 +3279,20 @@ Only that authority-registration preparer may construct the paired
 authority-managed retained Spawn with either value missing fails closed and cannot fall back to the
 legacy preparer or reinterpret generic `None` as compatibility. The seven exceptions change no
 packet ownership, policy, lifecycle, transport, identity, lineage, error, outcome, host-runtime,
-helper, legacy-member, or fork semantics and authorize no other structural change. B3.2a remains
-incomplete.
+helper, legacy-member, or fork semantics and authorize no other structural change. This mechanical
+authorization did not itself complete B3.2a; the recorded B3.2a/B3.2a-WA result in `05` is
+review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`.
 
 ### B3.2a-WA `ExactBoundWorldOwnershipAdoptionV1`
 
-The bounded Linux live Spawn proof reached durable admission, R0 registration, the unique transport
+The first bounded Linux live Spawn proof reached durable admission, R0 registration, the unique transport
 claim, and typed launch-proof validation, then failed closed before process creation because the
 HSA-bound generic REPL world and the world-service-created shared-owner world had different IDs.
 Creating another world is not a valid repair: HSA already owns the exact session binding and neither
-world-service nor backend metadata may replace it. The internal operation contract is therefore
-B3.2a-WA, required before B3.2a closeout and B1/B2.1-0:
+world-service nor backend metadata may replace it. The docs-first correction therefore made the
+internal operation contract B3.2a-WA, required before B3.2a closeout and B1/B2.1-0; the recorded
+result in `05` now satisfies that prerequisite through
+`d0a70727c2bec2b2d6fe0754ea469c4682684dda`:
 
 ```text
 ExactBoundWorldOwnershipAdoptionV1
@@ -3411,12 +3417,14 @@ Compatibility and scope are closed:
   unrelated world lifecycle refactors, resend/recovery, and abandonment/cancellation remain outside
   scope.
 
-`RG-WORLD-ADOPT-01` is the blocking regression gate. It requires exact same-ID/generation adoption,
+`RG-WORLD-ADOPT-01` was the blocking regression gate and is now satisfied for the bounded Linux
+packet through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. Its permanent proof requires exact same-ID/generation adoption,
 zero alternate-world creation, byte-stable exact retry, conflict-without-mutation coverage across
 owner/session/policy/project/spec/generation, every named publication crash boundary, member creation
 only after durable adoption, unchanged compatibility `None`, request/prompt-marker absence, and green
 world-service/world-backend tests plus Linux doctor, ordinary world execution, and bounded
-authority-managed live Spawn proof. Passing this gate does not promote any seam.
+authority-managed live Spawn proof. The recorded result in `05` supplies that evidence. Passing
+this gate does not promote any seam and makes no native macOS or Windows claim.
 
 The production order is exact:
 
@@ -3553,7 +3561,7 @@ The canonical source of every value used to construct or interpret
 | authoritative world binding and generation | `HostSessionAuthorityTruth` | For an action/runtime that requires a world, absence or mismatch fails closed; a host runtime may validly have no binding or may consume the exact session binding. Compatibility state cannot create or repair it. |
 | current policy ref and policy revision | `HostSessionAuthorityTruth` | The ref must be a Policy object and both values must equal the exact current authority. |
 | effective-policy/snapshot projection used by existing steering behavior | `CompatibilityProjectionValidatedAgainstAuthority` | Its ref/revision and canonical snapshot commitment must validate against exact current-policy identity before use. |
-| `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a must supply the exact RetainedWorkerRuntime admission count for production Spawn before closeout. B3.2a-WA is then the required exact physical same-world ownership prerequisite; B1/B2.1-0 removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |
+| `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a has supplied the exact RetainedWorkerRuntime admission count for production Spawn, and B3.2a-WA has supplied the required exact physical same-world ownership prerequisite; both are review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 next removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |
 | target participant ID named by the request | `ValidatedRequestInput` | It is a requested target only until exact authority/accepted-work validation succeeds. |
 | current prepared retained target backend, role, and participant record shape | `MissingCanonicalRepresentation` | A1.1e does not expose the retained object/descriptor as this legacy record, and activated stores reject the legacy writer that current fixtures use. R0 replaces the immutable identity shape: RetainedWorkerRuntime creates the descriptor/resume/worker graph; HostSessionAuthority atomically appends its participant to lineage, binds its ref, and proves the new revision as `HostSessionAuthorityTruth`. B3.2a supplies separate routability/admission truth, B3.2a-WA exact-adopts physical ownership of the same HSA-bound world without changing its ID/generation, and B1/B2.1-0 consumes the exact join without fabricating broader lifecycle state. |
 | immutable accepted task/active-run identity and acceptance revision | `ReceiptRegistryTruth` | Exact lookup is scoped by store, session, work identity, caller/backend, and world; unknown acceptance fails closed. |

@@ -168,7 +168,8 @@ activated legacy session/participant/snapshot writes, carries the exact bound ca
 live toolbox context, and leaves startup ownership Pending. It does not change fork/member prepared
 runtime construction or adopt helper plans, public Attach/Resume, startup outcome reconciliation,
 or any post-turn behavior. B1/B2.1-R0 is now landed and independently review-clean through
-`bb3eefba`; no seam is promoted, and B3.2a remains incomplete.
+`bb3eefba`. B3.2a plus its B3.2a-WA prerequisite are independently review-clean through
+`d0a70727c2bec2b2d6fe0754ea469c4682684dda`; B1/B2.1-0 is next. No seam is promoted.
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before
@@ -209,8 +210,13 @@ and completes durable ownership publication before member process creation. It i
 for authority-managed `Some(exact proof)`; compatibility `None` and ordinary world execution keep
 their current behavior. The operation adds no world-api field or persisted wire-schema version,
 does not persist request/prompt bytes, and does not prove member launch, Registered, routability, or
-terminal success. No seam is promoted, and B3.2a remains incomplete until this prerequisite and the
-full live proof are clean. B1/B2.1-0 then partitions the shared prepared state
+terminal success. At authorization time no seam was promoted, and B3.2a remained incomplete until
+this prerequisite and the full live proof were clean. That prerequisite and proof are now
+review-clean through
+`d0a70727c2bec2b2d6fe0754ea469c4682684dda`: the exact HSA-bound world was durably adopted with
+unchanged ID/generation, the authority-managed member registered through the production toolbox,
+and no alternate world or prompt persistence was observed. B1/B2.1-0 then partitions the shared
+prepared state
 for RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task
 Inspect/Cancel/Wait. Those paths
 do not require the missing live-retained lifecycle count. This is the first point at which the
