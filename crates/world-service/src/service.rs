@@ -74,6 +74,10 @@ use crate::gateway_runtime::{
 #[cfg(target_os = "linux")]
 use crate::member_runtime::{MemberRuntimeLaunchAdmissionV1, MemberRuntimeManager};
 use crate::request_routing::resolve_snapshot_routing;
+#[cfg(target_os = "linux")]
+use crate::runtime_replay::{
+    publish_replayable_frame, RuntimeReplayPublisher, RuntimeReplayRegistry,
+};
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 pub(crate) const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
@@ -200,6 +204,8 @@ pub struct WorldService {
     #[cfg(target_os = "linux")]
     member_runtime: Arc<MemberRuntimeManager>,
     #[cfg(target_os = "linux")]
+    runtime_replay: RuntimeReplayRegistry,
+    #[cfg(target_os = "linux")]
     pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
@@ -264,12 +270,16 @@ impl WorldService {
         {
             let linux_backend = Arc::new(world::LinuxLocalBackend::new());
             let backend: Arc<dyn WorldBackend> = linux_backend.clone();
+            let runtime_replay = RuntimeReplayRegistry::default();
 
             Ok(Self {
                 backend,
                 linux_backend,
                 gateway_runtime: Arc::new(GatewayRuntimeManager::new()),
-                member_runtime: Arc::new(MemberRuntimeManager::new()),
+                member_runtime: Arc::new(MemberRuntimeManager::with_replay_registry(
+                    runtime_replay.clone(),
+                )),
+                runtime_replay,
                 pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
@@ -1321,11 +1331,20 @@ impl WorldService {
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
             let message = crate::world_exec_guard::deny_message(&deny);
             let mut producer = RuntimeEventStreamProducer::new();
-            let frames = vec![
-                producer.start(span_id.clone())?,
-                producer.stderr(BASE64.encode(message.as_bytes()))?,
-                producer.exit(5, span_id, Vec::new(), None, ProcessTelemetry::default())?,
-            ];
+            let start = producer.start(span_id.clone())?;
+            let replay_publisher = self
+                .runtime_replay
+                .begin_for_acceptance(req.acceptance_context.as_ref(), &start)?;
+            let stderr = producer.stderr(BASE64.encode(message.as_bytes()))?;
+            let exit = producer.exit(5, span_id, Vec::new(), None, ProcessTelemetry::default())?;
+            if let Some(publisher) = replay_publisher.as_ref() {
+                for frame in [&stderr, &exit] {
+                    if let Err(error) = publisher.publish(frame) {
+                        tracing::error!(error = %error, "failed to retain replayable guard-deny frame");
+                    }
+                }
+            }
+            let frames = vec![start, stderr, exit];
 
             let stream = futures_util::stream::iter(frames.into_iter().map(|frame| {
                 let payload = frame
@@ -1393,6 +1412,9 @@ impl WorldService {
             .lock()
             .expect("runtime event stream producer lock poisoned")
             .start(span_id.clone())?;
+        let replay_publisher = self
+            .runtime_replay
+            .begin_for_acceptance(req.acceptance_context.as_ref(), &start)?;
         let _ = tx.send(start);
 
         let backend = self.backend.clone();
@@ -1402,8 +1424,13 @@ impl WorldService {
         let shared_world_for_events = shared_world.clone();
         let span_id_for_cleanup = span_id.clone();
         let producer_for_exec = producer.clone();
+        let replay_publisher_for_exec = replay_publisher.clone();
         task::spawn_blocking(move || {
-            let sink = Arc::new(StreamingSink::new(tx.clone(), producer_for_exec.clone()));
+            let sink = Arc::new(StreamingSink::new(
+                tx.clone(),
+                producer_for_exec.clone(),
+                replay_publisher_for_exec.clone(),
+            ));
             let guard = install_stream_sink(sink);
             let result = backend.exec(&world, exec_req);
             drop(guard);
@@ -1470,7 +1497,13 @@ impl WorldService {
                             .event(event);
                         match frame {
                             Ok(frame) => {
-                                let _ = tx.send(frame);
+                                if let Err(err) = publish_replayable_frame(
+                                    replay_publisher_for_exec.as_ref(),
+                                    &tx,
+                                    frame,
+                                ) {
+                                    tracing::error!(error = %err, "failed to publish replayable runtime Event");
+                                }
                             }
                             Err(err) => {
                                 tracing::error!(error = %err, "failed to identify runtime Event");
@@ -1489,7 +1522,13 @@ impl WorldService {
                         );
                     match frame {
                         Ok(frame) => {
-                            let _ = tx.send(frame);
+                            if let Err(err) = publish_replayable_frame(
+                                replay_publisher_for_exec.as_ref(),
+                                &tx,
+                                frame,
+                            ) {
+                                tracing::error!(error = %err, "failed to publish replayable runtime Exit");
+                            }
                         }
                         Err(err) => {
                             tracing::error!(error = %err, "failed to identify runtime Exit");
@@ -1504,7 +1543,11 @@ impl WorldService {
                         .expect("runtime event stream producer lock poisoned")
                         .transport_error(e.to_string());
                     if let Ok(frame) = frame {
-                        let _ = tx.send(frame);
+                        if let Err(err) =
+                            publish_replayable_frame(replay_publisher_for_exec.as_ref(), &tx, frame)
+                        {
+                            tracing::error!(error = %err, "failed to publish replayable runtime Error");
+                        }
                     }
                 }
             }
@@ -1540,6 +1583,32 @@ impl WorldService {
     ) -> Result<Response> {
         req.validate().map_err(BadRequestError::new)?;
         self.member_runtime.submit_turn(req).await
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn replay_execute_stream(
+        &self,
+        req: transport_api_types::ExecuteStreamReplayRequestV1,
+    ) -> Result<Response> {
+        let stream = self.runtime_replay.subscribe(&req)?.map(|frame| {
+            let payload = frame
+                .canonical_ndjson_bytes()
+                .expect("serialize replayed identified frame");
+            Ok::<Bytes, Infallible>(Bytes::from(payload))
+        });
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "application/x-ndjson")
+            .body(boxed(StreamBody::new(stream)))
+            .context("failed to build runtime replay response")
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub async fn replay_execute_stream(
+        &self,
+        _req: transport_api_types::ExecuteStreamReplayRequestV1,
+    ) -> Result<Response> {
+        anyhow::bail!("World stream replay is only supported on Linux");
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -2591,6 +2660,7 @@ impl RuntimeEventStreamProducer {
 struct StreamingSink {
     tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>,
     producer: Arc<Mutex<RuntimeEventStreamProducer>>,
+    replay_publisher: Option<RuntimeReplayPublisher>,
 }
 
 #[cfg(target_os = "linux")]
@@ -2598,8 +2668,13 @@ impl StreamingSink {
     fn new(
         tx: tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>,
         producer: Arc<Mutex<RuntimeEventStreamProducer>>,
+        replay_publisher: Option<RuntimeReplayPublisher>,
     ) -> Self {
-        Self { tx, producer }
+        Self {
+            tx,
+            producer,
+            replay_publisher,
+        }
     }
 }
 
@@ -2622,7 +2697,11 @@ impl StreamSink for StreamingSink {
         };
         match frame {
             Ok(frame) => {
-                let _ = self.tx.send(frame);
+                if let Err(err) =
+                    publish_replayable_frame(self.replay_publisher.as_ref(), &self.tx, frame)
+                {
+                    tracing::error!(error = %err, "failed to publish replayable runtime output frame");
+                }
             }
             Err(err) => {
                 tracing::error!(error = %err, "failed to identify runtime output frame");
@@ -3744,6 +3823,52 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn replay_service_returns_canonical_frames_after_exact_cursor() {
+        let service = WorldService::new().expect("world service");
+        let mut producer = RuntimeEventStreamProducer::new();
+        let start = producer
+            .start("spn_replay_service".to_string())
+            .expect("Start");
+        let stream_id = frame_identity(&start).stream_id.clone();
+        let publisher = service
+            .runtime_replay
+            .begin("wwa_replay_service", &start)
+            .expect("begin replay service stream");
+        let stdout = producer.stdout(BASE64.encode(b"once")).expect("Stdout");
+        publisher.publish(&stdout).expect("publish Stdout");
+        let exit = producer
+            .exit(
+                0,
+                "spn_replay_service".to_string(),
+                Vec::new(),
+                None,
+                ProcessTelemetry::default(),
+            )
+            .expect("Exit");
+        publisher.publish(&exit).expect("publish Exit");
+
+        let response = service
+            .replay_execute_stream(transport_api_types::ExecuteStreamReplayRequestV1 {
+                schema_version: 1,
+                acceptance_record_id: "wwa_replay_service".to_string(),
+                stream_id,
+                after_frame_sequence: 1,
+            })
+            .await
+            .expect("replay response");
+        let body = hyper::body::to_bytes(response.into_body())
+            .await
+            .expect("replay response body");
+        let expected = [
+            stdout.canonical_ndjson_bytes().expect("canonical Stdout"),
+            exit.canonical_ndjson_bytes().expect("canonical Exit"),
+        ]
+        .concat();
+        assert_eq!(body.as_ref(), expected.as_slice());
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn streaming_sink_enqueues_concurrent_output_in_assigned_sequence_order() {
         for _ in 0..256 {
@@ -3754,8 +3879,13 @@ mod tests {
                 .expect("producer lock")
                 .start("spn_concurrent".to_string())
                 .expect("Start");
+            let stream_id = frame_identity(&start).stream_id.clone();
+            let replay_registry = RuntimeReplayRegistry::default();
+            let replay_publisher = replay_registry
+                .begin("wwa_concurrent_sink", &start)
+                .expect("begin concurrent sink replay");
             tx.send(start).expect("enqueue Start");
-            let sink = Arc::new(StreamingSink::new(tx, producer));
+            let sink = Arc::new(StreamingSink::new(tx, producer, Some(replay_publisher)));
             let barrier = Arc::new(std::sync::Barrier::new(3));
 
             std::thread::scope(|scope| {
@@ -3782,6 +3912,18 @@ mod tests {
                     .collect::<Vec<_>>(),
                 vec![1, 2, 3]
             );
+            let mut replay = replay_registry
+                .subscribe(&transport_api_types::ExecuteStreamReplayRequestV1 {
+                    schema_version: 1,
+                    acceptance_record_id: "wwa_concurrent_sink".to_string(),
+                    stream_id,
+                    after_frame_sequence: 0,
+                })
+                .expect("subscribe to concurrent sink replay");
+            let replay_sequences = std::iter::from_fn(|| replay.try_recv().ok())
+                .map(|frame| frame_identity(&frame).frame_sequence)
+                .collect::<Vec<_>>();
+            assert_eq!(replay_sequences, vec![1, 2, 3]);
         }
     }
 

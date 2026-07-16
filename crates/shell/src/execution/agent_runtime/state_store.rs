@@ -1253,7 +1253,7 @@ pub(crate) struct WorldWorkAcceptanceRecordV1 {
 }
 
 #[cfg(any(target_os = "linux", test))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PersistedWorldWorkAcceptanceV1(WorldWorkAcceptanceRecordV1);
 
 #[cfg(any(target_os = "linux", test))]
@@ -2658,6 +2658,14 @@ pub(crate) struct ResolvedWorldWorkRegistryAuthorityV1 {
     pub(crate) current_policy_revision: String,
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct WorldWorkRecoveryAuthorityV1 {
+    pub(crate) receipt_registry: WorldWorkReceiptRegistry,
+    pub(crate) execution_supervisor:
+        super::world_work_execution_supervisor::WorldWorkExecutionSupervisor,
+}
+
 #[allow(dead_code)]
 impl BoundAgentRuntimeStateStore {
     pub(crate) fn bootstrap_home_identity(
@@ -3068,6 +3076,21 @@ impl WorldWorkReceiptRegistry {
             .map(PersistedWorldWorkAcceptanceV1)
     }
 
+    pub(crate) fn persisted_acceptances_for_recovery(
+        &self,
+    ) -> Result<Vec<PersistedWorldWorkAcceptanceV1>> {
+        self.with_state(|state| {
+            let acceptances = state
+                .sessions_by_id
+                .values()
+                .flat_map(|session| session.records_by_acceptance_record_id.values())
+                .cloned()
+                .map(PersistedWorldWorkAcceptanceV1)
+                .collect();
+            Ok((acceptances, false))
+        })
+    }
+
     #[allow(
         dead_code,
         reason = "B1 owns exact acceptance inspection before a later packet exposes its caller"
@@ -3239,6 +3262,50 @@ impl AgentRuntimeStateStore {
             current_policy_snapshot_ref,
             current_policy_revision,
         })
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn bind_world_work_recovery_authority(
+        &self,
+    ) -> Result<Option<WorldWorkRecoveryAuthorityV1>> {
+        use super::host_session_authority::{
+            facade::HostSessionAuthority, store::BootstrapClassificationV1,
+            trusted_fs::TrustedAuthorityRoot,
+        };
+
+        let trusted_root = TrustedAuthorityRoot::open(&self.substrate_home)
+            .context("open B2.1 recovery authority root")?;
+        let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        match authority.classify() {
+            BootstrapClassificationV1::FreshAbsent
+            | BootstrapClassificationV1::UnsupportedLegacyState => return Ok(None),
+            BootstrapClassificationV1::InitializationPending => {
+                anyhow::bail!("B2.1 recovery authority initialization is incomplete")
+            }
+            BootstrapClassificationV1::CorruptOrUnsupported => {
+                anyhow::bail!("B2.1 recovery authority is corrupt or unsupported")
+            }
+            BootstrapClassificationV1::ValidExisting => {}
+        }
+        let root = authority
+            .read_root()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let receipt_registry = WorldWorkReceiptRegistry::bind(
+            &self.substrate_home,
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )?;
+        let execution_supervisor =
+            super::world_work_execution_supervisor::WorldWorkExecutionSupervisor::bind(
+                &self.substrate_home,
+                &root.bootstrap_home,
+                &root.authority_store_id,
+            )?;
+        Ok(Some(WorldWorkRecoveryAuthorityV1 {
+            receipt_registry,
+            execution_supervisor,
+        }))
     }
 
     fn with_legacy_snapshot_transaction<T>(

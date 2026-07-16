@@ -12,10 +12,10 @@ use hyper::{body::Bytes, Method, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use transport_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, MemberTurnSubmitRequestV1,
-    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1,
-    WorldFsReadRequestV1, WorldFsReadResponseV1,
+    ExecuteStreamReplayRequestV1, GatewayLifecycleRequestV1, GatewayLifecycleResponseV1,
+    MemberTurnSubmitRequestV1, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
+    PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
+    PendingDiffRequestV1, WorldDoctorReportV1, WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
 
 pub mod retry;
@@ -127,6 +127,29 @@ impl AgentClient {
             .context("Failed to read error body")?
             .to_bytes();
 
+        Err(Self::map_http_error(status, &body_bytes))
+    }
+
+    /// Replay one accepted execution from the exact durable host cursor and continue live frames.
+    pub async fn replay_execute_stream(
+        &self,
+        request: ExecuteStreamReplayRequestV1,
+    ) -> Result<Response<hyper::body::Incoming>> {
+        request.validate().map_err(anyhow::Error::msg)?;
+        let response = self
+            .post("/v1/execute/stream/replay", &request)
+            .await
+            .context("Failed to initiate streaming execute replay")?;
+        if response.status().is_success() {
+            return Ok(response);
+        }
+        let status = response.status();
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to read replay error body")?
+            .to_bytes();
         Err(Self::map_http_error(status, &body_bytes))
     }
 
@@ -457,5 +480,21 @@ mod tests {
         let tcp_client = AgentClient::tcp("localhost", 8080).unwrap();
         let tcp_uri = tcp_client.build_uri_for_test("/v1/execute").unwrap();
         assert_eq!(tcp_uri.to_string(), "http://localhost:8080/v1/execute");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn replay_client_rejects_inexact_identity_before_transport() {
+        let client = AgentClient::unix_socket("/tmp/replay-validation.sock").unwrap();
+        let error = client
+            .replay_execute_stream(transport_api_types::ExecuteStreamReplayRequestV1 {
+                schema_version: 1,
+                acceptance_record_id: "session-only".to_string(),
+                stream_id: "rts_exact".to_string(),
+                after_frame_sequence: 0,
+            })
+            .await
+            .expect_err("inexact replay identity must fail before transport");
+        assert!(error.to_string().contains("acceptance_record_id"));
     }
 }
