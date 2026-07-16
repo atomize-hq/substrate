@@ -1240,10 +1240,31 @@ impl WorldService {
             shared_owner_spec.as_ref(),
         );
 
-        let world = match self.backend.ensure_session(&spec) {
-            Ok(w) => w,
+        let exact_bound_world_adoption = req
+            .member_dispatch
+            .as_ref()
+            .map(|dispatch| {
+                exact_bound_world_ownership_adoption(dispatch, &req.policy_snapshot, &spec)
+            })
+            .transpose()?
+            .flatten();
+
+        let durable_world = select_execute_stream_world(
+            exact_bound_world_adoption.as_ref(),
+            |adoption| {
+                self.linux_backend
+                    .adopt_exact_bound_world_ownership(adoption)
+            },
+            || self.backend.ensure_session(&spec),
+        );
+        let world = match durable_world {
+            Ok(selection) => selection.into_world(),
             Err(e) => {
                 self.record_last_netfilter_failure_for_error(isolate_network, &e);
+                if exact_bound_world_adoption.is_some() {
+                    tracing::error!(error = %e, "exact bound-world adoption failed");
+                    anyhow::bail!("Failed to adopt exact session world");
+                }
                 tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
                 anyhow::bail!("Failed to ensure session world");
             }
@@ -2782,6 +2803,129 @@ fn requested_shared_world_owner_spec(req: &ExecuteRequest) -> Option<SharedWorld
     })
 }
 
+#[cfg(target_os = "linux")]
+fn canonical_policy_snapshot_sha256(
+    policy_snapshot: &transport_api_types::PolicySnapshotV3,
+) -> Result<String> {
+    let canonical = policy_snapshot
+        .canonicalize()
+        .map_err(|error| BadRequestError::new(format!("invalid policy snapshot: {error}")))?;
+    let bytes = serde_json::to_vec(&canonical)
+        .map_err(|_| BadRequestError::new("failed to canonicalize policy snapshot".to_string()))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[cfg(target_os = "linux")]
+fn exact_bound_world_ownership_adoption(
+    dispatch: &transport_api_types::MemberDispatchRequestV1,
+    policy_snapshot: &transport_api_types::PolicySnapshotV3,
+    target_spec: &WorldSpec,
+) -> Result<Option<world::ExactBoundWorldOwnershipAdoptionV1>> {
+    let managed_identity =
+        dispatch.participant_id.starts_with("rwp_") || dispatch.run_id.starts_with("rwr_");
+    let Some(proof) = dispatch.retained_worker_launch_authority.as_ref() else {
+        if managed_identity {
+            return Err(BadRequestError::new(
+                "authority-managed retained member dispatch requires retained_worker_launch_authority"
+                    .to_string(),
+            )
+            .into());
+        }
+        return Ok(None);
+    };
+
+    proof.validate().map_err(|error| {
+        BadRequestError::new(format!("invalid retained_worker_launch_authority: {error}"))
+    })?;
+    if proof.orchestration_session_id != dispatch.orchestration_session_id
+        || proof.retained_participant_id != dispatch.participant_id
+        || proof.caller_participant_id != dispatch.orchestrator_participant_id
+        || proof.backend_id != dispatch.backend_id
+        || proof.protocol != dispatch.protocol
+        || proof.bootstrap_run_id != dispatch.run_id
+        || proof.world_binding.world_id != dispatch.world_id
+        || proof.world_binding.world_generation != dispatch.world_generation
+        || dispatch.parent_participant_id.is_some()
+        || dispatch.resumed_from_participant_id.is_some()
+    {
+        return Err(BadRequestError::new(
+            "retained_worker_launch_authority conflicts with member dispatch or exact world binding"
+                .to_string(),
+        )
+        .into());
+    }
+
+    let owner = target_spec.reuse_mode.shared_owner().ok_or_else(|| {
+        BadRequestError::new(
+            "authority-managed retained member dispatch requires exact shared owner target"
+                .to_string(),
+        )
+    })?;
+    if owner.orchestration_session_id != dispatch.orchestration_session_id
+        || !matches!(
+            owner.action,
+            world_api::SharedWorldOwnerAction::AttachOrCreate
+        )
+    {
+        return Err(BadRequestError::new(
+            "authority-managed retained member dispatch conflicts with shared owner target"
+                .to_string(),
+        )
+        .into());
+    }
+
+    let policy_snapshot_hash = canonical_policy_snapshot_sha256(policy_snapshot)?;
+    if proof.current_policy_revision != policy_snapshot_hash {
+        return Err(BadRequestError::new(
+            "retained_worker_launch_authority conflicts with exact policy snapshot".to_string(),
+        )
+        .into());
+    }
+
+    Ok(Some(world::ExactBoundWorldOwnershipAdoptionV1 {
+        orchestration_session_id: dispatch.orchestration_session_id.clone(),
+        world_id: dispatch.world_id.clone(),
+        world_generation: dispatch.world_generation,
+        participant_id: dispatch.participant_id.clone(),
+        policy_ref_id: proof.current_policy_ref_id.clone(),
+        policy_revision: proof.current_policy_revision.clone(),
+        policy_snapshot_hash,
+        target_spec: target_spec.clone(),
+        adoption_correlation_id: proof.transport_claim_id.clone(),
+    }))
+}
+
+#[cfg(target_os = "linux")]
+struct DurableExecuteStreamWorldSelection {
+    world: WorldHandle,
+}
+
+#[cfg(target_os = "linux")]
+impl DurableExecuteStreamWorldSelection {
+    fn into_world(self) -> WorldHandle {
+        self.world
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn select_execute_stream_world<Adopt, Ensure>(
+    adoption: Option<&world::ExactBoundWorldOwnershipAdoptionV1>,
+    adopt_exact: Adopt,
+    ensure_compatibility: Ensure,
+) -> Result<DurableExecuteStreamWorldSelection>
+where
+    Adopt: FnOnce(&world::ExactBoundWorldOwnershipAdoptionV1) -> Result<WorldHandle>,
+    Ensure: FnOnce() -> Result<WorldHandle>,
+{
+    let world = match adoption {
+        Some(adoption) => adopt_exact(adoption)?,
+        None => ensure_compatibility()?,
+    };
+    Ok(DurableExecuteStreamWorldSelection { world })
+}
+
 fn convert_member_dispatch_request(
     dispatch: &transport_api_types::MemberDispatchRequestV1,
 ) -> BackendMemberDispatchRequestV1 {
@@ -3238,6 +3382,250 @@ pub(crate) fn resolve_landlock_allowlist_paths(
 mod tests {
     use super::*;
     use world_api::{SharedWorldOwnerAction, WorldHandle};
+
+    #[cfg(target_os = "linux")]
+    fn exact_bound_world_policy_snapshot() -> transport_api_types::PolicySnapshotV3 {
+        transport_api_types::PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: transport_api_types::PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: transport_api_types::PolicySnapshotWorldFsFailClosedV3 {
+                    routing: false,
+                },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: None,
+                read: None,
+                write: transport_api_types::PolicySnapshotWorldFsWriteV3::default(),
+            },
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn exact_bound_world_managed_dispatch(
+        policy_snapshot: &transport_api_types::PolicySnapshotV3,
+    ) -> transport_api_types::MemberDispatchRequestV1 {
+        use transport_api_types::{
+            MemberRuntimeBackendKindV1, ResolvedMemberRuntimeDescriptorV1,
+            RetainedWorkerAdmissionCommitmentCarrierV1, RetainedWorkerAuthorityObjectCommitmentV1,
+            RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerLaunchWorldBindingV1,
+        };
+        let commitment = |value: char| RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: value.to_string().repeat(64),
+        };
+        let policy_hash = canonical_policy_snapshot_sha256(policy_snapshot).unwrap();
+        transport_api_types::MemberDispatchRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_exact".into(),
+            participant_id: "rwp_exact".into(),
+            orchestrator_participant_id: "ash_orchestrator".into(),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            backend_id: "cli:codex".into(),
+            protocol: "substrate.agent.session".into(),
+            run_id: "rwr_exact".into(),
+            world_id: "wld_hsa_bound".into(),
+            world_generation: 7,
+            initial_prompt: Some("PROMPT_MUST_NOT_REACH_ADOPTION".into()),
+            resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/bin/true".into(),
+            },
+            retained_worker_launch_authority: Some(RetainedWorkerLaunchAuthorityProofV1 {
+                schema_version: 1,
+                authority_store_id: "has_exact".into(),
+                issuer_request_id: "req_exact".into(),
+                canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+                    schema_version: 1,
+                    algorithm: "hmac-sha-256".into(),
+                    key_id: "adk_exact".into(),
+                    digest_hex: "a".repeat(64),
+                },
+                registration_id: "rwr_registration".into(),
+                registration_commitment: commitment('b'),
+                authority_revision_after: 2,
+                authority_record_commitment_after: commitment('c'),
+                orchestration_session_id: "orch_exact".into(),
+                caller_participant_id: "ash_orchestrator".into(),
+                retained_participant_id: "rwp_exact".into(),
+                bootstrap_run_id: "rwr_exact".into(),
+                transport_claim_id: "rtc_exact".into(),
+                backend_id: "cli:codex".into(),
+                protocol: "substrate.agent.session".into(),
+                world_binding: RetainedWorkerLaunchWorldBindingV1 {
+                    world_id: "wld_hsa_bound".into(),
+                    world_generation: 7,
+                },
+                current_policy_ref_id: "ao_policy_exact".into(),
+                current_policy_revision: policy_hash,
+                retained_worker_ref_id: "ao_worker_exact".into(),
+                retained_worker_commitment: commitment('d'),
+            }),
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn authority_managed_dispatch_projects_exact_bound_world_adoption_without_prompt_bytes() {
+        let snapshot = exact_bound_world_policy_snapshot();
+        let dispatch = exact_bound_world_managed_dispatch(&snapshot);
+        let project_dir = PathBuf::from("/tmp/project-exact");
+        let spec = build_world_spec(
+            project_dir.clone(),
+            false,
+            WorldFsMode::Writable,
+            false,
+            Vec::new(),
+            Some(&SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_exact".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+        );
+
+        let adoption = exact_bound_world_ownership_adoption(&dispatch, &snapshot, &spec)
+            .expect("valid exact proof")
+            .expect("authority-managed adoption");
+
+        assert_eq!(adoption.orchestration_session_id, "orch_exact");
+        assert_eq!(adoption.world_id, "wld_hsa_bound");
+        assert_eq!(adoption.world_generation, 7);
+        assert_eq!(adoption.participant_id, "rwp_exact");
+        assert_eq!(adoption.policy_ref_id, "ao_policy_exact");
+        assert_eq!(adoption.policy_revision, adoption.policy_snapshot_hash);
+        assert_eq!(adoption.target_spec.project_dir, project_dir);
+        assert_eq!(adoption.adoption_correlation_id, "rtc_exact");
+        assert!(!format!("{adoption:?}").contains("PROMPT_MUST_NOT_REACH_ADOPTION"));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn authority_managed_dispatch_requires_exact_proof_and_policy_while_legacy_none_is_unchanged() {
+        let snapshot = exact_bound_world_policy_snapshot();
+        let dispatch = exact_bound_world_managed_dispatch(&snapshot);
+        let spec = build_world_spec(
+            PathBuf::from("/tmp/project-exact"),
+            false,
+            WorldFsMode::Writable,
+            false,
+            Vec::new(),
+            Some(&SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_exact".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+        );
+
+        let mut missing = dispatch.clone();
+        missing.retained_worker_launch_authority = None;
+        assert!(exact_bound_world_ownership_adoption(&missing, &snapshot, &spec).is_err());
+
+        let mut policy_conflict = dispatch.clone();
+        policy_conflict
+            .retained_worker_launch_authority
+            .as_mut()
+            .unwrap()
+            .current_policy_revision = "f".repeat(64);
+        assert!(exact_bound_world_ownership_adoption(&policy_conflict, &snapshot, &spec).is_err());
+
+        let mut world_conflict = dispatch.clone();
+        world_conflict.world_id = "wld_other".into();
+        assert!(exact_bound_world_ownership_adoption(&world_conflict, &snapshot, &spec).is_err());
+
+        let mut legacy = dispatch;
+        legacy.participant_id = "ash_legacy_member".into();
+        legacy.run_id = "run_legacy".into();
+        legacy.retained_worker_launch_authority = None;
+        assert!(
+            exact_bound_world_ownership_adoption(&legacy, &snapshot, &spec)
+                .expect("compatibility None")
+                .is_none()
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn production_world_selection_orders_durable_adoption_before_launch_and_never_falls_back() {
+        use std::cell::RefCell;
+
+        let snapshot = exact_bound_world_policy_snapshot();
+        let dispatch = exact_bound_world_managed_dispatch(&snapshot);
+        let spec = build_world_spec(
+            PathBuf::from("/tmp/project-exact"),
+            false,
+            WorldFsMode::Writable,
+            false,
+            Vec::new(),
+            Some(&SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_exact".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+        );
+        let adoption = exact_bound_world_ownership_adoption(&dispatch, &snapshot, &spec)
+            .unwrap()
+            .unwrap();
+        let order = RefCell::new(Vec::new());
+        let selected = select_execute_stream_world(
+            Some(&adoption),
+            |_| {
+                order.borrow_mut().push("durable_adoption");
+                Ok(WorldHandle {
+                    id: "wld_hsa_bound".into(),
+                    shared_binding: Some(SharedWorldBindingSnapshot {
+                        orchestration_session_id: "orch_exact".into(),
+                        world_id: "wld_hsa_bound".into(),
+                        world_generation: 7,
+                        binding_state: SharedWorldBindingState::Active,
+                    }),
+                })
+            },
+            || -> Result<WorldHandle> {
+                panic!("managed selection must never call compatibility ensure_session")
+            },
+        )
+        .expect("durably selected exact world");
+        order.borrow_mut().push("member_launch");
+        assert_eq!(selected.into_world().id, "wld_hsa_bound");
+        assert_eq!(*order.borrow(), ["durable_adoption", "member_launch"]);
+
+        order.borrow_mut().clear();
+        let failed = select_execute_stream_world(
+            Some(&adoption),
+            |_| {
+                order.borrow_mut().push("adoption_failed");
+                anyhow::bail!("durability unavailable")
+            },
+            || -> Result<WorldHandle> {
+                panic!("managed failure must not fall back to ensure_session")
+            },
+        );
+        assert!(failed.is_err());
+        assert_eq!(*order.borrow(), ["adoption_failed"]);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn production_world_selection_keeps_compatibility_none_on_original_ensure_path() {
+        use std::cell::RefCell;
+
+        let order = RefCell::new(Vec::new());
+        let selected = select_execute_stream_world(
+            None,
+            |_| -> Result<WorldHandle> {
+                panic!("compatibility None must not enter exact adoption")
+            },
+            || {
+                order.borrow_mut().push("compatibility_ensure");
+                Ok(WorldHandle {
+                    id: "wld_legacy".into(),
+                    shared_binding: None,
+                })
+            },
+        )
+        .expect("compatibility ensure_session");
+        order.borrow_mut().push("member_launch");
+        assert_eq!(selected.into_world().id, "wld_legacy");
+        assert_eq!(*order.borrow(), ["compatibility_ensure", "member_launch"]);
+    }
 
     #[cfg(target_os = "linux")]
     fn frame_identity(frame: &ExecuteStreamFrame) -> &transport_api_types::RuntimeFrameIdentityV1 {

@@ -27,6 +27,78 @@ pub mod stream;
 
 pub use session::SessionWorld;
 
+/// Internal, non-wire evidence for adopting an already-bound generic world as the exact
+/// shared-session owner. The correlation identifier is operation-scoped and is never persisted.
+#[derive(Debug, Clone)]
+pub struct ExactBoundWorldOwnershipAdoptionV1 {
+    pub orchestration_session_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub participant_id: String,
+    pub policy_ref_id: String,
+    pub policy_revision: String,
+    pub policy_snapshot_hash: String,
+    pub target_spec: WorldSpec,
+    pub adoption_correlation_id: String,
+}
+
+impl ExactBoundWorldOwnershipAdoptionV1 {
+    fn validate(&self) -> Result<()> {
+        for (field, value) in [
+            (
+                "orchestration_session_id",
+                self.orchestration_session_id.as_str(),
+            ),
+            ("world_id", self.world_id.as_str()),
+            ("participant_id", self.participant_id.as_str()),
+            ("policy_ref_id", self.policy_ref_id.as_str()),
+            ("policy_revision", self.policy_revision.as_str()),
+            ("policy_snapshot_hash", self.policy_snapshot_hash.as_str()),
+            (
+                "adoption_correlation_id",
+                self.adoption_correlation_id.as_str(),
+            ),
+        ] {
+            if value.trim().is_empty() {
+                anyhow::bail!("exact bound-world adoption {field} is empty");
+            }
+        }
+        let mut world_id_components = std::path::Path::new(&self.world_id).components();
+        let safe_world_id = matches!(
+            (world_id_components.next(), world_id_components.next()),
+            (Some(std::path::Component::Normal(_)), None)
+        ) && self.world_id.starts_with("wld_");
+        if !safe_world_id {
+            anyhow::bail!("exact bound-world adoption world_id is not a safe world identifier");
+        }
+        if self.policy_snapshot_hash.len() != 64
+            || !self
+                .policy_snapshot_hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            anyhow::bail!(
+                "exact bound-world adoption policy_snapshot_hash is not lowercase sha256"
+            );
+        }
+        if self.policy_revision != self.policy_snapshot_hash {
+            anyhow::bail!(
+                "exact bound-world adoption policy revision does not match canonical snapshot"
+            );
+        }
+        let owner =
+            self.target_spec.reuse_mode.shared_owner().ok_or_else(|| {
+                anyhow::anyhow!("exact bound-world adoption target is not shared")
+            })?;
+        if owner.orchestration_session_id != self.orchestration_session_id
+            || !matches!(owner.action, SharedWorldOwnerAction::AttachOrCreate)
+        {
+            anyhow::bail!("exact bound-world adoption target owner does not match evidence");
+        }
+        Ok(())
+    }
+}
+
 /// Linux native backend using namespaces, cgroups, and nftables.
 #[derive(Default)]
 pub struct LinuxLocalBackend {
@@ -41,7 +113,24 @@ impl LinuxLocalBackend {
 
     /// Return a compatible cached session if one already exists without creating a new world.
     pub fn find_compatible_session(&self, spec: &WorldSpec) -> Result<Option<WorldHandle>> {
-        self.find_compatible_session_from_root(&SessionWorld::shared_root_dir(), spec, false)
+        let root_dir = SessionWorld::shared_root_dir();
+        self.find_compatible_session_with_root_lock_from_root(&root_dir, spec)
+    }
+
+    fn find_compatible_session_with_root_lock_from_root(
+        &self,
+        root_dir: &std::path::Path,
+        spec: &WorldSpec,
+    ) -> Result<Option<WorldHandle>> {
+        if spec.reuse_mode.shared_owner().is_some() {
+            let _guard = self
+                .shared_owner_mutex
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Failed to acquire shared owner mutex: {}", e))?;
+            let _durable_owner_lock = SessionWorld::lock_shared_root_for_ownership(root_dir)?;
+            return self.find_compatible_session_from_root(root_dir, spec, false);
+        }
+        self.find_compatible_session_from_root(root_dir, spec, false)
     }
 
     fn world_handle(world: &SessionWorld) -> WorldHandle {
@@ -386,6 +475,7 @@ impl LinuxLocalBackend {
             .shared_owner_mutex
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire shared owner mutex: {}", e))?;
+        let _durable_owner_lock = SessionWorld::lock_shared_root_for_ownership(root_dir)?;
 
         match &owner_spec.action {
             SharedWorldOwnerAction::AttachOrCreate => {
@@ -407,6 +497,54 @@ impl LinuxLocalBackend {
                 reason.clone(),
             ),
         }
+    }
+
+    /// Adopt the exact already-created HSA-bound world as the shared-session owner.
+    ///
+    /// Unlike `ensure_session`, this operation never creates or replaces a world.
+    pub fn adopt_exact_bound_world_ownership(
+        &self,
+        adoption: &ExactBoundWorldOwnershipAdoptionV1,
+    ) -> Result<WorldHandle> {
+        self.check_platform()?;
+        self.adopt_exact_bound_world_ownership_from_root(&SessionWorld::shared_root_dir(), adoption)
+    }
+
+    fn adopt_exact_bound_world_ownership_from_root(
+        &self,
+        root_dir: &std::path::Path,
+        adoption: &ExactBoundWorldOwnershipAdoptionV1,
+    ) -> Result<WorldHandle> {
+        adoption.validate()?;
+        let _guard = self
+            .shared_owner_mutex
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire shared owner mutex: {}", e))?;
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
+
+        if !cache.contains_key(&adoption.world_id) {
+            let recovered = SessionWorld::recover_exact_bound_world_from_root(
+                root_dir,
+                &adoption.target_spec,
+                &adoption.world_id,
+            )?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "exact bound-world adoption target {} is missing",
+                    adoption.world_id
+                )
+            })?;
+            cache.insert(adoption.world_id.clone(), recovered);
+        }
+
+        let world = cache
+            .get_mut(&adoption.world_id)
+            .context("exact bound-world adoption target disappeared from cache")?;
+        world.adopt_exact_bound_world_ownership(adoption)?;
+        Ok(Self::world_handle(world))
     }
 
     /// Ensure the overlay for a world is mounted and return its merged root.
@@ -878,5 +1016,375 @@ mod tests {
         );
 
         backend.session_cache.clear_poison();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn backend_adopts_only_the_exact_bound_generic_world_without_creating_another() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let generic_spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::GenericCompatible,
+            project_dir: project_dir.clone(),
+            isolate_network: false,
+            fs_mode: world_api::WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let backend = LinuxLocalBackend::new();
+        let generic = backend
+            .create_generic_session_in_root(&root_dir, &generic_spec)
+            .expect("generic exact HSA-bound world");
+        let root_entries_before = std::fs::read_dir(&root_dir).unwrap().count();
+        let target_spec = WorldSpec {
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_exact".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+            ..generic_spec
+        };
+        let adoption = ExactBoundWorldOwnershipAdoptionV1 {
+            orchestration_session_id: "orch_exact".into(),
+            world_id: generic.id.clone(),
+            world_generation: 4,
+            participant_id: "rwp_exact".into(),
+            policy_ref_id: "ao_policy_exact".into(),
+            policy_revision: "a".repeat(64),
+            policy_snapshot_hash: "a".repeat(64),
+            target_spec,
+            adoption_correlation_id: "transport_claim_123".into(),
+        };
+
+        let first = backend
+            .adopt_exact_bound_world_ownership_from_root(&root_dir, &adoption)
+            .expect("first adoption");
+        let second = backend
+            .adopt_exact_bound_world_ownership_from_root(&root_dir, &adoption)
+            .expect("exact retry");
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(first.shared_binding, second.shared_binding);
+        assert_eq!(first.id, generic.id);
+        assert_eq!(first.shared_binding.unwrap().world_generation, 4);
+        assert_eq!(
+            std::fs::read_dir(&root_dir).unwrap().count(),
+            root_entries_before
+        );
+        assert_eq!(backend.session_cache.read().unwrap().len(), 1);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn concurrent_exact_bound_world_adoptions_join_one_owner() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let generic_spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::GenericCompatible,
+            project_dir: project_dir.clone(),
+            isolate_network: false,
+            fs_mode: world_api::WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let backend = Arc::new(LinuxLocalBackend::new());
+        let generic = backend
+            .create_generic_session_in_root(&root_dir, &generic_spec)
+            .expect("generic world");
+        let adoption = Arc::new(ExactBoundWorldOwnershipAdoptionV1 {
+            orchestration_session_id: "orch_exact".into(),
+            world_id: generic.id,
+            world_generation: 9,
+            participant_id: "rwp_exact".into(),
+            policy_ref_id: "ao_policy_exact".into(),
+            policy_revision: "a".repeat(64),
+            policy_snapshot_hash: "a".repeat(64),
+            target_spec: WorldSpec {
+                reuse_mode: world_api::WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch_exact".into(),
+                    action: SharedWorldOwnerAction::AttachOrCreate,
+                }),
+                ..generic_spec
+            },
+            adoption_correlation_id: "transport_claim_123".into(),
+        });
+
+        let mut workers = Vec::new();
+        for _ in 0..2 {
+            let backend = Arc::clone(&backend);
+            let root_dir = root_dir.clone();
+            let adoption = Arc::clone(&adoption);
+            workers.push(std::thread::spawn(move || {
+                backend.adopt_exact_bound_world_ownership_from_root(&root_dir, &adoption)
+            }));
+        }
+        let handles = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(handles[0].id, handles[1].id);
+        assert_eq!(handles[0].shared_binding, handles[1].shared_binding);
+        assert_eq!(std::fs::read_dir(&root_dir).unwrap().count(), 1);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn separate_backend_instances_join_exact_adoption_and_conflicts_cannot_steal() {
+        fn generic_fixture(
+            root_dir: &std::path::Path,
+            project_dir: &std::path::Path,
+        ) -> (WorldSpec, WorldHandle) {
+            std::fs::create_dir_all(root_dir).unwrap();
+            std::fs::create_dir_all(project_dir).unwrap();
+            let spec = WorldSpec {
+                reuse_session: true,
+                reuse_mode: world_api::WorldReuseMode::GenericCompatible,
+                project_dir: project_dir.to_path_buf(),
+                isolate_network: false,
+                fs_mode: world_api::WorldFsMode::Writable,
+                ..WorldSpec::default()
+            };
+            let handle = LinuxLocalBackend::new()
+                .create_generic_session_in_root(root_dir, &spec)
+                .expect("generic exact world");
+            (spec, handle)
+        }
+
+        fn adoption_for(
+            generic_spec: &WorldSpec,
+            world_id: &str,
+            session_id: &str,
+            policy_marker: char,
+        ) -> ExactBoundWorldOwnershipAdoptionV1 {
+            ExactBoundWorldOwnershipAdoptionV1 {
+                orchestration_session_id: session_id.into(),
+                world_id: world_id.into(),
+                world_generation: 3,
+                participant_id: "rwp_exact".into(),
+                policy_ref_id: format!("ao_policy_{session_id}"),
+                policy_revision: policy_marker.to_string().repeat(64),
+                policy_snapshot_hash: policy_marker.to_string().repeat(64),
+                target_spec: WorldSpec {
+                    reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                        SharedWorldOwnerSpec {
+                            orchestration_session_id: session_id.into(),
+                            action: SharedWorldOwnerAction::AttachOrCreate,
+                        },
+                    ),
+                    ..generic_spec.clone()
+                },
+                adoption_correlation_id: format!("rtc_{session_id}"),
+            }
+        }
+
+        let exact_temp = tempdir().unwrap();
+        let exact_root = exact_temp.path().join("world-root");
+        let exact_project = exact_temp.path().join("project");
+        let (generic_spec, generic) = generic_fixture(&exact_root, &exact_project);
+        let exact_adoption = Arc::new(adoption_for(&generic_spec, &generic.id, "orch_exact", 'a'));
+        let exact_barrier = Arc::new(std::sync::Barrier::new(3));
+        let mut exact_workers = Vec::new();
+        for _ in 0..2 {
+            let backend = LinuxLocalBackend::new();
+            let root = exact_root.clone();
+            let adoption = Arc::clone(&exact_adoption);
+            let barrier = Arc::clone(&exact_barrier);
+            exact_workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                backend.adopt_exact_bound_world_ownership_from_root(&root, &adoption)
+            }));
+        }
+        exact_barrier.wait();
+        let exact_handles = exact_workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(exact_handles[0].id, exact_handles[1].id);
+        assert_eq!(
+            exact_handles[0].shared_binding,
+            exact_handles[1].shared_binding
+        );
+
+        let conflict_temp = tempdir().unwrap();
+        let conflict_root = conflict_temp.path().join("world-root");
+        let conflict_project = conflict_temp.path().join("project");
+        let (generic_spec, generic) = generic_fixture(&conflict_root, &conflict_project);
+        let first_adoption = adoption_for(&generic_spec, &generic.id, "orch_first", 'a');
+        let second_adoption = adoption_for(&generic_spec, &generic.id, "orch_second", 'b');
+        let conflict_barrier = Arc::new(std::sync::Barrier::new(3));
+        let mut conflict_workers = Vec::new();
+        for adoption in [first_adoption, second_adoption] {
+            let backend = LinuxLocalBackend::new();
+            let root = conflict_root.clone();
+            let barrier = Arc::clone(&conflict_barrier);
+            conflict_workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                backend.adopt_exact_bound_world_ownership_from_root(&root, &adoption)
+            }));
+        }
+        conflict_barrier.wait();
+        let results = conflict_workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+
+        let winner = results
+            .iter()
+            .find_map(|result| result.as_ref().ok())
+            .unwrap();
+        let metadata = serde_json::from_slice::<serde_json::Value>(
+            &std::fs::read(conflict_root.join(&generic.id).join("session.json")).unwrap(),
+        )
+        .unwrap();
+        let winner_binding = winner.shared_binding.as_ref().unwrap();
+        assert_eq!(
+            metadata["orchestration_session_id"],
+            winner_binding.orchestration_session_id
+        );
+        assert_eq!(metadata["world_id"], generic.id);
+        assert_eq!(std::fs::read_dir(&conflict_root).unwrap().count(), 1);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn separate_world_ids_cannot_both_own_one_orchestration_session() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let generic_spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::GenericCompatible,
+            project_dir,
+            isolate_network: false,
+            fs_mode: world_api::WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let creator = LinuxLocalBackend::new();
+        let first = creator
+            .create_generic_session_in_root(&root_dir, &generic_spec)
+            .unwrap();
+        let second = creator
+            .create_generic_session_in_root(&root_dir, &generic_spec)
+            .unwrap();
+        assert_ne!(first.id, second.id);
+
+        let adoption = |world_id: String, correlation: &str| ExactBoundWorldOwnershipAdoptionV1 {
+            orchestration_session_id: "orch_one_owner".into(),
+            world_id,
+            world_generation: 5,
+            participant_id: "rwp_exact".into(),
+            policy_ref_id: "ao_policy_exact".into(),
+            policy_revision: "a".repeat(64),
+            policy_snapshot_hash: "a".repeat(64),
+            target_spec: WorldSpec {
+                reuse_mode: world_api::WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch_one_owner".into(),
+                    action: SharedWorldOwnerAction::AttachOrCreate,
+                }),
+                ..generic_spec.clone()
+            },
+            adoption_correlation_id: correlation.into(),
+        };
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let mut workers = Vec::new();
+        for adoption in [
+            adoption(first.id, "rtc_first"),
+            adoption(second.id, "rtc_second"),
+        ] {
+            let backend = LinuxLocalBackend::new();
+            let root = root_dir.clone();
+            let barrier = Arc::clone(&barrier);
+            workers.push(std::thread::spawn(move || {
+                barrier.wait();
+                backend.adopt_exact_bound_world_ownership_from_root(&root, &adoption)
+            }));
+        }
+        barrier.wait();
+        let results = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn compatibility_shared_owner_creation_waits_on_durable_root_lock() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_root_lock".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+            project_dir,
+            isolate_network: false,
+            fs_mode: world_api::WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let owner = spec.reuse_mode.shared_owner().unwrap().clone();
+        let lookup_spec = spec.clone();
+        let durable_lock = SessionWorld::lock_shared_root_for_ownership(&root_dir).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker_root = root_dir.clone();
+        let worker = std::thread::spawn(move || {
+            let result = LinuxLocalBackend::new().ensure_shared_owner_session_from_root(
+                &worker_root,
+                &spec,
+                &owner,
+            );
+            tx.send(result).unwrap();
+        });
+
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        drop(durable_lock);
+        let handle = rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("shared creation resumes after durable root lock")
+            .expect("shared creation succeeds");
+        worker.join().unwrap();
+        assert_eq!(
+            handle.shared_binding.unwrap().orchestration_session_id,
+            "orch_root_lock"
+        );
+
+        let durable_lock = SessionWorld::lock_shared_root_for_ownership(&root_dir).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let lookup_root = root_dir.clone();
+        let lookup = std::thread::spawn(move || {
+            tx.send(
+                LinuxLocalBackend::new()
+                    .find_compatible_session_with_root_lock_from_root(&lookup_root, &lookup_spec),
+            )
+            .unwrap();
+        });
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100)),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        drop(durable_lock);
+        assert!(rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("shared lookup resumes after durable root lock")
+            .expect("shared lookup succeeds")
+            .is_some());
+        lookup.join().unwrap();
     }
 }
