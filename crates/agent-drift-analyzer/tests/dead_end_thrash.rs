@@ -2,15 +2,14 @@
 
 mod support;
 
-use std::fs;
-
 use agent_drift_analyzer::{
     AnalyzeRequest, Checkpoint, ChildWorkVisibility, Confidence, DelegationTopology, DriftClass,
     DriftScore, DriftState, ProgressDimension, ProgressSignalCode, ProgressStatus,
 };
 use agent_session_compactor::{
-    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DelegationEvidenceRef,
-    DelegationLink, DelegationLinkState, RowRef, SourceKind, UserMessageRole,
+    export_bundle, ChildSessionOrigin, CompactionKind, CompactionRow, DedupeGroup,
+    ExportBundleRequest, ParentSpawnResult, RolloutLinkageMetadata, RolloutRowProvenance, RowRef,
+    SourceKind, UserMessageRole,
 };
 use camino::Utf8PathBuf;
 use support::{
@@ -864,31 +863,42 @@ fn dead_end_thrash_scores_stay_on_linked_parent_and_child_trajectories() {
     const PARENT: &str = "session-linked-parent";
     const CHILD: &str = "session-linked-child";
 
+    let mut spawn_result = delegated_row(
+        PARENT,
+        3,
+        CompactionKind::ToolOutput,
+        r#"{"agent_id":"session-linked-child"}"#,
+        None,
+    );
+    spawn_result.dedupe_identity = Some(
+        r#"{"call_id":"call-session-linked-parent-2","type":"function_call_output"}"#.to_string(),
+    );
     let parent_rows = vec![
         delegated_row(
             PARENT,
-            0,
+            1,
             CompactionKind::UserMessage,
             "/goal Coordinate the bounded child task without claiming its implementation work.",
             None,
         ),
         delegated_row(
             PARENT,
-            1,
+            2,
             CompactionKind::ToolCall,
             r#"{"task_name":"r7_4_1_child","message":"Implement and verify only the child target."}"#,
             Some("spawn_agent"),
         ),
+        spawn_result,
         delegated_row(
             PARENT,
-            2,
+            4,
             CompactionKind::ToolCall,
             r#"{"session_id":"session-linked-child"}"#,
             Some("wait_agent"),
         ),
         delegated_row(
             PARENT,
-            3,
+            5,
             CompactionKind::ToolCall,
             r#"{"session_id":"session-linked-child"}"#,
             Some("wait_agent"),
@@ -897,62 +907,122 @@ fn dead_end_thrash_scores_stay_on_linked_parent_and_child_trajectories() {
     let mut child_rows = vec![
         delegated_row(
             CHILD,
-            0,
+            1,
             CompactionKind::UserMessage,
             "/goal Troubleshoot only child_target without widening scope.",
             None,
         ),
         delegated_tool_row(
             CHILD,
-            1,
+            2,
             "cargo test -p child-target child_target -- --exact",
         ),
-        delegated_row(CHILD, 2, CompactionKind::Error, "child target failed", None),
+        delegated_row(CHILD, 3, CompactionKind::Error, "child target failed", None),
         delegated_row(
             CHILD,
-            3,
+            4,
             CompactionKind::UserMessage,
             "/goal Re-run the same child_target verifier before widening scope.",
             None,
         ),
         delegated_tool_row(
             CHILD,
-            4,
+            5,
             "cargo test -p child-target child_target -- --exact",
         ),
-        delegated_row(CHILD, 5, CompactionKind::Error, "child target failed", None),
+        delegated_row(CHILD, 6, CompactionKind::Error, "child target failed", None),
     ];
     child_rows[2].text_hash_hex = "hash-linked-child-failure".to_string();
     child_rows[5].text_hash_hex = "hash-linked-child-failure".to_string();
 
+    let parent_source_file = parent_rows[0].source_file.clone();
+    let child_source_file = child_rows[0].source_file.clone();
     let rows = parent_rows
         .into_iter()
         .chain(child_rows)
         .collect::<Vec<_>>();
-    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
-    let manifest_path = fixture.input_dir.join("manifest.json");
-    let mut manifest: BundleManifest = serde_json::from_str(
-        &fs::read_to_string(&manifest_path).expect("read linked scorer manifest"),
-    )
-    .expect("parse linked scorer manifest");
-    manifest.delegation_links = vec![DelegationLink {
-        parent_session_id: PARENT.to_string(),
-        child_session_id: CHILD.to_string(),
-        child_origin_parent_session_id: Some(PARENT.to_string()),
-        depth: Some(1),
-        state: DelegationLinkState::Verified,
-        parent_evidence: vec![delegation_evidence(PARENT, 1)],
-        child_evidence: vec![delegation_evidence(CHILD, 0)],
-    }];
-    fs::write(
-        &manifest_path,
-        serde_json::to_string_pretty(&manifest).expect("serialize linked scorer manifest"),
-    )
-    .expect("write linked scorer manifest");
+    let linkage_metadata = vec![
+        RolloutLinkageMetadata {
+            parent_spawn_results: vec![ParentSpawnResult {
+                parent_session_id: PARENT.to_string(),
+                child_session_id: CHILD.to_string(),
+                call_id: "call-session-linked-parent-2".to_string(),
+                spawn_call_provenance: RolloutRowProvenance {
+                    source_file: parent_source_file.clone(),
+                    line_number: 3,
+                    event_index: 2,
+                },
+                spawn_result_provenance: RolloutRowProvenance {
+                    source_file: parent_source_file.clone(),
+                    line_number: 4,
+                    event_index: 3,
+                },
+            }],
+            child_origin: None,
+        },
+        RolloutLinkageMetadata {
+            parent_spawn_results: Vec::new(),
+            child_origin: Some(ChildSessionOrigin {
+                child_session_id: CHILD.to_string(),
+                parent_session_id: PARENT.to_string(),
+                depth: 1,
+                agent_nickname: Some("r7_4_1_child".to_string()),
+                agent_role: Some("default".to_string()),
+                provenance: RolloutRowProvenance {
+                    source_file: child_source_file.clone(),
+                    line_number: 1,
+                    event_index: 0,
+                },
+            }),
+        },
+    ];
+    let temp_dir = tempfile::TempDir::new().expect("linked scorer temp dir");
+    let root = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
+        .expect("linked scorer temp path is UTF-8");
+    let input_dir = root.join("input");
+    let output_dir = root.join("output");
+    let manifest = export_bundle(&ExportBundleRequest {
+        codex_home: camino::Utf8Path::new("/tmp/.codex"),
+        output_dir: &input_dir,
+        generated_at: time::OffsetDateTime::from_unix_timestamp(1_717_000_000)
+            .expect("linked scorer timestamp"),
+        session_ids: vec![CHILD.to_string(), PARENT.to_string()],
+        source_files: vec![parent_source_file, child_source_file],
+        linkage_metadata: &linkage_metadata,
+        archival_rows: &rows,
+        compact_rows: &rows,
+        dedupe_groups: &[],
+    })
+    .expect("export production-shaped linked scorer bundle");
+
+    assert_eq!(manifest.discovered_file_count, 2);
+    assert_eq!(manifest.files.len(), 2);
+    assert_eq!(manifest.delegation_links.len(), 1);
+    let link = &manifest.delegation_links[0];
+    assert_eq!(
+        link.state,
+        agent_session_compactor::DelegationLinkState::Verified
+    );
+    assert_eq!(
+        link.parent_evidence
+            .iter()
+            .map(|evidence| evidence.event_index)
+            .collect::<Vec<_>>(),
+        vec![2, 3],
+        "verified parent evidence must include the matching spawn call and result",
+    );
+    assert_eq!(
+        link.child_evidence
+            .iter()
+            .map(|evidence| evidence.event_index)
+            .collect::<Vec<_>>(),
+        vec![0],
+        "verified child evidence must point to child-origin session metadata",
+    );
 
     let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
-        input_dir: fixture.input_dir.clone(),
-        output_dir: fixture.output_dir.clone(),
+        input_dir,
+        output_dir,
     })
     .expect("analyze linked scorer bundle");
     let parent = final_checkpoint_for_session(&result, PARENT);
@@ -1513,14 +1583,6 @@ fn delegated_tool_row(session_id: &str, event_index: usize, command: &str) -> Co
         &format!("{{\"command\":{command:?},\"workdir\":\"/repo\"}}"),
         Some("functions.shell_command"),
     )
-}
-
-fn delegation_evidence(session_id: &str, event_index: usize) -> DelegationEvidenceRef {
-    DelegationEvidenceRef {
-        source_file: Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl")),
-        line_number: event_index + 1,
-        event_index,
-    }
 }
 
 fn final_checkpoint_for_session<'a>(
