@@ -631,6 +631,8 @@ MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMEN
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
 and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
 not claim review-clean status.
-Default-on linked closure and recursive depth remain evidence-gated decisions for later packets.
+Default-on linked closure and recursive depth are optional choices explicitly deferred beyond closed
+R7. They are not implicitly assigned to R8 and require separate evidence-backed, reviewed
+authorization before implementation.
 The R7-4 evidence requires no new drift taxonomy; any future distinct, unexpressible delegated
 failure mode requires a separate evidence-backed reviewed packet.

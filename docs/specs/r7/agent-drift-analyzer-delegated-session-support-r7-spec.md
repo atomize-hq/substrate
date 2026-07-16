@@ -473,7 +473,8 @@ The proof report must stratify `single_agent`, `delegating_parent_linked`,
 
 ## Success Criteria
 
-1. R6 authority docs state that `dead_end_thrash` is already cut over and that R7 is next.
+1. At R7 entry, R6 authority docs recorded that `dead_end_thrash` was already cut over and that R7
+   was next.
 2. The compactor preserves deterministic, reciprocal direct parent/child linkage with row-level
    provenance and legacy-manifest compatibility.
 3. Explicit linked-child compaction includes only the verified direct closure and reports unsupported
@@ -545,8 +546,11 @@ not claim review-clean status.
 
 ## Open Questions
 
-No blocking design question remains for the first implementation packet. The following decisions are
-intentionally evidence-gated later in the family:
+R7 is closed, so no implementation packet remains in this family. The following legacy optional R7
+choices are explicitly deferred beyond closed R7; that deferral does not implicitly assign them to
+R8:
 
-- whether linked-child discovery should become the default after R7 acceptance proves it stable;
-- whether depth greater than one should become a later R7 follow-on or a separate phase.
+- whether linked-child discovery should become the default;
+- whether delegation depth greater than one should be supported.
+
+Either choice requires separate evidence-backed, reviewed authorization before implementation.

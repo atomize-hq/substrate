@@ -42,7 +42,10 @@ SCOPE INVARIANTS
 - Do not begin R7 before R6 is CLOSED with terminal scorer dispositions.
 - Do not make R7 absorb ordinary single-session scorer gaps.
 - Never infer child work from parent orchestration alone.
-- Do not begin R8 before R7 stabilizes the analyzer-owned contract and R8 SPEC/PLAN/TASKS land.
+- Once R7 has stabilized the analyzer-owned contract and `R8-SPEC` is active at entry, R8
+  MAP/SPEC/PLAN/TASKS authoring may begin.
+- Do not begin R8 implementation or `R8-IMPLEMENT` until those R8 MAP/SPEC/PLAN/TASKS artifacts are
+  landed and review-clean.
 - R8 means Sentinel Interpretation Consolidation / Integration; analyzer semantics stay
   analyzer-owned.
 - Preserve unrelated worktree changes.
