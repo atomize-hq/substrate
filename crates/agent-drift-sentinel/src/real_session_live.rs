@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 
@@ -19,7 +20,8 @@ use crate::operator_surface::WarningPolicy;
 use crate::scheduler::SchedulerPolicy;
 
 const LEGACY_LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 1;
-const LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 2;
+const LEGACY_PROGRESS_LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 2;
+const LIVE_SESSION_STATE_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveSessionRequest {
@@ -165,7 +167,10 @@ struct LiveSessionProgress {
     // against that unchanged size instead of skipping still-undelivered checkpoints.
     #[serde(default)]
     pending_observed_size_bytes: Option<u64>,
-    last_delivered_cursor: Option<CheckpointCursor>,
+    #[serde(default)]
+    last_delivered_cursors: BTreeMap<String, CheckpointCursor>,
+    #[serde(default)]
+    monitor_linked_closure: bool,
     #[serde(default = "default_next_emission_ordinal")]
     next_emission_ordinal: usize,
 }
@@ -175,15 +180,26 @@ impl Default for LiveSessionProgress {
         Self {
             last_observed_size_bytes: None,
             pending_observed_size_bytes: None,
-            last_delivered_cursor: None,
+            last_delivered_cursors: BTreeMap::new(),
+            monitor_linked_closure: false,
             next_emission_ordinal: default_next_emission_ordinal(),
         }
     }
 }
 
 impl LiveSessionProgress {
-    fn latest_cursor(&self) -> Option<&CheckpointCursor> {
-        self.last_delivered_cursor.as_ref()
+    fn latest_cursor(&self, session_id: &str) -> Option<&CheckpointCursor> {
+        self.last_delivered_cursors.get(session_id)
+    }
+
+    fn has_delivered_checkpoint(&self) -> bool {
+        !self.last_delivered_cursors.is_empty()
+    }
+
+    fn tracks_linked_session(&self, root_session_id: &str) -> bool {
+        self.last_delivered_cursors
+            .keys()
+            .any(|session_id| session_id != root_session_id)
     }
 
     fn last_observed_size_bytes(&self) -> Option<u64> {
@@ -203,8 +219,8 @@ impl LiveSessionProgress {
     }
 
     fn checkpoint_is_fresh(&self, checkpoint: &Checkpoint) -> bool {
-        self.last_delivered_cursor
-            .as_ref()
+        self.last_delivered_cursors
+            .get(&checkpoint.session_id)
             .is_none_or(|cursor| checkpoint_after_cursor(checkpoint, cursor))
     }
 
@@ -223,7 +239,8 @@ impl LiveSessionProgress {
     }
 
     fn record_delivery(&mut self, cursor: CheckpointCursor) {
-        self.last_delivered_cursor = Some(cursor);
+        self.last_delivered_cursors
+            .insert(cursor.session_id.clone(), cursor);
     }
 
     fn begin_poll(&mut self, observed_size_bytes: u64) {
@@ -241,7 +258,7 @@ impl LiveSessionProgress {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct PersistedLiveSessionState {
     schema_version: u32,
-    session_id: String,
+    root_session_id: String,
     progress: LiveSessionProgress,
 }
 
@@ -250,6 +267,23 @@ struct LegacyPersistedLiveSessionState {
     schema_version: u32,
     session_id: String,
     last_delivered_cursor: Option<CheckpointCursor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct LegacyProgressLiveSessionState {
+    schema_version: u32,
+    session_id: String,
+    progress: LegacyLiveSessionProgress,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct LegacyLiveSessionProgress {
+    last_observed_size_bytes: Option<u64>,
+    #[serde(default)]
+    pending_observed_size_bytes: Option<u64>,
+    last_delivered_cursor: Option<CheckpointCursor>,
+    #[serde(default = "default_next_emission_ordinal")]
+    next_emission_ordinal: usize,
 }
 
 fn default_next_emission_ordinal() -> usize {
@@ -277,7 +311,7 @@ impl LiveSessionCoordinator {
     }
 
     pub fn latest_cursor(&self) -> Option<&CheckpointCursor> {
-        self.progress.latest_cursor()
+        self.progress.latest_cursor(&self.request.session_id)
     }
 
     pub fn runtime_snapshot(&self) -> LiveRuntimeSnapshot {
@@ -296,11 +330,18 @@ impl LiveSessionCoordinator {
             }
         }
         if let Some(previous_size_bytes) = self.progress.last_observed_size_bytes() {
-            if observed_size_bytes == previous_size_bytes {
+            if observed_size_bytes == previous_size_bytes
+                && !self.progress.monitor_linked_closure
+                && !self
+                    .progress
+                    .tracks_linked_session(&self.request.session_id)
+            {
                 return Ok(LiveSessionPollResult::idle(
                     self.rollout_path.clone(),
                     observed_size_bytes,
-                    self.progress.last_delivered_cursor.clone(),
+                    self.progress
+                        .latest_cursor(&self.request.session_id)
+                        .cloned(),
                 ));
             }
         }
@@ -308,7 +349,7 @@ impl LiveSessionCoordinator {
         let checkpoints = match self.run_pipeline() {
             Ok(checkpoints) => checkpoints,
             Err(error)
-                if self.progress.last_delivered_cursor.is_none()
+                if !self.progress.has_delivered_checkpoint()
                     && sparse_startup_retry_allowed(&self.rollout_path, &error) =>
             {
                 self.progress.complete_poll(observed_size_bytes);
@@ -318,12 +359,22 @@ impl LiveSessionCoordinator {
                     observed_size_bytes,
                     reran_pipeline: true,
                     emitted_checkpoints: 0,
-                    latest_cursor: self.progress.last_delivered_cursor.clone(),
+                    latest_cursor: self
+                        .progress
+                        .latest_cursor(&self.request.session_id)
+                        .cloned(),
                     observations: Vec::new(),
                 });
             }
             Err(error) => return Err(error),
         };
+        self.progress.monitor_linked_closure = checkpoints.iter().any(|checkpoint| {
+            checkpoint.session_id == self.request.session_id
+                && matches!(
+                    checkpoint.delegation.topology,
+                    agent_drift_analyzer::DelegationTopology::DelegatingParent
+                )
+        });
         if sparse_startup_checkpoint_emission_deferred(&self.progress, &self.rollout_path) {
             self.progress.complete_poll(observed_size_bytes);
             self.persist_state()?;
@@ -332,7 +383,10 @@ impl LiveSessionCoordinator {
                 observed_size_bytes,
                 reran_pipeline: true,
                 emitted_checkpoints: 0,
-                latest_cursor: self.progress.last_delivered_cursor.clone(),
+                latest_cursor: self
+                    .progress
+                    .latest_cursor(&self.request.session_id)
+                    .cloned(),
                 observations: Vec::new(),
             });
         }
@@ -362,7 +416,10 @@ impl LiveSessionCoordinator {
             observed_size_bytes,
             reran_pipeline: true,
             emitted_checkpoints: observations.len(),
-            latest_cursor: self.progress.last_delivered_cursor.clone(),
+            latest_cursor: self
+                .progress
+                .latest_cursor(&self.request.session_id)
+                .cloned(),
             observations,
         })
     }
@@ -378,7 +435,7 @@ impl LiveSessionCoordinator {
         compact_codex_sessions(&RunConfig {
             codex_home: self.request.codex_home.clone(),
             session_id: Some(self.request.session_id.clone()),
-            include_linked_children: false,
+            include_linked_children: true,
             output_dir: self.compactor_output_dir(),
             generated_at: None,
         })?;
@@ -389,19 +446,11 @@ impl LiveSessionCoordinator {
         })?;
 
         let bundle = load_replay_bundle(&self.analyzer_output_dir())?;
-        let mut found_session_ids = bundle
-            .checkpoints
-            .iter()
-            .map(|checkpoint| checkpoint.session_id.clone())
-            .collect::<Vec<_>>();
-        found_session_ids.sort();
-        found_session_ids.dedup();
-        if found_session_ids != [self.request.session_id.clone()] {
-            return Err(LiveSessionError::UnexpectedCheckpointSessions {
-                expected_session_id: self.request.session_id.clone(),
-                found_session_ids,
-            });
-        }
+        validate_analyzer_verified_direct_closure(
+            &self.request.session_id,
+            &bundle.checkpoints,
+            &self.progress.last_delivered_cursors,
+        )?;
 
         Ok(bundle.checkpoints)
     }
@@ -426,7 +475,7 @@ impl LiveSessionCoordinator {
         let temp_path = self.request.state_dir.join("live-session-state.json.tmp");
         let state = PersistedLiveSessionState {
             schema_version: LIVE_SESSION_STATE_SCHEMA_VERSION,
-            session_id: self.request.session_id.clone(),
+            root_session_id: self.request.session_id.clone(),
             progress: self.progress.clone(),
         };
         let encoded = serde_json::to_vec_pretty(&state).map_err(|source| {
@@ -483,15 +532,13 @@ fn load_persisted_progress(
                 &request.session_id,
                 state.last_delivered_cursor.as_ref(),
             )?;
-            Ok(LiveSessionProgress {
-                last_observed_size_bytes: None,
-                pending_observed_size_bytes: None,
-                last_delivered_cursor: state.last_delivered_cursor,
-                next_emission_ordinal: default_next_emission_ordinal(),
-            })
+            Ok(progress_from_legacy_cursor(
+                state.last_delivered_cursor,
+                default_next_emission_ordinal(),
+            ))
         }
-        LIVE_SESSION_STATE_SCHEMA_VERSION => {
-            let state: PersistedLiveSessionState =
+        LEGACY_PROGRESS_LIVE_SESSION_STATE_SCHEMA_VERSION => {
+            let state: LegacyProgressLiveSessionState =
                 serde_json::from_str(&raw).map_err(|source| {
                     LiveSessionError::ParsePersistedState {
                         path: state_path.clone(),
@@ -504,6 +551,26 @@ fn load_persisted_progress(
                 &request.session_id,
                 state.progress.last_delivered_cursor.as_ref(),
             )?;
+            let mut progress = progress_from_legacy_cursor(
+                state.progress.last_delivered_cursor,
+                state.progress.next_emission_ordinal,
+            );
+            progress.pending_observed_size_bytes = state.progress.pending_observed_size_bytes;
+            if progress.pending_observed_size_bytes.is_some() {
+                progress.last_observed_size_bytes = state.progress.last_observed_size_bytes;
+            }
+            Ok(progress)
+        }
+        LIVE_SESSION_STATE_SCHEMA_VERSION => {
+            let state: PersistedLiveSessionState =
+                serde_json::from_str(&raw).map_err(|source| {
+                    LiveSessionError::ParsePersistedState {
+                        path: state_path.clone(),
+                        source,
+                    }
+                })?;
+            validate_persisted_state_session(&state_path, request, &state.root_session_id)?;
+            validate_cursor_map(&state_path, &state.progress.last_delivered_cursors)?;
             Ok(state.progress)
         }
         actual => Err(LiveSessionError::UnsupportedPersistedStateSchema {
@@ -511,6 +578,23 @@ fn load_persisted_progress(
             actual,
             expected: LIVE_SESSION_STATE_SCHEMA_VERSION,
         }),
+    }
+}
+
+fn progress_from_legacy_cursor(
+    cursor: Option<CheckpointCursor>,
+    next_emission_ordinal: usize,
+) -> LiveSessionProgress {
+    let last_delivered_cursors = cursor
+        .into_iter()
+        .map(|cursor| (cursor.session_id.clone(), cursor))
+        .collect();
+    LiveSessionProgress {
+        last_observed_size_bytes: None,
+        pending_observed_size_bytes: None,
+        last_delivered_cursors,
+        monitor_linked_closure: false,
+        next_emission_ordinal,
     }
 }
 
@@ -558,6 +642,67 @@ fn validate_cursor_session(
             });
         }
     }
+    Ok(())
+}
+
+fn validate_cursor_map(
+    path: &Utf8Path,
+    cursors: &BTreeMap<String, CheckpointCursor>,
+) -> Result<(), LiveSessionError> {
+    for (session_id, cursor) in cursors {
+        validate_cursor_session(path, session_id, Some(cursor))?;
+    }
+    Ok(())
+}
+
+fn validate_analyzer_verified_direct_closure(
+    root_session_id: &str,
+    checkpoints: &[Checkpoint],
+    persisted_cursors: &BTreeMap<String, CheckpointCursor>,
+) -> Result<(), LiveSessionError> {
+    let mut expected_session_ids = BTreeSet::from([root_session_id.to_string()]);
+    for checkpoint in checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.session_id == root_session_id)
+    {
+        if matches!(
+            checkpoint.delegation.topology,
+            agent_drift_analyzer::DelegationTopology::DelegatingParent
+        ) {
+            expected_session_ids.extend(checkpoint.delegation.child_session_ids.iter().cloned());
+        }
+    }
+
+    let found_session_ids = checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.session_id.clone())
+        .collect::<BTreeSet<_>>();
+    let child_contract_is_valid = checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.session_id != root_session_id)
+        .all(|checkpoint| {
+            matches!(
+                checkpoint.delegation.topology,
+                agent_drift_analyzer::DelegationTopology::DelegatedChild
+            ) && checkpoint.delegation.parent_session_id.as_deref() == Some(root_session_id)
+        });
+    let persisted_sessions_are_expected = persisted_cursors
+        .keys()
+        .all(|session_id| expected_session_ids.contains(session_id));
+    if found_session_ids != expected_session_ids
+        || !child_contract_is_valid
+        || !persisted_sessions_are_expected
+    {
+        let found_session_ids = found_session_ids
+            .into_iter()
+            .chain(persisted_cursors.keys().cloned())
+            .collect::<BTreeSet<_>>();
+        return Err(LiveSessionError::UnexpectedCheckpointSessions {
+            expected_session_id: root_session_id.to_string(),
+            found_session_ids: found_session_ids.into_iter().collect(),
+        });
+    }
+
     Ok(())
 }
 
@@ -613,6 +758,9 @@ fn sparse_startup_retry_allowed(rollout_path: &Utf8Path, error: &LiveSessionErro
     };
 
     match error {
+        LiveSessionError::Compactor(CompactorError::Discovery(
+            DiscoveryError::LinkedSessionNotFound { .. },
+        )) => !readiness.has_session_activity,
         LiveSessionError::Analyzer(AnalyzerError::Input(AnalyzerInputError::NoSessions {
             ..
         })) => !readiness.has_session_activity,
@@ -627,7 +775,7 @@ fn sparse_startup_checkpoint_emission_deferred(
     progress: &LiveSessionProgress,
     rollout_path: &Utf8Path,
 ) -> bool {
-    if progress.last_delivered_cursor.is_some() {
+    if progress.has_delivered_checkpoint() {
         return false;
     }
 

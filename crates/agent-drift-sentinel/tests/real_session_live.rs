@@ -115,19 +115,24 @@ fn real_session_live_coordinator_restores_progress_for_restart_idle_decision() {
             .emission_ordinal
             + 1;
         let persisted_state = read_persisted_state(&state_dir);
-        assert_eq!(persisted_state["schema_version"].as_u64(), Some(2));
-        assert_eq!(persisted_state["session_id"].as_str(), Some("session-live"));
+        assert_eq!(persisted_state["schema_version"].as_u64(), Some(3));
+        assert_eq!(
+            persisted_state["root_session_id"].as_str(),
+            Some("session-live")
+        );
         assert_eq!(
             persisted_state["progress"]["last_observed_size_bytes"].as_u64(),
             Some(first.observed_size_bytes)
         );
         assert!(persisted_state["progress"]["pending_observed_size_bytes"].is_null());
         assert_eq!(
-            persisted_state["progress"]["last_delivered_cursor"]["session_id"].as_str(),
+            persisted_state["progress"]["last_delivered_cursors"]["session-live"]["session_id"]
+                .as_str(),
             Some("session-live")
         );
         assert_eq!(
-            persisted_state["progress"]["last_delivered_cursor"]["ordinal"].as_u64(),
+            persisted_state["progress"]["last_delivered_cursors"]["session-live"]["ordinal"]
+                .as_u64(),
             Some(first_latest_cursor.ordinal as u64)
         );
         assert_eq!(
@@ -389,7 +394,7 @@ fn real_session_live_coordinator_surfaces_posture_in_live_presentations() {
 }
 
 #[test]
-fn real_session_live_coordinator_upgrades_valid_legacy_schema_v1_state_to_v2_progress() {
+fn real_session_live_coordinator_upgrades_valid_legacy_schema_v1_state_to_v3_progress() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
         .expect("utf8 temp dir")
@@ -450,18 +455,22 @@ fn real_session_live_coordinator_upgrades_valid_legacy_schema_v1_state_to_v2_pro
     assert_eq!(restored.latest_cursor.as_ref(), Some(&first_latest_cursor));
 
     let upgraded_state = read_persisted_state(&state_dir);
-    assert_eq!(upgraded_state["schema_version"].as_u64(), Some(2));
+    assert_eq!(upgraded_state["schema_version"].as_u64(), Some(3));
+    assert_eq!(
+        upgraded_state["root_session_id"].as_str(),
+        Some("session-live")
+    );
     assert_eq!(
         upgraded_state["progress"]["last_observed_size_bytes"].as_u64(),
         Some(first_rollout_phase().len() as u64)
     );
     assert!(upgraded_state["progress"]["pending_observed_size_bytes"].is_null());
     assert_eq!(
-        upgraded_state["progress"]["last_delivered_cursor"]["session_id"].as_str(),
+        upgraded_state["progress"]["last_delivered_cursors"]["session-live"]["session_id"].as_str(),
         Some("session-live")
     );
     assert_eq!(
-        upgraded_state["progress"]["last_delivered_cursor"]["ordinal"].as_u64(),
+        upgraded_state["progress"]["last_delivered_cursors"]["session-live"]["ordinal"].as_u64(),
         Some(first_latest_cursor.ordinal as u64)
     );
     assert_eq!(
@@ -509,6 +518,62 @@ fn real_session_live_coordinator_rejects_invalid_persisted_cursor_state() {
 }
 
 #[test]
+fn real_session_live_coordinator_rejects_persisted_cursor_outside_verified_closure() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    fs::write(
+        rollout_dir.join("rollout-session-live.jsonl"),
+        first_rollout_phase(),
+    )
+    .expect("write rollout");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    write_persisted_state(
+        &state_dir,
+        &json!({
+            "schema_version": 3,
+            "root_session_id": "session-live",
+            "progress": {
+                "last_observed_size_bytes": null,
+                "pending_observed_size_bytes": null,
+                "last_delivered_cursors": {
+                    "session-unexpected": {
+                        "session_id": "session-unexpected",
+                        "ordinal": 1
+                    }
+                },
+                "next_emission_ordinal": 2
+            }
+        }),
+    );
+
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir,
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("persisted cursor is structurally valid before closure validation");
+
+    let error = coordinator
+        .poll_once()
+        .expect_err("cursor outside analyzer-owned closure should fail closed");
+    assert!(matches!(
+        error,
+        LiveSessionError::UnexpectedCheckpointSessions { .. }
+    ));
+}
+
+#[test]
 fn real_session_live_coordinator_rejects_ambiguous_rollout_artifacts() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
@@ -544,6 +609,244 @@ fn real_session_live_coordinator_rejects_ambiguous_rollout_artifacts() {
         error,
         LiveSessionError::AmbiguousRolloutArtifacts { .. }
     ));
+}
+
+#[test]
+fn real_session_live_coordinator_accepts_verified_children_and_advances_each_session_independently()
+{
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+
+    let root_session_id = "session-live";
+    let first_child_session_id = "session-child-a";
+    let second_child_session_id = "session-child-b";
+    let root_rollout_path = rollout_dir.join("rollout-session-live.jsonl");
+    let first_child_rollout_path = rollout_dir.join("rollout-session-child-a.jsonl");
+    let second_child_rollout_path = rollout_dir.join("rollout-session-child-b.jsonl");
+    fs::write(
+        &root_rollout_path,
+        linked_root_rollout(
+            root_session_id,
+            &[first_child_session_id, second_child_session_id],
+        ),
+    )
+    .expect("write linked root rollout");
+    fs::write(
+        &first_child_rollout_path,
+        linked_child_rollout(
+            root_session_id,
+            first_child_session_id,
+            first_rollout_phase(),
+        ),
+    )
+    .expect("write first linked child rollout");
+    fs::write(
+        &second_child_rollout_path,
+        linked_child_rollout(
+            root_session_id,
+            second_child_session_id,
+            first_rollout_phase(),
+        ),
+    )
+    .expect("write second linked child rollout");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: root_session_id.to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create linked coordinator");
+
+    let first = coordinator.poll_once().expect("first linked poll");
+    assert!(first.reran_pipeline);
+    assert!(first
+        .observations
+        .iter()
+        .any(|observation| observation.event.cursor.session_id == root_session_id));
+    assert!(first
+        .observations
+        .iter()
+        .any(|observation| observation.event.cursor.session_id == first_child_session_id));
+    assert!(first
+        .observations
+        .iter()
+        .any(|observation| observation.event.cursor.session_id == second_child_session_id));
+    let first_root_cursor = first
+        .observations
+        .iter()
+        .rev()
+        .find(|observation| observation.event.cursor.session_id == root_session_id)
+        .map(|observation| observation.event.cursor.clone())
+        .expect("root cursor");
+    let first_child_cursor = first
+        .observations
+        .iter()
+        .rev()
+        .find(|observation| observation.event.cursor.session_id == first_child_session_id)
+        .map(|observation| observation.event.cursor.clone())
+        .expect("first child cursor");
+    let second_child_cursor = first
+        .observations
+        .iter()
+        .rev()
+        .find(|observation| observation.event.cursor.session_id == second_child_session_id)
+        .map(|observation| observation.event.cursor.clone())
+        .expect("second child cursor");
+    assert_eq!(first.latest_cursor.as_ref(), Some(&first_root_cursor));
+
+    fs::write(
+        &second_child_rollout_path,
+        linked_child_rollout(
+            root_session_id,
+            second_child_session_id,
+            &format!("{}{}", first_rollout_phase(), second_rollout_phase()),
+        ),
+    )
+    .expect("append child-only growth");
+
+    let child_growth = coordinator.poll_once().expect("child growth poll");
+    assert!(child_growth.reran_pipeline);
+    assert!(!child_growth.observations.is_empty());
+    assert!(child_growth.observations.iter().all(|observation| {
+        observation.event.cursor.session_id == second_child_session_id
+            && observation.event.cursor.ordinal > second_child_cursor.ordinal
+    }));
+    assert_eq!(
+        child_growth.latest_cursor.as_ref(),
+        Some(&first_root_cursor)
+    );
+
+    let persisted_state = read_persisted_state(&state_dir);
+    assert_eq!(persisted_state["schema_version"].as_u64(), Some(3));
+    assert_eq!(
+        persisted_state["root_session_id"].as_str(),
+        Some(root_session_id)
+    );
+    assert_eq!(
+        persisted_state["progress"]["last_delivered_cursors"][root_session_id]["ordinal"].as_u64(),
+        Some(first_root_cursor.ordinal as u64)
+    );
+    assert_eq!(
+        persisted_state["progress"]["last_delivered_cursors"][first_child_session_id]["ordinal"]
+            .as_u64(),
+        Some(first_child_cursor.ordinal as u64)
+    );
+    assert!(
+        persisted_state["progress"]["last_delivered_cursors"][second_child_session_id]["ordinal"]
+            .as_u64()
+            > Some(second_child_cursor.ordinal as u64)
+    );
+}
+
+#[test]
+fn real_session_live_coordinator_discovers_verified_child_that_appears_after_root_poll() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+
+    let root_session_id = "session-live";
+    let child_session_id = "session-child-late";
+    fs::write(
+        rollout_dir.join("rollout-session-live.jsonl"),
+        linked_root_rollout(root_session_id, &[child_session_id]),
+    )
+    .expect("write root rollout before child artifact exists");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home.clone()),
+            session_id: root_session_id.to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create coordinator");
+
+    let root_only = coordinator.poll_once().expect("root-only poll");
+    assert!(root_only.reran_pipeline);
+    assert!(root_only
+        .observations
+        .iter()
+        .all(|observation| observation.event.cursor.session_id == root_session_id));
+    drop(coordinator);
+
+    fs::write(
+        rollout_dir.join("rollout-session-child-late.jsonl"),
+        linked_child_rollout(root_session_id, child_session_id, first_rollout_phase()),
+    )
+    .expect("write late child rollout");
+
+    let mut restarted = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: root_session_id.to_string(),
+            state_dir,
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("restart coordinator while linked closure is pending");
+    let child_discovered = restarted.poll_once().expect("late child poll");
+    assert!(child_discovered.reran_pipeline);
+    assert!(child_discovered
+        .observations
+        .iter()
+        .any(|observation| observation.event.cursor.session_id == child_session_id));
+}
+
+fn linked_root_rollout(root_session_id: &str, child_session_ids: &[&str]) -> String {
+    let mut rollout = first_rollout_phase().replace("session-live", root_session_id);
+    for (index, child_session_id) in child_session_ids.iter().enumerate() {
+        rollout.push_str(&format!(
+            "{{\"type\":\"response_item\",\"payload\":{{\"type\":\"function_call\",\"name\":\"spawn_agent\",\"call_id\":\"call-spawn-child-{index}\"}}}}\n{{\"type\":\"response_item\",\"payload\":{{\"type\":\"function_call_output\",\"call_id\":\"call-spawn-child-{index}\",\"output\":\"{{\\\"agent_id\\\":\\\"{child_session_id}\\\"}}\"}}}}\n"
+        ));
+    }
+    rollout
+}
+
+fn linked_child_rollout(root_session_id: &str, child_session_id: &str, rollout: &str) -> String {
+    let source = json!({
+        "subagent": {
+            "thread_spawn": {
+                "parent_thread_id": root_session_id,
+                "depth": 1,
+                "agent_nickname": "agent-child",
+                "agent_role": "default"
+            }
+        }
+    });
+    rollout
+        .replace("session-live", child_session_id)
+        .lines()
+        .map(|line| {
+            let mut value: Value = serde_json::from_str(line).expect("parse rollout line");
+            if value["type"] == "session_meta" {
+                value["payload"]["source"] = source.clone();
+            }
+            format!(
+                "{}\n",
+                serde_json::to_string(&value).expect("encode rollout line")
+            )
+        })
+        .collect()
 }
 
 fn first_rollout_phase() -> &'static str {
