@@ -1,6 +1,6 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE AND R7-0..R7-5 COMPLETE; R7-6 SOLE ACTIVE PHASE AT CHECKPOINT-DOC RECEIPT GATE; ACTIVE PACKET NONE; R7-6.1 COMMIT `7789fba4f`, R7-6.2 SERIES `d2842f279` + `77ae455fe` + `a333d8486`, AND FINAL-WALL FIX `bd743eacc` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`; R7-6.1, R7-6.2, AND FINAL CHECKPOINT COMPLETE; `CTX-R7-06` PROVEN; CHECKPOINT-DOC RECEIPT CANDIDATE PENDING FRESH INDEPENDENT REVIEW; R7-6 EXIT GATE AND R8-SPEC ENTRY PENDING/BLOCKED; NO NEXT PROMPT 1 SELECTORS ELIGIBLE OR INVOKED** as of
+Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE AND R7-0..R7-5 COMPLETE; R7-6 SOLE ACTIVE PHASE AT CHECKPOINT-DOC RECEIPT GATE; ACTIVE PACKET NONE; R7-6.1 COMMIT `7789fba4f`, R7-6.2 SERIES `d2842f279` + `77ae455fe` + `a333d8486`, AND FINAL-WALL FIX `bd743eacc` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`; R7-6.1, R7-6.2, AND FINAL CHECKPOINT COMPLETE; `CTX-R7-06` PROVEN; CHECKPOINT-DOC RECEIPT COMMITTED/LANDED AND AWAITING FRESH INDEPENDENT REVIEW; R7-6 EXIT GATE AND R8-SPEC ENTRY PENDING/BLOCKED; NO NEXT PROMPT 1 SELECTORS ELIGIBLE OR INVOKED** as of
 2026-07-16. Preserved review-clean R6 proof series remain authoritative.
 The review-clean R7 implementation series changes no R6 behavior. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
@@ -413,9 +413,9 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.
 
 The R7-4 checkpoint proof at HEAD `8a0790a3d` is `dead_end_thrash 19 / 19`, semantic filter `58 /

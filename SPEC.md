@@ -13,7 +13,7 @@ operator decision `R7-6-HIGH-IMPACT-SENTINEL-EXPLICIT-STATE-01: A`; R7-6.1 commi
 fresh independent built-in `default` `CLEAN`; R7-6.2 series `d2842f279` + `77ae455fe` +
 `a333d8486` fresh independent built-in `default` `CLEAN`; final-wall fix `bd743eacc` fresh
 independent built-in `default` `CLEAN`; `CTX-R7-06` `PROVEN`; implementation and final checkpoint
-complete; checkpoint-doc receipt candidate pending fresh independent review; R7-6 exit gate and
+complete; checkpoint-doc receipt committed/landed and awaiting fresh independent review; R7-6 exit gate and
 R8-SPEC entry pending/blocked; no next Prompt 1 selectors eligible or invoked)**
 
 The scoped R6 packets, acceptance controls, named gaps, replay closeout, and terminal-disposition
@@ -67,9 +67,9 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.
 
 R7-4 checkpoint proof at implementation/docs HEAD `8a0790a3d`: `dead_end_thrash` passes `19 / 19`;
@@ -183,9 +183,9 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
@@ -261,7 +261,7 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.

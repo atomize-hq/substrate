@@ -11,7 +11,7 @@ and otherwise MEDIUM/LOW, with no additional HIGH/CRITICAL symbol.
 
 **Current phase:** `R7-6` (**SOLE ACTIVE PHASE — CHECKPOINT-DOC RECEIPT GATE**; active packet:
 `none`; R7-6.1, R7-6.2, and all final checkpoint items complete; `CTX-R7-06` `PROVEN`;
-checkpoint-doc receipt candidate pending fresh independent review; R7-6 exit gate and R8-SPEC entry
+checkpoint-doc receipt committed/landed and awaiting fresh independent review; R7-6 exit gate and R8-SPEC entry
 pending/blocked; no next Prompt 1 selectors eligible or invoked)
 
 ## How To Resolve Truth
@@ -34,7 +34,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-5 COMPLETE / R7-6 SOLE ACTIVE PHASE AT CHECKPOINT-DOC RECEIPT GATE / ACTIVE PACKET NONE / R7-6.1 COMMIT `7789fba4f`, R7-6.2 SERIES `d2842f279` + `77ae455fe` + `a333d8486`, AND FINAL-WALL FIX `bd743eacc` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R7-6.1, R7-6.2, AND FINAL CHECKPOINT COMPLETE / `CTX-R7-06` PROVEN / CHECKPOINT-DOC RECEIPT CANDIDATE PENDING FRESH INDEPENDENT REVIEW / R7-6 EXIT GATE AND R8-SPEC ENTRY PENDING/BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | No next Prompt 1 selectors are eligible or invoked until the checkpoint-doc receipt is committed and fresh-review-clean. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-5 COMPLETE / R7-6 SOLE ACTIVE PHASE AT CHECKPOINT-DOC RECEIPT GATE / ACTIVE PACKET NONE / R7-6.1 COMMIT `7789fba4f`, R7-6.2 SERIES `d2842f279` + `77ae455fe` + `a333d8486`, AND FINAL-WALL FIX `bd743eacc` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R7-6.1, R7-6.2, AND FINAL CHECKPOINT COMPLETE / `CTX-R7-06` PROVEN / CHECKPOINT-DOC RECEIPT COMMITTED/LANDED AND AWAITING FRESH INDEPENDENT REVIEW / R7-6 EXIT GATE AND R8-SPEC ENTRY PENDING/BLOCKED** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | No next Prompt 1 selectors are eligible or invoked until the landed checkpoint-doc receipt is fresh-review-clean. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **BOUNDARY DEFINED / NOT YET SPECCED** | Root landing-order R8 section | Wait for stable, closed R7 analyzer contract; then create R8 SPEC/PLAN/TASKS. |
 
 ## R6 Authority
@@ -114,9 +114,9 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.
 
 Current R7 authority surfaces:
@@ -182,9 +182,9 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.
 
 ## R8 Authority

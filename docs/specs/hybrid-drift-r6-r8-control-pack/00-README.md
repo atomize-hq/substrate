@@ -9,7 +9,7 @@ none; operator decision R7-6-HIGH-IMPACT-SENTINEL-EXPLICIT-STATE-01 A; R7-6.1 co
 fresh independent built-in default CLEAN; R7-6.2 series d2842f279 + 77ae455fe + a333d8486 fresh
 independent built-in default CLEAN; final-wall fix bd743eacc fresh independent built-in default
 CLEAN; CTX-R7-06 PROVEN; implementation and final checkpoint complete; checkpoint-doc receipt
-candidate pending fresh independent review; R7-6 exit gate and R8-SPEC entry pending/blocked; no
+committed/landed and awaiting fresh independent review; R7-6 exit gate and R8-SPEC entry pending/blocked; no
 next Prompt 1 selectors eligible or invoked`
 
 **Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, R7-0.2 commit `fa85cd4b8`, and R7-0 -> R7-1 transition/fix series `339744dff` + `d20cac6a9` each received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The R7-0.2 fixture commit contains `12` sanitized JSONL files / `24` rows over seven cases; focused parser/privacy proof passes `2 / 2`, the compactor family passes `25 / 25` including end-to-end `2 / 2`, and manual JSON/private-marker/raw-UUID scans plus formatting are green with zero privacy matches. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; focused R7-1.2 passes `6 / 6`, R7-1.3 end-to-end and CLI pass `6 / 6` and `2 / 2`, and the full compactor wall passes `36` unit/integration tests plus `3` doctests. Formatting, clippy, diff, and staged GitNexus gates are green; link/session/file ordering is deterministic; no raw private rollout data was added. Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` +
@@ -51,9 +51,9 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.
 
 R7-4 checkpoint proof at HEAD `8a0790a3d`: `dead_end_thrash` passes `19 / 19`; the semantic filter
@@ -158,9 +158,9 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
 implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
 eligible or invoked.
 
 ## Purpose
