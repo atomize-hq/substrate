@@ -13,8 +13,7 @@ complete and R7 closed; `CTX-R7-06` `PROVEN`; checkpoint-doc receipt/review-fix 
 `0e5150945` + `e634ef324` + `8e39c109e` fresh independent built-in `default` `CLEAN`;
 `CTX-R8-01` `OPEN`; R8 MAP/SPEC/PLAN/TASKS authoring unchecked and unstarted; R8-IMPLEMENT
 blocked/boundary-only; Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` prepared and
-eligible but uninvoked; this phase-transition update awaits fresh independent review and does not
-claim review-clean status)**
+eligible but uninvoked; transition/fix series `b4b2149b2` + `bcb664f03` is fresh independent built-in `default` `CLEAN` with no findings)**
 
 ## Dependency Order
 
@@ -95,8 +94,7 @@ claim review-clean status)**
 18. **ACTIVE — R8-SPEC ENTRY ONLY:** active packet is `none`; `CTX-R8-01` is `OPEN`. R8
     MAP/SPEC/PLAN/TASKS authoring is unchecked and unstarted; R8-IMPLEMENT remains blocked/boundary-
     only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared and eligible
-    but uninvoked. This phase-transition update awaits fresh independent review and does not claim
-    review-clean status.
+    but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 
 ## Execution Rules
 
@@ -107,7 +105,7 @@ claim review-clean status)**
   independent `CLEAN`, R7-6 complete, and R7 closed. Keep R8-SPEC active only at entry with packet
   `none` and `CTX-R8-01` `OPEN`; keep R8 docs authoring unchecked/unstarted and R8-IMPLEMENT
   blocked/boundary-only. Keep Prompt 1 selectors `R8-SPEC` / `none` prepared and eligible but
-  uninvoked; do not claim this phase transition review-clean before fresh independent review.
+  uninvoked; transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 - Do not reopen `semantic_goal_drift` without a new failing witness.
 - Do not add a common mega-context argument to every scorer.
 - Treat `dead_end_thrash` regression/delegation/turn-shape; truth-grounding applicability,
@@ -220,5 +218,4 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.

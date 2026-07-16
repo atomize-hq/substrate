@@ -13,8 +13,7 @@ complete and R7 closed; `CTX-R7-06` `PROVEN`; checkpoint-doc receipt/review-fix 
 `0e5150945` + `e634ef324` + `8e39c109e` fresh independent built-in `default` `CLEAN`;
 `CTX-R8-01` `OPEN`; R8 MAP/SPEC/PLAN/TASKS authoring unchecked and unstarted; R8-IMPLEMENT
 blocked/boundary-only; Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` prepared and
-eligible but uninvoked; this phase-transition update awaits fresh independent review and does not
-claim review-clean status)**
+eligible but uninvoked; transition/fix series `b4b2149b2` + `bcb664f03` is fresh independent built-in `default` `CLEAN` with no findings)**
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -234,12 +233,14 @@ claim review-clean status)**
 - [x] Freshly review the landed R7-6 checkpoint-doc receipt/review-fix series `0e5150945` +
   `e634ef324` + `8e39c109e`; fresh independent built-in `default` review returned `CLEAN`, satisfying
   the R7-6 exit gate. R7-6 is complete and R7 is closed.
-- [x] Land the narrow docs-only R7-6 -> R8-SPEC entry transition candidate without starting R8 work.
-- [ ] Freshly review the narrow R7-6 -> R8-SPEC phase-transition update. Until then this transition
-  does not claim review-clean status. R8-SPEC is the sole active phase at ENTRY ONLY with active
-  packet `none`; `CTX-R8-01` is `OPEN`; R8 MAP/SPEC/PLAN/TASKS authoring remains unchecked and
-  unstarted; R8-IMPLEMENT remains blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` /
-  `ACTIVE_PACKET: none` are prepared and eligible but uninvoked.
+- [x] Land the narrow docs-only R7-6 -> R8-SPEC entry transition/fix series `b4b2149b2` +
+  `bcb664f03` without starting R8 work.
+- [x] Freshly review the narrow R7-6 -> R8-SPEC phase-transition update. Transition/fix series
+  `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
+  R8-SPEC remains the sole active phase at ENTRY ONLY with active packet `none`; `CTX-R8-01` remains
+  `OPEN`; R8 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted; R8-IMPLEMENT remains
+  blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` remain
+  prepared and eligible but uninvoked.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
 `R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.
@@ -288,5 +289,4 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.

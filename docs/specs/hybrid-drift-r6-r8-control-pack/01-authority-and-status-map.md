@@ -16,8 +16,7 @@ contract.
 complete and R7 closed; `CTX-R7-06` `PROVEN`; checkpoint-doc receipt/review-fix series `0e5150945` +
 `e634ef324` + `8e39c109e` fresh independent built-in `default` `CLEAN`; `CTX-R8-01` `OPEN`; R8
 MAP/SPEC/PLAN/TASKS authoring unchecked and unstarted; R8-IMPLEMENT blocked/boundary-only; Prompt 1
-selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` prepared and eligible but uninvoked; this
-phase-transition update awaits fresh independent review and does not claim review-clean status)
+selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` prepared and eligible but uninvoked; transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.)
 
 ## How To Resolve Truth
 
@@ -39,7 +38,7 @@ implementation begins until the authority stack is corrected explicitly.
 | Family | Status | Canonical status source | Next allowed action |
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
-| R7 | **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-6 COMPLETE / R7 CLOSED / `CTX-R7-06` PROVEN / CHECKPOINT-DOC RECEIPT/REVIEW-FIX SERIES `0e5150945` + `e634ef324` + `8e39c109e` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | R8-SPEC is the sole active phase at entry only with packet `none`; `CTX-R8-01` is open; R8 docs authoring is unchecked/unstarted; R8-IMPLEMENT remains blocked/boundary-only; Prompt 1 selectors `R8-SPEC` / `none` are prepared and eligible but uninvoked. The phase-transition update still requires fresh independent review. |
+| R7 | **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-6 COMPLETE / R7 CLOSED / `CTX-R7-06` PROVEN / CHECKPOINT-DOC RECEIPT/REVIEW-FIX SERIES `0e5150945` + `e634ef324` + `8e39c109e` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | R8-SPEC is the sole active phase at entry only with packet `none`; `CTX-R8-01` is open; R8 docs authoring is unchecked/unstarted; R8-IMPLEMENT remains blocked/boundary-only; Prompt 1 selectors `R8-SPEC` / `none` are prepared and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings. |
 | R8 — Sentinel Interpretation Consolidation / Integration | **R8-SPEC ACTIVE AT ENTRY ONLY / `CTX-R8-01` OPEN / ACTIVE PACKET NONE / R8 MAP/SPEC/PLAN/TASKS UNCHECKED AND UNSTARTED / R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY** | Root landing-order R8 section and phase map | Use prepared Prompt 1 selectors `R8-SPEC` / `none` in a fresh session; do not begin work in this transition. |
 
 ## R6 Authority
@@ -124,8 +123,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 
 Current R7 authority surfaces:
 
@@ -195,8 +193,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 
 ## R8 Authority
 

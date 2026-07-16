@@ -72,8 +72,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status. The
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 Operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact
@@ -175,8 +174,7 @@ independent built-in `default` `CLEAN`, satisfying the R7-6 exit gate; R7-6 is c
 closed with a stable analyzer contract. R8-SPEC is the sole active phase at ENTRY ONLY with packet
 `none`; `CTX-R8-01` is `OPEN`; R8 MAP/SPEC/PLAN/TASKS authoring is unchecked and unstarted;
 R8-IMPLEMENT remains blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` /
-`ACTIVE_PACKET: none` are prepared and eligible but uninvoked. This phase-transition update awaits
-fresh independent review and does not claim review-clean status.
+`ACTIVE_PACKET: none` are prepared and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
@@ -233,8 +231,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
 `default` `REVIEW CLEAN`.
@@ -277,8 +274,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -360,8 +356,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -1119,8 +1114,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -1244,8 +1238,7 @@ satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable a
 R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
 MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
 blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
-not claim review-clean status.
+and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
 
 The next honest work target is:
 
@@ -1300,8 +1293,7 @@ The next honest work target is:
   `8e39c109e` fresh independent built-in `default` `CLEAN`; keep R7-6 complete and R7 closed; keep
   R8-SPEC the sole active phase at ENTRY ONLY with packet `none` and `CTX-R8-01` `OPEN`; keep R8
   docs authoring unchecked/unstarted and R8-IMPLEMENT blocked/boundary-only; keep Prompt 1 selectors
-  `R8-SPEC` / `none` prepared and eligible but uninvoked; keep this transition awaiting fresh
-  independent review
+  `R8-SPEC` / `none` prepared and eligible but uninvoked; keep transition/fix series `b4b2149b2` + `bcb664f03` fresh independent built-in `default` `CLEAN`
 - keep work beyond the R8-SPEC entry boundary blocked; do not make R7 absorb ordinary single-session
   scorer gaps
 - keep R8-SPEC at entry only in this transition; do not author R8 MAP/SPEC/PLAN/TASKS or start R8
