@@ -8,12 +8,13 @@ series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
 clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-This bounded docs-only fix addresses only those findings and claims no review result; all R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
-no review result for itself. **No R8 code may begin until the
+Bounded docs-only fix `2b9565fb9` landed and remains pending fresh independent re-review. The
+current review/fix round identified three later scoped documentation findings; this bounded
+Markdown-only fix addresses only those three and claims no review result. All R8 implementation
+tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven;
+`CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility, implementation authorization,
+complete-family `CLEAN`, or review result for this progress receipt is claimed. **No R8 code may begin until the
 complete MAP/SPEC/PLAN/TASKS family is fresh-review-clean.**
 
 ## Objective
@@ -96,11 +97,15 @@ is authorized.
   rendering. They do not duplicate or own the supported-version table, analyzer-state mapping, or
   delegation semantics. Neither core paths nor facades may bridge errors with `unwrap`, panic,
   error-swallowing fallback, or v0.2 inference after a v0.3-v0.8 failure.
-- `CheckpointPresentation` remains source-compatible: add no public field and change no public
-  signature. `CheckpointPresentation::render_console_block` renders delegation iff the typed
-  interpretation option is `Some` through the existing public
-  `CheckpointPresentation.checkpoint.delegation` access path; it never gates on
-  `checkpoint.schema_version` or another schema string.
+- Delegation presence cannot be recovered from `CheckpointPresentation.checkpoint.delegation`
+  alone: analyzer `Checkpoint.delegation` is non-optional, pre-v0.8 serialized absence becomes
+  `DelegationContext::default()` during deserialization, and public `CheckpointPresentation` has no
+  separate presence carrier. The future gate
+  `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` must choose either an explicit optional public
+  presence/projection field or a localized schema-presence check in the legacy compatibility
+  facade while core interpretation/presentation uses an internal presence-carrying value. Until
+  that decision, R8-4 may not edit any symbol and `CTX-R8-05` cannot be proven. Changing the
+  upstream analyzer `Checkpoint` schema is outside R8.
 
 ## Compatibility Contract
 
@@ -129,7 +134,7 @@ is authorized.
 | `CTX-R8-02` | R8 MAP/SPEC/PLAN/TASKS are internally consistent and fresh-review-clean before code. |
 | `CTX-R8-03` | Replay and live use the same typed interpretation function and parity matrix. |
 | `CTX-R8-04` | One compatibility owner preserves v0.2 and v0.3-v0.8 contract behavior. |
-| `CTX-R8-05` | Operator code formats typed facts, renders delegation iff the typed option is `Some`, adds no public presentation field/signature, and performs no schema/analyzer/delegation inference. |
+| `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, operator core code formats the internal optional delegation fact without analyzer/delegation inference; the chosen public compatibility representation and its exact parity/source-compatibility tests are green. |
 | `CTX-R8-06` | Existing pre-observe transport bookkeeping is permitted; after interpretation failure there is no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. |
 
 `CTX-R8-01` is currently `PROVEN` by the stable R7 contract plus the clean MAP/SPEC freeze. The
@@ -142,9 +147,10 @@ authoritative until reviewed evidence updates it.
    `95529809`;
 2. the R8 specification — included in the same fresh-review-clean contract series;
 3. an exact migration/verification PLAN — the family through `0ed3d8f04` + `cfcf65507` received
-   `CHANGES_REQUIRED`; this bounded fix addresses the five docs findings and awaits fresh review;
-4. packetized TASKS with exact future HIGH-impact decision gates — same review/fix state, with all
-   implementation tasks unchecked and unstarted.
+   `CHANGES_REQUIRED`; first fix `2b9565fb9` and the current later-three-finding Markdown fix await
+   fresh re-review, and the current fix claims no review result;
+4. packetized TASKS with the exact future HIGH-impact and delegation-presence decision gates — same
+   review/fix state, with all implementation tasks unchecked and unstarted.
 
 Stop at documentation authoring. Do not stage or implement source/test changes under this map until
 all four artifacts are review-clean and `CTX-R8-02` is proven.

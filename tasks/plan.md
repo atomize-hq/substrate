@@ -15,12 +15,13 @@ series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
 clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-This bounded docs-only fix addresses only those findings and claims no review result; all R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
-no review result for itself.
+Bounded docs-only fix `2b9565fb9` landed and remains pending fresh independent re-review. The
+current review/fix round identified three later scoped documentation findings; this bounded
+Markdown-only fix addresses only those three and claims no review result. All R8 implementation
+tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven;
+`CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility, implementation authorization,
+complete-family `CLEAN`, or review result for this progress receipt is claimed.
 
 ## Dependency Order
 
@@ -101,8 +102,9 @@ no review result for itself.
 18. **ACTIVE / IN PROGRESS — R8-SPEC:** active packet is `none`. MAP/SPEC contract series
     `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN` with
     no findings, proving `CTX-R8-01`. Complete-family series `0ed3d8f04` + `cfcf65507` received
-    `CHANGES_REQUIRED` with five docs findings; this bounded fix addresses them and claims no review
-    result. All implementation tasks remain unchecked/unstarted. `CTX-R8-02` is `OPEN` / `REVIEW
+    `CHANGES_REQUIRED` with five docs findings; first fix `2b9565fb9` landed and remains pending
+    fresh re-review; the current later-three-finding Markdown fix claims no review result. All
+    implementation tasks remain unchecked/unstarted. `CTX-R8-02` is `OPEN` / `REVIEW
     PENDING` and not proven; `CTX-R8-03..06` and R8-IMPLEMENT remain blocked.
 
 ## Execution Rules
@@ -114,8 +116,9 @@ no review result for itself.
   independent `CLEAN`, R7-6 complete, and R7 closed. Keep R8-SPEC active / in progress with packet
   `none`; keep MAP/SPEC series `698c766f9` + `f5865fb7` + `95529809` fresh independent built-in
   `default` `CLEAN` with no findings and `CTX-R8-01` `PROVEN`. Keep complete-family series
-  `0ed3d8f04` + `cfcf65507` at reviewed `CHANGES_REQUIRED` with five docs findings and this bounded
-  fix awaiting fresh review; keep every implementation task unchecked/unstarted,
+  `0ed3d8f04` + `cfcf65507` at reviewed `CHANGES_REQUIRED` with five docs findings; keep first fix
+  `2b9565fb9` and the current later-three-finding Markdown fix pending fresh re-review, with no
+  result claimed for the current fix; keep every implementation task unchecked/unstarted,
   `CTX-R8-02` `OPEN` / `REVIEW PENDING` and not proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT
   blocked/boundary-only. Claim no phase transition, Prompt 1 eligibility, implementation
   authorization, full-family `CLEAN`, or review result for this receipt.
@@ -155,7 +158,9 @@ no review result for itself.
   closed. Keep R8-SPEC the sole active phase and IN PROGRESS with packet `none`; keep MAP/SPEC series
   `698c766f9` + `f5865fb7` + `95529809` fresh independent built-in `default` `CLEAN` with no findings
   and `CTX-R8-01` `PROVEN`. Keep complete-family series `0ed3d8f04` + `cfcf65507` at reviewed
-  `CHANGES_REQUIRED` with five docs findings and this bounded fix awaiting fresh review; keep every
+  `CHANGES_REQUIRED` with five docs findings; keep first fix `2b9565fb9` and the current
+  later-three-finding Markdown fix pending fresh re-review, with no result claimed for the current
+  fix; keep every
   implementation task unchecked/unstarted, `CTX-R8-02` `OPEN` / `REVIEW PENDING` and not
   proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT blocked/boundary-only. Claim no phase transition,
   Prompt 1 eligibility, implementation authorization, full-family `CLEAN`, or review result for this
@@ -237,9 +242,10 @@ series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
 clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-This bounded docs-only fix addresses only those findings and claims no review result; all R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
-no review result for itself.
+Bounded docs-only fix `2b9565fb9` landed and remains pending fresh independent re-review. The
+current review/fix round identified three later scoped documentation findings; this bounded
+Markdown-only fix addresses only those three and claims no review result. All R8 implementation
+tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven;
+`CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility, implementation authorization,
+complete-family `CLEAN`, or review result for this progress receipt is claimed.

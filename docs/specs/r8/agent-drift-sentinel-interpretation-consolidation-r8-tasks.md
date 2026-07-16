@@ -3,20 +3,22 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-tasks.md`
 
-Status: **CANDIDATE FIX FOR `CHANGES_REQUIRED` / AWAITING FRESH INDEPENDENT BUILT-IN `default`
-RE-REVIEW / ALL TASKS UNSTARTED / `CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
+Status: **FOLLOW-UP BOUNDED MARKDOWN FIX / FIRST FIX `2b9565fb9` PENDING FRESH INDEPENDENT
+RE-REVIEW / CURRENT THREE-FINDING FIX CLAIMS NO REVIEW RESULT / ALL TASKS UNSTARTED /
+`CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
 series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
 clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-This bounded docs-only fix addresses only those findings and claims no review result; all R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
-no review result for itself. No checkbox below authorizes
+Bounded docs-only fix `2b9565fb9` landed and remains pending fresh independent re-review. The
+current review/fix round identified three later scoped documentation findings; this bounded
+Markdown-only fix addresses only those three and claims no review result. All R8 implementation
+tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven;
+`CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility, implementation authorization,
+complete-family `CLEAN`, or review result for this progress receipt is claimed. No checkbox below authorizes
 source/test implementation until the complete four-document family is fresh-review-clean and
 `CTX-R8-02` is proven.
 
@@ -30,12 +32,13 @@ source/test implementation until the complete four-document family is fresh-revi
 - [ ] `git status --short` is clean before the first source/test edit.
 - [ ] No R8 implementation has started early.
 
-## Future HIGH-Impact Decision Gates — Not Requested During R8-SPEC
+## Future Symbol-Edit Decision Gates — Not Requested During R8-SPEC
 
-The refreshed 2026-07-16 upstream graph records all four gates below as HIGH. They are future
-R8-IMPLEMENT dependencies, not blockers to completing this docs-only fix. Do not ask the operator
-now because no production symbol is being edited. During implementation, exact A/B options,
-recommendations, and prompts come from the PLAN decision table; silence is never authorization.
+The refreshed 2026-07-16 upstream graph records the first four gates below as HIGH. The fifth gate
+records an unresolved public delegation-presence contract. They are future R8-IMPLEMENT
+dependencies, not blockers to completing this docs-only fix. Do not ask the operator now because no
+production symbol is being edited. During implementation, exact A/B options, recommendations,
+tests, and prompts come from the PLAN decision table; silence is never authorization.
 
 | Owning task | Stable required reply before symbol edit | Refreshed evidence |
 |---|---|---|
@@ -43,6 +46,7 @@ recommendations, and prompts come from the PLAN decision table; silence is never
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` | `verify_live_checkpoint_compatibility`: HIGH, 17 direct dependents, 0 processes, 1 module. |
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` | file-disambiguated `LiveRuntime::observe` in `src/live_runtime.rs`: HIGH, 17 direct dependents, 0 processes, 1 module. |
 | R8-4 | `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` | `uses_explicit_analyzer_state`: HIGH, 10 impacted, 2 direct, 1 affected `execute` process, 3 modules. |
+| R8-4 | `DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A` **or** `: B` | `Checkpoint.delegation` is non-optional after pre-v0.8 absence deserializes to `DelegationContext::default()`; public `CheckpointPresentation` has no optional presence carrier. Option A adds one with public-struct/source-compatibility cost; Option B preserves the public shape and confines one schema-presence check to the legacy facade. PLAN recommends B without resolving it. Upstream `Checkpoint` changes are out of scope. |
 
 ## Per-Task Rules
 
@@ -328,15 +332,18 @@ shape, or any unlisted file; any request to infer delegation or accept malformed
 ## R8-4 — Operator Presentation Migration And Public Signature Lock
 
 **Status:** unstarted; blocked by R8-3 review-clean and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01` operator reply `A`.
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01` operator reply `A`, plus an explicit A/B choice for
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`.
 
 **Description:** Remove the remaining version/analyzer/evidence decisions from operator
 presentation, route all compatibility facades through centralized non-validating projection plus
 the typed renderer, and preserve exact public signatures/current supported behavior.
 
 **Dependencies:** R8-3 landed and fresh-review-clean; exact operator reply
-`DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`. A `B` reply requires respec/defer; no reply means
-`uses_explicit_analyzer_state` remains uneditable.
+`DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`; and exact operator reply
+`DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A|B`. A `B` reply to the HIGH-impact gate
+requires respec/defer; the presence reply selects the PLAN's A or B implementation/test branch.
+No reply to either gate means every R8-4 symbol remains uneditable.
 
 **Gate mapping:** `CTX-R8-01` guard; `CTX-R8-02` entry dependency; `CTX-R8-03` direct shared renderer;
 `CTX-R8-04` direct removal of duplicate compatibility; `CTX-R8-05` direct proof;
@@ -373,8 +380,11 @@ direct dependents, one affected `execute` process, three modules). It is bound t
 **TDD sequence:**
 
 1. RED: add exact function-pointer signature assertions, facade behavior fixtures, and a static/
-   behavioral witness that typed rendering owns no version/state inference. Lock the existing
-   `CheckpointPresentation` public shape and `render_console_block` signature; add no public field.
+   behavioral witness that typed core rendering owns no version/state inference. Apply only the
+   selected presence branch: Option A directly constructs the new optional public field and proves
+   `None`/`Some`; Option B compile-locks the unchanged public shape and proves the single
+   schema-presence check is localized to the legacy facade. Both lock the existing
+   `render_console_block` signature.
 2. GREEN: move/delegate only the remaining semantic projection to the central module and render the
    typed facts.
 3. PROOF: run operator, compatibility, and replay/live presentation parity targets plus negative
@@ -392,10 +402,14 @@ direct dependents, one affected `execute` process, three modules). It is bound t
   classification, legacy evidence-prefix recognition, or delegation inference.
 - [ ] Presentation only formats/truncates/orders typed facts, labels trigger separately from
   posture, and applies existing decision/warning policy.
-- [ ] Delegation renders iff `CheckpointInterpretation.delegation: Option<DelegationContext>` is
-  `Some`; `render_console_block` contains no schema-version string gate and no public presentation
-  field/signature is added or changed. The typed projection uses the existing public
-  `CheckpointPresentation.checkpoint.delegation` access path rather than a new field.
+- [ ] Core delegation rendering follows
+  `CheckpointInterpretation.delegation: Option<DelegationContext>` exactly. The selected public
+  representation is proven: Option A's explicit optional field has the authorized public-struct
+  cost and exact `None`/`Some` construction/output tests; or Option B leaves the public shape/output
+  unchanged and confines exactly one schema-presence check to the legacy compatibility facade.
+- [ ] v0.2-v0.7 absence/default and v0.8 presence cases, facade/core parity, and replay/live byte
+  parity pass in `operator_surface`, `live_checkpoint_compatibility`, and `live_end_to_end`; static
+  inspection proves no presence inference leaks beyond the decision-authorized boundary.
 - [ ] Analyzer-owned mixed/ambiguous topology and partial/opaque visibility are rendered as typed
   facts without revalidation.
 
@@ -405,16 +419,23 @@ direct dependents, one affected `execute` process, three modules). It is bound t
 cargo test -p agent-drift-sentinel --test operator_surface -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
-! rg -n 'schema_version|DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
+! rg -n 'DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
 ! rg -n 'checkpoint\.schema_version.*delegation|schema_version.*format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
+rg -n 'schema_version' crates/agent-drift-sentinel/src/operator_surface.rs
 rg -n 'present_interpretation|format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 ```
 
-**Decision triggers:** Any public signature/source-compatibility break; any need for a facade to
+Classify the `schema_version` output against the recorded presence decision: Option A allows no
+delegation-presence occurrence; Option B allows exactly one inside the legacy facade and none in
+core interpretation/presentation helpers.
+
+**Decision triggers:** Any public signature/source-compatibility break not explicitly authorized by
+the recorded presence decision; any need for a facade to
 validate, panic, unwrap, or fall back; any analyzer/delegation inference remaining in presentation;
-any scheduler/adjudication/sink edit.
+any scheduler/adjudication/sink edit; any attempt to improvise the delegation-presence carrier or
+change upstream analyzer `Checkpoint` outside the recorded A/B reply.
 
 **Atomic commit:** suggested message `refactor: render sentinel checkpoints from typed facts`.
 
@@ -619,6 +640,8 @@ may a separate docs-only mirror/phase transition packet be proposed.
 - [ ] `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` and
   `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` recorded; R8-3 fresh-review-clean.
 - [ ] `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` recorded; R8-4 fresh-review-clean.
+- [ ] `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A|B` recorded before R8-4 edits, with the selected
+  exact construction/absence/presence/localization/parity proof fresh-review-clean.
 - [ ] R8-5.1 fresh-review-clean.
 - [ ] R8-5.2 fresh-review-clean.
 - [ ] No production or test file outside exact packet manifests changed.

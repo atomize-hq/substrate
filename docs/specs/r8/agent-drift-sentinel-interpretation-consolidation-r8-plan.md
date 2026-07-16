@@ -3,20 +3,22 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-plan.md`
 
-Status: **CANDIDATE FIX FOR `CHANGES_REQUIRED` / AWAITING FRESH INDEPENDENT BUILT-IN `default`
-RE-REVIEW / `CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
+Status: **FOLLOW-UP BOUNDED MARKDOWN FIX / FIRST FIX `2b9565fb9` PENDING FRESH INDEPENDENT
+RE-REVIEW / CURRENT THREE-FINDING FIX CLAIMS NO REVIEW RESULT / `CTX-R8-02` OPEN / REVIEW PENDING /
+R8-IMPLEMENT BLOCKED**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
 series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
 clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-This bounded docs-only fix addresses only those findings and claims no review result; all R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
-no review result for itself. No R8 source or test edit may
+Bounded docs-only fix `2b9565fb9` landed and remains pending fresh independent re-review. The
+current review/fix round identified three later scoped documentation findings; this bounded
+Markdown-only fix addresses only those three and claims no review result. All R8 implementation
+tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven;
+`CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility, implementation authorization,
+complete-family `CLEAN`, or review result for this progress receipt is claimed. No R8 source or test edit may
 start until the complete MAP/SPEC/PLAN/TASKS family is freshly reviewed and `CTX-R8-02` is proven.
 
 ## Objective
@@ -24,7 +26,8 @@ start until the complete MAP/SPEC/PLAN/TASKS family is freshly reviewed and `CTX
 Make replay and live sentinel paths consume one origin-neutral, fallible typed checkpoint
 interpretation while preserving the analyzer as the sole owner of drift, progress, and delegation
 semantics. The implementation must centralize the exact v0.2-v0.8 compatibility contract, keep the
-public sentinel facades source-compatible, and prove that interpretation failures have zero
+public function/method signatures source-compatible, defer the public presentation-shape choice to
+its explicit operator gate, and prove that interpretation failures have zero
 scheduler-decision, presentation, adjudication, operator-sink, checkpoint-acceptance,
 `record_delivery`, and persisted cursor/delivery effects. Existing transport-observation
 bookkeeping before `runtime.observe` is preserved and may occur.
@@ -72,9 +75,11 @@ The only new planned path is:
   `present_checkpoint_with_previous`, `render_replay_report`, or `execute`.
 - Keep `checkpoint_interpretation` crate-private: no public module declaration, public item, public
   re-export, or external interpretation integration target.
-- Preserve the existing public `CheckpointPresentation` shape and
-  `CheckpointPresentation::render_console_block` signature. Add no public field. Delegation renders
-  iff `CheckpointInterpretation.delegation` is `Some`, never because a schema-version string matches.
+- Do not choose or edit the public delegation-presence representation before the operator resolves
+  `R8-4-PRESENTATION-DELEGATION-PRESENCE-01`. `Checkpoint.delegation` alone is not a presence
+  carrier: it is non-optional after deserialization, pre-v0.8 absence becomes the default value, and
+  public `CheckpointPresentation` has no separate presence field. Changing the upstream analyzer
+  `Checkpoint` schema is outside R8.
 - Do not use `unwrap`, panic, default acceptance, error swallowing, or v0.2 fallback to cross the
   fallible v0.3-v0.8 seam.
 - Do not edit `real_session_live.rs` in the planned implementation. Existing ordering already calls
@@ -132,11 +137,14 @@ scheduler, or cursor-visible runtime state.
 4. **Locked public facades.** The four public function signatures remain exact. Infallible
    presentation/report APIs use centralized non-validating projection for already-typed supported
    inputs; they neither validate nor silently recover from a contract failure.
-5. **Presentation receives facts.** `present_interpretation` may format, truncate, order, label, and
-   apply the existing warning policy. It may not inspect schema strings, classify analyzer state,
-   recognize legacy evidence prefixes, or infer delegation. The typed presence projection is the
-   existing `CheckpointInterpretation.delegation: Option<DelegationContext>`; no public presentation
-   field/signature is added or changed, and `render_console_block` never gates on schema strings.
+5. **Presentation receives facts; the public presence carrier is gated.** Core
+   `present_interpretation` may format, truncate, order, label, and apply the existing warning
+   policy. It may not classify analyzer state, recognize legacy evidence prefixes, or infer
+   delegation. Core interpretation/presentation carries
+   `CheckpointInterpretation.delegation: Option<DelegationContext>`, but the public compatibility
+   representation is unresolved until `R8-4-PRESENTATION-DELEGATION-PRESENCE-01`: Option A adds an
+   explicit optional public field; Option B preserves the public shape and confines one
+   schema-presence check to the legacy facade. No R8-4 symbol is editable before that choice.
 6. **Crate-private implementation/testing.** `checkpoint_interpretation` and every additive item are
    `pub(crate)` only as needed. R8-1 RED/GREEN is an in-module `#[cfg(test)]` unit-test matrix; public-
    flow integration tests begin with R8-2/R8-3 and exercise the existing public facades.
@@ -153,7 +161,7 @@ These are hypotheses to disprove during implementation and fresh review, not com
 | One typed interpretation can preserve v0.2 and v0.3-v0.8 behavior without moving semantics out of the analyzer. | A wrong normalization creates a second analyzer. | Exact version matrix, explicit-state precedence, same-session history, typed delegation acceptance, and parent-orchestration negative witnesses. |
 | Fallible core paths can coexist with locked infallible facades without fallback or panic. | Error swallowing would make malformed checkpoints appear valid. | Compile-time signature locks, structured error-chain tests, source-order inspection, and searches excluding `unwrap`/panic/fallback bridges. |
 | Live contract failures can be rejected before scheduler/presentation/acceptance/delivery effects, while preserving existing pre-observe transport bookkeeping. | A post-interpretation delivery/cursor effect breaks restart safety, but claiming rollback of monitor/poll/ordinal bookkeeping would exceed R8. | Before/after runtime snapshots plus static real-session ordering prove no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance after failure; monitor-closure, pending-poll, and emission-ordinal observations are permitted. |
-| Operator presentation can become a pure typed renderer. | Schema/state inference in presentation would retain the duplication R8 exists to remove. | Static source checks plus replay/live rendering parity for posture, evidence, context, progress, and delegation. |
+| Core operator presentation can become a pure typed renderer while the public facade preserves its selected compatibility contract. | Schema/state inference in core presentation would retain the duplication R8 exists to remove; pretending the current public shape carries delegation presence would lose information. | The explicit presence-representation decision, static localization, and exact core/facade replay/live rendering parity for posture, evidence, context, progress, and delegation. |
 
 Fresh-context built-in `default` review is required after every packet before the next cutover.
 Cross-model review is skipped for this autonomous plan because external CLI use is explicitly
@@ -176,19 +184,20 @@ R8-3 live adapter/runtime cutover with pre-mutation failure
         v
 R8-4 operator facade consolidation and signature lock
         |
-        +--------------------+
-        v                    v
-R8-5.1 parity/matrix proof   R8-5.2 protected-boundary zero-effect proof
-        \                    /
-         +--------+---------+
-                  v
+        v
+R8-5.1 parity/matrix proof
+        |
+        v
+R8-5.2 protected-boundary zero-effect proof
+        |
+        v
 R8-6 final wall and canonical family status checkpoint
 ```
 
 The order is sequential. R8-2 and R8-3 share the central seam; R8-4 removes the remaining facade
-duplication only after both core paths are using typed interpretation. R8-5.1 and R8-5.2 are
-logically independent proof packets but must not run concurrently if they touch the same test
-workspace or review ledger.
+duplication only after both core paths are using typed interpretation. R8-5.2 is not an independent
+branch: it may start only after the complete R8-5.1 commit/fix series has landed and received fresh
+independent `CLEAN` review everywhere. The packets never run concurrently.
 
 ## Universal Packet Protocol
 
@@ -202,8 +211,10 @@ Every R8 implementation packet follows the same bounded cycle:
 4. If any impact result is HIGH or CRITICAL, stop and obtain a structured operator decision before
    the first production-symbol edit. The refreshed 2026-07-16 graph records four mandatory future
    HIGH gates in the decision table below. R8-2, R8-3, and R8-4 may not edit those symbols until the
-   operator replies to each owning ID. These are future R8-IMPLEMENT gates, not R8-SPEC blockers;
-   no decision is requested while this docs-only plan is being fixed.
+   operator replies to each owning ID. R8-4 also has the separate unresolved
+   `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` contract gate before any R8-4 symbol edit. These are
+   future R8-IMPLEMENT gates, not R8-SPEC blockers; no decision is requested while this docs-only
+   plan is being fixed.
 5. Use TDD in this exact order: write and run the smallest failing contract/parity witness; record
    the RED; make the smallest production change; run the focused GREEN proof and adjacent
    regression target. Do not commit the intentional RED state.
@@ -355,8 +366,10 @@ through centralized non-validating projection and `present_interpretation`, and 
 signatures and supported-input behavior.
 
 Status/dependency gate: **UNSTARTED / BLOCKED** until R8-3 is landed and fresh-review-clean **and**
-the operator replies `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`. A `B` reply stops R8-4 for
-respec; silence is not authorization.
+the operator replies `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` **and** explicitly chooses
+`DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A|B`. A `B` reply to the HIGH-impact gate stops
+R8-4 for respec; silence on either gate is not authorization. The presence decision selects an
+implementation branch rather than authorizing work by itself.
 
 Exact manifest (5 files):
 
@@ -369,11 +382,13 @@ Exact manifest (5 files):
 Compile-time function-pointer assertions lock `present_checkpoint`,
 `present_checkpoint_with_previous`, `CheckpointPresentation::render_console_block`, and
 `render_replay_report`; R8-2 locks `execute`. The typed renderer may format delegation and other
-analyzer-owned facts but may not validate or infer them. Delegation rendering is controlled only by
-`CheckpointInterpretation.delegation: Option<DelegationContext>`: render iff `Some`, never by a
-schema-version string. It uses the existing public
-`CheckpointPresentation.checkpoint.delegation` access path; no public `CheckpointPresentation`
-field or signature changes.
+analyzer-owned facts but may not validate or infer them. Core rendering is controlled by
+`CheckpointInterpretation.delegation: Option<DelegationContext>`. That optional value cannot be
+reconstructed from `CheckpointPresentation.checkpoint.delegation` alone because pre-v0.8 absence
+deserializes to `DelegationContext::default()` and the public presentation struct has no presence
+carrier. The explicit presence decision therefore chooses either Option A's public optional field
+or Option B's unchanged public shape plus one schema-presence check localized to the legacy facade.
+Changing the upstream analyzer `Checkpoint` schema is not an R8-4 option.
 The compatibility facades may not contain supported-version tables, analyzer-state classification,
 legacy evidence-prefix recognition, panic/unwrap, or failure fallback.
 
@@ -404,11 +419,17 @@ Focused proof:
 cargo test -p agent-drift-sentinel --test operator_surface -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
-! rg -n 'schema_version|DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
+! rg -n 'DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
 ! rg -n 'checkpoint\.schema_version.*delegation|schema_version.*format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
+rg -n 'schema_version' crates/agent-drift-sentinel/src/operator_surface.rs
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 ```
+
+The final `schema_version` output is decision-locked: Option A requires no delegation-presence
+occurrence; Option B permits exactly the one reviewed presence check inside the legacy compatibility
+facade and none in core interpretation/presentation helpers. The common negative check still bars a
+schema check coupled directly to delegation formatting.
 
 ## R8-5.1 — Replay/Live Parity And Compatibility Matrix
 
@@ -520,13 +541,16 @@ Legend: **D** = direct proof, **G** = preserved guardrail, **E** = entry/review 
 | R8-6 | D | D only after fresh review | D | D | D | D |
 
 `CTX-R8-01` is already proven as entry context; no implementation packet row is currently complete
-or proven by this candidate plan.
+or proven by this candidate plan. In particular, the R8-4 `CTX-R8-05` direct-proof cell is
+conditional on an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` reply and the selected exact
+proof branch; it cannot be claimed from `Checkpoint.delegation` alone.
 
 ## Structured Decision Triggers
 
-The following decisions are ready for the future R8-IMPLEMENT session. They are recorded now because
-the refreshed graph is HIGH, but they must **not** be asked during this R8-SPEC docs-only fix; no
-production symbol is being edited. The operator must reply in the exact `DECISION <ID>: A|B` form.
+The following decisions are ready for the future R8-IMPLEMENT session. Four are recorded because
+the refreshed graph is HIGH; the fifth records the unresolved public delegation-presence contract.
+They must **not** be asked during this R8-SPEC docs-only fix because no production symbol is being
+edited. The operator must reply in the exact `DECISION <ID>: A|B` form.
 
 | Stable ID / exact future prompt | Refreshed upstream evidence | Options | Recommendation / hard gate |
 |---|---|---|---|
@@ -534,6 +558,21 @@ production symbol is being edited. The operator must reply in the exact `DECISIO
 | `DECISION REQUIRED R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A\|B` | `verify_live_checkpoint_compatibility` in `src/live_input.rs`: **HIGH**, 17 direct dependents, 0 affected processes, 1 affected module. | **A:** authorize only its R8-3 delegation under the exact manifest and behavior locks. **B:** do not edit it; stop the compatibility half and respec/defer R8-3. | **Recommend A** because the public compatibility facade remains source/behavior compatible. The symbol remains uneditable until the reply is A. |
 | `DECISION REQUIRED R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A\|B` | file-disambiguated `LiveRuntime::observe` (`observe` in `src/live_runtime.rs`): **HIGH**, 17 direct dependents, 0 affected processes, 1 affected module. | **A:** authorize only the R8-3 pre-mutation interpretation reorder and exact snapshot/protected-boundary proof. **B:** do not edit it; stop the runtime half and respec/defer R8-3. | **Recommend A** because the narrowed proof locks every post-interpretation effect and permits existing pre-observe transport bookkeeping. The method remains uneditable until the reply is A. |
 | `DECISION REQUIRED R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A\|B` | `uses_explicit_analyzer_state` in `src/operator_surface.rs`: **HIGH**, 10 impacted symbols, 2 direct dependents, 1 affected `execute` process, 3 affected modules. | **A:** authorize only the R8-4 move/removal under exact signature, typed-delegation, parity, and static ownership locks. **B:** do not edit/remove it; stop R8-4 and respec/defer operator consolidation. | **Recommend A** because the analyzer remains semantic owner and presentation becomes formatting-only. The helper remains uneditable until the reply is A. |
+| `DECISION REQUIRED R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A\|B` | `Checkpoint.delegation` is non-optional; `RawCheckpoint.delegation` is optional only while deserializing and `into_checkpoint` maps pre-v0.8 absence to `DelegationContext::default()`; public `CheckpointPresentation` contains `checkpoint: Checkpoint` but no optional delegation/presence carrier. Therefore `checkpoint.delegation` alone cannot distinguish absence from a typed default. | **A:** add an explicit optional delegation presence/projection field to public `CheckpointPresentation`, accepting the public-struct/source-compatibility cost. Exact proof: direct public construction plus function/method signature compile locks in `tests/operator_surface.rs`; v0.2-v0.7 `None` suppresses the line despite a default checkpoint value; v0.8 `Some` renders the exact line; raw/typed presence cases pass `tests/live_checkpoint_compatibility.rs`; matching replay/live output is byte-identical in `tests/live_end_to_end.rs`. **B:** preserve the existing public shape/output, keep internal `CheckpointInterpretation.delegation: Option<_>` for core interpretation/presentation, and isolate exactly one schema-presence check inside the legacy compatibility facade. Exact proof: unchanged-shape construction/signature compile locks and v0.2-v0.7 default/v0.8 rendering fixtures in `tests/operator_surface.rs`; internal `None`/`Some` unit cases in `checkpoint_interpretation.rs`; raw/typed presence cases in `tests/live_checkpoint_compatibility.rs`; facade/core and replay/live byte parity in `tests/live_end_to_end.rs`; static search proves the one check is confined to the facade. | **Recommend B** because it best aligns with stable public APIs and centralized core semantics. This recommendation does not resolve or authorize the choice. No R8-4 symbol is editable before an explicit A/B reply, and changing upstream analyzer `Checkpoint` is out of scope. |
+
+Ready future prompt (recorded, **not requested now**):
+
+```text
+DECISION REQUIRED R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A|B
+EVIDENCE: Checkpoint.delegation is non-optional; pre-v0.8 serialized absence becomes
+DelegationContext::default(); CheckpointPresentation has no presence carrier.
+A: add an explicit optional public CheckpointPresentation presence/projection field and accept the
+public-struct/source-compatibility cost under the exact construction, absence/presence, and parity tests.
+B: preserve the existing public shape/output; keep optional presence internal and allow exactly one
+schema-presence check in the legacy compatibility facade under exact localization and parity tests.
+RECOMMENDATION: B, for stable public APIs plus centralized core semantics.
+BOUNDARY: this reply does not authorize an upstream Checkpoint schema change or any work outside R8-4.
+```
 
 Stop and emit a concrete `DECISION REQUIRED <ID>: A|B` prompt when any of these occurs:
 
