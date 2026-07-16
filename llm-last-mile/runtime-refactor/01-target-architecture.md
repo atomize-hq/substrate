@@ -55,6 +55,16 @@ flowchart TD
 
 `RuntimeToolInvocationAdapter -> InternalToolboxTransport` is the model-visible ingress route. Native CLI, REPL, and operator surfaces call the same authority and dispatch core through typed internal APIs; they do not detour through an agent-visible tool protocol.
 
+### Current B1/B2.1 control state
+
+The immutable receipt core is recovered and review-clean through `6436289f`; the durable
+supervisor core through `c519024b`; exact replay/startup activation through `de727091`; and the
+versioned authority-store correction through `717579b0`. The action-scoped B-owned dispatch view,
+including the read-only active-task tool adapter, is review-clean through `83101dcb`. This records
+only the B1/B2.1-0 prerequisite: B1 and B2.1 remain below complete, their joint production
+integration closeout has not begun, foreground behavior remains blocking until B2.2, B3.1 is not
+dependency-ready, and no seam classification is promoted.
+
 ## Authority map
 
 | Boundary | Owns | Must not own |

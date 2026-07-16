@@ -160,9 +160,9 @@ A1.1e -> B0 -> B1-3a/B1-3b receipt core -> B2.1-1/2/3 -------------------------+
 
 This corridor does not close A1.1d, bypass A2/A3 ownership, enable foreground early return, or
 promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven;
-the B1 receipt and B2.1 supervisor cores are preserved at the current joint-closeout stop. B1
-cannot close until the accepted production paths enter the durable supervisor without attempting
-the legacy active-task writer. A1.2a is landed and independently review-clean through
+the B1 receipt and B2.1 supervisor cores are recovered and review-clean, and B1/B2.1-0 is
+review-clean, but B1 and B2.1 remain below complete until their later joint production integration
+closeout. A1.2a is landed and independently review-clean through
 `b5f2b4f8dd7d9f650c462cd4626a562cacc1d27f`; it remains limited to production Start after one
 strict greenfield-only V1-to-V2 root upgrade, reservation/issuance/application, initial authority
 birth, exact retry, and the typed read surface required to resolve that already-current authority.
@@ -181,9 +181,13 @@ live toolbox context, and leaves startup ownership Pending. It does not change f
 runtime construction or adopt helper plans, public Attach/Resume, startup outcome reconciliation,
 or any post-turn behavior. B1/B2.1-R0 is now landed and independently review-clean through
 `bb3eefba`. B3.2a plus its B3.2a-WA prerequisite are independently review-clean through
-`d0a70727c2bec2b2d6fe0754ea469c4682684dda`; B1/B2.1-0 is next and has not begun. The B1 receipt
-core and B2.1 supervisor core remain preserved donor work, not recovered source truth. No seam is
-promoted.
+`d0a70727c2bec2b2d6fe0754ea469c4682684dda`. The B1 receipt core is recovered through
+`6436289fd9dd55ea516b96ef3299e4055d1ea718`; the B2.1 supervisor and replay/startup cores are
+recovered through `c519024bd91b6ca6e332d0b8881f7d13ded940e0` and
+`de727091a39c884044179a89135df3db5d566778`, with versioned authority-store binding corrected by
+`717579b0744154d343985ad439fb8756158f376f`. B1/B2.1-0 is review-clean through
+`83101dcbcc750e6e8fb8979bea19f1f777792188`. Its joint production integration closeout has not
+begun, B3.1 is not dependency-ready, and no seam is promoted.
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before
@@ -229,8 +233,8 @@ this prerequisite and the full live proof were clean. That prerequisite and proo
 review-clean through
 `d0a70727c2bec2b2d6fe0754ea469c4682684dda`: the exact HSA-bound world was durably adopted with
 unchanged ID/generation, the authority-managed member registered through the production toolbox,
-and no alternate world or prompt persistence was observed. B1/B2.1-0 then partitions the shared
-prepared state
+and no alternate world or prompt persistence was observed. B1/B2.1-0 now partitions the shared
+prepared state, review-clean through `83101dcbcc750e6e8fb8979bea19f1f777792188`,
 for RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task
 Inspect/Cancel/Wait. Those paths
 do not require the missing live-retained lifecycle count. This is the first point at which the

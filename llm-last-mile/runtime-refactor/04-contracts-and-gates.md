@@ -2764,20 +2764,22 @@ verify, reinterpret, log as observability evidence, or use it as obligation sema
 
 ### B1/B2.1 bounded read-only dispatch-authority adapter
 
-The implementability audit selects **Case B**. This adapter becomes implementation-authorized only
-after this docs-only control-pack correction is independently review-clean and the current source
-contains review-clean A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, B3.2a-WA, B1 receipt-core, and
-B2.1 supervisor-core prerequisites. Its implementation is part of B1/B2.1-0; it is not gated on
-B1/B2.1-0 already being review-clean. A1.1e alone could read exact current authority but could not create it; A1.2a,
+The implementability audit selected **Case B**. The adapter became implementation-authorized after
+the independently review-clean docs-only control-pack correction and the review-clean A1.2a,
+A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, B3.2a-WA, B1 receipt-core, and B2.1 supervisor-core
+prerequisites were present. Its implementation is part of B1/B2.1-0, not the later joint closeout.
+A1.1e alone could read exact current authority but could not create it; A1.2a,
 A1.2a-WB, and A1.2a-S now satisfy the bounded ordinary-internal-host creator/adopter portion of
 that sequence, B1/B2.1-R0 is independently review-clean, and B3.2a plus B3.2a-WA are independently
-review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 remains open. The
-current prepared type also combines
+review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. The recovered B1/B2.1 cores
+and B1/B2.1-0 implementation are review-clean through `6436289f`, `c519024b`, `de727091`,
+`717579b0`, and `83101dcb`. The joint production closeout remains open. The
+historical prepared type also combined
 B-owned accepted/inspection routing with retained-worker admission data that has no canonical
 live-state representation.
 
 The authority/retained branch is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0 → B3.2a → B3.2a-WA**. The independently
-preserved B1 receipt → B2.1 supervisor branch first joins it at **B1/B2.1-0**, after which the hard
+recovered B1 receipt → B2.1 supervisor branch first joins it at **B1/B2.1-0**, after which the hard
 order is **joint B1/B2.1 production closeout → B3.1 → C1 → A1.2b**. R0 consumes no receipt or
 supervisor datum; neither B core is therefore a false prerequisite of R0.
 
@@ -3617,15 +3619,15 @@ The canonical source of every value used to construct or interpret
 | legacy `AgentRuntimeStateStore` clone retained by the prepared compatibility shape | `CompatibilityProjectionValidatedAgainstAuthority` | It may perform only compatibility reads after its physical home/store identity validates against the bound capability; it cannot select or access durable authority namespaces. |
 | complete validated request, including request/idempotency/action/mode/payload fields | `ValidatedRequestInput` | Validation proves shape only; every authority-bearing request field is checked against its named canonical source below. |
 | orchestration session ID and authority revision | `HostSessionAuthorityTruth` | Must equal the exact resolved authority and root observation. |
-| current prepared `OrchestrationSessionRecord` shape | `MissingCanonicalRepresentation` | A1 activation rejects legacy writers and A1.1e does not return this compatibility record. B1/B2.1-0 must replace it with a narrower typed dispatch view sourced from A1.2a authority/application truth; it may not synthesize legacy lifecycle state. |
+| current prepared `OrchestrationSessionRecord` shape | `MissingCanonicalRepresentation` | A1 activation rejects legacy writers and A1.1e does not return this compatibility record. B1/B2.1-0 replaces it on its named B-owned actions with a narrower typed dispatch view sourced from A1.2a authority/application truth; it does not synthesize legacy lifecycle state. |
 | active caller participant ID and authoritative lineage | `HostSessionAuthorityTruth` | Caller must be the exact active authoritative participant and a member of the exact lineage. |
-| current prepared caller backend, role, and participant record shape | `MissingCanonicalRepresentation` | `DurableSessionAuthorityV1` contains IDs/lineage but not backend/role. A1.2a must expose the exact applied descriptor through a typed read result; B1/B2.1-0 must narrow or replace the legacy record shape. |
+| current prepared caller backend, role, and participant record shape | `MissingCanonicalRepresentation` | `DurableSessionAuthorityV1` contains IDs/lineage but not backend/role. A1.2a exposes the exact applied descriptor through a typed read result; B1/B2.1-0 narrows the named B-owned paths instead of synthesizing the legacy record shape. |
 | workspace binding and authority-store identity | `HostSessionAuthorityTruth` | Use exact canonical workspace root, authority-store root, and store ID. |
 | requested world ID and generation | `ValidatedRequestInput` | Must be present in the validated request where required and equal the exact authority world binding. |
 | authoritative world binding and generation | `HostSessionAuthorityTruth` | For an action/runtime that requires a world, absence or mismatch fails closed; a host runtime may validly have no binding or may consume the exact session binding. Compatibility state cannot create or repair it. |
 | current policy ref and policy revision | `HostSessionAuthorityTruth` | The ref must be a Policy object and both values must equal the exact current authority. |
 | effective-policy/snapshot projection used by existing steering behavior | `CompatibilityProjectionValidatedAgainstAuthority` | Its ref/revision and canonical snapshot commitment must validate against exact current-policy identity before use. |
-| `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a has supplied the exact RetainedWorkerRuntime admission count for production Spawn, and B3.2a-WA has supplied the required exact physical same-world ownership prerequisite; both are review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 next removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |
+| `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a has supplied the exact RetainedWorkerRuntime admission count for production Spawn, and B3.2a-WA has supplied the required exact physical same-world ownership prerequisite; both are review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |
 | target participant ID named by the request | `ValidatedRequestInput` | It is a requested target only until exact authority/accepted-work validation succeeds. |
 | current prepared retained target backend, role, and participant record shape | `MissingCanonicalRepresentation` | A1.1e does not expose the retained object/descriptor as this legacy record, and activated stores reject the legacy writer that current fixtures use. R0 replaces the immutable identity shape: RetainedWorkerRuntime creates the descriptor/resume/worker graph; HostSessionAuthority atomically appends its participant to lineage, binds its ref, and proves the new revision as `HostSessionAuthorityTruth`. B3.2a supplies separate routability/admission truth, B3.2a-WA exact-adopts physical ownership of the same HSA-bound world without changing its ID/generation, and B1/B2.1-0 consumes the exact join without fabricating broader lifecycle state. |
 | immutable accepted task/active-run identity and acceptance revision | `ReceiptRegistryTruth` | Exact lookup is scoped by store, session, work identity, caller/backend, and world; unknown acceptance fails closed. |
@@ -3637,12 +3639,20 @@ The required current-authority creator/read view and the prepared session/caller
 fields make Case A unrealizable. A1.2a supplies only the prerequisite authority establishment/read
 capability; A1.2a-S supplies only its bounded internal production adopter; B1/B2.1-R0 supplies only canonical retained-target registration/read; B3.2a supplies the
 production creation/admission bridge and canonical live/routability state; B3.2a-WA supplies only
-exact physical ownership adoption of the HSA-bound world; B1/B2.1-0 then removes non-B fields from
+exact physical ownership adoption of the HSA-bound world; B1/B2.1-0 removes non-B fields from
 the B-owned prepared view. A1.2b keeps all
 successor/post-turn and obligation-dependent ownership after C1. Full
 `dispatch_orchestrator_world_request`/`dispatch_prepared_orchestrator_world_request` entry is
 required regression proof; tests that invoke only a lower-level receipt, supervisor, transport, or
 resolver API cannot close this gate.
+
+The recorded B1/B2.1-0 gate result is review-clean through `83101dcb`. The B-owned view requires
+exact acceptance revision equality and a durable supervisor cursor at or beyond the acceptance
+frame before projecting active truth; ordinary retained Continue journals the canonical B0 stream
+without invoking legacy obligation or auto-attach writers. The active-task tool adapter preserves
+distinct unknown, stale, backend/world mismatch, nonterminal, exact-terminal, and unresolved-replay
+outcomes without mutation. Retained compatibility, Spawn, fork, and foreground blocking behavior
+remain unchanged. This gate result does not close B1/B2.1 jointly or promote any seam.
 
 Accordingly, the prior claim that `prepare_orchestrator_world_dispatch` itself belongs to A1.2 is
 rejected. It remains a B-owned `WorldDispatchControl` consumer after the named prerequisites.
