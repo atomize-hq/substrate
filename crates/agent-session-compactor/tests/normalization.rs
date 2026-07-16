@@ -62,19 +62,51 @@ fn normalization_maps_rollout_events_into_provenance_preserving_rows() {
     assert_eq!(rows[1].row_ordinal, 0);
     assert_eq!(rows[2].row_ordinal, 1);
     assert_eq!(rows[2].turn_id.as_deref(), Some("turn-abc"));
-    assert_eq!(rows[2].text, "{\"payload\":{\"turn_id\":\"turn-abc\",\"user_instructions\":\"Repo-local rules\"},\"type\":\"turn_context\"}");
+    let turn_context: serde_json::Value =
+        serde_json::from_str(&rows[2].text).expect("turn context should be valid JSON");
+    assert_eq!(
+        turn_context,
+        serde_json::json!({
+            "payload": {
+                "turn_id": "turn-abc",
+                "user_instructions": "Repo-local rules",
+            },
+            "type": "turn_context",
+        })
+    );
     assert_eq!(rows[4].turn_id.as_deref(), Some("turn-abc"));
     assert_eq!(rows[4].text, "Ship the packet");
     assert_eq!(rows[5].text, "Check parser seams first");
     assert_eq!(rows[6].text, "{\"cmd\":\"pwd\"}");
+    let tool_call_identity: serde_json::Value = serde_json::from_str(
+        rows[6]
+            .dedupe_identity
+            .as_deref()
+            .expect("tool call should have a dedupe identity"),
+    )
+    .expect("tool call dedupe identity should be valid JSON");
     assert_eq!(
-        rows[6].dedupe_identity.as_deref(),
-        Some("{\"call_id\":\"call-1\",\"name\":\"exec_command\",\"type\":\"function_call\"}")
+        tool_call_identity,
+        serde_json::json!({
+            "call_id": "call-1",
+            "name": "exec_command",
+            "type": "function_call",
+        })
     );
     assert_eq!(rows[7].text, "/tmp/worktree");
+    let tool_output_identity: serde_json::Value = serde_json::from_str(
+        rows[7]
+            .dedupe_identity
+            .as_deref()
+            .expect("tool output should have a dedupe identity"),
+    )
+    .expect("tool output dedupe identity should be valid JSON");
     assert_eq!(
-        rows[7].dedupe_identity.as_deref(),
-        Some("{\"call_id\":\"call-1\",\"type\":\"function_call_output\"}")
+        tool_output_identity,
+        serde_json::json!({
+            "call_id": "call-1",
+            "type": "function_call_output",
+        })
     );
     assert_eq!(rows[8].text, "Packet complete");
     assert_eq!(rows[9].kind, CompactionKind::Error);
