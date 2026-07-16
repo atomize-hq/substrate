@@ -348,20 +348,25 @@ repair `9fd9d9972` received fresh independent built-in `default` `REVIEW CLEAN`.
 commit `f8dd04549` and R7-3.2 test-only commit `c7c6f35b8` each received fresh independent built-in
 `default` `REVIEW CLEAN`; R7-3.1, R7-3.2, and the behavior/static checkpoint are complete.
 Checkpoint-doc commit `931c2701c` received fresh independent built-in `default` `REVIEW CLEAN`,
-satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Transition/fix series
-`e077de489` + `3dd5ba943` remains fresh independent built-in `default` `REVIEW CLEAN`. R7-4.1
-commit/fix series `ebcb052b9` + `e7b65523f` and R7-4.2 docs decision commit `8a0790a3d` each
-received fresh independent built-in `default` `REVIEW CLEAN`; R7-4.1, R7-4.2, and the behavior/
-static checkpoint are complete. R7-4 remains the sole active phase with packet `none` while this
-checkpoint-doc receipt still requires fresh independent review. The R7-4 exit gate and `CTX-R7-05`
-remain blocked/pending until the receipt itself is fresh-review-clean. `R7-5..R7-6` and R8 remain
-blocked; `R7-5.1` is unstarted; no next-phase selectors are prepared or invoked.
+satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Transition/fix series `e077de489` + `3dd5ba943` remains fresh independent built-in
+`default` `REVIEW CLEAN`. R7-4.1 commit/fix series `ebcb052b9` + `e7b65523f` and R7-4.2 docs
+decision commit `8a0790a3d` each received fresh independent built-in `default` `REVIEW CLEAN`;
+R7-4.1, R7-4.2, and the behavior/static checkpoint are complete. Checkpoint-doc commit
+`ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`,
+satisfying the R7-4 exit gate. R7-4 is complete. Only R7-5 is active at entry with packet `none`;
+the current R7-4 -> R7-5 transition candidate is pending fresh independent review and is not yet
+review-clean. `R7-5.1` is next, unchecked, and unstarted; no R7-5 acceptance or real-corpus work has
+started. `CTX-R7-05` remains blocked/pending until R7-5 acceptance evidence proves existing classes
+plus typed delegation context. R7-6 and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-5` /
+`ACTIVE_PACKET: none` are prepared and eligible but have not been invoked.
 
 R7-4 checkpoint proof at HEAD `8a0790a3d` is `dead_end_thrash 19 / 19`, semantic filter `58 / 58`,
-full analyzer `422 / 422`, plus green formatting, analyzer clippy, and diff checks. The current
-operator action is fresh independent review of the checkpoint-doc receipt only. Do not prepare or
-invoke an R7-5 Prompt 1 until that receipt is fresh-review-clean and a separate narrow phase
-transition is landed and independently reviewed.
+full analyzer `422 / 422`, plus green formatting, analyzer clippy, and diff checks. Checkpoint-doc
+commit `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default`
+`CLEAN`, satisfying the R7-4 exit gate. The current operator action is fresh independent review of
+the narrow R7-4 -> R7-5 transition candidate only. Prompt 1 selectors `PHASE_ID: R7-5` /
+`ACTIVE_PACKET: none` are prepared and eligible but must remain uninvoked until that transition
+candidate is fresh-review-clean. No R7-5 acceptance or real-corpus work has started.
 
 Historical resolved Task `.2B` decision report:
 
