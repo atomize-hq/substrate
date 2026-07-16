@@ -61,7 +61,8 @@ use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::retained_worker_runtime::{
     CanonicalDescriptorAndRuntimePlanV1, CanonicalExactCurrentAuthorityV1,
     CanonicalPolicyAndAdmissionCapV1, CanonicalValidatedSpawnRequestV1,
-    CanonicalWorkerSpawnPayloadV1, RetainedWorkerAdmissionPlanV1, RetainedWorkerRuntime,
+    CanonicalWorkerSpawnPayloadV1, RetainedWorkerAdmissionPlanV1, RetainedWorkerAdmissionStateV1,
+    RetainedWorkerRuntime,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
@@ -1410,7 +1411,7 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
     let current_policy_ref = exact.authority.current_policy_ref.clone().ok_or_else(|| {
         anyhow::anyhow!("retained admission authority omits current policy reference")
     })?;
-    let admission_plan = RetainedWorkerAdmissionPlanV1 {
+    let mut admission_plan = RetainedWorkerAdmissionPlanV1 {
         issuer_request_id: request.request_id.clone(),
         spawn_request: CanonicalValidatedSpawnRequestV1 {
             schema_version: 1,
@@ -1472,6 +1473,14 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
         },
     };
     let runtime = RetainedWorkerRuntime;
+    let reserved = runtime
+        .reserve_admission_slot(&authority, &admission_plan)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if reserved.joined {
+        admission_plan = runtime
+            .canonical_plan_for_existing_admission(&authority, &admission_plan, &reserved.record)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    }
     let registered = runtime
         .register_admitted_worker(&authority, &admission_plan)
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
@@ -1482,6 +1491,29 @@ pub(crate) fn prepare_authority_bound_spawn_world_worker(
             &registered.record.retained_participant_id,
         )
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if !claim.newly_claimed {
+        let message = match claim.record.state {
+            RetainedWorkerAdmissionStateV1::TransportClaimedNonterminal { .. } => {
+                "retained_spawn_transport_claimed: exact retained Spawn transport is already claimed and remains nonterminal"
+            }
+            RetainedWorkerAdmissionStateV1::Routable { .. } => {
+                "retained_spawn_already_routable: exact retained Spawn is already durably routable"
+            }
+            RetainedWorkerAdmissionStateV1::InterruptedNonterminal { .. } => {
+                "retained_spawn_interrupted_nonterminal: exact retained Spawn has ambiguous nonterminal transport truth"
+            }
+            RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+                "retained_spawn_already_terminal: exact retained Spawn is already durably terminal"
+            }
+            RetainedWorkerAdmissionStateV1::SlotReserved { .. }
+            | RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
+            | RetainedWorkerAdmissionStateV1::PreTransportNonterminal { .. }
+            | RetainedWorkerAdmissionStateV1::RejectedBeforeRegistration { .. } => {
+                "retained_spawn_claim_conflict: exact retained Spawn did not return a transport-claimed durable state"
+            }
+        };
+        anyhow::bail!(message);
+    }
     let launch_authority_proof = runtime
         .launch_authority_proof_for_claim(&authority, &admission_plan, &claim)
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;

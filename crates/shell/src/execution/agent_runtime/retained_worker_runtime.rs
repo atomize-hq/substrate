@@ -757,6 +757,206 @@ impl RetainedWorkerRuntime {
         )
     }
 
+    pub(crate) fn canonical_plan_for_existing_admission(
+        &self,
+        authority: &HostSessionAuthority,
+        presented_plan: &RetainedWorkerAdmissionPlanV1,
+        expected_record: &RetainedWorkerAdmissionRecordV1,
+    ) -> Result<RetainedWorkerAdmissionPlanV1, RetainedWorkerRuntimeError> {
+        let resolved = authority
+            .resolve_current_exact(&presented_plan.spawn_request.orchestration_session_id, None)
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let mut current_plan = presented_plan.clone();
+        current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
+        let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
+            std::path::Path::new(
+                &current_plan
+                    .exact_authority
+                    .authority
+                    .workspace_binding
+                    .workspace_root
+                    .physical_path,
+            ),
+            &authority.bootstrap_home(),
+        )
+        .map_err(|_| {
+            RetainedWorkerRuntimeError(
+                "resolve exact accepted-home existing-admission policy".into(),
+            )
+        })?;
+        validate_admission_policy_against_resolved(
+            &current_plan.policy_and_admission_cap,
+            &policy,
+        )?;
+        let storage =
+            super::host_session_authority::store::retained_worker_admission_storage_for_authority(
+                authority,
+            )
+            .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
+        let authority_store_id = storage.authority_store_id().to_owned();
+        let mut semantic_failure = None;
+        let result = storage.transaction(|transaction| {
+            let registry_bytes = transaction.read_registry()?.ok_or_else(
+                super::host_session_authority::store::BootstrapError::retained_admission_semantic,
+            )?;
+            let registry: RetainedWorkerAdmissionRegistryV1 = retain_semantic_error(
+                decode_canonical(&registry_bytes, "decode canonical admission registry"),
+                &mut semantic_failure,
+            )?;
+            let (_, envelope) = retain_semantic_error(
+                load_committed_admission_key(
+                    &authority_store_id,
+                    &registry,
+                    &transaction.read_keys()?,
+                ),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_registry(&registry, transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_complete_post_r0_registry_graphs(
+                    &registry,
+                    transaction.authority_root(),
+                    &post_r0_graphs,
+                ),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_admission_plan(transaction.authority_root(), &current_plan),
+                &mut semantic_failure,
+            )?;
+            let locator = retain_semantic_error(
+                registry
+                    .issuer_request_index
+                    .get(&presented_plan.issuer_request_id)
+                    .ok_or_else(|| {
+                        RetainedWorkerRuntimeError(
+                            "exact existing admission issuer is absent".into(),
+                        )
+                    }),
+                &mut semantic_failure,
+            )?;
+            if locator.orchestration_session_id != expected_record.orchestration_session_id
+                || locator.retained_participant_id != expected_record.retained_participant_id
+            {
+                retain_semantic_error(
+                    Err(RetainedWorkerRuntimeError(
+                        "exact existing admission locator conflicts with the joined record".into(),
+                    )),
+                    &mut semantic_failure,
+                )?;
+            }
+            let record = retain_semantic_error(
+                registry
+                    .records_by_session
+                    .get(&locator.orchestration_session_id)
+                    .and_then(|records| records.get(&locator.retained_participant_id))
+                    .ok_or_else(|| {
+                        RetainedWorkerRuntimeError(
+                            "exact existing admission record is absent".into(),
+                        )
+                    }),
+                &mut semantic_failure,
+            )?;
+            if record != expected_record {
+                retain_semantic_error(
+                    Err(RetainedWorkerRuntimeError(
+                        "exact existing admission record changed after its locked join".into(),
+                    )),
+                    &mut semantic_failure,
+                )?;
+            }
+            let VersionedStateRoot::V2(root) = transaction.authority_root() else {
+                return Err(
+                    super::host_session_authority::store::BootstrapError::retained_admission_semantic(),
+                );
+            };
+            retain_semantic_error(
+                validate_admission_to_current_r0_only(
+                    root,
+                    &current_plan.exact_authority,
+                    record,
+                ),
+                &mut semantic_failure,
+            )?;
+            let mut canonical_plan = presented_plan.clone();
+            canonical_plan.exact_authority = retain_semantic_error(
+                reconstruct_exact_authority_at_revision(
+                    root,
+                    &current_plan.exact_authority,
+                    record.admission_authority_revision,
+                ),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                validate_supplied_admission_authority(
+                    root,
+                    &current_plan.exact_authority,
+                    &canonical_plan.exact_authority,
+                    record,
+                ),
+                &mut semantic_failure,
+            )?;
+            retain_semantic_error(
+                verify_admission_record_fingerprint(
+                    &canonical_plan,
+                    record,
+                    &envelope.secret_key,
+                ),
+                &mut semantic_failure,
+            )?;
+            if record.authority_store_id != canonical_plan.exact_authority.authority_store_id
+                || record.issuer_request_id != canonical_plan.issuer_request_id
+                || record.orchestration_session_id
+                    != canonical_plan.spawn_request.orchestration_session_id
+                || record.admission_authority_revision
+                    != canonical_plan.exact_authority.authority_revision
+                || record.admission_authority_record_commitment
+                    != canonical_plan.exact_authority.authority_record_commitment
+                || record.backend_id
+                    != canonical_plan
+                        .descriptor_and_runtime_plan
+                        .descriptor
+                        .backend_id
+                || record.protocol
+                    != canonical_plan
+                        .descriptor_and_runtime_plan
+                        .descriptor
+                        .protocol
+                || record.world_binding.world_id != canonical_plan.spawn_request.world_id
+                || record.world_binding.world_generation
+                    != canonical_plan.spawn_request.world_generation
+                || record.current_policy_ref
+                    != canonical_plan.policy_and_admission_cap.current_policy_ref
+                || record.current_policy_revision
+                    != canonical_plan
+                        .policy_and_admission_cap
+                        .current_policy
+                        .policy_revision
+                || record.max_live_retained_workers
+                    != canonical_plan
+                        .policy_and_admission_cap
+                        .max_live_retained_workers
+            {
+                retain_semantic_error(
+                    Err(RetainedWorkerRuntimeError(
+                        "exact existing admission conflicts with canonical re-presentation"
+                            .into(),
+                    )),
+                    &mut semantic_failure,
+                )?;
+            }
+            Ok(canonical_plan)
+        });
+        if let Some(error) = semantic_failure {
+            return Err(error);
+        }
+        result.map_err(|error| RetainedWorkerRuntimeError(error.to_string()))
+    }
+
     #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     fn reserve_admission_slot_at(
@@ -797,6 +997,7 @@ impl RetainedWorkerRuntime {
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let mut current_plan = plan.clone();
         current_plan.exact_authority = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        let mut fingerprint_plan = plan.clone();
         self.initialize_admission_registry(authority)?;
         let post_r0_graphs = self.resolve_all_post_r0_registry_graphs(authority)?;
         let storage =
@@ -848,10 +1049,26 @@ impl RetainedWorkerRuntime {
                     );
                 };
                 retain_semantic_error(
+                    validate_admission_to_current_r0_only(
+                        root,
+                        &current_plan.exact_authority,
+                        record,
+                    ),
+                    &mut semantic_failure,
+                )?;
+                fingerprint_plan.exact_authority = retain_semantic_error(
+                    reconstruct_exact_authority_at_revision(
+                        root,
+                        &current_plan.exact_authority,
+                        record.admission_authority_revision,
+                    ),
+                    &mut semantic_failure,
+                )?;
+                retain_semantic_error(
                     validate_supplied_admission_authority(
                         root,
                         &current_plan.exact_authority,
-                        &plan.exact_authority,
+                        &fingerprint_plan.exact_authority,
                         record,
                     ),
                     &mut semantic_failure,
@@ -895,7 +1112,7 @@ impl RetainedWorkerRuntime {
                     &mut registry,
                     transaction.authority_root(),
                     &current_plan,
-                    plan,
+                    &fingerprint_plan,
                     &envelope.secret_key,
                     reserved_at,
                     participant_entropy,
@@ -7722,6 +7939,157 @@ mod tests {
     }
 
     #[test]
+    fn existing_admission_plan_reconstructs_admission_time_authority_without_mutation() {
+        let (parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let original = admission_plan(
+            &authority,
+            "historical-plan-retry",
+            "original retry prompt",
+            4,
+        );
+        let admitted = runtime
+            .register_admitted_worker(&authority, &original)
+            .unwrap();
+        let presented = admission_plan(
+            &authority,
+            "historical-plan-retry",
+            "original retry prompt",
+            4,
+        );
+        assert!(
+            presented.exact_authority.authority_revision
+                > original.exact_authority.authority_revision
+        );
+        let joined = runtime
+            .reserve_admission_slot(&authority, &presented)
+            .unwrap();
+        assert!(joined.joined);
+        assert_eq!(joined.record, admitted.record);
+
+        let snapshot_authority_files = || {
+            let authority_dir = parent.path().join("home/authority-v1");
+            let mut pending = vec![authority_dir.clone()];
+            let mut snapshot = Vec::<(std::path::PathBuf, Vec<u8>)>::new();
+            while let Some(directory) = pending.pop() {
+                for entry in fs::read_dir(&directory).unwrap() {
+                    let entry = entry.unwrap();
+                    let file_type = entry.file_type().unwrap();
+                    if file_type.is_dir() {
+                        pending.push(entry.path());
+                    } else if file_type.is_file() {
+                        snapshot.push((
+                            entry
+                                .path()
+                                .strip_prefix(&authority_dir)
+                                .unwrap()
+                                .to_path_buf(),
+                            fs::read(entry.path()).unwrap(),
+                        ));
+                    }
+                }
+            }
+            snapshot.sort_by(|left, right| left.0.cmp(&right.0));
+            snapshot
+        };
+        let bytes_before = snapshot_authority_files();
+        let reconstructed = runtime
+            .canonical_plan_for_existing_admission(&authority, &presented, &joined.record)
+            .unwrap();
+        assert!(reconstructed == original);
+        assert_eq!(snapshot_authority_files(), bytes_before);
+
+        let mut variants = Vec::new();
+        let mut changed = presented.clone();
+        changed.issuer_request_id = "wrong-issuer".into();
+        variants.push((changed, joined.record.clone()));
+        let mut changed = presented.clone();
+        changed.spawn_request.request_id = "wrong-request".into();
+        variants.push((changed, joined.record.clone()));
+        let mut changed = presented.clone();
+        changed.descriptor_and_runtime_plan.descriptor.agent_id = "wrong-agent".into();
+        variants.push((changed, joined.record.clone()));
+        let mut changed = presented.clone();
+        changed.policy_and_admission_cap.max_concurrent_ephemeral += 1;
+        variants.push((changed, joined.record.clone()));
+        let mut substituted_transient_authority = presented.clone();
+        substituted_transient_authority
+            .exact_authority
+            .authority_record_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "11".repeat(32),
+        };
+        let reconstructed_from_substituted = runtime
+            .canonical_plan_for_existing_admission(
+                &authority,
+                &substituted_transient_authority,
+                &joined.record,
+            )
+            .unwrap();
+        assert!(reconstructed_from_substituted == original);
+        assert_eq!(snapshot_authority_files(), bytes_before);
+        let mut changed_record = joined.record.clone();
+        changed_record.retained_participant_id = "rwp_wrong-participant".into();
+        variants.push((presented.clone(), changed_record));
+        let mut changed_record = joined.record.clone();
+        changed_record.bootstrap_run_id = "run_wrong-bootstrap".into();
+        variants.push((presented.clone(), changed_record));
+        let mut changed_record = joined.record.clone();
+        changed_record.canonical_spawn_fingerprint.digest_hex = "00".repeat(32);
+        variants.push((presented.clone(), changed_record));
+        let mut changed_record = joined.record.clone();
+        changed_record.admission_authority_revision = 0;
+        variants.push((presented.clone(), changed_record));
+
+        for (changed_plan, changed_record) in variants {
+            let error = runtime
+                .canonical_plan_for_existing_admission(&authority, &changed_plan, &changed_record)
+                .err()
+                .expect("changed existing-admission identity must fail closed");
+            assert!(!error.to_string().contains("original retry prompt"));
+            assert_eq!(snapshot_authority_files(), bytes_before);
+        }
+
+        let first_claim = runtime
+            .claim_admission_transport(
+                &authority,
+                &reconstructed,
+                &joined.record.retained_participant_id,
+            )
+            .unwrap();
+        assert!(first_claim.newly_claimed);
+        let bytes_after_claim = snapshot_authority_files();
+        let joined_claim = runtime
+            .claim_admission_transport(
+                &authority,
+                &reconstructed,
+                &joined.record.retained_participant_id,
+            )
+            .unwrap();
+        assert!(!joined_claim.newly_claimed);
+        assert_eq!(joined_claim.record, first_claim.record);
+        assert_eq!(snapshot_authority_files(), bytes_after_claim);
+
+        let new_plan = admission_plan(
+            &authority,
+            "current-authority-new-slot",
+            "new slot prompt",
+            4,
+        );
+        let new_slot = runtime
+            .reserve_admission_slot(&authority, &new_plan)
+            .unwrap();
+        assert!(!new_slot.joined);
+        assert_eq!(
+            new_slot.record.admission_authority_revision,
+            new_plan.exact_authority.authority_revision
+        );
+        assert_eq!(
+            new_slot.record.admission_authority_record_commitment,
+            new_plan.exact_authority.authority_record_commitment
+        );
+    }
+
+    #[test]
     fn admission_retry_rejects_every_changed_bound_input_without_mutation() {
         let (parent, authority, _) = started_authority();
         let runtime = RetainedWorkerRuntime;
@@ -7772,31 +8140,43 @@ mod tests {
         let mut changed = plan.clone();
         changed.policy_and_admission_cap.dispatch_enabled = false;
         variants.push(changed);
-        let mut changed = plan.clone();
-        changed.exact_authority.authority_record_commitment =
-            AuthorityObjectCommitmentV1::CanonicalSha256 {
-                digest_hex: "00".repeat(32),
-            };
-        variants.push(changed);
-        let mut changed = plan.clone();
-        changed.exact_authority.authoritative_lineage_commitment =
-            AuthorityObjectCommitmentV1::CanonicalSha256 {
-                digest_hex: "11".repeat(32),
-            };
-        variants.push(changed);
-        let mut changed = plan.clone();
-        changed
+        let mut substituted_authority_commitment = plan.clone();
+        substituted_authority_commitment
+            .exact_authority
+            .authority_record_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "00".repeat(32),
+        };
+        let mut substituted_lineage_commitment = plan.clone();
+        substituted_lineage_commitment
+            .exact_authority
+            .authoritative_lineage_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: "11".repeat(32),
+        };
+        let mut substituted_workspace = plan.clone();
+        substituted_workspace
             .exact_authority
             .authority
             .workspace_binding
             .workspace_root
             .physical_path = "/substituted-workspace".into();
-        variants.push(changed);
 
         for changed in variants {
             assert!(runtime
                 .reserve_admission_slot(&authority, &changed)
                 .is_err());
+            assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+            assert_eq!(authority.read_a12a_root().unwrap(), authority_before);
+        }
+        for substituted_authority in [
+            substituted_authority_commitment,
+            substituted_lineage_commitment,
+            substituted_workspace,
+        ] {
+            let joined = runtime
+                .reserve_admission_slot(&authority, &substituted_authority)
+                .unwrap();
+            assert!(joined.joined);
+            assert_eq!(joined.record, first.record);
             assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
             assert_eq!(authority.read_a12a_root().unwrap(), authority_before);
         }
