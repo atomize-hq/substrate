@@ -4,15 +4,18 @@ Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-plan.md`
 
 Status: **CANDIDATE / AWAITING FRESH INDEPENDENT BUILT-IN `default` REVIEW / `CTX-R8-02`
-UNPROVEN / R8-IMPLEMENT BLOCKED**.
+OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
 
-The MAP/SPEC contract series `698c766f9` + `f5865fb7` + `95529809` is reported by the current
-session handoff as fresh independent built-in `default` `CLEAN`. This PLAN and its companion TASKS
-are new candidate artifacts and make no review-clean or implementation-ready claim. The checked-in
-MAP/SPEC and control-pack mirrors still contain their pre-review status wording; reconciling those
-mirrors is outside this two-file authoring boundary. `CTX-R8-02` therefore remains unproven and no
-R8 source or test edit may start until the complete MAP/SPEC/PLAN/TASKS family is freshly reviewed
-and the authority status is reconciled.
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself. No R8 source or test edit may
+start until the complete MAP/SPEC/PLAN/TASKS family is freshly reviewed and `CTX-R8-02` is proven.
 
 ## Objective
 
@@ -426,7 +429,8 @@ Legend: **D** = direct proof, **G** = preserved guardrail, **E** = entry/review 
 | R8-5.2 | G | E | D | D | G | D |
 | R8-6 | D | D only after fresh review | D | D | D | D |
 
-No row is currently proven by this candidate plan.
+`CTX-R8-01` is already proven as entry context; no implementation packet row is currently complete
+or proven by this candidate plan.
 
 ## Structured Decision Triggers
 
@@ -450,6 +454,5 @@ Stop and emit a concrete `DECISION REQUIRED <ID>: A|B` prompt when any of these 
 R8 is not complete when code compiles or the focused suite is green. Completion requires every
 packet and fix series fresh-review-clean, the full wall recorded with exact counts, the canonical
 status receipt fresh-review-clean, `CTX-R8-01..06` reconciled against the control ledger, and a
-separate authorized phase/status transition. Until then, R8-IMPLEMENT remains blocked or active but
-incomplete according to the latest reviewed authority; this candidate plan claims neither state
-transition nor family completion.
+separate authorized phase/status transition. Until then, R8-IMPLEMENT remains blocked according to
+the latest authority; this candidate plan claims neither state transition nor family completion.

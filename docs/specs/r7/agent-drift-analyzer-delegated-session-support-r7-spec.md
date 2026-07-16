@@ -3,15 +3,18 @@
 Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-spec.md`
 
-Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-6 COMPLETE / R7 CLOSED /
-`CTX-R7-06` PROVEN / CHECKPOINT-DOC RECEIPT/REVIEW-FIX SERIES `0e5150945` + `e634ef324` +
-`8e39c109e` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-SPEC SOLE ACTIVE PHASE IN PROGRESS /
-ACTIVE PACKET NONE / `CTX-R8-01`
-OPEN / IN PROGRESS / CANDIDATE R8 MAP/SPEC COMMIT `698c766f9` LANDED / FRESH INDEPENDENT BUILT-IN
-`default` REVIEW `CHANGES_REQUIRED` WITH THREE SCOPED DOCUMENTATION FINDINGS / THIS DOCS-ONLY
-FOLLOW-UP ADDRESSES THE FINDINGS BUT IS NOT FRESH-REVIEWED / R8 PLAN/TASKS UNAUTHORED/UNREVIEWED /
-`CTX-R8-02` BLOCKED / R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY / NO PHASE TRANSITION OR IMPLEMENTATION
-AUTHORIZATION**
+Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-6 COMPLETE / R7 CLOSED / `CTX-R7-06`
+PROVEN / R8-SPEC SOLE ACTIVE PHASE IN PROGRESS / ACTIVE PACKET NONE**
+
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself.
 
 ## Assumptions I'm Making
 
@@ -66,12 +69,15 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`; `CTX-R8-01` is `OPEN` /
-in progress. Candidate R8 MAP/SPEC commit `698c766f9` landed, and fresh independent built-in `default`
-review returned `CHANGES_REQUIRED` with three scoped documentation findings. This docs-only follow-up
-addresses those findings but makes no claim of fresh independent review. R8 PLAN/TASKS remain
-unauthored/unreviewed; `CTX-R8-02` remains `BLOCKED`; R8-IMPLEMENT remains blocked/boundary-only.
-No phase transition or implementation authorization is claimed.
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
    descendants remain visible as bounded residue rather than being recursively joined in the first
    R7 implementation.
@@ -180,13 +186,18 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`; `CTX-R8-01` is `OPEN` /
-in progress. Candidate R8 MAP/SPEC commit `698c766f9` landed, and fresh independent built-in `default`
-review returned `CHANGES_REQUIRED` with three scoped documentation findings. This docs-only follow-up
-addresses those findings but makes no claim of fresh independent review. R8 PLAN/TASKS remain
-unauthored/unreviewed; `CTX-R8-02` remains `BLOCKED`; R8-IMPLEMENT remains blocked/boundary-only.
-No phase transition or implementation authorization is claimed. R7 must continue to preserve the stable
-ordinary single-session baseline and must not absorb baseline scorer semantics.
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself.
+
+R7 must continue to preserve the stable ordinary single-session baseline and must not absorb
+baseline scorer semantics.
 
 ## Objective
 
@@ -542,12 +553,15 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`; `CTX-R8-01` is `OPEN` /
-in progress. Candidate R8 MAP/SPEC commit `698c766f9` landed, and fresh independent built-in `default`
-review returned `CHANGES_REQUIRED` with three scoped documentation findings. This docs-only follow-up
-addresses those findings but makes no claim of fresh independent review. R8 PLAN/TASKS remain
-unauthored/unreviewed; `CTX-R8-02` remains `BLOCKED`; R8-IMPLEMENT remains blocked/boundary-only.
-No phase transition or implementation authorization is claimed.
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself.
 
 ## Open Questions
 

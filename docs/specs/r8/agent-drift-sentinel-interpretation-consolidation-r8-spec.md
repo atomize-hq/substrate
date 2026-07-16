@@ -1,13 +1,19 @@
 # R8 Spec: Agent Drift Sentinel Interpretation Consolidation
 
-Status: **R8-SPEC ACTIVE / IN PROGRESS; CANDIDATE FIX NOT YET REVIEWED**. Candidate MAP/SPEC commit
-`698c766f9` landed, and fresh independent built-in `default` review returned `CHANGES_REQUIRED` with
-three scoped documentation findings. This docs-only follow-up addresses those findings but makes no
-claim of fresh independent review. The R8 PLAN and TASKS remain unauthored/unreviewed;
-`CTX-R8-01` remains `OPEN` / in progress, `CTX-R8-02` remains `BLOCKED`, and R8-IMPLEMENT remains
-blocked/boundary-only. This document specifies a future implementation; it does not authorize R8
-code. The complete R8 MAP/SPEC/PLAN/TASKS family must be fresh-review-clean before implementation
-starts.
+Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; PLAN/TASKS
+REVIEW PENDING; R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
+
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself. This document specifies a future
+implementation; it does not authorize R8 code. The complete R8 MAP/SPEC/PLAN/TASKS family must be
+fresh-review-clean before implementation starts.
 
 ## Objective
 
@@ -296,6 +302,7 @@ recorded from the implementation run; this candidate spec claims none.
 | `CTX-R8-05` | Exact compile-time signature assertions and facade behavior tests preserve `present_checkpoint*`, `render_replay_report`, and `execute`; operator presentation has no schema/state/delegation inference and matching replay/live inputs render identically. |
 | `CTX-R8-06` | Failure produces no scheduler decision, presentation, adjudication, sink emission, cursor advancement, or checkpoint acceptance; success preserves existing scheduler/adjudication outputs, real-session closure, delivery order, and per-session cursor behavior. |
 
-These criteria remain unproven. Fresh independent review of this scoped docs-only fix is the next
-gate; PLAN/TASKS remain unauthored/unreviewed, `CTX-R8-02` remains blocked, and R8 implementation
-remains blocked.
+`CTX-R8-01` is proven. `CTX-R8-02` remains `OPEN` / `REVIEW PENDING` and not proven;
+`CTX-R8-03..06` remain blocked. Fresh independent built-in `default` review of PLAN/TASKS candidate
+commit `0ed3d8f04` is the next gate. All implementation tasks remain unchecked and unstarted, and
+R8 implementation remains blocked. This progress receipt claims no review result for itself.

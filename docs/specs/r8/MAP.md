@@ -1,13 +1,18 @@
 # R8 Map: Sentinel Interpretation Consolidation / Integration
 
-Status: **R8-SPEC ACTIVE / IN PROGRESS; CANDIDATE FIX NOT YET REVIEWED**. R7 is closed with the
-stable analyzer/delegation contract recorded in [`../r7/MAP.md`](../r7/MAP.md). Candidate MAP/SPEC
-commit `698c766f9` landed, and fresh independent built-in `default` review returned
-`CHANGES_REQUIRED` with three scoped documentation findings. This docs-only follow-up addresses
-those findings but makes no claim of fresh independent review. The R8 PLAN and TASKS remain
-unauthored/unreviewed; `CTX-R8-01` remains `OPEN` / in progress, `CTX-R8-02` remains `BLOCKED`, and
-R8-IMPLEMENT remains blocked/boundary-only. **No R8 code may begin until the complete
-MAP/SPEC/PLAN/TASKS family is fresh-review-clean.**
+Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; PLAN/TASKS
+REVIEW PENDING; R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
+
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself. **No R8 code may begin until the
+complete MAP/SPEC/PLAN/TASKS family is fresh-review-clean.**
 
 ## Objective
 
@@ -111,16 +116,19 @@ acceptance.
 | `CTX-R8-05` | Operator code formats typed facts and performs no analyzer or delegation inference. |
 | `CTX-R8-06` | Scheduler/adjudication behavior and real-session delivery/cursor rules remain unchanged. |
 
-These are criteria, not current completion claims. The control-pack ledger remains authoritative
-until a reviewed phase transition updates it.
+`CTX-R8-01` is currently `PROVEN` by the stable R7 contract plus the clean MAP/SPEC freeze. The
+remaining rows are future criteria, not completion claims. The control-pack ledger remains
+authoritative until reviewed evidence updates it.
 
 ## Required Docs Before Implementation
 
-1. this MAP — candidate commit `698c766f9` landed; three review findings addressed by this
-   not-yet-reviewed follow-up;
-2. the R8 specification — same candidate/fix status;
-3. an exact migration/verification PLAN — unauthored/unreviewed;
-4. packetized TASKS with review gates — unauthored/unreviewed.
+1. this MAP — included in fresh-review-clean contract series `698c766f9` + `f5865fb7` +
+   `95529809`;
+2. the R8 specification — included in the same fresh-review-clean contract series;
+3. an exact migration/verification PLAN — landed in candidate commit `0ed3d8f04` and awaiting
+   fresh independent built-in `default` review;
+4. packetized TASKS with review gates — landed in the same candidate commit and awaiting the same
+   fresh review.
 
 Stop at documentation authoring. Do not stage or implement source/test changes under this map until
-all four artifacts are review-clean.
+all four artifacts are review-clean and `CTX-R8-02` is proven.

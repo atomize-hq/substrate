@@ -4,14 +4,19 @@ Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-tasks.md`
 
 Status: **CANDIDATE / AWAITING FRESH INDEPENDENT BUILT-IN `default` REVIEW / ALL TASKS UNSTARTED /
-`CTX-R8-02` UNPROVEN / R8-IMPLEMENT BLOCKED**.
+`CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
 
-The MAP/SPEC contract series `698c766f9` + `f5865fb7` + `95529809` is reported by the current
-session handoff as fresh independent built-in `default` `CLEAN`. This TASKS artifact and its PLAN
-are not yet reviewed. The checked-in MAP/SPEC and control-pack mirrors retain pre-review wording;
-this bounded authoring packet does not reconcile them. No checkbox below authorizes source/test
-implementation until the complete four-document family is fresh-review-clean and the entry status
-is reconciled.
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
+series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
+with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
+clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
+independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
+`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
+`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
+transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
+claimed. This progress receipt claims no review result for itself. No checkbox below authorizes
+source/test implementation until the complete four-document family is fresh-review-clean and
+`CTX-R8-02` is proven.
 
 ## Entry Gate — Must Be Satisfied Before R8-1
 
@@ -566,5 +571,6 @@ may a separate docs-only mirror/phase transition packet be proposed.
 - [ ] `CTX-R8-01..06` status reconciled only from reviewed evidence.
 - [ ] Separate mirror/phase transition reviewed before any R8 completion or next-phase claim.
 
-All boxes are intentionally unchecked. This candidate TASKS artifact does not claim the docs family,
-R8 implementation, any context gate, or the full R8 family is clean or complete.
+All boxes are intentionally unchecked. `CTX-R8-01` is proven only by the stable R7 contract plus the
+clean R8 MAP/SPEC freeze. This candidate TASKS artifact does not claim `CTX-R8-02..06`, R8
+implementation, or the full R8 family is clean or complete.
