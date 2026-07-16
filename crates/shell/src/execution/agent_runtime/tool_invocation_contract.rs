@@ -3,6 +3,8 @@
 use anyhow::{bail, Context};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+#[cfg(any(target_os = "linux", test))]
+use substrate_common::paths as substrate_paths;
 
 use crate::execution::config_model::AgentExecutionScope;
 
@@ -846,53 +848,244 @@ pub(crate) fn resolve_follow_up_dispatch_authority_v1(
     metadata.validate()?;
     ensure_tool_accepts_follow_up_handle(tool_name, handle)?;
 
-    let authority = store.resolve_internal_world_dispatch_caller(
-        &metadata.orchestration_session_id,
-        &metadata.caller_participant_id,
-    )?;
-    let world_binding = authoritative_world_binding(&authority.session)?;
-
     match handle {
         HostToolFollowUpHandleV1::ActiveTask(active_task) => {
-            let Some(task) = store.load_active_ephemeral_world_task(
-                &metadata.orchestration_session_id,
-                &active_task.task_run_id,
-            )?
-            else {
-                bail!(
-                    "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
-                    metadata.orchestration_session_id,
-                    active_task.task_run_id
-                );
-            };
+            #[cfg(any(target_os = "linux", test))]
+            {
+                use super::{
+                    host_session_authority::{
+                        facade::HostSessionAuthority, trusted_fs::TrustedAuthorityRoot,
+                    },
+                    state_store::AcceptedWorldWorkIdentityV1,
+                };
 
-            if task.caller_participant_id != authority.caller_participant.participant_id() {
-                bail!(
-                    "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
-                    metadata.orchestration_session_id,
-                    active_task.task_run_id,
-                    authority.caller_participant.participant_id()
-                );
+                let substrate_home = substrate_paths::substrate_home()
+                    .context("resolve trusted active-task authority home")?;
+                let trusted_root = TrustedAuthorityRoot::open(&substrate_home)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("open trusted active-task authority home")?;
+                let host_authority = HostSessionAuthority::from_trusted_root(trusted_root)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("bind trusted active-task authority")?;
+                let current = host_authority
+                    .resolve_current_exact(&metadata.orchestration_session_id, None)
+                    .map_err(|error| anyhow::anyhow!(error.to_string()))
+                    .context("resolve exact current active-task authority")?;
+                if current.caller.participant_id != metadata.caller_participant_id {
+                    bail!(
+                        "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id,
+                        current.caller.participant_id
+                    );
+                }
+                let current_world = current.authority.world_binding.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "missing_world_binding: orchestration session {} has no authoritative world binding",
+                        metadata.orchestration_session_id
+                    )
+                })?;
+                let world_binding = HostToolRuntimeWorldBindingV1 {
+                    world_id: current_world.world_id.clone(),
+                    world_generation: current_world.world_generation,
+                };
+                let authority = store.resolve_world_work_registry_authority(
+                    &metadata.orchestration_session_id,
+                    &metadata.caller_participant_id,
+                    &world_binding.world_id,
+                    world_binding.world_generation,
+                    None,
+                )?;
+                let current_policy_ref =
+                    current.authority.current_policy_ref.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "stale_linkage: orchestration session {} active ephemeral task {} has no current policy reference",
+                            metadata.orchestration_session_id,
+                            active_task.task_run_id
+                        )
+                    })?;
+                let current_policy_revision = current
+                    .authority
+                    .current_policy_revision
+                    .as_deref()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "stale_linkage: orchestration session {} active ephemeral task {} has no current policy revision",
+                            metadata.orchestration_session_id,
+                            active_task.task_run_id
+                        )
+                    })?;
+                if authority.authority_store_id != current.observation.authority_store_id
+                    || authority.authority_revision_observed
+                        != current.observation.authority_revision
+                    || authority.orchestration_session_id
+                        != current.authority.orchestration_session_id
+                    || authority.caller_participant_id != current.caller.participant_id
+                    || authority.workspace_root
+                        != current
+                            .authority
+                            .workspace_binding
+                            .workspace_root
+                            .physical_path
+                    || authority.host_session_posture != current.authority.lifecycle_posture
+                    || authority.current_policy_snapshot_ref != *current_policy_ref
+                    || authority.current_policy_snapshot_hash
+                        != current.current_policy.canonical_policy_snapshot_sha256
+                    || authority.current_policy_revision != current_policy_revision
+                {
+                    bail!(
+                        "stale_linkage: orchestration session {} active ephemeral task {} no longer matches current dispatch authority",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id
+                    );
+                }
+                if authority.caller_backend_id != current.caller.descriptor.backend_id {
+                    bail!(
+                        "backend_mismatch: orchestration session {} active ephemeral task {} caller backend is {} not {}",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id,
+                        authority.caller_backend_id,
+                        current.caller.descriptor.backend_id
+                    );
+                }
+                if authority.world_id != current_world.world_id
+                    || authority.world_generation != current_world.world_generation
+                {
+                    bail!(
+                        "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id
+                    );
+                }
+
+                let work_identity = AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: active_task.task_run_id.clone(),
+                };
+                let acceptance = authority
+                    .receipt_registry
+                    .inspect_world_work_acceptance_by_work_identity(
+                        &authority.authority_store_id,
+                        &authority.orchestration_session_id,
+                        &work_identity,
+                    )?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+                            metadata.orchestration_session_id,
+                            active_task.task_run_id
+                        )
+                    })?;
+                if acceptance.caller_participant_id != authority.caller_participant_id {
+                    bail!(
+                        "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id,
+                        authority.caller_participant_id
+                    );
+                }
+                if acceptance.caller_backend_id != authority.caller_backend_id {
+                    bail!(
+                        "backend_mismatch: orchestration session {} active ephemeral task {} caller backend is {} not {}",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id,
+                        acceptance.caller_backend_id,
+                        authority.caller_backend_id
+                    );
+                }
+                if acceptance.world_id != authority.world_id
+                    || acceptance.world_generation != authority.world_generation
+                {
+                    bail!(
+                        "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id
+                    );
+                }
+                if acceptance.authority_store_id != authority.authority_store_id
+                    || acceptance.authority_revision_observed
+                        != authority.authority_revision_observed
+                    || acceptance.orchestration_session_id != authority.orchestration_session_id
+                    || acceptance.work_identity != work_identity
+                    || acceptance.current_policy_snapshot_ref
+                        != authority.current_policy_snapshot_ref
+                    || acceptance.current_policy_snapshot_hash
+                        != authority.current_policy_snapshot_hash
+                    || acceptance.current_policy_revision != authority.current_policy_revision
+                {
+                    bail!(
+                        "stale_linkage: orchestration session {} active ephemeral task {} no longer matches current dispatch authority",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id
+                    );
+                }
+
+                let observation = authority
+                    .execution_supervisor
+                    .inspect_observation_by_acceptance_id(&acceptance.acceptance_record_id)?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "active_task_observation_unavailable: orchestration session {} accepted ephemeral task {} has no exact supervisor claim",
+                            metadata.orchestration_session_id,
+                            active_task.task_run_id
+                        )
+                    })?;
+                if !observation.claim.matches_acceptance(&acceptance)
+                    || observation.claim.acceptance_record_id != acceptance.acceptance_record_id
+                    || observation.claim.stream_id != acceptance.runtime_acceptance.stream_id
+                    || observation.claim.work_identity != work_identity
+                    || observation.claim.authority_store_id != authority.authority_store_id
+                    || observation.claim.orchestration_session_id
+                        != authority.orchestration_session_id
+                    || observation.claim.caller_participant_id != authority.caller_participant_id
+                    || observation.claim.caller_backend_id != authority.caller_backend_id
+                    || observation.claim.target_backend_id != acceptance.target_backend_id
+                    || observation.claim.world_id != authority.world_id
+                    || observation.claim.world_generation != authority.world_generation
+                {
+                    bail!(
+                        "active_task_observation_mismatch: orchestration session {} accepted ephemeral task {} has conflicting supervisor truth",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id
+                    );
+                }
+                if observation.durable_frame_cursor
+                    < Some(acceptance.runtime_acceptance.frame_sequence)
+                {
+                    bail!(
+                        "active_task_observation_unavailable: orchestration session {} accepted ephemeral task {} has no durable supervisor cursor",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id
+                    );
+                }
+                if observation.terminal.is_some() {
+                    bail!(
+                        "target_already_terminal: orchestration session {} active ephemeral task {} has exact terminal supervisor truth",
+                        metadata.orchestration_session_id,
+                        active_task.task_run_id
+                    );
+                }
+
+                Ok(ResolvedFollowUpDispatchAuthorityV1 {
+                    mode: WorldDispatchModeV1::Ephemeral,
+                    target_backend_id: acceptance.target_backend_id,
+                    task_run_id: Some(active_task.task_run_id.clone()),
+                    target_participant_id: None,
+                    world_binding,
+                })
             }
-            if task.world_id != world_binding.world_id
-                || task.world_generation != world_binding.world_generation
+            #[cfg(not(any(target_os = "linux", test)))]
             {
                 bail!(
-                    "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
-                    metadata.orchestration_session_id,
-                    active_task.task_run_id
-                );
+                    "unsupported_platform_or_posture: canonical active-task follow-up authority is unavailable on this platform"
+                )
             }
-
-            Ok(ResolvedFollowUpDispatchAuthorityV1 {
-                mode: WorldDispatchModeV1::Ephemeral,
-                target_backend_id: task.target_backend_id,
-                task_run_id: Some(task.task_run_id),
-                target_participant_id: None,
-                world_binding,
-            })
         }
         HostToolFollowUpHandleV1::RetainedWorker(retained_worker) => {
+            let authority = store.resolve_internal_world_dispatch_caller(
+                &metadata.orchestration_session_id,
+                &metadata.caller_participant_id,
+            )?;
+            let world_binding = authoritative_world_binding(&authority.session)?;
             let Some(record) = store.load_session(&metadata.orchestration_session_id)? else {
                 bail!(
                     "missing_orchestration_session: internal world dispatch requires authoritative orchestration session {}",
@@ -1300,10 +1493,20 @@ fn require_runtime_owned_field(field: &'static str, value: &str) -> anyhow::Resu
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-    use std::path::PathBuf;
+    use std::{
+        collections::BTreeSet,
+        fs,
+        path::{Path, PathBuf},
+    };
 
+    use chrono::Utc;
+    use substrate_common::agent_events::{RuntimeEventIdentityV1, RuntimeTerminalIdentityV1};
     use tempfile::TempDir;
+    use transport_api_types::{
+        ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
+        ResolvedMemberRuntimeDescriptorV1,
+    };
+    use uuid::Uuid;
 
     use super::{
         host_tool_contract, host_tool_contracts_v1, normalize_cancel_world_work_outcome_v1,
@@ -1325,7 +1528,7 @@ mod tests {
         RetainedWorkerInspectSnapshotV1, RetainedWorkerStopCloseoutV1, RunWorldTaskOutcomeV1,
         SpawnWorldWorkerOutcomeV1, StopWorldWorkerOutcomeV1, WorkerCancelPayloadV1,
         WorkerContinuePayloadV1, WorkerForkPayloadV1, WorkerInspectPayloadV1, WorkerStopPayloadV1,
-        WorldTaskTerminalStateV1,
+        WorldDispatchOutcomeV1, WorldTaskTerminalStateV1,
     };
     use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
     use crate::execution::agent_runtime::orchestration_session::{
@@ -1334,8 +1537,14 @@ mod tests {
     use crate::execution::agent_runtime::session::{
         AgentRuntimeParticipantRecord, AgentRuntimeSessionState,
     };
-    use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
+    use crate::execution::agent_runtime::state_store::{
+        AcceptedWorldWorkIdentityV1, ProposedWorldWorkIdentityV1,
+        RuntimeAcceptanceAcknowledgementKindV1, RuntimeAcceptanceEvidenceV1,
+        WorldWorkAcceptanceProposalV1, WorldWorkAcceptanceRecordV1, WorldWorkProposalFamilyV1,
+        WorldWorkProposalReservationOutcomeV1, WorldWorkSubmissionIdentityV1,
+    };
     use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
+    use crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkInterruptionReasonV1;
     use crate::execution::agent_runtime::{
         AgentRuntimeStateStore, WorldDispatchActionV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
     };
@@ -2046,92 +2255,440 @@ mod tests {
         });
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    #[serial_test::serial]
+    async fn dispatch_contract_adapter_follow_up_resolution_uses_authoritative_active_task_state() {
+        let fixture = b_owned_active_task_fixture();
+        let store = &fixture.store;
+        let metadata = sample_runtime_metadata();
+
+        assert!(store
+            .load_active_ephemeral_world_task("sess_packet2", "task-run-packet2")
+            .expect("inspect legacy active-task compatibility path")
+            .is_none());
+
+        let resolved = resolve_follow_up_dispatch_authority_v1(
+            store,
+            &metadata,
+            HostToolNameV1::CancelWorldWork,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect("resolve active-task follow-up authority");
+
+        assert_eq!(resolved.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(resolved.target_backend_id, "cli:codex_world");
+        assert_eq!(resolved.task_run_id.as_deref(), Some("task-run-packet2"));
+        assert!(resolved.target_participant_id.is_none());
+        assert_eq!(resolved.world_binding.world_id, "world-17");
+        assert_eq!(resolved.world_binding.world_generation, 2);
+
+        let inspect_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+            store,
+            &metadata,
+            HostToolNameV1::InspectWorldWorker,
+            HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+            WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+        )
+        .expect("translate active inspect request");
+        let cancel_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
+            store,
+            &metadata,
+            HostToolNameV1::CancelWorldWork,
+            HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+            WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
+                reason: Some("host_requested_stop".to_string()),
+                graceful: Some(true),
+            }),
+        )
+        .expect("translate active cancel request");
+
+        let inspect_validated = inspect_request
+            .validate()
+            .expect("validate inspect request");
+        assert_eq!(inspect_validated.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(
+            inspect_validated.task_run_id.as_deref(),
+            Some("task-run-packet2")
+        );
+        assert!(inspect_validated.target_participant_id.is_none());
+
+        let cancel_validated = cancel_request.validate().expect("validate cancel request");
+        assert_eq!(cancel_validated.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(
+            cancel_validated.task_run_id.as_deref(),
+            Some("task-run-packet2")
+        );
+        assert_eq!(cancel_validated.world_id, "world-17");
+
+        let translated = translate_host_tool_invocation_request_to_internal_dispatch_request_v1(
+            store,
+            &metadata,
+            &sample_world_binding(),
+            HostToolInvocationRequestEnvelopeV1 {
+                version: super::host_tool_contract_version_v1(),
+                tool_name: "inspect_world_worker".to_string(),
+                tool_call_id: Some("tool-call-active-inspect".to_string()),
+                arguments: serde_json::json!({
+                    "task_run_id": "task-run-packet2",
+                    "payload": {}
+                }),
+            },
+        )
+        .expect("translate real active-task tool invocation");
+        let outcome =
+            crate::execution::orchestrator_world_dispatch::dispatch_orchestrator_world_request(
+                store,
+                translated.dispatch_request,
+            )
+            .await
+            .expect("dispatch real active-task inspection");
+        let WorldDispatchOutcomeV1::InspectWorldWorker(outcome) = outcome else {
+            panic!("active-task tool invocation must dispatch InspectWorldWorker")
+        };
+        assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
+        assert_eq!(outcome.target_participant_id, "task-run-packet2");
+        assert_eq!(outcome.target_backend_id, "cli:codex_world");
+        assert_eq!(outcome.world_id, "world-17");
+        assert_eq!(outcome.world_generation, 2);
+        assert!(outcome.snapshot.authoritative_live);
+
+        assert!(!store
+            .canonical_active_ephemeral_task_path("sess_packet2", "task-run-packet2")
+            .exists());
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
     #[test]
     #[serial_test::serial]
-    fn dispatch_contract_adapter_follow_up_resolution_uses_authoritative_active_task_state() {
-        with_store(|store| {
-            let orchestrator = live_orchestrator("codex", "sess_packet2", "orch_packet2");
-            let parent = active_parent(&orchestrator);
-            store
-                .persist_orchestration_session(&parent)
-                .expect("persist parent");
-            store
-                .persist_participant(&orchestrator)
-                .expect("persist orchestrator");
+    fn dispatch_contract_adapter_active_task_resolution_rejects_unknown_task_identity() {
+        let fixture = b_owned_authority_fixture();
+        let err = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-unknown".to_string(),
+            }),
+        )
+        .expect_err("unknown accepted task must fail closed");
+        assert!(err.to_string().contains("active_task_not_found"), "{err:#}");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
 
-            let guard = store
-                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                    orchestration_session_id: "sess_packet2".to_string(),
-                    task_run_id: "task-run-packet2".to_string(),
-                    caller_participant_id: "orch_packet2".to_string(),
-                    target_backend_id: "cli:codex_world".to_string(),
-                    world_id: "world-17".to_string(),
-                    world_generation: 2,
-                })
-                .expect("register active task");
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_active_task_resolution_rejects_caller_mismatch() {
+        let fixture = b_owned_active_task_fixture();
+        let mut metadata = sample_runtime_metadata();
+        metadata.caller_participant_id = "orch_other".to_string();
+        let err = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &metadata,
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect_err("foreign caller must fail closed");
+        assert!(err.to_string().contains("stale_linkage"), "{err:#}");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
 
-            let metadata = sample_runtime_metadata();
-            let resolved = resolve_follow_up_dispatch_authority_v1(
-                store,
-                &metadata,
-                HostToolNameV1::CancelWorldWork,
-                &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
-                    task_run_id: "task-run-packet2".to_string(),
-                }),
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_active_task_resolution_rejects_caller_backend_mismatch() {
+        let fixture = b_owned_authority_fixture_with_backend("cli:codex-host");
+        seed_b_owned_active_task_acceptance(&fixture.store);
+        let err = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect_err("caller/backend mismatch must fail closed");
+        assert!(err.to_string().contains("backend_mismatch"), "{err:#}");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_active_task_resolution_rejects_world_binding_mismatch() {
+        let fixture = b_owned_authority_fixture();
+        seed_b_owned_active_task_acceptance_for_scope(
+            &fixture.store,
+            ActiveTaskAcceptanceSeed {
+                orchestration_session_id: "sess_packet2",
+                caller_participant_id: "orch_packet2",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex_world",
+                world_id: "world-stale",
+                world_generation: 9,
+                task_run_id: "task-run-packet2",
+                current_policy_revision: None,
+                create_claim: true,
+            },
+        );
+        let err = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect_err("world-binding mismatch must fail closed");
+        assert!(
+            err.to_string().contains("world_binding_mismatch"),
+            "{err:#}"
+        );
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_active_task_resolution_rejects_stale_receipt_supervisor_linkage() {
+        let fixture = b_owned_authority_fixture();
+        seed_b_owned_active_task_acceptance_for_scope(
+            &fixture.store,
+            ActiveTaskAcceptanceSeed {
+                orchestration_session_id: "sess_packet2",
+                caller_participant_id: "orch_packet2",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex_world",
+                world_id: "world-17",
+                world_generation: 2,
+                task_run_id: "task-run-packet2",
+                current_policy_revision: Some("stale-policy-revision"),
+                create_claim: true,
+            },
+        );
+        let err = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect_err("stale receipt/supervisor linkage must fail closed");
+        assert!(err.to_string().contains("stale_linkage"), "{err:#}");
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_active_task_resolution_disambiguates_reused_task_id_by_session() {
+        let fixture = b_owned_authority_fixture();
+        seed_b_owned_active_task_acceptance_for_scope(
+            &fixture.store,
+            ActiveTaskAcceptanceSeed {
+                orchestration_session_id: "sess_other",
+                caller_participant_id: "orch_other",
+                caller_backend_id: "cli:other",
+                target_backend_id: "cli:other_world",
+                world_id: "world-other",
+                world_generation: 7,
+                task_run_id: "task-run-packet2",
+                current_policy_revision: None,
+                create_claim: true,
+            },
+        );
+        seed_b_owned_active_task_acceptance(&fixture.store);
+        let resolved = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect("same task ID must resolve only within exact current session");
+        assert_eq!(resolved.target_backend_id, "cli:codex_world");
+        assert_eq!(resolved.world_binding.world_id, "world-17");
+        assert_eq!(resolved.world_binding.world_generation, 2);
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim() {
+        let fixture = b_owned_authority_fixture();
+        seed_b_owned_active_task_acceptance_with_claim(&fixture.store, false);
+        let err = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect_err("acceptance without a supervisor claim must fail closed");
+        assert!(
+            err.to_string()
+                .contains("active_task_observation_unavailable"),
+            "{err:#}"
+        );
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[serial_test::serial]
+    async fn dispatch_contract_adapter_active_task_resolution_preserves_unresolved_replay_truth() {
+        let fixture = b_owned_active_task_fixture();
+        let authority = fixture
+            .store
+            .resolve_world_work_registry_authority(
+                "sess_packet2",
+                "orch_packet2",
+                "world-17",
+                2,
+                None,
             )
-            .expect("resolve active-task follow-up authority");
-
-            assert_eq!(resolved.mode, WorldDispatchModeV1::Ephemeral);
-            assert_eq!(resolved.target_backend_id, "cli:codex_world");
-            assert_eq!(resolved.task_run_id.as_deref(), Some("task-run-packet2"));
-            assert!(resolved.target_participant_id.is_none());
-            assert_eq!(resolved.world_binding.world_id, "world-17");
-            assert_eq!(resolved.world_binding.world_generation, 2);
-
-            let inspect_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
-                store,
-                &metadata,
-                HostToolNameV1::InspectWorldWorker,
-                HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+            .expect("resolve active-task supervisor authority");
+        let acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_work_identity(
+                &authority.authority_store_id,
+                "sess_packet2",
+                &AcceptedWorldWorkIdentityV1::EphemeralTask {
                     task_run_id: "task-run-packet2".to_string(),
-                }),
-                WorldDispatchPayloadV1::WorkerInspect(WorkerInspectPayloadV1::default()),
+                },
             )
-            .expect("translate active inspect request");
-            let cancel_request = translate_follow_up_tool_to_internal_dispatch_request_v1(
-                store,
-                &metadata,
-                HostToolNameV1::CancelWorldWork,
-                HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+            .expect("inspect active-task acceptance")
+            .expect("active-task acceptance exists");
+        let claim = authority
+            .execution_supervisor
+            .inspect_claim_by_acceptance_id(&acceptance.acceptance_record_id)
+            .expect("inspect active-task claim")
+            .expect("active-task claim exists");
+        authority
+            .execution_supervisor
+            .mark_interrupted(&claim, WorldWorkInterruptionReasonV1::ReplayUnavailable)
+            .expect("record exact replay-unavailable observation");
+
+        let translated = translate_host_tool_invocation_request_to_internal_dispatch_request_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            &sample_world_binding(),
+            HostToolInvocationRequestEnvelopeV1 {
+                version: super::host_tool_contract_version_v1(),
+                tool_name: "inspect_world_worker".to_string(),
+                tool_call_id: Some("tool-call-replay-unavailable".to_string()),
+                arguments: serde_json::json!({
+                    "task_run_id": "task-run-packet2",
+                    "payload": {}
+                }),
+            },
+        )
+        .expect("unresolved observation remains exact nonterminal dispatch truth");
+        let outcome =
+            crate::execution::orchestrator_world_dispatch::dispatch_orchestrator_world_request(
+                &fixture.store,
+                translated.dispatch_request,
+            )
+            .await
+            .expect("dispatch exact unresolved active-task inspection");
+        assert!(matches!(
+            outcome,
+            WorldDispatchOutcomeV1::InspectWorldWorker(_)
+        ));
+        let observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance.acceptance_record_id)
+            .expect("inspect replay-unavailable state")
+            .expect("replay-unavailable observation exists");
+        assert_eq!(
+            observation
+                .interruption
+                .as_ref()
+                .map(|interruption| interruption.kind),
+            Some(WorldWorkInterruptionReasonV1::ReplayUnavailable)
+        );
+        assert!(observation.terminal.is_none());
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn dispatch_contract_adapter_active_task_resolution_rejects_exact_terminal_truth_distinctly() {
+        let fixture = b_owned_active_task_fixture();
+        let authority = fixture
+            .store
+            .resolve_world_work_registry_authority(
+                "sess_packet2",
+                "orch_packet2",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve terminal fixture supervisor authority");
+        let acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_work_identity(
+                &authority.authority_store_id,
+                "sess_packet2",
+                &AcceptedWorldWorkIdentityV1::EphemeralTask {
                     task_run_id: "task-run-packet2".to_string(),
-                }),
-                WorldDispatchPayloadV1::WorkerCancel(WorkerCancelPayloadV1 {
-                    reason: Some("host_requested_stop".to_string()),
-                    graceful: Some(true),
-                }),
+                },
             )
-            .expect("translate active cancel request");
+            .expect("inspect terminal fixture acceptance")
+            .expect("terminal fixture acceptance exists");
+        let claim = authority
+            .execution_supervisor
+            .inspect_claim_by_acceptance_id(&acceptance.acceptance_record_id)
+            .expect("inspect terminal fixture claim")
+            .expect("terminal fixture claim exists");
+        let event_identity = RuntimeEventIdentityV1 {
+            event_id: "event-tool-terminal-1".to_string(),
+            event_sequence: 1,
+        };
+        let terminal = ExecuteStreamFrame::Exit {
+            frame_identity: transport_api_types::RuntimeFrameIdentityV1 {
+                schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                stream_id: acceptance.runtime_acceptance.stream_id.clone(),
+                frame_sequence: 2,
+            },
+            terminal_identity: RuntimeTerminalIdentityV1::from(&event_identity),
+            event_identity,
+            exit: 0,
+            span_id: "task-run-packet2".to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        };
+        authority
+            .execution_supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical terminal frame"),
+            )
+            .expect("journal exact terminal frame");
 
-            let inspect_validated = inspect_request
-                .validate()
-                .expect("validate inspect request");
-            assert_eq!(inspect_validated.mode, WorldDispatchModeV1::Ephemeral);
-            assert_eq!(
-                inspect_validated.task_run_id.as_deref(),
-                Some("task-run-packet2")
-            );
-            assert!(inspect_validated.target_participant_id.is_none());
-
-            let cancel_validated = cancel_request.validate().expect("validate cancel request");
-            assert_eq!(cancel_validated.mode, WorldDispatchModeV1::Ephemeral);
-            assert_eq!(
-                cancel_validated.task_run_id.as_deref(),
-                Some("task-run-packet2")
-            );
-            assert_eq!(cancel_validated.world_id, "world-17");
-
-            drop(guard);
-        });
+        let err = resolve_follow_up_dispatch_authority_v1(
+            &fixture.store,
+            &sample_runtime_metadata(),
+            HostToolNameV1::InspectWorldWorker,
+            &HostToolFollowUpHandleV1::ActiveTask(super::ActiveTaskHandleV1 {
+                task_run_id: "task-run-packet2".to_string(),
+            }),
+        )
+        .expect_err("exact terminal task cannot resolve as active");
+        assert!(
+            err.to_string().contains("target_already_terminal"),
+            "{err:#}"
+        );
+        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2732,6 +3289,426 @@ mod tests {
                 "invalid_follow_up_handle: retained-worker follow-up requires exact participant_id and does not accept task_run_id"
             );
         });
+    }
+
+    struct BOwnedActiveTaskFixture {
+        _root: TempDir,
+        store: AgentRuntimeStateStore,
+    }
+
+    fn b_owned_active_task_fixture() -> BOwnedActiveTaskFixture {
+        let fixture = b_owned_authority_fixture();
+        seed_b_owned_active_task_acceptance(&fixture.store);
+        fixture
+    }
+
+    fn b_owned_authority_fixture() -> BOwnedActiveTaskFixture {
+        b_owned_authority_fixture_with_backend("cli:codex")
+    }
+
+    fn b_owned_authority_fixture_with_backend(caller_backend_id: &str) -> BOwnedActiveTaskFixture {
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create secure authority fixture parent");
+        let root = tempfile::tempdir_in(safe_parent).expect("create secure authority fixture");
+        let substrate_home = root.path().join("home");
+        let workspace_root = root.path().join("workspace");
+        fs::create_dir_all(&substrate_home).expect("create authority home");
+        fs::create_dir_all(&workspace_root).expect("create authority workspace");
+        #[cfg(unix)]
+        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("secure authority home");
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_b_owned_world_dispatch_policy(&substrate_home);
+        activate_b_owned_tool_authority(&substrate_home, &workspace_root, caller_backend_id);
+
+        let store = AgentRuntimeStateStore::new().expect("open B-owned StateStore");
+        BOwnedActiveTaskFixture { _root: root, store }
+    }
+
+    fn write_b_owned_world_dispatch_policy(substrate_home: &Path) {
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n    - \"cli:codex_world\"\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex_world\"\n    allowed_actions:\n      - \"inspect_world_worker\"\n      - \"cancel_world_work\"\n    allowed_modes:\n      - \"ephemeral\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 4\n    max_concurrent_ephemeral: 4\n",
+        )
+        .expect("write B-owned dispatch policy");
+    }
+
+    fn activate_b_owned_tool_authority(
+        substrate_home: &Path,
+        workspace_root: &Path,
+        caller_backend_id: &str,
+    ) {
+        use crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority;
+        use crate::execution::agent_runtime::host_session_authority::schema::{
+            AgentDescriptorV1, AgentExecutionScopeV1, CanonicalDirectoryV1,
+            DirectoryPhysicalIdentityV1, HostAttachCapabilitiesV1,
+            HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
+            HostSessionAuthorityPreconditionV1, HostSessionTransitionCallerKindV1,
+            HostSessionTransitionCallerV1, HostSessionTransitionModeV1, PolicyObjectHashInputV1,
+            RuntimeBackendKindV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
+        };
+        use crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentStateV2;
+        use crate::execution::agent_runtime::host_session_authority::transition::{
+            ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
+            IssueHostSessionTransitionRequestV1, StartContractMaterialV1,
+            TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
+        };
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt as _;
+
+        fn canonical_directory(path: &Path) -> CanonicalDirectoryV1 {
+            let path = fs::canonicalize(path).expect("canonicalize authority fixture directory");
+            let metadata = fs::metadata(&path).expect("stat authority fixture directory");
+            CanonicalDirectoryV1 {
+                physical_path: path
+                    .to_str()
+                    .expect("authority fixture path is UTF-8")
+                    .to_string(),
+                #[cfg(unix)]
+                physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                    device_id: metadata.dev(),
+                    inode: metadata.ino(),
+                },
+                #[cfg(not(unix))]
+                physical_identity: unimplemented!("B-owned authority test requires Unix"),
+            }
+        }
+
+        let authority = HostSessionAuthority::open(substrate_home)
+            .expect("open B-owned tool authority fixture");
+        let root = authority
+            .bootstrap()
+            .expect("bootstrap B-owned tool authority fixture");
+        let policy_snapshot =
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
+                .expect("resolve B-owned tool policy snapshot");
+        let intent_id = "intent-b-owned-tool-sess-packet2".to_string();
+        let issuer_request_id = "request-b-owned-tool-sess-packet2".to_string();
+        let claim_id = "claim-b-owned-tool-sess-packet2".to_string();
+        let request = IssueHostSessionTransitionRequestV1 {
+            intent_id: intent_id.clone(),
+            issuer_request_id: issuer_request_id.clone(),
+            mode: HostSessionTransitionModeV1::Start,
+            authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+            orchestration_session_id: "sess_packet2".to_string(),
+            shell_trace_session_id: "trace-b-owned-tool-sess-packet2".to_string(),
+            caller: HostSessionTransitionCallerV1 {
+                kind: HostSessionTransitionCallerKindV1::PublicCli,
+                caller_participant_id: None,
+                auto_attach_obligation_id: None,
+                auto_attach_claim_owner: None,
+            },
+            source_authoritative_participant_id: None,
+            target_authoritative_participant_id: "orch_packet2".to_string(),
+            target_participant_lease_token: b"lease-orch-packet2".to_vec(),
+            run_id: "run-b-owned-tool-sess-packet2".to_string(),
+            resulting_authoritative_lineage: vec!["orch_packet2".to_string()],
+            workspace_binding: WorkspaceBindingV1 {
+                workspace_root: canonical_directory(workspace_root),
+                authority_store_root: root.bootstrap_home,
+                authority_store_id: root.authority_store_id,
+            },
+            world_binding: Some(WorldBindingV1 {
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            }),
+            start_contract: StartContractMaterialV1 {
+                descriptor: AgentDescriptorV1 {
+                    schema_version: 1,
+                    agent_id: "codex".to_string(),
+                    backend_id: caller_backend_id.to_string(),
+                    backend_kind: RuntimeBackendKindV1::Codex,
+                    protocol: "substrate.agent.session".to_string(),
+                    execution_scope: AgentExecutionScopeV1::Host,
+                    binary_path: "/usr/bin/codex".to_string(),
+                },
+                policy: PolicyObjectHashInputV1 {
+                    schema_version: 1,
+                    policy_revision: "policy-b-owned-tool-sess-packet2".to_string(),
+                    canonical_policy_snapshot_sha256: policy_snapshot.snapshot_hash,
+                },
+                capabilities: HostAttachCapabilitiesV1 {
+                    session_resume: true,
+                    session_fork: true,
+                    session_stop: true,
+                    status_snapshot: true,
+                    event_stream: true,
+                },
+                launch_knobs: HostAttachLaunchKnobsV1 {
+                    requested_execution_scope: AgentExecutionScopeV1::Host,
+                    host_execution_client_start: HostAttachExecutionClientStartV1::StartNow,
+                    attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
+                },
+            },
+            transition_input: None,
+        };
+        let TransitionIssueOutcomeV1::Issued(issued) = authority
+            .issue_start_at(
+                &request,
+                TimestampV1::parse("2026-07-16T12:00:00.000000000Z")
+                    .expect("fixture issue timestamp"),
+                300,
+            )
+            .expect("issue B-owned tool Start")
+        else {
+            panic!("fresh B-owned tool Start must issue")
+        };
+        let claim_request = ClaimHostSessionTransitionRequestV1 {
+            intent_id,
+            issuer_request_id,
+            payload_commitment: issued.payload_commitment,
+            expected_intent_revision: issued.intent_revision,
+            claim_id: claim_id.clone(),
+            claimant_attempt_id: "attempt-b-owned-tool-sess-packet2".to_string(),
+        };
+        let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+            .claim_start_at(
+                &claim_request,
+                TimestampV1::parse("2026-07-16T12:01:00.000000000Z")
+                    .expect("fixture claim timestamp"),
+                30,
+            )
+            .expect("claim B-owned tool Start")
+        else {
+            panic!("fresh B-owned tool Start must claim")
+        };
+        let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } = claimed.state
+        else {
+            panic!("B-owned tool claim must retain claim revision")
+        };
+        let application = ApplyHostSessionTransitionRequestV1 {
+            intent_id: claimed.intent_id,
+            issuer_request_id: claimed.issuer_request_id,
+            payload_commitment: claimed.payload_commitment,
+            expected_intent_revision: claimed.intent_revision,
+            claim_id,
+            expected_claim_revision: claim_revision,
+        };
+        assert!(matches!(
+            authority
+                .apply_start_at(
+                    &application,
+                    TimestampV1::parse("2026-07-16T12:01:10.000000000Z")
+                        .expect("fixture apply timestamp"),
+                )
+                .expect("apply B-owned tool Start"),
+            TransitionApplicationOutcomeV1::Applied(_)
+        ));
+    }
+
+    fn seed_b_owned_active_task_acceptance(store: &AgentRuntimeStateStore) {
+        seed_b_owned_active_task_acceptance_with_claim(store, true);
+    }
+
+    fn seed_b_owned_active_task_acceptance_with_claim(
+        store: &AgentRuntimeStateStore,
+        create_claim: bool,
+    ) {
+        seed_b_owned_active_task_acceptance_for_scope(
+            store,
+            ActiveTaskAcceptanceSeed {
+                orchestration_session_id: "sess_packet2",
+                caller_participant_id: "orch_packet2",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex_world",
+                world_id: "world-17",
+                world_generation: 2,
+                task_run_id: "task-run-packet2",
+                current_policy_revision: None,
+                create_claim,
+            },
+        );
+    }
+
+    struct ActiveTaskAcceptanceSeed<'a> {
+        orchestration_session_id: &'a str,
+        caller_participant_id: &'a str,
+        caller_backend_id: &'a str,
+        target_backend_id: &'a str,
+        world_id: &'a str,
+        world_generation: u64,
+        task_run_id: &'a str,
+        current_policy_revision: Option<&'a str>,
+        create_claim: bool,
+    }
+
+    fn seed_b_owned_active_task_acceptance_for_scope(
+        store: &AgentRuntimeStateStore,
+        seed: ActiveTaskAcceptanceSeed<'_>,
+    ) {
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_packet2",
+                "orch_packet2",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve exact B-owned acceptance authority");
+        let request_id = format!("req-seed-tool-active-task-{}", Uuid::now_v7());
+        let reservation = authority
+            .receipt_registry
+            .prepare_world_work_acceptance_proposal(
+                seed.orchestration_session_id,
+                &request_id,
+                WorldWorkProposalFamilyV1::EphemeralTask,
+                |allocation| {
+                    let validated_dispatch_request =
+                        crate::execution::agent_runtime::WorldDispatchRequestV1 {
+                            request_id: Some(request_id.clone()),
+                            idempotency_key: Some(format!("idem-{request_id}")),
+                            orchestration_session_id: Some(
+                                seed.orchestration_session_id.to_string(),
+                            ),
+                            caller_participant_id: Some(seed.caller_participant_id.to_string()),
+                            action: WorldDispatchActionV1::RunWorldTask,
+                            mode: WorldDispatchModeV1::Ephemeral,
+                            target_backend_id: Some(seed.target_backend_id.to_string()),
+                            task_run_id: None,
+                            target_participant_id: None,
+                            world_id: Some(seed.world_id.to_string()),
+                            world_generation: Some(seed.world_generation),
+                            payload: WorldDispatchPayloadV1::Task(
+                                crate::execution::agent_runtime::TaskPayloadV1 {
+                                    prompt: "seed accepted active task".to_string(),
+                                },
+                            ),
+                        }
+                        .validate()?;
+                    let member_dispatch_request = MemberDispatchRequestV1 {
+                        schema_version: 1,
+                        orchestration_session_id: seed.orchestration_session_id.to_string(),
+                        participant_id: format!("awm_{}", Uuid::now_v7()),
+                        orchestrator_participant_id: seed.caller_participant_id.to_string(),
+                        parent_participant_id: None,
+                        resumed_from_participant_id: None,
+                        backend_id: seed.target_backend_id.to_string(),
+                        protocol: "substrate.agent.session".to_string(),
+                        run_id: request_id.clone(),
+                        world_id: seed.world_id.to_string(),
+                        world_generation: seed.world_generation,
+                        initial_prompt: Some("seed accepted active task".to_string()),
+                        resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                            backend_kind: MemberRuntimeBackendKindV1::Codex,
+                            binary_path: "/usr/bin/codex".to_string(),
+                        },
+                        retained_worker_launch_authority: None,
+                    };
+                    Ok(WorldWorkAcceptanceProposalV1 {
+                        schema_version: 1,
+                        acceptance_context: transport_api_types::WorldWorkAcceptanceContextV1 {
+                            schema_version: 1,
+                            proposed_acceptance_record_id: allocation.acceptance_record_id,
+                            request_id: request_id.clone(),
+                            message_id: None,
+                            caller_backend_id: seed.caller_backend_id.to_string(),
+                            host_transition_correlation: None,
+                        },
+                        authority_store_id: authority.authority_store_id.clone(),
+                        authority_revision_observed: authority.authority_revision_observed,
+                        orchestration_session_id: seed.orchestration_session_id.to_string(),
+                        caller_participant_id: seed.caller_participant_id.to_string(),
+                        caller_backend_id: seed.caller_backend_id.to_string(),
+                        target_backend_id: seed.target_backend_id.to_string(),
+                        world_id: seed.world_id.to_string(),
+                        world_generation: seed.world_generation,
+                        proposed_work: ProposedWorldWorkIdentityV1::EphemeralTask,
+                        submission_identity: WorldWorkSubmissionIdentityV1::EphemeralTask {
+                            validated_dispatch_request,
+                            member_dispatch_request,
+                            canonical_execute_request_sha256: "d".repeat(64),
+                        },
+                        current_policy_snapshot_ref: authority.current_policy_snapshot_ref.clone(),
+                        current_policy_snapshot_hash: authority
+                            .current_policy_snapshot_hash
+                            .clone(),
+                        current_policy_revision: seed
+                            .current_policy_revision
+                            .unwrap_or(&authority.current_policy_revision)
+                            .to_string(),
+                        created_at: allocation.created_at,
+                    })
+                },
+            )
+            .expect("reserve exact active-task acceptance proposal");
+        let WorldWorkProposalReservationOutcomeV1::Proposed(proposal) = reservation else {
+            panic!("fresh active-task fixture must reserve a proposal")
+        };
+        let observed_at = Utc::now();
+        let stream_id = format!("rts_tool_contract_{}", Uuid::now_v7());
+        let record = WorldWorkAcceptanceRecordV1 {
+            schema_version: 1,
+            acceptance_record_id: proposal
+                .acceptance_context
+                .proposed_acceptance_record_id
+                .clone(),
+            request_id: proposal.acceptance_context.request_id.clone(),
+            authority_store_id: proposal.authority_store_id.clone(),
+            authority_revision_observed: proposal.authority_revision_observed,
+            orchestration_session_id: proposal.orchestration_session_id.clone(),
+            caller_participant_id: proposal.caller_participant_id.clone(),
+            caller_backend_id: proposal.caller_backend_id.clone(),
+            target_backend_id: proposal.target_backend_id.clone(),
+            world_id: proposal.world_id.clone(),
+            world_generation: proposal.world_generation,
+            work_identity: AcceptedWorldWorkIdentityV1::EphemeralTask {
+                task_run_id: seed.task_run_id.to_string(),
+            },
+            host_transition_correlation: None,
+            current_policy_snapshot_ref: proposal.current_policy_snapshot_ref.clone(),
+            current_policy_snapshot_hash: proposal.current_policy_snapshot_hash.clone(),
+            current_policy_revision: proposal.current_policy_revision.clone(),
+            runtime_acceptance: RuntimeAcceptanceEvidenceV1 {
+                acknowledgement_kind: RuntimeAcceptanceAcknowledgementKindV1::StartFrame,
+                acceptance_record_id: proposal.acceptance_context.proposed_acceptance_record_id,
+                stream_id: stream_id.clone(),
+                frame_sequence: 1,
+                runtime_submission_id: Some(seed.task_run_id.to_string()),
+                task_run_id: Some(seed.task_run_id.to_string()),
+                active_run_id: None,
+                message_id: None,
+                retained_participant_id: None,
+                observed_at,
+            },
+            accepted_at: observed_at,
+            record_revision: 1,
+        };
+        let persisted = authority
+            .receipt_registry
+            .persist_world_work_acceptance_for_supervision(record)
+            .expect("persist exact active-task acceptance");
+        if !seed.create_claim {
+            return;
+        }
+        let claim = authority
+            .execution_supervisor
+            .claim_persisted_world_work(&persisted)
+            .expect("claim exact accepted active task");
+        let start = ExecuteStreamFrame::Start {
+            frame_identity: transport_api_types::RuntimeFrameIdentityV1 {
+                schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                stream_id,
+                frame_sequence: 1,
+            },
+            span_id: seed.task_run_id.to_string(),
+        };
+        authority
+            .execution_supervisor
+            .journal_frame(
+                &claim,
+                &start,
+                &start
+                    .canonical_ndjson_bytes()
+                    .expect("canonical active-task Start"),
+            )
+            .expect("journal exact accepted active-task Start");
     }
 
     fn sample_runtime_metadata() -> HostToolRuntimeDispatchMetadataV1 {
