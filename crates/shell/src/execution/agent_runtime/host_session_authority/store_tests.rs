@@ -3932,6 +3932,141 @@ fn execution_supervisor_storage_requires_exact_activated_store_and_preserves_leg
 }
 
 #[test]
+fn world_work_storage_transactions_accept_versioned_authority_without_mutating_it() {
+    let bootstrap = root();
+    let v1 = platform::bootstrap_test(bootstrap.path(), material(0xde), None).unwrap();
+    let upgraded =
+        platform::upgrade_greenfield_root_test(bootstrap.path(), [0xdf; 16], None).unwrap();
+    let RootUpgradeOutcomeV1::Upgraded(v2) = upgraded else {
+        panic!("fresh greenfield authority must upgrade to V2")
+    };
+    assert_eq!(v2.authority_store_id, v1.authority_store_id);
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let root_path = bootstrap.path().join("authority-v1/state-root-v1.json");
+    let root_before = fs::read(&root_path).unwrap();
+
+    let receipt = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &v2.authority_store_id,
+    )
+    .unwrap();
+    let mut receipt_transaction = receipt.begin_transaction().unwrap();
+    receipt_transaction
+        .replace_registry(br#"{"schema_version":1}"#)
+        .unwrap();
+    receipt_transaction.finish().unwrap();
+
+    let supervisor = WorldWorkExecutionSupervisorStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &v2.authority_store_id,
+    )
+    .unwrap();
+    let mut supervisor_transaction = supervisor.begin_transaction().unwrap();
+    supervisor_transaction
+        .replace_supervisor(br#"{"schema_version":1}"#)
+        .unwrap();
+    supervisor_transaction.finish().unwrap();
+
+    assert_eq!(fs::read(root_path).unwrap(), root_before);
+    assert!(legacy_writer_guard(bootstrap.path()).is_err());
+}
+
+#[test]
+fn receipt_registry_storage_rejects_post_begin_v2_authority_temp_injection() {
+    let bootstrap = root();
+    platform::bootstrap_test(bootstrap.path(), material(0xe0), None).unwrap();
+    let RootUpgradeOutcomeV1::Upgraded(v2) =
+        platform::upgrade_greenfield_root_test(bootstrap.path(), [0xe1; 16], None).unwrap()
+    else {
+        panic!("fresh greenfield authority must upgrade to V2")
+    };
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &v2.authority_store_id,
+    )
+    .unwrap();
+    let mut transaction = storage.begin_transaction().unwrap();
+    let injected = bootstrap.path().join("authority-v1/tmp/not-a-temp");
+    fs::write(&injected, b"hostile post-begin temp").unwrap();
+    fs::set_permissions(&injected, fs::Permissions::from_mode(0o600)).unwrap();
+
+    assert!(transaction
+        .replace_registry(br#"{"must_not":"publish"}"#)
+        .is_err());
+    assert!(transaction.finish().is_err());
+    assert_eq!(fs::read(injected).unwrap(), b"hostile post-begin temp");
+    assert!(!bootstrap
+        .path()
+        .join("run/agent-hub/world-work-receipt-registry-v1.json")
+        .exists());
+}
+
+#[test]
+fn execution_supervisor_storage_rejects_post_begin_v2_legacy_and_marker_injection() {
+    for injection in ["legacy", "marker"] {
+        let bootstrap = root();
+        platform::bootstrap_test(bootstrap.path(), material(0xe2), None).unwrap();
+        let RootUpgradeOutcomeV1::Upgraded(v2) =
+            platform::upgrade_greenfield_root_test(bootstrap.path(), [0xe3; 16], None).unwrap()
+        else {
+            panic!("fresh greenfield authority must upgrade to V2")
+        };
+        let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+            .unwrap()
+            .identity()
+            .clone();
+        let storage = WorldWorkExecutionSupervisorStorageV1::bind(
+            bootstrap.path(),
+            &expected_identity,
+            &v2.authority_store_id,
+        )
+        .unwrap();
+        let mut transaction = storage.begin_transaction().unwrap();
+        match injection {
+            "legacy" => {
+                let sessions = bootstrap.path().join("run/agent-hub/sessions");
+                fs::create_dir(&sessions).unwrap();
+                fs::set_permissions(&sessions, fs::Permissions::from_mode(0o700)).unwrap();
+                let artifact = sessions.join("legacy.json");
+                fs::write(&artifact, b"hostile post-begin legacy state").unwrap();
+                fs::set_permissions(&artifact, fs::Permissions::from_mode(0o600)).unwrap();
+            }
+            "marker" => {
+                let marker = bootstrap.path().join("authority-v1/init-v1.json");
+                fs::write(&marker, br#"{"malformed":true}"#).unwrap();
+                fs::set_permissions(&marker, fs::Permissions::from_mode(0o600)).unwrap();
+            }
+            _ => unreachable!(),
+        }
+
+        assert!(
+            transaction
+                .replace_supervisor(br#"{"must_not":"publish"}"#)
+                .is_err(),
+            "injection {injection}"
+        );
+        assert!(transaction.finish().is_err(), "injection {injection}");
+        assert!(
+            !bootstrap
+                .path()
+                .join("run/agent-hub/world-work-execution-supervisor-v1.json")
+                .exists(),
+            "injection {injection}"
+        );
+    }
+}
+
+#[test]
 fn execution_supervisor_storage_reconciles_only_exact_safe_temps() {
     let bootstrap = root();
     let activated = platform::bootstrap_test(bootstrap.path(), material(0xd2), None).unwrap();
