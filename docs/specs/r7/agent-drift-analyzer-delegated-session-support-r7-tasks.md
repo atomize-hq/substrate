@@ -555,13 +555,13 @@ eligible or invoked.
 - [x] `npx gitnexus detect-changes --scope staged -r 97a0-substrate`
 - [x] Fresh review confirms R8 consolidation, recursive graphs, and R6 reopenings did not leak in.
 
-Checkpoint receipt candidate at code/proof HEAD `bd743eacc`: bounded final-wall fix `bd743eacc`
-received fresh independent built-in `default` `CLEAN` for the `serde_json` workspace feature-
-unification test-order witness. Formatting, workspace clippy with `-D warnings`, full compactor
-`39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full workspace tests, and
-`git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
-otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. `CTX-R7-06` is `PROVEN`. R7-6 remains
-the sole active phase with packet `none` while this checkpoint-doc receipt candidate awaits commit
-and fresh independent review. The R7-6 exit gate and R8-SPEC entry remain pending/blocked. No next
-Prompt 1 selectors are eligible or invoked. This candidate has no assigned commit hash or review
-result.
+Checkpoint-doc receipt status: committed and landed; fresh independent review remains pending. At
+code/proof HEAD `bd743eacc`, bounded final-wall fix `bd743eacc` received fresh independent built-in
+`default` `CLEAN` for the `serde_json` workspace feature-unification test-order witness. Formatting,
+workspace clippy with `-D warnings`, full compactor `39 / 39`, full analyzer `424 / 424`, full
+sentinel `105 / 105`, full workspace tests, and `git diff --check` are green. Staged GitNexus gates
+stayed within the authorized HIGH helper and otherwise MEDIUM/LOW; no additional HIGH/CRITICAL
+symbol was edited. `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with packet `none`
+while the landed receipt awaits fresh independent review. The R7-6 exit gate and R8-SPEC entry
+remain pending/blocked. No next Prompt 1 selectors are eligible or invoked. This current mirror
+assigns no receipt hash or review result.

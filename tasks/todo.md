@@ -230,9 +230,10 @@ R8-SPEC entry pending/blocked; no next Prompt 1 selectors eligible or invoked)**
   `105 / 105`, full workspace tests, and diff checks green. Staged GitNexus stayed within the
   authorized HIGH helper and otherwise MEDIUM/LOW, with no additional HIGH/CRITICAL symbol. `CTX-R7-06` is
   `PROVEN`.
-- [ ] Commit and freshly review the R7-6 checkpoint-doc receipt candidate. Until then R7-6 remains
-  the sole active phase, the R7-6 exit gate and R8-SPEC entry remain pending/blocked, and no next
-  Prompt 1 selectors are eligible or invoked.
+- [x] Commit and land the R7-6 checkpoint-doc receipt.
+- [ ] Freshly review the landed R7-6 checkpoint-doc receipt. Until then R7-6 remains the sole active
+  phase, the R7-6 exit gate and R8-SPEC entry remain pending/blocked, and no next Prompt 1 selectors
+  are eligible or invoked.
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
 `R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.

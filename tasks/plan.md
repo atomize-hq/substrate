@@ -90,9 +90,9 @@ R8-SPEC entry pending/blocked; no next Prompt 1 selectors eligible or invoked)**
 17. **ACTIVE — R7-6 CHECKPOINT-DOC RECEIPT GATE:** active packet is `none`. R7-6.1 commit
     `7789fba4f`, R7-6.2 series `d2842f279` + `77ae455fe` + `a333d8486`, and final-wall fix
     `bd743eacc` received fresh independent built-in `default` `CLEAN`. R7-6.1, R7-6.2, and all final
-    checkpoint items are complete; `CTX-R7-06` is `PROVEN`. The checkpoint-doc receipt candidate
-    awaits commit and fresh independent review, so the R7-6 exit gate and R8-SPEC entry remain
-    pending/blocked. No next Prompt 1 selectors are eligible or invoked.
+    checkpoint items are complete; `CTX-R7-06` is `PROVEN`. The landed checkpoint-doc receipt
+    awaits fresh independent review, so the R7-6 exit gate and R8-SPEC entry remain pending/blocked.
+    No next Prompt 1 selectors are eligible or invoked.
 
 ## Execution Rules
 
