@@ -69,26 +69,23 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. Bounded one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped Option B
-raw-direct-call count-lock finding. Current bounded docs-only fix `099f4ec2c` addresses only that
-latest finding, remains unreviewed, and claims no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed. The
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 Operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact
@@ -189,26 +186,23 @@ Checkpoint-doc receipt/review-fix series `0e5150945` + `e634ef324` + `8e39c109e`
 independent built-in `default` `CLEAN`, satisfying the R7-6 exit gate; R7-6 is complete and R7 is
 closed with a stable analyzer contract.
 
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. Bounded one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped Option B
-raw-direct-call count-lock finding. Current bounded docs-only fix `099f4ec2c` addresses only that
-latest finding, remains unreviewed, and claims no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation.
 Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
@@ -262,26 +256,23 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. Bounded one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped Option B
-raw-direct-call count-lock finding. Current bounded docs-only fix `099f4ec2c` addresses only that
-latest finding, remains unreviewed, and claims no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation.
 `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
 `default` `REVIEW CLEAN`.
@@ -321,26 +312,23 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. Bounded one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped Option B
-raw-direct-call count-lock finding. Current bounded docs-only fix `099f4ec2c` addresses only that
-latest finding, remains unreviewed, and claims no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -419,26 +407,23 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. Bounded one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped Option B
-raw-direct-call count-lock finding. Current bounded docs-only fix `099f4ec2c` addresses only that
-latest finding, remains unreviewed, and claims no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -482,21 +467,14 @@ control.” The current honest sequence is:
    independent built-in `default` `CLEAN`; keep R7-6.1, R7-6.2, and all final checkpoint items
    complete and `CTX-R7-06` `PROVEN`; keep checkpoint-doc receipt/review-fix series `0e5150945` +
    `e634ef324` + `8e39c109e` fresh independent built-in `default` `CLEAN`; keep R7-6 complete and R7
-   closed; keep R8-SPEC the sole active phase and IN PROGRESS with packet `none`; keep MAP/SPEC
-   series `698c766f9` + `f5865fb7` + `95529809` fresh independent built-in `default` `CLEAN` with no
-   findings and `CTX-R8-01` `PROVEN`; keep complete-family series `0ed3d8f04` + `cfcf65507` at
-   reviewed `CHANGES_REQUIRED` with five docs findings; keep fix `2b9565fb9` landed; keep follow-up
-   fix `b04207fb6` at fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-
-   acceptance finding; keep conditional fix `b9ce44c6f` at fresh independent built-in `default`
-   `CHANGES_REQUIRED` with two docs findings; keep two-finding fix `904c93d0d` at fresh independent
-   built-in `default` `CHANGES_REQUIRED` with one Option B call-path finding; keep one-finding
-   Markdown-only fix series `67c81c6ff` + `24e649de6` at fresh independent built-in `default`
-   `CHANGES_REQUIRED` with one Option B raw-direct-call count-lock finding; keep current bounded
-   docs-only fix `099f4ec2c` review-pending, unreviewed, and with no claimed result;
-   keep all implementation tasks unchecked/unstarted, `CTX-R8-02` `OPEN` / `REVIEW
-   PENDING` and not proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT blocked/boundary-only; claim no
-   phase transition, Prompt 1 eligibility, implementation authorization, full-family `CLEAN`, or
-   review result for this receipt
+   closed; keep R8-SPEC complete and the complete authority family through `806e53740` fresh independent
+   built-in `default` `CLEAN` with no findings; keep `CTX-R8-01` `PROVEN` and `CTX-R8-02` `PROVEN` /
+   `SATISFIED`; keep only R8-IMPLEMENT active at entry with packet `none`; keep `CTX-R8-03` `OPEN` /
+   current and `CTX-R8-04..06` `BLOCKED` / `UNPROVEN`; keep all implementation tasks unchecked and
+   unstarted; keep the four future HIGH gates and unresolved
+   `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` pending as packet-local prerequisites that authorize no
+   edit; keep Prompt 1 selectors prepared and eligible but `UNINVOKED`; keep this transition update
+   awaiting fresh independent review with no clean result claimed
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -1204,26 +1182,23 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. Bounded one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped Option B
-raw-direct-call count-lock finding. Current bounded docs-only fix `099f4ec2c` addresses only that
-latest finding, remains unreviewed, and claims no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -1344,26 +1319,23 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. Bounded one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped Option B
-raw-direct-call count-lock finding. Current bounded docs-only fix `099f4ec2c` addresses only that
-latest finding, remains unreviewed, and claims no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation.
 
 The next honest work target is:
 
@@ -1415,34 +1387,21 @@ The next honest work target is:
   series `d2842f279` + `77ae455fe` + `a333d8486`, and final-wall fix `bd743eacc` fresh independent
   built-in `default` `CLEAN`; keep R7-6.1, R7-6.2, and the final checkpoint complete and
   `CTX-R7-06` `PROVEN`; keep checkpoint-doc receipt/review-fix series `0e5150945` + `e634ef324` +
-  `8e39c109e` fresh independent built-in `default` `CLEAN`; keep R7-6 complete and R7 closed; keep
-  R8-SPEC the sole active phase and IN PROGRESS with packet `none`; keep MAP/SPEC series
-  `698c766f9` + `f5865fb7` + `95529809` fresh independent built-in `default` `CLEAN` with no findings
-  and `CTX-R8-01` `PROVEN`; keep complete-family series `0ed3d8f04` + `cfcf65507` at reviewed
-  `CHANGES_REQUIRED` with five docs findings; keep fix `2b9565fb9` landed; keep follow-up fix
-  `b04207fb6` at fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-
-  acceptance finding; keep conditional fix `b9ce44c6f` at fresh independent built-in `default`
-  `CHANGES_REQUIRED` with two docs findings; keep two-finding fix `904c93d0d` at fresh independent
-  built-in `default` `CHANGES_REQUIRED` with one Option B call-path finding; keep one-finding
-  Markdown-only fix series `67c81c6ff` + `24e649de6` at fresh independent built-in `default`
-  `CHANGES_REQUIRED` with one Option B raw-direct-call count-lock finding; keep current bounded
-  docs-only fix `099f4ec2c` review-pending, unreviewed, and with no claimed result; keep all
-  implementation tasks unchecked/unstarted, `CTX-R8-02` `OPEN` / `REVIEW PENDING` and not
-  proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT blocked/boundary-only; claim no phase transition,
-  Prompt 1 eligibility, implementation authorization, full-family `CLEAN`, or review result for this
-  receipt
-- keep work beyond the R8-SPEC docs boundary blocked; do not make R7 absorb ordinary single-session
-  scorer gaps
-- keep R8-SPEC in progress without a phase transition; keep complete-family series `0ed3d8f04` +
-  `cfcf65507` at reviewed `CHANGES_REQUIRED`, keep fix `2b9565fb9` landed, keep follow-up fix
-  `b04207fb6` at fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-
-  acceptance finding, keep conditional fix `b9ce44c6f` at fresh independent built-in `default`
-  `CHANGES_REQUIRED` with two docs findings, keep two-finding fix `904c93d0d` at fresh independent
-  built-in `default` `CHANGES_REQUIRED` with one Option B call-path finding, keep one-finding
-  Markdown-only fix series `67c81c6ff` + `24e649de6` at fresh independent built-in `default`
-  `CHANGES_REQUIRED` with one Option B raw-direct-call count-lock finding, keep current bounded
-  docs-only fix `099f4ec2c` review-pending and unreviewed, and do not start R8
-  implementation work
+  `8e39c109e` fresh independent built-in `default` `CLEAN`; keep R7-6 complete and R7 closed; keep R8-SPEC complete and the complete authority family through `806e53740` fresh independent
+   built-in `default` `CLEAN` with no findings; keep `CTX-R8-01` `PROVEN` and `CTX-R8-02` `PROVEN` /
+   `SATISFIED`; keep only R8-IMPLEMENT active at entry with packet `none`; keep `CTX-R8-03` `OPEN` /
+   current and `CTX-R8-04..06` `BLOCKED` / `UNPROVEN`; keep all implementation tasks unchecked and
+   unstarted; keep the four future HIGH gates and unresolved
+   `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` pending as packet-local prerequisites that authorize no
+   edit; keep Prompt 1 selectors prepared and eligible but `UNINVOKED`; keep this transition update
+   awaiting fresh independent review with no clean result claimed
+- keep R8-IMPLEMENT active at entry only with packet `none`; keep all implementation unchecked
+  and unstarted; request the four HIGH decisions and unresolved delegation-presence decision only in
+  their owning packets; do not make R7 absorb ordinary single-session scorer gaps
+- keep the complete R8 authority family through `806e53740` fresh independent built-in `default`
+  `CLEAN`; keep `CTX-R8-01` and `CTX-R8-02` proven; keep `CTX-R8-03` open/current and
+  `CTX-R8-04..06` blocked/unproven; keep Prompt 1 prepared and eligible but uninvoked; keep this
+  transition update awaiting fresh independent review and do not claim it is clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.

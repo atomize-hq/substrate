@@ -1,29 +1,28 @@
 # R8 Map: Sentinel Interpretation Consolidation / Integration
 
-Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; `24e649de6`
-FRESH INDEPENDENT `CHANGES_REQUIRED` WITH ONE OPTION B RAW-DIRECT-CALL COUNT-LOCK FINDING; CURRENT
-COUNT-LOCK FIX REVIEW PENDING;
-R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
+Status: **R8-SPEC COMPLETE / COMPLETE AUTHORITY FAMILY THROUGH `806e53740` FRESH INDEPENDENT BUILT-IN
+`default` `CLEAN` / `CTX-R8-01` AND `CTX-R8-02` PROVEN / R8-IMPLEMENT SOLE ACTIVE PHASE AT ENTRY
+ONLY / ACTIVE PACKET `none` / TRANSITION UPDATE AWAITING FRESH INDEPENDENT REVIEW**.
 
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix `904c93d0d` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with one scoped Option B call-path finding. Bounded one-finding Markdown-only fix
-series `67c81c6ff` + `24e649de6` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with one scoped Option B raw-direct-call count-lock finding. This current bounded
-docs-only fix addresses only that latest finding and claims no review result. All R8 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed. **No R8 code may begin until the
-complete MAP/SPEC/PLAN/TASKS family is fresh-review-clean.**
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation. **R8-IMPLEMENT
+entry alone authorizes no symbol edit; each owning packet must satisfy its exact decision, impact,
+TDD, proof, commit, and fresh-review gates first.**
 
 ## Objective
 
@@ -166,26 +165,19 @@ is authorized.
 | `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, Option A proves zero `schema_version` field/path uses and predicates in presentation while accepting the public-field/source-compatibility cost and preserving the same public output. Option B proves exactly one direct field use and one equality predicate with literal `"v0.8"` in `CheckpointPresentation::render_console_block`, zero in every other item, and permits that unchanged facade to serve the exact allowed owner set `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. A `syn`-based AST/call-path visitor independently proves that exact owner-set equality and exact raw direct `render_console_block` call-expression count `4` — two replay, one live, and one adjudication — and fails on any fifth call even within an allowed owner. Separate behavior tests prove facade/core output, the three actual consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. On the adjudication path, the predicate reaches only preserved presentation content, never adjudication policy/request shaping or decision semantics; `adjudication.rs` is read-only evidence, not an edit-manifest file. |
 | `CTX-R8-06` | Existing pre-observe transport bookkeeping is permitted; after interpretation failure there is no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. |
 
-`CTX-R8-01` is currently `PROVEN` by the stable R7 contract plus the clean MAP/SPEC freeze. The
-remaining rows are future criteria, not completion claims. The control-pack ledger remains
-authoritative until reviewed evidence updates it.
+`CTX-R8-01` is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED` by the complete review-clean
+authority family through `806e53740`. `CTX-R8-03` is `OPEN` / current at R8-IMPLEMENT entry;
+`CTX-R8-04..06` remain `BLOCKED` / `UNPROVEN` in dependency order. The control-pack ledger remains
+authoritative until reviewed implementation evidence updates those rows.
 
 ## Required Docs Before Implementation
 
-1. this MAP — included in fresh-review-clean contract series `698c766f9` + `f5865fb7` +
-   `95529809`;
-2. the R8 specification — included in the same fresh-review-clean contract series;
-3. an exact migration/verification PLAN — the family through `0ed3d8f04` + `cfcf65507` received
-   `CHANGES_REQUIRED`; fix `2b9565fb9` landed; follow-up fix `b04207fb6` received fresh independent
-   built-in `default` `CHANGES_REQUIRED` with one conditional-acceptance finding; conditional fix
-   `b9ce44c6f` received fresh independent built-in `default` `CHANGES_REQUIRED` with two findings;
-   two-finding fix `904c93d0d` received fresh independent built-in `default` `CHANGES_REQUIRED` with
-   one Option B call-path finding; one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
-   received fresh independent built-in `default` `CHANGES_REQUIRED` with one Option B raw-direct-call
-   count-lock finding; the current bounded docs-only fix addresses only that latest finding and claims
-   no review result;
-4. packetized TASKS with the exact future HIGH-impact and delegation-presence decision gates — same
-   review/fix state, with all implementation tasks unchecked and unstarted.
+1. this MAP;
+2. the R8 specification;
+3. the exact migration/verification PLAN;
+4. packetized TASKS with the four future HIGH-impact gates and unresolved delegation-presence gate.
 
-Stop at documentation authoring. Do not stage or implement source/test changes under this map until
-all four artifacts are review-clean and `CTX-R8-02` is proven.
+All four artifacts are included in the complete authoring/review-fix series through `806e53740`,
+which received fresh independent built-in `default` `CLEAN` with no findings. This satisfies
+`CTX-R8-02` and the R8-IMPLEMENT entry gate. It does not resolve any packet-local decision or start
+any implementation task; every implementation checkbox remains unchecked.

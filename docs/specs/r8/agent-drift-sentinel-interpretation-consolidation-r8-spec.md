@@ -1,30 +1,28 @@
 # R8 Spec: Agent Drift Sentinel Interpretation Consolidation
 
-Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; `24e649de6`
-FRESH INDEPENDENT `CHANGES_REQUIRED` WITH ONE OPTION B RAW-DIRECT-CALL COUNT-LOCK FINDING; CURRENT
-COUNT-LOCK FIX REVIEW PENDING;
-R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
+Status: **R8-SPEC COMPLETE / COMPLETE AUTHORITY FAMILY THROUGH `806e53740` FRESH INDEPENDENT BUILT-IN
+`default` `CLEAN` / `CTX-R8-01` AND `CTX-R8-02` PROVEN / R8-IMPLEMENT SOLE ACTIVE PHASE AT ENTRY
+ONLY / ACTIVE PACKET `none` / TRANSITION UPDATE AWAITING FRESH INDEPENDENT REVIEW**.
 
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix `904c93d0d` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with one scoped Option B call-path finding. Bounded one-finding Markdown-only fix
-series `67c81c6ff` + `24e649de6` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with one scoped Option B raw-direct-call count-lock finding. This current bounded
-docs-only fix addresses only that latest finding and claims no review result. All R8 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed. This document specifies a future
-implementation; it does not authorize R8 code. The complete R8 MAP/SPEC/PLAN/TASKS family must be
-fresh-review-clean before implementation starts.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation. This document
+specifies the entered implementation phase; entry alone authorizes no symbol edit before the
+owning packet's decision, impact, TDD, proof, commit, and fresh-review gates are satisfied.
 
 ## Objective
 
@@ -259,8 +257,8 @@ change. On the adjudication path, the predicate may affect only preserved render
 while keeping all earlier semantics centralized, but this specification neither resolves nor
 authorizes the gate. Option A has no presentation predicate and must preserve the same public
 output. Both options also accept the future R8-4 dev-only AST parser cost described below. Because
-no production symbol or manifest is edited during R8-SPEC, the future gate does not block docs
-completion or fresh review of this family. Changing the upstream analyzer `Checkpoint` schema is
+no production symbol or manifest was edited during R8-SPEC, the future gate did not block docs
+completion or fresh review of this family and does not invalidate R8-IMPLEMENT entry. Changing the upstream analyzer `Checkpoint` schema is
 outside R8.
 `format_delegation_summary`, `format_delegation_topology`, and
 `format_child_work_visibility` remain formatting-only and do not validate analyzer-owned facts.
@@ -398,11 +396,9 @@ recorded from the implementation run; this candidate spec claims none.
 | `CTX-R8-05` | `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` is explicitly decided before R8-4 edits and authorizes the selected public-compatibility plus dev-only parser cost. Option A proves zero presentation `schema_version` uses/predicates, accepts the public-field/source-compatibility cost, and preserves the same public output. Option B proves exactly one direct field use and one literal-v0.8 predicate in `CheckpointPresentation::render_console_block`, zero elsewhere, and accepts the localized compatibility/presentation coupling and parity cost because unchanged public shapes erase internal presence before later rendering. AST/call-path tests prove exhaustive syntax/ownership policy, exact allowed owner-set equality `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`, and exact raw direct `render_console_block` call-expression count `4` — two replay, one live, and one adjudication — with any fifth call failing even within an allowed owner. Separate behavior tests prove facade/core output, all three consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. `adjudication.rs` remains read-only; policy, request-shaping logic, and decision semantics stay unchanged. |
 | `CTX-R8-06` | Failure produces no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance; pre-observe transport bookkeeping is permitted; success preserves existing scheduler/adjudication outputs, real-session closure, delivery order, and per-session cursor behavior. |
 
-`CTX-R8-01` is proven. `CTX-R8-02` remains `OPEN` / `REVIEW PENDING` and not proven;
-`CTX-R8-03..06` remain blocked. Fresh independent built-in `default` review of the complete family
-through this bounded docs-only fix is the next gate after `b04207fb6` received `CHANGES_REQUIRED`
-with one conditional-acceptance finding, `b9ce44c6f` received `CHANGES_REQUIRED` with two findings,
-`904c93d0d` received fresh independent `CHANGES_REQUIRED` with one Option B call-path finding, and
-one-finding Markdown-only fix series `67c81c6ff` + `24e649de6` received fresh independent
-`CHANGES_REQUIRED` with the one Option B raw-direct-call count-lock finding addressed here. All implementation tasks remain unchecked and unstarted, and R8
-implementation remains blocked. This progress receipt claims no review result for itself.
+`CTX-R8-01` is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED` by the complete R8 authority
+family through `806e53740` receiving fresh independent built-in `default` `CLEAN` with no findings.
+`CTX-R8-03` is `OPEN` / current at R8-IMPLEMENT entry; `CTX-R8-04..06` remain `BLOCKED` /
+`UNPROVEN` in dependency order. All implementation tasks remain unchecked and unstarted. The four
+future HIGH gates and unresolved `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` remain packet-local
+prerequisites and authorize no edit.

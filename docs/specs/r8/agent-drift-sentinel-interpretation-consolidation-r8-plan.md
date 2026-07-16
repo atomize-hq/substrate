@@ -3,28 +3,29 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-plan.md`
 
-Status: **BOUNDED COUNT-LOCK MARKDOWN FIX FOR `24e649de6` `CHANGES_REQUIRED` / CURRENT FIX CLAIMS
-NO REVIEW RESULT / `CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
+Status: **R8-SPEC COMPLETE / COMPLETE AUTHORITY FAMILY THROUGH `806e53740` FRESH INDEPENDENT BUILT-IN
+`default` `CLEAN` / `CTX-R8-01` AND `CTX-R8-02` PROVEN / R8-IMPLEMENT SOLE ACTIVE PHASE AT ENTRY
+ONLY / ACTIVE PACKET `none` / ALL IMPLEMENTATION UNSTARTED / TRANSITION UPDATE AWAITING FRESH
+INDEPENDENT REVIEW**.
 
-R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
-series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
-with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
-`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
-independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix `904c93d0d` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with one scoped Option B call-path finding. Bounded one-finding Markdown-only fix
-series `67c81c6ff` + `24e649de6` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with one scoped Option B raw-direct-call count-lock finding. This current bounded
-docs-only fix addresses only that latest finding and claims no review result. All R8 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
-decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility,
-implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
-is claimed. No R8 source or test edit may
-start until the complete MAP/SPEC/PLAN/TASKS family is freshly reviewed and `CTX-R8-02` is proven.
+R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
+`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
+`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
+`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. `CTX-R8-01`
+is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at
+`ENTRY ONLY` with active packet `none`; its entry gate is satisfied by the review-clean R8
+MAP/SPEC/PLAN/TASKS, but every R8 implementation task and checkbox remains unchecked and
+unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
+`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
+HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
+authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
+`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
+narrow phase-transition update is `AWAITING FRESH INDEPENDENT REVIEW`; it assigns itself no commit
+hash or review result, does not claim to be clean, and starts no implementation. R8-IMPLEMENT entry
+alone authorizes no source or test edit; the owning packet's exact prerequisites remain mandatory.
 
 ## Objective
 
@@ -241,8 +242,8 @@ Every R8 implementation packet follows the same bounded cycle:
    HIGH gates in the decision table below. R8-2, R8-3, and R8-4 may not edit those symbols until the
    operator replies to each owning ID. R8-4 also has the separate unresolved
    `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` contract gate before any R8-4 symbol edit. These are
-   future R8-IMPLEMENT gates, not R8-SPEC blockers; no decision is requested while this docs-only
-   plan is being fixed.
+   packet-local R8-IMPLEMENT gates, not entry blockers; request each only when its owning packet
+   reaches the named edit.
 5. Use TDD in this exact order: write and run the smallest failing contract/parity witness; record
    the RED; make the smallest production change; run the focused GREEN proof and adjacent
    regression target. Do not commit the intentional RED state.
@@ -633,17 +634,18 @@ Legend: **D** = direct proof, **G** = preserved guardrail, **E** = entry/review 
 | R8-5.2 | G | E | D | D | G | D |
 | R8-6 | D | D only after fresh review | D | D | D | D |
 
-`CTX-R8-01` is already proven as entry context; no implementation packet row is currently complete
-or proven by this candidate plan. In particular, the R8-4 `CTX-R8-05` direct-proof cell is
+`CTX-R8-01` and the entry dependency `CTX-R8-02` are proven; no implementation packet row is
+currently complete or proven. In particular, the R8-4 `CTX-R8-05` direct-proof cell is
 conditional on an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` reply and the selected exact
 proof branch; it cannot be claimed from `Checkpoint.delegation` alone.
 
 ## Structured Decision Triggers
 
-The following decisions are ready for the future R8-IMPLEMENT session. Four are recorded because
-the refreshed graph is HIGH; the fifth records the unresolved public delegation-presence contract.
-They must **not** be asked during this R8-SPEC docs-only fix because no production symbol is being
-edited. The operator must reply in the exact `DECISION <ID>: A|B` form.
+The following decisions remain pending for their owning R8-IMPLEMENT packets. Four are recorded
+because the refreshed graph is HIGH; the fifth records the unresolved public delegation-presence
+contract. R8-SPEC completion and R8-IMPLEMENT entry resolve none of them. Request each only when its
+owning packet reaches the named symbol edit; the operator must reply in the exact
+`DECISION <ID>: A|B` form.
 
 | Stable ID / exact future prompt | Refreshed upstream evidence | Options | Recommendation / hard gate |
 |---|---|---|---|
@@ -700,8 +702,10 @@ Stop and emit a concrete `DECISION REQUIRED <ID>: A|B` prompt when any of these 
 
 ## Completion Condition
 
-R8 is not complete when code compiles or the focused suite is green. Completion requires every
+R8 is not complete merely because R8-IMPLEMENT is active at entry, code compiles, or a focused suite
+is green. Completion requires every
 packet and fix series fresh-review-clean, the full wall recorded with exact counts, the canonical
 status receipt fresh-review-clean, `CTX-R8-01..06` reconciled against the control ledger, and a
-separate authorized phase/status transition. Until then, R8-IMPLEMENT remains blocked according to
-the latest authority; this candidate plan claims neither state transition nor family completion.
+separate authorized phase/status transition. R8-IMPLEMENT is active at entry only with packet
+`none`; every implementation task is unchecked and unstarted, and this plan claims no implementation
+or family completion.
