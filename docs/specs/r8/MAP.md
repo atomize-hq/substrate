@@ -1,8 +1,8 @@
 # R8 Map: Sentinel Interpretation Consolidation / Integration
 
-Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; `904c93d0d`
-FRESH INDEPENDENT `CHANGES_REQUIRED` WITH ONE OPTION B CALL-PATH FINDING; CURRENT ONE-FINDING FIX
-REVIEW PENDING;
+Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; `24e649de6`
+FRESH INDEPENDENT `CHANGES_REQUIRED` WITH ONE OPTION B RAW-DIRECT-CALL COUNT-LOCK FINDING; CURRENT
+COUNT-LOCK FIX REVIEW PENDING;
 R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
@@ -13,11 +13,11 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
 Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. This bounded Markdown-only fix addresses only that one finding and claims
-no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
+`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix `904c93d0d` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with one scoped Option B call-path finding. Bounded one-finding Markdown-only fix
+series `67c81c6ff` + `24e649de6` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with one scoped Option B raw-direct-call count-lock finding. This current bounded
+docs-only fix addresses only that latest finding and claims no review result. All R8 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
 not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
 decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
 no R8 code has started. No phase transition, Prompt 1 eligibility,
@@ -116,11 +116,13 @@ is authorized.
   presence/projection field with zero operator-presentation schema checks, or exactly one
   `self.checkpoint.schema_version == "v0.8"` predicate in the named legacy public facade
   `CheckpointPresentation::render_console_block`. Option B explicitly permits that unchanged facade
-  to serve exactly three current downstream production consumer items:
-  `ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and
-  `adjudication::shape_request` while constructing `operator_summary`. This is consumer-item set
-  equality, not a false claim that only two call expressions exist: `ReplayReport::to_console_text`
-  retains its current per-collection calls. Contract validation, typed interpretation,
+  to serve the exact allowed downstream production owner set
+  `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. Fail-closed
+  AST/call-path proof must independently assert both that exact owner-set equality and exact raw
+  direct `render_console_block` call-expression count `4`: two in
+  `ReplayReport::to_console_text`, one in `cli::run_live`, and one in
+  `adjudication::shape_request` while constructing `operator_summary`. Any fifth direct call fails,
+  even when added inside one of those three allowed owners. Contract validation, typed interpretation,
   posture/evidence/delegation projection, scheduling, presentation construction, and adjudication
   decision/request-shaping logic must contain zero R8-4 schema-presence predicates. On the
   adjudication path, the sole predicate may affect only the preserved bytes rendered into the
@@ -161,7 +163,7 @@ is authorized.
 | `CTX-R8-02` | R8 MAP/SPEC/PLAN/TASKS are internally consistent and fresh-review-clean before code. |
 | `CTX-R8-03` | Replay and live use the same typed interpretation function and parity matrix. |
 | `CTX-R8-04` | One compatibility owner preserves v0.2 and v0.3-v0.8 contract behavior. |
-| `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, Option A proves zero `schema_version` field/path uses and predicates in presentation while accepting the public-field/source-compatibility cost and preserving the same public output. Option B proves exactly one direct field use and one equality predicate with literal `"v0.8"` in `CheckpointPresentation::render_console_block`, zero in every other item, and permits that unchanged facade to serve exactly the current three downstream production consumer items: `ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and `adjudication::shape_request` `operator_summary` construction. A `syn`-based AST/call-path visitor proves literal consumer-owner set equality across production source without conflating the three owners with raw call-expression count; separate behavior tests prove facade/core output, the three actual consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. On the adjudication path, the predicate reaches only preserved presentation content, never adjudication policy/request shaping or decision semantics; `adjudication.rs` is read-only evidence, not an edit-manifest file. |
+| `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, Option A proves zero `schema_version` field/path uses and predicates in presentation while accepting the public-field/source-compatibility cost and preserving the same public output. Option B proves exactly one direct field use and one equality predicate with literal `"v0.8"` in `CheckpointPresentation::render_console_block`, zero in every other item, and permits that unchanged facade to serve the exact allowed owner set `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. A `syn`-based AST/call-path visitor independently proves that exact owner-set equality and exact raw direct `render_console_block` call-expression count `4` — two replay, one live, and one adjudication — and fails on any fifth call even within an allowed owner. Separate behavior tests prove facade/core output, the three actual consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. On the adjudication path, the predicate reaches only preserved presentation content, never adjudication policy/request shaping or decision semantics; `adjudication.rs` is read-only evidence, not an edit-manifest file. |
 | `CTX-R8-06` | Existing pre-observe transport bookkeeping is permitted; after interpretation failure there is no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. |
 
 `CTX-R8-01` is currently `PROVEN` by the stable R7 contract plus the clean MAP/SPEC freeze. The
@@ -178,8 +180,10 @@ authoritative until reviewed evidence updates it.
    built-in `default` `CHANGES_REQUIRED` with one conditional-acceptance finding; conditional fix
    `b9ce44c6f` received fresh independent built-in `default` `CHANGES_REQUIRED` with two findings;
    two-finding fix `904c93d0d` received fresh independent built-in `default` `CHANGES_REQUIRED` with
-   one Option B call-path finding; the current bounded fix addresses only that finding and claims no
-   review result;
+   one Option B call-path finding; one-finding Markdown-only fix series `67c81c6ff` + `24e649de6`
+   received fresh independent built-in `default` `CHANGES_REQUIRED` with one Option B raw-direct-call
+   count-lock finding; the current bounded docs-only fix addresses only that latest finding and claims
+   no review result;
 4. packetized TASKS with the exact future HIGH-impact and delegation-presence decision gates — same
    review/fix state, with all implementation tasks unchecked and unstarted.
 

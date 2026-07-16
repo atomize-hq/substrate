@@ -3,8 +3,8 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-tasks.md`
 
-Status: **BOUNDED MARKDOWN FIX FOR `904c93d0d` `CHANGES_REQUIRED` / CURRENT ONE-FINDING FIX
-CLAIMS NO REVIEW RESULT / ALL TASKS UNSTARTED / `CTX-R8-02` OPEN / REVIEW PENDING /
+Status: **BOUNDED COUNT-LOCK MARKDOWN FIX FOR `24e649de6` `CHANGES_REQUIRED` / CURRENT FIX CLAIMS
+NO REVIEW RESULT / ALL TASKS UNSTARTED / `CTX-R8-02` OPEN / REVIEW PENDING /
 R8-IMPLEMENT BLOCKED**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
@@ -15,11 +15,11 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
 Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
-`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
-Option B call-path finding. This bounded Markdown-only fix addresses only that one finding and claims
-no review result. All R8
-implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
+`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix `904c93d0d` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with one scoped Option B call-path finding. Bounded one-finding Markdown-only fix
+series `67c81c6ff` + `24e649de6` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with one scoped Option B raw-direct-call count-lock finding. This current bounded
+docs-only fix addresses only that latest finding and claims no review result. All R8 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
 not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
 decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
 no R8 code has started. No phase transition, Prompt 1 eligibility,
@@ -52,7 +52,7 @@ tests, and prompts come from the PLAN decision table; silence is never authoriza
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` | `verify_live_checkpoint_compatibility`: HIGH, 17 direct dependents, 0 processes, 1 module. |
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` | file-disambiguated `LiveRuntime::observe` in `src/live_runtime.rs`: HIGH, 17 direct dependents, 0 processes, 1 module. |
 | R8-4 | `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` | `uses_explicit_analyzer_state`: HIGH, 10 impacted, 2 direct, 1 affected `execute` process, 3 modules. |
-| R8-4 | `DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A` **or** `: B` | `Checkpoint.delegation` is non-optional after pre-v0.8 absence deserializes to `DelegationContext::default()`; public `CheckpointPresentation` has no optional presence carrier, and unchanged `ReplayReport`/`LiveObservation` erase that internal presence before final rendering. Option A accepts the public-field/source-compatibility cost, requires zero presentation `schema_version` uses/predicates, and preserves the same public output. Option B accepts one direct literal-v0.8 predicate in `CheckpointPresentation::render_console_block` plus localized compatibility/presentation coupling/parity cost and permits that facade to serve exactly three current downstream production consumer items: `ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and `adjudication::shape_request` `operator_summary` construction. Validation/interpretation/projection/scheduling/construction and adjudication policy/request-shaping or decision logic contain zero R8-4 schema-presence predicates; on the adjudication path, the predicate may affect only preserved rendered operator-summary content. Both accept dev-only `syn` 2 (`full`, `visit`) plus exact lockfile cost for AST/call-path proof. `adjudication.rs` is read-only evidence, not an edit-manifest file. PLAN recommends B without resolving it. Upstream `Checkpoint` changes are out of scope. |
+| R8-4 | `DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A` **or** `: B` | `Checkpoint.delegation` is non-optional after pre-v0.8 absence deserializes to `DelegationContext::default()`; public `CheckpointPresentation` has no optional presence carrier, and unchanged `ReplayReport`/`LiveObservation` erase that internal presence before final rendering. Option A accepts the public-field/source-compatibility cost, requires zero presentation `schema_version` uses/predicates, and preserves the same public output. Option B accepts one direct literal-v0.8 predicate in `CheckpointPresentation::render_console_block` plus localized compatibility/presentation coupling/parity cost and permits that facade to serve exact allowed owner set `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. Fail-closed AST/call-path proof independently asserts that set equality and exact raw direct `render_console_block` call-expression count `4` — two replay, one live, and one adjudication — and fails on any fifth call even inside an allowed owner. Validation/interpretation/projection/scheduling/construction and adjudication policy/request-shaping or decision logic contain zero R8-4 schema-presence predicates; on the adjudication path, the predicate may affect only preserved rendered operator-summary content. Both accept dev-only `syn` 2 (`full`, `visit`) plus exact lockfile cost for AST/call-path proof. `adjudication.rs` is read-only evidence, not an edit-manifest file. PLAN recommends B without resolving it. Upstream `Checkpoint` changes are out of scope. |
 
 ## Per-Task Rules
 
@@ -348,11 +348,11 @@ shape, or any unlisted file; any request to infer delegation or accept malformed
 **Description:** Remove the remaining version/analyzer/evidence decisions before final rendering,
 route compatibility construction through centralized non-validating projection plus the typed
 renderer, and preserve exact public signatures/current supported behavior. Under Option B only,
-the frozen legacy facade and its sole schema-presence predicate may serve exactly three current
-downstream production consumer items after the unchanged public shapes erase internal presence:
-`ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and
-`adjudication::shape_request` while constructing `operator_summary`. This is a consumer-owner set,
-not a false two-call/raw-expression count.
+the frozen legacy facade and its sole schema-presence predicate may serve exact allowed owner set
+`{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}` after the unchanged
+public shapes erase internal presence. Its raw direct `render_console_block` call-expression count
+must equal exactly `4`: two replay, one live, and one adjudication. Any fifth direct call fails even
+inside an allowed owner.
 
 **Dependencies:** R8-3 landed and fresh-review-clean; exact operator reply
 `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`; and exact operator reply
@@ -413,9 +413,10 @@ direct dependents, one affected `execute` process, three modules). It is bound t
    Option B compile-locks the unchanged public shapes and proves exactly one direct field use and
    literal-v0.8 predicate in `CheckpointPresentation::render_console_block`, with zero in every
    other item. Both lock the existing signature. The fail-closed production call-owner witness
-   asserts exact set equality with `ReplayReport::to_console_text`, `cli::run_live`, and
-   `adjudication::shape_request`, reporting raw call-expression count separately because the replay
-   owner retains per-collection calls. Separate behavior witnesses exercise replay output, final
+   independently asserts exact owner-set equality
+   `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}` and exact raw direct
+   `render_console_block` call-expression count `4`, partitioned as two replay, one live, and one
+   adjudication. Any fifth direct call fails even inside an allowed owner. Separate behavior witnesses exercise replay output, final
    `LiveObservation.presentation.render_console_block` output corresponding to `cli::run_live`, and
    `adjudication::shape_request` `operator_summary`/full-request parity; the AST witness does not
    claim runtime data flow or behavior.
@@ -432,10 +433,11 @@ direct dependents, one affected `execute` process, three modules). It is bound t
 - [ ] Public facades preserve current supported-input output and delegate to centralized
   non-validating projection plus `present_interpretation`; neither core path calls a facade as a
   validation boundary. Option B explicitly allows the frozen legacy facade and its sole predicate
-  to serve exactly the current three downstream production consumer items:
-  `ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and
-  `adjudication::shape_request` `operator_summary` construction. No other production owner may call
-  it; raw call-expression count is not misreported as two.
+  to serve exact allowed owner set
+  `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. No other production
+  owner may call it, and exact raw direct `render_console_block` call-expression count must remain
+  `4` — two replay, one live, and one adjudication. A fifth direct call fails even inside an allowed
+  owner.
 - [ ] The recorded presence decision selects exactly one mutually exclusive schema acceptance
   branch: Option A proves zero `schema_version` field/path uses and predicates in all of
   `operator_surface.rs`; Option B proves exactly one direct field use and one predicate
@@ -491,9 +493,10 @@ unparsed macro, unclassified occurrence, or unowned form fails. Option A expects
 predicates. Option B expects exactly one direct field use and one predicate in the whole file, both
 in `CheckpointPresentation::render_console_block`, every other item zero, and direct equality to
 literal `"v0.8"`. The production facade-call owner set must equal exactly
-`{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`; raw call-expression
-count is recorded separately so `ReplayReport::to_console_text`'s per-collection calls cannot be
-collapsed into a false two-call claim. AST proof covers syntax/ownership/call-owner/count policy
+`{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. Independently, raw
+direct `render_console_block` call-expression count must equal exactly `4`, partitioned as two in
+`ReplayReport::to_console_text`, one in `cli::run_live`, and one in
+`adjudication::shape_request`; any fifth direct call fails even within an allowed owner. AST proof covers syntax/ownership/call-owner/count policy
 only; separate behavior tests prove the same output, the three actual paths, and unchanged
 `operator_summary` bytes/full adjudication requests.
 
@@ -668,9 +671,10 @@ evidence only after receipt review; `CTX-R8-03` final shared-seam wall; `CTX-R8-
   inspection are green with exact observed counts recorded (never copied from an older receipt).
 - [ ] Static inspection proves core replay/live ordering and absence of facade-as-validation calls;
   Option A has zero presentation schema uses/predicates, or Option B has only its exact direct-field/
-  one-predicate `CheckpointPresentation::render_console_block` legacy exception and exactly three
-  downstream production consumer owners: `ReplayReport::to_console_text`, `cli::run_live`, and
-  `adjudication::shape_request`. Validation, interpretation, projection, scheduling, construction,
+  one-predicate `CheckpointPresentation::render_console_block` legacy exception, exact allowed owner
+  set `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`, and exact raw
+  direct call-expression count `4` — two replay, one live, and one adjudication — with any fifth call
+  failing even inside an allowed owner. Validation, interpretation, projection, scheduling, construction,
   and adjudication policy/request-shaping or decision logic own no such predicate under either
   branch; Option B behavior proof locks unchanged `operator_summary` bytes/full requests, and
   Option A has no predicate while preserving the same public output.
@@ -713,8 +717,9 @@ may a separate docs-only mirror/phase transition packet be proposed.
   `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` recorded; R8-3 fresh-review-clean.
 - [ ] `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` recorded; R8-4 fresh-review-clean.
 - [ ] `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A|B` recorded before R8-4 edits, with the selected
-  public-compatibility cost, dev-only `syn`/lockfile cost, AST ownership policy, and separate final
-  exact-three-consumer call-path/output/adjudication-request parity proof fresh-review-clean.
+  public-compatibility cost, dev-only `syn`/lockfile cost, AST ownership policy, exact Option B owner
+  set plus raw direct call count `4` lock, and separate final behavior/output/adjudication-request
+  parity proof fresh-review-clean.
 - [ ] R8-5.1 fresh-review-clean.
 - [ ] R8-5.2 fresh-review-clean.
 - [ ] No production or test file outside exact packet manifests changed.
