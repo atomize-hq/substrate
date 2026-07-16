@@ -160,9 +160,12 @@ visibility, confidence, or evidence checks inside `DelegationContext`.
 - Validation and semantic interpretation of `DelegationContext` internals remain analyzer-owned.
   Sentinel may consume/project typed delegation facts and reject only already-defined whole-contract
   gaps: missing/null serialized `delegation` for v0.8, typed absence that contradicts v0.8, or a
-  conflicting schema/same-session contract state. Analyzer-declared `Conflicting`, `Partial`, or
-  `Opaque` values remain valid typed facts and must not be revalidated or reinterpreted field by
-  field.
+  conflicting schema/same-session contract state. Analyzer-declared
+  `DelegationTopology::MixedOrAmbiguous` and `ChildWorkVisibility::{Partial, Opaque}` states remain
+  valid typed facts and must not be revalidated or reinterpreted field by field.
+- Raw conflicting delegation links remain analyzer-owned. The analyzer maps them to its typed
+  `DelegationContext` projection, including `DelegationTopology::MixedOrAmbiguous` and
+  `ChildWorkVisibility::Opaque`; sentinel consumes that projection without interpreting raw conflict.
 - When child evidence is unavailable, the analyzer's `opaque`/`partial` visibility and insufficient
   evidence remain intact. Parent orchestration alone never proves child progress, drift, or
   completion.
@@ -259,7 +262,7 @@ production edit is authorized by this spec.
 
 | Path | Required proof |
 |---|---|
-| `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs` | Exact v0.2-v0.8 matrix; exact non-empty sentinel field set (`session_id`, `checkpoint_id`, `task_frame.objective`, `expected_next_step`); same-session history; explicit-state precedence; structured failures; typed v0.8 delegation projection; analyzer-declared conflicting/partial/opaque delegation accepted without field-level revalidation; parent-orchestration negative witness. |
+| `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs` | Exact v0.2-v0.8 matrix; exact non-empty sentinel field set (`session_id`, `checkpoint_id`, `task_frame.objective`, `expected_next_step`); same-session history; explicit-state precedence; structured failures; typed v0.8 delegation projection; analyzer maps conflicting-link input to its typed `DelegationContext` projection and sentinel consumes the resulting `DelegationTopology::MixedOrAmbiguous` plus `ChildWorkVisibility::Opaque` without interpreting raw conflict; `ChildWorkVisibility::{Partial, Opaque}` accepted without field-level revalidation; parent-orchestration negative witness. |
 | `crates/agent-drift-sentinel/tests/replay_input.rs` | Replay raw-field/version behavior, sorting, mixed-version failure, and cursor behavior unchanged. |
 | `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs` | v0.2 and v0.3-v0.8 compatibility/presentation behavior unchanged, including v0.8 state-backed evidence/delegation. |
 | `crates/agent-drift-sentinel/tests/live_input.rs` and `tests/live_input_adapter.rs` | Append-only event/cursor and fixture adapter errors unchanged. |

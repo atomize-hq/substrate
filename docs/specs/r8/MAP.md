@@ -96,8 +96,9 @@ acceptance.
 - Validation and semantic interpretation of fields inside analyzer-owned `DelegationContext` remain
   analyzer responsibilities. Sentinel may consume/project the typed delegation facts and reject only
   the already-defined whole-checkpoint gaps: a missing/null v0.8 `delegation` value or a conflicting
-  schema/same-session contract state. Analyzer-declared `Conflicting`, `Partial`, or `Opaque`
-  delegation is valid typed input, not a prompt for sentinel field-level revalidation or inference.
+  schema/same-session contract state. Analyzer-declared `DelegationTopology::MixedOrAmbiguous` and
+  `ChildWorkVisibility::{Partial, Opaque}` states are valid typed input, not a prompt for sentinel
+  field-level revalidation or inference.
 
 ## Gate Map
 
