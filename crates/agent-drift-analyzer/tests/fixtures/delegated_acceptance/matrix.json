@@ -1,0 +1,368 @@
+{
+  "cases": [
+    {
+      "id": "one_parent_one_verified_child",
+      "sessions": [
+        { "id": "session-parent-alpha", "behavior": "parent_clean" },
+        { "id": "session-child-alpha", "behavior": "child_minimal" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-alpha",
+          "child_session_id": "session-child-alpha",
+          "child_origin_parent_session_id": "session-parent-alpha",
+          "depth": 1,
+          "state": "verified"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-alpha",
+          "topology": "delegating_parent",
+          "parent_session_id": null,
+          "child_session_ids": ["session-child-alpha"],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-alpha",
+          "topology": "delegated_child",
+          "parent_session_id": "session-parent-alpha",
+          "child_session_ids": [],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "one_parent_multiple_verified_children",
+      "sessions": [
+        { "id": "session-parent-bravo", "behavior": "parent_clean" },
+        { "id": "session-child-bravo-one", "behavior": "child_minimal" },
+        { "id": "session-child-bravo-two", "behavior": "child_minimal" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-bravo",
+          "child_session_id": "session-child-bravo-one",
+          "child_origin_parent_session_id": "session-parent-bravo",
+          "depth": 1,
+          "state": "verified"
+        },
+        {
+          "parent_session_id": "session-parent-bravo",
+          "child_session_id": "session-child-bravo-two",
+          "child_origin_parent_session_id": "session-parent-bravo",
+          "depth": 1,
+          "state": "verified"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-bravo",
+          "topology": "delegating_parent",
+          "parent_session_id": null,
+          "child_session_ids": ["session-child-bravo-one", "session-child-bravo-two"],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-bravo-one",
+          "topology": "delegated_child",
+          "parent_session_id": "session-parent-bravo",
+          "child_session_ids": [],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-bravo-two",
+          "topology": "delegated_child",
+          "parent_session_id": "session-parent-bravo",
+          "child_session_ids": [],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "one_verified_child_plus_one_missing_child",
+      "sessions": [
+        { "id": "session-parent-charlie", "behavior": "parent_clean" },
+        { "id": "session-child-charlie-present", "behavior": "child_minimal" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-charlie",
+          "child_session_id": "session-child-charlie-present",
+          "child_origin_parent_session_id": "session-parent-charlie",
+          "depth": 1,
+          "state": "verified"
+        },
+        {
+          "parent_session_id": "session-parent-charlie",
+          "child_session_id": "session-child-charlie-missing",
+          "child_origin_parent_session_id": null,
+          "depth": null,
+          "state": "parent_only"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-charlie",
+          "topology": "delegating_parent",
+          "parent_session_id": null,
+          "child_session_ids": ["session-child-charlie-present"],
+          "visibility": "partial",
+          "confidence": "medium",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-charlie-present",
+          "topology": "delegated_child",
+          "parent_session_id": "session-parent-charlie",
+          "child_session_ids": [],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "parent_spawn_result_without_child_file",
+      "sessions": [
+        { "id": "session-parent-delta", "behavior": "parent_clean" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-delta",
+          "child_session_id": "session-child-delta-missing",
+          "child_origin_parent_session_id": null,
+          "depth": null,
+          "state": "parent_only"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-delta",
+          "topology": "delegating_parent",
+          "parent_session_id": null,
+          "child_session_ids": [],
+          "visibility": "opaque",
+          "confidence": "low",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "child_metadata_without_parent_result",
+      "sessions": [
+        { "id": "session-child-echo", "behavior": "child_minimal" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-echo-missing",
+          "child_session_id": "session-child-echo",
+          "child_origin_parent_session_id": "session-parent-echo-missing",
+          "depth": 1,
+          "state": "child_only"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-child-echo",
+          "topology": "delegated_child",
+          "parent_session_id": null,
+          "child_session_ids": [],
+          "visibility": "opaque",
+          "confidence": "low",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "conflicting_parent_child_ids",
+      "sessions": [
+        { "id": "session-parent-foxtrot", "behavior": "parent_clean" },
+        { "id": "session-child-foxtrot", "behavior": "child_minimal" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-foxtrot",
+          "child_session_id": "session-child-foxtrot",
+          "child_origin_parent_session_id": "session-parent-other",
+          "depth": 1,
+          "state": "conflicting_parent"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-foxtrot",
+          "topology": "mixed_or_ambiguous",
+          "parent_session_id": null,
+          "child_session_ids": [],
+          "visibility": "opaque",
+          "confidence": "low",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-foxtrot",
+          "topology": "mixed_or_ambiguous",
+          "parent_session_id": null,
+          "child_session_ids": [],
+          "visibility": "opaque",
+          "confidence": "low",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "nested_depth_greater_than_one_residue",
+      "sessions": [
+        { "id": "session-parent-golf", "behavior": "parent_clean" },
+        { "id": "session-child-golf", "behavior": "child_minimal" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-golf",
+          "child_session_id": "session-child-golf",
+          "child_origin_parent_session_id": "session-parent-golf",
+          "depth": 2,
+          "state": "deeper_residue"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-golf",
+          "topology": "mixed_or_ambiguous",
+          "parent_session_id": null,
+          "child_session_ids": [],
+          "visibility": "opaque",
+          "confidence": "low",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-golf",
+          "topology": "mixed_or_ambiguous",
+          "parent_session_id": null,
+          "child_session_ids": [],
+          "visibility": "opaque",
+          "confidence": "low",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "ordinary_single_agent_control",
+      "sessions": [
+        { "id": "session-single-hotel", "behavior": "single_agent_clean" }
+      ],
+      "links": [],
+      "expected": [
+        {
+          "session_id": "session-single-hotel",
+          "topology": "single_agent",
+          "parent_session_id": null,
+          "child_session_ids": [],
+          "visibility": "none",
+          "confidence": "high",
+          "progress_dimension": null,
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "parent_wait_loop_while_child_advances",
+      "sessions": [
+        { "id": "session-parent-india", "behavior": "parent_wait_loop" },
+        { "id": "session-child-india", "behavior": "child_advances" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-india",
+          "child_session_id": "session-child-india",
+          "child_origin_parent_session_id": "session-parent-india",
+          "depth": 1,
+          "state": "verified"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-india",
+          "topology": "delegating_parent",
+          "parent_session_id": null,
+          "child_session_ids": ["session-child-india"],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-india",
+          "topology": "delegated_child",
+          "parent_session_id": "session-parent-india",
+          "child_session_ids": [],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": "verification_closeout_narrowing",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        }
+      ]
+    },
+    {
+      "id": "child_stalls_while_parent_orchestration_clean",
+      "sessions": [
+        { "id": "session-parent-juliet", "behavior": "parent_clean" },
+        { "id": "session-child-juliet", "behavior": "child_stalls" }
+      ],
+      "links": [
+        {
+          "parent_session_id": "session-parent-juliet",
+          "child_session_id": "session-child-juliet",
+          "child_origin_parent_session_id": "session-parent-juliet",
+          "depth": 1,
+          "state": "verified"
+        }
+      ],
+      "expected": [
+        {
+          "session_id": "session-parent-juliet",
+          "topology": "delegating_parent",
+          "parent_session_id": null,
+          "child_session_ids": ["session-child-juliet"],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": "parent_visible_orchestration",
+          "dead_end_thrash": { "state": "cleared", "flagged": false }
+        },
+        {
+          "session_id": "session-child-juliet",
+          "topology": "delegated_child",
+          "parent_session_id": "session-parent-juliet",
+          "child_session_ids": [],
+          "visibility": "linked",
+          "confidence": "high",
+          "progress_dimension": "troubleshooting_frontier",
+          "dead_end_thrash": { "state": "active", "flagged": true }
+        }
+      ]
+    }
+  ]
+}
