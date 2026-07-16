@@ -1,7 +1,8 @@
 # R8 Map: Sentinel Interpretation Consolidation / Integration
 
-Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; `b9ce44c6f`
-FRESH INDEPENDENT `CHANGES_REQUIRED` WITH TWO FINDINGS; CURRENT TWO-FINDING FIX REVIEW PENDING;
+Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; `904c93d0d`
+FRESH INDEPENDENT `CHANGES_REQUIRED` WITH ONE OPTION B CALL-PATH FINDING; CURRENT ONE-FINDING FIX
+REVIEW PENDING;
 R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
@@ -12,8 +13,10 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
 Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
-only those two findings and claims no review result. All R8
+`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
+`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
+Option B call-path finding. This bounded Markdown-only fix addresses only that one finding and claims
+no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
 not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
 decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
@@ -49,6 +52,7 @@ Detailed contract: [`agent-drift-sentinel-interpretation-consolidation-r8-spec.m
 | Fixture/live | `live_input.rs` -> `live_runtime.rs` -> `operator_surface.rs` | Raw schema checks repeat replay rules; typed compatibility and presentation interpretation are separate. |
 | Real-session live | `real_session_live.rs` -> `live_runtime.rs` | Pipeline, per-session freshness, delivery, and persisted cursors surround the same presentation path. |
 | Operator | `operator_surface.rs` | Diagnostics rendering is shared, but version-aware posture/evidence decisions remain embedded in presentation. |
+| Adjudication summary | `adjudication.rs` -> `CheckpointPresentation::render_console_block` | `shape_request` preserves the rendered block, subject only to the existing truncation limit, as `operator_summary`; this is read-only dependency/call-path evidence and not an authorized edit seam. |
 
 GitNexus joins the replay path at `load_replay_bundle -> render_replay_report ->
 present_checkpoint_with_previous`, and the live path at `poll_once -> LiveRuntime::observe ->
@@ -111,14 +115,22 @@ is authorized.
   `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` must choose either an explicit optional public
   presence/projection field with zero operator-presentation schema checks, or exactly one
   `self.checkpoint.schema_version == "v0.8"` predicate in the named legacy public facade
-  `CheckpointPresentation::render_console_block`. Option B explicitly permits
-  `ReplayReport::to_console_text` and the final `LiveObservation.presentation.render_console_block`
-  call to use that frozen facade and its sole presence predicate; contract validation, typed
-  interpretation, posture/evidence/delegation projection, scheduling, and presentation construction
-  must contain zero R8-4 schema-presence predicates. This is a localized schema-coupling and
-  centralization exception with an explicit parity-test cost, not a claim that the erased internal
-  `Option` reaches later final rendering. Option A instead keeps zero schema predicates in
-  presentation by accepting the public-field/source-compatibility cost.
+  `CheckpointPresentation::render_console_block`. Option B explicitly permits that unchanged facade
+  to serve exactly three current downstream production consumer items:
+  `ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and
+  `adjudication::shape_request` while constructing `operator_summary`. This is consumer-item set
+  equality, not a false claim that only two call expressions exist: `ReplayReport::to_console_text`
+  retains its current per-collection calls. Contract validation, typed interpretation,
+  posture/evidence/delegation projection, scheduling, presentation construction, and adjudication
+  decision/request-shaping logic must contain zero R8-4 schema-presence predicates. On the
+  adjudication path, the sole predicate may affect only the preserved bytes rendered into the
+  operator summary; it may not affect request eligibility, fields other than rendered
+  `operator_summary` content, or decision semantics. `adjudication.rs` remains read-only evidence
+  and is not an R8-4 edit-manifest file.
+  This is a localized compatibility/presentation exception with an explicit parity-test cost, not
+  a claim that the erased internal `Option` reaches later rendering and not an adjudication-policy
+  exception. Option A instead keeps zero schema predicates in presentation by accepting the
+  public-field/source-compatibility cost while preserving the same public output.
   Until that decision, R8-4 may not edit any symbol and `CTX-R8-05` cannot be proven. Changing the
   upstream analyzer `Checkpoint` schema is outside R8.
 
@@ -149,7 +161,7 @@ is authorized.
 | `CTX-R8-02` | R8 MAP/SPEC/PLAN/TASKS are internally consistent and fresh-review-clean before code. |
 | `CTX-R8-03` | Replay and live use the same typed interpretation function and parity matrix. |
 | `CTX-R8-04` | One compatibility owner preserves v0.2 and v0.3-v0.8 contract behavior. |
-| `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, Option A proves zero `schema_version` field/path uses and predicates in presentation while accepting the public-field/source-compatibility cost. Option B proves exactly one direct field use and one equality predicate with literal `"v0.8"` in `CheckpointPresentation::render_console_block`, zero in every other item, and permits `ReplayReport::to_console_text` plus final `LiveObservation.presentation.render_console_block` to call that frozen facade because the unchanged public shapes erase internal presence before then. A `syn`-based AST visitor attributes every use/predicate form to its owning item; separate behavior tests prove facade/core output and the actual final replay/live call paths. |
+| `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, Option A proves zero `schema_version` field/path uses and predicates in presentation while accepting the public-field/source-compatibility cost and preserving the same public output. Option B proves exactly one direct field use and one equality predicate with literal `"v0.8"` in `CheckpointPresentation::render_console_block`, zero in every other item, and permits that unchanged facade to serve exactly the current three downstream production consumer items: `ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and `adjudication::shape_request` `operator_summary` construction. A `syn`-based AST/call-path visitor proves literal consumer-owner set equality across production source without conflating the three owners with raw call-expression count; separate behavior tests prove facade/core output, the three actual consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. On the adjudication path, the predicate reaches only preserved presentation content, never adjudication policy/request shaping or decision semantics; `adjudication.rs` is read-only evidence, not an edit-manifest file. |
 | `CTX-R8-06` | Existing pre-observe transport bookkeeping is permitted; after interpretation failure there is no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. |
 
 `CTX-R8-01` is currently `PROVEN` by the stable R7 contract plus the clean MAP/SPEC freeze. The
@@ -165,7 +177,9 @@ authoritative until reviewed evidence updates it.
    `CHANGES_REQUIRED`; fix `2b9565fb9` landed; follow-up fix `b04207fb6` received fresh independent
    built-in `default` `CHANGES_REQUIRED` with one conditional-acceptance finding; conditional fix
    `b9ce44c6f` received fresh independent built-in `default` `CHANGES_REQUIRED` with two findings;
-   the current bounded fix addresses only those two findings and claims no review result;
+   two-finding fix `904c93d0d` received fresh independent built-in `default` `CHANGES_REQUIRED` with
+   one Option B call-path finding; the current bounded fix addresses only that finding and claims no
+   review result;
 4. packetized TASKS with the exact future HIGH-impact and delegation-presence decision gates — same
    review/fix state, with all implementation tasks unchecked and unstarted.
 

@@ -3,7 +3,7 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-plan.md`
 
-Status: **BOUNDED MARKDOWN FIX FOR `b9ce44c6f` `CHANGES_REQUIRED` / CURRENT TWO-FINDING FIX
+Status: **BOUNDED MARKDOWN FIX FOR `904c93d0d` `CHANGES_REQUIRED` / CURRENT ONE-FINDING FIX
 CLAIMS NO REVIEW RESULT / `CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
@@ -14,8 +14,10 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
 Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
-only those two findings and claims no review result. All R8
+`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
+`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
+Option B call-path finding. This bounded Markdown-only fix addresses only that one finding and claims
+no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
 not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
 decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
@@ -54,6 +56,7 @@ expand it.
 | Live scheduling/state | `crates/agent-drift-sentinel/src/live_runtime.rs` | `crates/agent-drift-sentinel/tests/live_runtime.rs` |
 | Real-session delivery/cursors | `crates/agent-drift-sentinel/src/real_session_live.rs` | `crates/agent-drift-sentinel/tests/real_session_live.rs` |
 | Replay report and operator presentation | `crates/agent-drift-sentinel/src/operator_surface.rs` | `crates/agent-drift-sentinel/tests/operator_surface.rs`, `tests/live_end_to_end.rs` |
+| Adjudication operator summary | `crates/agent-drift-sentinel/src/adjudication.rs` (read-only dependency/call-path evidence) | Existing `tests/adjudication.rs` plus R8-4 parity assertions in edit-manifest tests; no adjudication source/test edit |
 | Public request/result facade | `crates/agent-drift-sentinel/src/lib.rs` | compile-time signature assertions added in focused Sentinel tests |
 
 The only new planned path is:
@@ -66,8 +69,10 @@ The only new planned path is:
 - Do not edit analyzer, compactor, or checkpoint schema code.
 - Do not edit `scheduler.rs`, `adjudication.rs`, `cli.rs`, `operator_sink.rs`, or their tests as an
   implementation shortcut.
-- Do not change scheduler trigger meanings, cooldown/debounce state, adjudication behavior, operator
-  sink behavior, real-session delivery ordering, checkpoint acceptance, or cursor persistence.
+- Do not change scheduler trigger meanings, cooldown/debounce state, adjudication behavior, policy,
+  request-shaping logic, request eligibility, decision semantics, operator sink behavior,
+  real-session delivery ordering, checkpoint acceptance, or cursor persistence. Option B may affect
+  only the preserved bytes rendered into `operator_summary`, and parity must prove them unchanged.
 - Do not add generalized schema parsing. The supported set remains the exact literals v0.2 through
   v0.8.
 - Do not add sentinel validation inside analyzer-owned `DelegationContext`. Missing/null v0.8
@@ -152,14 +157,20 @@ scheduler, or cursor-visible runtime state.
    `self.checkpoint.schema_version == "v0.8"`, to the legacy public facade
    `CheckpointPresentation::render_console_block`. Because unchanged `CheckpointPresentation`,
    `ReplayReport`, and `LiveObservation` shapes erase internal optional presence before their later
-   console call, Option B explicitly permits `ReplayReport::to_console_text` and final
-   `LiveObservation.presentation.render_console_block` to call that frozen facade and use its sole
-   predicate. Contract validation, typed interpretation,
-   posture/evidence/delegation projection, scheduling, and presentation construction may not call
-   or reproduce this exception. This is a localized schema-coupling/centralization exception with
-   an explicit parity-test cost; Option B does not claim the internal `Option` reaches final
-   rendering. Option A instead accepts the public-field/source-compatibility cost and requires zero
-   presentation schema uses/predicates. No R8-4 symbol or manifest is editable before the choice.
+   render calls, Option B explicitly permits that frozen facade to serve exactly three current
+   downstream production consumer items: `ReplayReport::to_console_text`, final live console
+   rendering in `cli::run_live`, and `adjudication::shape_request` while constructing
+   `operator_summary`. This is owner-set equality, not a false two-call/raw-expression claim;
+   `ReplayReport::to_console_text` retains its current per-collection calls. Contract validation,
+   typed interpretation, posture/evidence/delegation projection, scheduling, presentation
+   construction, and adjudication request-shaping/decision logic may not call or reproduce this
+   exception. This is a localized compatibility/presentation schema-coupling exception with an
+   explicit three-consumer parity-test cost; on the adjudication path, the predicate may affect only
+   preserved rendered operator-summary content, and `adjudication.rs` remains unchanged read-only
+   evidence. Option B does not claim the internal `Option` reaches final rendering. Option A instead
+   accepts the public-field/source-compatibility cost, requires zero presentation schema uses/
+   predicates, and preserves the same public output. No R8-4 symbol or manifest is editable before
+   the choice.
 6. **Crate-private implementation/testing.** `checkpoint_interpretation` and every additive item are
    `pub(crate)` only as needed. R8-1 RED/GREEN is an in-module `#[cfg(test)]` unit-test matrix; public-
    flow integration tests begin with R8-2/R8-3 and exercise the existing public facades.
@@ -176,7 +187,7 @@ These are hypotheses to disprove during implementation and fresh review, not com
 | One typed interpretation can preserve v0.2 and v0.3-v0.8 behavior without moving semantics out of the analyzer. | A wrong normalization creates a second analyzer. | Exact version matrix, explicit-state precedence, same-session history, typed delegation acceptance, and parent-orchestration negative witnesses. |
 | Fallible core paths can coexist with locked infallible facades without fallback or panic. | Error swallowing would make malformed checkpoints appear valid. | Compile-time signature locks, structured error-chain tests, source-order inspection, and searches excluding `unwrap`/panic/fallback bridges. |
 | Live contract failures can be rejected before scheduler/presentation/acceptance/delivery effects, while preserving existing pre-observe transport bookkeeping. | A post-interpretation delivery/cursor effect breaks restart safety, but claiming rollback of monitor/poll/ordinal bookkeeping would exceed R8. | Before/after runtime snapshots plus static real-session ordering prove no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance after failure; monitor-closure, pending-poll, and emission-ordinal observations are permitted. |
-| Core operator construction can remain typed and predicate-free while the selected public boundary preserves compatibility. | Schema/state inference before final rendering would retain the duplication R8 exists to remove; pretending the unchanged public shape carries delegation presence would lose information. | The explicit presence-representation decision, AST ownership policy, and separate behavior proof for exact facade/core output plus the actual replay/live final console call paths. |
+| Core operator construction can remain typed and predicate-free while the selected public boundary preserves compatibility. | Schema/state inference before final rendering would retain the duplication R8 exists to remove; pretending the unchanged public shape carries delegation presence would lose information. | The explicit presence-representation decision, fail-closed AST/call-path ownership policy with exact three-consumer owner-set equality, and separate behavior proof for exact facade/core output, final replay/live rendering, and unchanged adjudication `operator_summary` bytes/full requests. |
 
 Fresh-context built-in `default` review is required after every packet before the next cutover.
 Cross-model review is skipped for this autonomous plan because external CLI use is explicitly
@@ -394,6 +405,13 @@ Exact manifest (5 files):
 - `crates/agent-drift-sentinel/tests/operator_surface.rs`;
 - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`.
 
+Read-only dependency/call-path evidence outside that five-file edit manifest:
+
+- `crates/agent-drift-sentinel/src/adjudication.rs` — `shape_request` currently constructs
+  `operator_summary` from `CheckpointPresentation::render_console_block(None)`. R8-4 must not edit
+  this file or any adjudication policy/request-shaping logic; tests in the edit manifest lock its
+  existing bytes and full request behavior.
+
 Both presence branches add exactly one dev-only parser dependency,
 `syn = { version = "2", features = ["full", "visit"] }`, in the Sentinel crate and the matching
 `Cargo.lock` dependency-edge change. Live `Cargo.lock` already contains transitive `syn` `2.0.117`,
@@ -417,15 +435,20 @@ or Option B's unchanged public shape plus exactly one equality predicate,
 `self.checkpoint.schema_version == "v0.8"`, inside the named legacy public facade
 `CheckpointPresentation::render_console_block`. Under Option B, constructing the unchanged
 `CheckpointPresentation` and then placing it in unchanged `ReplayReport` or `LiveObservation`
-erases the internal `Option` before later console rendering. `ReplayReport::to_console_text` and
-final `LiveObservation.presentation.render_console_block` therefore may call the frozen facade and
-use its sole predicate to reconstruct the optional delegation argument at that final boundary.
-Contract validation, typed interpretation,
-posture/evidence/delegation projection, scheduling, and presentation/report/observation
-construction contain no R8-4 presence predicate. Option B is an explicit localized coupling and
-centralization exception with parity cost, not a claim that internal optional presence survives to
-final rendering. Option A has no presentation schema predicate but accepts a public-field/source-
-compatibility cost. Changing the upstream analyzer `Checkpoint` schema is not an R8-4 option.
+erases the internal `Option` before later rendering. The frozen facade therefore may serve exactly
+the three current downstream production consumer items `ReplayReport::to_console_text`, final live
+console rendering in `cli::run_live`, and `adjudication::shape_request` `operator_summary`
+construction, using its sole predicate only to reconstruct the optional delegation argument at the
+final presentation boundary. Contract validation, typed interpretation,
+posture/evidence/delegation projection, scheduling, presentation/report/observation construction,
+and adjudication policy/request-shaping or decision logic contain no R8-4 presence predicate.
+Option B is an explicit localized compatibility/presentation coupling exception with parity cost,
+not a claim that internal optional presence survives to final rendering and not authorization to
+edit `adjudication.rs`. On the adjudication path, its predicate may affect only preserved rendered
+operator-summary content; exact parity must show unchanged `operator_summary` bytes and full
+requests. Option A has no presentation schema predicate, accepts a public-field/source-
+compatibility cost, and preserves the same public output. Changing the upstream analyzer
+`Checkpoint` schema is not an R8-4 option.
 The compatibility facades may not contain supported-version tables, analyzer-state classification,
 legacy evidence-prefix recognition, panic/unwrap, or failure fallback. The single Option B equality
 is a presence-only legacy exception, not validation or version-table ownership.
@@ -457,14 +480,17 @@ Focused proof:
 cargo test -p agent-drift-sentinel --test operator_surface -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
+cargo test -p agent-drift-sentinel --test adjudication -- --nocapture
 ! rg -n 'DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 ```
 
-`tests/operator_surface.rs` must provide the exact schema-check proof; the removed line-oriented
-regex and token/delimiter counter are not acceptance evidence. Parse `src/operator_surface.rs` with
-`syn::parse_file` and run a fail-closed `syn::visit::Visit` ownership/data-dependency pass. It must
+`tests/operator_surface.rs` must provide the exact schema-check/call-owner proof; the removed line-
+oriented regex and token/delimiter counter are not acceptance evidence. Parse
+`src/operator_surface.rs` plus the Sentinel production source set (including read-only `cli.rs` and
+`adjudication.rs`) with `syn::parse_file` and run a fail-closed `syn::visit::Visit` ownership/data-
+dependency pass. It must
 visit every direct `schema_version` field/path occurrence, propagate local aliases/assignments, and
 record every enclosing predicate/control form: `==`, `!=`, boolean nesting, `if`/`while`, `match`
 scrutinees and guards, parsed `matches!`, method calls, struct field/pattern uses, constants, and aliases. Each occurrence and
@@ -473,16 +499,26 @@ unowned form fails the test. Option A asserts zero field/path uses and zero pred
 `operator_surface.rs`. Option B asserts exactly one direct field use and one predicate in the whole
 file, both owned by `CheckpointPresentation::render_console_block`, zero in every other item, with
 the allowed predicate structurally equal to direct `self.checkpoint.schema_version == "v0.8"` using
-that literal. The AST test proves syntax, item ownership, and the conditional count policy only; it
-must not claim that it proves runtime data flow.
+that literal. The fail-closed production call-path inventory also attributes every direct facade
+call to its owning item and asserts exact set equality with `ReplayReport::to_console_text`,
+`cli::run_live`, and `adjudication::shape_request`. It reports raw call-expression count separately
+because `ReplayReport::to_console_text` retains its current per-collection calls; it must not collapse
+that fact into the removed false two-call claim. Any new or unclassified production call owner
+fails. The AST test proves syntax, item ownership, call ownership, and conditional/count policy
+only; it must not claim that it proves runtime data flow or behavior.
 
 Behavior proof is separate and branch-locked. Under Option A, public `None`/`Some` construction must
-preserve that value through final output. Under Option B, v0.2-v0.7 and v0.8 legacy-facade output
-must match the intended absence/presence output, and `live_end_to_end` must exercise
-`ReplayReport::to_console_text` plus final
-`LiveObservation.presentation.render_console_block`. Those tests separately prove output/call-path
-parity and that no earlier validation, interpretation, projection, scheduling, or construction
-stage uses the Option B exception; the AST test alone proves none of those runtime facts.
+preserve that value through final output with no presentation predicate and the same public bytes.
+Under Option B, v0.2-v0.7 and v0.8 legacy-facade output must match the intended absence/presence
+output, and edit-manifest tests must exercise `ReplayReport::to_console_text`, final
+`LiveObservation.presentation.render_console_block` output corresponding to `cli::run_live`, and
+`adjudication::shape_request` `operator_summary` construction. Pre/post assertions lock exact
+`operator_summary` bytes and full `AdjudicationRequest` equality, including request eligibility and
+every non-summary field; only the facade output may flow through existing truncation into the summary; every other
+request field remains unchanged. Those tests separately prove output/call-path parity and that no earlier validation,
+interpretation, projection, scheduling, construction, adjudication request-shaping logic, or
+decision-semantic stage uses the Option B exception; the AST test alone proves none of those runtime
+facts.
 
 ## R8-5.1 — Replay/Live Parity And Compatibility Matrix
 
@@ -611,7 +647,7 @@ edited. The operator must reply in the exact `DECISION <ID>: A|B` form.
 | `DECISION REQUIRED R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A\|B` | `verify_live_checkpoint_compatibility` in `src/live_input.rs`: **HIGH**, 17 direct dependents, 0 affected processes, 1 affected module. | **A:** authorize only its R8-3 delegation under the exact manifest and behavior locks. **B:** do not edit it; stop the compatibility half and respec/defer R8-3. | **Recommend A** because the public compatibility facade remains source/behavior compatible. The symbol remains uneditable until the reply is A. |
 | `DECISION REQUIRED R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A\|B` | file-disambiguated `LiveRuntime::observe` (`observe` in `src/live_runtime.rs`): **HIGH**, 17 direct dependents, 0 affected processes, 1 affected module. | **A:** authorize only the R8-3 pre-mutation interpretation reorder and exact snapshot/protected-boundary proof. **B:** do not edit it; stop the runtime half and respec/defer R8-3. | **Recommend A** because the narrowed proof locks every post-interpretation effect and permits existing pre-observe transport bookkeeping. The method remains uneditable until the reply is A. |
 | `DECISION REQUIRED R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A\|B` | `uses_explicit_analyzer_state` in `src/operator_surface.rs`: **HIGH**, 10 impacted symbols, 2 direct dependents, 1 affected `execute` process, 3 affected modules. | **A:** authorize only the R8-4 move/removal under exact signature, typed-delegation, parity, and static ownership locks. **B:** do not edit/remove it; stop R8-4 and respec/defer operator consolidation. | **Recommend A** because the analyzer remains semantic owner and presentation becomes formatting-only. The helper remains uneditable until the reply is A. |
-| `DECISION REQUIRED R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A\|B` | `Checkpoint.delegation` is non-optional; `RawCheckpoint.delegation` is optional only while deserializing and `into_checkpoint` maps pre-v0.8 absence to `DelegationContext::default()`; public `CheckpointPresentation` contains `checkpoint: Checkpoint` but no optional presence carrier, and unchanged `ReplayReport`/`LiveObservation` only retain that presentation. Thus Option B erases the internal `Option` before final console rendering. Live `Cargo.lock` already contains transitive `syn` `2.0.117`, but no manifest exposes it; either branch needs a direct dev-only `syn` 2 `full`/`visit` edge and the exact Sentinel-package lock delta for fail-closed AST proof. | **A:** add an explicit optional delegation presence/projection field to public `CheckpointPresentation`, accepting the public-field/source-compatibility plus dev-dependency/lockfile cost, and require zero `schema_version` field/path uses and predicates throughout `operator_surface.rs`. Exact construction/signature, absence/presence, AST-zero, and final replay/live output tests prove the carrier survives to rendering. **B:** preserve the existing public shapes/output, accept the dev-dependency/lockfile plus localized schema-coupling/centralization/parity cost, and allow exactly one direct field use and predicate `self.checkpoint.schema_version == "v0.8"` inside `CheckpointPresentation::render_console_block`. `ReplayReport::to_console_text` and final `LiveObservation.presentation.render_console_block` may call that frozen facade; validation, interpretation, posture/evidence/delegation projection, scheduling, and construction contain zero R8-4 schema-presence predicates. `syn` AST proof attributes all field/path uses and enclosing predicate forms to owning items and asserts total direct uses `1`, predicates `1`, named method `1`, every other item `0`; separate tests prove output and actual final call paths. | **Recommend B** for stable public APIs, while explicitly accepting its localized coupling and parity cost. This recommendation does not resolve or authorize the choice. No R8-4 symbol or manifest is editable before an explicit A/B reply, and changing upstream analyzer `Checkpoint` is out of scope. |
+| `DECISION REQUIRED R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A\|B` | `Checkpoint.delegation` is non-optional; `RawCheckpoint.delegation` is optional only while deserializing and `into_checkpoint` maps pre-v0.8 absence to `DelegationContext::default()`; public `CheckpointPresentation` contains `checkpoint: Checkpoint` but no optional presence carrier, and unchanged `ReplayReport`/`LiveObservation` only retain that presentation. Thus Option B erases the internal `Option` before final console rendering. Live `Cargo.lock` already contains transitive `syn` `2.0.117`, but no manifest exposes it; either branch needs a direct dev-only `syn` 2 `full`/`visit` edge and the exact Sentinel-package lock delta for fail-closed AST proof. | **A:** add an explicit optional delegation presence/projection field to public `CheckpointPresentation`, accepting the public-field/source-compatibility plus dev-dependency/lockfile cost, and require zero `schema_version` field/path uses and predicates throughout `operator_surface.rs`. Exact construction/signature, absence/presence, AST-zero, and final output tests prove the carrier survives to rendering with the same public bytes. **B:** preserve the existing public shapes/output, accept the dev-dependency/lockfile plus localized compatibility/presentation schema-coupling/parity cost, and allow exactly one direct field use and predicate `self.checkpoint.schema_version == "v0.8"` inside `CheckpointPresentation::render_console_block`. That frozen facade may serve exactly three current downstream production consumer items: `ReplayReport::to_console_text`, final live console rendering in `cli::run_live`, and `adjudication::shape_request` `operator_summary` construction; validation, interpretation, posture/evidence/delegation projection, scheduling, construction, and adjudication policy/request-shaping or decision logic contain zero R8-4 schema-presence predicates. `syn` AST/call-path proof attributes all field/path uses, predicate forms, and production facade-call owners, asserting uses `1`, predicates `1`, named method `1`, every other item `0`, and exact three-owner set equality without treating raw call-expression count as two; separate tests prove the same public output, all three consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. `adjudication.rs` is read-only evidence and not an edit-manifest file. | **Recommend B** for stable public APIs, while explicitly accepting its localized coupling and parity cost. This recommendation does not resolve or authorize the choice. No R8-4 symbol or manifest is editable before an explicit A/B reply, and changing upstream analyzer `Checkpoint` is out of scope. |
 
 Ready future prompt (recorded, **not requested now**):
 
@@ -625,12 +661,18 @@ operator presentation.
 B: preserve the existing public shape/output; accept that CheckpointPresentation, ReplayReport, and
 LiveObservation erase internal optional presence before final rendering; allow exactly one
 `self.checkpoint.schema_version == "v0.8"` predicate in
-`CheckpointPresentation::render_console_block`, and let final replay/live console rendering call
-that frozen facade. Require zero such predicates in validation/interpretation/projection/scheduling/
-construction and every other presentation item.
+`CheckpointPresentation::render_console_block`, and let that frozen facade serve exactly the three
+current production consumer items ReplayReport::to_console_text, final live console rendering in
+cli::run_live, and adjudication::shape_request operator_summary construction. Treat adjudication.rs
+as read-only evidence, change no adjudication policy/request-shaping logic or decision semantics,
+and, on the adjudication path, allow the predicate to affect only preserved rendered operator-summary content. Require zero
+such predicates in validation/interpretation/projection/scheduling/construction, adjudication logic,
+and every other presentation item.
 DEPENDENCY COST FOR A OR B: dev-only syn 2 with full + visit in the Sentinel Cargo.toml plus the
-exact Cargo.lock delta; a fail-closed AST visitor proves item-owned uses/predicates, while separate
-behavior tests prove output and the actual final replay/live call paths.
+exact Cargo.lock delta; a fail-closed AST/call-path visitor proves item-owned uses/predicates and
+exact three-consumer owner-set equality without a false two-call count, while separate behavior
+tests prove the same public output, all three paths, and unchanged operator_summary bytes/full
+adjudication requests. Option A has no presentation predicate and preserves that same output.
 RECOMMENDATION: B, for stable public APIs while accepting localized coupling and parity cost.
 BOUNDARY: this reply does not authorize an upstream Checkpoint schema change or any work outside R8-4.
 ```

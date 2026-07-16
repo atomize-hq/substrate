@@ -18,8 +18,10 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
 Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
-only those two findings and claims no review result. All R8
+`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
+`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
+Option B call-path finding. This bounded Markdown-only fix addresses only that one finding and claims
+no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
 not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
 decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
@@ -109,8 +111,9 @@ is claimed.
     `CHANGES_REQUIRED` with five docs findings; fix `2b9565fb9` landed; follow-up fix `b04207fb6`
     received fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-acceptance
     finding; conditional fix `b9ce44c6f` received fresh independent built-in `default`
-    `CHANGES_REQUIRED` with two docs findings; the current bounded Markdown fix addresses only those
-    two and claims no review result. All
+    `CHANGES_REQUIRED` with two docs findings; two-finding fix `904c93d0d` then received fresh
+    independent built-in `default` `CHANGES_REQUIRED` with one Option B call-path finding; the current
+    bounded Markdown fix addresses only that one finding and claims no review result. All
     implementation tasks remain unchecked/unstarted. `CTX-R8-02` is `OPEN` / `REVIEW
     PENDING` and not proven; `CTX-R8-03..06` and R8-IMPLEMENT remain blocked.
 
@@ -126,8 +129,9 @@ is claimed.
   `0ed3d8f04` + `cfcf65507` at reviewed `CHANGES_REQUIRED` with five docs findings; keep
   `2b9565fb9` landed; keep follow-up fix `b04207fb6` at fresh independent built-in `default`
   `CHANGES_REQUIRED` with one conditional-acceptance finding; keep conditional fix `b9ce44c6f` at
-  fresh independent built-in `default` `CHANGES_REQUIRED` with two docs findings; keep the current
-  bounded fix pending fresh review with no result claimed; keep every implementation task unchecked/unstarted,
+  fresh independent built-in `default` `CHANGES_REQUIRED` with two docs findings; keep two-finding
+  fix `904c93d0d` at fresh independent built-in `default` `CHANGES_REQUIRED` with one Option B
+  call-path finding; keep the current one-finding fix pending fresh review with no result claimed; keep every implementation task unchecked/unstarted,
   `CTX-R8-02` `OPEN` / `REVIEW PENDING` and not proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT
   blocked/boundary-only. Claim no phase transition, Prompt 1 eligibility, implementation
   authorization, full-family `CLEAN`, or review result for this receipt.
@@ -170,8 +174,9 @@ is claimed.
   `CHANGES_REQUIRED` with five docs findings; keep fix `2b9565fb9` landed; keep follow-up fix
   `b04207fb6` at fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-
   acceptance finding; keep conditional fix `b9ce44c6f` at fresh independent built-in `default`
-  `CHANGES_REQUIRED` with two docs findings; keep the current bounded fix pending fresh review with
-  no result claimed;
+  `CHANGES_REQUIRED` with two docs findings; keep two-finding fix `904c93d0d` at fresh independent
+  built-in `default` `CHANGES_REQUIRED` with one Option B call-path finding; keep the current
+  one-finding fix pending fresh review with no result claimed;
   keep every
   implementation task unchecked/unstarted, `CTX-R8-02` `OPEN` / `REVIEW PENDING` and not
   proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT blocked/boundary-only. Claim no phase transition,
@@ -257,8 +262,10 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
 Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
-`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
-only those two findings and claims no review result. All R8
+`CHANGES_REQUIRED` with two scoped documentation findings. Bounded two-finding docs-only fix
+`904c93d0d` then received fresh independent built-in `default` `CHANGES_REQUIRED` with one scoped
+Option B call-path finding. This bounded Markdown-only fix addresses only that one finding and claims
+no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
 not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
 decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
