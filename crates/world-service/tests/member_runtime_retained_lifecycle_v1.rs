@@ -2,6 +2,7 @@
 
 use hyper::body::HttpBody;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,10 +13,12 @@ use transport_api_types::{
     ExecuteRequest, MemberDispatchRequestV1, MemberRuntimeBackendKindV1, MemberTurnSubmitRequestV1,
     PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
     PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
+    RetainedWorkerAdmissionCommitmentCarrierV1, RetainedWorkerAuthorityObjectCommitmentV1,
+    RetainedWorkerLaunchAuthorityProofV1, RetainedWorkerLaunchWorldBindingV1,
 };
 use world_api::{
-    SharedWorldBindingSnapshot, SharedWorldOwnerAction, SharedWorldOwnerSpec, WorldReuseMode,
-    WorldSpec,
+    SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
+    SharedWorldOwnerSpec, WorldReuseMode, WorldSpec,
 };
 use world_service::WorldService;
 
@@ -91,6 +94,53 @@ fn make_member_dispatch_request(
             retained_worker_launch_authority: None,
         }),
     }
+}
+
+fn attach_exact_retained_launch_authority(request: &mut ExecuteRequest) {
+    let canonical_policy = request
+        .policy_snapshot
+        .canonicalize()
+        .expect("canonical policy snapshot");
+    let mut hasher = Sha256::new();
+    hasher.update(serde_json::to_vec(&canonical_policy).expect("serialize canonical policy"));
+    let policy_revision = format!("{:x}", hasher.finalize());
+    let dispatch = request
+        .member_dispatch
+        .as_mut()
+        .expect("member dispatch request");
+    let commitment = |value: char| RetainedWorkerAuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: value.to_string().repeat(64),
+    };
+    dispatch.retained_worker_launch_authority = Some(RetainedWorkerLaunchAuthorityProofV1 {
+        schema_version: 1,
+        authority_store_id: "has_member_runtime_readiness".to_string(),
+        issuer_request_id: "req_member_runtime_readiness".to_string(),
+        canonical_spawn_fingerprint: RetainedWorkerAdmissionCommitmentCarrierV1 {
+            schema_version: 1,
+            algorithm: "hmac-sha-256".to_string(),
+            key_id: "adk_member_runtime_readiness".to_string(),
+            digest_hex: "a".repeat(64),
+        },
+        registration_id: "rwr_registration_member_runtime_readiness".to_string(),
+        registration_commitment: commitment('b'),
+        authority_revision_after: 2,
+        authority_record_commitment_after: commitment('c'),
+        orchestration_session_id: dispatch.orchestration_session_id.clone(),
+        caller_participant_id: dispatch.orchestrator_participant_id.clone(),
+        retained_participant_id: dispatch.participant_id.clone(),
+        bootstrap_run_id: dispatch.run_id.clone(),
+        transport_claim_id: "rtc_member_runtime_readiness".to_string(),
+        backend_id: dispatch.backend_id.clone(),
+        protocol: dispatch.protocol.clone(),
+        world_binding: RetainedWorkerLaunchWorldBindingV1 {
+            world_id: dispatch.world_id.clone(),
+            world_generation: dispatch.world_generation,
+        },
+        current_policy_ref_id: "ao_policy_member_runtime_readiness".to_string(),
+        current_policy_revision: policy_revision,
+        retained_worker_ref_id: "ao_worker_member_runtime_readiness".to_string(),
+        retained_worker_commitment: commitment('d'),
+    });
 }
 
 fn write_seed_home(temp: &Path) -> PathBuf {
@@ -297,6 +347,7 @@ async fn launch_retained_lifecycle_harness(
     orchestration_session_id: &'static str,
     participant_id: &'static str,
     run_id: &str,
+    authority_managed: bool,
 ) -> Option<RetainedLifecycleHarness> {
     let service = match WorldService::new() {
         Ok(svc) => svc,
@@ -309,12 +360,17 @@ async fn launch_retained_lifecycle_harness(
     let tmp = tempdir().expect("tempdir");
     let seed_home = write_seed_home(tmp.path());
     let (member_binary, count_path) = write_member_runtime(tmp.path());
-    let world_spec = WorldSpec {
-        reuse_session: true,
-        reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+    let reuse_mode = if authority_managed {
+        WorldReuseMode::GenericCompatible
+    } else {
+        WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
             orchestration_session_id: orchestration_session_id.to_string(),
             action: SharedWorldOwnerAction::AttachOrCreate,
-        }),
+        })
+    };
+    let world_spec = WorldSpec {
+        reuse_session: true,
+        reuse_mode,
         isolate_network: false,
         limits: world_api::ResourceLimits::default(),
         enable_preload: false,
@@ -333,21 +389,35 @@ async fn launch_retained_lifecycle_harness(
             return None;
         }
     };
-    let Some(binding) = world.shared_binding.clone() else {
-        eprintln!("skipping retained member lifecycle test: shared world binding missing");
-        return None;
+    let binding = if authority_managed {
+        SharedWorldBindingSnapshot {
+            orchestration_session_id: orchestration_session_id.to_string(),
+            world_id: world.id.clone(),
+            world_generation: 0,
+            binding_state: SharedWorldBindingState::Active,
+        }
+    } else {
+        let Some(binding) = world.shared_binding.clone() else {
+            eprintln!("skipping retained member lifecycle test: shared world binding missing");
+            return None;
+        };
+        binding
     };
 
+    let mut request = make_member_dispatch_request(
+        tmp.path(),
+        &member_binary,
+        &seed_home,
+        &binding,
+        orchestration_session_id,
+        participant_id,
+        run_id,
+    );
+    if authority_managed {
+        attach_exact_retained_launch_authority(&mut request);
+    }
     let launch_response = service
-        .execute_stream(make_member_dispatch_request(
-            tmp.path(),
-            &member_binary,
-            &seed_home,
-            &binding,
-            orchestration_session_id,
-            participant_id,
-            run_id,
-        ))
+        .execute_stream(request)
         .await
         .expect("member launch should succeed");
     let mut launch_body = launch_response.into_body();
@@ -359,6 +429,26 @@ async fn launch_retained_lifecycle_harness(
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| panic!("expected start frame, got {launch_start:?}"));
     let launch_summary = collect_stream_summary(&mut launch_body, &launch_span_id).await;
+    if authority_managed {
+        assert!(
+            launch_summary
+                .frames
+                .first()
+                .and_then(frame_event)
+                .is_some_and(|event| {
+                    event.get("kind").and_then(Value::as_str) == Some("registered")
+                }),
+            "authority-managed bootstrap must publish the exact Registered session-handle event before gateway status or progress events; frames: {:?}",
+            launch_summary.frames
+        );
+        assert!(
+            launch_summary.frames.iter().skip(1).any(|frame| frame
+                .to_string()
+                .contains("external sandbox exec policy enabled")),
+            "the pre-registration gateway warning must be preserved after Registered; frames: {:?}",
+            launch_summary.frames
+        );
+    }
     assert!(
         launch_summary.saw_registered,
         "bootstrap with a surfaced session handle must register before it exits; frames: {:?}",
@@ -392,6 +482,24 @@ async fn launch_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarnes
         "orch-member-runtime-retained-clean-exit",
         "ash_member_runtime_retained_clean_exit",
         "run-member-runtime-retained-bootstrap",
+        false,
+    )
+    .await
+}
+
+async fn launch_authority_managed_clean_bootstrap_exit_harness() -> Option<RetainedLifecycleHarness>
+{
+    let fixture_id = uuid::Uuid::now_v7();
+    let orchestration_session_id =
+        Box::leak(format!("orch-member-runtime-authority-readiness-{fixture_id}").into_boxed_str());
+    let participant_id =
+        Box::leak(format!("ash_member_runtime_authority_readiness_{fixture_id}").into_boxed_str());
+    launch_retained_lifecycle_harness(
+        write_clean_bootstrap_then_resume_member_runtime,
+        orchestration_session_id,
+        participant_id,
+        "run-member-runtime-authority-readiness-bootstrap",
+        true,
     )
     .await
 }
@@ -402,6 +510,7 @@ async fn launch_failed_submit_turn_harness() -> Option<RetainedLifecycleHarness>
         "orch-member-runtime-retained-failed-turn",
         "ash_member_runtime_retained_failed_turn",
         "run-member-runtime-retained-failed-turn-bootstrap",
+        false,
     )
     .await
 }
@@ -444,6 +553,19 @@ async fn member_runtime_clean_bootstrap_exit_with_session_handle_registers_then_
         read_invocation_count(&harness.count_path),
         1,
         "bootstrap harness must stop after clean exit and leave the parked retained worker ready for Packet 3 follow-up proofs"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authority_managed_member_runtime_emits_registered_before_pre_registration_gateway_events()
+{
+    let Some(harness) = launch_authority_managed_clean_bootstrap_exit_harness().await else {
+        return;
+    };
+    assert_eq!(
+        read_invocation_count(&harness.count_path),
+        1,
+        "authority-managed readiness proof must use exactly one member bootstrap invocation"
     );
 }
 

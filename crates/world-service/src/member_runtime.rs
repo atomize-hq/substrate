@@ -127,6 +127,8 @@ impl MemberRuntimeManager {
         placement: LinuxWorldPlacementContext,
     ) -> Result<Response> {
         validate_retained_worker_launch_authority_proof(&dispatch, &binding)?;
+        let requires_exact_registered_readiness =
+            dispatch.retained_worker_launch_authority.is_some();
         let actual_binary = validate_member_runtime_binary(&dispatch)?;
         let PreparedMemberRuntimeLauncher {
             launcher_path,
@@ -248,12 +250,37 @@ impl MemberRuntimeManager {
             let mut events = handle.events;
             let completion = handle.completion;
             let mut emitted_registered = false;
+            let mut pending_authority_bootstrap_events = Vec::new();
 
             while let Some(wrapper_event) = events.next().await {
                 if let Some(session_id) =
                     surfaced_uaa_session_id_from_data(wrapper_event.data.as_ref())
                 {
                     manager.remember_uaa_session_id(&participant_id, session_id);
+                }
+                if requires_exact_registered_readiness
+                    && !emitted_registered
+                    && registered_event_from_data(
+                        &context,
+                        &binding,
+                        &span_id,
+                        wrapper_event.data.as_ref(),
+                        active.agent_id.as_str(),
+                    )
+                    .is_none()
+                {
+                    const MAX_PRE_REGISTERED_BOOTSTRAP_EVENTS: usize = 64;
+                    if pending_authority_bootstrap_events.len()
+                        == MAX_PRE_REGISTERED_BOOTSTRAP_EVENTS
+                    {
+                        tracing::error!(
+                            "authority-managed member bootstrap exceeded pre-registration event bound"
+                        );
+                        active.cancel_bootstrap();
+                        break;
+                    }
+                    pending_authority_bootstrap_events.push(wrapper_event);
+                    continue;
                 }
                 match frame_from_wrapper_event(
                     &context,
@@ -274,6 +301,32 @@ impl MemberRuntimeManager {
                         break;
                     }
                 }
+                if requires_exact_registered_readiness && emitted_registered {
+                    for pending_event in pending_authority_bootstrap_events.drain(..) {
+                        match frame_from_wrapper_event(
+                            &context,
+                            &binding,
+                            &span_id,
+                            pending_event,
+                            &mut emitted_registered,
+                            MemberStreamMode::Bootstrap,
+                            active.agent_id.as_str(),
+                            &mut producer,
+                        ) {
+                            Ok(Some(frame)) => {
+                                let _ = tx.send(frame);
+                            }
+                            Ok(None) => {}
+                            Err(err) => {
+                                tracing::error!(
+                                    error = %err,
+                                    "failed to identify buffered member bootstrap Event"
+                                );
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
             let completion = completion.await;
@@ -282,6 +335,52 @@ impl MemberRuntimeManager {
                     surfaced_uaa_session_id_from_data(completion.data.as_ref())
                 {
                     manager.remember_uaa_session_id(&participant_id, session_id);
+                }
+            }
+            if requires_exact_registered_readiness && !emitted_registered {
+                if let Ok(ref completion) = completion {
+                    if let Some(event) = registered_event_from_data(
+                        &context,
+                        &binding,
+                        &span_id,
+                        completion.data.as_ref(),
+                        active.agent_id.as_str(),
+                    ) {
+                        emitted_registered = true;
+                        match producer.event(event) {
+                            Ok(frame) => {
+                                let _ = tx.send(frame);
+                            }
+                            Err(err) => tracing::error!(
+                                error = %err,
+                                "failed to identify member bootstrap completion registration"
+                            ),
+                        }
+                        for pending_event in pending_authority_bootstrap_events.drain(..) {
+                            match frame_from_wrapper_event(
+                                &context,
+                                &binding,
+                                &span_id,
+                                pending_event,
+                                &mut emitted_registered,
+                                MemberStreamMode::Bootstrap,
+                                active.agent_id.as_str(),
+                                &mut producer,
+                            ) {
+                                Ok(Some(frame)) => {
+                                    let _ = tx.send(frame);
+                                }
+                                Ok(None) => {}
+                                Err(err) => {
+                                    tracing::error!(
+                                        error = %err,
+                                        "failed to identify buffered member bootstrap completion Event"
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             let preserve_retained_member = completion.as_ref().ok().is_some_and(|completion| {
