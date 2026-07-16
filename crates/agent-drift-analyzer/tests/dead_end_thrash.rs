@@ -2,11 +2,15 @@
 
 mod support;
 
+use std::fs;
+
 use agent_drift_analyzer::{
-    AnalyzeRequest, Confidence, DriftState, ProgressDimension, ProgressSignalCode, ProgressStatus,
+    AnalyzeRequest, Checkpoint, ChildWorkVisibility, Confidence, DelegationTopology, DriftClass,
+    DriftScore, DriftState, ProgressDimension, ProgressSignalCode, ProgressStatus,
 };
 use agent_session_compactor::{
-    CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
+    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DelegationEvidenceRef,
+    DelegationLink, DelegationLinkState, RowRef, SourceKind, UserMessageRole,
 };
 use camino::Utf8PathBuf;
 use support::{
@@ -856,6 +860,149 @@ fn dead_end_thrash_keeps_opaque_parent_orchestration_clear_without_child_activit
 }
 
 #[test]
+fn dead_end_thrash_scores_stay_on_linked_parent_and_child_trajectories() {
+    const PARENT: &str = "session-linked-parent";
+    const CHILD: &str = "session-linked-child";
+
+    let parent_rows = vec![
+        delegated_row(
+            PARENT,
+            0,
+            CompactionKind::UserMessage,
+            "/goal Coordinate the bounded child task without claiming its implementation work.",
+            None,
+        ),
+        delegated_row(
+            PARENT,
+            1,
+            CompactionKind::ToolCall,
+            r#"{"task_name":"r7_4_1_child","message":"Implement and verify only the child target."}"#,
+            Some("spawn_agent"),
+        ),
+        delegated_row(
+            PARENT,
+            2,
+            CompactionKind::ToolCall,
+            r#"{"session_id":"session-linked-child"}"#,
+            Some("wait_agent"),
+        ),
+        delegated_row(
+            PARENT,
+            3,
+            CompactionKind::ToolCall,
+            r#"{"session_id":"session-linked-child"}"#,
+            Some("wait_agent"),
+        ),
+    ];
+    let mut child_rows = vec![
+        delegated_row(
+            CHILD,
+            0,
+            CompactionKind::UserMessage,
+            "/goal Troubleshoot only child_target without widening scope.",
+            None,
+        ),
+        delegated_tool_row(
+            CHILD,
+            1,
+            "cargo test -p child-target child_target -- --exact",
+        ),
+        delegated_row(CHILD, 2, CompactionKind::Error, "child target failed", None),
+        delegated_row(
+            CHILD,
+            3,
+            CompactionKind::UserMessage,
+            "/goal Re-run the same child_target verifier before widening scope.",
+            None,
+        ),
+        delegated_tool_row(
+            CHILD,
+            4,
+            "cargo test -p child-target child_target -- --exact",
+        ),
+        delegated_row(CHILD, 5, CompactionKind::Error, "child target failed", None),
+    ];
+    child_rows[2].text_hash_hex = "hash-linked-child-failure".to_string();
+    child_rows[5].text_hash_hex = "hash-linked-child-failure".to_string();
+
+    let rows = parent_rows
+        .into_iter()
+        .chain(child_rows)
+        .collect::<Vec<_>>();
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    let manifest_path = fixture.input_dir.join("manifest.json");
+    let mut manifest: BundleManifest = serde_json::from_str(
+        &fs::read_to_string(&manifest_path).expect("read linked scorer manifest"),
+    )
+    .expect("parse linked scorer manifest");
+    manifest.delegation_links = vec![DelegationLink {
+        parent_session_id: PARENT.to_string(),
+        child_session_id: CHILD.to_string(),
+        child_origin_parent_session_id: Some(PARENT.to_string()),
+        depth: Some(1),
+        state: DelegationLinkState::Verified,
+        parent_evidence: vec![delegation_evidence(PARENT, 1)],
+        child_evidence: vec![delegation_evidence(CHILD, 0)],
+    }];
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).expect("serialize linked scorer manifest"),
+    )
+    .expect("write linked scorer manifest");
+
+    let result = agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze linked scorer bundle");
+    let parent = final_checkpoint_for_session(&result, PARENT);
+    let child = final_checkpoint_for_session(&result, CHILD);
+    let parent_thrash = drift_score(parent, DriftClass::DeadEndThrash);
+    let child_thrash = drift_score(child, DriftClass::DeadEndThrash);
+
+    assert_eq!(result.sessions.len(), 2);
+    assert_eq!(
+        (
+            parent.delegation.topology,
+            parent.delegation.child_work_visibility,
+            parent.delegation.child_session_ids.as_slice(),
+        ),
+        (
+            DelegationTopology::DelegatingParent,
+            ChildWorkVisibility::Linked,
+            [CHILD.to_string()].as_slice(),
+        ),
+    );
+    assert_eq!(
+        (
+            child.delegation.topology,
+            child.delegation.child_work_visibility,
+            child.delegation.parent_session_id.as_deref(),
+        ),
+        (
+            DelegationTopology::DelegatedChild,
+            ChildWorkVisibility::Linked,
+            Some(PARENT),
+        ),
+    );
+    assert_eq!(
+        (
+            parent_thrash.raw_score,
+            parent_thrash.state,
+            parent_thrash.flagged,
+            parent_thrash.evidence.len(),
+        ),
+        (0, DriftState::Cleared, false, 0),
+        "repeated parent waits must not become dead-end thrash",
+    );
+    assert!(child_thrash.flagged, "child-local thrash must stay visible");
+    assert_eq!(child_thrash.state, DriftState::Active);
+    assert!(!child_thrash.evidence.is_empty());
+    assert_checkpoint_scores_stay_session_local(parent, PARENT);
+    assert_checkpoint_scores_stay_session_local(child, CHILD);
+}
+
+#[test]
 fn dead_end_thrash_retains_medium_confidence_for_partial_parent_visible_activity() {
     let mut spawn = row(
         1,
@@ -1337,4 +1484,82 @@ fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
 fn tool_row(event_index: usize, command: &str) -> CompactionRow {
     let payload = format!("{{\"command\":{command:?},\"workdir\":\"/repo\"}}");
     row(event_index, CompactionKind::ToolCall, &payload)
+}
+
+fn delegated_row(
+    session_id: &str,
+    event_index: usize,
+    kind: CompactionKind,
+    text: &str,
+    tool_name: Option<&str>,
+) -> CompactionRow {
+    let mut item = row(event_index, kind, text);
+    item.source_file = Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl"));
+    item.session_id = Some(session_id.to_string());
+    item.dedupe_identity = tool_name.map(|name| {
+        format!(
+            "{{\"call_id\":\"call-{session_id}-{event_index}\",\"name\":\"{name}\",\"type\":\"function_call\"}}"
+        )
+    });
+    item.text_hash_hex = format!("hash-{session_id}-{event_index}");
+    item
+}
+
+fn delegated_tool_row(session_id: &str, event_index: usize, command: &str) -> CompactionRow {
+    delegated_row(
+        session_id,
+        event_index,
+        CompactionKind::ToolCall,
+        &format!("{{\"command\":{command:?},\"workdir\":\"/repo\"}}"),
+        Some("functions.shell_command"),
+    )
+}
+
+fn delegation_evidence(session_id: &str, event_index: usize) -> DelegationEvidenceRef {
+    DelegationEvidenceRef {
+        source_file: Utf8PathBuf::from(format!("/tmp/{session_id}/rollout.jsonl")),
+        line_number: event_index + 1,
+        event_index,
+    }
+}
+
+fn final_checkpoint_for_session<'a>(
+    result: &'a agent_drift_analyzer::AnalyzeResult,
+    session_id: &str,
+) -> &'a Checkpoint {
+    result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .and_then(|session| session.checkpoints.last())
+        .unwrap_or_else(|| panic!("final checkpoint for {session_id}"))
+}
+
+fn drift_score(checkpoint: &Checkpoint, class: DriftClass) -> &DriftScore {
+    checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == class)
+        .unwrap_or_else(|| panic!("{class:?} score"))
+}
+
+fn assert_checkpoint_scores_stay_session_local(checkpoint: &Checkpoint, session_id: &str) {
+    assert!(
+        checkpoint
+            .boundary
+            .start
+            .source_file
+            .as_str()
+            .contains(session_id),
+        "checkpoint boundary must belong to {session_id}"
+    );
+    assert!(
+        checkpoint.drift_scores.iter().all(|score| {
+            score
+                .evidence
+                .iter()
+                .all(|item| item.row.source_file.as_str().contains(session_id))
+        }),
+        "every drift score and evidence row must stay on {session_id}"
+    );
 }
