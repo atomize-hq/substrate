@@ -140,6 +140,14 @@ pub enum LiveSessionError {
         actual_session_id: String,
         actual_ordinal: usize,
     },
+    #[error(
+        "persisted cursor {session_id}:{persisted_ordinal} is ahead of analyzer-owned closure maximum {session_id}:{current_max_ordinal}"
+    )]
+    PersistedCursorAheadOfAnalyzerClosure {
+        session_id: String,
+        persisted_ordinal: usize,
+        current_max_ordinal: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -701,6 +709,27 @@ fn validate_analyzer_verified_direct_closure(
             expected_session_id: root_session_id.to_string(),
             found_session_ids: found_session_ids.into_iter().collect(),
         });
+    }
+
+    for (session_id, cursor) in persisted_cursors {
+        let Some(current_max_ordinal) = checkpoints
+            .iter()
+            .filter(|checkpoint| checkpoint.session_id == *session_id)
+            .map(|checkpoint| checkpoint.ordinal)
+            .max()
+        else {
+            return Err(LiveSessionError::UnexpectedCheckpointSessions {
+                expected_session_id: root_session_id.to_string(),
+                found_session_ids: found_session_ids.iter().cloned().collect(),
+            });
+        };
+        if current_max_ordinal < cursor.ordinal {
+            return Err(LiveSessionError::PersistedCursorAheadOfAnalyzerClosure {
+                session_id: session_id.clone(),
+                persisted_ordinal: cursor.ordinal,
+                current_max_ordinal,
+            });
+        }
     }
 
     Ok(())

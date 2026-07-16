@@ -574,6 +574,75 @@ fn real_session_live_coordinator_rejects_persisted_cursor_outside_verified_closu
 }
 
 #[test]
+fn real_session_live_coordinator_rejects_persisted_child_cursor_ahead_of_analyzer_closure() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+
+    let root_session_id = "session-live";
+    let child_session_id = "session-child-a";
+    fs::write(
+        rollout_dir.join("rollout-session-live.jsonl"),
+        linked_root_rollout(root_session_id, &[child_session_id]),
+    )
+    .expect("write linked root rollout");
+    fs::write(
+        rollout_dir.join("rollout-session-child-a.jsonl"),
+        linked_child_rollout(root_session_id, child_session_id, first_rollout_phase()),
+    )
+    .expect("write linked child rollout");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    write_persisted_state(
+        &state_dir,
+        &json!({
+            "schema_version": 3,
+            "root_session_id": root_session_id,
+            "progress": {
+                "last_observed_size_bytes": null,
+                "pending_observed_size_bytes": null,
+                "last_delivered_cursors": {
+                    child_session_id: {
+                        "session_id": child_session_id,
+                        "ordinal": 999
+                    }
+                },
+                "monitor_linked_closure": true,
+                "next_emission_ordinal": 2
+            }
+        }),
+    );
+
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: root_session_id.to_string(),
+            state_dir,
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("persisted child cursor is structurally valid before closure validation");
+
+    let error = coordinator
+        .poll_once()
+        .expect_err("cursor ahead of analyzer-owned closure should fail closed");
+    assert!(matches!(
+        error,
+        LiveSessionError::PersistedCursorAheadOfAnalyzerClosure {
+            session_id,
+            persisted_ordinal: 999,
+            current_max_ordinal,
+        } if session_id == child_session_id && current_max_ordinal < 999
+    ));
+}
+
+#[test]
 fn real_session_live_coordinator_rejects_ambiguous_rollout_artifacts() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
@@ -804,12 +873,17 @@ fn real_session_live_coordinator_discovers_verified_child_that_appears_after_roo
         WarningPolicy::default(),
     )
     .expect("restart coordinator while linked closure is pending");
-    let child_discovered = restarted.poll_once().expect("late child poll");
-    assert!(child_discovered.reran_pipeline);
-    assert!(child_discovered
-        .observations
-        .iter()
-        .any(|observation| observation.event.cursor.session_id == child_session_id));
+    let error = restarted
+        .poll_once()
+        .expect_err("late closure expansion must not swallow a regressed root cursor");
+    assert!(matches!(
+        error,
+        LiveSessionError::PersistedCursorAheadOfAnalyzerClosure {
+            session_id,
+            persisted_ordinal: 2,
+            current_max_ordinal: 1,
+        } if session_id == root_session_id
+    ));
 }
 
 fn linked_root_rollout(root_session_id: &str, child_session_ids: &[&str]) -> String {
