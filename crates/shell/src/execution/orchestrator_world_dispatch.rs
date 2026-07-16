@@ -27,8 +27,6 @@ use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
 use tokio::sync::mpsc::UnboundedSender;
 #[cfg(target_os = "linux")]
-use tokio::sync::watch;
-#[cfg(target_os = "linux")]
 use tracing::{info, warn};
 #[cfg(target_os = "linux")]
 use uuid::Uuid;
@@ -178,10 +176,44 @@ struct RouterOwnedAutoAttachOutcomeRecord {
 pub(crate) struct PreparedOrchestratorWorldDispatch {
     pub store: AgentRuntimeStateStore,
     pub request: ValidatedWorldDispatchRequestV1,
+    #[cfg(any(target_os = "linux", test))]
+    b_owned_authority:
+        Option<crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1>,
+    compatibility: Option<CompatibilityPreparedOrchestratorWorldDispatch>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct CompatibilityPreparedOrchestratorWorldDispatch {
     pub session: OrchestrationSessionRecord,
     pub caller_participant: AgentRuntimeParticipantRecord,
     pub target_participant: Option<AgentRuntimeParticipantRecord>,
     pub live_retained_worker_count: usize,
+}
+
+impl std::ops::Deref for PreparedOrchestratorWorldDispatch {
+    type Target = CompatibilityPreparedOrchestratorWorldDispatch;
+
+    fn deref(&self) -> &Self::Target {
+        self.compatibility
+            .as_ref()
+            .expect("B-owned prepared dispatch must not consume compatibility session state")
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl PreparedOrchestratorWorldDispatch {
+    fn b_owned_authority(
+        &self,
+    ) -> Result<&crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1>
+    {
+        self.b_owned_authority.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "dispatch_authority_unavailable: action {} did not enter B-owned preparation",
+                self.request.action.as_str()
+            )
+        })
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
@@ -245,181 +277,37 @@ fn world_dispatch_concurrency_tracker() -> &'static Mutex<WorldDispatchConcurren
 }
 
 #[cfg(target_os = "linux")]
-#[derive(Clone)]
-struct ActiveEphemeralTerminalWaitEntry {
-    waiter_count: usize,
-    state_tx: watch::Sender<Option<WorldTaskTerminalStateV1>>,
-}
-
-#[cfg(target_os = "linux")]
-impl Default for ActiveEphemeralTerminalWaitEntry {
-    fn default() -> Self {
-        let (state_tx, _state_rx) = watch::channel(None);
-        Self {
-            waiter_count: 0,
-            state_tx,
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Default)]
-struct ActiveEphemeralTerminalWaitTracker {
-    by_task: BTreeMap<String, ActiveEphemeralTerminalWaitEntry>,
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Debug)]
-struct ActiveEphemeralTerminalWaitRegistrationGuard {
-    orchestration_session_id: String,
-    task_run_id: String,
-    armed: bool,
-}
-
-#[cfg(target_os = "linux")]
-impl ActiveEphemeralTerminalWaitRegistrationGuard {
-    fn new(orchestration_session_id: &str, task_run_id: &str) -> Self {
-        register_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-        Self {
-            orchestration_session_id: orchestration_session_id.to_string(),
-            task_run_id: task_run_id.to_string(),
-            armed: true,
-        }
-    }
-
-    fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for ActiveEphemeralTerminalWaitRegistrationGuard {
-    fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        release_active_ephemeral_terminal_wait(&self.orchestration_session_id, &self.task_run_id);
-    }
-}
-
-#[cfg(target_os = "linux")]
 const ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg(target_os = "linux")]
-fn active_ephemeral_terminal_wait_tracker() -> &'static Mutex<ActiveEphemeralTerminalWaitTracker> {
-    static TRACKER: LazyLock<Mutex<ActiveEphemeralTerminalWaitTracker>> =
-        LazyLock::new(|| Mutex::new(ActiveEphemeralTerminalWaitTracker::default()));
-    &TRACKER
-}
-
-#[cfg(target_os = "linux")]
-fn active_ephemeral_terminal_wait_key(orchestration_session_id: &str, task_run_id: &str) -> String {
-    format!("{orchestration_session_id}:{task_run_id}")
-}
-
-#[cfg(target_os = "linux")]
-fn register_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
-    let mut tracker = active_ephemeral_terminal_wait_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let entry = tracker
-        .by_task
-        .entry(active_ephemeral_terminal_wait_key(
-            orchestration_session_id,
-            task_run_id,
-        ))
-        .or_default();
-    entry.waiter_count = entry.waiter_count.saturating_add(1);
-}
-
-#[cfg(target_os = "linux")]
-fn release_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_run_id: &str) {
-    let key = active_ephemeral_terminal_wait_key(orchestration_session_id, task_run_id);
-    let mut tracker = active_ephemeral_terminal_wait_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let remove_entry = match tracker.by_task.get_mut(&key) {
-        Some(entry) => {
-            entry.waiter_count = entry.waiter_count.saturating_sub(1);
-            entry.waiter_count == 0
-        }
-        None => false,
-    };
-    if remove_entry {
-        tracker.by_task.remove(&key);
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[allow(
-    dead_code,
-    reason = "legacy ephemeral control compatibility remains until B1/B2.1-0 adoption"
-)]
-fn publish_active_ephemeral_terminal_truth(
-    orchestration_session_id: &str,
-    task_run_id: &str,
-    terminal_state: WorldTaskTerminalStateV1,
-) {
-    let mut tracker = active_ephemeral_terminal_wait_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let Some(entry) = tracker.by_task.get_mut(&active_ephemeral_terminal_wait_key(
-        orchestration_session_id,
-        task_run_id,
-    )) else {
-        return;
-    };
-    entry.state_tx.send_replace(Some(terminal_state));
-}
-
-#[cfg(target_os = "linux")]
-async fn wait_for_active_ephemeral_terminal_truth(
+async fn wait_for_supervised_ephemeral_terminal_truth(
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    acceptance_record_id: &str,
     orchestration_session_id: &str,
     task_run_id: &str,
 ) -> Result<WorldTaskTerminalStateV1> {
-    let mut state_rx = {
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let Some(entry) = tracker.by_task.get(&active_ephemeral_terminal_wait_key(
-            orchestration_session_id,
-            task_run_id,
-        )) else {
-            anyhow::bail!(
-                "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
-                task_run_id,
-                orchestration_session_id
-            );
-        };
-        entry.state_tx.subscribe()
-    };
+    let deadline = Instant::now() + ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT;
     loop {
-        if let Some(terminal_state) = *state_rx.borrow() {
-            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-            return Ok(terminal_state);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(acceptance_record_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its exact supervisor claim",
+                    task_run_id,
+                    orchestration_session_id
+                )
+            })?;
+        if let Some(terminal) = observation.terminal {
+            return Ok(world_task_terminal_state_from_exit_code(terminal.exit_code));
         }
-
-        let changed = tokio::time::timeout(
-            ACTIVE_EPHEMERAL_CANCEL_TERMINAL_WAIT_TIMEOUT,
-            state_rx.changed(),
-        )
-        .await
-        .map_err(|_| {
-            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
-            anyhow::anyhow!(
-                "cancel_closeout_timeout: active ephemeral task {} in orchestration session {} did not surface terminal truth after execute cancel delivery",
-                task_run_id,
-                orchestration_session_id
-            )
-        })?;
-        if changed.is_err() {
-            release_active_ephemeral_terminal_wait(orchestration_session_id, task_run_id);
+        if Instant::now() >= deadline {
             anyhow::bail!(
-                "cancel_closeout_tracking_lost: active ephemeral task {} in orchestration session {} lost its cancel terminal wait registration",
+                "cancel_closeout_timeout: active ephemeral task {} in orchestration session {} did not surface exact durable terminal truth after execute cancel delivery",
                 task_run_id,
                 orchestration_session_id
             );
         }
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
 }
 
@@ -430,76 +318,6 @@ fn active_ephemeral_terminal_state_label(state: WorldTaskTerminalStateV1) -> &'s
         WorldTaskTerminalStateV1::Failed => "failed",
         WorldTaskTerminalStateV1::Cancelled => "cancelled",
         WorldTaskTerminalStateV1::NeedsRetainedFollowup => "needs_retained_followup",
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[allow(
-    dead_code,
-    reason = "legacy ephemeral control compatibility remains until B1/B2.1-0 adoption"
-)]
-fn publish_active_ephemeral_terminal_truth_if_registered(
-    orchestration_session_id: &str,
-    task_run_id: Option<&str>,
-    terminal_state: WorldTaskTerminalStateV1,
-) {
-    let Some(task_run_id) = task_run_id.filter(|task_run_id| !task_run_id.trim().is_empty()) else {
-        return;
-    };
-    publish_active_ephemeral_terminal_truth(orchestration_session_id, task_run_id, terminal_state);
-}
-
-#[cfg(target_os = "linux")]
-#[derive(Debug)]
-#[allow(
-    dead_code,
-    reason = "legacy foreground guard remains until B1/B2.1-0 adoption"
-)]
-struct ActiveEphemeralTerminalTruthGuard {
-    orchestration_session_id: String,
-    task_run_id: Option<String>,
-    published: bool,
-}
-
-#[cfg(target_os = "linux")]
-#[allow(
-    dead_code,
-    reason = "legacy foreground guard remains until B1/B2.1-0 adoption"
-)]
-impl ActiveEphemeralTerminalTruthGuard {
-    fn new(orchestration_session_id: &str) -> Self {
-        Self {
-            orchestration_session_id: orchestration_session_id.to_string(),
-            task_run_id: None,
-            published: false,
-        }
-    }
-
-    fn register_task_run_id(&mut self, task_run_id: String) {
-        self.task_run_id = Some(task_run_id);
-    }
-
-    fn publish(&mut self, terminal_state: WorldTaskTerminalStateV1) {
-        publish_active_ephemeral_terminal_truth_if_registered(
-            &self.orchestration_session_id,
-            self.task_run_id.as_deref(),
-            terminal_state,
-        );
-        self.published = self.task_run_id.is_some();
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for ActiveEphemeralTerminalTruthGuard {
-    fn drop(&mut self) {
-        if self.published {
-            return;
-        }
-        publish_active_ephemeral_terminal_truth_if_registered(
-            &self.orchestration_session_id,
-            self.task_run_id.as_deref(),
-            WorldTaskTerminalStateV1::Failed,
-        );
     }
 }
 
@@ -519,6 +337,44 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     request: WorldDispatchRequestV1,
 ) -> Result<PreparedOrchestratorWorldDispatch> {
     let request = request.validate()?;
+    #[cfg(any(target_os = "linux", test))]
+    if request.action == WorldDispatchActionV1::RunWorldTask
+        || (request.action == WorldDispatchActionV1::ContinueWorldWorker
+            && !matches!(
+                request.payload,
+                WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+            ))
+        || ((request.action == WorldDispatchActionV1::InspectWorldWorker
+            || request.action == WorldDispatchActionV1::CancelWorldWork)
+            && request.mode == WorldDispatchModeV1::Ephemeral)
+    {
+        let retained_target = if request.action == WorldDispatchActionV1::ContinueWorldWorker {
+            Some((
+                request
+                    .target_participant_id
+                    .as_deref()
+                    .expect("validated continue request includes target participant"),
+                request.target_backend_id.as_str(),
+            ))
+        } else {
+            None
+        };
+        let authority = store
+            .resolve_world_work_registry_authority(
+                &request.orchestration_session_id,
+                &request.caller_participant_id,
+                &request.world_id,
+                request.world_generation,
+                retained_target,
+            )
+            .map_err(map_world_dispatch_resolution_error)?;
+        return Ok(PreparedOrchestratorWorldDispatch {
+            store: store.clone(),
+            request,
+            b_owned_authority: Some(authority),
+            compatibility: None,
+        });
+    }
     let authority = store
         .resolve_internal_world_dispatch_caller(
             &request.orchestration_session_id,
@@ -535,10 +391,14 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     Ok(PreparedOrchestratorWorldDispatch {
         store: store.clone(),
         request,
-        session,
-        caller_participant,
-        target_participant: None,
-        live_retained_worker_count,
+        #[cfg(any(target_os = "linux", test))]
+        b_owned_authority: None,
+        compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
+            session,
+            caller_participant,
+            target_participant: None,
+            live_retained_worker_count,
+        }),
     })
 }
 
@@ -772,7 +632,10 @@ fn format_fork_lineage_persist_failure(
 async fn cancel_world_work(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let workspace_root = match prepared.b_owned_authority.as_ref() {
+        Some(authority) => PathBuf::from(&authority.workspace_root),
+        None => PathBuf::from(&prepared.session.workspace_root),
+    };
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
     #[cfg(not(target_os = "linux"))]
@@ -887,11 +750,6 @@ async fn cancel_world_work(
             }
             WorldDispatchModeV1::Ephemeral => {
                 let resolved = resolve_active_ephemeral_inspect_target(&prepared)?;
-                let mut terminal_wait_registration =
-                    ActiveEphemeralTerminalWaitRegistrationGuard::new(
-                        &resolved.session.orchestration_session_id,
-                        &resolved.task_run_id,
-                    );
                 let client = connect_world_agent_client().context(
                     "failed to connect active ephemeral cancel_world_work to /v1/execute/cancel",
                 )?;
@@ -907,13 +765,14 @@ async fn cancel_world_work(
                 if !delivered.delivered {
                     anyhow::bail!(
                         "target_already_terminal: orchestration session {} active ephemeral task {} is already terminal or no longer live",
-                        resolved.session.orchestration_session_id,
+                        resolved.orchestration_session_id,
                         resolved.task_run_id
                     );
                 }
-                terminal_wait_registration.disarm();
-                let terminal_state = match wait_for_active_ephemeral_terminal_truth(
-                    &resolved.session.orchestration_session_id,
+                let terminal_state = match wait_for_supervised_ephemeral_terminal_truth(
+                    &resolved.execution_supervisor,
+                    &resolved.acceptance_record_id,
+                    &resolved.orchestration_session_id,
                     &resolved.task_run_id,
                 )
                 .await?
@@ -923,24 +782,11 @@ async fn cancel_world_work(
                         anyhow::bail!(
                             "cancel_closeout_not_cancelled: active ephemeral task {} in orchestration session {} reached terminal state {} after execute cancel delivery",
                             resolved.task_run_id,
-                            resolved.session.orchestration_session_id,
+                            resolved.orchestration_session_id,
                             active_ephemeral_terminal_state_label(other)
                         );
                     }
                 };
-
-                let world_id = resolved.session.world_id.clone().ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "missing_world_binding: orchestration session {} has no authoritative world binding",
-                        resolved.session.orchestration_session_id
-                    )
-                })?;
-                let world_generation = resolved.session.world_generation.ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "missing_world_binding: orchestration session {} has no authoritative world binding",
-                        resolved.session.orchestration_session_id
-                    )
-                })?;
                 let summary = summarize_active_ephemeral_cancel_world_task_result(
                     &resolved.task_run_id,
                     &resolved.target_backend_id,
@@ -949,17 +795,14 @@ async fn cancel_world_work(
                 Ok(WorldDispatchOutcomeV1::CancelWorldWork(
                     CancelWorldWorkOutcomeV1 {
                         request_id: prepared.request.request_id,
-                        orchestration_session_id: resolved.session.orchestration_session_id.clone(),
+                        orchestration_session_id: resolved.orchestration_session_id,
                         action: WorldDispatchActionV1::CancelWorldWork,
                         mode: prepared.request.mode,
-                        orchestrator_participant_id: resolved
-                            .caller_participant
-                            .participant_id()
-                            .to_string(),
+                        orchestrator_participant_id: resolved.caller_participant_id,
                         target_participant_id: resolved.task_run_id,
                         target_backend_id: resolved.target_backend_id,
-                        world_id,
-                        world_generation,
+                        world_id: resolved.world_id,
+                        world_generation: resolved.world_generation,
                         state: match terminal_state {
                             WorldTaskTerminalStateV1::Cancelled => {
                                 CancelWorldWorkTerminalStateV1::Cancelled
@@ -1052,9 +895,13 @@ struct RunWorldTaskStreamResult {
 #[derive(Clone, Debug)]
 struct ResolvedActiveEphemeralInspectTarget {
     task_run_id: String,
-    session: OrchestrationSessionRecord,
-    caller_participant: AgentRuntimeParticipantRecord,
+    acceptance_record_id: String,
+    execution_supervisor: WorldWorkExecutionSupervisor,
+    orchestration_session_id: String,
+    caller_participant_id: String,
     target_backend_id: String,
+    world_id: String,
+    world_generation: u64,
 }
 
 #[cfg(target_os = "linux")]
@@ -1064,12 +911,12 @@ impl ResolvedActiveEphemeralInspectTarget {
     ) -> crate::execution::agent_runtime::dispatch_contract::RetainedWorkerInspectSnapshotV1 {
         crate::execution::agent_runtime::dispatch_contract::RetainedWorkerInspectSnapshotV1 {
             participant_state: crate::execution::agent_runtime::AgentRuntimeSessionState::Running,
-            session_state: self.session.state.clone(),
-            session_posture: self.session.posture,
+            session_state:
+                crate::execution::agent_runtime::orchestration_session::OrchestrationSessionState::Active,
+            session_posture:
+                crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::ActiveAttached,
             authoritative_live: true,
-            attention_required: self.session.posture
-                == crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::AwaitingAttention
-                || self.session.pending_inbox_count > 0,
+            attention_required: false,
             parent_participant_id: None,
             resumed_from_participant_id: None,
         }
@@ -1085,66 +932,27 @@ fn resolve_active_ephemeral_inspect_target(
         .task_run_id
         .as_deref()
         .expect("validated inspect request must include task_run_id");
-    let world_id = prepared.session.world_id.clone().ok_or_else(|| {
-        anyhow::anyhow!(
-            "missing_world_binding: orchestration session {} has no authoritative world binding",
-            prepared.session.orchestration_session_id
-        )
-    })?;
-    let world_generation = prepared.session.world_generation.ok_or_else(|| {
-        anyhow::anyhow!(
-            "missing_world_binding: orchestration session {} has no authoritative world binding",
-            prepared.session.orchestration_session_id
-        )
-    })?;
-    let record = prepared
-        .store
-        .load_active_ephemeral_world_task(&prepared.session.orchestration_session_id, task_run_id)?
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
-                prepared.session.orchestration_session_id,
-                task_run_id
-            )
-        })?;
-
-    if record.orchestration_session_id != prepared.session.orchestration_session_id {
+    let authority = prepared.b_owned_authority()?;
+    if authority.host_session_posture
+        != crate::execution::agent_runtime::host_session_authority::schema::HostSessionPostureV1::ActiveAttached
+    {
         anyhow::bail!(
-            "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
-            prepared.session.orchestration_session_id,
-            task_run_id
+            "stale_linkage: orchestration session {} is not active-attached for ephemeral control",
+            authority.orchestration_session_id
         );
     }
-    if record.caller_participant_id != prepared.caller_participant.participant_id() {
-        anyhow::bail!(
-            "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
-            prepared.session.orchestration_session_id,
-            task_run_id,
-            prepared.caller_participant.participant_id()
-        );
-    }
-    if record.target_backend_id != prepared.request.target_backend_id {
-        anyhow::bail!(
-            "backend_mismatch: orchestration session {} active ephemeral task {} backend is {} not {}",
-            prepared.session.orchestration_session_id,
-            task_run_id,
-            record.target_backend_id,
-            prepared.request.target_backend_id
-        );
-    }
-    if record.world_id != world_id || record.world_generation != world_generation {
-        anyhow::bail!(
-            "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
-            prepared.session.orchestration_session_id,
-            task_run_id
-        );
-    }
+    let resolved = authority
+        .resolve_active_ephemeral_observation(task_run_id, &prepared.request.target_backend_id)?;
 
     Ok(ResolvedActiveEphemeralInspectTarget {
         task_run_id: task_run_id.to_string(),
-        session: prepared.session.clone(),
-        caller_participant: prepared.caller_participant.clone(),
-        target_backend_id: record.target_backend_id,
+        acceptance_record_id: resolved.acceptance_record.acceptance_record_id,
+        execution_supervisor: authority.execution_supervisor.clone(),
+        orchestration_session_id: authority.orchestration_session_id.clone(),
+        caller_participant_id: authority.caller_participant_id.clone(),
+        target_backend_id: resolved.acceptance_record.target_backend_id,
+        world_id: authority.world_id.clone(),
+        world_generation: authority.world_generation,
     })
 }
 
@@ -1238,13 +1046,11 @@ fn prepare_task_acceptance_submission(
     let resolved_policy =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
             .context("resolve B1 task submission policy snapshot")?;
-    let registry_authority = prepared.store.resolve_world_work_registry_authority(
-        &prepared.request.orchestration_session_id,
-        &prepared.request.caller_participant_id,
-        &prepared.request.world_id,
-        prepared.request.world_generation,
-    )?;
-    let caller_backend_id = prepared.caller_participant.handle.backend_id.clone();
+    let registry_authority = prepared.b_owned_authority()?;
+    if resolved_policy.snapshot_hash != registry_authority.current_policy_snapshot_hash {
+        anyhow::bail!("B-owned task policy snapshot changed after authority preparation");
+    }
+    let caller_backend_id = registry_authority.caller_backend_id.clone();
     let request_id = prepared.request.request_id.clone();
     let proposal_outcome = registry_authority
         .receipt_registry
@@ -1330,8 +1136,8 @@ fn prepare_task_acceptance_submission(
         anyhow::bail!("B1 task proposal reconstruction conflict before transport");
     }
     Ok(PreparedTaskAcceptanceSubmission {
-        receipt_registry: registry_authority.receipt_registry,
-        execution_supervisor: registry_authority.execution_supervisor,
+        receipt_registry: registry_authority.receipt_registry.clone(),
+        execution_supervisor: registry_authority.execution_supervisor.clone(),
         proposal,
         client,
         execute_request,
@@ -1346,13 +1152,11 @@ fn prepare_retained_acceptance_submission(
     let resolved_policy =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
             .context("resolve B1 retained submission policy snapshot")?;
-    let registry_authority = prepared.store.resolve_world_work_registry_authority(
-        &prepared.request.orchestration_session_id,
-        &prepared.request.caller_participant_id,
-        &prepared.request.world_id,
-        prepared.request.world_generation,
-    )?;
-    let caller_backend_id = prepared.caller_participant.handle.backend_id.clone();
+    let registry_authority = prepared.b_owned_authority()?;
+    if resolved_policy.snapshot_hash != registry_authority.current_policy_snapshot_hash {
+        anyhow::bail!("B-owned retained policy snapshot changed after authority preparation");
+    }
+    let caller_backend_id = registry_authority.caller_backend_id.clone();
     let request_id = prepared.request.request_id.clone();
     let target_participant_id = prepared
         .request
@@ -1433,8 +1237,8 @@ fn prepare_retained_acceptance_submission(
         anyhow::bail!("B1 retained proposal reconstruction conflict before transport");
     }
     Ok(PreparedRetainedAcceptanceSubmission {
-        receipt_registry: registry_authority.receipt_registry,
-        execution_supervisor: registry_authority.execution_supervisor,
+        receipt_registry: registry_authority.receipt_registry.clone(),
+        execution_supervisor: registry_authority.execution_supervisor.clone(),
         proposal,
         submit_request,
     })
@@ -1452,7 +1256,7 @@ async fn run_world_task_with_started_task_run_id_tx(
     prepared: PreparedOrchestratorWorldDispatch,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
 ) -> Result<WorldDispatchOutcomeV1> {
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let workspace_root = PathBuf::from(&prepared.b_owned_authority()?.workspace_root);
     let context = resolve_internal_dispatch_context(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
     let resolved = resolve_world_dispatch_contract(
@@ -1875,7 +1679,10 @@ pub(crate) async fn spawn_prepared_world_worker(
 async fn continue_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let workspace_root = match prepared.b_owned_authority.as_ref() {
+        Some(authority) => PathBuf::from(&authority.workspace_root),
+        None => PathBuf::from(&prepared.session.workspace_root),
+    };
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
     enforce_continue_world_worker_payload_policy(&prepared, &base_policy)?;
@@ -2179,10 +1986,13 @@ fn acquire_continue_world_worker_fork_command_bootstrap_guard(
         &PreparedOrchestratorWorldDispatch {
             store: prepared.store.clone(),
             request: fork_request,
-            session: prepared.session.clone(),
-            caller_participant: prepared.caller_participant.clone(),
-            target_participant: prepared.target_participant.clone(),
-            live_retained_worker_count,
+            b_owned_authority: None,
+            compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
+                session: prepared.session.clone(),
+                caller_participant: prepared.caller_participant.clone(),
+                target_participant: prepared.target_participant.clone(),
+                live_retained_worker_count,
+            }),
         },
         base_policy,
     )
@@ -2815,7 +2625,10 @@ fn continue_world_worker_persisted_event_label(
 async fn inspect_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
-    let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    let workspace_root = match prepared.b_owned_authority.as_ref() {
+        Some(authority) => PathBuf::from(&authority.workspace_root),
+        None => PathBuf::from(&prepared.session.workspace_root),
+    };
     let base_policy = resolve_internal_dispatch_policy(&workspace_root)?;
     enforce_world_dispatch_steering_policy(&prepared, &base_policy)?;
 
@@ -2875,18 +2688,6 @@ async fn inspect_world_worker(
         }
         WorldDispatchModeV1::Ephemeral => {
             let resolved = resolve_active_ephemeral_inspect_target(&prepared)?;
-            let world_id = resolved.session.world_id.clone().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "missing_world_binding: orchestration session {} has no authoritative world binding",
-                    resolved.session.orchestration_session_id
-                )
-            })?;
-            let world_generation = resolved.session.world_generation.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "missing_world_binding: orchestration session {} has no authoritative world binding",
-                    resolved.session.orchestration_session_id
-                )
-            })?;
             let snapshot = resolved.project_snapshot();
             let summary = summarize_active_ephemeral_inspect_world_task_result(
                 &resolved.task_run_id,
@@ -2894,12 +2695,12 @@ async fn inspect_world_worker(
             );
 
             (
-                resolved.session.orchestration_session_id.clone(),
-                resolved.caller_participant.participant_id().to_string(),
+                resolved.orchestration_session_id,
+                resolved.caller_participant_id,
                 resolved.task_run_id,
                 resolved.target_backend_id,
-                world_id,
-                world_generation,
+                resolved.world_id,
+                resolved.world_generation,
                 snapshot,
                 summary,
             )
@@ -3320,6 +3121,18 @@ fn map_fork_world_dispatch_resolution_error(err: anyhow::Error) -> anyhow::Error
 fn resolve_continue_world_dispatch_target_for_routing(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<PreparedOrchestratorWorldDispatch> {
+    if !matches!(
+        prepared.request.payload,
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+    ) {
+        let authority = prepared.b_owned_authority()?;
+        if authority.retained_target.is_none() {
+            anyhow::bail!(
+                "dispatch_authority_incomplete: ordinary continue omitted exact retained target"
+            );
+        }
+        return Ok(prepared);
+    }
     if prepared.target_participant.is_some() {
         return Ok(prepared);
     }
@@ -3329,34 +3142,31 @@ fn resolve_continue_world_dispatch_target_for_routing(
         .target_participant_id
         .as_deref()
         .expect("validated continue request must include target_participant_id");
-    let resolved = match &prepared.request.payload {
-        WorldDispatchPayloadV1::WorkerContinueForkCommand(_) => prepared
-            .store
-            .resolve_internal_continue_fork_command_dispatch_target(
-                &prepared.request.orchestration_session_id,
-                &prepared.request.caller_participant_id,
-                target_participant_id,
-                &prepared.request.target_backend_id,
-            )
-            .map_err(map_fork_world_dispatch_resolution_error)?,
-        _ => prepared
-            .store
-            .resolve_internal_continue_world_dispatch_target(
-                &prepared.request.orchestration_session_id,
-                &prepared.request.caller_participant_id,
-                target_participant_id,
-                &prepared.request.target_backend_id,
-            )
-            .map_err(map_continue_world_dispatch_resolution_error)?,
-    };
+    let resolved = prepared
+        .store
+        .resolve_internal_continue_fork_command_dispatch_target(
+            &prepared.request.orchestration_session_id,
+            &prepared.request.caller_participant_id,
+            target_participant_id,
+            &prepared.request.target_backend_id,
+        )
+        .map_err(map_fork_world_dispatch_resolution_error)?;
+    let compatibility = prepared.compatibility.ok_or_else(|| {
+        anyhow::anyhow!(
+            "dispatch_authority_incomplete: continue-fork compatibility preparation is absent"
+        )
+    })?;
 
     Ok(PreparedOrchestratorWorldDispatch {
         store: prepared.store,
         request: prepared.request,
-        session: resolved.session,
-        caller_participant: resolved.caller_participant,
-        target_participant: Some(resolved.target_participant),
-        live_retained_worker_count: prepared.live_retained_worker_count,
+        b_owned_authority: None,
+        compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
+            session: resolved.session,
+            caller_participant: resolved.caller_participant,
+            target_participant: Some(resolved.target_participant),
+            live_retained_worker_count: compatibility.live_retained_worker_count,
+        }),
     })
 }
 
@@ -3496,6 +3306,21 @@ fn enforce_world_dispatch_steering_policy(
 fn validate_authoritative_session_boundary(
     prepared: &PreparedOrchestratorWorldDispatch,
 ) -> Result<()> {
+    #[cfg(any(target_os = "linux", test))]
+    if let Some(authority) = prepared.b_owned_authority.as_ref() {
+        if prepared.request.orchestration_session_id != authority.orchestration_session_id
+            || prepared.request.caller_participant_id != authority.caller_participant_id
+        {
+            return Err(steering_policy_denial(
+                WorldDispatchSteeringDenialV1::CrossSessionSteeringDenied,
+                format!(
+                    "request must stay within authoritative orchestration session {}",
+                    authority.orchestration_session_id
+                ),
+            ));
+        }
+        return Ok(());
+    }
     let authoritative_session_id = &prepared.session.orchestration_session_id;
     let target_crosses_session = prepared
         .target_participant
@@ -3523,6 +3348,25 @@ fn validate_authoritative_session_boundary(
 fn validate_authoritative_world_binding_for_steering(
     prepared: &PreparedOrchestratorWorldDispatch,
 ) -> Result<()> {
+    #[cfg(any(target_os = "linux", test))]
+    if let Some(authority) = prepared.b_owned_authority.as_ref() {
+        if prepared.request.world_id != authority.world_id
+            || prepared.request.world_generation != authority.world_generation
+        {
+            return Err(steering_policy_denial(
+                WorldDispatchSteeringDenialV1::CrossWorldBindingSteeringDenied,
+                format!(
+                    "world_binding_mismatch: orchestration session {} exact authority world is {} generation {}, not {} generation {}",
+                    authority.orchestration_session_id,
+                    authority.world_id,
+                    authority.world_generation,
+                    prepared.request.world_id,
+                    prepared.request.world_generation
+                ),
+            ));
+        }
+        return Ok(());
+    }
     validate_authoritative_world_binding(&prepared.session, &prepared.request).map_err(|err| {
         steering_policy_denial(
             WorldDispatchSteeringDenialV1::CrossWorldBindingSteeringDenied,
@@ -4064,6 +3908,26 @@ fn build_continue_world_worker_fork_command_transport_request(
 fn build_continue_world_worker_submit_request(
     prepared: &PreparedOrchestratorWorldDispatch,
 ) -> Result<transport_api_types::MemberTurnSubmitRequestV1> {
+    if let Some(authority) = prepared.b_owned_authority.as_ref() {
+        let target = authority.retained_target.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "invalid_dispatch_target: ordinary continue_world_worker requires exact canonical retained target"
+            )
+        })?;
+        let prompt = render_continue_world_worker_transport_prompt(&prepared.request.payload)?;
+        return Ok(transport_api_types::MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: authority.orchestration_session_id.clone(),
+            participant_id: target.participant_id.clone(),
+            orchestrator_participant_id: authority.caller_participant_id.clone(),
+            backend_id: target.backend_id.clone(),
+            run_id: prepared.request.request_id.clone(),
+            world_id: authority.world_id.clone(),
+            world_generation: authority.world_generation,
+            prompt,
+            acceptance_context: None,
+        });
+    }
     let target = prepared.target_participant.as_ref().ok_or_else(|| {
         anyhow::anyhow!(
             "invalid_dispatch_target: continue_world_worker requires an exact retained target participant"
@@ -7249,6 +7113,182 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn secure_authority_tempdir() -> TempDir {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create secure authority fixture parent");
+        let root =
+            tempfile::tempdir_in(safe_parent).expect("create secure authority fixture directory");
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure authority fixture directory");
+        root
+    }
+
+    #[cfg(target_os = "linux")]
+    fn activate_b_owned_dispatch_authority(
+        substrate_home: &Path,
+        workspace_root: &Path,
+        orchestration_session_id: &str,
+        caller_participant_id: &str,
+        caller_backend_id: &str,
+        world_id: &str,
+        world_generation: u64,
+    ) -> HostSessionAuthority {
+        use crate::execution::agent_runtime::host_session_authority::schema::{
+            AgentDescriptorV1, AgentExecutionScopeV1, CanonicalDirectoryV1,
+            DirectoryPhysicalIdentityV1, HostAttachCapabilitiesV1,
+            HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
+            HostSessionAuthorityPreconditionV1, HostSessionTransitionCallerKindV1,
+            HostSessionTransitionCallerV1, HostSessionTransitionModeV1, PolicyObjectHashInputV1,
+            RuntimeBackendKindV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
+        };
+        use crate::execution::agent_runtime::host_session_authority::store_schema::HostSessionTransitionIntentStateV2;
+        use crate::execution::agent_runtime::host_session_authority::transition::{
+            ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
+            IssueHostSessionTransitionRequestV1, StartContractMaterialV1,
+            TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
+        };
+        use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+
+        fn canonical_directory(path: &Path) -> CanonicalDirectoryV1 {
+            let path = fs::canonicalize(path).expect("canonicalize B-owned fixture directory");
+            let metadata = fs::metadata(&path).expect("stat B-owned fixture directory");
+            CanonicalDirectoryV1 {
+                physical_path: path
+                    .to_str()
+                    .expect("B-owned fixture path is UTF-8")
+                    .to_string(),
+                physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                    device_id: metadata.dev(),
+                    inode: metadata.ino(),
+                },
+            }
+        }
+
+        fs::set_permissions(substrate_home, fs::Permissions::from_mode(0o700))
+            .expect("secure B-owned fixture authority home");
+        let authority = HostSessionAuthority::open(substrate_home)
+            .expect("open B-owned dispatch authority fixture");
+        let root = authority
+            .bootstrap()
+            .expect("bootstrap B-owned dispatch authority fixture");
+        let policy_snapshot =
+            crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
+                .expect("resolve B-owned fixture policy snapshot");
+        let binding = WorkspaceBindingV1 {
+            workspace_root: canonical_directory(workspace_root),
+            authority_store_root: root.bootstrap_home,
+            authority_store_id: root.authority_store_id,
+        };
+        let intent_id = format!("intent-b-owned-{orchestration_session_id}");
+        let issuer_request_id = format!("request-b-owned-{orchestration_session_id}");
+        let claim_id = format!("claim-b-owned-{orchestration_session_id}");
+        let request = IssueHostSessionTransitionRequestV1 {
+            intent_id: intent_id.clone(),
+            issuer_request_id: issuer_request_id.clone(),
+            mode: HostSessionTransitionModeV1::Start,
+            authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+            orchestration_session_id: orchestration_session_id.to_string(),
+            shell_trace_session_id: format!("trace-b-owned-{orchestration_session_id}"),
+            caller: HostSessionTransitionCallerV1 {
+                kind: HostSessionTransitionCallerKindV1::PublicCli,
+                caller_participant_id: None,
+                auto_attach_obligation_id: None,
+                auto_attach_claim_owner: None,
+            },
+            source_authoritative_participant_id: None,
+            target_authoritative_participant_id: caller_participant_id.to_string(),
+            target_participant_lease_token: format!("lease-{caller_participant_id}").into_bytes(),
+            run_id: format!("run-b-owned-{orchestration_session_id}"),
+            resulting_authoritative_lineage: vec![caller_participant_id.to_string()],
+            workspace_binding: binding,
+            world_binding: Some(WorldBindingV1 {
+                world_id: world_id.to_string(),
+                world_generation,
+            }),
+            start_contract: StartContractMaterialV1 {
+                descriptor: AgentDescriptorV1 {
+                    schema_version: 1,
+                    agent_id: "codex".to_string(),
+                    backend_id: caller_backend_id.to_string(),
+                    backend_kind: RuntimeBackendKindV1::Codex,
+                    protocol: PURE_AGENT_PROTOCOL.to_string(),
+                    execution_scope: AgentExecutionScopeV1::Host,
+                    binary_path: "/usr/bin/codex".to_string(),
+                },
+                policy: PolicyObjectHashInputV1 {
+                    schema_version: 1,
+                    policy_revision: format!("policy-b-owned-{orchestration_session_id}"),
+                    canonical_policy_snapshot_sha256: policy_snapshot.snapshot_hash,
+                },
+                capabilities: HostAttachCapabilitiesV1 {
+                    session_resume: true,
+                    session_fork: true,
+                    session_stop: true,
+                    status_snapshot: true,
+                    event_stream: true,
+                },
+                launch_knobs: HostAttachLaunchKnobsV1 {
+                    requested_execution_scope: AgentExecutionScopeV1::Host,
+                    host_execution_client_start: HostAttachExecutionClientStartV1::StartNow,
+                    attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
+                },
+            },
+            transition_input: None,
+        };
+        let issued_at =
+            TimestampV1::parse("2026-07-16T12:00:00.000000000Z").expect("fixture issued timestamp");
+        let TransitionIssueOutcomeV1::Issued(issued) = authority
+            .issue_start_at(&request, issued_at, 300)
+            .expect("issue B-owned fixture Start")
+        else {
+            panic!("fresh B-owned fixture Start must issue")
+        };
+        let claim_request = ClaimHostSessionTransitionRequestV1 {
+            intent_id,
+            issuer_request_id,
+            payload_commitment: issued.payload_commitment.clone(),
+            expected_intent_revision: issued.intent_revision,
+            claim_id: claim_id.clone(),
+            claimant_attempt_id: format!("attempt-b-owned-{orchestration_session_id}"),
+        };
+        let claimed_at = TimestampV1::parse("2026-07-16T12:01:00.000000000Z")
+            .expect("fixture claimed timestamp");
+        let TransitionClaimOutcomeV1::Claimed(claimed) = authority
+            .claim_start_at(&claim_request, claimed_at, 30)
+            .expect("claim B-owned fixture Start")
+        else {
+            panic!("fresh B-owned fixture Start must claim")
+        };
+        let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } = claimed.state
+        else {
+            panic!("B-owned fixture claim must retain claim revision")
+        };
+        let application = ApplyHostSessionTransitionRequestV1 {
+            intent_id: claimed.intent_id,
+            issuer_request_id: claimed.issuer_request_id,
+            payload_commitment: claimed.payload_commitment,
+            expected_intent_revision: claimed.intent_revision,
+            claim_id,
+            expected_claim_revision: claim_revision,
+        };
+        let applied_at = TimestampV1::parse("2026-07-16T12:01:10.000000000Z")
+            .expect("fixture applied timestamp");
+        assert!(matches!(
+            authority
+                .apply_start_at(&application, applied_at)
+                .expect("apply B-owned fixture Start"),
+            TransitionApplicationOutcomeV1::Applied(_)
+        ));
+        authority
+    }
+
+    #[cfg(target_os = "linux")]
     fn write_runtime_inventory_entry(
         substrate_home: &Path,
         agent_id: &str,
@@ -7866,6 +7906,26 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn sample_compatibility_prepared_dispatch(
+        request: ValidatedWorldDispatchRequestV1,
+        caller_participant: AgentRuntimeParticipantRecord,
+        target_participant: Option<AgentRuntimeParticipantRecord>,
+        live_retained_worker_count: usize,
+    ) -> PreparedOrchestratorWorldDispatch {
+        PreparedOrchestratorWorldDispatch {
+            store: sample_state_store(),
+            request,
+            b_owned_authority: None,
+            compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
+                session: sample_session(),
+                caller_participant,
+                target_participant,
+                live_retained_worker_count,
+            }),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     fn sample_spawn_request() -> ValidatedWorldDispatchRequestV1 {
         WorldDispatchRequestV1 {
             request_id: Some("req_spawn".to_string()),
@@ -8309,6 +8369,145 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    struct BOwnedEphemeralAcceptanceSeed<'a> {
+        orchestration_session_id: &'a str,
+        caller_participant_id: &'a str,
+        caller_backend_id: &'a str,
+        target_backend_id: &'a str,
+        world_id: &'a str,
+        world_generation: u64,
+        task_run_id: &'a str,
+    }
+
+    #[cfg(target_os = "linux")]
+    fn seed_b_owned_ephemeral_acceptance(
+        authority: &crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1,
+        seed: BOwnedEphemeralAcceptanceSeed<'_>,
+    ) -> (
+        WorldWorkAcceptanceRecordV1,
+        crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
+    ) {
+        let request_id = format!(
+            "req-seed-{}-{}",
+            seed.orchestration_session_id, seed.task_run_id
+        );
+        let mut execute_request_out = None;
+        let outcome = authority
+            .receipt_registry
+            .prepare_world_work_acceptance_proposal(
+                seed.orchestration_session_id,
+                &request_id,
+                WorldWorkProposalFamilyV1::EphemeralTask,
+                |allocation| {
+                    let (mut proposal, mut execute_request) = sample_task_acceptance_submission();
+                    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+                        validated_dispatch_request,
+                        member_dispatch_request,
+                        canonical_execute_request_sha256,
+                    } = &mut proposal.submission_identity
+                    else {
+                        unreachable!("ephemeral seed proposal changed family")
+                    };
+                    validated_dispatch_request.request_id = request_id.clone();
+                    validated_dispatch_request.orchestration_session_id =
+                        seed.orchestration_session_id.to_string();
+                    validated_dispatch_request.caller_participant_id =
+                        seed.caller_participant_id.to_string();
+                    validated_dispatch_request.target_backend_id =
+                        seed.target_backend_id.to_string();
+                    validated_dispatch_request.world_id = seed.world_id.to_string();
+                    validated_dispatch_request.world_generation = seed.world_generation;
+                    member_dispatch_request.orchestration_session_id =
+                        seed.orchestration_session_id.to_string();
+                    member_dispatch_request.orchestrator_participant_id =
+                        seed.caller_participant_id.to_string();
+                    member_dispatch_request.backend_id = seed.target_backend_id.to_string();
+                    member_dispatch_request.run_id = request_id.clone();
+                    member_dispatch_request.world_id = seed.world_id.to_string();
+                    member_dispatch_request.world_generation = seed.world_generation;
+
+                    proposal.acceptance_context.proposed_acceptance_record_id =
+                        allocation.acceptance_record_id;
+                    proposal.acceptance_context.request_id = request_id.clone();
+                    proposal.acceptance_context.message_id = allocation.message_id;
+                    proposal.acceptance_context.caller_backend_id =
+                        seed.caller_backend_id.to_string();
+                    proposal.authority_store_id = authority.authority_store_id.clone();
+                    proposal.authority_revision_observed = authority.authority_revision_observed;
+                    proposal.orchestration_session_id = seed.orchestration_session_id.to_string();
+                    proposal.caller_participant_id = seed.caller_participant_id.to_string();
+                    proposal.caller_backend_id = seed.caller_backend_id.to_string();
+                    proposal.target_backend_id = seed.target_backend_id.to_string();
+                    proposal.world_id = seed.world_id.to_string();
+                    proposal.world_generation = seed.world_generation;
+                    proposal.current_policy_snapshot_ref =
+                        authority.current_policy_snapshot_ref.clone();
+                    proposal.current_policy_snapshot_hash =
+                        authority.current_policy_snapshot_hash.clone();
+                    proposal.current_policy_revision = authority.current_policy_revision.clone();
+                    proposal.created_at = allocation.created_at;
+
+                    execute_request.member_dispatch = Some(member_dispatch_request.clone());
+                    execute_request.acceptance_context = Some(proposal.acceptance_context.clone());
+                    *canonical_execute_request_sha256 = canonical_world_work_submission_sha256(
+                        validated_dispatch_request,
+                        &execute_request,
+                    )?;
+                    execute_request_out = Some(execute_request);
+                    Ok(proposal)
+                },
+            )
+            .expect("reserve B-owned ephemeral acceptance proposal");
+        let WorldWorkProposalReservationOutcomeV1::Proposed(proposal) = outcome else {
+            panic!("fresh B-owned acceptance seed cannot already be accepted")
+        };
+        let execute_request = execute_request_out.expect("ephemeral seed returns execute request");
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: seed.task_run_id.to_string(),
+        };
+        let mut claim = None;
+        consume_task_acceptance_acknowledgement(
+            &execute_request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                let accepted = authority
+                    .receipt_registry
+                    .persist_world_work_acceptance_for_supervision(record)?;
+                claim = Some(
+                    authority
+                        .execution_supervisor
+                        .claim_persisted_world_work(&accepted)?,
+                );
+                Ok(())
+            },
+        )
+        .expect("persist B-owned ephemeral acceptance");
+        let claim = claim.expect("B-owned acceptance creates supervisor claim");
+        authority
+            .execution_supervisor
+            .journal_frame(
+                &claim,
+                &start,
+                &start
+                    .canonical_ndjson_bytes()
+                    .expect("canonical B-owned Start"),
+            )
+            .expect("journal B-owned Start");
+        let acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_id(
+                &authority.authority_store_id,
+                &claim.acceptance_record_id,
+            )
+            .expect("inspect seeded B-owned acceptance")
+            .expect("seeded B-owned acceptance exists");
+        (acceptance, claim)
+    }
+
+    #[cfg(target_os = "linux")]
     fn reserve_b21_task_acceptance(
         receipt_registry: &WorldWorkReceiptRegistry,
         authority_store_id: &str,
@@ -8477,6 +8676,19 @@ mod tests {
             fs_diff: None,
             process_telemetry: Default::default(),
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn b21_test_cancelled_exit_frame(
+        stream_id: &str,
+        span_id: &str,
+    ) -> transport_api_types::ExecuteStreamFrame {
+        let mut frame = b21_test_exit_frame(stream_id, span_id);
+        let transport_api_types::ExecuteStreamFrame::Exit { exit, .. } = &mut frame else {
+            unreachable!("B2.1 cancelled fixture must remain an Exit frame")
+        };
+        *exit = 130;
+        frame
     }
 
     #[cfg(target_os = "linux")]
@@ -10360,14 +10572,12 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn continue_world_worker_submit_request_uses_authoritative_retained_identity() {
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_continue_request(),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: Some(sample_member_participant()),
-            live_retained_worker_count: 1,
-        };
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_continue_request(),
+            sample_orchestrator_participant(),
+            Some(sample_member_participant()),
+            1,
+        );
 
         let submit =
             build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
@@ -10385,16 +10595,14 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn continue_world_worker_submit_request_renders_typed_approval_response_deterministically() {
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_continue_approval_response_world_dispatch_request()
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_continue_approval_response_world_dispatch_request()
                 .validate()
                 .expect("validated approval-response continue request"),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: Some(sample_member_participant()),
-            live_retained_worker_count: 1,
-        };
+            sample_orchestrator_participant(),
+            Some(sample_member_participant()),
+            1,
+        );
 
         let submit =
             build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
@@ -10409,16 +10617,14 @@ mod tests {
     #[test]
     fn continue_world_worker_submit_request_renders_typed_clarification_response_deterministically()
     {
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_continue_clarification_response_world_dispatch_request()
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_continue_clarification_response_world_dispatch_request()
                 .validate()
                 .expect("validated clarification-response continue request"),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: Some(sample_member_participant()),
-            live_retained_worker_count: 1,
-        };
+            sample_orchestrator_participant(),
+            Some(sample_member_participant()),
+            1,
+        );
 
         let submit =
             build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
@@ -10432,16 +10638,14 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn continue_world_worker_submit_request_renders_typed_control_directive_deterministically() {
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_continue_control_directive_world_dispatch_request()
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_continue_control_directive_world_dispatch_request()
                 .validate()
                 .expect("validated control-directive continue request"),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: Some(sample_member_participant()),
-            live_retained_worker_count: 1,
-        };
+            sample_orchestrator_participant(),
+            Some(sample_member_participant()),
+            1,
+        );
 
         let submit =
             build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
@@ -10455,16 +10659,14 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn continue_world_worker_submit_request_renders_typed_progress_ack_deterministically() {
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_continue_progress_ack_world_dispatch_request()
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_continue_progress_ack_world_dispatch_request()
                 .validate()
                 .expect("validated progress-ack continue request"),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: Some(sample_member_participant()),
-            live_retained_worker_count: 1,
-        };
+            sample_orchestrator_participant(),
+            Some(sample_member_participant()),
+            1,
+        );
 
         let submit =
             build_continue_world_worker_submit_request(&prepared).expect("continue submit request");
@@ -16578,7 +16780,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_returns_authoritative_snapshot_without_mutation(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -16588,28 +16790,43 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        let hsa = activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        let session_before = store
-            .load_session("sess_dispatch")
-            .expect("load session before inspect")
-            .expect("authoritative session before inspect");
-        let participant_before = store
-            .load_participant("ash_member")
-            .expect("load participant before inspect")
-            .expect("retained participant before inspect");
-
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-47".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve B-owned inspect fixture authority");
+        let (acceptance, claim) = seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
                 world_generation: 2,
-            })
-            .expect("register active ephemeral task");
+                task_run_id: "task-run-47",
+            },
+        );
+        let hsa_before = hsa.read_a12a_root().expect("read HSA before inspect");
+        let observation_before = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect supervisor before dispatch")
+            .expect("supervisor claim exists before dispatch");
 
         let outcome = dispatch_real_inspect_world_worker_request_with_request(
             &store,
@@ -16660,18 +16877,29 @@ agents:
         assert_eq!(adapter_outcome.participant_id, None);
         assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
 
-        let session_after = store
-            .load_session("sess_dispatch")
-            .expect("load session after inspect")
-            .expect("authoritative session after inspect");
-        let participant_after = store
-            .load_participant("ash_member")
-            .expect("load participant after inspect")
-            .expect("retained participant after inspect");
-
-        assert_eq!(session_after.session, session_before.session);
-        assert_eq!(session_after.participants, session_before.participants);
-        assert_eq!(participant_after, participant_before);
+        assert_eq!(
+            hsa.read_a12a_root().expect("read HSA after inspect"),
+            hsa_before
+        );
+        assert_eq!(
+            authority
+                .receipt_registry
+                .inspect_world_work_acceptance_by_id(
+                    &authority.authority_store_id,
+                    &acceptance.acceptance_record_id,
+                )
+                .expect("inspect acceptance after dispatcher read"),
+            Some(acceptance),
+            "full-dispatch inspect must leave immutable acceptance unchanged"
+        );
+        assert_eq!(
+            authority
+                .execution_supervisor
+                .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                .expect("inspect supervisor after dispatch"),
+            Some(observation_before),
+            "full-dispatch inspect must not rotate or mutate supervisor truth"
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -16679,7 +16907,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_resolves_exact_session_binding_when_task_run_id_is_reused(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -16689,29 +16917,49 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        let _other_guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_other".to_string(),
-                task_run_id: "task-run-shared".to_string(),
-                caller_participant_id: "orch_other".to_string(),
-                target_backend_id: "cli:other_world".to_string(),
-                world_id: "world-99".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve reused-task dispatch authority");
+        seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_other",
+                caller_participant_id: "orch_other",
+                caller_backend_id: "cli:other",
+                target_backend_id: "cli:other_world",
+                world_id: "world-99",
                 world_generation: 99,
-            })
-            .expect("register unrelated active ephemeral task");
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-shared".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
+                task_run_id: "task-run-shared",
+            },
+        );
+        seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
                 world_generation: 2,
-            })
-            .expect("register authoritative active ephemeral task");
+                task_run_id: "task-run-shared",
+            },
+        );
 
         let outcome = dispatch_real_inspect_world_worker_request_with_request(
             &store,
@@ -16735,7 +16983,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_unknown_task_run_id()
     {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -16745,8 +16993,16 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -16765,7 +17021,7 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_stale_linkage() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -16775,18 +17031,37 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-stale".to_string(),
-                caller_participant_id: "orch_other".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve stale-linkage fixture authority");
+        seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_other",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
                 world_generation: 2,
-            })
-            .expect("register active ephemeral task");
+                task_run_id: "task-run-stale",
+            },
+        );
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -16805,7 +17080,7 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_backend_mismatch() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -16815,18 +17090,37 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-backend".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:other_world".to_string(),
-                world_id: "world-17".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve backend-mismatch fixture authority");
+        seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:other_world",
+                world_id: "world-17",
                 world_generation: 2,
-            })
-            .expect("register active ephemeral task");
+                task_run_id: "task-run-backend",
+            },
+        );
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -16846,7 +17140,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_world_binding_mismatch(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -16856,18 +17150,37 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-binding".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve world-mismatch fixture authority");
+        seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
                 world_generation: 3,
-            })
-            .expect("register active ephemeral task");
+                task_run_id: "task-run-binding",
+            },
+        );
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -16921,7 +17234,7 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_teardown_removes_routability() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -16931,21 +17244,48 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-
-        {
-            let _guard = store
-                .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                    orchestration_session_id: "sess_dispatch".to_string(),
-                    task_run_id: "task-run-terminal".to_string(),
-                    caller_participant_id: "orch_dispatch".to_string(),
-                    target_backend_id: "cli:codex-world".to_string(),
-                    world_id: "world-17".to_string(),
-                    world_generation: 2,
-                })
-                .expect("register active ephemeral task");
-        }
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve terminal inspect fixture authority");
+        let (acceptance, claim) = seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
+                world_generation: 2,
+                task_run_id: "task-run-terminal",
+            },
+        );
+        let terminal = b21_test_exit_frame("rts_shell_world_dispatch_fixture", "task-run-terminal");
+        authority
+            .execution_supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical terminal inspect fixture"),
+            )
+            .expect("journal exact terminal inspect fixture");
 
         let err = dispatch_orchestrator_world_request(
             &store,
@@ -16958,6 +17298,263 @@ agents:
             err.to_string(),
             "active_task_not_found: orchestration session sess_dispatch has no exact active ephemeral task task-run-terminal"
         );
+        assert_eq!(
+            authority
+                .receipt_registry
+                .inspect_world_work_acceptance_by_id(
+                    &authority.authority_store_id,
+                    &acceptance.acceptance_record_id,
+                )
+                .expect("inspect terminal receipt"),
+            Some(acceptance),
+            "terminal supervisor truth removes active routing without deleting acceptance"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b1_b21_0_ordinary_continue_joins_canonical_retained_target_and_supervision() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker", "continue_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let (continue_seen_tx, continue_seen_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut continue_seen_tx = Some(continue_seen_tx);
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let execute_request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("decode retained Spawn request");
+                    let member_dispatch = execute_request
+                        .member_dispatch
+                        .expect("Spawn request includes member dispatch");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
+                            span_id: "spawn-retained-target".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
+                            event: substrate_common::agent_events::AgentEvent {
+                                ts: chrono::Utc::now(),
+                                kind: AgentEventKind::Registered,
+                                data: json!({}),
+                                agent_id: execute_request.agent_id,
+                                orchestration_session_id: member_dispatch
+                                    .orchestration_session_id
+                                    .clone(),
+                                run_id: member_dispatch.run_id.clone(),
+                                parent_run_id: None,
+                                participant_id: Some(member_dispatch.participant_id.clone()),
+                                parent_participant_id: None,
+                                resumed_from_participant_id: None,
+                                backend_id: Some(member_dispatch.backend_id.clone()),
+                                thread_id: None,
+                                role: Some("member".to_string()),
+                                world_id: Some(member_dispatch.world_id.clone()),
+                                world_generation: Some(member_dispatch.world_generation),
+                                cmd_id: None,
+                                span_id: Some("spawn-retained-target".to_string()),
+                                event_identity: Some(test_runtime_event_identity(1)),
+                                channel: None,
+                                identity_tuple: None,
+                                placement_posture: None,
+                                project: None,
+                            },
+                        },
+                    )
+                    .await;
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        drop(stream);
+                    });
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let submitted: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("decode ordinary Continue request");
+                    let acceptance_record_id = submitted
+                        .acceptance_context
+                        .as_ref()
+                        .expect("ordinary Continue includes acceptance context")
+                        .proposed_acceptance_record_id
+                        .clone();
+                    if let Some(continue_seen_tx) = continue_seen_tx.take() {
+                        let _ = continue_seen_tx
+                            .send((submitted.participant_id.clone(), acceptance_record_id));
+                    }
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
+                            span_id: "continue-retained-target".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &b21_test_exit_frame(
+                            "rts_shell_world_dispatch_fixture",
+                            "continue-retained-target",
+                        ),
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    break;
+                }
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let spawn = dispatch_orchestrator_world_request(
+            &store,
+            WorldDispatchRequestV1 {
+                request_id: Some("req_spawn_for_continue".to_string()),
+                idempotency_key: Some("idem_spawn_for_continue".to_string()),
+                orchestration_session_id: Some("sess_dispatch".to_string()),
+                caller_participant_id: Some("orch_dispatch".to_string()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some("world-17".to_string()),
+                world_generation: Some(2),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "create exact retained target".to_string(),
+                }),
+            },
+        )
+        .await
+        .expect("Spawn canonical retained target");
+        let WorldDispatchOutcomeV1::SpawnWorldWorker(spawn) = spawn else {
+            panic!("expected SpawnWorldWorker outcome")
+        };
+
+        let continue_outcome = dispatch_orchestrator_world_request(
+            &store,
+            WorldDispatchRequestV1 {
+                request_id: Some("req_continue_b_owned".to_string()),
+                idempotency_key: Some("idem_continue_b_owned".to_string()),
+                orchestration_session_id: Some("sess_dispatch".to_string()),
+                caller_participant_id: Some("orch_dispatch".to_string()),
+                action: WorldDispatchActionV1::ContinueWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: Some(spawn.participant_id.clone()),
+                world_id: Some("world-17".to_string()),
+                world_generation: Some(2),
+                payload: WorldDispatchPayloadV1::WorkerContinue(WorkerContinuePayloadV1 {
+                    prompt: "continue exact retained target".to_string(),
+                    thread_id: None,
+                }),
+            },
+        )
+        .await
+        .expect("ordinary Continue uses canonical retained target");
+        let WorldDispatchOutcomeV1::ContinueWorldWorker(continued) = continue_outcome else {
+            panic!("expected ContinueWorldWorker outcome")
+        };
+        assert_eq!(continued.target_participant_id, spawn.participant_id);
+        assert_eq!(continued.target_backend_id, "cli:codex-world");
+        assert_eq!(continued.world_id, "world-17");
+        assert_eq!(continued.world_generation, 2);
+        let (transport_participant_id, acceptance_record_id) =
+            timeout(Duration::from_secs(3), continue_seen_rx)
+                .await
+                .expect("timed out waiting for ordinary Continue transport")
+                .expect("ordinary Continue transport identity");
+        assert_eq!(transport_participant_id, continued.target_participant_id);
+
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                Some((&continued.target_participant_id, "cli:codex-world")),
+            )
+            .expect("resolve post-Continue B-owned authority");
+        let retained_acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_id(
+                &authority.authority_store_id,
+                &acceptance_record_id,
+            )
+            .expect("inspect retained acceptance")
+            .expect("retained acceptance exists");
+        assert!(matches!(
+            retained_acceptance.work_identity,
+            AcceptedWorldWorkIdentityV1::RetainedTurn { .. }
+        ));
+        let observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&retained_acceptance.acceptance_record_id)
+            .expect("inspect retained supervisor")
+            .expect("retained supervisor observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 2);
+        assert_eq!(observation.terminal.map(|value| value.exit_code), Some(0));
+        assert!(
+            !substrate_home
+                .path()
+                .join("run/agent-hub/sessions/sess_dispatch/active-ephemeral-tasks")
+                .exists(),
+            "ordinary Continue must not activate the legacy task registry"
+        );
+        server.await.expect("join Spawn/Continue fixture server");
     }
 
     #[cfg(target_os = "linux")]
@@ -17190,7 +17787,7 @@ agents:
     #[serial]
     async fn dispatch_contract_cancel_world_work_ephemeral_routes_exact_active_task_over_execute_cancel(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -17200,18 +17797,37 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-cancel-live".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve exact cancel fixture authority");
+        let (acceptance, claim) = seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
                 world_generation: 2,
-            })
-            .expect("register active ephemeral task");
+                task_run_id: "task-run-cancel-live",
+            },
+        );
 
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world.sock");
@@ -17273,11 +17889,20 @@ agents:
             !dispatch_task.is_finished(),
             "ephemeral cancel must wait for terminal truth before returning cancelled"
         );
-        publish_active_ephemeral_terminal_truth(
-            "sess_dispatch",
+        let terminal = b21_test_cancelled_exit_frame(
+            "rts_shell_world_dispatch_fixture",
             "task-run-cancel-live",
-            WorldTaskTerminalStateV1::Cancelled,
         );
+        authority
+            .execution_supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical cancelled terminal fixture"),
+            )
+            .expect("journal exact cancelled terminal fixture");
         let outcome = dispatch_task
             .await
             .expect("dispatch join should succeed")
@@ -17318,6 +17943,17 @@ agents:
         );
         assert_eq!(adapter_outcome.participant_id, None);
         assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
+        assert_eq!(
+            authority
+                .receipt_registry
+                .inspect_world_work_acceptance_by_id(
+                    &authority.authority_store_id,
+                    &acceptance.acceptance_record_id,
+                )
+                .expect("inspect immutable cancel receipt"),
+            Some(acceptance),
+            "terminal closeout must not delete immutable accepted truth"
+        );
 
         server.abort();
     }
@@ -17327,69 +17963,271 @@ agents:
     #[serial]
     async fn active_ephemeral_terminal_wait_allows_multiple_waiters_to_observe_same_terminal_truth()
     {
-        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-shared");
-        register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-shared");
-        register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-shared");
-
-        let waiter_one = tokio::spawn(wait_for_active_ephemeral_terminal_truth(
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["cancel_world_work"],
+            &["ephemeral"],
+        );
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
             "sess_dispatch",
-            "task-run-shared",
-        ));
-        let waiter_two = tokio::spawn(wait_for_active_ephemeral_terminal_truth(
-            "sess_dispatch",
-            "task-run-shared",
-        ));
-
-        tokio::task::yield_now().await;
-        publish_active_ephemeral_terminal_truth(
-            "sess_dispatch",
-            "task-run-shared",
-            WorldTaskTerminalStateV1::Cancelled,
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve multiple-waiter fixture authority");
+        let (_acceptance, claim) = seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
+                world_generation: 2,
+                task_run_id: "task-run-shared",
+            },
         );
 
-        assert_eq!(
-            waiter_one
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let (cancel_seen_tx, mut cancel_seen_rx) = tokio::sync::mpsc::unbounded_channel();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("execute cancel request");
+                    assert_eq!(parsed.span_id, "task-run-shared");
+                    assert_eq!(parsed.sig, "TERM");
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"delivered":true}"#,
+                    )
+                    .await;
+                    let _ = cancel_seen_tx.send(());
+                    continue;
+                }
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let store_for_one = store.clone();
+        let waiter_one = tokio::spawn(async move {
+            dispatch_orchestrator_world_request(
+                &store_for_one,
+                sample_ephemeral_cancel_world_dispatch_request("task-run-shared"),
+            )
+            .await
+        });
+        let mut waiter_two_request =
+            sample_ephemeral_cancel_world_dispatch_request("task-run-shared");
+        waiter_two_request.request_id = Some("req_cancel_ephemeral_waiter_two".to_string());
+        waiter_two_request.idempotency_key = Some("idem_cancel_ephemeral_waiter_two".to_string());
+        let store_for_two = store.clone();
+        let waiter_two = tokio::spawn(async move {
+            dispatch_orchestrator_world_request(&store_for_two, waiter_two_request).await
+        });
+
+        cancel_seen_rx
+            .recv()
+            .await
+            .expect("first waiter reaches cancel");
+        cancel_seen_rx
+            .recv()
+            .await
+            .expect("second waiter reaches cancel");
+        assert!(!waiter_one.is_finished());
+        assert!(!waiter_two.is_finished());
+        let terminal =
+            b21_test_cancelled_exit_frame("rts_shell_world_dispatch_fixture", "task-run-shared");
+        authority
+            .execution_supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical multiple-waiter terminal"),
+            )
+            .expect("journal one exact terminal for both waiters");
+
+        for waiter in [waiter_one, waiter_two] {
+            let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = waiter
                 .await
-                .expect("waiter one should join")
-                .expect("waiter one result"),
-            WorldTaskTerminalStateV1::Cancelled
-        );
-        assert_eq!(
-            waiter_two
-                .await
-                .expect("waiter two should join")
-                .expect("waiter two result"),
-            WorldTaskTerminalStateV1::Cancelled
-        );
-
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert!(
-            !tracker.by_task.contains_key(&key),
-            "all waiters should release the shared terminal wait entry"
-        );
+                .expect("waiter dispatch joins")
+                .expect("waiter observes durable terminal")
+            else {
+                panic!("expected cancel_world_work outcome")
+            };
+            assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
+            assert_eq!(outcome.target_participant_id, "task-run-shared");
+        }
+        let observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect multiple-waiter observation")
+            .expect("multiple-waiter observation exists");
+        assert_eq!(observation.journal.len(), 2);
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.terminal.map(|value| value.exit_code), Some(130));
+        server.abort();
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
+    #[tokio::test(flavor = "current_thread")]
     #[serial]
-    fn active_ephemeral_terminal_wait_registration_guard_releases_non_happy_path_registrations() {
-        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-cleanup");
-        {
-            let _guard = ActiveEphemeralTerminalWaitRegistrationGuard::new(
-                "sess_dispatch",
-                "task-run-cleanup",
-            );
-        }
-
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert!(
-            !tracker.by_task.contains_key(&key),
-            "dropping the registration guard must release non-happy-path wait registrations"
+    async fn active_ephemeral_terminal_wait_registration_guard_releases_non_happy_path_registrations(
+    ) {
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["cancel_world_work"],
+            &["ephemeral"],
         );
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve dropped-waiter fixture authority");
+        let (acceptance, claim) = seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
+                world_generation: 2,
+                task_run_id: "task-run-cleanup",
+            },
+        );
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let (cancel_seen_tx, cancel_seen_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut cancel_seen_tx = Some(cancel_seen_tx);
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("execute cancel request");
+                    assert_eq!(parsed.span_id, "task-run-cleanup");
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"delivered":true}"#,
+                    )
+                    .await;
+                    if let Some(cancel_seen_tx) = cancel_seen_tx.take() {
+                        let _ = cancel_seen_tx.send(());
+                    }
+                    continue;
+                }
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let store_for_dispatch = store.clone();
+        let dispatch = tokio::spawn(async move {
+            dispatch_orchestrator_world_request(
+                &store_for_dispatch,
+                sample_ephemeral_cancel_world_dispatch_request("task-run-cleanup"),
+            )
+            .await
+        });
+        timeout(Duration::from_secs(3), cancel_seen_rx)
+            .await
+            .expect("timed out waiting for real cancel waiter")
+            .expect("real cancel waiter reaches transport");
+        assert!(!dispatch.is_finished());
+        dispatch.abort();
+        assert!(dispatch
+            .await
+            .expect_err("dispatch must abort")
+            .is_cancelled());
+
+        assert_eq!(
+            authority
+                .receipt_registry
+                .inspect_world_work_acceptance_by_id(
+                    &authority.authority_store_id,
+                    &acceptance.acceptance_record_id,
+                )
+                .expect("inspect receipt after waiter drop"),
+            Some(acceptance),
+            "dropping the real waiter must not delete acceptance"
+        );
+        let observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect observation after waiter drop")
+            .expect("observation survives waiter drop");
+        assert_eq!(observation.durable_frame_cursor, Some(1));
+        assert_eq!(observation.journal.len(), 1);
+        assert!(observation.terminal.is_none());
+        server.abort();
     }
 
     #[cfg(target_os = "linux")]
@@ -17397,26 +18235,174 @@ agents:
     #[serial]
     async fn active_ephemeral_terminal_truth_guard_publishes_failed_terminal_truth_on_drop_after_start(
     ) {
-        let key = active_ephemeral_terminal_wait_key("sess_dispatch", "task-run-stream-failure");
-        register_active_ephemeral_terminal_wait("sess_dispatch", "task-run-stream-failure");
-        {
-            let mut guard = ActiveEphemeralTerminalTruthGuard::new("sess_dispatch");
-            guard.register_task_run_id("task-run-stream-failure".to_string());
-        }
-
-        assert_eq!(
-            wait_for_active_ephemeral_terminal_truth("sess_dispatch", "task-run-stream-failure")
-                .await
-                .expect("terminal truth should be published on drop"),
-            WorldTaskTerminalStateV1::Failed
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
         );
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["run_world_task"],
+            &["ephemeral"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve caller-drop RunWorldTask authority");
 
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (_hold_stream_tx, hold_stream_rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            let mut start_sent_tx = Some(start_sent_tx);
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/execute/stream ") {
+                    let request: ExecuteRequest =
+                        serde_json::from_slice(&body).expect("decode RunWorldTask request");
+                    assert!(request.acceptance_context.is_some());
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
+                            span_id: "task-run-stream-failure".to_string(),
+                        },
+                    )
+                    .await;
+                    if let Some(start_sent_tx) = start_sent_tx.take() {
+                        let _ = start_sent_tx.send(());
+                    }
+                    let _ = hold_stream_rx.await;
+                    break;
+                }
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let (started_task_run_id_tx, mut started_task_run_id_rx) =
+            tokio::sync::mpsc::unbounded_channel();
+        let store_for_dispatch = store.clone();
+        let dispatch = tokio::spawn(async move {
+            dispatch_run_world_task_request_with_started_task_run_id_tx(
+                &store_for_dispatch,
+                WorldDispatchRequestV1 {
+                    request_id: Some("req_dispatch_guard_drop".to_string()),
+                    idempotency_key: Some("idem_dispatch_guard_drop".to_string()),
+                    orchestration_session_id: Some("sess_dispatch".to_string()),
+                    caller_participant_id: Some("orch_dispatch".to_string()),
+                    action: WorldDispatchActionV1::RunWorldTask,
+                    mode: WorldDispatchModeV1::Ephemeral,
+                    target_backend_id: Some("cli:codex-world".to_string()),
+                    task_run_id: None,
+                    target_participant_id: None,
+                    world_id: Some("world-17".to_string()),
+                    world_generation: Some(2),
+                    payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                        prompt: "hold after exact Start".to_string(),
+                    }),
+                },
+                started_task_run_id_tx,
+            )
+            .await
+        });
+        timeout(Duration::from_secs(3), start_sent_rx)
+            .await
+            .expect("timed out waiting for world-service Start")
+            .expect("world-service Start sent");
+        assert_eq!(
+            timeout(Duration::from_secs(3), started_task_run_id_rx.recv())
+                .await
+                .expect("timed out waiting for production Start acknowledgement")
+                .expect("production Start task ID"),
+            "task-run-stream-failure"
+        );
+        let resolved = timeout(Duration::from_secs(3), async {
+            loop {
+                if let Ok(resolved) = authority.resolve_active_ephemeral_observation(
+                    "task-run-stream-failure",
+                    "cli:codex-world",
+                ) {
+                    break resolved;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("timed out waiting for durable acceptance and Start journal");
+
+        dispatch.abort();
+        assert!(dispatch
+            .await
+            .expect_err("dispatch must abort")
+            .is_cancelled());
+        server.abort();
+        tokio::task::yield_now().await;
+
+        let acceptance = authority
+            .receipt_registry
+            .inspect_world_work_acceptance_by_id(
+                &authority.authority_store_id,
+                &resolved.acceptance_record.acceptance_record_id,
+            )
+            .expect("inspect receipt after RunWorldTask caller drop")
+            .expect("accepted truth survives caller drop");
+        assert_eq!(acceptance, resolved.acceptance_record);
+        let observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance.acceptance_record_id)
+            .expect("inspect supervisor after RunWorldTask caller drop")
+            .expect("supervisor claim survives caller drop");
+        assert_eq!(observation.durable_frame_cursor, Some(1));
+        assert_eq!(observation.journal.len(), 1);
         assert!(
-            !tracker.by_task.contains_key(&key),
-            "published failure truth must still release the wait registration after consumption"
+            observation.terminal.is_none(),
+            "caller/guard drop must not fabricate failed terminal truth"
+        );
+        assert!(
+            !substrate_home
+                .path()
+                .join("run/agent-hub/sessions/sess_dispatch/active-ephemeral-tasks")
+                .exists(),
+            "accepted RunWorldTask must not register legacy active-task state"
         );
     }
 
@@ -17424,7 +18410,7 @@ agents:
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_cancel_world_work_ephemeral_retry_reuses_shared_terminal_truth() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -17434,18 +18420,37 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-cancel-shared".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve shared cancel fixture authority");
+        let (_acceptance, claim) = seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
                 world_generation: 2,
-            })
-            .expect("register active ephemeral task");
+                task_run_id: "task-run-cancel-shared",
+            },
+        );
 
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world.sock");
@@ -17517,11 +18522,20 @@ agents:
             .await
             .expect("retry cancel should reuse execute-cancel while the task is still live");
 
-        publish_active_ephemeral_terminal_truth(
-            "sess_dispatch",
+        let terminal = b21_test_cancelled_exit_frame(
+            "rts_shell_world_dispatch_fixture",
             "task-run-cancel-shared",
-            WorldTaskTerminalStateV1::Cancelled,
         );
+        authority
+            .execution_supervisor
+            .journal_frame(
+                &claim,
+                &terminal,
+                &terminal
+                    .canonical_ndjson_bytes()
+                    .expect("canonical shared cancelled terminal fixture"),
+            )
+            .expect("journal exact shared cancelled terminal fixture");
 
         for dispatch_task in [first_cancel, retry_cancel] {
             let outcome = dispatch_task
@@ -17535,17 +18549,17 @@ agents:
             assert_eq!(outcome.target_participant_id, "task-run-cancel-shared");
         }
 
-        let tracker = active_ephemeral_terminal_wait_tracker()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert!(
-            !tracker
-                .by_task
-                .contains_key(&active_ephemeral_terminal_wait_key(
-                    "sess_dispatch",
-                    "task-run-cancel-shared",
-                )),
-            "shared cancel closeout tracking must release after both waiters finish"
+        let observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect shared cancel observation")
+            .expect("shared cancel observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 2);
+        assert_eq!(
+            observation.terminal.map(|terminal| terminal.exit_code),
+            Some(130),
+            "both foreground waiters must join one exact durable terminal closeout"
         );
 
         server.abort();
@@ -17556,7 +18570,7 @@ agents:
     #[serial]
     async fn dispatch_contract_cancel_world_work_ephemeral_fails_closed_when_execute_cancel_is_not_delivered(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
+        let substrate_home = secure_authority_tempdir();
         let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
@@ -17566,18 +18580,37 @@ agents:
         );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
         let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
-        let _guard = store
-            .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
-                orchestration_session_id: "sess_dispatch".to_string(),
-                task_run_id: "task-run-cancel-race".to_string(),
-                caller_participant_id: "orch_dispatch".to_string(),
-                target_backend_id: "cli:codex-world".to_string(),
-                world_id: "world-17".to_string(),
+        let authority = store
+            .resolve_world_work_registry_authority(
+                "sess_dispatch",
+                "orch_dispatch",
+                "world-17",
+                2,
+                None,
+            )
+            .expect("resolve undelivered cancel fixture authority");
+        let (acceptance, claim) = seed_b_owned_ephemeral_acceptance(
+            &authority,
+            BOwnedEphemeralAcceptanceSeed {
+                orchestration_session_id: "sess_dispatch",
+                caller_participant_id: "orch_dispatch",
+                caller_backend_id: "cli:codex",
+                target_backend_id: "cli:codex-world",
+                world_id: "world-17",
                 world_generation: 2,
-            })
-            .expect("register active ephemeral task");
+                task_run_id: "task-run-cancel-race",
+            },
+        );
 
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world.sock");
@@ -17626,6 +18659,23 @@ agents:
             err.to_string(),
             "target_already_terminal: orchestration session sess_dispatch active ephemeral task task-run-cancel-race is already terminal or no longer live"
         );
+        assert_eq!(
+            authority
+                .receipt_registry
+                .inspect_world_work_acceptance_by_id(
+                    &authority.authority_store_id,
+                    &acceptance.acceptance_record_id,
+                )
+                .expect("inspect undelivered cancel receipt"),
+            Some(acceptance)
+        );
+        let observation = authority
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect undelivered cancel observation")
+            .expect("undelivered cancel observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(1));
+        assert!(observation.terminal.is_none());
 
         server.abort();
     }
@@ -20850,14 +21900,12 @@ agents:
     #[test]
     fn dispatch_contract_steering_policy_rejects_disabled_world_dispatch() {
         let err = enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
-                request: sample_request(),
-                session: sample_session(),
-                caller_participant: sample_orchestrator_participant(),
-                target_participant: None,
-                live_retained_worker_count: 0,
-            },
+            &sample_compatibility_prepared_dispatch(
+                sample_request(),
+                sample_orchestrator_participant(),
+                None,
+                0,
+            ),
             &Policy::default(),
         )
         .expect_err("disabled steering must fail closed");
@@ -20875,14 +21923,12 @@ agents:
         policy.agents_world_dispatch_allowed_actions = vec!["spawn_world_worker".to_string()];
 
         let err = enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
-                request: sample_request(),
-                session: sample_session(),
-                caller_participant: sample_orchestrator_participant(),
-                target_participant: None,
-                live_retained_worker_count: 0,
-            },
+            &sample_compatibility_prepared_dispatch(
+                sample_request(),
+                sample_orchestrator_participant(),
+                None,
+                0,
+            ),
             &policy,
         )
         .expect_err("disallowed action must fail closed");
@@ -20900,14 +21946,12 @@ agents:
         policy.agents_world_dispatch_allowed_modes = vec!["retained".to_string()];
 
         let err = enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
-                request: sample_request(),
-                session: sample_session(),
-                caller_participant: sample_orchestrator_participant(),
-                target_participant: None,
-                live_retained_worker_count: 0,
-            },
+            &sample_compatibility_prepared_dispatch(
+                sample_request(),
+                sample_orchestrator_participant(),
+                None,
+                0,
+            ),
             &policy,
         )
         .expect_err("disallowed mode must fail closed");
@@ -20925,14 +21969,12 @@ agents:
         policy.agents_world_dispatch_allowed_backends = vec!["cli:other_world".to_string()];
 
         let err = enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
-                request: sample_request(),
-                session: sample_session(),
-                caller_participant: sample_orchestrator_participant(),
-                target_participant: None,
-                live_retained_worker_count: 0,
-            },
+            &sample_compatibility_prepared_dispatch(
+                sample_request(),
+                sample_orchestrator_participant(),
+                None,
+                0,
+            ),
             &policy,
         )
         .expect_err("disallowed backend must fail closed");
@@ -20950,14 +21992,7 @@ agents:
         caller.handle.orchestration_session_id = "sess_other".to_string();
 
         let err = enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
-                request: sample_request(),
-                session: sample_session(),
-                caller_participant: caller,
-                target_participant: None,
-                live_retained_worker_count: 0,
-            },
+            &sample_compatibility_prepared_dispatch(sample_request(), caller, None, 0),
             &sample_world_dispatch_policy(),
         )
         .expect_err("cross-session steering must fail closed");
@@ -20977,14 +22012,7 @@ agents:
         policy.agents_world_dispatch_same_session_only = false;
 
         enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
-                request: sample_request(),
-                session: sample_session(),
-                caller_participant: caller,
-                target_participant: None,
-                live_retained_worker_count: 0,
-            },
+            &sample_compatibility_prepared_dispatch(sample_request(), caller, None, 0),
             &policy,
         )
         .expect("relaxed same-session policy should not reject cross-session prepared truth");
@@ -20997,14 +22025,12 @@ agents:
         request.world_generation = 3;
 
         let err = enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
+            &sample_compatibility_prepared_dispatch(
                 request,
-                session: sample_session(),
-                caller_participant: sample_orchestrator_participant(),
-                target_participant: Some(sample_member_participant()),
-                live_retained_worker_count: 1,
-            },
+                sample_orchestrator_participant(),
+                Some(sample_member_participant()),
+                1,
+            ),
             &sample_world_dispatch_policy(),
         )
         .expect_err("cross-world steering must fail closed");
@@ -21024,14 +22050,12 @@ agents:
         policy.agents_world_dispatch_same_world_binding_only = false;
 
         enforce_world_dispatch_steering_policy(
-            &PreparedOrchestratorWorldDispatch {
-                store: sample_state_store(),
+            &sample_compatibility_prepared_dispatch(
                 request,
-                session: sample_session(),
-                caller_participant: sample_orchestrator_participant(),
-                target_participant: Some(sample_member_participant()),
-                live_retained_worker_count: 1,
-            },
+                sample_orchestrator_participant(),
+                Some(sample_member_participant()),
+                1,
+            ),
             &policy,
         )
         .expect("relaxed world-binding policy should not reject drifted prepared truth");
@@ -21069,14 +22093,12 @@ agents:
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_max_concurrent_ephemeral = 1;
 
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_request(),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: None,
-            live_retained_worker_count: 0,
-        };
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_request(),
+            sample_orchestrator_participant(),
+            None,
+            0,
+        );
         let _guard = acquire_world_dispatch_concurrency_guard(&prepared, &policy)
             .expect("first ephemeral dispatch should reserve the only slot");
 
@@ -21095,14 +22117,12 @@ agents:
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_max_live_retained_workers = 1;
 
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_spawn_request(),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: None,
-            live_retained_worker_count: 1,
-        };
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_spawn_request(),
+            sample_orchestrator_participant(),
+            None,
+            1,
+        );
 
         let err = acquire_world_dispatch_concurrency_guard(&prepared, &policy)
             .expect_err("spawn above retained worker cap must fail closed");
@@ -21122,14 +22142,12 @@ agents:
             .push("fork_world_worker".to_string());
         policy.agents_world_dispatch_max_live_retained_workers = 1;
 
-        let prepared = PreparedOrchestratorWorldDispatch {
-            store: sample_state_store(),
-            request: sample_fork_request(),
-            session: sample_session(),
-            caller_participant: sample_orchestrator_participant(),
-            target_participant: None,
-            live_retained_worker_count: 1,
-        };
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_fork_request(),
+            sample_orchestrator_participant(),
+            None,
+            1,
+        );
 
         let err = acquire_world_dispatch_concurrency_guard(&prepared, &policy)
             .expect_err("fork above retained worker cap must fail closed");

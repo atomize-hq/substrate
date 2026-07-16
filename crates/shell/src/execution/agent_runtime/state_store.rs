@@ -2653,9 +2653,247 @@ pub(crate) struct ResolvedWorldWorkRegistryAuthorityV1 {
         super::world_work_execution_supervisor::WorldWorkExecutionSupervisor,
     pub(crate) authority_store_id: String,
     pub(crate) authority_revision_observed: u64,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) caller_participant_id: String,
+    pub(crate) caller_backend_id: String,
+    pub(crate) workspace_root: String,
+    pub(crate) world_id: String,
+    pub(crate) world_generation: u64,
+    pub(crate) host_session_posture: super::host_session_authority::schema::HostSessionPostureV1,
     pub(crate) current_policy_snapshot_ref:
         super::host_session_authority::schema::AuthorityObjectRefV1,
+    pub(crate) current_policy_snapshot_hash: String,
     pub(crate) current_policy_revision: String,
+    pub(crate) retained_target: Option<ResolvedCanonicalRetainedWorldDispatchTargetV1>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedCanonicalRetainedWorldDispatchTargetV1 {
+    pub(crate) participant_id: String,
+    pub(crate) backend_id: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedActiveEphemeralWorldWorkV1 {
+    pub(crate) acceptance_record: WorldWorkAcceptanceRecordV1,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl ResolvedWorldWorkRegistryAuthorityV1 {
+    pub(crate) fn resolve_active_ephemeral_observation(
+        &self,
+        task_run_id: &str,
+        expected_target_backend_id: &str,
+    ) -> Result<ResolvedActiveEphemeralWorldWorkV1> {
+        let work_identity = AcceptedWorldWorkIdentityV1::EphemeralTask {
+            task_run_id: task_run_id.to_string(),
+        };
+        let acceptance_record = self
+            .receipt_registry
+            .inspect_world_work_acceptance_by_work_identity(
+                &self.authority_store_id,
+                &self.orchestration_session_id,
+                &work_identity,
+            )?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+                    self.orchestration_session_id,
+                    task_run_id
+                )
+            })?;
+        if acceptance_record.caller_participant_id != self.caller_participant_id
+            || acceptance_record.caller_backend_id != self.caller_backend_id
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} active ephemeral task {} is not linked to authoritative orchestrator {}",
+                self.orchestration_session_id,
+                task_run_id,
+                self.caller_participant_id
+            );
+        }
+        if acceptance_record.target_backend_id != expected_target_backend_id {
+            anyhow::bail!(
+                "backend_mismatch: orchestration session {} active ephemeral task {} backend is {} not {}",
+                self.orchestration_session_id,
+                task_run_id,
+                acceptance_record.target_backend_id,
+                expected_target_backend_id
+            );
+        }
+        if acceptance_record.world_id != self.world_id
+            || acceptance_record.world_generation != self.world_generation
+        {
+            anyhow::bail!(
+                "world_binding_mismatch: orchestration session {} active ephemeral task {} no longer matches the authoritative world binding",
+                self.orchestration_session_id,
+                task_run_id
+            );
+        }
+        if acceptance_record.authority_store_id != self.authority_store_id
+            || acceptance_record.authority_revision_observed > self.authority_revision_observed
+            || acceptance_record.current_policy_snapshot_ref != self.current_policy_snapshot_ref
+            || acceptance_record.current_policy_snapshot_hash != self.current_policy_snapshot_hash
+            || acceptance_record.current_policy_revision != self.current_policy_revision
+        {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} active ephemeral task {} no longer matches current dispatch authority",
+                self.orchestration_session_id,
+                task_run_id
+            );
+        }
+        let observation = self
+            .execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record.acceptance_record_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "active_task_observation_unavailable: orchestration session {} accepted ephemeral task {} has no exact supervisor claim",
+                    self.orchestration_session_id,
+                    task_run_id
+                )
+            })?;
+        if !observation.claim.matches_acceptance(&acceptance_record)
+            || observation.claim.authority_store_id != self.authority_store_id
+            || observation.claim.orchestration_session_id != self.orchestration_session_id
+            || observation.claim.caller_participant_id != self.caller_participant_id
+            || observation.claim.caller_backend_id != self.caller_backend_id
+            || observation.claim.target_backend_id != acceptance_record.target_backend_id
+            || observation.claim.world_id != self.world_id
+            || observation.claim.world_generation != self.world_generation
+        {
+            anyhow::bail!(
+                "active_task_observation_mismatch: orchestration session {} accepted ephemeral task {} has conflicting supervisor truth",
+                self.orchestration_session_id,
+                task_run_id
+            );
+        }
+        if observation.terminal.is_some() {
+            anyhow::bail!(
+                "active_task_not_found: orchestration session {} has no exact active ephemeral task {}",
+                self.orchestration_session_id,
+                task_run_id
+            );
+        }
+        Ok(ResolvedActiveEphemeralWorldWorkV1 { acceptance_record })
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn resolve_canonical_retained_world_dispatch_target(
+    authority: &super::host_session_authority::facade::HostSessionAuthority,
+    current: &super::host_session_authority::facade::ResolvedCurrentAuthorityV1,
+    retained_participant_id: &str,
+    target_backend_id: &str,
+) -> Result<ResolvedCanonicalRetainedWorldDispatchTargetV1> {
+    use super::host_session_authority::schema::AuthorityObjectCommitmentV1;
+    use super::retained_worker_runtime::{
+        RetainedWorkerAdmissionStateV1, RetainedWorkerRegistrationResultV1, RetainedWorkerRuntime,
+    };
+
+    let world_binding = current
+        .authority
+        .world_binding
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("canonical retained dispatch authority omits world"))?;
+    let current_policy_ref = current
+        .authority
+        .current_policy_ref
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("canonical retained dispatch authority omits policy"))?;
+    let runtime = RetainedWorkerRuntime;
+    let admission = runtime
+        .read_admission_record(
+            authority,
+            &current.authority.orchestration_session_id,
+            retained_participant_id,
+        )
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "target_not_in_session: orchestration session {} has no exact retained worker {}",
+                current.authority.orchestration_session_id,
+                retained_participant_id
+            )
+        })?;
+    let registration = match &admission.state {
+        RetainedWorkerAdmissionStateV1::Routable { registration, .. } => registration,
+        RetainedWorkerAdmissionStateV1::Terminal { .. } => {
+            anyhow::bail!(
+                "target_already_terminal: orchestration session {} retained worker {} is terminal",
+                current.authority.orchestration_session_id,
+                retained_participant_id
+            )
+        }
+        _ => {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} retained worker {} is not durably routable",
+                current.authority.orchestration_session_id,
+                retained_participant_id
+            )
+        }
+    };
+    if admission.authority_store_id != current.observation.authority_store_id
+        || admission.orchestration_session_id != current.authority.orchestration_session_id
+        || admission.retained_participant_id != retained_participant_id
+        || admission.backend_id != target_backend_id
+        || admission.world_binding != *world_binding
+        || admission.current_policy_ref != *current_policy_ref
+        || admission.current_policy_revision != current.current_policy.policy_revision
+    {
+        anyhow::bail!(
+            "stale_linkage: retained worker {} admission truth conflicts with current dispatch authority",
+            retained_participant_id
+        );
+    }
+    let root = authority
+        .read_a12a_root()
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let durable_registration = root
+        .retained_worker_registration_journal
+        .get(&registration.registration_id)
+        .ok_or_else(|| anyhow::anyhow!("canonical retained registration proof is absent"))?;
+    if durable_registration.retained_worker_ref != registration.retained_worker_ref
+        || durable_registration.orchestration_session_id
+            != current.authority.orchestration_session_id
+        || durable_registration.retained_participant_id != retained_participant_id
+    {
+        anyhow::bail!("canonical retained admission-to-R0 join conflicts");
+    }
+    let canonical = super::host_session_authority::canonical_json::to_vec(durable_registration)
+        .context("encode canonical retained registration proof")?;
+    let target = RetainedWorkerRegistrationResultV1 {
+        registration_id: durable_registration.registration_id.clone(),
+        registration_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+            digest_hex: format!("{:x}", Sha256::digest(canonical)),
+        },
+        authority_store_id: current.observation.authority_store_id.clone(),
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        retained_participant_id: retained_participant_id.to_string(),
+        retained_worker_ref: durable_registration.retained_worker_ref.clone(),
+        authority_revision_after: durable_registration.authority_revision_after,
+        authority_record_commitment_after: durable_registration
+            .authority_record_commitment_after
+            .clone(),
+    };
+    let resolved = runtime
+        .resolve_retained_target(authority, &target)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    if resolved.descriptor.backend_id != target_backend_id
+        || resolved.resume_handle.backend_id != target_backend_id
+        || resolved.resume_handle.protocol != resolved.descriptor.protocol
+        || resolved.retained_worker.participant_id != retained_participant_id
+        || resolved.retained_worker.world_binding != *world_binding
+        || resolved.retained_worker.policy_ref != *current_policy_ref
+        || resolved.current_policy != current.current_policy
+    {
+        anyhow::bail!("canonical retained target graph conflicts with dispatch request");
+    }
+    Ok(ResolvedCanonicalRetainedWorldDispatchTargetV1 {
+        participant_id: retained_participant_id.to_string(),
+        backend_id: resolved.descriptor.backend_id,
+    })
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -3191,6 +3429,7 @@ impl AgentRuntimeStateStore {
         caller_participant_id: &str,
         world_id: &str,
         world_generation: u64,
+        retained_target: Option<(&str, &str)>,
     ) -> Result<ResolvedWorldWorkRegistryAuthorityV1> {
         use super::host_session_authority::{
             facade::HostSessionAuthority, schema::AuthorityObjectKindV1,
@@ -3202,20 +3441,11 @@ impl AgentRuntimeStateStore {
         let authority = HostSessionAuthority::from_trusted_root(trusted_root)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         let resolved = authority
-            .resolve_exact(orchestration_session_id, None)
+            .resolve_current_exact(orchestration_session_id, None)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-        let observation = resolved.observation();
+        let observation = resolved.observation.clone();
         if resolved.authority.orchestration_session_id != orchestration_session_id
-            || resolved
-                .authority
-                .active_authoritative_participant_id
-                .as_deref()
-                != Some(caller_participant_id)
-            || !resolved
-                .authority
-                .authoritative_participant_lineage
-                .iter()
-                .any(|participant_id| participant_id == caller_participant_id)
+            || resolved.caller.participant_id != caller_participant_id
             || resolved.authority.workspace_binding.authority_store_id
                 != observation.authority_store_id
         {
@@ -3254,13 +3484,37 @@ impl AgentRuntimeStateStore {
                 &observation.bootstrap_home,
                 &observation.authority_store_id,
             )?;
+        let retained_target = match retained_target {
+            Some((retained_participant_id, target_backend_id)) => {
+                Some(resolve_canonical_retained_world_dispatch_target(
+                    &authority,
+                    &resolved,
+                    retained_participant_id,
+                    target_backend_id,
+                )?)
+            }
+            None => None,
+        };
         Ok(ResolvedWorldWorkRegistryAuthorityV1 {
             receipt_registry,
             execution_supervisor,
             authority_store_id: observation.authority_store_id,
             authority_revision_observed: observation.authority_revision,
+            orchestration_session_id: resolved.authority.orchestration_session_id,
+            caller_participant_id: resolved.caller.participant_id,
+            caller_backend_id: resolved.caller.descriptor.backend_id,
+            workspace_root: resolved
+                .authority
+                .workspace_binding
+                .workspace_root
+                .physical_path,
+            world_id: world_binding.world_id.clone(),
+            world_generation: world_binding.world_generation,
+            host_session_posture: resolved.authority.lifecycle_posture,
             current_policy_snapshot_ref,
+            current_policy_snapshot_hash: resolved.current_policy.canonical_policy_snapshot_sha256,
             current_policy_revision,
+            retained_target,
         })
     }
 
