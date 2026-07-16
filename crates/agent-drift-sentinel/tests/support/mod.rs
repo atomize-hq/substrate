@@ -3,8 +3,8 @@
 use std::fs;
 
 use agent_drift_analyzer::{
-    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftClass,
-    DriftScore, DriftState, EvidenceRef, TaskFrame,
+    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence,
+    DelegationContext, DriftClass, DriftScore, DriftState, EvidenceRef, TaskFrame,
 };
 use agent_session_compactor::RowRef;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -116,6 +116,7 @@ pub(crate) fn checkpoint(
         },
         session_archetype: None,
         session_progress: None,
+        delegation: DelegationContext::default(),
         drift_scores: vec![DriftScore {
             class: DriftClass::WrongPlanBranch,
             state: if flagged {

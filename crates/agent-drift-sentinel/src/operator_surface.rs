@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use agent_drift_analyzer::{
-    Checkpoint, DriftClass, DriftState, EvidenceRef, ProgressDimension, ProgressStatus,
-    SessionArchetype, SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    Checkpoint, ChildWorkVisibility, DelegationContext, DelegationTopology, DriftClass, DriftState,
+    EvidenceRef, ProgressDimension, ProgressStatus, SessionArchetype, SessionArchetypeLabel,
+    SessionProgress, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use camino::Utf8Path;
 
@@ -138,6 +138,12 @@ impl CheckpointPresentation {
                 format_session_progress_summary(session_progress)
             ));
         }
+        if self.checkpoint.schema_version == "v0.8" {
+            lines.push(format!(
+                "- Delegation: {}",
+                format_delegation_summary(&self.checkpoint.delegation)
+            ));
+        }
         lines.push(format!(
             "- Diagnostics: {}",
             self.diagnostics_summary.render_console_summary()
@@ -231,6 +237,40 @@ fn format_session_progress_summary(progress: &SessionProgress) -> String {
         format_progress_support(progress),
         format_progress_evidence(&progress.counter_evidence)
     )
+}
+
+fn format_delegation_summary(delegation: &DelegationContext) -> String {
+    let parent = delegation.parent_session_id.as_deref().unwrap_or("none");
+    let children = if delegation.child_session_ids.is_empty() {
+        "none".to_string()
+    } else {
+        delegation.child_session_ids.join(",")
+    };
+
+    format!(
+        "topology={} parent={parent} children=[{children}] visibility={} confidence={}",
+        format_delegation_topology(delegation.topology),
+        format_child_work_visibility(delegation.child_work_visibility),
+        confidence_name(delegation.confidence)
+    )
+}
+
+fn format_delegation_topology(topology: DelegationTopology) -> &'static str {
+    match topology {
+        DelegationTopology::SingleAgent => "single_agent",
+        DelegationTopology::DelegatingParent => "delegating_parent",
+        DelegationTopology::DelegatedChild => "delegated_child",
+        DelegationTopology::MixedOrAmbiguous => "mixed_or_ambiguous",
+    }
+}
+
+fn format_child_work_visibility(visibility: ChildWorkVisibility) -> &'static str {
+    match visibility {
+        ChildWorkVisibility::None => "none",
+        ChildWorkVisibility::Linked => "linked",
+        ChildWorkVisibility::Partial => "partial",
+        ChildWorkVisibility::Opaque => "opaque",
+    }
 }
 
 fn format_session_archetype_label(label: SessionArchetypeLabel) -> &'static str {
@@ -543,7 +583,7 @@ fn classify_checkpoint_posture(
 fn uses_explicit_analyzer_state(checkpoint: &Checkpoint) -> bool {
     matches!(
         checkpoint.schema_version.as_str(),
-        "v0.3" | "v0.4" | "v0.5" | "v0.6" | "v0.7"
+        "v0.3" | "v0.4" | "v0.5" | "v0.6" | "v0.7" | "v0.8"
     )
 }
 

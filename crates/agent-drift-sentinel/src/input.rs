@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] =
-    &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7"];
+    &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"];
 const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str =
-    "v0.2, v0.3, v0.4, v0.5, v0.6, or v0.7";
+    "v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, or v0.8";
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CheckpointCursor {
@@ -311,6 +311,41 @@ fn validate_checkpoint_contract(
                 "v0.7 checkpoints must serialize explicit session progress",
             )?;
             validate_drift_score_state_contract(path, line_number, checkpoint, "v0.7")
+        }
+        Some("v0.8") => {
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "turn_context",
+                "v0.8 checkpoints must serialize explicit turn context",
+            )?;
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "session_archetype",
+                "v0.8 checkpoints must serialize explicit session archetype",
+            )?;
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "session_progress",
+                "v0.8 checkpoints must serialize explicit session progress",
+            )?;
+            require_non_null_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "delegation",
+                "v0.8 checkpoints must serialize analyzer-owned delegation context",
+            )?;
+            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.8")
         }
         _ => Ok(()),
     }

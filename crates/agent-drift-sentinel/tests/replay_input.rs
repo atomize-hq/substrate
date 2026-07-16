@@ -3,9 +3,10 @@
 use std::fs;
 
 use agent_drift_analyzer::{
-    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftState,
-    ProgressDimension, ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress,
-    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, ChildWorkVisibility,
+    Confidence, DelegationContext, DelegationTopology, DriftState, ProgressDimension,
+    ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress, TaskFrame,
+    TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use agent_drift_sentinel::input::{load_replay_bundle, InputError};
 use agent_session_compactor::RowRef;
@@ -114,6 +115,7 @@ fn checkpoint(
         },
         session_archetype: None,
         session_progress: None,
+        delegation: DelegationContext::default(),
         drift_scores: vec![agent_drift_analyzer::DriftScore {
             class: agent_drift_analyzer::DriftClass::WrongPlanBranch,
             state: if flagged {
@@ -202,6 +204,124 @@ fn sample_session_progress() -> SessionProgress {
         supporting_evidence: Vec::new(),
         counter_evidence: Vec::new(),
     }
+}
+
+fn v0_8_checkpoint(session_id: &str, ordinal: usize) -> Checkpoint {
+    let mut checkpoint = schema_checkpoint("v0.8", session_id, ordinal, 20, false, "continue");
+    checkpoint.turn_context = Some(sample_turn_context(ordinal));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    checkpoint.session_progress = Some(sample_session_progress());
+    checkpoint.delegation = DelegationContext {
+        topology: DelegationTopology::DelegatingParent,
+        parent_session_id: None,
+        child_session_ids: vec!["session-child".to_string()],
+        child_work_visibility: ChildWorkVisibility::Linked,
+        confidence: Confidence::High,
+        markers: Vec::new(),
+        supporting_evidence: vec![agent_drift_analyzer::EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "analyzer-owned verified direct child".to_string(),
+        }],
+        counter_evidence: Vec::new(),
+    };
+    checkpoint
+}
+
+#[test]
+fn replay_input_loads_v0_8_checkpoint_with_analyzer_delegation() {
+    let checkpoint = v0_8_checkpoint("session-parent", 1);
+    let fixture = ReplayFixture::from_checkpoints(vec![checkpoint], sample_summary());
+
+    let bundle = load_replay_bundle(&fixture.checkpoint_dir).expect("load v0.8 replay bundle");
+
+    assert_eq!(bundle.schema_version, "v0.8");
+    assert_eq!(bundle.checkpoints.len(), 1);
+    assert_eq!(
+        bundle.checkpoints[0].delegation.topology,
+        DelegationTopology::DelegatingParent
+    );
+    assert_eq!(
+        bundle.checkpoints[0].delegation.child_work_visibility,
+        ChildWorkVisibility::Linked
+    );
+    assert_eq!(
+        bundle.checkpoints[0].delegation.child_session_ids,
+        ["session-child"]
+    );
+}
+
+#[test]
+fn replay_input_rejects_v0_8_checkpoint_missing_delegation() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let checkpoint_dir = root.join("checkpoint");
+    fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+
+    let checkpoint = v0_8_checkpoint("session-parent", 1);
+    let mut malformed_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    malformed_json
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("delegation");
+    fs::write(
+        checkpoint_dir.join("checkpoints.jsonl"),
+        format!(
+            "{}\n",
+            serde_json::to_string(&malformed_json).expect("serialize malformed checkpoint")
+        ),
+    )
+    .expect("write checkpoints");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
+
+    let error = load_replay_bundle(&checkpoint_dir)
+        .expect_err("v0.8 checkpoints missing delegation must fail closed");
+
+    assert!(matches!(
+        error,
+        InputError::ContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.8" && field == "delegation"
+    ));
+}
+
+#[test]
+fn replay_input_rejects_v0_8_checkpoint_missing_explicit_drift_state() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let checkpoint_dir = root.join("checkpoint");
+    fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+
+    let checkpoint = v0_8_checkpoint("session-parent", 1);
+    let mut malformed_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    malformed_json["drift_scores"][0]
+        .as_object_mut()
+        .expect("drift score object")
+        .remove("state");
+    fs::write(
+        checkpoint_dir.join("checkpoints.jsonl"),
+        format!(
+            "{}\n",
+            serde_json::to_string(&malformed_json).expect("serialize malformed checkpoint")
+        ),
+    )
+    .expect("write checkpoints");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
+
+    let error = load_replay_bundle(&checkpoint_dir)
+        .expect_err("v0.8 checkpoints missing explicit drift state must fail closed");
+
+    assert!(matches!(
+        error,
+        InputError::ContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.8" && field == "drift_scores[0].state"
+    ));
 }
 
 #[test]

@@ -11,9 +11,9 @@ use crate::operator_surface::warning_fingerprint;
 use crate::scheduler::TriggerClass;
 
 const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] =
-    &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7"];
+    &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"];
 const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str =
-    "v0.2, v0.3, v0.4, v0.5, v0.6, or v0.7";
+    "v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, or v0.8";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCheckpointEvent {
@@ -559,6 +559,45 @@ fn validate_live_fixture_contract(
             )?;
             validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.7")
         }
+        Some("v0.8") => {
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "checkpoint.turn_context",
+                "turn_context",
+                "v0.8 checkpoints must serialize explicit turn context",
+            )?;
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "checkpoint.session_archetype",
+                "session_archetype",
+                "v0.8 checkpoints must serialize explicit session archetype",
+            )?;
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "checkpoint.session_progress",
+                "session_progress",
+                "v0.8 checkpoints must serialize explicit session progress",
+            )?;
+            require_non_null_fixture_field(
+                path,
+                line_number,
+                checkpoint,
+                "v0.8",
+                "checkpoint.delegation",
+                "delegation",
+                "v0.8 checkpoints must serialize analyzer-owned delegation context",
+            )?;
+            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.8")
+        }
         _ => Ok(()),
     }
 }
@@ -588,15 +627,15 @@ fn require_non_null_fixture_field(
 }
 
 fn schema_requires_turn_context(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.4" | "v0.5" | "v0.6" | "v0.7")
+    matches!(schema_version, "v0.4" | "v0.5" | "v0.6" | "v0.7" | "v0.8")
 }
 
 fn schema_requires_session_archetype(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.5" | "v0.6" | "v0.7")
+    matches!(schema_version, "v0.5" | "v0.6" | "v0.7" | "v0.8")
 }
 
 fn schema_requires_session_progress(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.6" | "v0.7")
+    matches!(schema_version, "v0.6" | "v0.7" | "v0.8")
 }
 
 fn validate_fixture_drift_score_state_contract(

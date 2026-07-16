@@ -3,10 +3,10 @@
 use std::fs;
 
 use agent_drift_analyzer::{
-    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, Confidence, DriftClass,
-    DriftState, EvidenceRef, ProgressDimension, ProgressStatus, SessionArchetype,
-    SessionArchetypeLabel, SessionProgress, TaskFrame, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    checkpoint::CheckpointDiagnostics, Checkpoint, CheckpointBoundary, ChildWorkVisibility,
+    Confidence, DelegationContext, DelegationTopology, DriftClass, DriftState, EvidenceRef,
+    ProgressDimension, ProgressStatus, SessionArchetype, SessionArchetypeLabel, SessionProgress,
+    TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use agent_drift_sentinel::{
     load_live_fixture,
@@ -83,6 +83,7 @@ fn checkpoint(
         },
         session_archetype: None,
         session_progress: None,
+        delegation: DelegationContext::default(),
         drift_scores: vec![agent_drift_analyzer::DriftScore {
             class: DriftClass::WrongPlanBranch,
             state: if flagged {
@@ -149,6 +150,297 @@ fn sample_session_progress() -> SessionProgress {
         supporting_evidence: Vec::new(),
         counter_evidence: Vec::new(),
     }
+}
+
+fn v0_8_checkpoint_with_state(state: DriftState, evidence_reason: &str) -> Checkpoint {
+    let mut checkpoint = checkpoint_with_state(
+        "session-parent",
+        2,
+        DriftClass::TruthGroundingGap,
+        state,
+        20,
+        false,
+        "continue on the current task frame",
+        &[evidence_reason],
+    );
+    checkpoint.schema_version = "v0.8".to_string();
+    checkpoint.turn_context = Some(sample_turn_context(2));
+    checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+    checkpoint.session_progress = Some(sample_session_progress());
+    checkpoint.delegation = DelegationContext {
+        topology: DelegationTopology::DelegatingParent,
+        parent_session_id: None,
+        child_session_ids: vec!["session-child".to_string()],
+        child_work_visibility: ChildWorkVisibility::Linked,
+        confidence: Confidence::High,
+        markers: Vec::new(),
+        supporting_evidence: vec![EvidenceRef {
+            row: checkpoint.boundary.start.clone(),
+            reason: "analyzer-owned verified direct child".to_string(),
+        }],
+        counter_evidence: Vec::new(),
+    };
+    checkpoint
+}
+
+#[test]
+fn live_checkpoint_compatibility_accepts_and_renders_v0_8_analyzer_delegation() {
+    let checkpoint =
+        v0_8_checkpoint_with_state(DriftState::Recovered, "explicit analyzer recovery evidence");
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("v0.8 checkpoint is compatible");
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        compatibility.cursor.clone(),
+        TriggerClass::CheckpointReady,
+        compatibility.flagged,
+        Some(&compatibility.warning_fingerprint),
+    );
+    let presentation = present_checkpoint(
+        &checkpoint,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+    let rendered = presentation.render_console_block(None);
+
+    assert_eq!(compatibility.cursor.session_id, "session-parent");
+    assert!(rendered.contains(
+        "- Delegation: topology=delegating_parent parent=none children=[session-child] visibility=linked confidence=high"
+    ));
+    assert!(!rendered.contains("spawn_agent"));
+}
+
+#[test]
+fn live_checkpoint_compatibility_uses_v0_8_recovered_state_backed_evidence() {
+    let checkpoint =
+        v0_8_checkpoint_with_state(DriftState::Recovered, "explicit analyzer recovery evidence");
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("v0.8 checkpoint is compatible");
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        compatibility.cursor.clone(),
+        TriggerClass::CheckpointReady,
+        compatibility.flagged,
+        Some(&compatibility.warning_fingerprint),
+    );
+    let presentation = present_checkpoint(
+        &checkpoint,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+
+    assert!(!compatibility.flagged);
+    assert_eq!(presentation.posture, Some(CheckpointPosture::Recovered));
+    assert!(presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("explicit analyzer recovery evidence")));
+}
+
+#[test]
+fn live_checkpoint_compatibility_uses_v0_8_historical_state_backed_evidence() {
+    let mut checkpoint = v0_8_checkpoint_with_state(
+        DriftState::HistoricalOnly,
+        "explicit analyzer historical evidence",
+    );
+    checkpoint.delegation.topology = DelegationTopology::DelegatedChild;
+    checkpoint.delegation.parent_session_id = Some("session-root".to_string());
+    checkpoint.delegation.child_session_ids.clear();
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("v0.8 checkpoint is compatible");
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        compatibility.cursor.clone(),
+        TriggerClass::CheckpointReady,
+        compatibility.flagged,
+        Some(&compatibility.warning_fingerprint),
+    );
+    let presentation = present_checkpoint(
+        &checkpoint,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+
+    assert!(!compatibility.flagged);
+    assert_eq!(
+        presentation.posture,
+        Some(CheckpointPosture::HistoricalOnly)
+    );
+    assert!(presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("explicit analyzer historical evidence")));
+}
+
+#[test]
+fn live_checkpoint_compatibility_loads_v0_8_fixture_with_analyzer_delegation() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let checkpoint =
+        v0_8_checkpoint_with_state(DriftState::Recovered, "explicit analyzer recovery evidence");
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let events = load_live_fixture(&fixture_path).expect("load v0.8 live fixture");
+
+    let loaded = events[0]
+        .checkpoint
+        .as_ref()
+        .expect("checkpoint-ready payload");
+    assert_eq!(loaded.schema_version, "v0.8");
+    assert_eq!(
+        loaded.delegation.topology,
+        DelegationTopology::DelegatingParent
+    );
+    assert_eq!(
+        loaded.delegation.child_work_visibility,
+        ChildWorkVisibility::Linked
+    );
+}
+
+#[test]
+fn live_checkpoint_compatibility_rejects_v0_8_fixture_missing_delegation() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let checkpoint =
+        v0_8_checkpoint_with_state(DriftState::Recovered, "explicit analyzer recovery evidence");
+    let mut checkpoint_json =
+        serde_json::to_value(&checkpoint).expect("serialize checkpoint to json value");
+    checkpoint_json
+        .as_object_mut()
+        .expect("checkpoint object")
+        .remove("delegation");
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint_json,
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!("{}\n", serde_json::to_string(&record).expect("record json")),
+    )
+    .expect("write live fixture");
+
+    let error = load_live_fixture(&fixture_path)
+        .expect_err("v0.8 live fixture missing delegation must fail closed");
+
+    assert!(matches!(
+        error,
+        LiveInputError::FixtureContractGap {
+            ref schema_version,
+            ref field,
+            ..
+        } if schema_version == "v0.8" && field == "checkpoint.delegation"
+    ));
+}
+
+#[test]
+fn live_checkpoint_compatibility_preserves_v0_3_through_v0_7_behavior() {
+    for schema_version in ["v0.3", "v0.4", "v0.5", "v0.6", "v0.7"] {
+        let mut checkpoint = schema_checkpoint(
+            schema_version,
+            "session-legacy-explicit",
+            1,
+            88,
+            true,
+            "re-read the implementation plan",
+        );
+        if matches!(schema_version, "v0.4" | "v0.5" | "v0.6" | "v0.7") {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+        }
+        if matches!(schema_version, "v0.5" | "v0.6" | "v0.7") {
+            checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+        }
+        if matches!(schema_version, "v0.6" | "v0.7") {
+            checkpoint.session_progress = Some(sample_session_progress());
+        }
+
+        let compatibility = verify_live_checkpoint_compatibility(&checkpoint)
+            .unwrap_or_else(|error| panic!("{schema_version} must remain compatible: {error}"));
+        let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+        let decision = scheduler.observe(
+            compatibility.cursor.clone(),
+            TriggerClass::CheckpointReady,
+            compatibility.flagged,
+            Some(&compatibility.warning_fingerprint),
+        );
+        let presentation = present_checkpoint(
+            &checkpoint,
+            TriggerClass::CheckpointReady,
+            &decision,
+            &WarningPolicy::default(),
+        );
+
+        assert!(compatibility.flagged, "{schema_version}");
+        assert_eq!(
+            presentation.posture,
+            Some(CheckpointPosture::Active),
+            "{schema_version}"
+        );
+        assert!(
+            !presentation
+                .render_console_block(None)
+                .contains("- Delegation:"),
+            "legacy {schema_version} presentation must remain unchanged"
+        );
+    }
+}
+
+#[test]
+fn live_checkpoint_compatibility_preserves_v0_2_legacy_presentation() {
+    let checkpoint = checkpoint_with_drift(
+        "v0.2",
+        "session-legacy",
+        1,
+        DriftClass::TruthGroundingGap,
+        82,
+        true,
+        "align plan to repo truth",
+        &["flagged score for session-legacy:1"],
+    );
+
+    let compatibility =
+        verify_live_checkpoint_compatibility(&checkpoint).expect("v0.2 must remain compatible");
+    let mut scheduler = ReplayScheduler::new(SchedulerPolicy::default());
+    let decision = scheduler.observe(
+        compatibility.cursor.clone(),
+        TriggerClass::CheckpointReady,
+        compatibility.flagged,
+        Some(&compatibility.warning_fingerprint),
+    );
+    let presentation = present_checkpoint(
+        &checkpoint,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+
+    assert_eq!(presentation.posture, Some(CheckpointPosture::Active));
+    assert!(presentation
+        .evidence_lines
+        .iter()
+        .any(|line| line.contains("flagged score for session-legacy:1")));
+    assert!(!presentation
+        .render_console_block(None)
+        .contains("- Delegation:"));
 }
 
 #[test]
