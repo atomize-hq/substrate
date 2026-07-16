@@ -13,10 +13,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 
@@ -80,10 +83,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 2. The first supported delegated model is one parent plus directly spawned children. Nested child
@@ -201,10 +207,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 
@@ -572,10 +581,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 

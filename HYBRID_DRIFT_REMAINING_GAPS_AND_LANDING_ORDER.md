@@ -76,10 +76,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
@@ -189,10 +192,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 Docs-only `R7-0.1` series
@@ -255,10 +261,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
@@ -307,10 +316,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 `R6-C.1-CONTROLS` completed at
@@ -398,10 +410,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 
@@ -452,7 +467,9 @@ control.” The current honest sequence is:
    findings and `CTX-R8-01` `PROVEN`; keep complete-family series `0ed3d8f04` + `cfcf65507` at
    reviewed `CHANGES_REQUIRED` with five docs findings; keep fix `2b9565fb9` landed; keep follow-up
    fix `b04207fb6` at fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-
-   acceptance finding; keep the current bounded fix review-pending with no claimed result;
+   acceptance finding; keep conditional fix `b9ce44c6f` at fresh independent built-in `default`
+   `CHANGES_REQUIRED` with two docs findings; keep the current bounded fix review-pending with no
+   claimed result;
    keep all implementation tasks unchecked/unstarted, `CTX-R8-02` `OPEN` / `REVIEW
    PENDING` and not proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT blocked/boundary-only; claim no
    phase transition, Prompt 1 eligibility, implementation authorization, full-family `CLEAN`, or
@@ -1171,10 +1188,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 
@@ -1304,10 +1324,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed.
 
@@ -1367,7 +1390,9 @@ The next honest work target is:
   and `CTX-R8-01` `PROVEN`; keep complete-family series `0ed3d8f04` + `cfcf65507` at reviewed
   `CHANGES_REQUIRED` with five docs findings; keep fix `2b9565fb9` landed; keep follow-up fix
   `b04207fb6` at fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-
-  acceptance finding; keep the current bounded fix review-pending with no claimed result; keep all
+  acceptance finding; keep conditional fix `b9ce44c6f` at fresh independent built-in `default`
+  `CHANGES_REQUIRED` with two docs findings; keep the current bounded fix review-pending with no
+  claimed result; keep all
   implementation tasks unchecked/unstarted, `CTX-R8-02` `OPEN` / `REVIEW PENDING` and not
   proven, `CTX-R8-03..06` blocked, and R8-IMPLEMENT blocked/boundary-only; claim no phase transition,
   Prompt 1 eligibility, implementation authorization, full-family `CLEAN`, or review result for this
@@ -1377,7 +1402,8 @@ The next honest work target is:
 - keep R8-SPEC in progress without a phase transition; keep complete-family series `0ed3d8f04` +
   `cfcf65507` at reviewed `CHANGES_REQUIRED`, keep fix `2b9565fb9` landed, keep follow-up fix
   `b04207fb6` at fresh independent built-in `default` `CHANGES_REQUIRED` with one conditional-
-  acceptance finding, keep the current bounded fix review-pending, and do not start R8
+  acceptance finding, keep conditional fix `b9ce44c6f` at fresh independent built-in `default`
+  `CHANGES_REQUIRED` with two docs findings, keep the current bounded fix review-pending, and do not start R8
   implementation work
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 

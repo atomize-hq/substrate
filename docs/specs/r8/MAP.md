@@ -1,7 +1,8 @@
 # R8 Map: Sentinel Interpretation Consolidation / Integration
 
-Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; PLAN/TASKS
-REVIEW PENDING; R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
+Status: **R8-SPEC ACTIVE / IN PROGRESS; ACTIVE PACKET `none`; `CTX-R8-01` PROVEN; `b9ce44c6f`
+FRESH INDEPENDENT `CHANGES_REQUIRED` WITH TWO FINDINGS; CURRENT TWO-FINDING FIX REVIEW PENDING;
+R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
 series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
@@ -10,10 +11,13 @@ clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the com
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
 Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
 independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
-This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+Bounded conditional-acceptance fix `b9ce44c6f` then received fresh independent built-in `default`
+`CHANGES_REQUIRED` with two scoped documentation findings. This bounded Markdown-only fix addresses
+only those two findings and claims no review result. All R8
 implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
-not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
-boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-4 and `CTX-R8-05` remain
+decision-blocked by their future structured gates. R8-IMPLEMENT remains blocked/boundary-only, and
+no R8 code has started. No phase transition, Prompt 1 eligibility,
 implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
 is claimed. **No R8 code may begin until the
 complete MAP/SPEC/PLAN/TASKS family is fresh-review-clean.**
@@ -101,12 +105,20 @@ is authorized.
 - Delegation presence cannot be recovered from `CheckpointPresentation.checkpoint.delegation`
   alone: analyzer `Checkpoint.delegation` is non-optional, pre-v0.8 serialized absence becomes
   `DelegationContext::default()` during deserialization, and public `CheckpointPresentation` has no
-  separate presence carrier. The future gate
+  separate presence carrier. Under an unchanged public shape, construction of
+  `CheckpointPresentation`, storage in `ReplayReport`, and storage in `LiveObservation` therefore
+  erase the internal `Option` presence before the later console-rendering call. The future gate
   `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` must choose either an explicit optional public
   presence/projection field with zero operator-presentation schema checks, or exactly one
   `self.checkpoint.schema_version == "v0.8"` predicate in the named legacy public facade
-  `CheckpointPresentation::render_console_block`. Option B permits no schema check in any other
-  operator/core presentation item; replay/live core paths use the internal presence-carrying value.
+  `CheckpointPresentation::render_console_block`. Option B explicitly permits
+  `ReplayReport::to_console_text` and the final `LiveObservation.presentation.render_console_block`
+  call to use that frozen facade and its sole presence predicate; contract validation, typed
+  interpretation, posture/evidence/delegation projection, scheduling, and presentation construction
+  must contain zero R8-4 schema-presence predicates. This is a localized schema-coupling and
+  centralization exception with an explicit parity-test cost, not a claim that the erased internal
+  `Option` reaches later final rendering. Option A instead keeps zero schema predicates in
+  presentation by accepting the public-field/source-compatibility cost.
   Until that decision, R8-4 may not edit any symbol and `CTX-R8-05` cannot be proven. Changing the
   upstream analyzer `Checkpoint` schema is outside R8.
 
@@ -137,7 +149,7 @@ is authorized.
 | `CTX-R8-02` | R8 MAP/SPEC/PLAN/TASKS are internally consistent and fresh-review-clean before code. |
 | `CTX-R8-03` | Replay and live use the same typed interpretation function and parity matrix. |
 | `CTX-R8-04` | One compatibility owner preserves v0.2 and v0.3-v0.8 contract behavior. |
-| `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, Option A proves zero operator-presentation schema checks or Option B proves exactly one named `CheckpointPresentation::render_console_block` v0.8 equality predicate and zero elsewhere; multiline-robust structural/count proof plus legacy-facade/core and replay/live byte parity proves core presentation formats the internal optional delegation fact without schema/analyzer/delegation inference. |
+| `CTX-R8-05` | After an explicit `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` decision, Option A proves zero `schema_version` field/path uses and predicates in presentation while accepting the public-field/source-compatibility cost. Option B proves exactly one direct field use and one equality predicate with literal `"v0.8"` in `CheckpointPresentation::render_console_block`, zero in every other item, and permits `ReplayReport::to_console_text` plus final `LiveObservation.presentation.render_console_block` to call that frozen facade because the unchanged public shapes erase internal presence before then. A `syn`-based AST visitor attributes every use/predicate form to its owning item; separate behavior tests prove facade/core output and the actual final replay/live call paths. |
 | `CTX-R8-06` | Existing pre-observe transport bookkeeping is permitted; after interpretation failure there is no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. |
 
 `CTX-R8-01` is currently `PROVEN` by the stable R7 contract plus the clean MAP/SPEC freeze. The
@@ -151,8 +163,9 @@ authoritative until reviewed evidence updates it.
 2. the R8 specification — included in the same fresh-review-clean contract series;
 3. an exact migration/verification PLAN — the family through `0ed3d8f04` + `cfcf65507` received
    `CHANGES_REQUIRED`; fix `2b9565fb9` landed; follow-up fix `b04207fb6` received fresh independent
-   built-in `default` `CHANGES_REQUIRED` with one conditional-acceptance finding; the current bounded
-   fix addresses only that finding and claims no review result;
+   built-in `default` `CHANGES_REQUIRED` with one conditional-acceptance finding; conditional fix
+   `b9ce44c6f` received fresh independent built-in `default` `CHANGES_REQUIRED` with two findings;
+   the current bounded fix addresses only those two findings and claims no review result;
 4. packetized TASKS with the exact future HIGH-impact and delegation-presence decision gates — same
    review/fix state, with all implementation tasks unchecked and unstarted.
 
