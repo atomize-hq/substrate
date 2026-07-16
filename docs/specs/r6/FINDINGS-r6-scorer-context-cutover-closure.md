@@ -301,11 +301,14 @@ witness. At code/proof HEAD `bd743eacc`, formatting, workspace clippy with `-D w
 compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full workspace tests,
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
-checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
-implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
-eligible or invoked.
+checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
+`0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
+satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
+R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
+MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
+blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
+and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
+not claim review-clean status.
 
 The R7-4 checkpoint proof at HEAD `8a0790a3d` is `dead_end_thrash 19 / 19`, semantic filter `58 /
 58`, full analyzer `422 / 422`, plus green formatting, analyzer clippy, and diff checks. This changes

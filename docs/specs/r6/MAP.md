@@ -1,6 +1,12 @@
 # R6 Map: Drift Scorer Cutover To Context-Aware Semantics (Rescope Scaffold)
 
-Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE AND R7-0..R7-5 COMPLETE; R7-6 SOLE ACTIVE PHASE AT CHECKPOINT-DOC RECEIPT GATE; ACTIVE PACKET NONE; R7-6.1 COMMIT `7789fba4f`, R7-6.2 SERIES `d2842f279` + `77ae455fe` + `a333d8486`, AND FINAL-WALL FIX `bd743eacc` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`; R7-6.1, R7-6.2, AND FINAL CHECKPOINT COMPLETE; `CTX-R7-06` PROVEN; CHECKPOINT-DOC RECEIPT COMMITTED/LANDED AND AWAITING FRESH INDEPENDENT REVIEW; R7-6 EXIT GATE AND R8-SPEC ENTRY PENDING/BLOCKED; NO NEXT PROMPT 1 SELECTORS ELIGIBLE OR INVOKED** as of
+Status: **CLOSED — R6-REPLAY, R6-CLOSE, AND CTX-R6-17 COMPLETE; R7-PROMOTE AND R7-0..R7-6
+COMPLETE; R7 CLOSED; `CTX-R7-06` PROVEN; CHECKPOINT-DOC RECEIPT/REVIEW-FIX SERIES `0e5150945` +
+`e634ef324` + `8e39c109e` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`; R8-SPEC SOLE ACTIVE PHASE AT
+ENTRY ONLY; ACTIVE PACKET NONE; `CTX-R8-01` OPEN; R8 MAP/SPEC/PLAN/TASKS AUTHORING UNCHECKED AND
+UNSTARTED; R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY; PROMPT 1 SELECTORS `PHASE_ID: R8-SPEC` /
+`ACTIVE_PACKET: none` PREPARED AND ELIGIBLE BUT UNINVOKED; PHASE-TRANSITION UPDATE AWAITING FRESH
+INDEPENDENT REVIEW AND NOT CLAIMED REVIEW-CLEAN** as of
 2026-07-16. Preserved review-clean R6 proof series remain authoritative.
 The review-clean R7 implementation series changes no R6 behavior. Closure authority is
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`. This map began as a scaffold created on
@@ -412,11 +418,14 @@ witness. At code/proof HEAD `bd743eacc`, formatting, workspace clippy with `-D w
 compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full workspace tests,
 and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
-checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
-packet `none` while the committed/landed checkpoint-doc receipt awaits fresh independent review. The
-implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
-pending/blocked until the landed receipt is fresh-review-clean. No next Prompt 1 selectors are
-eligible or invoked.
+checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
+`0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
+satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
+R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
+MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
+blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
+and eligible but uninvoked. This phase-transition update awaits fresh independent review and does
+not claim review-clean status.
 
 The R7-4 checkpoint proof at HEAD `8a0790a3d` is `dead_end_thrash 19 / 19`, semantic filter `58 /
 58`, full analyzer `422 / 422`, plus green formatting, analyzer clippy, and diff checks. This changes
