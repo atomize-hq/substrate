@@ -8,7 +8,7 @@ Execution context router:
 
 Status: **CLOSED**
 
-Current phase: **`R7-5` (SOLE ACTIVE PHASE — CHECKPOINT-DOC RECEIPT GATE; active packet: `none`; R7-5.1 commit `afb10827d` fresh independent built-in `default` `CLEAN` with no findings; R7-5.2 commit `9c0690a02` fresh independent built-in `default` `CLEAN` with no actionable findings; R7-5.1, R7-5.2, and Checkpoint R7-5 behavior items complete; `CTX-R7-05` `PROVEN`; checkpoint-doc receipt candidate pending fresh independent review; R7-5 exit gate pending; R7-6 and R8 blocked; R7-6.1 workspace-clippy witness preserved; no next-phase selectors prepared or invoked)**
+Current phase: **`R7-6` (SOLE ACTIVE PHASE AT ENTRY ONLY; active packet: `none`; R7-5 complete at checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c`, fresh independent built-in `default` `CLEAN` with no findings; `CTX-R7-05` `PROVEN`; current R7-5 -> R7-6 transition candidate pending fresh independent review and not yet review-clean; `R7-6.1` next, unchecked, and unstarted; no sentinel or other R7-6 implementation work started; R8 blocked; R7-6.1 workspace-clippy witness preserved; Prompt 1 selectors `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` prepared but not invoked and not actionable until the transition is fresh-review-clean)**
 
 The scoped R6 packets, acceptance controls, named gaps, replay closeout, and terminal-disposition
 reconciliation are complete. R6 is closed for sequencing. Promotion series `455d0ed90` +
@@ -44,10 +44,14 @@ evidence references, zero malformed references, and zero cross-trajectory progre
 violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
 full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
-`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
-receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
-receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
-remains preserved, and no next-phase selectors are prepared or invoked.
+`PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
+independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
+complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
+candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
+blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
+R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
+R7-6 work must not start until the transition candidate is fresh-review-clean.
 
 R7-4 checkpoint proof at implementation/docs HEAD `8a0790a3d`: `dead_end_thrash` passes `19 / 19`;
 the `semantic_goal_drift` filter passes `58 / 58` aggregate (`56` library plus `2` acceptance);
@@ -143,10 +147,14 @@ evidence references, zero malformed references, and zero cross-trajectory progre
 violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
 full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
-`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
-receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
-receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
-remains preserved, and no next-phase selectors are prepared or invoked.
+`PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
+independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
+complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
+candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
+blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
+R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
+R7-6 work must not start until the transition candidate is fresh-review-clean.
 
 `R6-C.0A` is complete at `d3dcda785`; `R6-C.1-SPEC` is complete through review-clean `ea19b39a7`;
 and `R6-C.1-CONTROLS` is complete against the wall receipt `5618f7864`. The thirteen synthetic
@@ -204,7 +212,11 @@ evidence references, zero malformed references, and zero cross-trajectory progre
 violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
 full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
-`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
-receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
-receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
-remains preserved, and no next-phase selectors are prepared or invoked.
+`PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
+independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
+complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
+candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
+blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
+R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
+R7-6 work must not start until the transition candidate is fresh-review-clean.

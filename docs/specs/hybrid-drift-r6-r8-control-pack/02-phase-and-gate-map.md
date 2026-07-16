@@ -27,8 +27,8 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R7-2` | COMPLETE | Analyzer link graph and checkpoint v0.8 delegation contract | SATISFIED — `R7-1` exit gate is fresh-review-clean; operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded seam | SATISFIED — R7-2 task commits `c60d05f77`, `9403c8a24`, and series `7af2ae517` + `75a353e46` plus behavior/static checkpoint and checkpoint-doc commit `78a168c09` are complete and fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R7-03` is proven. |
 | `R7-3` | COMPLETE | Child-visible progress separation | SATISFIED — `R7-2` exit gate is fresh-review-clean; transition/fix series `e27d82580` + `305e40bf2` and entry-authority repair `9fd9d9972` are fresh independent built-in `default` `REVIEW CLEAN` | SATISFIED — test-only commits `f8dd04549` and `c7c6f35b8`, the behavior/static checkpoint, and checkpoint-doc commit `931c2701c` are complete and fresh independent built-in `default` `REVIEW CLEAN`; `CTX-R7-04` is proven. |
 | `R7-4` | COMPLETE | Delegated scorer guardrails | SATISFIED — `R7-3` exit gate and transition/fix series `e077de489` + `3dd5ba943` are fresh-review-clean | SATISFIED — R7-4.1 commit/fix series `ebcb052b9` + `e7b65523f`, R7-4.2 docs decision commit `8a0790a3d`, and the behavior/static checkpoint are complete and fresh-review-clean where applicable; `dead_end_thrash` passes `19 / 19`, semantic filter `58 / 58`, full analyzer `422 / 422`, and static gates are green. Checkpoint-doc commit `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`, satisfying the R7-4 exit gate. At that R7-4 exit boundary, `CTX-R7-05` remained blocked/pending for R7-5 acceptance evidence. |
-| `R7-5` | ACTIVE — CHECKPOINT-DOC RECEIPT GATE | Delegated acceptance and real-corpus proof | SATISFIED — R7-4 exit gate and transition commit `1b746a2a` are fresh independent built-in `default` `REVIEW CLEAN`; active packet is `none` | PENDING RECEIPT REVIEW — R7-5.1 commit `afb10827d` is fresh independent built-in `default` `CLEAN` with no findings; R7-5.2 commit `9c0690a02` is fresh independent built-in `default` `CLEAN` with no actionable findings; the Checkpoint R7-5 behavior items are complete and `CTX-R7-05` is `PROVEN`. The checkpoint-doc receipt candidate still requires fresh independent review; R7-6 and R8 remain blocked. |
-| `R7-6` | BLOCKED | Minimal sentinel compatibility | R7-5 exit gate review-clean | Minimal sentinel compatibility and the preserved workspace-clippy witness are resolved review-clean without R8 consolidation. |
+| `R7-5` | COMPLETE | Delegated acceptance and real-corpus proof | SATISFIED — R7-4 exit gate and transition commit `1b746a2a` are fresh independent built-in `default` `REVIEW CLEAN` | SATISFIED — R7-5.1 commit `afb10827d`, R7-5.2 commit `9c0690a02`, the Checkpoint R7-5 behavior items, and `CTX-R7-05` are complete/proven; focused proof passes `2 / 2`, `8 / 8`, and `4 / 4`; full compactor passes `39 / 39`; full analyzer passes `424 / 424`; static gates are green. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. |
+| `R7-6` | ACTIVE AT ENTRY ONLY — TRANSITION REVIEW PENDING | Minimal sentinel compatibility | SATISFIED FOR ENTRY ONLY — R7-5 exit gate is complete and fresh-review-clean; the current R7-5 -> R7-6 transition candidate is the pending fresh-review boundary; active packet is `none`; the prepared `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` selectors are not actionable and R7-6 work must not start until that review is clean | PENDING — `R7-6.1` is next, unchecked, and unstarted; `R7-6.2` and the final checkpoint are also unchecked and unstarted. No sentinel or other R7-6 implementation work has started. The workspace-clippy witness remains preserved, and R8 remains blocked. |
 | `R8-SPEC` | BLOCKED | R8 MAP/SPEC/PLAN/TASKS | R7 closed with stable analyzer contract | R8 consolidation/integration interfaces, migration, proof wall, and non-goals are review-clean. |
 | `R8-IMPLEMENT` | BOUNDARY ONLY | Sentinel interpretation consolidation/integration | R8 docs landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
@@ -95,10 +95,14 @@ evidence references, zero malformed references, and zero cross-trajectory progre
 violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
 full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
-`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
-receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
-receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
-remains preserved, and no next-phase selectors are prepared or invoked.
+`PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
+independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
+complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
+candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
+blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
+R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
+R7-6 work must not start until the transition candidate is fresh-review-clean.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 
