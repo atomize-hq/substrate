@@ -3872,6 +3872,142 @@ fn legacy_transaction_rejects_descendant_replacement_between_read_and_write() {
 }
 
 #[test]
+fn execution_supervisor_storage_requires_exact_activated_store_and_preserves_legacy_exclusion() {
+    let bootstrap = root();
+    let activated = platform::bootstrap_test(bootstrap.path(), material(0xd1), None).unwrap();
+    let activated_root = TrustedAuthorityRoot::open(bootstrap.path()).unwrap();
+    let expected_identity = activated_root.identity().clone();
+    let original_root_bytes =
+        fs::read(bootstrap.path().join("authority-v1/state-root-v1.json")).unwrap();
+
+    let other = root();
+    let other_identity = TrustedAuthorityRoot::open(other.path())
+        .unwrap()
+        .identity()
+        .clone();
+    assert!(WorldWorkExecutionSupervisorStorageV1::bind(
+        bootstrap.path(),
+        &other_identity,
+        &activated.authority_store_id,
+    )
+    .is_err());
+    assert!(WorldWorkExecutionSupervisorStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        "as_ffffffffffffffffffffffffffffffff",
+    )
+    .is_err());
+
+    let storage = WorldWorkExecutionSupervisorStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+    let mut transaction = storage.begin_transaction().unwrap();
+    assert_eq!(transaction.read_supervisor().unwrap(), None);
+    transaction
+        .replace_supervisor(br#"{"schema_version":1}"#)
+        .unwrap();
+    assert_eq!(
+        transaction.read_supervisor().unwrap(),
+        Some(br#"{"schema_version":1}"#.to_vec())
+    );
+    transaction.finish().unwrap();
+
+    assert_eq!(
+        fs::read(bootstrap.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        original_root_bytes
+    );
+    assert!(legacy_writer_guard(bootstrap.path()).is_err());
+    assert_eq!(
+        fs::read(
+            bootstrap
+                .path()
+                .join("run/agent-hub/world-work-execution-supervisor-v1.json")
+        )
+        .unwrap(),
+        br#"{"schema_version":1}"#
+    );
+}
+
+#[test]
+fn execution_supervisor_storage_reconciles_only_exact_safe_temps() {
+    let bootstrap = root();
+    let activated = platform::bootstrap_test(bootstrap.path(), material(0xd2), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkExecutionSupervisorStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+    storage.begin_transaction().unwrap().finish().unwrap();
+
+    let agent_hub = bootstrap.path().join("run/agent-hub");
+    let recognized =
+        agent_hub.join("world-work-execution-supervisor-v1--11111111111111111111111111111111.tmp");
+    fs::write(&recognized, b"partial and non-authoritative").unwrap();
+    fs::set_permissions(&recognized, fs::Permissions::from_mode(0o600)).unwrap();
+    storage.begin_transaction().unwrap().finish().unwrap();
+    assert!(!recognized.exists());
+
+    let malformed = agent_hub.join("world-work-execution-supervisor-v1--NOT-HEX.tmp");
+    fs::write(&malformed, b"unsafe temp name").unwrap();
+    fs::set_permissions(&malformed, fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(storage.begin_transaction().is_err());
+    assert_eq!(fs::read(&malformed).unwrap(), b"unsafe temp name");
+}
+
+#[test]
+fn execution_supervisor_storage_holds_root_lock_and_rejects_rebound_root() {
+    let parent = root();
+    let lexical_root = parent.path().join("bootstrap");
+    fs::create_dir(&lexical_root).unwrap();
+    fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700)).unwrap();
+    let activated = platform::bootstrap_test(&lexical_root, material(0xd3), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(&lexical_root)
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkExecutionSupervisorStorageV1::bind(
+        &lexical_root,
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+
+    let mut transaction = storage.begin_transaction().unwrap();
+    let contender_root = TrustedAuthorityRoot::open(&lexical_root).unwrap();
+    let contender_authority = contender_root
+        .directory()
+        .open_directory("authority-v1")
+        .unwrap();
+    let contender_lock = contender_authority
+        .open_directory("lock")
+        .unwrap()
+        .open_file("root.lock")
+        .unwrap();
+    assert!(contender_lock.try_lock_exclusive().unwrap().is_none());
+
+    let retained_root = parent.path().join("bootstrap-retained");
+    fs::rename(&lexical_root, &retained_root).unwrap();
+    fs::create_dir(&lexical_root).unwrap();
+    fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(transaction
+        .replace_supervisor(br#"{"must_not":"publish"}"#)
+        .is_err());
+    assert!(transaction.finish().is_err());
+    assert!(fs::read_dir(&lexical_root).unwrap().next().is_none());
+    assert!(!retained_root
+        .join("run/agent-hub/world-work-execution-supervisor-v1.json")
+        .exists());
+}
+
+#[test]
 fn receipt_registry_storage_requires_exact_activated_store_and_preserves_legacy_exclusion() {
     let bootstrap = root();
     let activated = platform::bootstrap_test(bootstrap.path(), material(0xc1), None).unwrap();

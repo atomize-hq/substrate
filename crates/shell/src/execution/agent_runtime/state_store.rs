@@ -1253,8 +1253,19 @@ pub(crate) struct WorldWorkAcceptanceRecordV1 {
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Debug)]
+pub(crate) struct PersistedWorldWorkAcceptanceV1(WorldWorkAcceptanceRecordV1);
+
+#[cfg(any(target_os = "linux", test))]
+impl PersistedWorldWorkAcceptanceV1 {
+    pub(super) fn record(&self) -> &WorldWorkAcceptanceRecordV1 {
+        &self.0
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
 impl WorldWorkAcceptanceRecordV1 {
-    fn validate(&self) -> Result<()> {
+    pub(super) fn validate(&self) -> Result<()> {
         use super::host_session_authority::schema::AuthorityObjectKindV1;
 
         if self.schema_version != 1 || self.record_revision != 1 {
@@ -2598,6 +2609,10 @@ impl ActiveEphemeralWorldTaskRecord {
 }
 
 #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+#[allow(
+    dead_code,
+    reason = "legacy active-task compatibility remains until B1/B2.1-0 adoption"
+)]
 #[derive(Clone, Debug)]
 pub(crate) struct ActiveEphemeralWorldTaskGuard {
     store: AgentRuntimeStateStore,
@@ -2634,6 +2649,8 @@ pub(crate) struct WorldWorkReceiptRegistry {
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedWorldWorkRegistryAuthorityV1 {
     pub(crate) receipt_registry: WorldWorkReceiptRegistry,
+    pub(crate) execution_supervisor:
+        super::world_work_execution_supervisor::WorldWorkExecutionSupervisor,
     pub(crate) authority_store_id: String,
     pub(crate) authority_revision_observed: u64,
     pub(crate) current_policy_snapshot_ref:
@@ -2786,6 +2803,15 @@ impl WorldWorkReceiptRegistry {
             storage,
             authority_store_id: expected_authority_store_id.to_string(),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn bind_for_test(
+        substrate_home: &Path,
+        expected_root: &super::host_session_authority::schema::CanonicalDirectoryV1,
+        expected_authority_store_id: &str,
+    ) -> Result<Self> {
+        Self::bind(substrate_home, expected_root, expected_authority_store_id)
     }
 
     fn with_state<T>(
@@ -3034,6 +3060,14 @@ impl WorldWorkReceiptRegistry {
         })
     }
 
+    pub(crate) fn persist_world_work_acceptance_for_supervision(
+        &self,
+        record: WorldWorkAcceptanceRecordV1,
+    ) -> Result<PersistedWorldWorkAcceptanceV1> {
+        self.persist_world_work_acceptance(record)
+            .map(PersistedWorldWorkAcceptanceV1)
+    }
+
     #[allow(
         dead_code,
         reason = "B1 owns exact acceptance inspection before a later packet exposes its caller"
@@ -3191,8 +3225,15 @@ impl AgentRuntimeStateStore {
             &observation.bootstrap_home,
             &observation.authority_store_id,
         )?;
+        let execution_supervisor =
+            super::world_work_execution_supervisor::WorldWorkExecutionSupervisor::bind(
+                &self.substrate_home,
+                &observation.bootstrap_home,
+                &observation.authority_store_id,
+            )?;
         Ok(ResolvedWorldWorkRegistryAuthorityV1 {
             receipt_registry,
+            execution_supervisor,
             authority_store_id: observation.authority_store_id,
             authority_revision_observed: observation.authority_revision,
             current_policy_snapshot_ref,
@@ -3956,6 +3997,10 @@ impl AgentRuntimeStateStore {
     }
 
     #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    #[allow(
+        dead_code,
+        reason = "activated-store legacy writer remains rejectable compatibility surface"
+    )]
     pub(crate) fn register_active_ephemeral_world_task(
         &self,
         record: ActiveEphemeralWorldTaskRecord,
@@ -4104,6 +4149,10 @@ impl AgentRuntimeStateStore {
     }
 
     #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    #[allow(
+        dead_code,
+        reason = "activated-store legacy writer remains rejectable compatibility surface"
+    )]
     fn remove_active_ephemeral_world_task(
         &self,
         orchestration_session_id: &str,
