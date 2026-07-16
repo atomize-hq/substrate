@@ -6,11 +6,12 @@
 
 **Current work phase:** `R7-6 — SOLE ACTIVE PHASE AT ENTRY ONLY; active packet none; R7-5
 complete at checkpoint-doc commit b4916e565cd48f0924fb720d633b57d31b0d624c, fresh independent
-built-in default CLEAN with no findings; CTX-R7-05 PROVEN; current R7-5 -> R7-6 transition
-candidate pending fresh independent review and not yet review-clean; R7-6.1 next, unchecked, and
+built-in default CLEAN with no findings; CTX-R7-05 PROVEN; R7-5 -> R7-6 transition
+commit 92a24286bf02f7f29ddf895cf490772d2d215a99 fresh independent built-in default CLEAN with no
+findings; R7-6 entry gate satisfied; CTX-R7-06 OPEN/current and not implementation-proven; R7-6.1 next, unchecked, and
 unstarted; no sentinel or other R7-6 implementation work started; R8 blocked; R7-6.1 workspace-
-clippy witness preserved; Prompt 1 selectors PHASE_ID R7-6 / ACTIVE_PACKET none prepared but not
-invoked and not actionable until the transition is fresh-review-clean`
+clippy witness preserved; Prompt 1 selectors PHASE_ID R7-6 / ACTIVE_PACKET none prepared and
+eligible but not invoked`
 
 **Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, R7-0.2 commit `fa85cd4b8`, and R7-0 -> R7-1 transition/fix series `339744dff` + `d20cac6a9` each received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The R7-0.2 fixture commit contains `12` sanitized JSONL files / `24` rows over seven cases; focused parser/privacy proof passes `2 / 2`, the compactor family passes `25 / 25` including end-to-end `2 / 2`, and manual JSON/private-marker/raw-UUID scans plus formatting are green with zero privacy matches. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; focused R7-1.2 passes `6 / 6`, R7-1.3 end-to-end and CLI pass `6 / 6` and `2 / 2`, and the full compactor wall passes `36` unit/integration tests plus `3` doctests. Formatting, clippy, diff, and staged GitNexus gates are green; link/session/file ordering is deterministic; no raw private rollout data was added. Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` +
 `75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the
@@ -36,12 +37,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean.
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started.
 
 R7-4 checkpoint proof at HEAD `8a0790a3d`: `dead_end_thrash` passes `19 / 19`; the semantic filter
 passes `58 / 58` aggregate (`56` library plus `2` acceptance); full analyzer passes `422 / 422`;
@@ -130,12 +132,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean.
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started.
 
 ## Purpose
 

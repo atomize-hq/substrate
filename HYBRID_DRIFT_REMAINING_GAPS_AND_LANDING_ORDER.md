@@ -52,12 +52,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean. The
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 Operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact
@@ -150,11 +151,13 @@ R7-5.1 commit `afb10827d` and R7-5.2 commit `9c0690a02` are fresh independent bu
 `CLEAN`. Both tasks and the behavior checkpoint are complete, and `CTX-R7-05` is proven.
 Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` also received fresh independent
 built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is complete. The
-active follow-on is solely the narrow R7-5 -> R7-6 transition review gate: R7-6 is active at entry
-only with packet `none`, `R7-6.1` is next and unstarted, no sentinel or other R7-6 implementation
+active follow-on is solely R7-6 at entry with packet `none`. Transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN`
+with no findings, satisfying the R7-6 entry gate; `CTX-R7-06` is `OPEN`/current and not
+implementation-proven. `R7-6.1` is next and unstarted, no sentinel or other R7-6 implementation
 has started, R8 remains blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt
-1 selectors `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` are prepared but not invoked; they remain
-non-actionable until the transition candidate is fresh-review-clean. Docs-only `R7-0.1` series
+1 selectors `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but not invoked.
+Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
 `339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
@@ -190,12 +193,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean.
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started.
 `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
 `default` `REVIEW CLEAN`.
@@ -218,12 +222,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean.
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -285,12 +290,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean.
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -330,11 +336,11 @@ control.” The current honest sequence is:
    checkpoint complete and `CTX-R7-05` proven; keep checkpoint-doc commit
    `b4916e565cd48f0924fb720d633b57d31b0d624c` fresh independent built-in `default` `CLEAN` with
    no findings, the R7-5 exit gate satisfied, and R7-5 complete; keep only R7-6 active at entry with
-   packet `none`; keep the current R7-5 -> R7-6 transition candidate pending fresh independent review
-   and not yet review-clean; keep `R7-6.1` next, unchecked, and unstarted with no sentinel or other
+   packet `none`; keep transition commit `92a24286bf02f7f29ddf895cf490772d2d215a99` fresh independent
+   built-in `default` `CLEAN` with no findings, the R7-6 entry gate satisfied, and `CTX-R7-06`
+   `OPEN`/current but not implementation-proven; keep `R7-6.1` next, unchecked, and unstarted with no sentinel or other
    R7-6 implementation started; keep R8 blocked, the R7-6.1 workspace-clippy witness preserved, and
-   the prepared `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` selectors uninvoked and non-actionable
-   until the transition is fresh-review-clean
+   the prepared `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` selectors eligible and uninvoked
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -1025,12 +1031,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean.
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -1134,12 +1141,13 @@ full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `gi
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
 independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; the current R7-5 -> R7-6 transition
-candidate is pending fresh independent review and is not yet review-clean. `R7-6.1` is next,
+complete. Only R7-6 is active at entry with packet `none`; transition commit
+`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
+the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
 unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
 blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared but have not been invoked; they must not be invoked and
-R7-6 work must not start until the transition candidate is fresh-review-clean.
+R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
+not started.
 
 The next honest work target is:
 
@@ -1188,15 +1196,15 @@ The next honest work target is:
   complete and `CTX-R7-05` proven; keep checkpoint-doc commit
   `b4916e565cd48f0924fb720d633b57d31b0d624c` fresh independent built-in `default` `CLEAN` with no
   findings, the R7-5 exit gate satisfied, and R7-5 complete; keep only R7-6 active at entry with
-  packet `none`; keep the current R7-5 -> R7-6 transition candidate pending fresh independent review
-  and not yet review-clean; keep `R7-6.1` next, unchecked, and unstarted with no sentinel or other
+  packet `none`; keep transition commit `92a24286bf02f7f29ddf895cf490772d2d215a99` fresh independent
+  built-in `default` `CLEAN` with no findings, the R7-6 entry gate satisfied, and `CTX-R7-06`
+  `OPEN`/current but not implementation-proven; keep `R7-6.1` next, unchecked, and unstarted with no sentinel or other
   R7-6 implementation started; keep R8 blocked, the R7-6.1 workspace-clippy witness preserved, and
-  the prepared `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` selectors uninvoked and non-actionable until
-  the transition is fresh-review-clean
+  the prepared `PHASE_ID: R7-6` / `ACTIVE_PACKET: none` selectors eligible and uninvoked
 - keep work beyond the R7-6 entry boundary blocked, including R8; do not make R7 absorb ordinary
   single-session scorer gaps
-- obtain fresh independent review for only the narrow R7-5 -> R7-6 transition candidate; do not
-  invoke the prepared R7-6 selectors or start R7-6 work until that candidate is fresh-review-clean
+- keep R7-6 at entry only until the prepared Prompt 1 selectors are invoked in a separate phase
+  run; do not start R7-6 implementation in this transition receipt
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.
