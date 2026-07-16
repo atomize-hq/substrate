@@ -29,8 +29,8 @@ At most one implementation phase may be active. Docs-only authority repair may p
 | `R7-4` | COMPLETE | Delegated scorer guardrails | SATISFIED — `R7-3` exit gate and transition/fix series `e077de489` + `3dd5ba943` are fresh-review-clean | SATISFIED — R7-4.1 commit/fix series `ebcb052b9` + `e7b65523f`, R7-4.2 docs decision commit `8a0790a3d`, and the behavior/static checkpoint are complete and fresh-review-clean where applicable; `dead_end_thrash` passes `19 / 19`, semantic filter `58 / 58`, full analyzer `422 / 422`, and static gates are green. Checkpoint-doc commit `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`, satisfying the R7-4 exit gate. At that R7-4 exit boundary, `CTX-R7-05` remained blocked/pending for R7-5 acceptance evidence. |
 | `R7-5` | COMPLETE | Delegated acceptance and real-corpus proof | SATISFIED — R7-4 exit gate and transition commit `1b746a2a` are fresh independent built-in `default` `REVIEW CLEAN` | SATISFIED — R7-5.1 commit `afb10827d`, R7-5.2 commit `9c0690a02`, the Checkpoint R7-5 behavior items, and `CTX-R7-05` are complete/proven; focused proof passes `2 / 2`, `8 / 8`, and `4 / 4`; full compactor passes `39 / 39`; full analyzer passes `424 / 424`; static gates are green. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. |
 | `R7-6` | COMPLETE | Minimal sentinel compatibility | SATISFIED — R7-5 exit gate and transition commit `92a24286bf02f7f29ddf895cf490772d2d215a99` are fresh-review-clean; operator decision `R7-6-HIGH-IMPACT-SENTINEL-EXPLICIT-STATE-01: A` authorized the bounded v0.8 central-helper change; active packet is `none` | SATISFIED — R7-6.1 commit `7789fba4f`, R7-6.2 series `d2842f279` + `77ae455fe` + `a333d8486`, final-wall fix `bd743eacc`, and checkpoint-doc receipt/review-fix series `0e5150945` + `e634ef324` + `8e39c109e` are fresh independent built-in `default` `CLEAN`; all final checkpoint items are complete; `CTX-R7-06` is `PROVEN`; R7 is closed with a stable analyzer contract. |
-| `R8-SPEC` | ACTIVE — ENTRY ONLY | R8 MAP/SPEC/PLAN/TASKS | SATISFIED — R7 is closed with a stable analyzer contract; `CTX-R8-01` is `OPEN`; active packet is `none`; transition/fix series `b4b2149b2` + `bcb664f03` is fresh independent built-in `default` `CLEAN` | PENDING — R8 MAP/SPEC/PLAN/TASKS authoring is unchecked and unstarted. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared and eligible but uninvoked. |
-| `R8-IMPLEMENT` | BLOCKED / BOUNDARY ONLY | Sentinel interpretation consolidation/integration | BLOCKED — R8 docs are not authored or landed | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
+| `R8-SPEC` | ACTIVE / IN PROGRESS | R8 MAP/SPEC/PLAN/TASKS | SATISFIED — R7 is closed with a stable analyzer contract; `CTX-R8-01` is `OPEN` / in progress; active packet is `none`; candidate MAP/SPEC commit `698c766f9` landed. | BLOCKED — fresh independent built-in `default` review returned `CHANGES_REQUIRED` with three scoped documentation findings. This docs-only follow-up addresses them but is not fresh-review-clean. PLAN/TASKS remain unauthored/unreviewed and `CTX-R8-02` remains `BLOCKED`. |
+| `R8-IMPLEMENT` | BLOCKED / BOUNDARY ONLY | Sentinel interpretation consolidation/integration | BLOCKED — the complete R8 MAP/SPEC/PLAN/TASKS family is not authored and fresh-review-clean | Replay/live share one seam, compatibility is centralized, presentation stays presentation-first. |
 
 `PACK-0`, `R6-C.0A`, `R6-C.1-SPEC`, `R6-C.1-CONTROLS`, and aggregate `R6-GAP-*` are complete.
 `R6-GAP-DET-OPAQUE-PARENT` and `R6-GAP-TGG-TRUTH-PATH-ACTION` remain complete at their recorded
@@ -114,10 +114,12 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
-MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
-blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`; `CTX-R8-01` is `OPEN` /
+in progress. Candidate R8 MAP/SPEC commit `698c766f9` landed, and fresh independent built-in `default`
+review returned `CHANGES_REQUIRED` with three scoped documentation findings. This docs-only follow-up
+addresses those findings but makes no claim of fresh independent review. R8 PLAN/TASKS remain
+unauthored/unreviewed; `CTX-R8-02` remains `BLOCKED`; R8-IMPLEMENT remains blocked/boundary-only.
+No phase transition or implementation authorization is claimed.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 

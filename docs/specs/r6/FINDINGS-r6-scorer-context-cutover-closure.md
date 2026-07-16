@@ -304,10 +304,12 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is the sole active phase at ENTRY ONLY with packet `none`; `CTX-R8-01` is `OPEN`. R8
-MAP/SPEC/PLAN/TASKS authoring remains unchecked and unstarted, while R8-IMPLEMENT remains
-blocked/boundary-only. Prompt 1 selectors `PHASE_ID: R8-SPEC` / `ACTIVE_PACKET: none` are prepared
-and eligible but uninvoked. Transition/fix series `b4b2149b2` + `bcb664f03` received fresh independent built-in `default` `CLEAN` with no findings.
+R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`; `CTX-R8-01` is `OPEN` /
+in progress. Candidate R8 MAP/SPEC commit `698c766f9` landed, and fresh independent built-in `default`
+review returned `CHANGES_REQUIRED` with three scoped documentation findings. This docs-only follow-up
+addresses those findings but makes no claim of fresh independent review. R8 PLAN/TASKS remain
+unauthored/unreviewed; `CTX-R8-02` remains `BLOCKED`; R8-IMPLEMENT remains blocked/boundary-only.
+No phase transition or implementation authorization is claimed.
 
 The R7-4 checkpoint proof at HEAD `8a0790a3d` is `dead_end_thrash 19 / 19`, semantic filter `58 /
 58`, full analyzer `422 / 422`, plus green formatting, analyzer clippy, and diff checks. This changes
