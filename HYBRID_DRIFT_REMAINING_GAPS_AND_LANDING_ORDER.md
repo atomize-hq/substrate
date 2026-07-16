@@ -42,14 +42,18 @@ satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Transit
 decision commit `8a0790a3d` each received fresh independent built-in `default` `REVIEW CLEAN`;
 R7-4.1, R7-4.2, and the behavior/static checkpoint are complete. Checkpoint-doc commit
 `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`,
-satisfying the R7-4 exit gate. R7-4 is complete. Only R7-5 is active at entry with packet `none`;
-the R7-4 -> R7-5 transition commit `1b746a2a` received fresh independent built-in `default`
-`REVIEW CLEAN` with no findings.
-`R7-5.1` is next, unchecked, and unstarted; no R7-5 acceptance or real-corpus work has
-started. `CTX-R7-05` remains blocked/pending until R7-5 acceptance evidence proves existing classes
-plus typed delegation context. R7-6 and R8 remain blocked, and the R7-6.1 workspace-clippy witness
-stays preserved. Prompt 1 selectors `PHASE_ID: R7-5` /
-`ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. The
+satisfying the R7-4 exit gate. R7-4 is complete. R7-5.1 commit `afb10827d` received fresh independent built-in `default` `CLEAN` with no findings,
+and R7-5.2 commit `9c0690a02` received fresh independent built-in `default` `CLEAN` with no
+actionable findings. The focused acceptance targets pass `2 / 2`, `8 / 8`, and `4 / 4`; the report
+records `115` checkpoints across required strata `23 / 18 / 0 / 23 / 51 / 0`, `3,126` valid
+evidence references, zero malformed references, and zero cross-trajectory progress/scorer ownership
+violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
+full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
+green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
+`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
+receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
+receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
+remains preserved, and no next-phase selectors are prepared or invoked. The
 Ground Truth Sources list below is historical context, not an exhaustive index of current authority.
 
 Operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact
@@ -138,14 +142,10 @@ The current analyzer now exports deterministic, evidence-backed `session_archety
 `session_progress` state, and replay/live sentinel surfaces render the same compact archetype and
 progress views for matching checkpoints.
 
-The active follow-on is solely R7-5 at entry with packet `none`; R7-4.1 commit/fix series
-`ebcb052b9` + `e7b65523f`, R7-4.2 docs decision commit `8a0790a3d`, and checkpoint-doc commit
-`ca8467edda80f14b35f1a4d9a4c2192d43b217a2` are fresh independent review-clean receipts, with the
-checkpoint receipt recorded accurately as `CLEAN`. R7-4 is complete. Transition commit `1b746a2a`
-received fresh independent built-in `default` `REVIEW CLEAN` with no findings. R7-5.1 is next,
-unchecked, and unstarted, and no R7-5 acceptance or real-corpus work has started.
-`CTX-R7-05` remains blocked/pending until R7-5 acceptance evidence proves existing classes plus
-typed delegation context. Docs-only `R7-0.1` series
+The active follow-on is solely the R7-5 checkpoint-doc receipt gate with packet `none`; R7-5.1
+commit `afb10827d` and R7-5.2 commit `9c0690a02` are fresh independent built-in `default` `CLEAN`.
+Both tasks and the behavior checkpoint are complete, and `CTX-R7-05` is proven. The checkpoint-doc receipt candidate awaits fresh independent review, so the R7-5 exit gate remains
+pending; R7-6 and R8 remain blocked, and no next-phase selectors are prepared or invoked. Docs-only `R7-0.1` series
 `a9e75f149` + `55bea5fa5` + `faff68ac6` and fixture-only `R7-0.2` commit `fa85cd4b8` are fresh
 independent built-in `default` `REVIEW CLEAN`, completing `R7-0`. Transition/fix series
 `339744dff` + `d20cac6a9` received fresh independent built-in `default` `REVIEW CLEAN`. R7-1 task
@@ -171,14 +171,18 @@ satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Transit
 decision commit `8a0790a3d` each received fresh independent built-in `default` `REVIEW CLEAN`;
 R7-4.1, R7-4.2, and the behavior/static checkpoint are complete. Checkpoint-doc commit
 `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`,
-satisfying the R7-4 exit gate. R7-4 is complete. Only R7-5 is active at entry with packet `none`;
-the R7-4 -> R7-5 transition commit `1b746a2a` received fresh independent built-in `default`
-`REVIEW CLEAN` with no findings.
-`R7-5.1` is next, unchecked, and unstarted; no R7-5 acceptance or real-corpus work has
-started. `CTX-R7-05` remains blocked/pending until R7-5 acceptance evidence proves existing classes
-plus typed delegation context. R7-6 and R8 remain blocked, and the R7-6.1 workspace-clippy witness
-stays preserved. Prompt 1 selectors `PHASE_ID: R7-5` /
-`ACTIVE_PACKET: none` are prepared and eligible but have not been invoked.
+satisfying the R7-4 exit gate. R7-4 is complete. R7-5.1 commit `afb10827d` received fresh independent built-in `default` `CLEAN` with no findings,
+and R7-5.2 commit `9c0690a02` received fresh independent built-in `default` `CLEAN` with no
+actionable findings. The focused acceptance targets pass `2 / 2`, `8 / 8`, and `4 / 4`; the report
+records `115` checkpoints across required strata `23 / 18 / 0 / 23 / 51 / 0`, `3,126` valid
+evidence references, zero malformed references, and zero cross-trajectory progress/scorer ownership
+violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
+full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
+green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
+`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
+receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
+receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
+remains preserved, and no next-phase selectors are prepared or invoked.
 `R7-PROMOTE` and its fresh-review-clean promotion series are complete; entry
 transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430` is also fresh independent built-in
 `default` `REVIEW CLEAN`.
@@ -191,11 +195,18 @@ the R7-3 exit gate and proving `CTX-R7-04`. R7-4 checkpoint proof at HEAD `8a079
 `dead_end_thrash 19 / 19`, semantic filter `58 / 58`, full analyzer `422 / 422`, plus green
 formatting, analyzer clippy, and diff checks. Checkpoint-doc commit
 `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`,
-satisfying the R7-4 exit gate. Only R7-5 is active at entry with packet `none`; transition commit
-`1b746a2a` received fresh independent built-in `default` `REVIEW CLEAN` with no findings. `CTX-R7-05`
-remains blocked/pending until R7-5 acceptance evidence proves existing classes plus typed delegation
-context.
-Prompt 1 selectors `PHASE_ID: R7-5` / `ACTIVE_PACKET: none` are prepared and eligible but uninvoked.
+satisfying the R7-4 exit gate. R7-5.1 commit `afb10827d` received fresh independent built-in `default` `CLEAN` with no findings,
+and R7-5.2 commit `9c0690a02` received fresh independent built-in `default` `CLEAN` with no
+actionable findings. The focused acceptance targets pass `2 / 2`, `8 / 8`, and `4 / 4`; the report
+records `115` checkpoints across required strata `23 / 18 / 0 / 23 / 51 / 0`, `3,126` valid
+evidence references, zero malformed references, and zero cross-trajectory progress/scorer ownership
+violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
+full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
+green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
+`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
+receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
+receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
+remains preserved, and no next-phase selectors are prepared or invoked.
 `R6-C.1-CONTROLS` completed at
 the `5618f7864` wall as `10 PASS / 3 preserved RED`, with no production change in that wall.
 `R6-GAP-DET-OPAQUE-PARENT` is complete after production series `bcd94bf4f` + `931e50c85` +
@@ -247,14 +258,18 @@ satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Transit
 decision commit `8a0790a3d` each received fresh independent built-in `default` `REVIEW CLEAN`;
 R7-4.1, R7-4.2, and the behavior/static checkpoint are complete. Checkpoint-doc commit
 `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`,
-satisfying the R7-4 exit gate. R7-4 is complete. Only R7-5 is active at entry with packet `none`;
-the R7-4 -> R7-5 transition commit `1b746a2a` received fresh independent built-in `default`
-`REVIEW CLEAN` with no findings.
-`R7-5.1` is next, unchecked, and unstarted; no R7-5 acceptance or real-corpus work has
-started. `CTX-R7-05` remains blocked/pending until R7-5 acceptance evidence proves existing classes
-plus typed delegation context. R7-6 and R8 remain blocked, and the R7-6.1 workspace-clippy witness
-stays preserved. Prompt 1 selectors `PHASE_ID: R7-5` /
-`ACTIVE_PACKET: none` are prepared and eligible but have not been invoked.
+satisfying the R7-4 exit gate. R7-4 is complete. R7-5.1 commit `afb10827d` received fresh independent built-in `default` `CLEAN` with no findings,
+and R7-5.2 commit `9c0690a02` received fresh independent built-in `default` `CLEAN` with no
+actionable findings. The focused acceptance targets pass `2 / 2`, `8 / 8`, and `4 / 4`; the report
+records `115` checkpoints across required strata `23 / 18 / 0 / 23 / 51 / 0`, `3,126` valid
+evidence references, zero malformed references, and zero cross-trajectory progress/scorer ownership
+violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
+full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
+green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
+`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
+receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
+receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
+remains preserved, and no next-phase selectors are prepared or invoked.
 
 ### Why The Current Stack Still Needs Follow-On Work
 
@@ -289,12 +304,11 @@ control.” The current honest sequence is:
    commit/fix series `ebcb052b9` + `e7b65523f`, R7-4.2 docs decision commit `8a0790a3d`, and
    checkpoint-doc commit `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` fresh independent review-
    clean; keep R7-4 complete; keep transition commit `1b746a2a` fresh independent built-in
-   `default` `REVIEW CLEAN` with no findings; keep only R7-5 active at entry with packet `none`;
-   keep `R7-5.1` next, unchecked, and unstarted and all R7-5 acceptance/real-corpus work unstarted;
-   keep
-   `CTX-R7-05` blocked/pending until R7-5 acceptance evidence proves existing classes plus typed
-   delegation context; keep R7-6 and R8 blocked, the R7-6.1 workspace-clippy witness preserved, and
-   Prompt 1 selectors `PHASE_ID: R7-5` / `ACTIVE_PACKET: none` prepared but uninvoked
+   `default` `REVIEW CLEAN` with no findings; keep R7-5 as the sole active phase with packet `none`; keep R7-5.1 commit `afb10827d` and
+   R7-5.2 commit `9c0690a02` fresh independent built-in `default` `CLEAN`; keep both tasks and the
+   behavior checkpoint complete and `CTX-R7-05` proven; keep this checkpoint-doc receipt
+   candidate pending fresh independent review, the R7-5 exit gate pending, R7-6 and R8 blocked, the
+   R7-6.1 workspace-clippy witness preserved, and next-phase selectors neither prepared nor invoked
 
 Now that `R4` is landed, later packets can consume typed session meaning instead of inferring it
 from turn shape, objective wording, and command mix alone.
@@ -975,14 +989,18 @@ satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Transit
 decision commit `8a0790a3d` each received fresh independent built-in `default` `REVIEW CLEAN`;
 R7-4.1, R7-4.2, and the behavior/static checkpoint are complete. Checkpoint-doc commit
 `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`,
-satisfying the R7-4 exit gate. R7-4 is complete. Only R7-5 is active at entry with packet `none`;
-the R7-4 -> R7-5 transition commit `1b746a2a` received fresh independent built-in `default`
-`REVIEW CLEAN` with no findings.
-`R7-5.1` is next, unchecked, and unstarted; no R7-5 acceptance or real-corpus work has
-started. `CTX-R7-05` remains blocked/pending until R7-5 acceptance evidence proves existing classes
-plus typed delegation context. R7-6 and R8 remain blocked, and the R7-6.1 workspace-clippy witness
-stays preserved. Prompt 1 selectors `PHASE_ID: R7-5` /
-`ACTIVE_PACKET: none` are prepared and eligible but have not been invoked.
+satisfying the R7-4 exit gate. R7-4 is complete. R7-5.1 commit `afb10827d` received fresh independent built-in `default` `CLEAN` with no findings,
+and R7-5.2 commit `9c0690a02` received fresh independent built-in `default` `CLEAN` with no
+actionable findings. The focused acceptance targets pass `2 / 2`, `8 / 8`, and `4 / 4`; the report
+records `115` checkpoints across required strata `23 / 18 / 0 / 23 / 51 / 0`, `3,126` valid
+evidence references, zero malformed references, and zero cross-trajectory progress/scorer ownership
+violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
+full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
+green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
+`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
+receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
+receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
+remains preserved, and no next-phase selectors are prepared or invoked.
 
 ## Packet R7: Full Delegated-Session Support
 
@@ -1076,14 +1094,18 @@ satisfying the R7-3 exit gate and proving `CTX-R7-04`. R7-3 is complete. Transit
 decision commit `8a0790a3d` each received fresh independent built-in `default` `REVIEW CLEAN`;
 R7-4.1, R7-4.2, and the behavior/static checkpoint are complete. Checkpoint-doc commit
 `ca8467edda80f14b35f1a4d9a4c2192d43b217a2` received fresh independent built-in `default` `CLEAN`,
-satisfying the R7-4 exit gate. R7-4 is complete. Only R7-5 is active at entry with packet `none`;
-the R7-4 -> R7-5 transition commit `1b746a2a` received fresh independent built-in `default`
-`REVIEW CLEAN` with no findings.
-`R7-5.1` is next, unchecked, and unstarted; no R7-5 acceptance or real-corpus work has
-started. `CTX-R7-05` remains blocked/pending until R7-5 acceptance evidence proves existing classes
-plus typed delegation context. R7-6 and R8 remain blocked, and the R7-6.1 workspace-clippy witness
-stays preserved. Prompt 1 selectors `PHASE_ID: R7-5` /
-`ACTIVE_PACKET: none` are prepared and eligible but have not been invoked.
+satisfying the R7-4 exit gate. R7-4 is complete. R7-5.1 commit `afb10827d` received fresh independent built-in `default` `CLEAN` with no findings,
+and R7-5.2 commit `9c0690a02` received fresh independent built-in `default` `CLEAN` with no
+actionable findings. The focused acceptance targets pass `2 / 2`, `8 / 8`, and `4 / 4`; the report
+records `115` checkpoints across required strata `23 / 18 / 0 / 23 / 51 / 0`, `3,126` valid
+evidence references, zero malformed references, and zero cross-trajectory progress/scorer ownership
+violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clippy with `-D warnings`,
+full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
+green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
+`PROVEN`. R7-5 remains the sole active phase with packet `none` while this checkpoint-doc
+receipt candidate awaits fresh independent review. The R7-5 exit gate remains pending until the
+receipt is fresh-review-clean. R7-6 and R8 remain blocked, the R7-6.1 workspace-clippy witness
+remains preserved, and no next-phase selectors are prepared or invoked.
 
 The next honest work target is:
 
@@ -1127,15 +1149,16 @@ The next honest work target is:
   `CTX-R7-04` proven; keep R7-4.1 commit/fix series `ebcb052b9` + `e7b65523f`, R7-4.2 docs decision
   commit `8a0790a3d`, and checkpoint-doc commit `ca8467edda80f14b35f1a4d9a4c2192d43b217a2`
   fresh independent review-clean; keep R7-4 complete; keep transition commit `1b746a2a` fresh
-  independent built-in `default` `REVIEW CLEAN` with no findings; keep only R7-5 active at entry with
-  packet `none`; keep `R7-5.1` next, unchecked, and unstarted and all R7-5 acceptance/real-corpus work
-  unstarted; keep `CTX-R7-05` blocked/pending until R7-5 acceptance evidence proves existing classes
-  plus typed delegation context; keep R7-6 and R8 blocked, the R7-6.1 workspace-clippy witness
-  preserved, and Prompt 1 selectors `PHASE_ID: R7-5` / `ACTIVE_PACKET: none` prepared but uninvoked
+  independent built-in `default` `REVIEW CLEAN` with no findings; keep R7-5 as the sole active phase with
+  packet `none`; keep R7-5.1 commit `afb10827d` and R7-5.2 commit `9c0690a02` fresh independent
+  `CLEAN`; keep both tasks and the behavior checkpoint complete and `CTX-R7-05` proven; keep the
+  checkpoint-doc receipt candidate pending fresh independent review, the R7-5 exit gate
+  pending, R7-6 and R8 blocked, the R7-6.1 workspace-clippy witness preserved, and next-phase
+  selectors neither prepared nor invoked
 - keep later delegated-session work blocked; do not make R7 absorb ordinary single-session scorer
   gaps
-- keep R7-5 at entry only until the prepared Prompt 1 selectors are invoked in a separate phase
-  run; keep R7-6 blocked until R7-5 exits review-clean
+- obtain fresh independent review for only the R7-5 checkpoint-doc receipt before transition; keep
+  R7-6 blocked until R7-5 exits review-clean
 - keep sentinel interpretation consolidation as `R8` behind the analyzer semantic packets
 
 Commit `99efda8f9` remains in history as draft planning work; it is not R6 closure authority.
