@@ -2764,9 +2764,11 @@ verify, reinterpret, log as observability evidence, or use it as obligation sema
 
 ### B1/B2.1 bounded read-only dispatch-authority adapter
 
-The implementability audit selects **Case B**. This adapter is not implementation-authorized until
-the corrected A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, B3.2a-WA, and B1/B2.1-0 sequence is independently
-review-clean. A1.1e alone could read exact current authority but could not create it; A1.2a,
+The implementability audit selects **Case B**. This adapter becomes implementation-authorized only
+after this docs-only control-pack correction is independently review-clean and the current source
+contains review-clean A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, B3.2a-WA, B1 receipt-core, and
+B2.1 supervisor-core prerequisites. Its implementation is part of B1/B2.1-0; it is not gated on
+B1/B2.1-0 already being review-clean. A1.1e alone could read exact current authority but could not create it; A1.2a,
 A1.2a-WB, and A1.2a-S now satisfy the bounded ordinary-internal-host creator/adopter portion of
 that sequence, B1/B2.1-R0 is independently review-clean, and B3.2a plus B3.2a-WA are independently
 review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 remains open. The
@@ -2778,6 +2780,39 @@ The authority/retained branch is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0
 preserved B1 receipt → B2.1 supervisor branch first joins it at **B1/B2.1-0**, after which the hard
 order is **joint B1/B2.1 production closeout → B3.1 → C1 → A1.2b**. R0 consumes no receipt or
 supervisor datum; neither B core is therefore a false prerequisite of R0.
+
+`tool_invocation_contract.rs::resolve_follow_up_dispatch_authority_v1` is a read-only adapter and
+owns no durable state. For its active-task branch only, it consumes the existing bound authority
+capability or the single authorized trusted open-and-bind conversion and resolves:
+
+1. the exact current HostSessionAuthority;
+2. the exact immutable `WorldWorkAcceptanceRecordV1`; and
+3. the exact `WorldWorkExecutionSupervisor` claim, durable cursor, interruption/unresolved state,
+   and immutable terminal closeout when present.
+
+It accepts only one complete equality join across physical store ID and home, orchestration
+session, caller participant and backend, world ID and generation, task/active-run identity,
+acceptance record identity, and stream identity where applicable. It returns only a bounded
+projection into the existing tool-invocation result and performs no mutation. Absent, stale,
+ambiguous, cross-session, backend-mismatched, world-mismatched, task-reused, incomplete, or
+conflicting truth fails closed. Unknown task, stale linkage, caller/backend mismatch, world-binding
+mismatch, nonterminal active work, exact terminal work, and producer-replay-unavailable or otherwise
+unresolved observation remain distinct existing outcomes; they cannot be collapsed into generic
+not-found or stale linkage.
+
+The adapter cannot create or mutate authority, acceptance, supervisor state, or any legacy active-
+task record; treat receipt existence alone as active, running, or terminal truth; derive lifecycle
+from PID, guard, waiter, helper, socket, timeout, EOF, readiness, process state, or caller presence;
+reinterpret retained work as an ephemeral active task; or bypass the full dispatcher. Its retained-
+worker branch, retained target selection, retained error categories, and retained Inspect/Cancel/
+Stop, continue-fork, fork, and Spawn behavior remain unchanged. Its function signature and callers
+remain unchanged. The existing shared pre-`match` legacy caller/world resolution may be
+mechanically relocated into the retained-worker branch with identical inputs, order, errors, and
+results so the active-task branch no longer executes it. That partitioning grants no retained
+semantic change and no parallel resolver. The approved GitNexus HIGH impact is exactly 12 direct callers, four affected
+execution processes, and 14 impacted symbols for this active-task branch. Any additional production
+symbol, signature/caller change, retained-branch change, or new HIGH/CRITICAL process family is a
+stop requiring a new control-pack correction.
 
 The minimal prerequisite contract is:
 

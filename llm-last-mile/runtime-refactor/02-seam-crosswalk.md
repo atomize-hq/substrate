@@ -306,6 +306,28 @@ fill that gap.
 
 The smallest acyclic correction has seven prerequisites before the joint closeout:
 
+The B1/B2.1-0 production-route audit additionally found one bounded read-only adapter on the real
+host tool path. `tool_invocation_contract.rs::resolve_follow_up_dispatch_authority_v1` may change
+only its active-task branch. That branch consumes the exact current HostSessionAuthority, immutable
+`WorldWorkAcceptanceRecordV1`, and `WorldWorkExecutionSupervisor` claim/cursor/terminal state and
+requires exact equality across store, orchestration session, caller participant/backend, world ID/
+generation, task or active-run identity, acceptance identity, and stream identity where applicable.
+It may project that joined truth into its existing result but owns and mutates no durable state,
+cannot synthesize a legacy active-task record, and cannot infer lifecycle from any episode or
+transport observation. Unknown task, stale linkage, caller/backend mismatch, world mismatch,
+nonterminal work, exact terminal work, and unresolved producer observation remain distinct
+outcomes. Receipt existence without the exact supervisor claim is insufficient.
+
+The retained-worker branch is frozen on its compatibility path, including target selection and
+error categories. To make the branch boundary real, the existing shared pre-`match` legacy caller/
+world resolution may be mechanically relocated into the retained-worker branch with byte-equivalent
+inputs, order, errors, and results. This grants no retained behavior change and no second resolver;
+only the active-task branch receives the canonical HSA/receipt/supervisor read. Function signature
+and callers are unchanged. The approved GitNexus HIGH impact
+is limited to the known 12 direct callers, four execution processes, and 14 impacted symbols for
+this exact branch correction. A new production symbol, signature change, retained-branch change,
+or new HIGH/CRITICAL process family is `CrossDocumentChangeRequired`.
+
 1. **A1.2a — current-authority establishment/read prerequisite** first owns the strict
    greenfield-only V1-to-V2 root upgrade, then owns only production Start
    reservation/issuance/claim/application, initial authority birth, crash-safe exact retry, and a

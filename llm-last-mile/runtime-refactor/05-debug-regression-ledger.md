@@ -586,9 +586,25 @@ All fourteen retain these exact historical names and their original production-l
 Tests 1–11 must re-enter the full dispatcher. Tests 12–13 must prove accepted and supervised truth
 survives actual guard/waiter destruction; aborting a helper waiter or calling a lower-level owner
 directly is not equivalent. Test 14 must exercise the real host tool-invocation-to-dispatch route;
-direct receipt/supervisor authority resolution followed by request construction is not equivalent.
+establish current authority through production HostSessionAuthority APIs, acceptance through
+`WorldWorkReceiptRegistry`, and observation/terminal truth through
+`WorldWorkExecutionSupervisor`; and prove no legacy active-task writer or resolver is used. Direct
+receipt/supervisor authority resolution followed by request construction is not equivalent.
 Direct resolver, transport, receipt, supervisor, or helper substitutions remain
 `RegressionMasked`, even when the lower-level owner is correct.
+
+The bounded control-pack correction authorizes only
+`tool_invocation_contract.rs::resolve_follow_up_dispatch_authority_v1`'s active-task branch,
+mechanical imports for that branch, mechanical relocation of the existing shared pre-`match`
+legacy caller/world resolution unchanged into the retained-worker branch, the unchanged-name
+historical test 14, and focused negative tests. The active branch must prove exact task-ID reuse across sessions, unknown task, stale
+receipt/supervisor linkage, caller/backend mismatch, world ID/generation mismatch, acceptance
+without a supervisor claim, unresolved producer replay, and exact terminal truth. The retained
+branch must prove unchanged compatibility behavior, target selection, and error categories. The
+function signature and callers remain unchanged. The approved GitNexus HIGH impact is bounded to
+12 direct callers, four affected execution processes, and 14 impacted symbols; any broader impact
+is a new stop. These additions sharpen `RG-RECEIPT-03`, `RG-SUP-01`, `RG-SUP-02`, `RG-OBS-01`, and
+`RG-DIFF-01` but resolve none of them.
 
 Test renaming, replacement, newly ignored status, assertion deletion or weakening, or lower-level
 substitution cannot count as `FailToPass` proof. Within the bounded closeout, only the named
@@ -607,20 +623,25 @@ This disposition sharpens the open gates without closing them:
   dropped production guard or waiter. It does not promote retained control lifecycle.
 - `RG-SUP-01` requires the accepted production path and full compatibility dispatcher to use the
   exact claim/journal without a legacy active-task registration or resolver fallback for the
-  action-scoped closeout paths.
+  action-scoped closeout paths. The tool adapter may read but cannot create, mutate, terminalize,
+  or substitute for that supervisor truth.
 - `RG-SUP-02` requires restart, actual waiter/guard-drop, terminal-closeout, and
   acceptance-retention proof through the named ephemeral production integration path; replay
   unavailability after world-service restart remains durably unresolved rather than terminalized,
-  and retained closeout remains later-owned.
+  and retained closeout remains later-owned. The active-task tool projection must preserve the
+  distinct unresolved-producer state.
 - `RG-OBS-01` requires the real tool-to-dispatch and prepared-dispatch paths to join the A1.2a-S production-bound current-authority read,
   R0's HSA-proven retained target where applicable, B1 acceptance, and B2.1 observation identity;
   episode/liveness composites and compatibility
-  projections are not observability authority.
+  projections are not observability authority. Test 14 must reach that join through the real host
+  tool route; a direct call to the corrected resolver is not production proof.
 - `RG-DIFF-01` requires all fourteen historical names and original production-level assertions.
   The eleven dispatcher tests re-enter the full dispatcher, the two guard tests exercise actual
   drop, and the tool test uses the real tool-to-dispatch route. Retained control cases may remain
   `FailToSameFailure`, but direct resolver/transport/receipt/supervisor substitutions remain
-  `RegressionMasked` even when they exercise individually correct owner APIs.
+  `RegressionMasked` even when they exercise individually correct owner APIs. Test 14 additionally
+  retains its distinct unknown/stale/backend/world/nonterminal/terminal/unresolved outcomes and
+  cannot weaken or replace them with a generic result.
 
 Only a fresh broad differential classified `ExpectedBaselineResolution` after that real-path proof
 may close the joint packet. `PassToFail`, `FailToChangedFailure`, `Removed`,
@@ -635,7 +656,10 @@ to be implemented from its bounded contract rather than by restoring the broad A
 That authorization state is superseded by the recorded review-clean WB and A1.2a-S closeout above.
 B1/B2.1-R0 is review-clean through `bb3eefba`; B3.2a plus B3.2a-WA are independently review-clean
 through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. B1/B2.1-0 has not begun; it and later
-implementation remain unauthorized here.
+implementation remain unauthorized until this docs-only control-pack correction is independently
+review-clean. Once that correction is published and the named review-clean prerequisites are
+present in current source, the bounded B1/B2.1-0 allowlist in `03` is authorized; later packets
+remain unauthorized.
 
 ## B1/B2.1-R0 recorded result
 
