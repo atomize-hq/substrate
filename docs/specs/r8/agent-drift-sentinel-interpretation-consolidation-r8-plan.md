@@ -3,18 +3,20 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-plan.md`
 
-Status: **CANDIDATE / AWAITING FRESH INDEPENDENT BUILT-IN `default` REVIEW / `CTX-R8-02`
-OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
+Status: **CANDIDATE FIX FOR `CHANGES_REQUIRED` / AWAITING FRESH INDEPENDENT BUILT-IN `default`
+RE-REVIEW / `CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
 series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
-independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
-`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
-`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
-transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
-claimed. This progress receipt claims no review result for itself. No R8 source or test edit may
+clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
+`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
+This bounded docs-only fix addresses only those findings and claims no review result; all R8
+implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
+boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
+no review result for itself. No R8 source or test edit may
 start until the complete MAP/SPEC/PLAN/TASKS family is freshly reviewed and `CTX-R8-02` is proven.
 
 ## Objective
@@ -23,7 +25,9 @@ Make replay and live sentinel paths consume one origin-neutral, fallible typed c
 interpretation while preserving the analyzer as the sole owner of drift, progress, and delegation
 semantics. The implementation must centralize the exact v0.2-v0.8 compatibility contract, keep the
 public sentinel facades source-compatible, and prove that interpretation failures have zero
-scheduler, presentation, adjudication, sink, checkpoint-acceptance, delivery, and cursor effects.
+scheduler-decision, presentation, adjudication, operator-sink, checkpoint-acceptance,
+`record_delivery`, and persisted cursor/delivery effects. Existing transport-observation
+bookkeeping before `runtime.observe` is preserved and may occur.
 
 ## Authoritative Inputs
 
@@ -46,10 +50,10 @@ expand it.
 | Replay report and operator presentation | `crates/agent-drift-sentinel/src/operator_surface.rs` | `crates/agent-drift-sentinel/tests/operator_surface.rs`, `tests/live_end_to_end.rs` |
 | Public request/result facade | `crates/agent-drift-sentinel/src/lib.rs` | compile-time signature assertions added in focused Sentinel tests |
 
-The new planned paths are exactly:
+The only new planned path is:
 
-- `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs`;
-- `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs`.
+- `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs`, including its in-module
+  `#[cfg(test)] mod tests` matrix.
 
 ## Non-Negotiable Boundaries
 
@@ -66,11 +70,19 @@ The new planned paths are exactly:
 - Do not consult a previous checkpoint from another session.
 - Do not change the public signatures of `present_checkpoint`,
   `present_checkpoint_with_previous`, `render_replay_report`, or `execute`.
+- Keep `checkpoint_interpretation` crate-private: no public module declaration, public item, public
+  re-export, or external interpretation integration target.
+- Preserve the existing public `CheckpointPresentation` shape and
+  `CheckpointPresentation::render_console_block` signature. Add no public field. Delegation renders
+  iff `CheckpointInterpretation.delegation` is `Some`, never because a schema-version string matches.
 - Do not use `unwrap`, panic, default acceptance, error swallowing, or v0.2 fallback to cross the
   fallible v0.3-v0.8 seam.
 - Do not edit `real_session_live.rs` in the planned implementation. Existing ordering already calls
-  `LiveRuntime::observe` before recording delivery and persisting cursor state; R8 proves that
-  boundary with tests instead of redesigning it.
+  `LiveRuntime::observe` before recording delivery and persisting cursor state. Monitor-closure
+  tracking, pending-poll state, and emission-ordinal allocation already occur before that call and
+  are preserved/out of scope. R8 proves only that interpretation failure produces no scheduler
+  decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted
+  cursor/delivery, or checkpoint acceptance; it authorizes no rollback production edit.
 
 Any required expansion is a structured decision and reviewed spec amendment, not an opportunistic
 fix.
@@ -122,9 +134,15 @@ scheduler, or cursor-visible runtime state.
    inputs; they neither validate nor silently recover from a contract failure.
 5. **Presentation receives facts.** `present_interpretation` may format, truncate, order, label, and
    apply the existing warning policy. It may not inspect schema strings, classify analyzer state,
-   recognize legacy evidence prefixes, or infer delegation.
-6. **No protected-boundary edits.** Scheduler, adjudication, sinks, and real-session delivery/cursor
-   code remain unchanged. Tests establish equivalence and zero-effect failure behavior.
+   recognize legacy evidence prefixes, or infer delegation. The typed presence projection is the
+   existing `CheckpointInterpretation.delegation: Option<DelegationContext>`; no public presentation
+   field/signature is added or changed, and `render_console_block` never gates on schema strings.
+6. **Crate-private implementation/testing.** `checkpoint_interpretation` and every additive item are
+   `pub(crate)` only as needed. R8-1 RED/GREEN is an in-module `#[cfg(test)]` unit-test matrix; public-
+   flow integration tests begin with R8-2/R8-3 and exercise the existing public facades.
+7. **No protected-boundary edits.** Scheduler, adjudication, sinks, and real-session delivery/cursor
+   code remain unchanged. Tests preserve pre-observe transport bookkeeping and establish the
+   narrower post-interpretation zero-effect boundary.
 
 ## Doubt Claims And Disproof Evidence
 
@@ -134,7 +152,7 @@ These are hypotheses to disprove during implementation and fresh review, not com
 |---|---|---|
 | One typed interpretation can preserve v0.2 and v0.3-v0.8 behavior without moving semantics out of the analyzer. | A wrong normalization creates a second analyzer. | Exact version matrix, explicit-state precedence, same-session history, typed delegation acceptance, and parent-orchestration negative witnesses. |
 | Fallible core paths can coexist with locked infallible facades without fallback or panic. | Error swallowing would make malformed checkpoints appear valid. | Compile-time signature locks, structured error-chain tests, source-order inspection, and searches excluding `unwrap`/panic/fallback bridges. |
-| Live contract failures can be rejected before any runtime or delivery state changes. | A cursor or delivery side effect on failure makes replay/live non-equivalent and breaks restart safety. | Before/after runtime snapshots plus persisted real-session state and sink/adjudication negative witnesses. |
+| Live contract failures can be rejected before scheduler/presentation/acceptance/delivery effects, while preserving existing pre-observe transport bookkeeping. | A post-interpretation delivery/cursor effect breaks restart safety, but claiming rollback of monitor/poll/ordinal bookkeeping would exceed R8. | Before/after runtime snapshots plus static real-session ordering prove no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance after failure; monitor-closure, pending-poll, and emission-ordinal observations are permitted. |
 | Operator presentation can become a pure typed renderer. | Schema/state inference in presentation would retain the duplication R8 exists to remove. | Static source checks plus replay/live rendering parity for posture, evidence, context, progress, and delegation. |
 
 Fresh-context built-in `default` review is required after every packet before the next cutover.
@@ -182,9 +200,10 @@ Every R8 implementation packet follows the same bounded cycle:
    New symbols have no pre-existing graph target; record that explicitly rather than pretending an
    impact result exists.
 4. If any impact result is HIGH or CRITICAL, stop and obtain a structured operator decision before
-   the first production-symbol edit. The current graph already reports HIGH for
-   `verify_live_checkpoint_compatibility` and `LiveRuntime::observe` (17 direct test dependents
-   each), so R8-3 requires such a decision unless a refreshed graph lowers the risk.
+   the first production-symbol edit. The refreshed 2026-07-16 graph records four mandatory future
+   HIGH gates in the decision table below. R8-2, R8-3, and R8-4 may not edit those symbols until the
+   operator replies to each owning ID. These are future R8-IMPLEMENT gates, not R8-SPEC blockers;
+   no decision is requested while this docs-only plan is being fixed.
 5. Use TDD in this exact order: write and run the smallest failing contract/parity witness; record
    the RED; make the smallest production change; run the focused GREEN proof and adjacent
    regression target. Do not commit the intentional RED state.
@@ -208,24 +227,25 @@ Every R8 implementation packet follows the same bounded cycle:
 Create the origin-neutral module and prove the exact central compatibility matrix before any core
 adapter cutover.
 
-Exact manifest (3 files):
+Exact manifest (2 files):
 
 - `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs` (new);
-- `crates/agent-drift-sentinel/src/lib.rs`;
-- `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs` (new).
+- `crates/agent-drift-sentinel/src/lib.rs`.
 
 The RED witness must cover the exact v0.2-v0.8 schema set; v0.3-v0.8 explicit state; v0.4 turn
 context; v0.5 archetype; v0.6-v0.8 progress; v0.8 non-null typed delegation; exactly the four
 sentinel-owned non-empty fields; same-session history; v0.2 bounded legacy behavior; explicit-state
 precedence; structured errors; valid mixed/ambiguous and partial/opaque analyzer projections; and a
-negative parent-orchestration witness. The smallest implementation adds the schema profile,
-serialized validator, typed input/result, error types, interpretation, and minimal module/export
-wiring. No replay/live production path changes in this packet.
+negative parent-orchestration witness. All RED/GREEN cases live under `#[cfg(test)] mod tests`
+inside the new module. The smallest implementation adds the schema profile,
+serialized validator, typed input/result, error types, interpretation, and minimal crate-private
+module wiring. The module/items stay crate-private with no public re-export or API expansion. No
+replay/live production path changes in this packet.
 
 Focused proof:
 
 ```bash
-cargo test -p agent-drift-sentinel --test checkpoint_interpretation -- --nocapture
+cargo test -p agent-drift-sentinel checkpoint_interpretation::tests --lib -- --nocapture
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 ```
@@ -234,6 +254,10 @@ cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 
 Route replay through complete-set validation/interpretation before scheduler/report construction,
 add the internal fallible report core, and keep public replay/report signatures exact.
+
+Status/dependency gate: **UNSTARTED / BLOCKED** until R8-1 is landed and fresh-review-clean **and**
+the operator replies `DECISION R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`. A `B` reply stops R8-2 for
+respec; silence is not authorization.
 
 Exact manifest (5 files):
 
@@ -250,6 +274,19 @@ report, scheduler decision, presentation, adjudication request, or next cursor. 
 version failure, selection, and cursor behavior remain unchanged. The public `render_replay_report`
 facade remains infallible and source-compatible but is not called by `execute`.
 
+Complete existing-symbol impact inventory before edits:
+
+- `input.rs`: `load_replay_bundle`, `read_checkpoint_jsonl_file`,
+  `validate_checkpoint_contract`, `require_non_null_field`, and
+  `validate_drift_score_state_contract`;
+- `lib.rs`: `execute`;
+- `operator_surface.rs`: `render_replay_report`;
+- additive `try_render_replay_report` and error-adapter helpers: new/no pre-existing graph target.
+
+Refreshed upstream impact for `load_replay_bundle` is HIGH: 17 direct dependents, one affected
+`execute` process, and one affected module. That result is bound to
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01`; no edit to the loader is allowed before the operator reply.
+
 Focused proof:
 
 ```bash
@@ -263,6 +300,12 @@ cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 
 Delegate live serialized/typed compatibility to the central contract and make
 `LiveRuntime::observe` interpret checkpoint-ready events before any state or scheduler mutation.
+
+Status/dependency gate: **UNSTARTED / BLOCKED** until R8-2 is landed and fresh-review-clean **and**
+the operator separately replies `A` to both
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01` and
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`. A `B` reply stops the owning seam for respec; silence on either
+ID is not authorization.
 
 Exact manifest (5 files):
 
@@ -279,6 +322,20 @@ checkpoint/source detail; the runtime returns
 must prove no accepted checkpoint, previous-by-session update, scheduler change, processed-event
 increment, presentation, or cursor-visible change on error. Synthetic trigger behavior and the
 separation between repeated-failure trigger and analyzer posture remain unchanged.
+
+Complete existing-symbol impact inventory before edits:
+
+- `live_input.rs`: `validate_live_fixture_contract`, `require_non_null_fixture_field`,
+  `schema_requires_turn_context`, `schema_requires_session_archetype`,
+  `schema_requires_session_progress`, `validate_fixture_drift_score_state_contract`,
+  `compatibility_gap`, and `verify_live_checkpoint_compatibility`;
+- `live_runtime.rs`: file-disambiguated `LiveRuntime::observe` (`observe` in
+  `crates/agent-drift-sentinel/src/live_runtime.rs`);
+- additive compatibility/error-adapter helpers: new/no pre-existing graph target.
+
+Refreshed upstream impacts are separately HIGH: `verify_live_checkpoint_compatibility` has 17
+direct dependents, and file-disambiguated `LiveRuntime::observe` has 17 direct dependents. They are
+bound to the two stable R8-3 decision IDs above; neither symbol may be edited before its reply.
 
 Focused proof:
 
@@ -297,6 +354,10 @@ Remove remaining schema/state/evidence inference from `operator_surface.rs`, rou
 through centralized non-validating projection and `present_interpretation`, and lock exact public
 signatures and supported-input behavior.
 
+Status/dependency gate: **UNSTARTED / BLOCKED** until R8-3 is landed and fresh-review-clean **and**
+the operator replies `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`. A `B` reply stops R8-4 for
+respec; silence is not authorization.
+
 Exact manifest (5 files):
 
 - `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs`;
@@ -306,10 +367,36 @@ Exact manifest (5 files):
 - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`.
 
 Compile-time function-pointer assertions lock `present_checkpoint`,
-`present_checkpoint_with_previous`, and `render_replay_report`; R8-2 locks `execute`. The typed
-renderer may format delegation and other analyzer-owned facts but may not validate or infer them.
+`present_checkpoint_with_previous`, `CheckpointPresentation::render_console_block`, and
+`render_replay_report`; R8-2 locks `execute`. The typed renderer may format delegation and other
+analyzer-owned facts but may not validate or infer them. Delegation rendering is controlled only by
+`CheckpointInterpretation.delegation: Option<DelegationContext>`: render iff `Some`, never by a
+schema-version string. It uses the existing public
+`CheckpointPresentation.checkpoint.delegation` access path; no public `CheckpointPresentation`
+field or signature changes.
 The compatibility facades may not contain supported-version tables, analyzer-state classification,
 legacy evidence-prefix recognition, panic/unwrap, or failure fallback.
+
+Complete existing-symbol impact inventory before edits/removals:
+
+- public/facade methods and functions: `CheckpointPresentation::render_console_block`,
+  `render_replay_report`, `present_checkpoint`, `present_checkpoint_with_previous`,
+  `classify_checkpoint`, and `warning_fingerprint`;
+- delegation formatting touched by the render behavior lock: `format_delegation_summary`,
+  `format_delegation_topology`, and `format_child_work_visibility`;
+- posture/evidence helpers moved or removed from `operator_surface.rs`:
+  `classify_checkpoint_posture`, `uses_explicit_analyzer_state`,
+  `classify_checkpoint_posture_from_state`, `classify_checkpoint_posture_legacy`,
+  `checkpoint_had_active_class`, `score_has_historical_evidence`,
+  `historical_reason_prefixes`, `collect_evidence_lines`,
+  `collect_state_backed_evidence_lines`, `collect_legacy_evidence_lines`,
+  `push_evidence_lines`, and `max_flagged_score`;
+- additive `present_interpretation` and compatibility-projection helpers: new/no pre-existing graph
+  target.
+
+Refreshed upstream impact for `uses_explicit_analyzer_state` is HIGH: 10 impacted symbols, two
+direct dependents, one affected `execute` process, and three affected modules. That result is bound
+to `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`; no edit/removal is allowed before the operator reply.
 
 Focused proof:
 
@@ -318,6 +405,7 @@ cargo test -p agent-drift-sentinel --test operator_surface -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
 ! rg -n 'schema_version|DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
+! rg -n 'checkpoint\.schema_version.*delegation|schema_version.*format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 ```
@@ -328,7 +416,7 @@ Add the focused, test-only parity wall after both cores and the operator facades
 
 Exact manifest (4 files):
 
-- `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs`;
+- `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs` (`#[cfg(test)]` only);
 - `crates/agent-drift-sentinel/tests/replay_input.rs`;
 - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`;
 - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`.
@@ -343,7 +431,7 @@ smallest owning earlier packet and fresh review; it does not authorize productio
 Focused proof:
 
 ```bash
-cargo test -p agent-drift-sentinel --test checkpoint_interpretation -- --nocapture
+cargo test -p agent-drift-sentinel checkpoint_interpretation::tests --lib -- --nocapture
 cargo test -p agent-drift-sentinel --test replay_input -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
@@ -361,10 +449,12 @@ Exact manifest (4 test files):
 - `crates/agent-drift-sentinel/tests/real_session_live.rs`.
 
 Tests preserve append-only fixture ordering, source/cursor errors, sparse startup, verified closure,
-restart behavior, per-session cursor freshness, and delivery order. A contract failure must produce
-no adjudication, sink emission, delivery record, persisted cursor, checkpoint acceptance, or
-scheduler/runtime state change. A need to modify `real_session_live.rs`, scheduler, adjudication,
-CLI, or sinks is a stop-and-respec trigger.
+restart behavior, per-session cursor freshness, and delivery order. Existing pre-observe transport
+bookkeeping may occur: monitor-closure tracking, pending-poll state, and emission-ordinal allocation.
+After interpretation fails there must be no scheduler decision, presentation, adjudication, operator
+sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. A need to
+modify `real_session_live.rs`, scheduler, adjudication, CLI, or sinks is a stop-and-respec trigger;
+no rollback production edit is authorized.
 
 Focused proof:
 
@@ -434,10 +524,21 @@ or proven by this candidate plan.
 
 ## Structured Decision Triggers
 
+The following decisions are ready for the future R8-IMPLEMENT session. They are recorded now because
+the refreshed graph is HIGH, but they must **not** be asked during this R8-SPEC docs-only fix; no
+production symbol is being edited. The operator must reply in the exact `DECISION <ID>: A|B` form.
+
+| Stable ID / exact future prompt | Refreshed upstream evidence | Options | Recommendation / hard gate |
+|---|---|---|---|
+| `DECISION REQUIRED R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A\|B` | `load_replay_bundle` in `src/input.rs`: **HIGH**, 17 direct dependents, 1 affected `execute` process, 1 affected module. | **A:** authorize only the R8-2 manifest/TDD cutover and require focused proof, staged GitNexus, atomic commit, and fresh review. **B:** do not edit the loader; stop R8-2 and respec/defer the replay seam. | **Recommend A** because R8-2 preserves the public/error/sorting/cursor contracts and contains the risk with exact tests. `load_replay_bundle` remains uneditable until the reply is A. |
+| `DECISION REQUIRED R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A\|B` | `verify_live_checkpoint_compatibility` in `src/live_input.rs`: **HIGH**, 17 direct dependents, 0 affected processes, 1 affected module. | **A:** authorize only its R8-3 delegation under the exact manifest and behavior locks. **B:** do not edit it; stop the compatibility half and respec/defer R8-3. | **Recommend A** because the public compatibility facade remains source/behavior compatible. The symbol remains uneditable until the reply is A. |
+| `DECISION REQUIRED R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A\|B` | file-disambiguated `LiveRuntime::observe` (`observe` in `src/live_runtime.rs`): **HIGH**, 17 direct dependents, 0 affected processes, 1 affected module. | **A:** authorize only the R8-3 pre-mutation interpretation reorder and exact snapshot/protected-boundary proof. **B:** do not edit it; stop the runtime half and respec/defer R8-3. | **Recommend A** because the narrowed proof locks every post-interpretation effect and permits existing pre-observe transport bookkeeping. The method remains uneditable until the reply is A. |
+| `DECISION REQUIRED R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A\|B` | `uses_explicit_analyzer_state` in `src/operator_surface.rs`: **HIGH**, 10 impacted symbols, 2 direct dependents, 1 affected `execute` process, 3 affected modules. | **A:** authorize only the R8-4 move/removal under exact signature, typed-delegation, parity, and static ownership locks. **B:** do not edit/remove it; stop R8-4 and respec/defer operator consolidation. | **Recommend A** because the analyzer remains semantic owner and presentation becomes formatting-only. The helper remains uneditable until the reply is A. |
+
 Stop and emit a concrete `DECISION REQUIRED <ID>: A|B` prompt when any of these occurs:
 
-1. GitNexus reports HIGH or CRITICAL for a production symbol. R8-3 already expects
-   `R8-3-HIGH-IMPACT-LIVE-CUTOVER-01` unless refreshed evidence changes the risk.
+1. GitNexus reports any additional HIGH or CRITICAL production symbol not covered by the exact
+   table above. Never combine multiple symbol gates into one ID.
 2. A packet needs more than its exact manifest or more than five files to preserve the contract.
 3. A public signature or supported-input behavior cannot be preserved without panic, fallback, or
    error swallowing.

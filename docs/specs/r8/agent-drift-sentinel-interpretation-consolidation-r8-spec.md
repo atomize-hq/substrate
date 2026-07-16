@@ -6,12 +6,14 @@ REVIEW PENDING; R8-IMPLEMENT BLOCKED/BOUNDARY-ONLY**.
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
 series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
-independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
-`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
-`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
-transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
-claimed. This progress receipt claims no review result for itself. This document specifies a future
+clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
+`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
+This bounded docs-only fix addresses only those findings and claims no review result; all R8
+implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
+boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
+no review result for itself. This document specifies a future
 implementation; it does not authorize R8 code. The complete R8 MAP/SPEC/PLAN/TASKS family must be
 fresh-review-clean before implementation starts.
 
@@ -30,6 +32,10 @@ presentation.
 3. A previous checkpoint is usable only when its `session_id` matches the current checkpoint.
 4. Parent waits, spawn/results, or other orchestration do not establish child-local semantics.
 5. Existing scheduler, adjudication, cursor, and delivery behavior is a protected contract.
+6. Real-session transport-observation bookkeeping that already happens before
+   `LiveRuntime::observe` is preserved and outside R8: monitor-closure tracking, pending-poll state,
+   and emission-ordinal allocation may occur before a later interpretation error. The protected
+   zero-effect boundary begins at the interpretation call, not at the start of `poll_once`.
 
 ## Current Contract Topology
 
@@ -50,16 +56,16 @@ The reviewed plan must introduce one explicitly owned interpretation module rath
 shared semantics under a replay- or live-named adapter. The intended contract is:
 
 ```rust
-enum CheckpointSchemaVersion {
+pub(crate) enum CheckpointSchemaVersion {
     V0_2, V0_3, V0_4, V0_5, V0_6, V0_7, V0_8,
 }
 
-struct CheckpointInterpretationInput<'a> {
+pub(crate) struct CheckpointInterpretationInput<'a> {
     checkpoint: &'a Checkpoint,
     previous_same_session: Option<&'a Checkpoint>,
 }
 
-struct CheckpointInterpretation {
+pub(crate) struct CheckpointInterpretation {
     checkpoint: Checkpoint,
     schema_version: CheckpointSchemaVersion,
     cursor: CheckpointCursor,
@@ -71,10 +77,10 @@ struct CheckpointInterpretation {
     delegation: Option<DelegationContext>,
 }
 
-fn validate_serialized_checkpoint(value: &serde_json::Value)
+pub(crate) fn validate_serialized_checkpoint(value: &serde_json::Value)
     -> Result<CheckpointSchemaVersion, CheckpointContractError>;
 
-fn interpret_checkpoint(input: CheckpointInterpretationInput<'_>)
+pub(crate) fn interpret_checkpoint(input: CheckpointInterpretationInput<'_>)
     -> Result<CheckpointInterpretation, CheckpointContractError>;
 
 pub(crate) fn try_render_replay_report(
@@ -97,6 +103,12 @@ single replay/live semantic entry point. It has no replay/live mode flag. The ty
 facts, not console strings or scheduler/adjudicator decisions. `try_render_replay_report` is the
 fallible replay core used by `execute`; `LiveRuntime::observe` calls `interpret_checkpoint` directly.
 Both validate/interpret before scheduler observation and before `present_interpretation`.
+
+The new `checkpoint_interpretation` module is crate-private. `lib.rs` may declare it only as a
+crate-private module, every new item is `pub(crate)` only where another Sentinel module needs it,
+and R8 adds no public re-export or public API surface. R8-1's RED/GREEN matrix lives in
+`checkpoint_interpretation.rs` under an in-module `#[cfg(test)] mod tests`; no external
+interpretation integration target is authorized.
 
 The following public source signatures are locked exactly:
 
@@ -189,6 +201,18 @@ Presentation receives `CheckpointInterpretation` plus trigger/decision/policy, t
 It must not inspect schema strings, classify analyzer state, apply legacy evidence prefixes, or
 infer delegation. Replay and live render the same interpretation object for matching inputs.
 
+`CheckpointInterpretation.delegation: Option<DelegationContext>` is the only typed delegation
+presence projection used by presentation. The existing public `CheckpointPresentation` shape,
+including its `checkpoint` field and `render_console_block` signature, remains source-compatible:
+R8 adds no public field and changes no public signature. `CheckpointPresentation::render_console_block`
+renders a delegation line if and only if the typed interpretation projection is `Some`; it never
+gates delegation rendering on `checkpoint.schema_version` or any other schema-version string.
+The projection is carried through the existing public
+`CheckpointPresentation.checkpoint.delegation` access path; R8 does not add a parallel
+`CheckpointPresentation::delegation` field.
+`format_delegation_summary`, `format_delegation_topology`, and
+`format_child_work_visibility` remain formatting-only and do not validate analyzer-owned facts.
+
 ## Unchanged Scheduling, Adjudication, and Delivery
 
 - `ReplayScheduler::observe`, `SchedulerPolicy`, trigger meanings, cooldown/deduplication, and
@@ -200,7 +224,13 @@ infer delegation. Replay and live render the same interpretation object for matc
   Replay first validates/interprets the complete selected checkpoint set and only then constructs
   scheduler/report state. Live validates/interprets the event before mutating accepted-checkpoint or
   cursor state. A failed interpretation produces no scheduler decision, presentation, adjudication,
-  sink emission, cursor advancement, or checkpoint acceptance.
+  operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance.
+- Existing real-session transport-observation bookkeeping before `runtime.observe` is explicitly
+  preserved and may occur: `monitor_linked_closure` tracking, `begin_poll` pending-poll state, and
+  `checkpoint_ready_event` emission-ordinal allocation. R8 does not roll those observations back and
+  authorizes no production edit to `real_session_live.rs`. The protected failure proof is exactly:
+  after interpretation fails, there is no scheduler decision, presentation, adjudication, operator
+  sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance.
 
 No edit to `scheduler.rs`, `adjudication.rs`, or their tests belongs in R8 unless a later separately
 reviewed spec authorizes it.
@@ -225,13 +255,16 @@ reviewed spec authorizes it.
    fields inside a present `DelegationContext` are not field-level sentinel validation and never
    trigger raw-event reconstruction.
 6. No fallible path uses `unwrap`, panic, default acceptance, or error-swallowing fallback. On any
-   contract failure there is no scheduler decision, presentation, adjudication, sink emission,
-   cursor advancement, or checkpoint acceptance.
+   contract failure there is no scheduler decision, presentation, adjudication, operator sink
+   emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. Existing
+   pre-observe monitor-closure tracking, pending-poll bookkeeping, and emission-ordinal allocation
+   may already have occurred and are not rollback targets.
 
 ## Migration Contract
 
 1. Add the central schema profile, raw validator, typed interpretation, deterministic error
-   adapters, and focused matrix tests.
+   adapters, and the in-module `#[cfg(test)]` matrix in
+   `src/checkpoint_interpretation.rs`; do not add an external interpretation integration target.
 2. Add `try_render_replay_report`; validate/interpret the complete replay selection before any
    scheduler call, then render only typed interpretations. Route `execute` through this fallible core
    so `CheckpointContractError -> InputError -> SentinelError::Input`, without changing sorting,
@@ -253,12 +286,12 @@ The PLAN/TASKS may packetize only this inventory unless a fresh spec amendment e
 
 | Path | Permitted R8 change |
 |---|---|
-| `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs` | New sole owner of schema profiles, serialized contract rules, typed interpretation, posture/evidence normalization, and v0.8 typed delegation projection. |
-| `crates/agent-drift-sentinel/src/lib.rs` | Minimal module/export wiring; preserve supported public surfaces. |
+| `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs` | New crate-private sole owner of schema profiles, serialized contract rules, typed interpretation, posture/evidence normalization, and v0.8 typed delegation projection; contains its own `#[cfg(test)]` matrix. |
+| `crates/agent-drift-sentinel/src/lib.rs` | Minimal crate-private module wiring only; no public re-export or API expansion. |
 | `crates/agent-drift-sentinel/src/input.rs` | Delegate raw replay validation/interpretation; map `CheckpointContractError` into `InputError`; retain bundle, sorting, cursor, and replay-specific errors. |
 | `crates/agent-drift-sentinel/src/live_input.rs` | Delegate raw/typed compatibility; map `CheckpointContractError` into `LiveInputError`; retain event/source/sequence validation and compatibility facade. |
 | `crates/agent-drift-sentinel/src/live_runtime.rs` | Consume the shared interpretation before state mutation and the unchanged scheduler/presentation sequence; propagate via `LiveRuntimeError::Input`. |
-| `crates/agent-drift-sentinel/src/real_session_live.rs` | Only integration ordering needed to guarantee no adjudication, sink emission, acceptance, delivery, or persistence on interpretation failure. |
+| `crates/agent-drift-sentinel/src/real_session_live.rs` | No production edit authorized. Preserve pre-observe monitor-closure/pending-poll/emission-ordinal bookkeeping and prove the narrower post-interpretation boundary from tests/static ordering. |
 | `crates/agent-drift-sentinel/src/operator_surface.rs` | Add the fallible internal replay report path and typed renderer; preserve exact public facade signatures/current behavior while removing duplicated semantic/version decisions. |
 
 No analyzer, compactor, schema, fixture corpus, scheduler, adjudication, CLI, or operator-sink
@@ -268,21 +301,22 @@ production edit is authorized by this spec.
 
 | Path | Required proof |
 |---|---|
-| `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs` | Exact v0.2-v0.8 matrix; exact non-empty sentinel field set (`session_id`, `checkpoint_id`, `task_frame.objective`, `expected_next_step`); same-session history; explicit-state precedence; structured failures; typed v0.8 delegation projection; analyzer maps conflicting-link input to its typed `DelegationContext` projection and sentinel consumes the resulting `DelegationTopology::MixedOrAmbiguous` plus `ChildWorkVisibility::Opaque` without interpreting raw conflict; `ChildWorkVisibility::{Partial, Opaque}` accepted without field-level revalidation; parent-orchestration negative witness. |
+| `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs` in-module `#[cfg(test)]` matrix | Exact v0.2-v0.8 matrix; exact non-empty sentinel field set (`session_id`, `checkpoint_id`, `task_frame.objective`, `expected_next_step`); same-session history; explicit-state precedence; structured failures; typed v0.8 delegation projection; analyzer maps conflicting-link input to its typed `DelegationContext` projection and sentinel consumes the resulting `DelegationTopology::MixedOrAmbiguous` plus `ChildWorkVisibility::Opaque` without interpreting raw conflict; `ChildWorkVisibility::{Partial, Opaque}` accepted without field-level revalidation; parent-orchestration negative witness. |
 | `crates/agent-drift-sentinel/tests/replay_input.rs` | Replay raw-field/version behavior, sorting, mixed-version failure, and cursor behavior unchanged. |
 | `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs` | v0.2 and v0.3-v0.8 compatibility/presentation behavior unchanged, including v0.8 state-backed evidence/delegation. |
 | `crates/agent-drift-sentinel/tests/live_input.rs` and `tests/live_input_adapter.rs` | Append-only event/cursor and fixture adapter errors unchanged. |
 | `crates/agent-drift-sentinel/tests/live_runtime.rs` | `CheckpointContractError -> LiveInputError -> LiveRuntimeError::Input`; shared interpretation precedes unchanged scheduling/state mutation; no decision/presentation/acceptance/cursor advance on failure; repeated-failure trigger remains distinct from posture. |
-| `crates/agent-drift-sentinel/tests/real_session_live.rs` | Per-session cursors, verified closure, sparse startup, restart, regression failures, and no adjudication/sink emission/delivery/persistence on interpretation error. |
-| `crates/agent-drift-sentinel/tests/operator_surface.rs` | Compile-time function-pointer assertions lock the exact public `present_checkpoint`, `present_checkpoint_with_previous`, and `render_replay_report` signatures; facade current-behavior fixtures remain stable; core presentation consumes typed facts and owns no version/analyzer semantics. |
+| `crates/agent-drift-sentinel/tests/real_session_live.rs` | Per-session cursors, verified closure, sparse startup, restart, and regression failures remain unchanged; static/behavior proof permits existing pre-observe monitor-closure/pending-poll/emission-ordinal bookkeeping while proving no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance after interpretation fails. |
+| `crates/agent-drift-sentinel/tests/operator_surface.rs` | Compile-time function-pointer assertions lock the exact public `present_checkpoint`, `present_checkpoint_with_previous`, `CheckpointPresentation::render_console_block`, and `render_replay_report` signatures; facade current-behavior fixtures remain stable; delegation renders iff the typed option is `Some`, without schema-string gating; core presentation consumes typed facts and owns no version/analyzer semantics. |
 | `crates/agent-drift-sentinel/tests/live_end_to_end.rs` | Replay/live parity for diagnostics, headlines, turn context, archetype, progress, posture, session locality, and trigger/posture separation. |
 
 Additionally, a compile-time function-pointer assertion must lock
 `execute: fn(&SentinelRequest) -> Result<SentinelResult, SentinelError>`. Replay failure tests must
 assert `CheckpointContractError -> InputError -> SentinelError::Input` and zero scheduler/report,
 presentation, adjudication, or cursor effects. Live failure tests must assert the corresponding
-`CheckpointContractError -> LiveInputError -> LiveRuntimeError::Input` chain and zero state/sink
-effects. Static source checks must prove core replay/live call validation/interpretation before
+`CheckpointContractError -> LiveInputError -> LiveRuntimeError::Input` chain and the narrower
+protected zero-effect boundary; pre-observe transport bookkeeping is permitted. Static source checks
+must prove core replay/live call validation/interpretation before
 scheduler/presentation and that the compatibility facades are not called from `execute` or
 `LiveRuntime::observe`.
 
@@ -299,10 +333,11 @@ recorded from the implementation run; this candidate spec claims none.
 | `CTX-R8-02` | MAP/SPEC/PLAN/TASKS are fresh-review-clean before the first source/test edit. |
 | `CTX-R8-03` | Replay and live call one fallible `interpret_checkpoint` seam before scheduling/presentation; error tests prove `CheckpointContractError -> InputError -> SentinelError::Input` and `CheckpointContractError -> LiveInputError -> LiveRuntimeError::Input`. |
 | `CTX-R8-04` | One literal compatibility matrix covers v0.2 and every version v0.3-v0.8, including fail-closed serialized gaps and exactly the four sentinel-owned typed non-empty fields. |
-| `CTX-R8-05` | Exact compile-time signature assertions and facade behavior tests preserve `present_checkpoint*`, `render_replay_report`, and `execute`; operator presentation has no schema/state/delegation inference and matching replay/live inputs render identically. |
-| `CTX-R8-06` | Failure produces no scheduler decision, presentation, adjudication, sink emission, cursor advancement, or checkpoint acceptance; success preserves existing scheduler/adjudication outputs, real-session closure, delivery order, and per-session cursor behavior. |
+| `CTX-R8-05` | Exact compile-time signature assertions and facade behavior tests preserve `present_checkpoint*`, `CheckpointPresentation::render_console_block`, `render_replay_report`, and `execute`; typed delegation renders iff `CheckpointInterpretation.delegation` is `Some`, with no public field/signature change or schema-string gate; operator presentation has no schema/state/delegation inference and matching replay/live inputs render identically. |
+| `CTX-R8-06` | Failure produces no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance; pre-observe transport bookkeeping is permitted; success preserves existing scheduler/adjudication outputs, real-session closure, delivery order, and per-session cursor behavior. |
 
 `CTX-R8-01` is proven. `CTX-R8-02` remains `OPEN` / `REVIEW PENDING` and not proven;
-`CTX-R8-03..06` remain blocked. Fresh independent built-in `default` review of PLAN/TASKS candidate
-commit `0ed3d8f04` is the next gate. All implementation tasks remain unchecked and unstarted, and
-R8 implementation remains blocked. This progress receipt claims no review result for itself.
+`CTX-R8-03..06` remain blocked. Fresh independent built-in `default` review of the complete family
+through this bounded docs-only fix is the next gate after the earlier `0ed3d8f04` + `cfcf65507`
+review returned `CHANGES_REQUIRED`. All implementation tasks remain unchecked and unstarted, and R8
+implementation remains blocked. This progress receipt claims no review result for itself.

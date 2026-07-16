@@ -3,18 +3,20 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-tasks.md`
 
-Status: **CANDIDATE / AWAITING FRESH INDEPENDENT BUILT-IN `default` REVIEW / ALL TASKS UNSTARTED /
-`CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
+Status: **CANDIDATE FIX FOR `CHANGES_REQUIRED` / AWAITING FRESH INDEPENDENT BUILT-IN `default`
+RE-REVIEW / ALL TASKS UNSTARTED / `CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
 series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
-clean R8 MAP/SPEC freeze. PLAN/TASKS candidate commit `0ed3d8f04` is landed and awaits fresh
-independent built-in `default` review; all implementation tasks remain unchecked and unstarted.
-`CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven; `CTX-R8-03` through `CTX-R8-06` remain
-`BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and no R8 code has started. No phase
-transition, Prompt 1 eligibility, implementation authorization, or complete-family `CLEAN` is
-claimed. This progress receipt claims no review result for itself. No checkbox below authorizes
+clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
+`0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
+This bounded docs-only fix addresses only those findings and claims no review result; all R8
+implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
+boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+implementation authorization, or complete-family `CLEAN` is claimed. This progress receipt claims
+no review result for itself. No checkbox below authorizes
 source/test implementation until the complete four-document family is fresh-review-clean and
 `CTX-R8-02` is proven.
 
@@ -27,6 +29,20 @@ source/test implementation until the complete four-document family is fresh-revi
   claiming any implementation gate proven.
 - [ ] `git status --short` is clean before the first source/test edit.
 - [ ] No R8 implementation has started early.
+
+## Future HIGH-Impact Decision Gates — Not Requested During R8-SPEC
+
+The refreshed 2026-07-16 upstream graph records all four gates below as HIGH. They are future
+R8-IMPLEMENT dependencies, not blockers to completing this docs-only fix. Do not ask the operator
+now because no production symbol is being edited. During implementation, exact A/B options,
+recommendations, and prompts come from the PLAN decision table; silence is never authorization.
+
+| Owning task | Stable required reply before symbol edit | Refreshed evidence |
+|---|---|---|
+| R8-2 | `DECISION R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A` | `load_replay_bundle`: HIGH, 17 direct dependents, 1 affected `execute` process, 1 module. |
+| R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` | `verify_live_checkpoint_compatibility`: HIGH, 17 direct dependents, 0 processes, 1 module. |
+| R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` | file-disambiguated `LiveRuntime::observe` in `src/live_runtime.rs`: HIGH, 17 direct dependents, 0 processes, 1 module. |
+| R8-4 | `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` | `uses_explicit_analyzer_state`: HIGH, 10 impacted, 2 direct, 1 affected `execute` process, 3 modules. |
 
 ## Per-Task Rules
 
@@ -73,27 +89,27 @@ cut over in this task.
 `CTX-R8-03` direct foundation; `CTX-R8-04` direct central owner; `CTX-R8-05` guard (facts, not
 strings); `CTX-R8-06` guard (no protected-path edits).
 
-**Exact manifest (3 files):**
+**Exact manifest (2 files):**
 
 - `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs` (new)
 - `crates/agent-drift-sentinel/src/lib.rs`
-- `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs` (new)
 
 **GitNexus impact targets before edits:**
 
 - New `CheckpointSchemaVersion`, `CheckpointInterpretationInput`, `CheckpointInterpretation`,
   `CheckpointContractError`, `validate_serialized_checkpoint`, and `interpret_checkpoint`: no
   pre-existing graph targets; record as new.
-- `crates/agent-drift-sentinel/src/lib.rs` receives module/export wiring only. If implementing the
+- `crates/agent-drift-sentinel/src/lib.rs` receives crate-private module wiring only; no public
+  re-export or API expansion is allowed. If implementing the
   wiring requires editing `execute`, run upstream impact for `execute` first and stop because that
   edit belongs to R8-2.
 
 **TDD sequence:**
 
-1. RED: add focused tests that fail because the central schema/interpretation contract does not
-   exist.
-2. GREEN: implement only the types, validator, interpreter, and module/export wiring needed by the
-   witness.
+1. RED: add the in-module `#[cfg(test)] mod tests` matrix that fails because the central schema/
+   interpretation contract does not exist. Do not add an external integration test target.
+2. GREEN: implement only the types, validator, interpreter, and crate-private module wiring needed
+   by the witness.
 3. PROOF: expand/run the exact central matrix and focused lint/format commands.
 
 **Acceptance criteria:**
@@ -111,14 +127,16 @@ strings); `CTX-R8-06` guard (no protected-path edits).
   adjudication data, or rendered console strings.
 - [ ] Structured errors identify the schema/checkpoint/field contract gap without panic, unwrap,
   default acceptance, or legacy fallback.
+- [ ] `checkpoint_interpretation` and every additive item are crate-private (`pub(crate)` only as
+  needed), with no public re-export/API expansion; its matrix is in-module `#[cfg(test)]` only.
 
 **Exact verification:**
 
 ```bash
-cargo test -p agent-drift-sentinel --test checkpoint_interpretation -- --nocapture
+cargo test -p agent-drift-sentinel checkpoint_interpretation::tests --lib -- --nocapture
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
-git diff --check -- crates/agent-drift-sentinel/src/checkpoint_interpretation.rs crates/agent-drift-sentinel/src/lib.rs crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs
+git diff --check -- crates/agent-drift-sentinel/src/checkpoint_interpretation.rs crates/agent-drift-sentinel/src/lib.rs
 ```
 
 **Decision triggers:** Any need to change analyzer/schema types, validate inside `DelegationContext`,
@@ -130,14 +148,17 @@ parse generalized versions, use cross-session history, or edit another Sentinel 
 
 ## R8-2 — Replay Core Migration With Locked Public Facades
 
-**Status:** unstarted; blocked by R8-1 review-clean.
+**Status:** unstarted; blocked by R8-1 review-clean and
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01` operator reply `A`.
 
 **Description:** Delegate replay raw validation to the central validator, add the internal fallible
 report core, interpret the complete selected set before constructing scheduler/report state, and
 route `execute` through the fallible core without changing public signatures or replay sorting/
 cursor behavior.
 
-**Dependencies:** R8-1 landed and fresh-review-clean.
+**Dependencies:** R8-1 landed and fresh-review-clean; exact operator reply
+`DECISION R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`. A `B` reply requires respec/defer; no reply means
+`load_replay_bundle` remains uneditable.
 
 **Gate mapping:** `CTX-R8-01` guard; `CTX-R8-02` entry dependency; `CTX-R8-03` direct replay half;
 `CTX-R8-04` direct replay delegation; `CTX-R8-05` direct typed-render input; `CTX-R8-06` direct
@@ -154,14 +175,18 @@ zero-effect and unchanged scheduling/adjudication proof.
 **GitNexus impact targets before edits:**
 
 - `validate_checkpoint_contract` in `src/input.rs`
+- `require_non_null_field` in `src/input.rs`
+- `validate_drift_score_state_contract` in `src/input.rs`
 - `read_checkpoint_jsonl_file` in `src/input.rs`
 - `load_replay_bundle` in `src/input.rs`
 - `render_replay_report` in `src/operator_surface.rs`
 - `execute` in `src/lib.rs`
 - New `try_render_replay_report` and any error-adapter helper: record as new/no pre-existing target.
 
-Run impact again for any additional existing function before editing it. Any HIGH/CRITICAL result
-requires a named operator decision.
+Run impact again for any additional existing function before editing it. Refreshed upstream impact
+for `load_replay_bundle` is HIGH (17 direct dependents, one affected `execute` process, one module),
+so the stable decision above is mandatory regardless of later routine refreshes. Any additional
+HIGH/CRITICAL result requires its own named operator decision.
 
 **TDD sequence:**
 
@@ -213,14 +238,17 @@ sorting, selection, cursor semantics, or report grouping.
 
 ## R8-3 — Live Input And Runtime Migration With Zero-Effect Errors
 
-**Status:** unstarted; blocked by R8-2 review-clean and a required HIGH-impact decision if refreshed
-GitNexus remains HIGH.
+**Status:** unstarted; blocked by R8-2 review-clean and separate operator replies `A` for
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01` and `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`.
 
 **Description:** Delegate live fixture/typed compatibility to the same central contract and make
 `LiveRuntime::observe` interpret before accepted-checkpoint, previous-by-session, scheduler, or
 cursor-visible mutation.
 
-**Dependencies:** R8-2 landed and fresh-review-clean; structured HIGH-risk decision satisfied.
+**Dependencies:** R8-2 landed and fresh-review-clean; exact replies
+`DECISION R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` and
+`DECISION R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`. A `B` reply stops the owning seam for respec/defer;
+silence on either ID is not authorization.
 
 **Gate mapping:** `CTX-R8-01` guard; `CTX-R8-02` entry dependency; `CTX-R8-03` direct live half;
 `CTX-R8-04` direct compatibility delegation; `CTX-R8-05` direct typed presentation input;
@@ -237,13 +265,22 @@ cursor-visible mutation.
 **GitNexus impact targets before edits:**
 
 - `validate_live_fixture_contract` in `src/live_input.rs`
+- `require_non_null_fixture_field` in `src/live_input.rs`
+- `schema_requires_turn_context` in `src/live_input.rs`
+- `schema_requires_session_archetype` in `src/live_input.rs`
+- `schema_requires_session_progress` in `src/live_input.rs`
+- `validate_fixture_drift_score_state_contract` in `src/live_input.rs`
+- `compatibility_gap` in `src/live_input.rs`
 - `verify_live_checkpoint_compatibility` in `src/live_input.rs`
-- `LiveRuntime::observe` in `src/live_runtime.rs`
+- file-disambiguated `LiveRuntime::observe` (`observe` in
+  `crates/agent-drift-sentinel/src/live_runtime.rs`)
 - Any compatibility/error adapter helper introduced here: new/no pre-existing target.
 
-Current planning-time impact reports mark `verify_live_checkpoint_compatibility` and
-`LiveRuntime::observe` HIGH with 17 direct test dependents each. Refresh the graph and emit
-`DECISION REQUIRED R8-3-HIGH-IMPACT-LIVE-CUTOVER-01: A|B` before either edit if that risk remains.
+Refreshed upstream reports mark `verify_live_checkpoint_compatibility` and file-disambiguated
+`LiveRuntime::observe` HIGH with 17 direct dependents each. The former is bound to
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`; the latter is bound to
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`. Neither edit is permitted until its separate operator reply is
+`A`; do not collapse the two symbol gates.
 
 **TDD sequence:**
 
@@ -290,13 +327,16 @@ shape, or any unlisted file; any request to infer delegation or accept malformed
 
 ## R8-4 — Operator Presentation Migration And Public Signature Lock
 
-**Status:** unstarted; blocked by R8-3 review-clean.
+**Status:** unstarted; blocked by R8-3 review-clean and
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01` operator reply `A`.
 
 **Description:** Remove the remaining version/analyzer/evidence decisions from operator
 presentation, route all compatibility facades through centralized non-validating projection plus
 the typed renderer, and preserve exact public signatures/current supported behavior.
 
-**Dependencies:** R8-3 landed and fresh-review-clean.
+**Dependencies:** R8-3 landed and fresh-review-clean; exact operator reply
+`DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`. A `B` reply requires respec/defer; no reply means
+`uses_explicit_analyzer_state` remains uneditable.
 
 **Gate mapping:** `CTX-R8-01` guard; `CTX-R8-02` entry dependency; `CTX-R8-03` direct shared renderer;
 `CTX-R8-04` direct removal of duplicate compatibility; `CTX-R8-05` direct proof;
@@ -315,16 +355,26 @@ the typed renderer, and preserve exact public signatures/current supported behav
 - `present_checkpoint` in `src/operator_surface.rs`
 - `present_checkpoint_with_previous` in `src/operator_surface.rs`
 - `render_replay_report` in `src/operator_surface.rs`
+- `CheckpointPresentation::render_console_block` in `src/operator_surface.rs`
+- `format_delegation_summary`, `format_delegation_topology`, and
+  `format_child_work_visibility` in `src/operator_surface.rs`
 - `classify_checkpoint_posture`, `uses_explicit_analyzer_state`,
   `classify_checkpoint_posture_from_state`, `classify_checkpoint_posture_legacy`,
-  `collect_evidence_lines`, and `warning_fingerprint` before delegating/removing their semantic
-  ownership
+  `checkpoint_had_active_class`, `score_has_historical_evidence`, `historical_reason_prefixes`,
+  `collect_evidence_lines`, `collect_state_backed_evidence_lines`,
+  `collect_legacy_evidence_lines`, `push_evidence_lines`, `classify_checkpoint`,
+  `warning_fingerprint`, and `max_flagged_score` before delegating/removing their semantic ownership
 - New `present_interpretation` or compatibility-projection helpers: new/no pre-existing target.
+
+Refreshed upstream impact for `uses_explicit_analyzer_state` is HIGH (10 impacted symbols, two
+direct dependents, one affected `execute` process, three modules). It is bound to
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`; no edit/removal is permitted before the operator reply is `A`.
 
 **TDD sequence:**
 
 1. RED: add exact function-pointer signature assertions, facade behavior fixtures, and a static/
-   behavioral witness that typed rendering owns no version/state inference.
+   behavioral witness that typed rendering owns no version/state inference. Lock the existing
+   `CheckpointPresentation` public shape and `render_console_block` signature; add no public field.
 2. GREEN: move/delegate only the remaining semantic projection to the central module and render the
    typed facts.
 3. PROOF: run operator, compatibility, and replay/live presentation parity targets plus negative
@@ -333,7 +383,8 @@ the typed renderer, and preserve exact public signatures/current supported behav
 **Acceptance criteria:**
 
 - [ ] Exact public signatures of `present_checkpoint`, `present_checkpoint_with_previous`, and
-  `render_replay_report` compile unchanged; R8-2's `execute` signature assertion remains green.
+  `CheckpointPresentation::render_console_block` and `render_replay_report` compile unchanged;
+  R8-2's `execute` signature assertion remains green.
 - [ ] Public facades preserve current supported-input output and delegate to centralized
   non-validating projection plus `present_interpretation`; neither core path calls a facade as a
   validation boundary.
@@ -341,6 +392,10 @@ the typed renderer, and preserve exact public signatures/current supported behav
   classification, legacy evidence-prefix recognition, or delegation inference.
 - [ ] Presentation only formats/truncates/orders typed facts, labels trigger separately from
   posture, and applies existing decision/warning policy.
+- [ ] Delegation renders iff `CheckpointInterpretation.delegation: Option<DelegationContext>` is
+  `Some`; `render_console_block` contains no schema-version string gate and no public presentation
+  field/signature is added or changed. The typed projection uses the existing public
+  `CheckpointPresentation.checkpoint.delegation` access path rather than a new field.
 - [ ] Analyzer-owned mixed/ambiguous topology and partial/opaque visibility are rendered as typed
   facts without revalidation.
 
@@ -351,6 +406,7 @@ cargo test -p agent-drift-sentinel --test operator_surface -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
 ! rg -n 'schema_version|DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
+! rg -n 'checkpoint\.schema_version.*delegation|schema_version.*format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
 rg -n 'present_interpretation|format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
@@ -377,9 +433,9 @@ cores and facades; it does not authorize production corrections outside an ownin
 `CTX-R8-03` direct parity proof; `CTX-R8-04` direct exact-version proof; `CTX-R8-05` direct rendering
 proof; `CTX-R8-06` direct unchanged trigger/output proof.
 
-**Exact manifest (4 test files):**
+**Exact manifest (4 files; test-only edits):**
 
-- `crates/agent-drift-sentinel/tests/checkpoint_interpretation.rs`
+- `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs` (`#[cfg(test)]` only)
 - `crates/agent-drift-sentinel/tests/replay_input.rs`
 - `crates/agent-drift-sentinel/tests/live_checkpoint_compatibility.rs`
 - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
@@ -411,7 +467,7 @@ impact analysis and a new exact manifest.
 **Exact verification:**
 
 ```bash
-cargo test -p agent-drift-sentinel --test checkpoint_interpretation -- --nocapture
+cargo test -p agent-drift-sentinel checkpoint_interpretation::tests --lib -- --nocapture
 cargo test -p agent-drift-sentinel --test replay_input -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
@@ -429,9 +485,10 @@ generalized parsing, field-level delegation validation, or origin-specific seman
 
 **Status:** unstarted; blocked by R8-5.1 review-clean.
 
-**Description:** Prove contract failure has no adapter/runtime/real-session side effects and that
-existing append-only delivery and per-session cursor behavior remains unchanged, without production
-edits.
+**Description:** Prove the narrow protected boundary after interpretation failure and that existing
+append-only delivery and per-session cursor behavior remains unchanged, without production edits.
+Pre-observe monitor-closure tracking, pending-poll state, and emission-ordinal allocation are
+preserved/out of scope and may occur.
 
 **Dependencies:** R8-5.1 landed and fresh-review-clean.
 
@@ -453,7 +510,8 @@ production file is a mandatory stop-and-respec condition.
 **TDD/proof sequence:**
 
 1. Add a failing malformed-checkpoint runtime snapshot witness plus a static real-session ordering
-   witness that locates successful `runtime.observe` before `record_delivery` and persistence.
+   witness that permits existing monitor-closure/pending-poll/emission-ordinal bookkeeping, then
+   locates successful `runtime.observe` before `record_delivery` and persistence.
 2. If the review-clean runtime is RED, return to R8-3; if production source ordering has drifted,
    stop for a reviewed contract decision rather than changing protected production code here.
 3. Once GREEN, add adjacent append-only/restart/verified-closure/cursor invariance assertions and run
@@ -463,14 +521,17 @@ production file is a mandatory stop-and-respec condition.
 **Acceptance criteria:**
 
 - [ ] Fixture path/line and event/source error detail survive the central error mapping.
-- [ ] The runtime negative witness changes no snapshot field, scheduler decision/state,
-  processed-event count, presentation, or accepted checkpoint; real-session source ordering proves
-  the error returns before any delivery record or persisted cursor, so no adjudication/sink input is
-  produced.
+- [ ] The runtime negative witness changes no accepted-checkpoint/runtime snapshot field, scheduler
+  decision/state, processed-event count, or presentation. Real-session source ordering permits
+  monitor-closure tracking, pending-poll bookkeeping, and emission-ordinal allocation before the
+  error, but proves no adjudication/operator-sink input, `record_delivery`, persisted cursor/
+  delivery, or checkpoint acceptance occurs after interpretation fails.
 - [ ] Append-only fixture ordering, cursor mismatch/regression errors, sparse startup, restart,
   verified closure, per-session freshness, and delivery order remain unchanged.
 - [ ] Successful delivery still occurs only after successful `LiveRuntime::observe`; no
   `real_session_live.rs` production edit is required.
+- [ ] No test asserts rollback of pre-observe transport bookkeeping; no rollback production edit is
+  authorized.
 - [ ] No test treats parent orchestration as proof of child implementation/progress/completion.
 
 **Exact verification:**
@@ -487,7 +548,7 @@ cargo fmt --all -- --check
 change scheduler, adjudication, sink, real-session persistence, closure validation, or sparse-startup
 logic.
 
-**Atomic commit:** suggested message `test: prove sentinel interpretation failure is effect free`.
+**Atomic commit:** suggested message `test: prove sentinel interpretation failure boundary`.
 
 **Review gate:** fresh built-in `default` review of the exact landed R8-5.2 series must be `CLEAN`.
 
@@ -554,9 +615,10 @@ may a separate docs-only mirror/phase transition packet be proposed.
 ## Final Unchecked Wall
 
 - [ ] R8-1 fresh-review-clean.
-- [ ] R8-2 fresh-review-clean.
-- [ ] R8-3 HIGH-impact decision recorded if required; R8-3 fresh-review-clean.
-- [ ] R8-4 fresh-review-clean.
+- [ ] `R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A` recorded; R8-2 fresh-review-clean.
+- [ ] `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` and
+  `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` recorded; R8-3 fresh-review-clean.
+- [ ] `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` recorded; R8-4 fresh-review-clean.
 - [ ] R8-5.1 fresh-review-clean.
 - [ ] R8-5.2 fresh-review-clean.
 - [ ] No production or test file outside exact packet manifests changed.
@@ -564,8 +626,9 @@ may a separate docs-only mirror/phase transition packet be proposed.
   cursor behavior edit landed.
 - [ ] Exact v0.2-v0.8 matrix and replay/live parity pass.
 - [ ] Public facade signatures and supported behavior remain locked.
-- [ ] Failure produces zero scheduler/presentation/adjudication/sink/acceptance/delivery/cursor
-  effects.
+- [ ] After interpretation failure there is no scheduler decision, presentation, adjudication,
+  operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance;
+  existing pre-observe monitor-closure/pending-poll/emission-ordinal bookkeeping is permitted.
 - [ ] Full Sentinel and workspace wall pass with current counts.
 - [ ] R8-6 canonical receipt fresh-review-clean.
 - [ ] `CTX-R8-01..06` status reconciled only from reviewed evidence.
