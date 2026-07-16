@@ -348,6 +348,7 @@ impl WindowsWslBackend {
             world_network: None,
             world_fs_mode: Some(fs_mode),
             member_dispatch: None,
+            acceptance_context: None,
         })
     }
 

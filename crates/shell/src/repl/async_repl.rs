@@ -8277,6 +8277,7 @@ async fn start_remote_member_runtime_with_prepared(
     let (client, request, _agent_id) = match build_agent_client_and_member_dispatch_request_for_cwd(
         &transport_request,
         &workspace_root,
+        None,
     ) {
         Ok(built) => built,
         Err(error) => {
@@ -9794,6 +9795,7 @@ async fn submit_world_targeted_turn(
                 )
             })?,
             prompt: prompt.to_string(),
+            acceptance_context: None,
         }
     };
     let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;

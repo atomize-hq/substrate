@@ -10,9 +10,9 @@ pub use substrate_common::agent_events::{
     RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
 };
 pub use substrate_common::{
-    validate_identity_tuple_and_placement_posture, FsDiff, IdentityTuple, PlacementExecution,
-    PlacementPosture, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
-    WorldFsMode,
+    validate_identity_tuple_and_placement_posture, FsDiff, HostTransitionWorkCorrelationV1,
+    IdentityTuple, OpaqueAuthorityCommitmentV1, PlacementExecution, PlacementPosture, ProcessEvent,
+    ProcessEventType, ProcessEventsStatus, ProcessTelemetry, WorldFsMode,
 };
 pub use world_api::{
     SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
@@ -1100,6 +1100,106 @@ impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
     }
 }
 
+/// Request-scoped proposal identity retained unchanged until runtime acknowledgement.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WorldWorkAcceptanceContextV1 {
+    pub schema_version: u32,
+    pub proposed_acceptance_record_id: String,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
+    pub caller_backend_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_transition_correlation: Option<HostTransitionWorkCorrelationV1>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorldWorkAcceptanceContextDef {
+    schema_version: u32,
+    proposed_acceptance_record_id: String,
+    request_id: String,
+    #[serde(default)]
+    message_id: Option<String>,
+    caller_backend_id: String,
+    #[serde(default)]
+    host_transition_correlation: Option<HostTransitionWorkCorrelationV1>,
+}
+
+impl WorldWorkAcceptanceContextV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported acceptance_context.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+        validate_prefixed_uuid_v7(
+            "acceptance_context.proposed_acceptance_record_id",
+            &self.proposed_acceptance_record_id,
+            "wwa_",
+        )?;
+        validate_non_empty_request_field("acceptance_context.request_id", &self.request_id)?;
+        validate_non_empty_request_field(
+            "acceptance_context.caller_backend_id",
+            &self.caller_backend_id,
+        )?;
+        if let Some(message_id) = self.message_id.as_deref() {
+            validate_prefixed_uuid_v7("acceptance_context.message_id", message_id, "wwm_")?;
+        }
+        if let Some(correlation) = self.host_transition_correlation.as_ref() {
+            correlation.validate()?;
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<WorldWorkAcceptanceContextDef> for WorldWorkAcceptanceContextV1 {
+    type Error = String;
+
+    fn try_from(value: WorldWorkAcceptanceContextDef) -> Result<Self, Self::Error> {
+        let context = Self {
+            schema_version: value.schema_version,
+            proposed_acceptance_record_id: value.proposed_acceptance_record_id,
+            request_id: value.request_id,
+            message_id: value.message_id,
+            caller_backend_id: value.caller_backend_id,
+            host_transition_correlation: value.host_transition_correlation,
+        };
+        context.validate()?;
+        Ok(context)
+    }
+}
+
+impl<'de> Deserialize<'de> for WorldWorkAcceptanceContextV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = WorldWorkAcceptanceContextDef::deserialize(deserializer)?;
+        Self::try_from(value).map_err(serde::de::Error::custom)
+    }
+}
+
+fn validate_prefixed_uuid_v7(field: &str, value: &str, prefix: &str) -> Result<(), String> {
+    let Some(uuid) = value.strip_prefix(prefix) else {
+        return Err(format!("{field} must start with {prefix}"));
+    };
+    let bytes = uuid.as_bytes();
+    let hyphens = [8usize, 13, 18, 23];
+    if bytes.len() != 36
+        || hyphens.iter().any(|index| bytes[*index] != b'-')
+        || bytes.iter().enumerate().any(|(index, byte)| {
+            !(hyphens.contains(&index) || byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+        })
+        || bytes[14] != b'7'
+        || !matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
+    {
+        return Err(format!("{field} must contain a lowercase UUIDv7"));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "MemberTurnSubmitRequestDef")]
 pub struct MemberTurnSubmitRequestV1 {
@@ -1113,6 +1213,8 @@ pub struct MemberTurnSubmitRequestV1 {
     pub world_id: String,
     pub world_generation: u64,
     pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1128,6 +1230,8 @@ struct MemberTurnSubmitRequestDef {
     world_id: String,
     world_generation: u64,
     prompt: String,
+    #[serde(default)]
+    acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
 
 fn member_turn_submit_request_v1_default_schema_version() -> u32 {
@@ -1166,6 +1270,21 @@ impl MemberTurnSubmitRequestV1 {
         validate_non_empty_request_field("member_turn_submit.world_id", &self.world_id)?;
         validate_non_empty_request_field("member_turn_submit.prompt", &self.prompt)?;
 
+        if let Some(context) = self.acceptance_context.as_ref() {
+            context.validate()?;
+            if context.request_id != self.run_id {
+                return Err(
+                    "member_turn_submit.acceptance_context.request_id must equal run_id"
+                        .to_string(),
+                );
+            }
+            if context.message_id.is_none() {
+                return Err(
+                    "member_turn_submit.acceptance_context.message_id is required".to_string(),
+                );
+            }
+        }
+
         if self.orchestrator_participant_id == self.participant_id {
             return Err(
                 "member_turn_submit.orchestrator_participant_id must not equal participant_id"
@@ -1191,6 +1310,7 @@ impl TryFrom<MemberTurnSubmitRequestDef> for MemberTurnSubmitRequestV1 {
             world_id: value.world_id,
             world_generation: value.world_generation,
             prompt: value.prompt,
+            acceptance_context: value.acceptance_context,
         };
         request.validate()?;
         Ok(request)
@@ -1216,6 +1336,8 @@ pub struct ExecuteRequest {
     pub world_fs_mode: Option<WorldFsMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub member_dispatch: Option<MemberDispatchRequestV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1237,6 +1359,8 @@ struct ExecuteRequestDef {
     world_fs_mode: Option<WorldFsMode>,
     #[serde(default)]
     member_dispatch: Option<MemberDispatchRequestV1>,
+    #[serde(default)]
+    acceptance_context: Option<WorldWorkAcceptanceContextV1>,
 }
 
 impl ExecuteRequest {
@@ -1255,12 +1379,32 @@ impl ExecuteRequest {
                 if self.pty {
                     return Err("execute request member_dispatch requires pty=false".to_string());
                 }
+                if let Some(context) = self.acceptance_context.as_ref() {
+                    context.validate()?;
+                    if context.request_id != member_dispatch.run_id {
+                        return Err(
+                            "execute request acceptance_context.request_id must equal member_dispatch.run_id"
+                                .to_string(),
+                        );
+                    }
+                    if context.message_id.is_some() {
+                        return Err(
+                            "execute request task acceptance_context.message_id must be absent"
+                                .to_string(),
+                        );
+                    }
+                }
             }
             None => {
                 if cmd_is_empty {
                     return Err(
                         "execute request process exec requires a non-empty cmd when member_dispatch is absent"
-                            .to_string(),
+                        .to_string(),
+                    );
+                }
+                if self.acceptance_context.is_some() {
+                    return Err(
+                        "execute request acceptance_context requires member_dispatch".to_string(),
                     );
                 }
             }
@@ -1287,6 +1431,7 @@ impl TryFrom<ExecuteRequestDef> for ExecuteRequest {
             world_network: value.world_network,
             world_fs_mode: value.world_fs_mode,
             member_dispatch: value.member_dispatch,
+            acceptance_context: value.acceptance_context,
         };
         request.validate()?;
         Ok(request)
@@ -2999,6 +3144,7 @@ mod tests {
             }),
             world_fs_mode: Some(WorldFsMode::ReadOnly),
             member_dispatch: None,
+            acceptance_context: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
@@ -3072,6 +3218,7 @@ mod tests {
             world_network: None,
             world_fs_mode: None,
             member_dispatch: None,
+            acceptance_context: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
@@ -3281,14 +3428,35 @@ mod tests {
                 },
                 retained_worker_launch_authority: None,
             }),
+            acceptance_context: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
         assert!(json.contains("\"member_dispatch\""));
+        assert!(!json.contains("\"acceptance_context\""));
         assert!(
             !json.contains("retained_worker_launch_authority"),
             "legacy/Run/Fork None compatibility must preserve the pre-carrier wire shape"
         );
+
+        let mut acceptance_context = sample_world_work_acceptance_context();
+        acceptance_context.request_id = "run_123".to_string();
+        acceptance_context.message_id = None;
+        let mut with_acceptance = serde_json::to_value(&req).expect("shape execute request");
+        with_acceptance["acceptance_context"] =
+            serde_json::to_value(&acceptance_context).expect("shape task acceptance context");
+        let accepted: ExecuteRequest = serde_json::from_value(with_acceptance.clone())
+            .expect("decode task acceptance context");
+        assert_eq!(accepted.acceptance_context, Some(acceptance_context));
+
+        let mut wrong_request = with_acceptance.clone();
+        wrong_request["acceptance_context"]["request_id"] =
+            serde_json::Value::String("run_other".to_string());
+        assert!(serde_json::from_value::<ExecuteRequest>(wrong_request).is_err());
+
+        with_acceptance["acceptance_context"]["message_id"] =
+            serde_json::Value::String("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac".to_string());
+        assert!(serde_json::from_value::<ExecuteRequest>(with_acceptance).is_err());
 
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert!(back.cmd.is_empty());
@@ -3328,12 +3496,78 @@ mod tests {
             world_id: "world_123".into(),
             world_generation: 7,
             prompt: "summarize the failure".into(),
+            acceptance_context: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize member turn submit request");
         let back: MemberTurnSubmitRequestV1 =
             serde_json::from_str(&json).expect("deserialize member turn submit request");
         assert_eq!(back, req);
+    }
+
+    fn sample_world_work_acceptance_context() -> WorldWorkAcceptanceContextV1 {
+        WorldWorkAcceptanceContextV1 {
+            schema_version: 1,
+            proposed_acceptance_record_id: "wwa_018f0f3a-9b2c-7def-8abc-0123456789ab".to_string(),
+            request_id: "request-123".to_string(),
+            message_id: Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac".to_string()),
+            caller_backend_id: "cli:codex".to_string(),
+            host_transition_correlation: None,
+        }
+    }
+
+    #[test]
+    fn world_work_acceptance_context_v1_round_trips_exact_schema() {
+        let context = sample_world_work_acceptance_context();
+        let json = serde_json::to_value(&context).unwrap();
+        assert_eq!(json["schema_version"], 1);
+        assert_eq!(json["request_id"], "request-123");
+        assert_eq!(
+            serde_json::from_value::<WorldWorkAcceptanceContextV1>(json).unwrap(),
+            context
+        );
+    }
+
+    #[test]
+    fn world_work_acceptance_context_v1_rejects_malformed_or_unknown_fields() {
+        let context = sample_world_work_acceptance_context();
+        let mut wrong_version = serde_json::to_value(&context).unwrap();
+        wrong_version["schema_version"] = serde_json::Value::from(2);
+        assert!(serde_json::from_value::<WorldWorkAcceptanceContextV1>(wrong_version).is_err());
+
+        let mut malformed_id = serde_json::to_value(&context).unwrap();
+        malformed_id["proposed_acceptance_record_id"] =
+            serde_json::Value::String("wwa_not-a-uuid".to_string());
+        assert!(serde_json::from_value::<WorldWorkAcceptanceContextV1>(malformed_id).is_err());
+
+        let mut unknown = serde_json::to_value(&context).unwrap();
+        unknown["accepted"] = serde_json::Value::Bool(true);
+        assert!(serde_json::from_value::<WorldWorkAcceptanceContextV1>(unknown).is_err());
+    }
+
+    #[test]
+    fn optional_acceptance_context_is_omitted_for_legacy_requests() {
+        let mut turn_json = serde_json::to_value(MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".into(),
+            participant_id: "ash_member_123".into(),
+            orchestrator_participant_id: "ash_orch_123".into(),
+            backend_id: "cli:codex".into(),
+            run_id: "request-123".into(),
+            world_id: "world_123".into(),
+            world_generation: 7,
+            prompt: "resume".into(),
+            acceptance_context: None,
+        })
+        .unwrap();
+        assert!(turn_json.get("acceptance_context").is_none());
+        turn_json["acceptance_context"] =
+            serde_json::to_value(sample_world_work_acceptance_context()).unwrap();
+        let decoded: MemberTurnSubmitRequestV1 = serde_json::from_value(turn_json).unwrap();
+        assert_eq!(
+            decoded.acceptance_context,
+            Some(sample_world_work_acceptance_context())
+        );
     }
 
     #[test]

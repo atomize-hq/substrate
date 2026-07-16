@@ -2204,6 +2204,7 @@ where
                 )
             })?,
             prompt: prompt.to_string(),
+            acceptance_context: None,
         }
     };
 

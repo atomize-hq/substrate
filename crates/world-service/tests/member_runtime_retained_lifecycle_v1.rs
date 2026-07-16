@@ -74,6 +74,7 @@ fn make_member_dispatch_request(
         shared_world: None,
         world_network: None,
         world_fs_mode: None,
+        acceptance_context: None,
         member_dispatch: Some(MemberDispatchRequestV1 {
             schema_version: 1,
             orchestration_session_id: orchestration_session_id.to_string(),
@@ -173,6 +174,7 @@ fn make_member_turn_submit_request(
         world_id: world_id.to_string(),
         world_generation,
         prompt: prompt.to_string(),
+        acceptance_context: None,
     }
 }
 
