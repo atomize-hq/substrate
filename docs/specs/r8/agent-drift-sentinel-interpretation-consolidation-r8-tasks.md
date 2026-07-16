@@ -3,22 +3,23 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-tasks.md`
 
-Status: **FOLLOW-UP BOUNDED MARKDOWN FIX / FIRST FIX `2b9565fb9` PENDING FRESH INDEPENDENT
-RE-REVIEW / CURRENT THREE-FINDING FIX CLAIMS NO REVIEW RESULT / ALL TASKS UNSTARTED /
-`CTX-R8-02` OPEN / REVIEW PENDING / R8-IMPLEMENT BLOCKED**.
+Status: **BOUNDED MARKDOWN FIX FOR `b04207fb6` `CHANGES_REQUIRED` / CURRENT ONE-FINDING FIX
+CLAIMS NO REVIEW RESULT / ALL TASKS UNSTARTED / `CTX-R8-02` OPEN / REVIEW PENDING /
+R8-IMPLEMENT BLOCKED**.
 
 R8-SPEC is the sole active phase and is IN PROGRESS with packet `none`. The R8 MAP/SPEC contract
 series `698c766f9` + `f5865fb7` + `95529809` received fresh independent built-in `default` `CLEAN`
 with no findings. `CTX-R8-01` is `PROVEN` by the stable R7 analyzer/delegation contract plus that
 clean R8 MAP/SPEC freeze. Fresh independent built-in `default` review of the complete family at
 `0ed3d8f04` + `cfcf65507` returned `CHANGES_REQUIRED` with five scoped documentation findings.
-Bounded docs-only fix `2b9565fb9` landed and remains pending fresh independent re-review. The
-current review/fix round identified three later scoped documentation findings; this bounded
-Markdown-only fix addresses only those three and claims no review result. All R8 implementation
-tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and not proven;
-`CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/boundary-only, and
-no R8 code has started. No phase transition, Prompt 1 eligibility, implementation authorization,
-complete-family `CLEAN`, or review result for this progress receipt is claimed. No checkbox below authorizes
+Bounded docs-only fix `2b9565fb9` landed. Follow-up fix `b04207fb6` then received fresh
+independent built-in `default` `CHANGES_REQUIRED` with one scoped conditional-acceptance finding.
+This bounded Markdown-only fix addresses only that finding and claims no review result. All R8
+implementation tasks remain unchecked and unstarted. `CTX-R8-02` is `OPEN` / `REVIEW PENDING` and
+not proven; `CTX-R8-03` through `CTX-R8-06` remain `BLOCKED`. R8-IMPLEMENT remains blocked/
+boundary-only, and no R8 code has started. No phase transition, Prompt 1 eligibility,
+implementation authorization, complete-family `CLEAN`, or review result for this progress receipt
+is claimed. No checkbox below authorizes
 source/test implementation until the complete four-document family is fresh-review-clean and
 `CTX-R8-02` is proven.
 
@@ -46,7 +47,7 @@ tests, and prompts come from the PLAN decision table; silence is never authoriza
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` | `verify_live_checkpoint_compatibility`: HIGH, 17 direct dependents, 0 processes, 1 module. |
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` | file-disambiguated `LiveRuntime::observe` in `src/live_runtime.rs`: HIGH, 17 direct dependents, 0 processes, 1 module. |
 | R8-4 | `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` | `uses_explicit_analyzer_state`: HIGH, 10 impacted, 2 direct, 1 affected `execute` process, 3 modules. |
-| R8-4 | `DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A` **or** `: B` | `Checkpoint.delegation` is non-optional after pre-v0.8 absence deserializes to `DelegationContext::default()`; public `CheckpointPresentation` has no optional presence carrier. Option A adds one with public-struct/source-compatibility cost; Option B preserves the public shape and confines one schema-presence check to the legacy facade. PLAN recommends B without resolving it. Upstream `Checkpoint` changes are out of scope. |
+| R8-4 | `DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A` **or** `: B` | `Checkpoint.delegation` is non-optional after pre-v0.8 absence deserializes to `DelegationContext::default()`; public `CheckpointPresentation` has no optional presence carrier. Option A adds one with public-struct/source-compatibility cost and requires zero schema-version checks in `operator_surface.rs`. Option B preserves the public shape and permits exactly one `self.checkpoint.schema_version == "v0.8"` predicate inside `CheckpointPresentation::render_console_block`, with zero elsewhere in operator/core presentation. PLAN recommends B without resolving it. Upstream `Checkpoint` changes are out of scope. |
 
 ## Per-Task Rules
 
@@ -382,9 +383,12 @@ direct dependents, one affected `execute` process, three modules). It is bound t
 1. RED: add exact function-pointer signature assertions, facade behavior fixtures, and a static/
    behavioral witness that typed core rendering owns no version/state inference. Apply only the
    selected presence branch: Option A directly constructs the new optional public field and proves
-   `None`/`Some`; Option B compile-locks the unchanged public shape and proves the single
-   schema-presence check is localized to the legacy facade. Both lock the existing
-   `render_console_block` signature.
+   `None`/`Some` plus zero schema predicates in `operator_surface.rs`; Option B compile-locks the
+   unchanged public shape and proves exactly one
+   `self.checkpoint.schema_version == "v0.8"` predicate is localized to
+   `CheckpointPresentation::render_console_block`, with zero in every other item. Both lock the
+   existing `render_console_block` signature and compare legacy-facade output with the common typed
+   renderer.
 2. GREEN: move/delegate only the remaining semantic projection to the central module and render the
    typed facts.
 3. PROOF: run operator, compatibility, and replay/live presentation parity targets plus negative
@@ -398,18 +402,28 @@ direct dependents, one affected `execute` process, three modules). It is bound t
 - [ ] Public facades preserve current supported-input output and delegate to centralized
   non-validating projection plus `present_interpretation`; neither core path calls a facade as a
   validation boundary.
-- [ ] `operator_surface.rs` contains no schema-version table/string checks, `DriftState`
-  classification, legacy evidence-prefix recognition, or delegation inference.
+- [ ] The recorded presence decision selects exactly one mutually exclusive schema acceptance
+  branch: Option A proves zero schema-version predicates in all of `operator_surface.rs`; Option B
+  proves exactly one predicate `self.checkpoint.schema_version == "v0.8"` in the named legacy public
+  facade `CheckpointPresentation::render_console_block` and zero in every other item. Neither branch
+  permits a supported-version table, `DriftState` classification, legacy evidence-prefix
+  recognition, or delegation inference.
 - [ ] Presentation only formats/truncates/orders typed facts, labels trigger separately from
   posture, and applies existing decision/warning policy.
 - [ ] Core delegation rendering follows
   `CheckpointInterpretation.delegation: Option<DelegationContext>` exactly. The selected public
   representation is proven: Option A's explicit optional field has the authorized public-struct
   cost and exact `None`/`Some` construction/output tests; or Option B leaves the public shape/output
-  unchanged and confines exactly one schema-presence check to the legacy compatibility facade.
-- [ ] v0.2-v0.7 absence/default and v0.8 presence cases, facade/core parity, and replay/live byte
-  parity pass in `operator_surface`, `live_checkpoint_compatibility`, and `live_end_to_end`; static
-  inspection proves no presence inference leaks beyond the decision-authorized boundary.
+  unchanged and uses its sole named predicate only to derive the optional value passed into the same
+  typed renderer. The interpretation-to-presentation core beginning with a completed
+  `CheckpointInterpretation`, including `present_interpretation` and all formatting helpers, contains
+  zero schema checks under either option.
+- [ ] v0.2-v0.7 absence/default and v0.8 presence cases pass in `operator_surface` and
+  `live_checkpoint_compatibility`. Option A public `None`/`Some` output matches core `None`/`Some`;
+  Option B legacy-facade v0.2-v0.7 output is byte-identical to core internal `None` output and legacy-
+  facade v0.8 output is byte-identical to core internal `Some` output. `live_end_to_end` proves replay/
+  live byte parity for both cases and proves core paths use the presence-carrying internal value,
+  never the Option B facade predicate.
 - [ ] Analyzer-owned mixed/ambiguous topology and partial/opaque visibility are rendered as typed
   facts without revalidation.
 
@@ -420,16 +434,19 @@ cargo test -p agent-drift-sentinel --test operator_surface -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
 ! rg -n 'DriftState|historical_reason_prefixes|uses_explicit_analyzer_state|classify_checkpoint_posture' crates/agent-drift-sentinel/src/operator_surface.rs
-! rg -n 'checkpoint\.schema_version.*delegation|schema_version.*format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
-rg -n 'schema_version' crates/agent-drift-sentinel/src/operator_surface.rs
 rg -n 'present_interpretation|format_delegation_summary' crates/agent-drift-sentinel/src/operator_surface.rs
 cargo fmt --all -- --check
 cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 ```
 
-Classify the `schema_version` output against the recorded presence decision: Option A allows no
-delegation-presence occurrence; Option B allows exactly one inside the legacy facade and none in
-core interpretation/presentation helpers.
+The `operator_surface` target must include a token-aware, balanced-delimiter source-structure test;
+the removed line-oriented regex is not acceptance evidence. The test ignores whitespace, comments,
+string contents, and line wrapping; locates `CheckpointPresentation::render_console_block`; counts
+schema-version equality predicates by owning item; and proves the selected exact count. Option A
+expects whole-file `0`. Option B expects whole-file `1`, named method `1`, every other item `0`, and
+the sole predicate structurally equal to `self.checkpoint.schema_version == "v0.8"`, feeding only the
+optional delegation argument passed to the common typed renderer. Raw occurrence output is
+diagnostic only and cannot replace this structural/count assertion.
 
 **Decision triggers:** Any public signature/source-compatibility break not explicitly authorized by
 the recorded presence decision; any need for a facade to
@@ -601,7 +618,9 @@ evidence only after receipt review; `CTX-R8-03` final shared-seam wall; `CTX-R8-
 - [ ] Focused targets, full Sentinel, workspace fmt/clippy/tests, staged GitNexus, and cached-diff
   inspection are green with exact observed counts recorded (never copied from an older receipt).
 - [ ] Static inspection proves core replay/live ordering and absence of facade-as-validation calls;
-  operator presentation owns no schema/state/delegation inference.
+  Option A has zero operator-presentation schema checks, or Option B has only its exact one-predicate
+  `CheckpointPresentation::render_console_block` legacy exception; core presentation owns no schema/
+  state/delegation inference under either branch.
 - [ ] Receipts name every task/fix commit and fresh review result, plus every structured decision.
 - [ ] The receipt does not claim its own review result, phase transition, or family completion before
   fresh independent review.
