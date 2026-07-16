@@ -2606,6 +2606,35 @@ B0 rules:
 5. B0 owns only the carrier. B1 owns acceptance, B2.1 owns durable observation/dedupe/restart,
    B3.1 owns retained-event semantics, and C1 owns obligation materialization/completeness.
 
+### B2.1-3 exact producer replay transport
+
+World-service may add one bounded process-memory registry and endpoint for exact B0 frame replay.
+The registry is a producer transport cache, not durable state and not a supervisor. A replay request
+must supply all of:
+
+```rust
+struct ExecuteStreamReplayRequestV1 {
+    schema_version: u32,          // exactly 1
+    acceptance_record_id: String,
+    stream_id: String,
+    after_frame_sequence: u64,
+}
+```
+
+The registry binds that request to the exact accepted producer stream. It returns only frames with
+the same `stream_id` and `frame_sequence > after_frame_sequence`, in strict sequence, with the
+original identity and canonical bytes, and may then continue that exact live stream. It cannot
+enumerate streams or accept lookup by session, backend, process, endpoint, partial identity, or any
+fuzzy match. The implementation must set explicit maximum retained streams, maximum frames per
+stream, and maximum bytes per stream. Overflow, missing or expired retention, cursor-ahead state,
+identity mismatch, corruption, reorder, conflict, and unavailable replay fail closed.
+
+The replay registry is lost on world-service restart unless a later separately authorized durable
+producer contract proves otherwise. It must not be described as durable across that restart. It
+cannot create or modify B1 acceptance, a supervisor claim/cursor/journal, a terminal result,
+cancellation, lifecycle state, an obligation or Complete cut, or success. ReceiptRegistry remains
+immutable acceptance authority; `RuntimeEventTransport` transports producer facts only.
+
 ## 2B. Bounded retained worker event envelope
 
 B3.1 supplies the minimum semantic envelope C1 needs without moving B3.2 early. It extends the
@@ -4320,9 +4349,10 @@ Rules:
 
 ## 11. Supervisor idempotency and restart rules
 
-`WorldWorkExecutionSupervisor` owns one canonical receipt-scoped claim-and-journal state containing
+`WorldWorkExecutionSupervisor` alone owns one canonical receipt-scoped claim-and-journal state containing
 active observation identity, lease/observer epoch, exact durable cursor, canonical B0 frame/event
-entries, interruption/reconciliation state, and immutable terminal closeout. This state is not an
+entries, restart discovery, interruption/reconciliation state, unresolved producer-replay state,
+and immutable terminal closeout. This state is not an
 active-task side table and cannot be interpreted by StateStore or HostSessionAuthority. A dedicated
 `WorldWorkExecutionSupervisorStorageV1`-shaped capability may provide opaque crash-safe physical
 persistence in the activated authority store, but it has no caller-selected path/collection API and
@@ -4344,9 +4374,12 @@ B2.1 is reviewed in three ordered subpackets:
    before compatibility delivery; exact replay is a no-op and every gap, reorder, conflict, stale
    observer, or post-terminal write fails closed. Foreground inspect/wait and the minimum cancel
    compatibility consume receipt/supervisor truth without owning it.
-3. **B2.1-3 — restart and terminal reconciliation:** reopen every nonterminal claim at its exact
-   cursor, resume only through exact producer replay/reconciliation, and keep terminal closeout
-   immutable/idempotent. Missing exact terminal truth remains nonterminal/interrupted.
+3. **B2.1-3 — restart and terminal reconciliation:** the supervisor reopens every nonterminal
+   claim at its exact cursor, resumes only through exact producer replay/reconciliation, and keeps
+   terminal closeout immutable/idempotent. A host/shell restart may resume when the process-memory
+   world-service registry survives. A world-service restart or unavailable producer leaves the
+   valid durable claim nonterminal and unresolved. Missing exact terminal truth remains
+   nonterminal/interrupted.
 
 After those reviews, the joint B1/B2.1 production closeout must prove ephemeral and retained
 acceptance, legacy-writer exclusion, caller-drop/restart survival, blocking compatibility, and exact
@@ -4363,7 +4396,8 @@ terminal behavior before B3.1 becomes dependency-ready.
    receipt-scoped frame/event cursor plus the exact B1 acceptance record ID/revision, accepted-work
    identity, and optional transition correlation before waiter delivery or derived receipt/terminal
    state.
-4. **Restart discovery:** startup enumerates canonical nonterminal supervisor claims/cursors,
+4. **Restart discovery:** the canonical supervisor recovery operation enumerates nonterminal
+   supervisor claims/cursors,
    exact-joins each to its immutable B1 acceptance record, and resumes only from that durable
    cursor or through exact runtime replay/reconciliation. A crash after acceptance publication but
    before claim publication leaves an accepted-but-unclaimed handoff, not active or terminal
@@ -4383,9 +4417,11 @@ terminal behavior before B3.1 becomes dependency-ready.
    requires only opaque canonical-event commitment plus B0/B1 identity and order.
 7. **Monotonic states:** terminal states never revert; stale observers cannot overwrite newer
    state; equal-revision conflicting writes fail closed.
-8. **Interrupted observation:** EOF, timeout, observer/process loss, or PID/helper/socket state
-   without exact terminal event proof records an interruption and retry metadata. It does not
-   fabricate terminal success or a complete obligation cut.
+8. **Interrupted observation:** EOF, timeout, caller/observer/process loss, endpoint or replay
+   absence, or PID/helper/socket/readiness state without exact terminal event proof records an
+   interruption, exact unresolved/replay-unavailable state, and retry metadata. It does not
+   fabricate terminal success, cancellation, deletion, cursor advance, or a complete obligation
+   cut.
 9. **Reconciliation:** only exact producer replay/reconciliation that returns the missing B0 frames
    and exact terminal event may advance the cursor or close the run. A runtime known to have exited
    without that terminal event records an interruption/protocol failure with diagnostics, remains
@@ -4406,6 +4442,14 @@ terminal behavior before B3.1 becomes dependency-ready.
     delivery is safe.
 14. **Diagnostics:** non-zero exit, stream error, reconciliation failure, and cancel failure retain
     exact active-run/session/world/policy/stream/event joins.
+15. **Startup activation:** the current production `run_async_repl` hook may call exactly one
+    canonical supervisor recovery entry point and retain the returned observation tasks. It cannot
+    enumerate or interpret claims, duplicate reconciliation, or make lifecycle/terminal decisions.
+    Store corruption, invalid claim identity, or impossible durable state is fatal and fails
+    startup closed. An individual valid nonterminal claim with unavailable producer replay remains
+    durably unresolved; ordinary shell startup cannot discard or terminalize it and need not
+    pretend every accepted stream resumed. This bounded hook proves neither full ingress-surface
+    neutrality nor any seam promotion.
 
 ## 11A. Differential-baseline transition gate
 
@@ -4426,7 +4470,8 @@ The following transitions or explanations are forbidden:
 - a historical test is removed, hidden, filtered, renamed to evade comparison, or newly ignored;
 - a historical failure has an unexplained changed signature;
 - a historical failure passes because an assertion was deleted or weakened;
-- success bypasses the intended production path; or
+- success bypasses the intended production path through a direct resolver, transport, receipt,
+  supervisor, or other lower-level substitute; or
 - success disables behavior, swallows an error, adds a permissive fallback, or uses test-only
   branching.
 
@@ -4442,6 +4487,11 @@ For every historical failure that becomes a pass, the closeout evidence must:
 7. map the transition to an exact slice behavior and changed symbol;
 8. prove no unrelated feature or enforcement behavior was removed; and
 9. obtain independent review.
+
+For the B1/B2.1 inventory frozen in `05`, preserving a historical name while replacing its real
+dispatcher, guard-drop, waiter-drop, or tool-to-dispatch route with a lower-level owner call is
+still `RegressionMasked`. Renaming, replacing, newly ignoring, weakening assertions, or substituting
+a direct resolver/transport/receipt/supervisor call cannot count as `FailToPass` proof.
 
 The evidence must also publish the complete historical and current inventories, exact transition
 matrix, retained-failure names and normalized signatures, failure-to-pass manifest, new-test

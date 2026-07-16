@@ -59,7 +59,7 @@ flowchart TD
 
 | Boundary | Owns | Must not own |
 |---|---|---|
-| SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations | durable posture, world binding, retained continuity, successor allocation, terminal truth, transition-intent issuance/claim/application |
+| SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations; the current bounded production activation call into canonical supervisor recovery | durable posture, world binding, retained continuity, successor allocation, restart discovery/reconciliation, supervisor-record interpretation, terminal truth, transition-intent issuance/claim/application |
 | HostSessionAuthority | exact session/caller/lineage/session-world-binding resolution; durable posture transitions; revision-bound host-transition-intent issuance, claim validation, replay-safe application, and reconciliation | physical world realization or ownership metadata, runtime-process placement, transport loops, provider mechanics, compatibility projection |
 | StateStore | bounded atomic physical persistence, migrations, schema evolution | lifecycle, receipt, supervisor, routing, or liveness-derived semantic authority; generic activated-store writes |
 | CompatibilityReadModel | legacy reads, torn-root diagnostics, compatibility projection/migration | new authority writes or overriding newer revisions |
@@ -67,8 +67,8 @@ flowchart TD
 | SteeringPolicyEngine | deny-by-default action/mode/backend/session/world/autonomy decisions | effective policy materialization or runtime launch |
 | EffectivePolicyResolver | parent-policy composition and immutable `PolicySnapshotV3` materialization | enforcement by advisory flags alone |
 | WorldWorkReceiptRegistry | proposed acceptance-record identity/request context before submission; durable immutable accepted task/turn identity only after runtime acknowledgement; immutable recording of any owner-supplied host-transition correlation | runtime acceptance itself, active observation claims, frame/event journals, terminal reconciliation, stream ownership, host-transition interpretation, or worker lifecycle policy |
-| RuntimeEventTransport | producer-assigned stable stream/frame/event/terminal identity and monotonic ordering | receipt acceptance, durable observation, retained-message semantics, obligation semantics, or completeness |
-| WorldWorkExecutionSupervisor | durable active-observation claims, no-gap post-acceptance frame/event journal, exact acceptance joins, opaque correlation-byte retention, duplicate/reorder rejection, caller-drop survival, restart recovery/reconciliation, and monotonic terminal closeout | proposal or immutable acceptance-record truth, foreground tool semantics, model-facing identity, retained-message or host-transition semantics, or obligation classification/materialization |
+| RuntimeEventTransport | producer-assigned stable stream/frame/event/terminal identity and monotonic ordering; bounded process-memory retention and exact replay transport for supplied acceptance-record/stream/cursor identity | receipt acceptance, durable observation, stream enumeration, fuzzy lookup, lifecycle or terminal truth, retained-message semantics, obligation semantics, or completeness |
+| WorldWorkExecutionSupervisor | sole ownership of durable active-observation claims, no-gap post-acceptance frame/event journal, exact acceptance joins, opaque correlation-byte retention, duplicate/reorder rejection, caller-drop survival, restart discovery/recovery/reconciliation, unresolved replay state, and monotonic terminal closeout | proposal or immutable acceptance-record truth, foreground tool or startup-surface semantics, model-facing identity, producer-frame retention, retained-message or host-transition semantics, or obligation classification/materialization |
 | WorldWorkerMessagingProtocol | fail-closed producer-side normalization of provider events plus exact retained target/source, active-run, thread, typed event class, attention, and request/message/event causation semantics | transport ordering, receipt acceptance, observation ownership, or obligation materialization |
 | RetainedWorkerRuntime | worker create/continue/park/cancel/stop/fork/inspect/invalidate lifecycle; retained admission, R0-registration join, transport-claim, routability, and exact terminal truth | HSA world binding, physical world ownership metadata, host-session posture, or obligation projection |
 | ObligationLedger | obligation classification, idempotent materialization, canonical revisions and records, completeness watermarks/cuts, closed snapshots, and attention/review/deferred-action truth | runtime identity generation, stream observation, host rendering, prompt replay, or direct worker continuation |
@@ -155,6 +155,41 @@ a compatibility waiter over the receipt while the supervisor alone ingests and c
 At the exact acceptance transition, the supervisor claim must become durable before any subsequent
 frame can be consumed outside its journal. Dropping a foreground waiter or guard cannot delete an
 accepted record, supervisor claim, journal entry, or supervised work.
+
+#### B2.1-3 restart and producer-replay boundary
+
+`WorldWorkExecutionSupervisor` alone discovers durable nonterminal observations, interprets claims
+and journals, validates the exact acceptance-record/stream/cursor join, starts reconciliation, and
+decides whether exact B0 truth may advance or terminalize an observation. A startup surface may
+invoke exactly one canonical recovery operation and retain the returned observation tasks. The
+current `run_async_repl` call is only that bounded production activation hook: it cannot enumerate
+or interpret supervisor records, reproduce recovery logic, or make lifecycle decisions. This hook
+does not establish complete ingress-surface neutrality and cannot promote `SurfaceAdapter`,
+`HostExecutionEpisode`, or `WorldWorkExecutionSupervisor`.
+
+World-service may keep a bounded process-memory producer registry of exact B0 frames and expose
+replay only for a supplied exact acceptance-record ID, exact stream ID, and exact frame cursor.
+Frame identity, canonical bytes, and ordering remain unchanged. The endpoint cannot enumerate
+streams or accept a fuzzy, backend-only, session-only, or otherwise partial lookup. Explicit stream,
+per-stream frame, and per-stream byte limits are mandatory. Missing, mismatched, expired,
+unavailable, corrupt, reordered, or conflicting replay fails closed. Producer replay cannot create
+acceptance, an observation claim, terminal truth, an obligation, lifecycle truth, or success.
+
+The supported restart domains are exact:
+
+1. After a host/shell restart while the world-service registry survives, the durable supervisor
+   discovers its nonterminal claim, reconnects by exact acceptance/stream/cursor identity, replays
+   missing frames, and resumes live observation without duplicate journal transitions.
+2. After a world-service restart, or whenever producer replay is unavailable, the durable claim
+   remains nonterminal and unresolved. No terminal result, success, cancellation, deletion, cursor
+   advance, or Complete obligation cut is fabricated. The shell may report the exact unresolved or
+   replay-unavailable state, but PID, helper, socket, process, readiness, timeout, caller presence,
+   endpoint absence, EOF, and stream exhaustion cannot resolve it.
+
+Ordinary shell startup must distinguish fatal recovery-initialization corruption from a valid
+nonterminal claim whose producer is unavailable. Corrupt storage, invalid claim identity, or an
+impossible durable state fails closed. An individually unavailable producer stays durably
+unresolved and does not require startup to pretend the stream resumed successfully.
 
 ### 5. Cancel targets active work
 

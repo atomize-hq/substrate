@@ -71,6 +71,12 @@ EXIT PROOF / STOP CONDITIONS:
 
 If target docs, live code, tests, or fresh runtime evidence conflict, record the conflict in `KNOWN CORRECTIONS OR CONFLICTS` and resolve it before implementation. Never silently select the source that makes the slice appear easiest or most complete.
 
+For B2.1-3, keep three facts separate in every capsule and review: the durable supervisor claim
+and cursor, the process-memory world-service producer replay registry, and the shell startup hook
+that invokes the canonical supervisor recovery operation. Only `WorldWorkExecutionSupervisor`
+interprets durable claims or performs restart discovery and reconciliation. Producer replay only
+retains and transports exact B0 frames, and a startup surface only activates the canonical owner.
+
 ## Current gateway carrier correction
 
 Keep this split explicit in every D1, D3, or E3 context capsule:
@@ -104,7 +110,13 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
 - **Receipt:** durable accepted-work identity returned before terminal completion.
 - **Runtime event carrier:** producer-assigned stable stream/frame/event/terminal identity and
   monotonic ordering; it transports fact but owns neither durable observation nor semantics.
+- **Producer replay registry:** a bounded, process-memory world-service index that retains exact
+  B0 frames for one exact acceptance-record/stream/cursor lookup; it is transport availability,
+  not durable supervisor or lifecycle truth.
 - **Supervisor:** restart-safe owner of post-acceptance observation and closeout.
+- **Supervisor recovery activation hook:** a production startup call that invokes one canonical
+  supervisor recovery entry point and retains its observation tasks; it owns no discovery,
+  reconciliation, journal interpretation, or terminal decision.
 - **Materialization cut:** the ObligationLedger-owned proof that canonical obligation
   materialization covers an exact terminal event identity and sequence for one scoped run.
 - **Secret handoff:** one-time secure-FD delivery from host credential authority to the in-world Substrate gateway; never a UAA-native credential file projection.
@@ -169,7 +181,9 @@ live toolbox context, and leaves startup ownership Pending. It does not change f
 runtime construction or adopt helper plans, public Attach/Resume, startup outcome reconciliation,
 or any post-turn behavior. B1/B2.1-R0 is now landed and independently review-clean through
 `bb3eefba`. B3.2a plus its B3.2a-WA prerequisite are independently review-clean through
-`d0a70727c2bec2b2d6fe0754ea469c4682684dda`; B1/B2.1-0 is next. No seam is promoted.
+`d0a70727c2bec2b2d6fe0754ea469c4682684dda`; B1/B2.1-0 is next and has not begun. The B1 receipt
+core and B2.1 supervisor core remain preserved donor work, not recovered source truth. No seam is
+promoted.
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before
