@@ -3872,6 +3872,295 @@ fn legacy_transaction_rejects_descendant_replacement_between_read_and_write() {
 }
 
 #[test]
+fn receipt_registry_storage_requires_exact_activated_store_and_preserves_legacy_exclusion() {
+    let bootstrap = root();
+    let activated = platform::bootstrap_test(bootstrap.path(), material(0xc1), None).unwrap();
+    let activated_root = TrustedAuthorityRoot::open(bootstrap.path()).unwrap();
+    let expected_identity = activated_root.identity().clone();
+    let original_root_bytes =
+        fs::read(bootstrap.path().join("authority-v1/state-root-v1.json")).unwrap();
+
+    let other = root();
+    let other_identity = TrustedAuthorityRoot::open(other.path())
+        .unwrap()
+        .identity()
+        .clone();
+    assert!(WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &other_identity,
+        &activated.authority_store_id,
+    )
+    .is_err());
+    assert!(WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        "as_ffffffffffffffffffffffffffffffff",
+    )
+    .is_err());
+
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+    let mut transaction = storage.begin_transaction().unwrap();
+    assert_eq!(transaction.read_registry().unwrap(), None);
+    transaction
+        .replace_registry(br#"{"schema_version":1}"#)
+        .unwrap();
+    assert_eq!(
+        transaction.read_registry().unwrap(),
+        Some(br#"{"schema_version":1}"#.to_vec())
+    );
+    transaction.finish().unwrap();
+
+    assert_eq!(
+        fs::read(bootstrap.path().join("authority-v1/state-root-v1.json")).unwrap(),
+        original_root_bytes
+    );
+    assert!(legacy_writer_guard(bootstrap.path()).is_err());
+    assert_eq!(
+        fs::read(
+            bootstrap
+                .path()
+                .join("run/agent-hub/world-work-receipt-registry-v1.json")
+        )
+        .unwrap(),
+        br#"{"schema_version":1}"#
+    );
+}
+
+#[test]
+fn receipt_registry_storage_reconciles_only_exact_safe_temps() {
+    let bootstrap = root();
+    let activated = platform::bootstrap_test(bootstrap.path(), material(0xc2), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+    storage.begin_transaction().unwrap().finish().unwrap();
+
+    let agent_hub = bootstrap.path().join("run/agent-hub");
+    let recognized =
+        agent_hub.join("world-work-receipt-registry-v1--11111111111111111111111111111111.tmp");
+    fs::write(&recognized, b"partial and non-authoritative").unwrap();
+    fs::set_permissions(&recognized, fs::Permissions::from_mode(0o600)).unwrap();
+    storage.begin_transaction().unwrap().finish().unwrap();
+    assert!(!recognized.exists());
+
+    let malformed = agent_hub.join("world-work-receipt-registry-v1--NOT-HEX.tmp");
+    fs::write(&malformed, b"unsafe temp name").unwrap();
+    fs::set_permissions(&malformed, fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(storage.begin_transaction().is_err());
+    assert_eq!(fs::read(&malformed).unwrap(), b"unsafe temp name");
+}
+
+#[test]
+fn receipt_registry_storage_holds_root_lock_and_rejects_rebound_root() {
+    let parent = root();
+    let lexical_root = parent.path().join("bootstrap");
+    fs::create_dir(&lexical_root).unwrap();
+    fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700)).unwrap();
+    let activated = platform::bootstrap_test(&lexical_root, material(0xc3), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(&lexical_root)
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        &lexical_root,
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+
+    let mut transaction = storage.begin_transaction().unwrap();
+    let contender_root = TrustedAuthorityRoot::open(&lexical_root).unwrap();
+    let contender_authority = contender_root
+        .directory()
+        .open_directory("authority-v1")
+        .unwrap();
+    let contender_lock = contender_authority
+        .open_directory("lock")
+        .unwrap()
+        .open_file("root.lock")
+        .unwrap();
+    assert!(contender_lock.try_lock_exclusive().unwrap().is_none());
+
+    let retained_root = parent.path().join("bootstrap-retained");
+    fs::rename(&lexical_root, &retained_root).unwrap();
+    fs::create_dir(&lexical_root).unwrap();
+    fs::set_permissions(&lexical_root, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(transaction
+        .replace_registry(br#"{"must_not":"publish"}"#)
+        .is_err());
+    assert!(transaction.finish().is_err());
+    assert!(fs::read_dir(&lexical_root).unwrap().next().is_none());
+    assert!(!retained_root
+        .join("run/agent-hub/world-work-receipt-registry-v1.json")
+        .exists());
+}
+
+#[test]
+fn receipt_registry_storage_accepts_later_valid_root_revision_only_between_transactions() {
+    let bootstrap = root();
+    let current = platform::bootstrap_test(bootstrap.path(), material(0xc4), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &current.authority_store_id,
+    )
+    .unwrap();
+    storage.begin_transaction().unwrap().finish().unwrap();
+
+    let mut next = current.clone();
+    next.root_revision += 1;
+    assert!(matches!(
+        compare_and_swap_root(
+            bootstrap.path(),
+            &ExpectedRevisionsV1 {
+                root_revision: current.root_revision,
+                authority: None,
+            },
+            &next,
+        )
+        .unwrap(),
+        TransactionCommitOutcomeV1::Committed(_)
+    ));
+
+    let mut transaction = storage.begin_transaction().unwrap();
+    transaction
+        .replace_registry(b"opaque receipt bytes")
+        .unwrap();
+    transaction.finish().unwrap();
+    assert_eq!(read_root(bootstrap.path()).unwrap(), next);
+}
+
+#[test]
+fn receipt_registry_storage_rejects_unsafe_final_entry_without_following_it() {
+    use std::os::unix::fs::symlink;
+
+    let bootstrap = root();
+    let activated = platform::bootstrap_test(bootstrap.path(), material(0xc5), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+    storage.begin_transaction().unwrap().finish().unwrap();
+
+    let external = root();
+    let external_file = external.path().join("outside.json");
+    fs::write(&external_file, b"outside must remain unchanged").unwrap();
+    fs::set_permissions(&external_file, fs::Permissions::from_mode(0o600)).unwrap();
+    let registry = bootstrap
+        .path()
+        .join("run/agent-hub/world-work-receipt-registry-v1.json");
+    symlink(&external_file, &registry).unwrap();
+
+    assert!(storage.begin_transaction().is_err());
+    assert_eq!(
+        fs::read(&external_file).unwrap(),
+        b"outside must remain unchanged"
+    );
+    assert!(fs::symlink_metadata(&registry)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+}
+
+#[test]
+fn receipt_registry_storage_rejects_named_root_lock_replacement() {
+    let bootstrap = root();
+    let activated = platform::bootstrap_test(bootstrap.path(), material(0xc6), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+    let mut transaction = storage.begin_transaction().unwrap();
+
+    let lock_directory = bootstrap.path().join("authority-v1/lock");
+    fs::remove_file(lock_directory.join("root.lock")).unwrap();
+    fs::write(lock_directory.join("root.lock"), b"").unwrap();
+    fs::set_permissions(
+        lock_directory.join("root.lock"),
+        fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    let replacement_root = TrustedAuthorityRoot::open(bootstrap.path()).unwrap();
+    let replacement_lock = replacement_root
+        .directory()
+        .open_directory("authority-v1")
+        .unwrap()
+        .open_directory("lock")
+        .unwrap()
+        .open_file("root.lock")
+        .unwrap();
+    let replacement_guard = replacement_lock.try_lock_exclusive().unwrap().unwrap();
+
+    assert!(transaction
+        .replace_registry(b"must not publish after lock replacement")
+        .is_err());
+    assert!(transaction.finish().is_err());
+    drop(replacement_guard);
+    assert!(!bootstrap
+        .path()
+        .join("run/agent-hub/world-work-receipt-registry-v1.json")
+        .exists());
+}
+
+#[test]
+fn receipt_registry_storage_does_not_partially_clean_mixed_unsafe_temps() {
+    let bootstrap = root();
+    let activated = platform::bootstrap_test(bootstrap.path(), material(0xc7), None).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    let storage = WorldWorkReceiptRegistryStorageV1::bind(
+        bootstrap.path(),
+        &expected_identity,
+        &activated.authority_store_id,
+    )
+    .unwrap();
+    storage.begin_transaction().unwrap().finish().unwrap();
+
+    let agent_hub = bootstrap.path().join("run/agent-hub");
+    let recognized =
+        agent_hub.join("world-work-receipt-registry-v1--11111111111111111111111111111111.tmp");
+    let malformed = agent_hub.join("world-work-receipt-registry-v1--zzzz.tmp");
+    fs::write(&recognized, b"safe exact-name temp").unwrap();
+    fs::write(&malformed, b"unsafe malformed temp").unwrap();
+    fs::set_permissions(&recognized, fs::Permissions::from_mode(0o600)).unwrap();
+    fs::set_permissions(&malformed, fs::Permissions::from_mode(0o600)).unwrap();
+
+    assert!(storage.begin_transaction().is_err());
+    assert_eq!(fs::read(&recognized).unwrap(), b"safe exact-name temp");
+    assert_eq!(fs::read(&malformed).unwrap(), b"unsafe malformed temp");
+}
+
+#[test]
 fn legacy_transaction_finish_rejects_descendant_replacement_after_write() {
     let bootstrap = root();
     let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();

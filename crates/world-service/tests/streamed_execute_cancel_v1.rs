@@ -56,6 +56,7 @@ fn make_request(cwd: &Path, cmd: &str) -> ExecuteRequest {
         shared_world: None,
         world_network: None,
         world_fs_mode: None,
+        acceptance_context: None,
         member_dispatch: None,
     }
 }
@@ -133,6 +134,7 @@ fn make_member_turn_submit_request(
         world_id: world_id.to_string(),
         world_generation,
         prompt: prompt.to_string(),
+        acceptance_context: None,
     }
 }
 
