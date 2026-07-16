@@ -819,7 +819,8 @@ fn real_session_live_coordinator_accepts_verified_children_and_advances_each_ses
 }
 
 #[test]
-fn real_session_live_coordinator_discovers_verified_child_that_appears_after_root_poll() {
+fn real_session_live_coordinator_fails_closed_on_root_cursor_regression_after_late_verified_child_discovery(
+) {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
         .expect("utf8 temp dir")
