@@ -4,14 +4,13 @@
 
 **Pack status:** ACTIVE
 
-**Current work phase:** `R7-6 — SOLE ACTIVE PHASE AT ENTRY ONLY; active packet none; R7-5
-complete at checkpoint-doc commit b4916e565cd48f0924fb720d633b57d31b0d624c, fresh independent
-built-in default CLEAN with no findings; CTX-R7-05 PROVEN; R7-5 -> R7-6 transition
-commit 92a24286bf02f7f29ddf895cf490772d2d215a99 fresh independent built-in default CLEAN with no
-findings; R7-6 entry gate satisfied; CTX-R7-06 OPEN/current and not implementation-proven; R7-6.1 next, unchecked, and
-unstarted; no sentinel or other R7-6 implementation work started; R8 blocked; R7-6.1 workspace-
-clippy witness preserved; Prompt 1 selectors PHASE_ID R7-6 / ACTIVE_PACKET none prepared and
-eligible but not invoked`
+**Current work phase:** `R7-6 — SOLE ACTIVE PHASE AT CHECKPOINT-DOC RECEIPT GATE; active packet
+none; operator decision R7-6-HIGH-IMPACT-SENTINEL-EXPLICIT-STATE-01 A; R7-6.1 commit 7789fba4f
+fresh independent built-in default CLEAN; R7-6.2 series d2842f279 + 77ae455fe + a333d8486 fresh
+independent built-in default CLEAN; final-wall fix bd743eacc fresh independent built-in default
+CLEAN; CTX-R7-06 PROVEN; implementation and final checkpoint complete; checkpoint-doc receipt
+candidate pending fresh independent review; R7-6 exit gate and R8-SPEC entry pending/blocked; no
+next Prompt 1 selectors eligible or invoked`
 
 **Last repo-truth verification:** preserved review-clean packet/proof series through `b1791c1e3` + `e6d43eee9` + `61c9d5074`; on 2026-07-15 exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and exact `CTX-R6-06` each passed `1 / 1`; family filters passed `21 / 21`, `58 / 58`, `22 / 22`, `6 / 6`, and `169 / 169`; full analyzer completed with all suites green; diff check is green. R6-close transition/review-fix series `13b14d5f1` + `50446e6d6`, R7 promotion series `455d0ed90` + `876ac55de`, R7 entry transition series `6bf0ac6ad` + `4a887ee0c` + `e83ebb430`, R7-0.1 series `a9e75f149` + `55bea5fa5` + `faff68ac6`, R7-0.2 commit `fa85cd4b8`, and R7-0 -> R7-1 transition/fix series `339744dff` + `d20cac6a9` each received fresh independent built-in `default` `REVIEW CLEAN`. Current sticky authority is `HistoricalOnly / 20`, unflagged; old `Recovered / 20` is historical baseline only. No ordinary replay or acceptance-proof gap remains. `CTX-R6-17` assigns `dead_end_thrash` and `semantic_goal_drift` **Cutover complete**; `truth_grounding_gap`, `wrong_plan_branch`, and `scoring/mod.rs` **Fit-for-purpose exception**. The R7-0.2 fixture commit contains `12` sanitized JSONL files / `24` rows over seven cases; focused parser/privacy proof passes `2 / 2`, the compactor family passes `25 / 25` including end-to-end `2 / 2`, and manual JSON/private-marker/raw-UUID scans plus formatting are green with zero privacy matches. R7-1 task series `e65127720` + `685cf843b`, `4d122cd9f`, and `e865eee13` are fresh independent built-in `default` `REVIEW CLEAN`; focused R7-1.2 passes `6 / 6`, R7-1.3 end-to-end and CLI pass `6 / 6` and `2 / 2`, and the full compactor wall passes `36` unit/integration tests plus `3` doctests. Formatting, clippy, diff, and staged GitNexus gates are green; link/session/file ordering is deterministic; no raw private rollout data was added. Checkpoint-doc commit `1cae7d693` received fresh independent built-in `default` `REVIEW CLEAN`, satisfying the R7-1 exit gate. R7-1 is complete. R7-2 task commits `c60d05f77` and `9403c8a24`, plus R7-2.3 series `7af2ae517` +
 `75a353e46`, received fresh independent built-in `default` `REVIEW CLEAN`; `75a353e46` fixed the
@@ -36,14 +35,26 @@ violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clip
 full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
-independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; transition commit
-`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
-the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
-unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
-blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
-not started.
+independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is complete. Operator decision
+`R7-6-HIGH-IMPACT-SENTINEL-EXPLICIT-STATE-01: A` authorized only adding `v0.8` to the centralized
+explicit-analyzer-state helper, proving explicit posture plus state-backed evidence, preserving
+v0.2 and v0.3-v0.7 behavior, and forbidding generalized version parsing or R8 consolidation.
+R7-6.1 commit `7789fba4f` received fresh independent built-in `default` `CLEAN`; live compatibility
+passes `27 / 27`, replay input `16 / 16`, and operator surface `16 / 16`. R7-6.2 series
+`d2842f279` + `77ae455fe` + `a333d8486` received fresh independent built-in `default` `CLEAN` after
+cursor-regression and naming fixes; `real_session_live` passes `12 / 12` and `live_end_to_end`
+passes `10 / 10`, proving verified direct closure, per-session cursors, fail-closed unexpected-
+session behavior, and unchanged scheduling. Bounded final-wall fix `bd743eacc` received fresh
+independent built-in `default` `CLEAN` for the `serde_json` workspace feature-unification test-order
+witness. At code/proof HEAD `bd743eacc`, formatting, workspace clippy with `-D warnings`, full
+compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full workspace tests,
+and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
+otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
+checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
+packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
+pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+eligible or invoked.
 
 R7-4 checkpoint proof at HEAD `8a0790a3d`: `dead_end_thrash` passes `19 / 19`; the semantic filter
 passes `58 / 58` aggregate (`56` library plus `2` acceptance); full analyzer passes `422 / 422`;
@@ -51,8 +62,8 @@ formatting, analyzer clippy with `-D warnings`, and diff checks are green. The f
 found one P2/Important untruthful-linkage-provenance contract failure in `ebcb052b9`; fix
 `e7b65523f` routes the witness through production `export_bundle`, and fresh re-review returned
 `CLEAN`. R7-4.2 commit `8a0790a3d` records the no-new-class disposition and received fresh `CLEAN`
-with no findings. The known workspace-clippy RED remains routed to R7-6.1 and was neither rerun nor
-fixed.
+with no findings. At that R7-4 boundary, the known workspace-clippy RED remained routed to R7-6.1
+and was neither rerun nor fixed.
 
 Operator decision `R7-2-HIGH-IMPACT-ANALYZER-CONTRACT-01: A` authorized the bounded high-impact
 analyzer seam. At implementation HEAD `75a353e46`, input passes `16 / 16`; delegation matches pass
@@ -131,14 +142,26 @@ violations. At final proof HEAD `9c0690a02`, formatting, compactor/analyzer clip
 full compactor `39 / 39` aggregate, full analyzer `424 / 424` aggregate, and `git diff --check` are
 green. R7-5.1, R7-5.2, and the Checkpoint R7-5 behavior items are complete; `CTX-R7-05` is
 `PROVEN`. Checkpoint-doc commit `b4916e565cd48f0924fb720d633b57d31b0d624c` received fresh
-independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is
-complete. Only R7-6 is active at entry with packet `none`; transition commit
-`92a24286bf02f7f29ddf895cf490772d2d215a99` received fresh independent built-in `default` `CLEAN` with no findings, satisfying
-the R7-6 entry gate. `CTX-R7-06` is `OPEN`/current and not implementation-proven. `R7-6.1` is next,
-unchecked, and unstarted; no sentinel or other R7-6 implementation work has started. R8 remains
-blocked, and the R7-6.1 workspace-clippy witness remains preserved. Prompt 1 selectors `PHASE_ID:
-R7-6` / `ACTIVE_PACKET: none` are prepared and eligible but have not been invoked. R7-6 work has
-not started.
+independent built-in `default` `CLEAN` with no findings, satisfying the R7-5 exit gate. R7-5 is complete. Operator decision
+`R7-6-HIGH-IMPACT-SENTINEL-EXPLICIT-STATE-01: A` authorized only adding `v0.8` to the centralized
+explicit-analyzer-state helper, proving explicit posture plus state-backed evidence, preserving
+v0.2 and v0.3-v0.7 behavior, and forbidding generalized version parsing or R8 consolidation.
+R7-6.1 commit `7789fba4f` received fresh independent built-in `default` `CLEAN`; live compatibility
+passes `27 / 27`, replay input `16 / 16`, and operator surface `16 / 16`. R7-6.2 series
+`d2842f279` + `77ae455fe` + `a333d8486` received fresh independent built-in `default` `CLEAN` after
+cursor-regression and naming fixes; `real_session_live` passes `12 / 12` and `live_end_to_end`
+passes `10 / 10`, proving verified direct closure, per-session cursors, fail-closed unexpected-
+session behavior, and unchanged scheduling. Bounded final-wall fix `bd743eacc` received fresh
+independent built-in `default` `CLEAN` for the `serde_json` workspace feature-unification test-order
+witness. At code/proof HEAD `bd743eacc`, formatting, workspace clippy with `-D warnings`, full
+compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full workspace tests,
+and `git diff --check` are green. Staged GitNexus gates stayed within the authorized HIGH helper and
+otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-6.2, and all final
+checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. R7-6 remains the sole active phase with
+packet `none` while this checkpoint-doc receipt candidate awaits fresh independent review. The
+implementation/final checkpoint is complete, but the R7-6 exit gate and R8-SPEC entry remain
+pending/blocked until the receipt is committed and review-clean. No next Prompt 1 selectors are
+eligible or invoked.
 
 ## Purpose
 
