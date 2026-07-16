@@ -137,6 +137,8 @@ use crate::execution::orchestrator_world_dispatch::prepare_authority_bound_spawn
 use crate::execution::orchestrator_world_dispatch::prepare_fork_world_worker_bootstrap;
 #[cfg(target_os = "macos")]
 use crate::execution::orchestrator_world_dispatch::prepare_spawn_world_worker_bootstrap;
+#[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::recover_world_work_execution_observations;
 use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
     PreparedSpawnWorldWorkerBootstrap,
@@ -627,6 +629,23 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         } else {
             None
+        };
+        #[cfg(target_os = "linux")]
+        let _world_work_recovery_tasks = {
+            let recovery = AgentRuntimeStateStore::new()
+                .and_then(|store| recover_world_work_execution_observations(&store));
+            match recovery {
+                Ok(tasks) => tasks,
+                Err(error) => {
+                    let message = format!(
+                        "substrate: error: failed to recover accepted world work observation: {error:#}"
+                    );
+                    agent_printer.print(message.clone());
+                    write_best_effort_stderr_line(&message);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    return Ok(1);
+                }
+            }
         };
         let (toolbox_request_tx, mut toolbox_request_rx) =
             internal_toolbox_dispatch_request_channel();

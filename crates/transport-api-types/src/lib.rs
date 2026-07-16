@@ -1470,6 +1470,46 @@ fn execute_cancel_response_v1_default_schema_version() -> u32 {
     1
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExecuteStreamReplayRequestV1 {
+    #[serde(default = "execute_stream_replay_request_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub acceptance_record_id: String,
+    pub stream_id: String,
+    pub after_frame_sequence: u64,
+}
+
+fn execute_stream_replay_request_v1_default_schema_version() -> u32 {
+    1
+}
+
+impl ExecuteStreamReplayRequestV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported execute stream replay schema version {}",
+                self.schema_version
+            ));
+        }
+        for (field, value, prefix) in [
+            (
+                "acceptance_record_id",
+                self.acceptance_record_id.as_str(),
+                "wwa_",
+            ),
+            ("stream_id", self.stream_id.as_str(), "rts_"),
+        ] {
+            if value.trim() != value || !value.starts_with(prefix) || value.len() == prefix.len() {
+                return Err(format!(
+                    "execute stream replay {field} must be exact, trimmed, and {prefix}-prefixed"
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingDiffRequestV1 {
     pub profile: Option<String>,
@@ -4272,5 +4312,37 @@ mod tests {
         assert!(!status.enabled);
         assert!(!status.world_netfilter_enable_present);
         assert!(status.last_failure_reason.is_none());
+    }
+
+    #[test]
+    fn execute_stream_replay_request_round_trips_only_exact_identity() {
+        let request = super::ExecuteStreamReplayRequestV1 {
+            schema_version: 1,
+            acceptance_record_id: "wwa_exact-replay".to_string(),
+            stream_id: "rts_exact-replay".to_string(),
+            after_frame_sequence: 17,
+        };
+        request.validate().expect("validate exact replay request");
+        let bytes = serde_json::to_vec(&request).expect("serialize exact replay request");
+        let decoded: super::ExecuteStreamReplayRequestV1 =
+            serde_json::from_slice(&bytes).expect("decode exact replay request");
+        assert_eq!(decoded, request);
+
+        for invalid in [
+            super::ExecuteStreamReplayRequestV1 {
+                schema_version: 2,
+                ..request.clone()
+            },
+            super::ExecuteStreamReplayRequestV1 {
+                acceptance_record_id: "session-only".to_string(),
+                ..request.clone()
+            },
+            super::ExecuteStreamReplayRequestV1 {
+                stream_id: "rts_other ".to_string(),
+                ..request
+            },
+        ] {
+            assert!(invalid.validate().is_err());
+        }
     }
 }

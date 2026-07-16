@@ -12,6 +12,8 @@ mod member_runtime;
 mod prompt_fulfillment;
 pub mod pty;
 mod request_routing;
+#[cfg(target_os = "linux")]
+mod runtime_replay;
 pub mod service;
 #[cfg(unix)]
 mod socket_activation;
@@ -270,6 +272,10 @@ fn build_router(service: WorldService) -> Router {
         .route("/v1/gateway/sync", post(handlers::gateway_sync))
         .route("/v1/gateway/restart", post(handlers::gateway_restart))
         .route("/v1/execute/stream", post(handlers::execute_stream))
+        .route(
+            "/v1/execute/stream/replay",
+            post(handlers::execute_stream_replay),
+        )
         .route("/v1/member_turn/stream", post(handlers::member_turn_stream))
         .route("/v1/stream", get(handlers::stream))
         .route("/v1/trace/:span_id", get(handlers::get_trace))
@@ -566,6 +572,11 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
+    #[cfg(target_os = "linux")]
+    use axum::{body::Body, http::Request};
+    #[cfg(target_os = "linux")]
+    use tower::ServiceExt;
+
     static ENV_GUARD: Mutex<()> = Mutex::new(());
 
     fn reset_env() {
@@ -596,6 +607,48 @@ mod tests {
         let err = read_tcp_port().unwrap_err();
         assert!(err.to_string().contains("Failed to parse"));
         reset_env();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn exact_replay_route_distinguishes_invalid_from_unavailable_producer() {
+        let service = WorldService::new().expect("world service");
+        let app = build_router(service);
+
+        let invalid = Request::builder()
+            .method("POST")
+            .uri("/v1/execute/stream/replay")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"schema_version":1,"acceptance_record_id":"wwa_fixture","stream_id":"rts_fixture","after_frame_sequence":0,"extra":true}"#,
+            ))
+            .expect("invalid replay request");
+        let invalid_response = app
+            .clone()
+            .oneshot(invalid)
+            .await
+            .expect("invalid replay response");
+        assert_eq!(
+            invalid_response.status(),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+
+        let unavailable = Request::builder()
+            .method("POST")
+            .uri("/v1/execute/stream/replay")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"schema_version":1,"acceptance_record_id":"wwa_fixture","stream_id":"rts_fixture","after_frame_sequence":0}"#,
+            ))
+            .expect("exact replay request");
+        let unavailable_response = app
+            .oneshot(unavailable)
+            .await
+            .expect("unavailable replay response");
+        assert_eq!(
+            unavailable_response.status(),
+            axum::http::StatusCode::NOT_FOUND
+        );
     }
 
     #[cfg(unix)]

@@ -28,6 +28,9 @@ use world_api::SharedWorldBindingSnapshot;
 
 use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlacementContext};
 use crate::prompt_fulfillment::PromptFulfillmentBridge;
+use crate::runtime_replay::{
+    publish_replayable_frame, RuntimeReplayPublisher, RuntimeReplayRegistry,
+};
 use crate::service::RuntimeEventStreamProducer;
 
 const MEMBER_ROLE: &str = "member";
@@ -41,6 +44,7 @@ const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CO
 pub(crate) struct MemberRuntimeManager {
     active_members: Arc<RwLock<ActiveMemberRegistry>>,
     active_turns_by_span_id: Arc<RwLock<HashMap<String, Arc<ActiveSubmittedTurn>>>>,
+    runtime_replay: RuntimeReplayRegistry,
 }
 
 pub(crate) struct MemberRuntimeLaunchAdmissionV1 {
@@ -121,6 +125,13 @@ struct RetainedMemberSlot {
 impl MemberRuntimeManager {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn with_replay_registry(runtime_replay: RuntimeReplayRegistry) -> Self {
+        Self {
+            runtime_replay,
+            ..Self::new()
+        }
     }
 
     pub(crate) async fn launch(
@@ -262,8 +273,29 @@ impl MemberRuntimeManager {
             backend_id: dispatch.backend_id.clone(),
             protocol: json!(dispatch.protocol),
         };
-        let (mut producer, start) =
-            start_member_runtime_stream(&context, MemberStreamMode::Bootstrap, span_id.clone())?;
+        let (mut producer, start) = match start_member_runtime_stream(
+            &context,
+            MemberStreamMode::Bootstrap,
+            span_id.clone(),
+        ) {
+            Ok(stream) => stream,
+            Err(error) => {
+                active.cancel_bootstrap();
+                self.unregister_member(&active.participant_id);
+                return Err(error);
+            }
+        };
+        let replay_publisher = match self
+            .runtime_replay
+            .begin_for_acceptance(context.acceptance_context.as_ref(), &start)
+        {
+            Ok(publisher) => publisher,
+            Err(error) => {
+                active.cancel_bootstrap();
+                self.unregister_member(&active.participant_id);
+                return Err(error);
+            }
+        };
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
         let _ = tx.send(start);
 
@@ -316,7 +348,12 @@ impl MemberRuntimeManager {
                     &mut producer,
                 ) {
                     Ok(Some(frame)) => {
-                        let _ = tx.send(frame);
+                        publish_member_replay_frame(
+                            replay_publisher.as_ref(),
+                            &tx,
+                            frame,
+                            "member bootstrap Event",
+                        );
                     }
                     Ok(None) => {}
                     Err(err) => {
@@ -337,7 +374,12 @@ impl MemberRuntimeManager {
                             &mut producer,
                         ) {
                             Ok(Some(frame)) => {
-                                let _ = tx.send(frame);
+                                publish_member_replay_frame(
+                                    replay_publisher.as_ref(),
+                                    &tx,
+                                    frame,
+                                    "buffered member bootstrap Event",
+                                );
                             }
                             Ok(None) => {}
                             Err(err) => {
@@ -372,7 +414,12 @@ impl MemberRuntimeManager {
                         emitted_registered = true;
                         match producer.event(event) {
                             Ok(frame) => {
-                                let _ = tx.send(frame);
+                                publish_member_replay_frame(
+                                    replay_publisher.as_ref(),
+                                    &tx,
+                                    frame,
+                                    "member bootstrap completion registration",
+                                );
                             }
                             Err(err) => tracing::error!(
                                 error = %err,
@@ -391,7 +438,12 @@ impl MemberRuntimeManager {
                                 &mut producer,
                             ) {
                                 Ok(Some(frame)) => {
-                                    let _ = tx.send(frame);
+                                    publish_member_replay_frame(
+                                        replay_publisher.as_ref(),
+                                        &tx,
+                                        frame,
+                                        "buffered member bootstrap completion Event",
+                                    );
                                 }
                                 Ok(None) => {}
                                 Err(err) => {
@@ -427,7 +479,12 @@ impl MemberRuntimeManager {
             match frames {
                 Ok(frames) => {
                     for frame in frames {
-                        let _ = tx.send(frame);
+                        publish_member_replay_frame(
+                            replay_publisher.as_ref(),
+                            &tx,
+                            frame,
+                            "member bootstrap completion",
+                        );
                     }
                 }
                 Err(err) => {
@@ -476,19 +533,36 @@ impl MemberRuntimeManager {
             }
         };
 
+        let context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
+        let (mut producer, start) = match start_member_runtime_stream(
+            &context,
+            MemberStreamMode::SubmittedTurn,
+            span_id.clone(),
+        ) {
+            Ok(stream) => stream,
+            Err(error) => {
+                cancel.cancel();
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(error);
+            }
+        };
+        let replay_publisher = match self
+            .runtime_replay
+            .begin_for_acceptance(context.acceptance_context.as_ref(), &start)
+        {
+            Ok(publisher) => publisher,
+            Err(error) => {
+                cancel.cancel();
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(error);
+            }
+        };
         let turn = Arc::new(ActiveSubmittedTurn {
             participant_id: active.participant_id.clone(),
             cancel,
             last_signal: Mutex::new(None),
         });
         self.register_turn(span_id.clone(), turn.clone());
-
-        let context = active.submit_context(req.run_id.clone(), req.acceptance_context.clone());
-        let (mut producer, start) = start_member_runtime_stream(
-            &context,
-            MemberStreamMode::SubmittedTurn,
-            span_id.clone(),
-        )?;
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
         let _ = tx.send(start);
 
@@ -516,7 +590,12 @@ impl MemberRuntimeManager {
                     &mut producer,
                 ) {
                     Ok(Some(frame)) => {
-                        let _ = tx.send(frame);
+                        publish_member_replay_frame(
+                            replay_publisher.as_ref(),
+                            &tx,
+                            frame,
+                            "submitted member Event",
+                        );
                     }
                     Ok(None) => {}
                     Err(err) => {
@@ -548,7 +627,12 @@ impl MemberRuntimeManager {
             match frames {
                 Ok(frames) => {
                     for frame in frames {
-                        let _ = tx.send(frame);
+                        publish_member_replay_frame(
+                            replay_publisher.as_ref(),
+                            &tx,
+                            frame,
+                            "submitted member completion",
+                        );
                     }
                 }
                 Err(err) => {
@@ -1496,6 +1580,17 @@ fn validate_submit_turn_request(
         .into());
     }
     Ok(())
+}
+
+fn publish_member_replay_frame(
+    publisher: Option<&RuntimeReplayPublisher>,
+    tx: &tokio::sync::mpsc::UnboundedSender<ExecuteStreamFrame>,
+    frame: ExecuteStreamFrame,
+    frame_kind: &'static str,
+) {
+    if let Err(error) = publish_replayable_frame(publisher, tx, frame) {
+        tracing::error!(error = %error, frame_kind, "failed to retain replayable member runtime frame");
+    }
 }
 
 fn stream_response(

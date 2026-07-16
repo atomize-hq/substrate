@@ -85,7 +85,8 @@ use crate::execution::agent_runtime::state_store::{
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::world_work_execution_supervisor::{
-    WorldWorkExecutionSupervisor, WorldWorkInterruptionReasonV1, WorldWorkJournalAppendOutcomeV1,
+    WorldWorkExecutionObservationV1, WorldWorkExecutionSupervisor, WorldWorkInterruptionReasonV1,
+    WorldWorkJournalAppendOutcomeV1, WorldWorkRecoveryAttemptV1,
 };
 #[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::WorldTaskTerminalStateV1;
@@ -4130,6 +4131,128 @@ fn member_runtime_backend_kind(
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) fn recover_world_work_execution_observations(
+    store: &AgentRuntimeStateStore,
+) -> Result<Vec<tokio::task::JoinHandle<()>>> {
+    let Some(authority) = store.bind_world_work_recovery_authority()? else {
+        return Ok(Vec::new());
+    };
+    let mut observations = None;
+    for _ in 0..16 {
+        let acceptances = authority
+            .receipt_registry
+            .persisted_acceptances_for_recovery()?;
+        match authority
+            .execution_supervisor
+            .recover_persisted_world_work(&acceptances)?
+        {
+            WorldWorkRecoveryAttemptV1::Recovered(recovered) => {
+                let revalidated_acceptances = authority
+                    .receipt_registry
+                    .persisted_acceptances_for_recovery()?;
+                if revalidated_acceptances != acceptances {
+                    continue;
+                }
+                observations = Some(recovered);
+                break;
+            }
+            WorldWorkRecoveryAttemptV1::ReceiptSnapshotStale => continue,
+        }
+    }
+    let observations = observations.ok_or_else(|| {
+        anyhow::anyhow!("B2.1 recovery could not obtain a stable receipt/supervisor view")
+    })?;
+    let mut tasks = Vec::with_capacity(observations.len());
+    for observation in observations {
+        let client = match build_agent_client_and_pending_diff_request() {
+            Ok((client, _, _)) => client,
+            Err(_) => {
+                authority.execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ReplayUnavailable,
+                )?;
+                continue;
+            }
+        };
+        let supervisor = authority.execution_supervisor.clone();
+        tasks.push(tokio::spawn(async move {
+            if let Some(reason) =
+                reconcile_recovered_world_work_stream(&supervisor, client, &observation).await
+            {
+                let _ = supervisor.mark_interrupted(&observation.claim, reason);
+            }
+        }));
+    }
+    Ok(tasks)
+}
+
+#[cfg(target_os = "linux")]
+async fn reconcile_recovered_world_work_stream(
+    supervisor: &WorldWorkExecutionSupervisor,
+    client: transport_api_client::AgentClient,
+    observation: &WorldWorkExecutionObservationV1,
+) -> Option<WorldWorkInterruptionReasonV1> {
+    use http_body_util::BodyExt as _;
+
+    let request = transport_api_types::ExecuteStreamReplayRequestV1 {
+        schema_version: 1,
+        acceptance_record_id: observation.claim.acceptance_record_id.clone(),
+        stream_id: observation.claim.stream_id.clone(),
+        after_frame_sequence: observation.durable_frame_cursor.unwrap_or(0),
+    };
+    let response = match client.replay_execute_stream(request).await {
+        Ok(response) => response,
+        Err(_) => return Some(WorldWorkInterruptionReasonV1::ReplayUnavailable),
+    };
+    if supervisor.mark_observing(&observation.claim).is_err() {
+        return Some(WorldWorkInterruptionReasonV1::ObserverFailure);
+    }
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = match frame {
+            Ok(frame) => frame,
+            Err(_) => return Some(WorldWorkInterruptionReasonV1::ObserverFailure),
+        };
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+        while let Some(pos) = buffer.iter().position(|byte| *byte == b'\n') {
+            let line = buffer.drain(..=pos).collect::<Vec<_>>();
+            if line.len() <= 1 {
+                continue;
+            }
+            let runtime_frame = match serde_json::from_slice::<
+                transport_api_types::ExecuteStreamFrame,
+            >(&line[..line.len() - 1])
+            {
+                Ok(frame) => frame,
+                Err(_) => return Some(WorldWorkInterruptionReasonV1::ObserverFailure),
+            };
+            if supervisor
+                .journal_frame(&observation.claim, &runtime_frame, &line)
+                .is_err()
+            {
+                return Some(WorldWorkInterruptionReasonV1::ObserverFailure);
+            }
+            if matches!(
+                runtime_frame,
+                transport_api_types::ExecuteStreamFrame::Exit { .. }
+            ) {
+                return None;
+            }
+        }
+    }
+    if buffer.is_empty() {
+        Some(WorldWorkInterruptionReasonV1::ReplayEndedWithoutTerminal)
+    } else {
+        Some(WorldWorkInterruptionReasonV1::ObserverFailure)
+    }
+}
+
+#[cfg(target_os = "linux")]
 async fn execute_run_world_task_stream(
     receipt_registry: &WorldWorkReceiptRegistry,
     execution_supervisor: &WorldWorkExecutionSupervisor,
@@ -8142,6 +8265,50 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn seed_b21_ephemeral_observation(
+        task_run_id: &str,
+    ) -> (
+        TempDir,
+        WorldWorkReceiptRegistry,
+        WorldWorkExecutionSupervisor,
+        crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1,
+    ) {
+        let (root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let start = transport_api_types::ExecuteStreamFrame::Start {
+            frame_identity: test_runtime_frame_identity(1),
+            span_id: task_run_id.to_string(),
+        };
+        let mut claim = None;
+        consume_task_acceptance_acknowledgement(
+            &request,
+            &proposal,
+            Some(&start),
+            false,
+            |record| {
+                let accepted =
+                    receipt_registry.persist_world_work_acceptance_for_supervision(record)?;
+                claim = Some(execution_supervisor.claim_persisted_world_work(&accepted)?);
+                Ok(())
+            },
+        )
+        .expect("persist accepted B2.1 recovery task");
+        let claim = claim.expect("B2.1 recovery task has durable claim");
+        execution_supervisor
+            .journal_frame(
+                &claim,
+                &start,
+                &start
+                    .canonical_ndjson_bytes()
+                    .expect("canonical B2.1 recovery Start"),
+            )
+            .expect("journal B2.1 recovery Start");
+        (root, receipt_registry, execution_supervisor, claim)
+    }
+
+    #[cfg(target_os = "linux")]
     fn reserve_b21_task_acceptance(
         receipt_registry: &WorldWorkReceiptRegistry,
         authority_store_id: &str,
@@ -9165,6 +9332,189 @@ mod tests {
             Some(0)
         );
         server.await.expect("join Error server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_restart_replay_resumes_after_exact_durable_cursor_and_closes_on_b0_exit() {
+        let (_root, receipt_registry, execution_supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-restart-replay");
+        let acceptances = receipt_registry
+            .persisted_acceptances_for_recovery()
+            .expect("enumerate exact accepted work for recovery");
+        let WorldWorkRecoveryAttemptV1::Recovered(recovered) = execution_supervisor
+            .recover_persisted_world_work(&acceptances)
+            .expect("recover nonterminal observation")
+        else {
+            panic!("stable test receipt snapshot cannot be stale")
+        };
+        let observation = recovered
+            .into_iter()
+            .find(|observation| observation.claim == claim)
+            .expect("recover exact seeded observation");
+        assert_eq!(observation.durable_frame_cursor, Some(1));
+
+        let socket_home = tempdir().expect("restart replay socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind restart replay socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept replay request");
+            let (header, body) = read_http_request(&mut stream)
+                .await
+                .expect("read replay request");
+            assert!(header
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .starts_with("POST /v1/execute/stream/replay "));
+            let request: transport_api_types::ExecuteStreamReplayRequestV1 =
+                serde_json::from_slice(&body).expect("decode replay request body");
+            assert_eq!(request.after_frame_sequence, 1);
+            assert_eq!(request.stream_id, "rts_shell_world_dispatch_fixture");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame(
+                    "rts_shell_world_dispatch_fixture",
+                    "task-run-restart-replay",
+                ),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build restart replay client");
+        assert_eq!(
+            reconcile_recovered_world_work_stream(&execution_supervisor, client, &observation)
+                .await,
+            None
+        );
+        server.await.expect("join restart replay server");
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect replayed terminal")
+            .expect("replayed observation exists");
+        assert_eq!(terminal.durable_frame_cursor, Some(2));
+        assert!(terminal.interruption.is_none());
+        assert_eq!(terminal.terminal.map(|value| value.exit_code), Some(0));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_restart_eof_and_error_never_fabricate_terminal_truth() {
+        let (_root, receipt_registry, execution_supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-restart-interrupted");
+        let acceptances = receipt_registry
+            .persisted_acceptances_for_recovery()
+            .expect("enumerate interrupted recovery acceptance");
+        let WorldWorkRecoveryAttemptV1::Recovered(mut recovered) = execution_supervisor
+            .recover_persisted_world_work(&acceptances)
+            .expect("recover interrupted observation")
+        else {
+            panic!("stable interrupted test receipt snapshot cannot be stale")
+        };
+        let observation = recovered.pop().expect("one observation requires replay");
+
+        let socket_home = tempdir().expect("interrupted replay socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind interrupted replay socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener
+                .accept()
+                .await
+                .expect("accept interrupted replay request");
+            read_http_request(&mut stream)
+                .await
+                .expect("read interrupted replay request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Error {
+                    frame_identity: test_runtime_frame_identity(2),
+                    message: "producer ended without exact terminal".to_string(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build interrupted replay client");
+        let reason =
+            reconcile_recovered_world_work_stream(&execution_supervisor, client, &observation)
+                .await
+                .expect("missing exact terminal remains interrupted");
+        assert_eq!(
+            reason,
+            WorldWorkInterruptionReasonV1::ReplayEndedWithoutTerminal
+        );
+        execution_supervisor
+            .mark_interrupted(&observation.claim, reason)
+            .expect("persist interrupted recovery state");
+        server.await.expect("join interrupted replay server");
+        let interrupted = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect missing-terminal recovery")
+            .expect("interrupted observation exists");
+        assert_eq!(interrupted.durable_frame_cursor, Some(2));
+        assert_eq!(interrupted.terminal, None);
+        assert_eq!(
+            interrupted.interruption.map(|value| value.kind),
+            Some(WorldWorkInterruptionReasonV1::ReplayEndedWithoutTerminal)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_startup_recovery_unavailable_producer_remains_nonterminal() {
+        let (root, _receipt_registry, execution_supervisor, claim) =
+            seed_b21_ephemeral_observation("task-run-startup-unavailable");
+        let socket_home = tempdir().expect("startup unavailable socket tempdir");
+        let unavailable_socket = socket_home.path().join("missing-world.sock");
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", root.path());
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &unavailable_socket);
+
+        let store = AgentRuntimeStateStore::new().expect("open startup StateStore");
+        let tasks = recover_world_work_execution_observations(&store)
+            .expect("unavailable producer must not fail startup recovery activation");
+        for task in tasks {
+            timeout(Duration::from_secs(3), task)
+                .await
+                .expect("startup recovery task timed out")
+                .expect("startup recovery task panicked");
+        }
+
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+            .expect("inspect startup unavailable observation")
+            .expect("startup unavailable observation exists");
+        assert_eq!(observation.terminal, None);
+        assert_eq!(
+            observation.interruption.map(|value| value.kind),
+            Some(WorldWorkInterruptionReasonV1::ReplayUnavailable)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn b21_startup_recovery_rejects_corrupt_authority_before_activation() {
+        let (root, _receipt_registry, _execution_supervisor, _authority_store_id) =
+            b21_test_acceptance_stores();
+        fs::remove_dir_all(root.path().join("authority-v1/keys"))
+            .expect("remove required authority key directory");
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", root.path());
+
+        let store = AgentRuntimeStateStore::new().expect("open corrupt startup StateStore path");
+        let error = recover_world_work_execution_observations(&store)
+            .expect_err("corrupt recovery authority must fail startup activation");
+        assert!(
+            error.to_string().contains("corrupt")
+                || error.to_string().contains("unsupported")
+                || error.to_string().contains("authority root")
+        );
     }
 
     #[cfg(target_os = "linux")]

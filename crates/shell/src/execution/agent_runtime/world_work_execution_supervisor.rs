@@ -251,6 +251,12 @@ pub(crate) struct WorldWorkExecutionObservationV1 {
     pub(crate) interruption: Option<WorldWorkObservationInterruptionV1>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum WorldWorkRecoveryAttemptV1 {
+    Recovered(Vec<WorldWorkExecutionObservationV1>),
+    ReceiptSnapshotStale,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct SupervisedWorldWorkExecutionV1 {
@@ -567,6 +573,129 @@ impl WorldWorkExecutionSupervisor {
             );
             Ok((claim, true))
         })
+    }
+
+    pub(crate) fn recover_persisted_world_work(
+        &self,
+        acceptances: &[PersistedWorldWorkAcceptanceV1],
+    ) -> Result<WorldWorkRecoveryAttemptV1> {
+        let records = acceptances
+            .iter()
+            .map(PersistedWorldWorkAcceptanceV1::record)
+            .collect::<Vec<_>>();
+        self.recover_record_refs(&records)
+    }
+
+    #[cfg(test)]
+    fn recover_records(
+        &self,
+        records: &[WorldWorkAcceptanceRecordV1],
+    ) -> Result<Vec<WorldWorkExecutionObservationV1>> {
+        match self.recover_record_refs(&records.iter().collect::<Vec<_>>())? {
+            WorldWorkRecoveryAttemptV1::Recovered(observations) => Ok(observations),
+            WorldWorkRecoveryAttemptV1::ReceiptSnapshotStale => {
+                anyhow::bail!("test recovery receipt snapshot is stale")
+            }
+        }
+    }
+
+    fn recover_record_refs(
+        &self,
+        records: &[&WorldWorkAcceptanceRecordV1],
+    ) -> Result<WorldWorkRecoveryAttemptV1> {
+        let mut accepted_by_id = BTreeMap::new();
+        for record in records {
+            record.validate()?;
+            if record.authority_store_id != self.authority_store_id {
+                anyhow::bail!(
+                    "recovery acceptance does not match bound supervisor authority store"
+                );
+            }
+            if accepted_by_id
+                .insert(record.acceptance_record_id.as_str(), *record)
+                .is_some()
+            {
+                anyhow::bail!("recovery acceptance identity is duplicated");
+            }
+        }
+
+        self.with_state(|state| {
+            for (acceptance_record_id, execution) in &state.executions_by_acceptance_record_id {
+                let Some(record) = accepted_by_id.get(acceptance_record_id.as_str()) else {
+                    return Ok((WorldWorkRecoveryAttemptV1::ReceiptSnapshotStale, false));
+                };
+                if !execution.claim.matches_acceptance(record) {
+                    anyhow::bail!("supervised world work conflicts with durable acceptance truth");
+                }
+            }
+
+            let mut changed = false;
+            let mut recovered = Vec::new();
+            for record in records {
+                if !state
+                    .executions_by_acceptance_record_id
+                    .contains_key(&record.acceptance_record_id)
+                {
+                    let claim = WorldWorkExecutionClaimV1::from_acceptance(
+                        record,
+                        &self.observer_instance_id,
+                    )?;
+                    state.executions_by_acceptance_record_id.insert(
+                        record.acceptance_record_id.clone(),
+                        SupervisedWorldWorkExecutionV1::from_claim(claim),
+                    );
+                    changed = true;
+                }
+                let execution = state
+                    .executions_by_acceptance_record_id
+                    .get_mut(&record.acceptance_record_id)
+                    .ok_or_else(|| anyhow::anyhow!("recovery claim insertion was not durable"))?;
+                if !execution.claim.matches_acceptance(record) {
+                    anyhow::bail!("recovery encountered a conflicting observation claim");
+                }
+                if execution.terminal.is_some() {
+                    continue;
+                }
+                if execution.claim.observer_instance_id != self.observer_instance_id {
+                    execution.claim.observer_instance_id = self.observer_instance_id.clone();
+                    execution.claim.observer_epoch = execution
+                        .claim
+                        .observer_epoch
+                        .checked_add(1)
+                        .ok_or_else(|| anyhow::anyhow!("B2.1 observer epoch exhausted"))?;
+                    execution.claim.claim_revision = execution
+                        .claim
+                        .claim_revision
+                        .checked_add(1)
+                        .ok_or_else(|| anyhow::anyhow!("B2.1 claim revision exhausted"))?;
+                    execution.claim.claimed_at = Utc::now();
+                    changed = true;
+                }
+                let interruption = WorldWorkObservationInterruptionV1 {
+                    schema_version: 1,
+                    kind: WorldWorkInterruptionReasonV1::RecoveryPending,
+                    observer_epoch: execution.claim.observer_epoch,
+                    interrupted_at: Utc::now(),
+                };
+                if execution.interruption.as_ref().map(|value| value.kind)
+                    != Some(WorldWorkInterruptionReasonV1::RecoveryPending)
+                    || execution
+                        .interruption
+                        .as_ref()
+                        .map(|value| value.observer_epoch)
+                        != Some(execution.claim.observer_epoch)
+                {
+                    execution.interruption = Some(interruption);
+                    changed = true;
+                }
+                recovered.push(execution.observation());
+            }
+            Ok((WorldWorkRecoveryAttemptV1::Recovered(recovered), changed))
+        })
+    }
+
+    pub(crate) fn mark_observing(&self, claim: &WorldWorkExecutionClaimV1) -> Result<()> {
+        self.update_interruption(claim, None)
     }
 
     pub(crate) fn mark_interrupted(
@@ -1313,6 +1442,189 @@ mod tests {
                     .as_ref()
                     .map(|terminal| terminal.exit_code),
                 Some(0)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn restart_recovery_rotates_observer_at_exact_cursor_and_replay_converges() {
+        with_supervisor(|supervisor, root_path| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(&root_path)
+                .expect("open authority");
+            let root = authority.read_root().expect("read authority root");
+            let old = WorldWorkExecutionSupervisor::bind_for_test_observer(
+                &root_path,
+                &root.bootstrap_home,
+                &supervisor.authority_store_id,
+                "observer-before-restart",
+            )
+            .expect("bind old observer");
+            let old_claim = old.claim_record(&record).expect("claim before restart");
+            let start = ExecuteStreamFrame::Start {
+                frame_identity: frame_identity("stream-b2-1", 1),
+                span_id: "task-run-b2-1".to_string(),
+            };
+            old.journal_frame(
+                &old_claim,
+                &start,
+                &start.canonical_ndjson_bytes().expect("canonical Start"),
+            )
+            .expect("journal Start before restart");
+            let first_event = event("stream-b2-1", 1);
+            old.journal_frame(
+                &old_claim,
+                &first_event,
+                &first_event
+                    .canonical_ndjson_bytes()
+                    .expect("canonical event"),
+            )
+            .expect("journal event before restart");
+
+            let recovered = WorldWorkExecutionSupervisor::bind_for_test_observer(
+                &root_path,
+                &root.bootstrap_home,
+                &root.authority_store_id,
+                "observer-after-restart",
+            )
+            .expect("bind restarted observer");
+            let observations = recovered
+                .recover_records(std::slice::from_ref(&record))
+                .expect("recover nonterminal accepted work");
+            assert_eq!(observations.len(), 1);
+            let observation = &observations[0];
+            assert_eq!(observation.durable_frame_cursor, Some(2));
+            assert_eq!(observation.durable_event_cursor, Some(1));
+            assert_eq!(observation.claim.observer_epoch, 2);
+            assert_eq!(observation.claim.claim_revision, 2);
+            assert_eq!(
+                observation.interruption.as_ref().map(|value| value.kind),
+                Some(WorldWorkInterruptionReasonV1::RecoveryPending)
+            );
+
+            let late = terminal("stream-b2-1", 3, 2);
+            assert!(old
+                .journal_frame(
+                    &old_claim,
+                    &late,
+                    &late
+                        .canonical_ndjson_bytes()
+                        .expect("canonical stale terminal"),
+                )
+                .is_err());
+            assert_eq!(
+                recovered
+                    .journal_frame(
+                        &observation.claim,
+                        &start,
+                        &start
+                            .canonical_ndjson_bytes()
+                            .expect("canonical replay Start"),
+                    )
+                    .expect("exact Start replay converges"),
+                WorldWorkJournalAppendOutcomeV1::ExactReplay
+            );
+            recovered
+                .mark_observing(&observation.claim)
+                .expect("mark exact replay observer live");
+            recovered
+                .journal_frame(
+                    &observation.claim,
+                    &late,
+                    &late.canonical_ndjson_bytes().expect("canonical terminal"),
+                )
+                .expect("journal exact terminal after recovery");
+            let terminal_observation = recovered
+                .inspect_observation_by_acceptance_id(&record.acceptance_record_id)
+                .expect("inspect recovered terminal")
+                .expect("terminal observation exists");
+            assert!(terminal_observation.interruption.is_none());
+            assert!(terminal_observation.terminal.is_some());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn accepted_without_claim_recovers_interrupted_and_never_fabricates_terminal_truth() {
+        with_supervisor(|supervisor, _| {
+            let record = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-b2-1".to_string(),
+                },
+            );
+            let observations = supervisor
+                .recover_records(std::slice::from_ref(&record))
+                .expect("recover accepted work with no claim");
+            assert_eq!(observations.len(), 1);
+            let observation = &observations[0];
+            assert_eq!(observation.durable_frame_cursor, None);
+            assert_eq!(observation.terminal, None);
+            assert_eq!(
+                observation.interruption.as_ref().map(|value| value.kind),
+                Some(WorldWorkInterruptionReasonV1::RecoveryPending)
+            );
+            supervisor
+                .mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ReplayUnavailable,
+                )
+                .expect("record unavailable exact producer replay");
+            let interrupted = supervisor
+                .inspect_observation_by_acceptance_id(&record.acceptance_record_id)
+                .expect("inspect interrupted recovery")
+                .expect("interrupted observation exists");
+            assert_eq!(interrupted.terminal, None);
+            assert_eq!(
+                interrupted.interruption.map(|value| value.kind),
+                Some(WorldWorkInterruptionReasonV1::ReplayUnavailable)
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn concurrent_claim_reports_stale_receipt_snapshot_without_mutating_observers() {
+        with_supervisor(|supervisor, _| {
+            let first = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-first".to_string(),
+                },
+            );
+            let second = accepted_record(
+                &supervisor.authority_store_id,
+                AcceptedWorldWorkIdentityV1::EphemeralTask {
+                    task_run_id: "task-run-concurrent".to_string(),
+                },
+            );
+            let first_claim = supervisor.claim_record(&first).expect("claim first work");
+            let second_claim = supervisor
+                .claim_record(&second)
+                .expect("claim concurrent work");
+            assert_eq!(
+                supervisor
+                    .recover_record_refs(&[&first])
+                    .expect("classify stale receipt snapshot"),
+                WorldWorkRecoveryAttemptV1::ReceiptSnapshotStale
+            );
+            assert_eq!(
+                supervisor
+                    .inspect_claim_by_acceptance_id(&first.acceptance_record_id)
+                    .expect("inspect first unchanged claim"),
+                Some(first_claim)
+            );
+            assert_eq!(
+                supervisor
+                    .inspect_claim_by_acceptance_id(&second.acceptance_record_id)
+                    .expect("inspect concurrent unchanged claim"),
+                Some(second_claim)
             );
         });
     }

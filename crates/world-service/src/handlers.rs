@@ -13,10 +13,10 @@ use serde_json::{json, Value};
 use substrate_common::{WorldFsMode, WorldFsStrategyProbeResult};
 use transport_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, MemberTurnSubmitRequestV1,
-    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
-    WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
+    ExecuteStreamReplayRequestV1, GatewayLifecycleRequestV1, GatewayLifecycleResponseV1,
+    MemberTurnSubmitRequestV1, PendingDiffClearRequestV1, PendingDiffClearResponseV1,
+    PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1, PendingDiffRecordV1,
+    PendingDiffRequestV1, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
     WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
     WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsReadRequestV1,
     WorldFsReadResponseV1,
@@ -347,6 +347,24 @@ pub async fn execute_stream(
         } else {
             ApiErrorResponse(ApiError::Internal(e.to_string()))
         }
+    })
+}
+
+/// Resume one exact accepted execution stream from its durable host cursor.
+pub async fn execute_stream_replay(
+    State(service): State<WorldService>,
+    body: Bytes,
+) -> Result<Response, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: ExecuteStreamReplayRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    req.validate()
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(e)))?;
+    service.replay_execute_stream(req).await.map_err(|e| {
+        ApiErrorResponse(ApiError::NotFound(format!(
+            "exact runtime replay stream is unavailable: {e}"
+        )))
     })
 }
 
