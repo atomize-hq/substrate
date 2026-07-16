@@ -62,8 +62,9 @@ for child work.
    checkpoint, including `SingleAgent`.
 6. **Separate trajectory truth.** Child progress stays on child checkpoints. Parent checkpoints hold
    parent-visible progress plus link references, never copied child status.
-7. **No new scorer taxonomy by default.** Existing scorers run per trajectory; a new drift class
-   requires later acceptance evidence.
+7. **Existing scorer taxonomy is sufficient for R7-4 evidence.** Existing scorers run per
+   trajectory and typed delegation context preserves ownership. Any future distinct,
+   unexpressible delegated failure mode requires a separate evidence-backed reviewed packet.
 8. **R7-compatible sentinel only.** Multi-session cursor and presentation support may change, but
    broad replay/live interpretation refactoring remains R8.
 9. **R6 closure boundary stands.** Do not reopen `R6-3.X.3`, conditional `R6-4`, or closed
@@ -285,9 +286,15 @@ and eligible but uninvoked.
 
 ### R7-4.2 Decide taxonomy from evidence
 
-- Start with no new `DriftClass`.
-- If the acceptance corpus demonstrates a distinct delegated failure mode that cannot be expressed
-  through trajectory-local scores plus delegation context, stop and open a new reviewed packet.
+- Decision: existing `DriftClass` values plus typed delegation context are sufficient for the live
+  R7-4.1 evidence. The production-shaped linked witness keeps parent waits cleared, preserves
+  child-local repetition as active `dead_end_thrash`, and identifies each trajectory through
+  topology and child-work visibility.
+- No new `DriftClass` variant was added. If future evidence demonstrates a distinct delegated
+  failure mode that cannot be expressed through trajectory-local scores plus delegation context,
+  stop and open a separate evidence-backed reviewed packet before schema or compatibility edits.
+- Upstream GitNexus impact for `DriftClass` was LOW with `0` direct callers, `0` affected
+  processes, and `0` affected modules; this manual boundary review did not authorize an enum edit.
 
 Checkpoint:
 
@@ -406,5 +413,6 @@ entry with packet `none`; transition/fix series `e077de489` + `3dd5ba943` receiv
 `R7-4.1` is next, unchecked, and unstarted; no R7-4 production/scorer work has started.
 `R7-5..R7-6` and R8 remain blocked. Prompt 1 selectors `PHASE_ID: R7-4` / `ACTIVE_PACKET: none` are
 prepared and eligible but have not been invoked.
-Default-on linked closure, new drift taxonomy, and recursive depth remain evidence-gated decisions
-for later packets.
+Default-on linked closure and recursive depth remain evidence-gated decisions for later packets.
+The R7-4 evidence requires no new drift taxonomy; any future distinct, unexpressible delegated
+failure mode requires a separate evidence-backed reviewed packet.

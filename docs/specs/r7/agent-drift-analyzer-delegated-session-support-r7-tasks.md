@@ -294,6 +294,11 @@ unstarted; no R7-4 production/scorer work has started. Prompt 1 selectors `PHASE
 - [ ] **R7-4.2: Record the delegated drift taxonomy decision.**
   - Acceptance: either existing classes plus delegation context are sufficient, or a separate
     evidence-backed follow-on packet is opened; no opportunistic variant is added.
+  - Decision: existing classes plus typed delegation context are sufficient for the production-shaped
+    R7-4.1 evidence: parent waits remain cleared, child-local repetition remains active
+    `dead_end_thrash`, and topology/visibility preserve ownership. No new variant was added; any
+    future distinct, unexpressible delegated failure mode requires a separate evidence-backed
+    reviewed packet before schema or compatibility edits.
   - Verify: manual review against acceptance evidence and `DriftClass` impact analysis
   - Files: R7 docs and, only if separately approved, schema/compatibility files
   - Dependencies: R7-4.1

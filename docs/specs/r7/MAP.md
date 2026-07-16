@@ -173,8 +173,11 @@ prepared and eligible but have not been invoked.
 4. **R7-3 — child-visible progress separation.** Reuse each child's own `SessionProgress`; do not
    copy child progress into parent progress or synthesize it from waits/results.
 5. **R7-4 — delegated scorer guardrails.** Apply existing scorers per trajectory and prevent
-   parent-side opacity or waiting from becoming claims about child drift. No new drift class is
-   required without acceptance evidence.
+   parent-side opacity or waiting from becoming claims about child drift. The production-shaped
+   R7-4.1 parent/child witness is expressible with existing drift classes plus typed delegation
+   context: parent waits remain cleared while child-local repetition remains
+   `dead_end_thrash`. No new drift class was added; a future distinct, unexpressible delegated
+   failure mode requires its own evidence-backed reviewed packet.
 6. **R7-5 — delegated acceptance and real-corpus proof.** Prove linked, missing, conflicting,
    multi-child, and non-delegated cases with explicit topology strata.
 7. **R7-6 — minimal sentinel compatibility.** Accept and render analyzer-owned linked trajectories
@@ -186,7 +189,8 @@ prepared and eligible but have not been invoked.
   child, with deeper descendants remaining explicit bounded residue;
 - inferred links based only on prose, filenames, or temporal proximity;
 - aggregating child progress into one parent progress status;
-- a new delegated-session drift class without real acceptance evidence;
+- a new delegated-session drift class; R7-4 evidence does not require one, and any future distinct
+  failure mode requires a separate evidence-backed reviewed packet;
 - learned delegation or progress models;
 - R8 replay/live interpretation consolidation;
 - reopening `R6-3.X.3`, conditional `R6-4`, or closed semantic-goal-drift packets.

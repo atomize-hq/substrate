@@ -425,11 +425,20 @@ The proof report must stratify `single_agent`, `delegating_parent_linked`,
 11. Replay and live sentinel paths accept v0.8 linked trajectories with per-session cursor safety.
 12. R8 consolidation, recursive execution graphs, and new drift taxonomy remain outside this family.
 
+### R7-4 delegated drift taxonomy decision
+
+The production-shaped linked parent/child witness from R7-4.1 is expressible with the existing
+`DriftClass` contract plus typed `DelegationContext`: the parent's repeated waits remain a cleared
+`dead_end_thrash` score, while the child's repeated failing work remains active child-local
+`dead_end_thrash`, and the checkpoint topology/visibility identifies which trajectory each result
+belongs to. No new `DriftClass` variant was added. Any future delegated failure mode that cannot be
+expressed by the existing classes plus delegation context requires a separate evidence-backed
+reviewed packet before schema or compatibility edits.
+
 ## Open Questions
 
 No blocking design question remains for the first implementation packet. The following decisions are
 intentionally evidence-gated later in the family:
 
 - whether linked-child discovery should become the default after R7 acceptance proves it stable;
-- whether any delegated-specific `DriftClass` is justified after per-trajectory scorer evidence;
 - whether depth greater than one should become a later R7 follow-on or a separate phase.
