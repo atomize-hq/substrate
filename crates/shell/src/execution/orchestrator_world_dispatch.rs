@@ -70,10 +70,11 @@ use crate::execution::agent_runtime::retained_worker_runtime::{
     CanonicalWorkerSpawnPayloadV1, RetainedWorkerAdmissionPlanV1, RetainedWorkerAdmissionStateV1,
     RetainedWorkerRuntime,
 };
+#[cfg(test)]
+use crate::execution::agent_runtime::state_store::ActiveEphemeralWorldTaskRecord;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::state_store::{
-    AcceptedWorldWorkIdentityV1, ActiveEphemeralWorldTaskGuard, ActiveEphemeralWorldTaskRecord,
-    PreparedInternalApprovalResponseObligationCloseout,
+    AcceptedWorldWorkIdentityV1, PreparedInternalApprovalResponseObligationCloseout,
     PreparedInternalClarificationResponseObligationCloseout, ProposedWorldWorkIdentityV1,
     RuntimeAcceptanceAcknowledgementKindV1, RuntimeAcceptanceEvidenceV1,
     WorldWorkAcceptanceProposalV1, WorldWorkAcceptanceRecordV1, WorldWorkProposalAllocationV1,
@@ -82,6 +83,10 @@ use crate::execution::agent_runtime::state_store::{
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::materialize_runtime_descriptor;
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::world_work_execution_supervisor::{
+    WorldWorkExecutionSupervisor, WorldWorkInterruptionReasonV1, WorldWorkJournalAppendOutcomeV1,
+};
 #[cfg(any(target_os = "linux", test))]
 use crate::execution::agent_runtime::WorldTaskTerminalStateV1;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -345,6 +350,10 @@ fn release_active_ephemeral_terminal_wait(orchestration_session_id: &str, task_r
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "legacy ephemeral control compatibility remains until B1/B2.1-0 adoption"
+)]
 fn publish_active_ephemeral_terminal_truth(
     orchestration_session_id: &str,
     task_run_id: &str,
@@ -424,6 +433,10 @@ fn active_ephemeral_terminal_state_label(state: WorldTaskTerminalStateV1) -> &'s
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "legacy ephemeral control compatibility remains until B1/B2.1-0 adoption"
+)]
 fn publish_active_ephemeral_terminal_truth_if_registered(
     orchestration_session_id: &str,
     task_run_id: Option<&str>,
@@ -437,6 +450,10 @@ fn publish_active_ephemeral_terminal_truth_if_registered(
 
 #[cfg(target_os = "linux")]
 #[derive(Debug)]
+#[allow(
+    dead_code,
+    reason = "legacy foreground guard remains until B1/B2.1-0 adoption"
+)]
 struct ActiveEphemeralTerminalTruthGuard {
     orchestration_session_id: String,
     task_run_id: Option<String>,
@@ -444,6 +461,10 @@ struct ActiveEphemeralTerminalTruthGuard {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "legacy foreground guard remains until B1/B2.1-0 adoption"
+)]
 impl ActiveEphemeralTerminalTruthGuard {
     fn new(orchestration_session_id: &str) -> Self {
         Self {
@@ -1193,6 +1214,7 @@ pub(crate) struct PreparedForkWorldWorkerBootstrap {
 #[cfg(target_os = "linux")]
 struct PreparedTaskAcceptanceSubmission {
     receipt_registry: WorldWorkReceiptRegistry,
+    execution_supervisor: WorldWorkExecutionSupervisor,
     proposal: WorldWorkAcceptanceProposalV1,
     client: transport_api_client::AgentClient,
     execute_request: transport_api_types::ExecuteRequest,
@@ -1201,6 +1223,7 @@ struct PreparedTaskAcceptanceSubmission {
 #[cfg(target_os = "linux")]
 struct PreparedRetainedAcceptanceSubmission {
     receipt_registry: WorldWorkReceiptRegistry,
+    execution_supervisor: WorldWorkExecutionSupervisor,
     proposal: WorldWorkAcceptanceProposalV1,
     submit_request: transport_api_types::MemberTurnSubmitRequestV1,
 }
@@ -1307,6 +1330,7 @@ fn prepare_task_acceptance_submission(
     }
     Ok(PreparedTaskAcceptanceSubmission {
         receipt_registry: registry_authority.receipt_registry,
+        execution_supervisor: registry_authority.execution_supervisor,
         proposal,
         client,
         execute_request,
@@ -1409,6 +1433,7 @@ fn prepare_retained_acceptance_submission(
     }
     Ok(PreparedRetainedAcceptanceSubmission {
         receipt_registry: registry_authority.receipt_registry,
+        execution_supervisor: registry_authority.execution_supervisor,
         proposal,
         submit_request,
     })
@@ -1444,30 +1469,15 @@ async fn run_world_task_with_started_task_run_id_tx(
             err.reason
         )
     })?;
-    let active_task_record = ActiveEphemeralWorldTaskRecord {
-        orchestration_session_id: prepared.request.orchestration_session_id.clone(),
-        task_run_id: String::new(),
-        caller_participant_id: prepared.request.caller_participant_id.clone(),
-        target_backend_id: prepared.request.target_backend_id.clone(),
-        world_id: prepared
-            .session
-            .world_id
-            .clone()
-            .unwrap_or_else(|| prepared.request.world_id.clone()),
-        world_generation: prepared
-            .session
-            .world_generation
-            .unwrap_or(prepared.request.world_generation),
-    };
     let acceptance_submission =
         prepare_task_acceptance_submission(&prepared, &workspace_root, &descriptor)?;
     let stream_result = execute_run_world_task_stream(
-        &prepared.store,
         &acceptance_submission.receipt_registry,
+        &acceptance_submission.execution_supervisor,
         acceptance_submission.client,
         acceptance_submission.execute_request,
         &acceptance_submission.proposal,
-        active_task_record,
+        &prepared.request.orchestration_session_id,
         started_task_run_id_tx,
     )
     .await?;
@@ -1895,6 +1905,7 @@ async fn continue_world_worker(
             &base_policy,
             turn_kind,
             &acceptance_submission.receipt_registry,
+            &acceptance_submission.execution_supervisor,
             &acceptance_submission.proposal,
         )
         .await?;
@@ -4120,12 +4131,54 @@ fn member_runtime_backend_kind(
 
 #[cfg(target_os = "linux")]
 async fn execute_run_world_task_stream(
-    store: &AgentRuntimeStateStore,
     receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
     client: transport_api_client::AgentClient,
     execute_request: transport_api_types::ExecuteRequest,
     acceptance_proposal: &WorldWorkAcceptanceProposalV1,
-    mut active_task_record: ActiveEphemeralWorldTaskRecord,
+    _orchestration_session_id: &str,
+    started_task_run_id_tx: Option<UnboundedSender<String>>,
+) -> Result<RunWorldTaskStreamResult> {
+    let receipt_registry = receipt_registry.clone();
+    let execution_supervisor = execution_supervisor.clone();
+    let acceptance_proposal = acceptance_proposal.clone();
+    tokio::spawn(async move {
+        let outcome = observe_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &acceptance_proposal,
+            started_task_run_id_tx,
+        )
+        .await;
+        if outcome.is_err() {
+            if let Ok(Some(observation)) = execution_supervisor
+                .inspect_observation_by_acceptance_id(
+                    &acceptance_proposal
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+            {
+                let _ = execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ObserverFailure,
+                );
+            }
+        }
+        outcome
+    })
+    .await
+    .context("run_world_task durable observation task failed")?
+}
+
+#[cfg(target_os = "linux")]
+async fn observe_run_world_task_stream(
+    receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
+    client: transport_api_client::AgentClient,
+    execute_request: transport_api_types::ExecuteRequest,
+    acceptance_proposal: &WorldWorkAcceptanceProposalV1,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
 ) -> Result<RunWorldTaskStreamResult> {
     use http_body_util::BodyExt as _;
@@ -4143,11 +4196,10 @@ async fn execute_run_world_task_stream(
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut active_span_id = None::<String>;
-    let mut active_task_guard = None::<ActiveEphemeralWorldTaskGuard>;
-    let mut terminal_truth_guard =
-        ActiveEphemeralTerminalTruthGuard::new(&active_task_record.orchestration_session_id);
+    let mut active_claim = None;
     let mut saw_registered_event = false;
     let mut exit_code = None::<i32>;
+    let mut stream_error = None::<String>;
 
     while let Some(frame) = body.as_mut().frame().await {
         let frame = match frame {
@@ -4179,27 +4231,82 @@ async fn execute_run_world_task_stream(
                     Err(err) => return Err(err),
                 };
 
+            if !matches!(frame, ExecuteStreamFrame::Start { .. }) {
+                let claim = active_claim.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("run_world_task stream emitted a frame before accepted Start")
+                })?;
+                if execution_supervisor.journal_frame(claim, &frame, &line)?
+                    == WorldWorkJournalAppendOutcomeV1::ExactReplay
+                {
+                    continue;
+                }
+            }
+
             match frame {
                 start_frame @ ExecuteStreamFrame::Start { .. } => {
+                    let ExecuteStreamFrame::Start { span_id, .. } = &start_frame else {
+                        unreachable!("matched Start frame")
+                    };
+                    let existing_observation = match active_claim.as_ref() {
+                        Some(claim) => Some(
+                            execution_supervisor
+                                .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)?
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("B2.1 task observation disappeared after claim")
+                                })?,
+                        ),
+                        None => execution_supervisor.inspect_observation_by_acceptance_id(
+                            &acceptance_proposal
+                                .acceptance_context
+                                .proposed_acceptance_record_id,
+                        )?,
+                    };
+                    if let Some(observation) = existing_observation {
+                        if observation.claim.runtime_submission_id != *span_id {
+                            anyhow::bail!(
+                                "replayed run_world_task Start changed runtime submission identity"
+                            );
+                        }
+                        let claim = observation.claim;
+                        let append_outcome =
+                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                        active_claim = Some(claim);
+                        active_span_id = Some(span_id.clone());
+                        if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                            continue;
+                        }
+                        if let Some(started_task_run_id_tx) = started_task_run_id_tx.as_ref() {
+                            let _ = started_task_run_id_tx.send(span_id.clone());
+                        }
+                        continue;
+                    }
+                    let mut claimed = None;
                     let span_id = consume_task_acceptance_acknowledgement(
                         &execute_request,
                         acceptance_proposal,
                         Some(&start_frame),
-                        active_task_guard.is_some(),
+                        active_span_id.is_some(),
                         |record| {
-                            receipt_registry
-                                .persist_world_work_acceptance(record)
-                                .map(|_| ())
+                            let accepted = receipt_registry
+                                .persist_world_work_acceptance_for_supervision(record)?;
+                            claimed =
+                                Some(execution_supervisor.claim_persisted_world_work(&accepted)?);
+                            Ok(())
                         },
                     )?;
-                    active_task_record.task_run_id = span_id.clone();
-                    active_task_guard = Some(
-                        store.register_active_ephemeral_world_task(active_task_record.clone())?,
-                    );
+                    let claim = claimed.ok_or_else(|| {
+                        anyhow::anyhow!("B2.1 task acceptance omitted durable supervisor claim")
+                    })?;
+                    let append_outcome =
+                        execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                    active_claim = Some(claim);
+                    if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                        active_span_id = Some(span_id);
+                        continue;
+                    }
                     if let Some(started_task_run_id_tx) = started_task_run_id_tx.as_ref() {
                         let _ = started_task_run_id_tx.send(span_id.clone());
                     }
-                    terminal_truth_guard.register_task_run_id(span_id.clone());
                     active_span_id = Some(span_id);
                 }
                 ExecuteStreamFrame::Event { event, .. } => {
@@ -4217,7 +4324,6 @@ async fn execute_run_world_task_stream(
                         );
                     }
                     exit_code = Some(exit);
-                    break;
                 }
                 ExecuteStreamFrame::Error { message, .. } => {
                     if saw_registered_event {
@@ -4230,7 +4336,9 @@ async fn execute_run_world_task_stream(
                                 .await;
                         }
                     }
-                    anyhow::bail!(message);
+                    if stream_error.is_none() {
+                        stream_error = Some(message);
+                    }
                 }
                 ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {
                     if active_span_id.is_none() {
@@ -4239,20 +4347,36 @@ async fn execute_run_world_task_stream(
                 }
             }
         }
-
-        if exit_code.is_some() {
-            break;
-        }
+    }
+    if !buffer.is_empty() {
+        anyhow::bail!("run_world_task stream ended with an incomplete canonical frame");
     }
 
-    let exit_code = match exit_code {
+    let observed_exit_code = match exit_code {
         Some(exit_code) => exit_code,
+        None if stream_error.is_some() => {
+            anyhow::bail!(stream_error.take().expect("checked stream error"))
+        }
         None => anyhow::bail!("run_world_task stream ended without a terminal exit frame"),
     };
-    terminal_truth_guard.publish(world_task_terminal_state_from_exit_code(exit_code));
+    let claim = active_claim
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("run_world_task stream ended without accepted claim"))?;
+    let terminal = execution_supervisor
+        .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)?
+        .and_then(|observation| observation.terminal)
+        .ok_or_else(|| {
+            anyhow::anyhow!("run_world_task stream ended without durable B0 terminal truth")
+        })?;
+    if terminal.exit_code != observed_exit_code {
+        anyhow::bail!("run_world_task terminal exit changed after durable journaling");
+    }
+    if let Some(message) = stream_error {
+        anyhow::bail!(message);
+    }
 
     Ok(RunWorldTaskStreamResult {
-        exit_code,
+        exit_code: terminal.exit_code,
         saw_registered_event,
         task_run_id: active_span_id,
     })
@@ -4724,16 +4848,45 @@ async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
     policy: &Policy,
     turn_kind: ContinueWorldWorkerTurnKind,
     receipt_registry: &WorldWorkReceiptRegistry,
+    execution_supervisor: &WorldWorkExecutionSupervisor,
     acceptance_proposal: &WorldWorkAcceptanceProposalV1,
 ) -> Result<ContinueWorldWorkerStreamResult> {
     validate_retained_submission_against_proposal(request, acceptance_proposal)?;
-    execute_continue_world_worker_stream_for_turn_kind_impl(
-        request,
-        policy,
-        turn_kind,
-        Some((receipt_registry, acceptance_proposal)),
-    )
+    let request = request.clone();
+    let policy = policy.clone();
+    let receipt_registry = receipt_registry.clone();
+    let execution_supervisor = execution_supervisor.clone();
+    let acceptance_proposal = acceptance_proposal.clone();
+    tokio::spawn(async move {
+        let outcome = execute_continue_world_worker_stream_for_turn_kind_impl(
+            &request,
+            &policy,
+            turn_kind,
+            Some((
+                &receipt_registry,
+                &execution_supervisor,
+                &acceptance_proposal,
+            )),
+        )
+        .await;
+        if outcome.is_err() {
+            if let Ok(Some(observation)) = execution_supervisor
+                .inspect_observation_by_acceptance_id(
+                    &acceptance_proposal
+                        .acceptance_context
+                        .proposed_acceptance_record_id,
+                )
+            {
+                let _ = execution_supervisor.mark_interrupted(
+                    &observation.claim,
+                    WorldWorkInterruptionReasonV1::ObserverFailure,
+                );
+            }
+        }
+        outcome
+    })
     .await
+    .context("accepted continue_world_worker durable observation task failed")?
 }
 
 #[cfg(target_os = "linux")]
@@ -4741,7 +4894,11 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     policy: &Policy,
     turn_kind: ContinueWorldWorkerTurnKind,
-    acceptance: Option<(&WorldWorkReceiptRegistry, &WorldWorkAcceptanceProposalV1)>,
+    acceptance: Option<(
+        &WorldWorkReceiptRegistry,
+        &WorldWorkExecutionSupervisor,
+        &WorldWorkAcceptanceProposalV1,
+    )>,
 ) -> Result<ContinueWorldWorkerStreamResult> {
     use http_body_util::BodyExt as _;
     use transport_api_types::ExecuteStreamFrame;
@@ -4756,7 +4913,9 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
     let mut body = std::pin::pin!(response.into_body());
     let mut buffer = Vec::new();
     let mut active_span_id = None::<String>;
+    let mut active_claim = None;
     let mut exit_code = None::<i32>;
+    let mut stream_error = None::<String>;
     let mut surfaced_thread_id = None::<String>;
     let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
 
@@ -4796,21 +4955,86 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                     }
                 };
 
+            if !matches!(frame, ExecuteStreamFrame::Start { .. }) {
+                if let Some((_, execution_supervisor, _)) = acceptance {
+                    let claim = active_claim.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "accepted continue_world_worker stream emitted a frame before durable Start claim"
+                        )
+                    })?;
+                    if execution_supervisor.journal_frame(claim, &frame, &line)?
+                        == WorldWorkJournalAppendOutcomeV1::ExactReplay
+                    {
+                        continue;
+                    }
+                }
+            }
+
             match frame {
                 start_frame @ ExecuteStreamFrame::Start { .. } => {
-                    if let Some((receipt_registry, acceptance_proposal)) = acceptance {
+                    if let Some((receipt_registry, execution_supervisor, acceptance_proposal)) =
+                        acceptance
+                    {
+                        let ExecuteStreamFrame::Start { span_id, .. } = &start_frame else {
+                            unreachable!("matched Start frame")
+                        };
+                        let existing_observation = match active_claim.as_ref() {
+                            Some(claim) => Some(
+                                execution_supervisor
+                                    .inspect_observation_by_acceptance_id(
+                                        &claim.acceptance_record_id,
+                                    )?
+                                    .ok_or_else(|| {
+                                        anyhow::anyhow!(
+                                            "B2.1 retained observation disappeared after claim"
+                                        )
+                                    })?,
+                            ),
+                            None => execution_supervisor.inspect_observation_by_acceptance_id(
+                                &acceptance_proposal
+                                    .acceptance_context
+                                    .proposed_acceptance_record_id,
+                            )?,
+                        };
+                        if let Some(observation) = existing_observation {
+                            if observation.claim.runtime_submission_id != *span_id {
+                                anyhow::bail!(
+                                    "replayed continue_world_worker Start changed runtime submission identity"
+                                );
+                            }
+                            let claim = observation.claim;
+                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                            active_claim = Some(claim);
+                            active_span_id = Some(span_id.clone());
+                            continue;
+                        }
+                        let mut claimed = None;
                         let span_id = consume_retained_acceptance_acknowledgement(
                             request,
                             acceptance_proposal,
                             Some(&start_frame),
                             active_span_id.is_some(),
                             |record| {
-                                receipt_registry
-                                    .persist_world_work_acceptance(record)
-                                    .map(|_| ())
+                                let accepted = receipt_registry
+                                    .persist_world_work_acceptance_for_supervision(record)?;
+                                claimed = Some(
+                                    execution_supervisor.claim_persisted_world_work(&accepted)?,
+                                );
+                                Ok(())
                             },
                         )?;
+                        let claim = claimed.ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "B2.1 retained acceptance omitted durable supervisor claim"
+                            )
+                        })?;
+                        let append_outcome =
+                            execution_supervisor.journal_frame(&claim, &start_frame, &line)?;
+                        active_claim = Some(claim);
                         active_span_id = Some(span_id);
+                        if append_outcome == WorldWorkJournalAppendOutcomeV1::ExactReplay {
+                            continue;
+                        }
                     } else {
                         let ExecuteStreamFrame::Start { span_id, .. } = start_frame else {
                             unreachable!("matched Start frame")
@@ -4841,6 +5065,12 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                                     active_span_id.as_deref(),
                                 )
                                 .await;
+                                if acceptance.is_some() {
+                                    if stream_error.is_none() {
+                                        stream_error = Some(format!("{err:#}"));
+                                    }
+                                    continue;
+                                }
                                 return Err(err);
                             }
                         };
@@ -4851,6 +5081,12 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                         ) {
                             cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
                                 .await;
+                            if acceptance.is_some() {
+                                if stream_error.is_none() {
+                                    stream_error = Some(format!("{err:#}"));
+                                }
+                                continue;
+                            }
                             return Err(err);
                         }
                         let preserve_existing_live_event =
@@ -4873,11 +5109,18 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                         );
                     }
                     exit_code = Some(exit);
-                    break;
+                    if acceptance.is_none() {
+                        break;
+                    }
                 }
                 ExecuteStreamFrame::Error { message, .. } => {
                     cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
-                    anyhow::bail!(message);
+                    if acceptance.is_none() {
+                        anyhow::bail!(message);
+                    }
+                    if stream_error.is_none() {
+                        stream_error = Some(message);
+                    }
                 }
                 ExecuteStreamFrame::Stdout { .. } | ExecuteStreamFrame::Stderr { .. } => {
                     if active_span_id.is_none() {
@@ -4888,19 +5131,45 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                 }
             }
         }
-
-        if exit_code.is_some() {
+        if acceptance.is_none() && exit_code.is_some() {
             break;
         }
     }
-
-    let exit_code = exit_code.ok_or_else(|| {
-        anyhow::anyhow!("continue_world_worker stream ended without a terminal exit frame")
-    });
-    if exit_code.is_err() {
-        cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+    if acceptance.is_some() && !buffer.is_empty() {
+        anyhow::bail!("continue_world_worker stream ended with an incomplete canonical frame");
     }
-    let exit_code = exit_code?;
+
+    let observed_exit_code = match exit_code {
+        Some(exit_code) => exit_code,
+        None => {
+            cancel_continue_world_worker_turn(&client, active_span_id.as_deref()).await;
+            if let Some(message) = stream_error.take() {
+                anyhow::bail!(message);
+            }
+            anyhow::bail!("continue_world_worker stream ended without a terminal exit frame");
+        }
+    };
+    let exit_code = if let (Some((_, execution_supervisor, _)), Some(claim)) =
+        (acceptance, active_claim.as_ref())
+    {
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)?
+            .and_then(|observation| observation.terminal)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "accepted continue_world_worker stream ended without durable B0 terminal truth"
+                )
+            })?;
+        if terminal.exit_code != observed_exit_code {
+            anyhow::bail!("continue_world_worker terminal exit changed after durable journaling");
+        }
+        terminal.exit_code
+    } else {
+        observed_exit_code
+    };
+    if let Some(message) = stream_error {
+        anyhow::bail!(message);
+    }
 
     Ok(ContinueWorldWorkerStreamResult {
         exit_code,
@@ -7829,6 +8098,221 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn b21_test_acceptance_stores() -> (
+        TempDir,
+        WorldWorkReceiptRegistry,
+        WorldWorkExecutionSupervisor,
+        String,
+    ) {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create B2.1 acceptance test parent");
+        let root_path =
+            tempfile::tempdir_in(safe_parent).expect("create B2.1 acceptance test root");
+        fs::set_permissions(root_path.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("secure B2.1 acceptance test root");
+        let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(root_path.path())
+            .expect("open B2.1 acceptance authority");
+        let root = authority
+            .bootstrap()
+            .expect("activate B2.1 acceptance authority");
+        let receipt_registry = WorldWorkReceiptRegistry::bind_for_test(
+            root_path.path(),
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )
+        .expect("bind B2.1 receipt registry");
+        let execution_supervisor = WorldWorkExecutionSupervisor::bind(
+            root_path.path(),
+            &root.bootstrap_home,
+            &root.authority_store_id,
+        )
+        .expect("bind B2.1 execution supervisor");
+        (
+            root_path,
+            receipt_registry,
+            execution_supervisor,
+            root.authority_store_id,
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    fn reserve_b21_task_acceptance(
+        receipt_registry: &WorldWorkReceiptRegistry,
+        authority_store_id: &str,
+    ) -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::ExecuteRequest,
+    ) {
+        let mut request_out = None;
+        let outcome = receipt_registry
+            .prepare_world_work_acceptance_proposal(
+                "sess_dispatch",
+                "req_dispatch",
+                WorldWorkProposalFamilyV1::EphemeralTask,
+                |allocation| {
+                    let (mut proposal, mut request) = sample_task_acceptance_submission();
+                    proposal.acceptance_context.proposed_acceptance_record_id =
+                        allocation.acceptance_record_id;
+                    proposal.acceptance_context.message_id = allocation.message_id;
+                    proposal.authority_store_id = authority_store_id.to_string();
+                    proposal.created_at = allocation.created_at;
+                    request.acceptance_context = Some(proposal.acceptance_context.clone());
+                    let WorldWorkSubmissionIdentityV1::EphemeralTask {
+                        validated_dispatch_request,
+                        canonical_execute_request_sha256,
+                        ..
+                    } = &mut proposal.submission_identity
+                    else {
+                        unreachable!("task test proposal changed family")
+                    };
+                    *canonical_execute_request_sha256 = canonical_world_work_submission_sha256(
+                        validated_dispatch_request,
+                        &request,
+                    )?;
+                    request_out = Some(request);
+                    Ok(proposal)
+                },
+            )
+            .expect("reserve B2.1 task acceptance proposal");
+        let WorldWorkProposalReservationOutcomeV1::Proposed(proposal) = outcome else {
+            panic!("fresh B2.1 task proposal cannot already be accepted")
+        };
+        (
+            proposal,
+            request_out.expect("B2.1 task proposal builder returns transport request"),
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    fn reserve_b21_retained_acceptance(
+        receipt_registry: &WorldWorkReceiptRegistry,
+        authority_store_id: &str,
+    ) -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::MemberTurnSubmitRequestV1,
+    ) {
+        let mut request_out = None;
+        let outcome = receipt_registry
+            .prepare_world_work_acceptance_proposal(
+                "sess_dispatch",
+                "req_continue",
+                WorldWorkProposalFamilyV1::RetainedTurn,
+                |allocation| {
+                    let (mut proposal, mut request) = sample_retained_acceptance_submission();
+                    let message_id = allocation
+                        .message_id
+                        .expect("retained B2.1 allocation includes message ID");
+                    proposal.acceptance_context.proposed_acceptance_record_id =
+                        allocation.acceptance_record_id;
+                    proposal.acceptance_context.message_id = Some(message_id.clone());
+                    proposal.authority_store_id = authority_store_id.to_string();
+                    proposal.created_at = allocation.created_at;
+                    request.acceptance_context = Some(proposal.acceptance_context.clone());
+                    let ProposedWorldWorkIdentityV1::RetainedTurn {
+                        message_id: proposed_message_id,
+                        ..
+                    } = &mut proposal.proposed_work
+                    else {
+                        unreachable!("retained test proposal changed family")
+                    };
+                    *proposed_message_id = message_id;
+                    let WorldWorkSubmissionIdentityV1::RetainedTurn {
+                        validated_dispatch_request,
+                        canonical_member_turn_submit_request_sha256,
+                    } = &mut proposal.submission_identity
+                    else {
+                        unreachable!("retained test submission changed family")
+                    };
+                    *canonical_member_turn_submit_request_sha256 =
+                        canonical_world_work_submission_sha256(
+                            validated_dispatch_request,
+                            &request,
+                        )?;
+                    request_out = Some(request);
+                    Ok(proposal)
+                },
+            )
+            .expect("reserve B2.1 retained acceptance proposal");
+        let WorldWorkProposalReservationOutcomeV1::Proposed(proposal) = outcome else {
+            panic!("fresh B2.1 retained proposal cannot already be accepted")
+        };
+        (
+            proposal,
+            request_out.expect("B2.1 retained proposal builder returns transport request"),
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn wait_for_b21_claim(
+        supervisor: &WorldWorkExecutionSupervisor,
+        acceptance_record_id: &str,
+    ) -> crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkExecutionClaimV1
+    {
+        timeout(Duration::from_secs(3), async {
+            loop {
+                if let Some(claim) = supervisor
+                    .inspect_claim_by_acceptance_id(acceptance_record_id)
+                    .expect("inspect B2.1 claim")
+                {
+                    break claim;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("timed out waiting for durable B2.1 claim")
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn wait_for_b21_terminal(
+        supervisor: &WorldWorkExecutionSupervisor,
+        acceptance_record_id: &str,
+    ) -> crate::execution::agent_runtime::world_work_execution_supervisor::WorldWorkTerminalObservationV1
+    {
+        timeout(Duration::from_secs(3), async {
+            loop {
+                if let Some(terminal) = supervisor
+                    .inspect_observation_by_acceptance_id(acceptance_record_id)
+                    .expect("inspect B2.1 terminal observation")
+                    .and_then(|observation| observation.terminal)
+                {
+                    break terminal;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("timed out waiting for durable B2.1 terminal observation")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn b21_test_exit_frame(
+        stream_id: &str,
+        span_id: &str,
+    ) -> transport_api_types::ExecuteStreamFrame {
+        transport_api_types::ExecuteStreamFrame::Exit {
+            frame_identity: transport_api_types::RuntimeFrameIdentityV1 {
+                schema_version: transport_api_types::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+                stream_id: stream_id.to_string(),
+                frame_sequence: 2,
+            },
+            event_identity: test_runtime_event_identity(1),
+            terminal_identity: test_runtime_terminal_identity(1),
+            exit: 0,
+            span_id: span_id.to_string(),
+            scopes_used: Vec::new(),
+            fs_diff: None,
+            process_telemetry: Default::default(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
     fn b1_test_terminal_frame() -> transport_api_types::ExecuteStreamFrame {
         transport_api_types::ExecuteStreamFrame::Exit {
             frame_identity: test_runtime_frame_identity(1),
@@ -7840,6 +8324,847 @@ mod tests {
             fs_diff: None,
             process_telemetry: Default::default(),
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_ephemeral_production_handoff_claims_before_next_frame_without_legacy_writer() {
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 task socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind B2.1 task world socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_next_tx, allow_next_rx) = tokio::sync::oneshot::channel();
+        let expected_acceptance_record_id = acceptance_record_id.clone();
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept B2.1 task stream");
+            let (header, body) = read_http_request(&mut stream)
+                .await
+                .expect("read B2.1 task stream request");
+            assert!(header
+                .lines()
+                .next()
+                .is_some_and(|line| line.starts_with("POST /v1/execute/stream ")));
+            let submitted: transport_api_types::ExecuteRequest =
+                serde_json::from_slice(&body).expect("decode B2.1 task stream request");
+            assert_eq!(
+                submitted
+                    .acceptance_context
+                    .as_ref()
+                    .map(|context| context.proposed_acceptance_record_id.as_str()),
+                Some(expected_acceptance_record_id.as_str())
+            );
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_task".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx.send(()).expect("signal B2.1 task Start");
+            allow_next_rx
+                .await
+                .expect("durable task claim must precede the next frame");
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_task"),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build B2.1 task client");
+        let execute = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        );
+        let observe_handoff = async {
+            timeout(Duration::from_secs(3), start_sent_rx)
+                .await
+                .expect("timed out waiting for B2.1 task Start")
+                .expect("observe B2.1 task Start");
+            let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+            let observation = execution_supervisor
+                .inspect_observation_by_acceptance_id(&acceptance_record_id)
+                .expect("inspect B2.1 task Start journal")
+                .expect("B2.1 task observation exists");
+            let acceptance = receipt_registry
+                .inspect_world_work_acceptance_by_id(&authority_store_id, &acceptance_record_id)
+                .expect("inspect B2.1 task acceptance")
+                .expect("B2.1 task acceptance is durable before release");
+            assert_eq!(claim.acceptance_record_id, acceptance.acceptance_record_id);
+            assert_eq!(claim.stream_id, "rts_shell_world_dispatch_fixture");
+            assert_eq!(claim.work_identity, acceptance.work_identity);
+            assert_eq!(observation.durable_frame_cursor, Some(1));
+            assert_eq!(observation.journal.len(), 1);
+            assert!(observation.terminal.is_none());
+            assert!(
+                !authority_root
+                    .path()
+                    .join("run/agent-hub/sessions/sess_dispatch/active-ephemeral-tasks")
+                    .exists(),
+                "accepted production task must not create the legacy active-task side table"
+            );
+            allow_next_tx
+                .send(())
+                .expect("release B2.1 task terminal frame");
+        };
+        let (result, ()) = tokio::join!(execute, observe_handoff);
+        let result = result.expect("B2.1 task stream completes after durable handoff");
+        assert_eq!(result.task_run_id.as_deref(), Some("spn_b21_task"));
+        assert_eq!(result.exit_code, 0);
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect B2.1 task terminal journal")
+            .expect("B2.1 task terminal observation exists");
+        assert_eq!(terminal.durable_frame_cursor, Some(2));
+        assert_eq!(terminal.durable_event_cursor, Some(1));
+        assert_eq!(terminal.journal.len(), 2);
+        assert_eq!(
+            terminal.terminal.map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        server.await.expect("join B2.1 task stream server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_retained_production_handoff_claims_before_next_frame() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 retained socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind B2.1 retained world socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_next_tx, allow_next_rx) = tokio::sync::oneshot::channel();
+        let expected_acceptance_record_id = acceptance_record_id.clone();
+        let server = tokio::spawn(async move {
+            let (mut stream, body) = loop {
+                let (mut stream, _addr) = listener
+                    .accept()
+                    .await
+                    .expect("accept B2.1 retained connection");
+                let (header, body) = read_http_request(&mut stream)
+                    .await
+                    .expect("read B2.1 retained request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                break (stream, body);
+            };
+            let submitted: transport_api_types::MemberTurnSubmitRequestV1 =
+                serde_json::from_slice(&body).expect("decode B2.1 retained stream request");
+            assert_eq!(
+                submitted
+                    .acceptance_context
+                    .as_ref()
+                    .map(|context| context.proposed_acceptance_record_id.as_str()),
+                Some(expected_acceptance_record_id.as_str())
+            );
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx.send(()).expect("signal B2.1 retained Start");
+            allow_next_rx
+                .await
+                .expect("durable retained claim must precede the next frame");
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_retained"),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let policy = sample_world_dispatch_policy();
+        let execute = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &submit_request,
+            &policy,
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &receipt_registry,
+            &execution_supervisor,
+            &proposal,
+        );
+        let observe_handoff = async {
+            timeout(Duration::from_secs(3), start_sent_rx)
+                .await
+                .expect("timed out waiting for B2.1 retained Start")
+                .expect("observe B2.1 retained Start");
+            let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+            let observation = loop {
+                let observation = execution_supervisor
+                    .inspect_observation_by_acceptance_id(&acceptance_record_id)
+                    .expect("inspect B2.1 retained Start journal")
+                    .expect("B2.1 retained observation exists");
+                if observation.durable_frame_cursor == Some(1) {
+                    break observation;
+                }
+                tokio::task::yield_now().await;
+            };
+            let acceptance = receipt_registry
+                .inspect_world_work_acceptance_by_id(&authority_store_id, &acceptance_record_id)
+                .expect("inspect B2.1 retained acceptance")
+                .expect("B2.1 retained acceptance is durable before release");
+            assert_eq!(claim.acceptance_record_id, acceptance.acceptance_record_id);
+            assert_eq!(claim.stream_id, "rts_shell_world_dispatch_fixture");
+            assert_eq!(claim.work_identity, acceptance.work_identity);
+            assert_eq!(observation.durable_frame_cursor, Some(1));
+            assert_eq!(observation.journal.len(), 1);
+            assert!(observation.terminal.is_none());
+            allow_next_tx
+                .send(())
+                .expect("release B2.1 retained terminal frame");
+        };
+        let (result, ()) = tokio::join!(execute, observe_handoff);
+        let result = result.expect("B2.1 retained stream completes after durable handoff");
+        assert_eq!(result.exit_code, 0);
+        let terminal = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect B2.1 retained terminal journal")
+            .expect("B2.1 retained terminal observation exists");
+        assert_eq!(terminal.durable_frame_cursor, Some(2));
+        assert_eq!(terminal.durable_event_cursor, Some(1));
+        assert_eq!(terminal.journal.len(), 2);
+        assert_eq!(
+            terminal.terminal.map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        server.await.expect("join B2.1 retained stream server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_accepted_retained_policy_error_observes_exact_terminal_before_failing_waiter() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 retained policy-error socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind retained policy-error socket");
+        let cancel_requests = Arc::new(Mutex::new(Vec::<ExecuteCancelRequestV1>::new()));
+        let cancel_requests_for_server = cancel_requests.clone();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let submitted: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body)
+                            .expect("decode retained policy-error request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
+                            span_id: "spn_b21_retained_policy_error".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
+                            event: sample_continue_stream_event_for_run(
+                                &submitted.run_id,
+                                json!({
+                                    "event_class": "approval_request",
+                                    "payload": { "message": "requires approval" }
+                                }),
+                            ),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(3),
+                            event_identity: test_runtime_event_identity(2),
+                            terminal_identity: test_runtime_terminal_identity(2),
+                            exit: 130,
+                            span_id: "spn_b21_retained_policy_error".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("decode retained cancel request");
+                    cancel_requests_for_server
+                        .lock()
+                        .expect("cancel requests mutex poisoned")
+                        .push(parsed);
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"delivered":true}"#,
+                    )
+                    .await;
+                    break;
+                }
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let result = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &submit_request,
+            &Policy::default(),
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &receipt_registry,
+            &execution_supervisor,
+            &proposal,
+        )
+        .await;
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("denied accepted retained event did not fail the foreground waiter"),
+        };
+        assert!(error.to_string().contains("approval_request_not_allowed"));
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect retained policy-error observation")
+            .expect("retained policy-error observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(3));
+        assert_eq!(observation.durable_event_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 3);
+        assert_eq!(
+            observation.terminal.map(|terminal| terminal.exit_code),
+            Some(130)
+        );
+        server.await.expect("join retained policy-error server");
+        let recorded = cancel_requests
+            .lock()
+            .expect("cancel requests mutex poisoned");
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].span_id, "spn_b21_retained_policy_error");
+        assert_eq!(recorded[0].sig, "INT");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_dropping_ephemeral_foreground_waiter_does_not_drop_observation() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 caller-drop socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind B2.1 caller-drop socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener
+                .accept()
+                .await
+                .expect("accept B2.1 caller-drop stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read B2.1 caller-drop request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_caller_drop".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx.send(()).expect("signal caller-drop Start");
+            allow_terminal_rx
+                .await
+                .expect("release caller-drop terminal");
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_caller_drop"),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build B2.1 caller-drop client");
+        let receipt_for_waiter = receipt_registry.clone();
+        let supervisor_for_waiter = execution_supervisor.clone();
+        let foreground_waiter = tokio::spawn(async move {
+            execute_run_world_task_stream(
+                &receipt_for_waiter,
+                &supervisor_for_waiter,
+                client,
+                execute_request,
+                &proposal,
+                "sess_dispatch",
+                None,
+            )
+            .await
+        });
+
+        timeout(Duration::from_secs(3), start_sent_rx)
+            .await
+            .expect("timed out waiting for caller-drop Start")
+            .expect("observe caller-drop Start");
+        let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+        loop {
+            let observation = execution_supervisor
+                .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                .expect("inspect caller-drop Start journal")
+                .expect("caller-drop observation exists");
+            if observation.durable_frame_cursor == Some(1) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        foreground_waiter.abort();
+        match foreground_waiter.await {
+            Err(error) => assert!(error.is_cancelled()),
+            Ok(_) => panic!("foreground waiter was not aborted"),
+        }
+        allow_terminal_tx
+            .send(())
+            .expect("release terminal after caller drop");
+        server.await.expect("join caller-drop stream server");
+
+        let terminal = wait_for_b21_terminal(&execution_supervisor, &acceptance_record_id).await;
+        assert_eq!(terminal.exit_code, 0);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect caller-drop terminal journal")
+            .expect("caller-drop terminal observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 2);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_dropping_retained_foreground_waiter_does_not_drop_observation() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 retained caller-drop socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener =
+            UnixListener::bind(&socket_path).expect("bind B2.1 retained caller-drop socket");
+        let (start_sent_tx, start_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut stream = loop {
+                let (mut stream, _addr) = listener
+                    .accept()
+                    .await
+                    .expect("accept B2.1 retained caller-drop connection");
+                let (header, _) = read_http_request(&mut stream)
+                    .await
+                    .expect("read B2.1 retained caller-drop request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                break stream;
+            };
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained_caller_drop".to_string(),
+                },
+            )
+            .await;
+            start_sent_tx
+                .send(())
+                .expect("signal retained caller-drop Start");
+            allow_terminal_rx
+                .await
+                .expect("release retained caller-drop terminal");
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame(
+                    "rts_shell_world_dispatch_fixture",
+                    "spn_b21_retained_caller_drop",
+                ),
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let policy = sample_world_dispatch_policy();
+        let receipt_for_waiter = receipt_registry.clone();
+        let supervisor_for_waiter = execution_supervisor.clone();
+        let foreground_waiter = tokio::spawn(async move {
+            execute_accepted_continue_world_worker_stream_for_turn_kind(
+                &submit_request,
+                &policy,
+                ContinueWorldWorkerTurnKind::GenericContinue,
+                &receipt_for_waiter,
+                &supervisor_for_waiter,
+                &proposal,
+            )
+            .await
+        });
+
+        timeout(Duration::from_secs(3), start_sent_rx)
+            .await
+            .expect("timed out waiting for retained caller-drop Start")
+            .expect("observe retained caller-drop Start");
+        let claim = wait_for_b21_claim(&execution_supervisor, &acceptance_record_id).await;
+        loop {
+            let observation = execution_supervisor
+                .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                .expect("inspect retained caller-drop Start journal")
+                .expect("retained caller-drop observation exists");
+            if observation.durable_frame_cursor == Some(1) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        foreground_waiter.abort();
+        match foreground_waiter.await {
+            Err(error) => assert!(error.is_cancelled()),
+            Ok(_) => panic!("retained foreground waiter was not aborted"),
+        }
+        allow_terminal_tx
+            .send(())
+            .expect("release retained terminal after caller drop");
+        server
+            .await
+            .expect("join retained caller-drop stream server");
+
+        let terminal = wait_for_b21_terminal(&execution_supervisor, &acceptance_record_id).await;
+        assert_eq!(terminal.exit_code, 0);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect retained caller-drop terminal journal")
+            .expect("retained caller-drop terminal observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.journal.len(), 2);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_production_observer_rejects_post_terminal_frames() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 post-terminal socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind post-terminal socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener
+                .accept()
+                .await
+                .expect("accept post-terminal stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read post-terminal request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_post_terminal".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &b21_test_exit_frame("rts_shell_world_dispatch_fixture", "spn_b21_post_terminal"),
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Stdout {
+                    frame_identity: test_runtime_frame_identity(3),
+                    chunk_b64: "bGF0ZQ==".to_string(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build post-terminal client");
+        let result = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        )
+        .await;
+        let err = match result {
+            Err(error) => error,
+            Ok(_) => panic!("production observer accepted a post-terminal frame"),
+        };
+        assert!(err.to_string().contains("post-terminal"));
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect exact terminal after post-terminal rejection")
+            .expect("post-terminal rejection preserves durable observation");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert!(observation.terminal.is_some());
+        server.await.expect("join post-terminal server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_production_observer_consumes_exact_replay_as_no_op() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 replay socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind replay socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept replay stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read replay request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_replay".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_replay".to_string(),
+                },
+            )
+            .await;
+            let stdout = transport_api_types::ExecuteStreamFrame::Stdout {
+                frame_identity: test_runtime_frame_identity(2),
+                chunk_b64: "b25jZQ==".to_string(),
+            };
+            write_chunked_frame(&mut stream, &stdout).await;
+            write_chunked_frame(&mut stream, &stdout).await;
+            let event_identity = test_runtime_event_identity(1);
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Exit {
+                    frame_identity: test_runtime_frame_identity(3),
+                    terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                        &event_identity,
+                    ),
+                    event_identity,
+                    exit: 0,
+                    span_id: "spn_b21_replay".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                    process_telemetry: Default::default(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build replay client");
+        let result = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        )
+        .await
+        .expect("exact replay remains a production no-op");
+        assert_eq!(result.exit_code, 0);
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect production replay journal")
+            .expect("production replay observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(3));
+        assert_eq!(observation.journal.len(), 3);
+        server.await.expect("join replay server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn b21_production_error_frame_remains_nonterminal_until_exact_exit() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, execute_request) =
+            reserve_b21_task_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 Error socket tempdir");
+        let socket_path = socket_home.path().join("world.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind Error socket");
+        let server = tokio::spawn(async move {
+            let (mut stream, _addr) = listener.accept().await.expect("accept Error stream");
+            read_http_request(&mut stream)
+                .await
+                .expect("read Error request");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_error".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Error {
+                    frame_identity: test_runtime_frame_identity(2),
+                    message: "runtime reported an observation error".to_string(),
+                },
+            )
+            .await;
+            let event_identity = test_runtime_event_identity(1);
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Exit {
+                    frame_identity: test_runtime_frame_identity(3),
+                    terminal_identity: transport_api_types::RuntimeTerminalIdentityV1::from(
+                        &event_identity,
+                    ),
+                    event_identity,
+                    exit: 0,
+                    span_id: "spn_b21_error".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                    process_telemetry: Default::default(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let client = transport_api_client::AgentClient::unix_socket(&socket_path)
+            .expect("build Error client");
+        let result = execute_run_world_task_stream(
+            &receipt_registry,
+            &execution_supervisor,
+            client,
+            execute_request,
+            &proposal,
+            "sess_dispatch",
+            None,
+        )
+        .await;
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("Error frame was not surfaced to the foreground waiter"),
+        };
+        assert!(error.to_string().contains("observation error"));
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect Error/Exit journal")
+            .expect("Error/Exit observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(3));
+        assert_eq!(observation.journal.len(), 3);
+        assert_eq!(
+            observation.terminal.map(|terminal| terminal.exit_code),
+            Some(0)
+        );
+        server.await.expect("join Error server");
     }
 
     #[cfg(target_os = "linux")]
@@ -9815,6 +11140,83 @@ mod tests {
 
             server.await.expect("stub world server task");
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn continue_fork_compatibility_returns_at_exit_without_waiting_for_transport_eof() {
+        let _env_guard = world_env_guard();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("continue-fork-exit-boundary.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("member turn submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
+                            span_id: "member-turn-span".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(2),
+                            event_identity: test_runtime_event_identity(1),
+                            terminal_identity: test_runtime_terminal_identity(1),
+                            exit: 0,
+                            span_id: "member-turn-span".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    break;
+                }
+
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            execute_continue_world_worker_stream_for_turn_kind(
+                &sample_continue_submit_request(),
+                &Policy::default(),
+                ContinueWorldWorkerTurnKind::GenericContinue,
+            ),
+        )
+        .await
+        .expect("continue-fork compatibility must return at exact Exit")
+        .expect("continue-fork compatibility should preserve the terminal result");
+
+        assert_eq!(outcome.exit_code, 0);
+        server.abort();
+        let _ = server.await;
     }
 
     #[cfg(target_os = "linux")]
