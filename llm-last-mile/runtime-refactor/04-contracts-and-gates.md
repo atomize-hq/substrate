@@ -2736,14 +2736,15 @@ verify, reinterpret, log as observability evidence, or use it as obligation sema
 ### B1/B2.1 bounded read-only dispatch-authority adapter
 
 The implementability audit selects **Case B**. This adapter is not implementation-authorized until
-the corrected A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, and B1/B2.1-0 sequence is independently
+the corrected A1.2a, A1.2a-WB, A1.2a-S, B1/B2.1-R0, B3.2a, B3.2a-WA, and B1/B2.1-0 sequence is independently
 review-clean. A1.1e alone could read exact current authority but could not create it; A1.2a,
 A1.2a-WB, and A1.2a-S now satisfy the bounded ordinary-internal-host creator/adopter portion of
-that sequence. B1/B2.1-R0, B3.2a, and B1/B2.1-0 remain open. The current prepared type also combines
+that sequence, and B1/B2.1-R0 is independently review-clean. B3.2a, B3.2a-WA, and B1/B2.1-0
+remain open. The current prepared type also combines
 B-owned accepted/inspection routing with retained-worker admission data that has no canonical
 live-state representation.
 
-The authority/retained branch is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0 → B3.2a**. The independently
+The authority/retained branch is **A1.2a → A1.2a-WB → A1.2a-S → B1/B2.1-R0 → B3.2a → B3.2a-WA**. The independently
 preserved B1 receipt → B2.1 supervisor branch first joins it at **B1/B2.1-0**, after which the hard
 order is **joint B1/B2.1 production closeout → B3.1 → C1 → A1.2b**. R0 consumes no receipt or
 supervisor datum; neither B core is therefore a false prerequisite of R0.
@@ -2814,8 +2815,18 @@ The minimal prerequisite contract is:
    `SlotReserved` record with no head is valid; head acquisition requires complete exact
    re-presentation of the earliest request, while current-head reconciliation/release never
    promotes another slot and persists no request/prompt/payload preimage.
-6. **B1/B2.1-0 — action-scoped dispatch preparation:** accept the A1.2a/A1.2a-WB/A1.2a-S,
-   B1/B2.1-R0, and B3.2a typed read results plus B1 receipt and B2.1 supervisor truth through a
+6. **B3.2a-WA — exact bound-world ownership adoption prerequisite:** after authority-managed proof
+   validation and before member creation, exact-join the HSA session/world ID/generation/policy,
+   participant, project/world-spec identity, and current generic-world metadata. The runtime-family/
+   Linux backend alone may durably publish `GenericExactBoundWorld ->
+   SharedSessionOwnerExactBoundWorld`, preserving world ID and generation. Exact retry joins without
+   rewrite; conflicts, missing/corrupt/ambiguous metadata, or partial publication fail closed with no
+   alternate world. This changes no HSA, RetainedWorkerRuntime, transport-claim, routability, or
+   terminal truth and proves no launch. Compatibility `None` stays unchanged. It adds no world-api
+   field, schema version, side table, shell rebinding, request/prompt persistence, PID/liveness
+   authority, recovery protocol, or non-Linux proof.
+7. **B1/B2.1-0 — action-scoped dispatch preparation:** accept the A1.2a/A1.2a-WB/A1.2a-S,
+   B1/B2.1-R0, B3.2a, and B3.2a-WA typed read results plus B1 receipt and B2.1 supervisor truth through a
    caller-supplied bound capability or one explicitly authorized trusted open-and-bind conversion;
    build a B-owned prepared view only for RunWorldTask, ordinary retained ContinueWorldWorker, and
    ephemeral accepted-task Inspect/Cancel/Wait; and leave `WorkerContinueForkCommand`, retained
@@ -2823,7 +2834,7 @@ The minimal prerequisite contract is:
    It leaves the already-landed B3.2a spawn creation/admission bridge unchanged and does not alter spawn
    policy, steering, outcome, or lifecycle semantics. It neither uses
    nor replaces that legacy count and cannot claim it as authority.
-6. After those prerequisites, validate the typed request, require session/caller/world agreement,
+8. After those prerequisites, validate the typed request, require session/caller/world agreement,
    exact-join receipt and supervisor truth for accepted work, and fail closed on any absent,
    incomplete, stale, or conflicting authority/binding/acceptance/claim.
 
@@ -3204,13 +3215,14 @@ does not verify or reinterpret the host-only HMAC input. The
 optional carrier field on the V1 compatibility request may remain absent only on the explicitly
 pre-activation legacy path; both A1.2a-S authority-managed Spawn producers require it with no
 fallback. `transport-api-types` validates its closed shape. Production member Spawn enters
-`Service::execute_stream`, whose member-dispatch branch passes the same transport-api request
-directly to `MemberRuntimeManager::launch`; `world-api`, `Service::execute`, and
-`convert_member_dispatch_request` are not part of this route. `MemberRuntimeManager::launch`
-rejects any missing (for the authority-managed route), changed, or dispatch-mismatched proof before
-process creation. World-service does not mint or advance HSA or admission truth; the bound host
-verification supplies authority authenticity and the launch boundary supplies exact
-carrier/request equality.
+`Service::execute_stream`. For authority-managed `Some(exact proof)`, that member branch completes
+the existing strict proof/dispatch equality validation, durably adopts the exact HSA-bound physical
+world through B3.2a-WA, and only then calls `MemberRuntimeManager::launch`, which retains its own
+validation before process creation. Compatibility `None` retains the existing direct path.
+`world-api`, `Service::execute`, and `convert_member_dispatch_request` are not part of this route.
+World-service does not mint or advance HSA or admission truth; the bound host verification supplies
+authority authenticity, B3.2a-WA supplies physical ownership only, and the launch boundary supplies
+exact carrier/request equality.
 
 `#[serde(default)]` on the optional `MemberDispatchRequestV1` proof field preserves wire
 compatibility by supplying `Default::default()` only when that field is absent during
@@ -3267,6 +3279,145 @@ packet ownership, policy, lifecycle, transport, identity, lineage, error, outcom
 helper, legacy-member, or fork semantics and authorize no other structural change. B3.2a remains
 incomplete.
 
+### B3.2a-WA `ExactBoundWorldOwnershipAdoptionV1`
+
+The bounded Linux live Spawn proof reached durable admission, R0 registration, the unique transport
+claim, and typed launch-proof validation, then failed closed before process creation because the
+HSA-bound generic REPL world and the world-service-created shared-owner world had different IDs.
+Creating another world is not a valid repair: HSA already owns the exact session binding and neither
+world-service nor backend metadata may replace it. The internal operation contract is therefore
+B3.2a-WA, required before B3.2a closeout and B1/B2.1-0:
+
+```text
+ExactBoundWorldOwnershipAdoptionV1
+
+GenericExactBoundWorld
+    -> SharedSessionOwnerExactBoundWorld
+```
+
+This is an internal service/backend call contract. It is not a new `world-api` field, request
+variant, persisted wire-schema version, authority object, admission state, side table, or lifecycle
+state. The existing generic/shared world metadata shape remains unchanged.
+
+Ownership remains separated:
+
+1. `HostSessionAuthority` alone owns the exact durable orchestration-session world ID and
+   generation and the policy binding accepted with that authority. Adoption consumes this tuple as
+   immutable evidence and cannot create, repair, revise, or clear it.
+2. `RetainedWorkerRuntime` alone owns admission, R0-registration join, the unique transport claim,
+   routability, interruption, and terminal truth. Adoption changes none of those bytes and cannot
+   turn an exact joined claim into permission to resend.
+3. World-service and the runtime-family/Linux world backend own only physical realization and
+   durable physical ownership metadata. They may adopt the exact already-bound generic world; they
+   may not choose a replacement world when that exact world exists.
+4. `WorldDispatchControl`, the shell episode, helpers, and compatibility projections consume the
+   result only. They do not authorize or perform adoption.
+
+The closed transient input/evidence set is:
+
+```rust
+struct ExactBoundWorldOwnershipAdoptionV1 {
+    orchestration_session_id: String,
+    world_id: String,
+    world_generation: u64,
+    participant_id: String,
+    authority_managed_launch_proof: RetainedWorkerLaunchAuthorityProofV1,
+    policy_ref_id: String,
+    policy_revision: String,
+    policy_snapshot_hash: String,
+    canonical_project_identity: String,
+    canonical_world_spec_identity: String,
+    target_shared_session_owner_id: String,
+    adoption_correlation_id: String,
+}
+```
+
+The sketch freezes semantic members, not a Rust/public/wire type requirement. The implementation may
+use a narrower private borrowed type composed from existing values. The non-secret adoption
+correlation is equality-only call-scope evidence and is not a prompt/request preimage or ownership
+source. Raw prompt, request, payload, credentials, or secrets are excluded from the operation,
+metadata, errors, logs, traces, and diagnostics.
+
+The operation may run only when all preconditions hold under the backend's trusted shared-owner
+lock:
+
+1. The authority-managed carrier is `Some(exact proof)` and its complete existing strict validation
+   has succeeded before adoption. Compatibility `None` cannot enter this operation and cannot be
+   reinterpreted as a managed request.
+2. Exact session, world ID, generation, participant, policy ref/revision/snapshot hash, project, and
+   world-spec identity match the validated proof/request and the durable/current backend evidence.
+3. The selected physical world is the exact HSA-bound world, has the exact supported generic owner
+   shape, and has complete, contiguous, readable metadata. The implementation resolves by exact
+   world identity, never by project/spec compatibility alone.
+4. Generic metadata has no shared owner fields, foreign owner, conflicting generation, stale policy,
+   substituted project/spec, or ambiguous/partially published ownership state.
+5. If the exact world is already a shared owner, every owner/session/world/generation/policy/project/
+   spec member must match and the operation joins without rewrite. Any mismatch fails closed.
+6. Missing, corrupt, forked, discontinuous, substituted, unreadable, unsupported, or multiply
+   matching evidence fails closed without metadata mutation or alternate-world creation.
+7. Durable adoption completes before member process creation. Adoption does not prove transport
+   submission, member creation, Registered, routability, terminal success, or any later lifecycle
+   outcome.
+
+First adoption changes only the existing world's ownership metadata from exact generic to exact
+active shared-session owner while preserving its world ID, generation, root, project, cgroup,
+network, overlay, filesystem mode, policy snapshot, and all other realization semantics. Publication
+uses the existing trusted lock and recognized temporary-file, file-`fsync`, atomic rename, and parent
+directory-`fsync` conventions. No success may be returned before directory durability. The exact
+crash/reopen matrix is:
+
+1. **Before temporary-file creation or persistence:** the durable final remains authoritative
+   generic metadata. Reopen observes no adoption; an exact retry may begin first publication.
+2. **After a temporary write but before its file `fsync`:** temporary-file presence is never
+   semantic ownership. Under the trusted lock, an operation-bound temp with incomplete bytes is
+   removed as non-semantic cleanup and the parent directory is re-`fsync`ed; a complete exact temp
+   is fully revalidated and file-`fsync`ed before it can proceed. An unrecognized or conflicting
+   temp fails closed without deletion or ownership mutation.
+3. **After temporary-file `fsync`, including immediately before atomic rename:** the recognized
+   candidate remains non-semantic. Reopen revalidates the authoritative generic final and the
+   complete exact candidate under the trusted lock, then may atomically rename that candidate and
+   parent-directory-`fsync` it. Presence or file durability alone never adopts the world.
+4. **After atomic rename but before parent-directory `fsync`:** reopen may observe either the
+   original exact generic final (the rename did not survive) or the exact adopted final (the rename
+   survived without proven directory durability). Under the trusted lock, the exact generic final
+   may restart publication from step 1, including step-2/3 handling of any recognized temp; the exact
+   adopted final must be completely revalidated and its file plus parent directory re-`fsync`ed
+   before join/success. Missing, conflicting, multiply matching, or otherwise ambiguous final/temp
+   evidence fails closed without ownership mutation. Neither observed shape proves adoption before
+   parent-directory durability.
+5. **After parent-directory `fsync` but before the registry/root response:** the exact final tuple
+   is durable adopted ownership. Exact retry joins it byte-for-byte without rewrite and without
+   claiming member launch.
+
+Exact retry is exercised after every state above. Recognized temp cleanup or republication never
+changes HSA, RetainedWorkerRuntime, or semantic ownership before the exact final rename plus required
+directory durability. Conflicting retry leaves the exact durable bytes unchanged.
+
+Conflicting retry leaves the exact durable bytes unchanged. PID, timeout, caller disappearance,
+helper state, socket or endpoint state, EOF, process liveness, prompt content, shell-local state, and
+compatibility projections cannot acquire, steal, replace, renew, or clear ownership.
+
+Compatibility and scope are closed:
+
+- authority-managed retained Spawn uses adoption only after `Some(exact proof)` validation;
+- existing compatibility `None` behavior and ordinary world execution remain unchanged;
+- world filesystem, overlay, network, caging, capability, policy, discovery, and write-sync
+  behavior remain unchanged;
+- Linux proof makes no macOS or Windows claim;
+- runtime implementation is authorized only in `crates/world-service/src/service.rs`,
+  `crates/world/src/lib.rs`, and `crates/world/src/session.rs`, plus focused colocated or existing
+  integration tests needed to prove this contract;
+- shell/HSA rebinding, `crates/world-api/src/lib.rs`, schema versions, alternate side tables,
+  unrelated world lifecycle refactors, resend/recovery, and abandonment/cancellation remain outside
+  scope.
+
+`RG-WORLD-ADOPT-01` is the blocking regression gate. It requires exact same-ID/generation adoption,
+zero alternate-world creation, byte-stable exact retry, conflict-without-mutation coverage across
+owner/session/policy/project/spec/generation, every named publication crash boundary, member creation
+only after durable adoption, unchanged compatibility `None`, request/prompt-marker absence, and green
+world-service/world-backend tests plus Linux doctor, ordinary world execution, and bounded
+authority-managed live Spawn proof. Passing this gate does not promote any seam.
+
 The production order is exact:
 
 1. `dispatch_orchestrator_world_request` validates the raw request and routes only
@@ -3309,10 +3460,15 @@ The production order is exact:
    or returns the existing bounded in-progress/interrupted compatibility result and never sends a
    duplicate. Crash, caller loss, timeout, or process observation cannot steal or renew the claim;
    ambiguous claim state stays live/nonroutable for later B3.2 reconciliation.
-6. The direct dispatcher builder carries `RetainedWorkerLaunchAuthorityProofV1` through
+6. B3.2a-WA is the intervening physical-ownership step. The direct dispatcher builder carries
+   `RetainedWorkerLaunchAuthorityProofV1` through
    `MemberDispatchTransportRequest` and transport-api `MemberDispatchRequestV1`.
-   `Service::execute_stream` passes that exact typed member-dispatch request directly to
-   `MemberRuntimeManager::launch`, which validates it before creating the world member. The direct stream
+   `Service::execute_stream` first completes the existing strict authority-managed proof validation,
+   then invokes `ExactBoundWorldOwnershipAdoptionV1` for the exact HSA-bound world. Only after durable
+   same-ID/generation adoption may it pass the exact typed member-dispatch request to
+   `MemberRuntimeManager::launch`, whose existing validation remains in force before creating the
+   world member. The managed branch never calls generic `AttachOrCreate` first and never creates an
+   alternate shared-owner world. The direct stream
    consumer accepts only the exact matching B0 Registered event, persists Routable, returns the
    unchanged Spawn outcome, and hands the remaining body to the registry observer.
 7. The live `handle_internal_toolbox_world_dispatch_request` Spawn branch invokes the same
@@ -3345,6 +3501,22 @@ publication, with exact retry from each durable state. Security proof scans regi
 logs, traces, diagnostics, and errors for request/prompt/payload bytes. The explicit caller/PID/
 helper/socket/endpoint/timeout/EOF/process-liveness/observer-loss matrix proves that none can
 acquire or steal admission, head, transport-claim, routability, or terminal authority.
+
+B3.2a-WA proof separately exercises `RG-WORLD-ADOPT-01`: exact generic-to-shared adoption preserves
+world ID/generation and creates no second world; exact retry joins without metadata rewrite; and
+owner/session/policy/project/spec/generation conflicts fail without mutation. Publication tests
+crash/reopen and exact retry (a) before temp creation/persistence, (b) after temp write, (c) after
+temp-file `fsync`, (d) immediately before atomic rename, (e) after rename but before parent-directory
+`fsync`, and (f) after parent-directory `fsync` but before response. At (e), tests prove both
+permitted reopen shapes: an exact original generic final restarts publication, while an exact adopted
+final is revalidated and re-`fsync`ed before join. They prove a temp is never semantic ownership by
+presence alone, incomplete recognized temps receive only operation-bound cleanup, conflicting,
+missing, or ambiguous temp/final evidence fails without mutation, and any exact final join
+re-establishes required file and parent-directory durability before success. The member runtime
+cannot be created before durable adoption. Compatibility `None` and ordinary world execution remain
+unchanged, and prompt/request markers are absent from fixture storage, world metadata, service
+storage, logs, traces, errors, and the bounded journal scan. Adoption alone is never accepted as
+transport submission, Registered, routability, terminal success, or member launch proof.
 
 An ordinary retained Continue may consume only the exact R0 target joined to a Routable B3.2a
 record. `PreTransportNonterminal`, `InterruptedNonterminal`, and `Terminal` return distinct bounded
@@ -3381,9 +3553,9 @@ The canonical source of every value used to construct or interpret
 | authoritative world binding and generation | `HostSessionAuthorityTruth` | For an action/runtime that requires a world, absence or mismatch fails closed; a host runtime may validly have no binding or may consume the exact session binding. Compatibility state cannot create or repair it. |
 | current policy ref and policy revision | `HostSessionAuthorityTruth` | The ref must be a Policy object and both values must equal the exact current authority. |
 | effective-policy/snapshot projection used by existing steering behavior | `CompatibilityProjectionValidatedAgainstAuthority` | Its ref/revision and canonical snapshot commitment must validate against exact current-policy identity before use. |
-| `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a must supply the exact RetainedWorkerRuntime admission count for production Spawn before closeout. B1/B2.1-0 removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |
+| `live_retained_worker_count` used by `WorkerContinueForkCommand`/spawn/fork steering | `MissingCanonicalRepresentation` | `retained_worker_refs` carry no live/terminal state, while legacy `authoritative_live` is forbidden authority. B3.2a must supply the exact RetainedWorkerRuntime admission count for production Spawn before closeout. B3.2a-WA is then the required exact physical same-world ownership prerequisite; B1/B2.1-0 removes the value from only its RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task Inspect/Cancel/Wait view. Continue-fork, retained Inspect/Cancel/Stop, and fork semantics remain unchanged and unpromoted for later RetainedWorkerRuntime/B4. |
 | target participant ID named by the request | `ValidatedRequestInput` | It is a requested target only until exact authority/accepted-work validation succeeds. |
-| current prepared retained target backend, role, and participant record shape | `MissingCanonicalRepresentation` | A1.1e does not expose the retained object/descriptor as this legacy record, and activated stores reject the legacy writer that current fixtures use. R0 replaces the immutable identity shape: RetainedWorkerRuntime creates the descriptor/resume/worker graph; HostSessionAuthority atomically appends its participant to lineage, binds its ref, and proves the new revision as `HostSessionAuthorityTruth`. B3.2a supplies separate routability/admission truth, and B1/B2.1-0 consumes the exact join without fabricating broader lifecycle state. |
+| current prepared retained target backend, role, and participant record shape | `MissingCanonicalRepresentation` | A1.1e does not expose the retained object/descriptor as this legacy record, and activated stores reject the legacy writer that current fixtures use. R0 replaces the immutable identity shape: RetainedWorkerRuntime creates the descriptor/resume/worker graph; HostSessionAuthority atomically appends its participant to lineage, binds its ref, and proves the new revision as `HostSessionAuthorityTruth`. B3.2a supplies separate routability/admission truth, B3.2a-WA exact-adopts physical ownership of the same HSA-bound world without changing its ID/generation, and B1/B2.1-0 consumes the exact join without fabricating broader lifecycle state. |
 | immutable accepted task/active-run identity and acceptance revision | `ReceiptRegistryTruth` | Exact lookup is scoped by store, session, work identity, caller/backend, and world; unknown acceptance fails closed. |
 | active claim, journal cursor, interruption state, routability, and immutable terminal closeout | `SupervisorTruth` | Exact claim must match the acceptance record; waiter/caller drop does not delete it and only exact terminal truth closes routability. |
 | optional host-transition correlation before A1.2b adoption | `MissingCanonicalRepresentation` | It remains absent through A1.2a and the joint closeout; request ID, task/active-run ID, compatibility state, or the adapter may not synthesize it. |
@@ -3392,7 +3564,9 @@ The canonical source of every value used to construct or interpret
 The required current-authority creator/read view and the prepared session/caller/live-retained
 fields make Case A unrealizable. A1.2a supplies only the prerequisite authority establishment/read
 capability; A1.2a-S supplies only its bounded internal production adopter; B1/B2.1-R0 supplies only canonical retained-target registration/read; B3.2a supplies the
-production creation/admission bridge and canonical live/routability state; B1/B2.1-0 removes non-B fields from the B-owned prepared view. A1.2b keeps all
+production creation/admission bridge and canonical live/routability state; B3.2a-WA supplies only
+exact physical ownership adoption of the HSA-bound world; B1/B2.1-0 then removes non-B fields from
+the B-owned prepared view. A1.2b keeps all
 successor/post-turn and obligation-dependent ownership after C1. Full
 `dispatch_orchestrator_world_request`/`dispatch_prepared_orchestrator_world_request` entry is
 required regression proof; tests that invoke only a lower-level receipt, supervisor, transport, or

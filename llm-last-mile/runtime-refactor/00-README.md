@@ -139,7 +139,8 @@ A1.1e -> B0 -> B1-3a/B1-3b receipt core -> B2.1-1/2/3 -------------------------+
        \-> A1.2a current-authority protocol -> A1.2a-WB binding correction       |
            -> A1.2a-S bounded Start adoption                                    |
            -> B1/B2.1-R0 canonical retained target protocol                     |
-           -> B3.2a retained creation/admission bridge --------------------------+
+           -> B3.2a retained creation/admission bridge
+           -> B3.2a-WA exact bound-world ownership adoption ---------------------+
                                                                                 -> B1/B2.1-0
                                                                                 -> joint closeout
                                                                                 -> B3.1 -> C1 -> A1.2b
@@ -197,7 +198,19 @@ transport-api `Service::execute_stream` member branch to the world-service launc
 store legacy session/participant writes are replaced by exact proof validation. Unknown or
 interrupted state stays nonterminal and counted; only exact B0 terminal truth removes it from the
 live count. Active caller, posture, workspace, world, policy, spawn steering/outcome, and transport
-event behavior remain unchanged. B1/B2.1-0 then partitions the shared prepared state
+event behavior remain unchanged. The bounded Linux live Spawn proof then exposed one remaining
+physical-realization prerequisite: an authority-managed request could exact-bind HSA and admission
+truth to the already-running generic world while world-service `AttachOrCreate` created a different
+shared-owner world before launch validation. **B3.2a-WA** therefore runs before B3.2a closeout and
+B1/B2.1-0. It gives the runtime-family/world backend one internal, exact, durable adoption operation
+for the already-HSA-bound generic world. Adoption preserves the HSA-owned world ID and generation,
+changes no HSA or RetainedWorkerRuntime record, exact-joins retry, rejects conflicting ownership,
+and completes durable ownership publication before member process creation. It is authorized only
+for authority-managed `Some(exact proof)`; compatibility `None` and ordinary world execution keep
+their current behavior. The operation adds no world-api field or persisted wire-schema version,
+does not persist request/prompt bytes, and does not prove member launch, Registered, routability, or
+terminal success. No seam is promoted, and B3.2a remains incomplete until this prerequisite and the
+full live proof are clean. B1/B2.1-0 then partitions the shared prepared state
 for RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task
 Inspect/Cancel/Wait. Those paths
 do not require the missing live-retained lifecycle count. This is the first point at which the

@@ -60,23 +60,23 @@ flowchart TD
 | Boundary | Owns | Must not own |
 |---|---|---|
 | SurfaceAdapter / HostExecutionEpisode | input normalization, live channels, rendering, episode-local cancellation, readiness observations | durable posture, world binding, retained continuity, successor allocation, terminal truth, transition-intent issuance/claim/application |
-| HostSessionAuthority | exact session/caller/lineage/session-world-binding resolution; durable posture transitions; revision-bound host-transition-intent issuance, claim validation, replay-safe application, and reconciliation | runtime-process placement, transport loops, provider mechanics, compatibility projection |
+| HostSessionAuthority | exact session/caller/lineage/session-world-binding resolution; durable posture transitions; revision-bound host-transition-intent issuance, claim validation, replay-safe application, and reconciliation | physical world realization or ownership metadata, runtime-process placement, transport loops, provider mechanics, compatibility projection |
 | StateStore | bounded atomic physical persistence, migrations, schema evolution | lifecycle, receipt, supervisor, routing, or liveness-derived semantic authority; generic activated-store writes |
 | CompatibilityReadModel | legacy reads, torn-root diagnostics, compatibility projection/migration | new authority writes or overriding newer revisions |
-| WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries; blocking compatibility inspect/wait/cancel routing that consumes exact receipt/supervisor truth | provider-specific execution, direct policy invention, or ownership of accepted-work/observation truth |
+| WorldDispatchControl | typed world verbs and orchestration of authority/policy/receipt/runtime boundaries; blocking compatibility inspect/wait/cancel routing that consumes exact receipt/supervisor truth | physical world ownership adoption, provider-specific execution, direct policy invention, or ownership of accepted-work/observation truth |
 | SteeringPolicyEngine | deny-by-default action/mode/backend/session/world/autonomy decisions | effective policy materialization or runtime launch |
 | EffectivePolicyResolver | parent-policy composition and immutable `PolicySnapshotV3` materialization | enforcement by advisory flags alone |
 | WorldWorkReceiptRegistry | proposed acceptance-record identity/request context before submission; durable immutable accepted task/turn identity only after runtime acknowledgement; immutable recording of any owner-supplied host-transition correlation | runtime acceptance itself, active observation claims, frame/event journals, terminal reconciliation, stream ownership, host-transition interpretation, or worker lifecycle policy |
 | RuntimeEventTransport | producer-assigned stable stream/frame/event/terminal identity and monotonic ordering | receipt acceptance, durable observation, retained-message semantics, obligation semantics, or completeness |
 | WorldWorkExecutionSupervisor | durable active-observation claims, no-gap post-acceptance frame/event journal, exact acceptance joins, opaque correlation-byte retention, duplicate/reorder rejection, caller-drop survival, restart recovery/reconciliation, and monotonic terminal closeout | proposal or immutable acceptance-record truth, foreground tool semantics, model-facing identity, retained-message or host-transition semantics, or obligation classification/materialization |
 | WorldWorkerMessagingProtocol | fail-closed producer-side normalization of provider events plus exact retained target/source, active-run, thread, typed event class, attention, and request/message/event causation semantics | transport ordering, receipt acceptance, observation ownership, or obligation materialization |
-| RetainedWorkerRuntime | worker create/continue/park/cancel/stop/fork/inspect/invalidate lifecycle | host-session posture or obligation projection |
+| RetainedWorkerRuntime | worker create/continue/park/cancel/stop/fork/inspect/invalidate lifecycle; retained admission, R0-registration join, transport-claim, routability, and exact terminal truth | HSA world binding, physical world ownership metadata, host-session posture, or obligation projection |
 | ObligationLedger | obligation classification, idempotent materialization, canonical revisions and records, completeness watermarks/cuts, closed snapshots, and attention/review/deferred-action truth | runtime identity generation, stream observation, host rendering, prompt replay, or direct worker continuation |
 | Inbox / AutoAttach / Router | derived review view, attach eligibility, sanctioned host ownership restoration | approving, answering, forking, or continuing workers |
 | AgentConfigProjectionService | logical inventory and non-secret effective/native projection per worker identity; launch-time secret-handoff intent | treating `.codex`, `CODEX_HOME`, `config.toml`, auth files, or workspace files as credential authority |
-| WorldRuntimeAdapterExecutionEnvelope | guest-realizable launch contract bound to world, worker, config, policy snapshot, credential posture, and secret-handoff ref | raw credential payloads, provider-specific parsing, or unrestricted side effects |
+| WorldRuntimeAdapterExecutionEnvelope | guest-realizable launch contract bound to world, worker, config, policy snapshot, credential posture, secret-handoff ref, and equality-only exact world-ownership prerequisite | raw credential payloads, HSA or backend ownership authority, provider-specific parsing, or unrestricted side effects |
 | WorldCommandExecutionBroker | every UAA shell/edit/write/tool/process/network side effect under the accepted policy snapshot | bypassing world-service because the initial process is in-world |
-| RuntimeFamilyRealizationAdapter | provider launch, resume, output parsing, non-secret native config format, gateway endpoint wiring, provider cancellation mechanics | raw host credentials or Substrate authority, policy, binding, receipt, or obligation semantics |
+| RuntimeFamilyRealizationAdapter | provider launch, resume, output parsing, non-secret native config format, gateway endpoint wiring, provider cancellation mechanics; runtime-family/world-backend physical world realization and exact ownership-metadata publication under validated HSA proof | raw host credentials; minting or changing HSA binding, admission, policy, receipt, obligation, routability, or terminal semantics |
 
 ## Non-negotiable invariants
 
@@ -103,6 +103,29 @@ exact non-empty world ID and generation supplied by session truth. `Host + Some`
 host runtime in the world. Host participant manifests remain host-scoped and do not acquire
 participant-level world placement fields; the binding stays on the durable session authority.
 World filesystem, network, caging, policy, capability, and enforcement semantics are unchanged.
+
+#### Exact bound-world physical ownership
+
+The durable session binding and the backend's physical ownership metadata are separate truths.
+`HostSessionAuthority` alone says which exact world ID and generation belong to the session. The
+runtime-family/world backend may only realize that already-authoritative tuple physically. For the
+bounded B3.2a-WA prerequisite, `ExactBoundWorldOwnershipAdoptionV1` is an internal operation
+contract, not a `world-api` field and not a persisted wire-schema version. It permits one exact
+transition:
+
+```text
+GenericExactBoundWorld -> SharedSessionOwnerExactBoundWorld
+```
+
+The transition preserves world ID and generation, exact-joins the validated HSA session/policy and
+project/world-spec identity, and durably publishes ownership metadata before member process
+creation. An exact already-adopted tuple joins without rewrite; any foreign owner, changed session,
+generation, policy, project, spec, missing/corrupt metadata, or ambiguous publication fails closed.
+Shell state, helper state, PID, timeout, socket, caller disappearance, process liveness, prompt
+content, and compatibility projections are never adoption authority. Adoption changes no HSA or
+RetainedWorkerRuntime record and proves neither transport submission nor member launch, Registered,
+routability, or terminal success. Compatibility requests without the exact authority-managed proof
+and ordinary world execution retain their existing physical-realization behavior.
 
 ### 2. Private transports are fast paths
 
