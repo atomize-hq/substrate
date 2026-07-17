@@ -1381,18 +1381,23 @@ fn operator_surface_labels_scheduler_trigger_separately_from_analyzer_posture() 
 #[test]
 fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let operator_path = manifest_dir.join("src/operator_surface.rs");
-    let operator_source = fs::read_to_string(&operator_path).expect("read operator surface source");
+    let production_sources = production_rust_sources(&manifest_dir.join("src"));
+    let operator_source = production_sources
+        .iter()
+        .find(|source| source.module.as_deref() == Some("operator_surface"))
+        .expect("compiled operator_surface module source");
+    let operator_source =
+        fs::read_to_string(&operator_source.path).expect("read compiled operator surface source");
     let operator_file = syn::parse_file(&operator_source).expect("parse operator surface source");
-    let schema_analysis = analyze_schema_policy(&operator_file);
+    let schema_analysis = analyze_schema_policy_in_module(&operator_file, Some("operator_surface"));
 
     assert_eq!(
         schema_analysis.direct_uses,
-        vec!["CheckpointPresentation::render_console_block".to_string()]
+        vec!["operator_surface::CheckpointPresentation::render_console_block".to_string()]
     );
     assert_eq!(
         schema_analysis.exact_predicates,
-        vec!["CheckpointPresentation::render_console_block".to_string()]
+        vec!["operator_surface::CheckpointPresentation::render_console_block".to_string()]
     );
     assert!(
         schema_analysis.violations.is_empty(),
@@ -1401,15 +1406,12 @@ fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
     );
 
     let mut call_inventory = RenderCallInventory::default();
-    for source_path in production_rust_sources(&manifest_dir.join("src")) {
-        let source = fs::read_to_string(&source_path)
-            .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()));
+    for production_source in &production_sources {
+        let source = fs::read_to_string(&production_source.path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", production_source.path.display()));
         let file = syn::parse_file(&source)
-            .unwrap_or_else(|error| panic!("parse {}: {error}", source_path.display()));
-        let module = source_path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .expect("Rust source file stem");
+            .unwrap_or_else(|error| panic!("parse {}: {error}", production_source.path.display()));
+        let module = production_source.module.as_deref().unwrap_or("crate");
         analyze_render_calls_in_items(module, &file.items, &mut call_inventory);
     }
 
@@ -1432,6 +1434,124 @@ fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
         call_inventory.violations.is_empty(),
         "unclassified render-console reference: {:?}",
         call_inventory.violations
+    );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_orphan_nested_cli_decoy_sources() {
+    let fixture = tempfile::tempdir().expect("create compiled-source fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(source_root.join("layer")).expect("create compiled module directory");
+    fs::create_dir_all(source_root.join("spare")).expect("create orphan module directory");
+    fs::write(
+        source_root.join("lib.rs"),
+        concat!(
+            "mod layer { pub mod cli; }\n",
+            "#[path = \"renamed.rs\"] mod alias;\n",
+            "#[cfg(not(test))] mod production;\n",
+            "#[cfg(test)] mod test_only;\n",
+        ),
+    )
+    .expect("write crate root");
+    fs::write(
+        source_root.join("layer/cli.rs"),
+        concat!(
+            "fn run_live(checkpoint: Checkpoint, presentation: Presentation) {\n",
+            "    if checkpoint.schema_version == \"v0.8\" {}\n",
+            "    presentation.render_console_block(None);\n",
+            "}\n",
+        ),
+    )
+    .expect("write compiled cli module");
+    fs::write(source_root.join("renamed.rs"), "").expect("write path-attributed module");
+    fs::write(source_root.join("production.rs"), "").expect("write production cfg module");
+    fs::write(source_root.join("test_only.rs"), "").expect("write test-only cfg module");
+    fs::write(
+        source_root.join("spare/cli.rs"),
+        concat!(
+            "fn run_live(checkpoint: Checkpoint, presentation: Presentation) {\n",
+            "    if checkpoint.schema_version == \"v0.8\" {}\n",
+            "    presentation.render_console_block(None);\n",
+            "}\n",
+        ),
+    )
+    .expect("write orphan cli decoy");
+
+    let relative_sources = production_rust_sources(&source_root)
+        .into_iter()
+        .map(|source| {
+            let relative_path = source
+                .path
+                .strip_prefix(&source_root)
+                .expect("fixture source path")
+                .to_path_buf();
+            (relative_path, source.module)
+        })
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        relative_sources,
+        BTreeSet::from([
+            (
+                PathBuf::from("layer/cli.rs"),
+                Some("layer::cli".to_string())
+            ),
+            (PathBuf::from("lib.rs"), None),
+            (
+                PathBuf::from("production.rs"),
+                Some("production".to_string())
+            ),
+            (PathBuf::from("renamed.rs"), Some("alias".to_string())),
+        ]),
+        concat!(
+            "only modules reachable from the crate roots may enter the production inventory, ",
+            "with Rust path attributes, cfg(test), and canonical module lineage preserved"
+        )
+    );
+
+    let compiled_sources = production_rust_sources(&source_root);
+    let (schema, calls) = analyze_compiled_source_inventories(&compiled_sources);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["layer::cli::run_live".to_string()],
+        "the compiled schema reference must retain its complete module owner"
+    );
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([("layer::cli::run_live".to_string(), 1)]),
+        "the compiled render call must retain its complete module owner"
+    );
+
+    fs::write(
+        source_root.join("layer/cli.rs"),
+        "fn run_live(_checkpoint: Checkpoint, _presentation: Presentation) {}\n",
+    )
+    .expect("remove compiled controls inside temporary fixture");
+    let (schema_without_compiled_call, calls_without_compiled_call) =
+        analyze_compiled_source_inventories(&production_rust_sources(&source_root));
+    assert!(
+        schema_without_compiled_call.direct_uses.is_empty(),
+        "an orphan same-stem decoy must not replace a removed compiled schema reference"
+    );
+    assert!(
+        calls_without_compiled_call.counts.is_empty(),
+        "an orphan same-stem decoy must not replace a removed compiled render call"
+    );
+
+    let orphan_source =
+        fs::read_to_string(source_root.join("spare/cli.rs")).expect("read orphan cli decoy");
+    let orphan_file = syn::parse_file(&orphan_source).expect("parse orphan cli decoy");
+    let orphan_schema = analyze_schema_policy_in_module(&orphan_file, Some("spare::cli"));
+    let mut orphan_calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("spare::cli", &orphan_file.items, &mut orphan_calls);
+    assert_eq!(
+        orphan_schema.direct_uses,
+        vec!["spare::cli::run_live".to_string()]
+    );
+    assert_eq!(
+        orphan_calls.counts,
+        BTreeMap::from([("spare::cli::run_live".to_string(), 1)]),
+        "the decoy remains syntactically valid but cannot collapse onto layer::cli by file stem"
     );
 }
 
@@ -2180,122 +2300,242 @@ fn ast_policy_self_test_visits_compile_valid_free_fn_parameter_types() {
     );
 }
 
+fn header_owner_counts(owners: impl IntoIterator<Item = String>) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for owner in owners {
+        *counts.entry(owner).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn assert_compile_valid_header_fixture_owners(
+    crate_name: &str,
+    module: &str,
+    source: &str,
+    expected_schema_owners: BTreeMap<String, usize>,
+    expected_render_owners: BTreeMap<String, usize>,
+) {
+    assert_rust_fixture_compiles(crate_name, source);
+    let file = syn::parse_file(source)
+        .unwrap_or_else(|error| panic!("parse {crate_name} header fixture: {error}\n{source}"));
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        header_owner_counts(schema.direct_uses.iter().cloned()),
+        expected_schema_owners,
+        "schema inventory missed a stable {crate_name} header owner: {schema:?}"
+    );
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items(module, &file.items, &mut calls);
+    assert!(
+        calls.counts.is_empty(),
+        "header function references must not be misclassified as calls: {calls:?}"
+    );
+    let render_owners = calls.violations.into_iter().map(|violation| {
+        violation
+            .strip_suffix(": unclassified render_console_block path reference")
+            .unwrap_or_else(|| panic!("unexpected render header violation: {violation}"))
+            .to_string()
+    });
+    assert_eq!(
+        header_owner_counts(render_owners),
+        expected_render_owners,
+        "render inventory missed a stable {crate_name} header owner"
+    );
+}
+
 #[test]
-fn ast_policy_self_test_visits_all_item_impl_and_foreign_header_surfaces() {
+fn ast_policy_self_test_compiles_stable_free_item_header_surfaces() {
     const MARKER: &str = r#"{
         let _render = CheckpointPresentation::render_console_block;
         (Checkpoint::schema_version == 8) as usize
     }"#;
+    let source = r#"
+        #![allow(dead_code, non_upper_case_globals, type_alias_bounds)]
+        struct Checkpoint;
+        impl Checkpoint { const schema_version: usize = 8; }
+        struct CheckpointPresentation;
+        impl CheckpointPresentation { fn render_console_block(&self) {} }
+        trait Bound<const N: usize> {}
+        trait Other<const N: usize> {}
 
+        fn free<T: Bound<$M>>(_: [(); $M]) -> [(); $M]
+        where T: Other<$M> { loop {} }
+        const VALUE: [(); $M] = [()];
+        static STATIC_VALUE: [(); $M] = [()];
+        type Alias<T: Bound<$M>> where T: Other<$M> = ([(); $M], T);
+    "#
+    .replace("$M", MARKER);
+    assert_compile_valid_header_fixture_owners(
+        "stable_free_headers",
+        "free_headers",
+        &source,
+        BTreeMap::from([
+            ("const VALUE".to_string(), 1),
+            ("free".to_string(), 4),
+            ("static STATIC_VALUE".to_string(), 1),
+            ("type Alias".to_string(), 3),
+        ]),
+        BTreeMap::from([
+            ("free_headers::const VALUE".to_string(), 1),
+            ("free_headers::free".to_string(), 4),
+            ("free_headers::static STATIC_VALUE".to_string(), 1),
+            ("type Alias".to_string(), 3),
+        ]),
+    );
+}
+
+#[test]
+fn ast_policy_self_test_compiles_stable_struct_enum_and_union_header_surfaces() {
+    const MARKER: &str = r#"{
+        let _render = CheckpointPresentation::render_console_block;
+        (Checkpoint::schema_version == 8) as usize
+    }"#;
+    let source = r#"
+        #![allow(dead_code, non_upper_case_globals)]
+        use core::mem::ManuallyDrop;
+        struct Checkpoint;
+        impl Checkpoint { const schema_version: usize = 8; }
+        struct CheckpointPresentation;
+        impl CheckpointPresentation { fn render_console_block(&self) {} }
+        trait Bound<const N: usize> {}
+        trait Other<const N: usize> {}
+
+        struct Struct<T: Bound<$M>> where T: Other<$M> {
+            field: ([(); $M], T),
+        }
+        #[repr(usize)]
+        enum Enum<T: Bound<$M>> where T: Other<$M> {
+            Field([(); $M], T),
+            Discriminant = $M,
+        }
+        union Union<T: Bound<$M>> where T: Other<$M> {
+            field: ManuallyDrop<([(); $M], T)>,
+        }
+    "#
+    .replace("$M", MARKER);
+    let expected = BTreeMap::from([
+        ("enum Enum".to_string(), 4),
+        ("struct Struct".to_string(), 3),
+        ("union Union".to_string(), 3),
+    ]);
+    assert_compile_valid_header_fixture_owners(
+        "stable_adt_headers",
+        "adt_headers",
+        &source,
+        expected.clone(),
+        expected,
+    );
+}
+
+#[test]
+fn ast_policy_self_test_compiles_stable_trait_and_impl_header_surfaces() {
+    const MARKER: &str = r#"{
+        let _render = CheckpointPresentation::render_console_block;
+        (Checkpoint::schema_version == 8) as usize
+    }"#;
+    let source = r#"
+        #![allow(dead_code, non_upper_case_globals)]
+        struct Checkpoint;
+        impl Checkpoint { const schema_version: usize = 8; }
+        struct CheckpointPresentation;
+        impl CheckpointPresentation { fn render_console_block(&self) {} }
+        trait Bound<const N: usize> {}
+        trait Other<const N: usize> {}
+        struct Target<const N: usize, T>(T);
+        struct Concrete;
+
+        trait HeaderTrait<T: Bound<$M>>: Other<$M> where T: Other<$M> {}
+        trait Implemented<const N: usize> {}
+        impl<T: Bound<$M>> Implemented<$M> for Target<$M, T>
+        where T: Other<$M> {}
+
+        impl Concrete {
+            fn method<T: Bound<$M>>(_: [(); $M]) -> [(); $M]
+            where T: Other<$M> { loop {} }
+            const VALUE: [(); $M] = [()];
+        }
+
+        trait HasValue {
+            type Value<T: Bound<$M>> where T: Other<$M>;
+        }
+        impl HasValue for Concrete {
+            type Value<T: Bound<$M>> = ([(); $M], T) where T: Other<$M>;
+        }
+    "#
+    .replace("$M", MARKER);
+    let expected = BTreeMap::from([
+        ("<Concrete as HasValue>::type Value".to_string(), 3),
+        ("Concrete::const VALUE".to_string(), 1),
+        ("Concrete::method".to_string(), 4),
+        ("impl <Target<...> as Implemented>".to_string(), 4),
+        ("trait HasValue::type Value".to_string(), 2),
+        ("trait HeaderTrait".to_string(), 3),
+    ]);
+    assert_compile_valid_header_fixture_owners(
+        "stable_trait_impl_headers",
+        "trait_impl_headers",
+        &source,
+        expected.clone(),
+        expected,
+    );
+}
+
+#[test]
+fn ast_policy_self_test_compiles_stable_foreign_header_surfaces() {
+    const MARKER: &str = r#"{
+        let _render = CheckpointPresentation::render_console_block;
+        (Checkpoint::schema_version == 8) as usize
+    }"#;
+    let source = r#"
+        #![allow(dead_code, improper_ctypes, non_upper_case_globals)]
+        struct Checkpoint;
+        impl Checkpoint { const schema_version: usize = 8; }
+        struct CheckpointPresentation;
+        impl CheckpointPresentation { fn render_console_block(&self) {} }
+
+        extern "C" {
+            fn foreign(_: [(); $M]) -> [(); $M];
+            static FOREIGN: [(); $M];
+        }
+    "#
+    .replace("$M", MARKER);
+    let expected = BTreeMap::from([
+        ("extern block::foreign".to_string(), 2),
+        ("extern block::static FOREIGN".to_string(), 1),
+    ]);
+    assert_compile_valid_header_fixture_owners(
+        "stable_foreign_headers",
+        "foreign_headers",
+        &source,
+        expected.clone(),
+        expected,
+    );
+}
+
+#[test]
+fn ast_policy_self_test_parse_only_rejects_unstable_or_unsupported_header_forms() {
+    const MARKER: &str = r#"{
+        let _render = CheckpointPresentation::render_console_block;
+        (Checkpoint::schema_version == 8) as usize
+    }"#;
     let cases = [
         (
-            "free function signature",
-            "fn free<T: Bound<$M>>(_: [(); $M]) -> [(); $M] where T: Other<$M> { loop {} }",
-            "free",
-            "headers::free",
-            4,
-        ),
-        (
-            "const type",
-            "const VALUE: [(); $M] = [];",
-            "const VALUE",
-            "headers::const VALUE",
-            1,
-        ),
-        (
-            "static type",
-            "static VALUE: [(); $M] = [];",
-            "static VALUE",
-            "headers::static VALUE",
-            1,
-        ),
-        (
-            "type alias generics, where clause, and type",
-            "type Alias<const N: usize = $M, T> where T: Bound<$M> = [(); $M];",
-            "type Alias",
-            "type Alias",
-            3,
-        ),
-        (
-            "struct generics, where clause, and field type",
-            "struct Struct<const N: usize = $M, T> where T: Bound<$M> { field: [(); $M] }",
-            "struct Struct",
-            "struct Struct",
-            3,
-        ),
-        (
-            "enum generics, where clause, field type, and discriminant",
-            concat!(
-                "enum Enum<const N: usize = $M, T> where T: Bound<$M> { ",
-                "Field([(); $M]), Discriminant = $M }"
-            ),
-            "enum Enum",
-            "enum Enum",
-            4,
-        ),
-        (
-            "union generics, where clause, and field type",
-            concat!(
-                "union Union<const N: usize = $M, T> where T: Bound<$M> { ",
-                "field: ManuallyDrop<[(); $M]> }"
-            ),
-            "union Union",
-            "union Union",
-            3,
-        ),
-        (
-            "trait generics, supertraits, and where clause",
-            "trait Trait<const N: usize = $M, T>: Bound<$M> where T: Other<$M> {}",
-            "trait Trait",
-            "trait Trait",
-            3,
-        ),
-        (
-            "trait alias generics, bounds, and where clause",
+            "unstable trait alias",
             "trait Alias<const N: usize = $M, T> = Bound<$M> where T: Other<$M>;",
             "trait alias Alias",
             "trait alias Alias",
             3,
         ),
         (
-            "impl generics, trait, self type, and where clause",
-            concat!(
-                "impl<T: Bound<$M>> Trait<$M> for Target<$M> ",
-                "where T: Other<$M> {}"
-            ),
-            "impl <Target<...> as Trait>",
-            "impl <Target<...> as Trait>",
-            4,
-        ),
-        (
-            "impl function signature",
-            concat!(
-                "impl Target { fn method<T: Bound<$M>>(_: [(); $M]) -> [(); $M] ",
-                "where T: Other<$M> { loop {} } }"
-            ),
-            "Target::method",
-            "Target::method",
-            4,
-        ),
-        (
-            "impl const type",
-            "impl Target { const VALUE: [(); $M] = []; }",
-            "Target::const VALUE",
-            "Target::const VALUE",
-            1,
-        ),
-        (
-            "impl type generics, where clause, and type",
-            concat!(
-                "impl Target { type Value<const N: usize = $M, T> = [(); $M] ",
-                "where T: Bound<$M>; }"
-            ),
+            "unstable inherent associated type",
+            "impl Target { type Value<const N: usize = $M, T> = [(); $M] where T: Bound<$M>; }",
             "Target::type Value",
             "Target::type Value",
             3,
         ),
         (
-            "foreign function signature",
+            "unsupported generic foreign function",
             concat!(
                 "extern \"C\" { fn foreign<T: Bound<$M>>(_: [(); $M]) -> [(); $M] ",
                 "where T: Other<$M>; }"
@@ -2305,24 +2545,17 @@ fn ast_policy_self_test_visits_all_item_impl_and_foreign_header_surfaces() {
             4,
         ),
         (
-            "foreign static type",
-            "extern \"C\" { static FOREIGN: [(); $M]; }",
-            "extern block::static FOREIGN",
-            "extern block::static FOREIGN",
-            1,
-        ),
-        (
-            "foreign type generics and where clause",
+            "unstable extern type",
             "extern \"C\" { type Foreign<T: Bound<$M>> where T: Other<$M>; }",
             "extern block::type Foreign",
             "extern block::type Foreign",
             2,
         ),
         (
-            "module attribute",
+            "unsupported custom module attribute",
             "#[policy(Checkpoint::schema_version == 8, CheckpointPresentation::render_console_block)] mod nested;",
             "nested",
-            "headers::nested",
+            "parse_only::nested",
             1,
         ),
     ];
@@ -2330,23 +2563,26 @@ fn ast_policy_self_test_visits_all_item_impl_and_foreign_header_surfaces() {
     for (label, template, schema_owner, render_owner, expected_count) in cases {
         let source = template.replace("$M", MARKER);
         let file = syn::parse_file(&source)
-            .unwrap_or_else(|error| panic!("parse {label} header fixture: {error}\n{source}"));
-
+            .unwrap_or_else(|error| panic!("parse-only {label} fixture: {error}\n{source}"));
         let schema = analyze_schema_policy(&file);
         assert_eq!(
             schema.direct_uses,
             vec![schema_owner.to_string(); expected_count],
-            "schema inventory missed {label}: {schema:?}"
+            "schema inventory must fail closed over parse-only {label}: {schema:?}"
+        );
+        assert!(
+            !schema.violations.is_empty(),
+            "parse-only {label} schema controls must be rejected"
         );
 
         let mut calls = RenderCallInventory::default();
-        analyze_render_calls_in_items("headers", &file.items, &mut calls);
+        analyze_render_calls_in_items("parse_only", &file.items, &mut calls);
         let expected_violation =
             format!("{render_owner}: unclassified render_console_block path reference");
         assert_eq!(
             calls.violations,
             vec![expected_violation; expected_count],
-            "render inventory missed {label}: {calls:?}"
+            "render inventory must fail closed over parse-only {label}: {calls:?}"
         );
     }
 }
@@ -2810,6 +3046,15 @@ struct SchemaPolicyAnalysis {
 fn analyze_schema_policy(file: &syn::File) -> SchemaPolicyAnalysis {
     let mut analysis = SchemaPolicyAnalysis::default();
     analyze_schema_items(&file.items, None, &mut analysis);
+    analysis.direct_uses.sort();
+    analysis.exact_predicates.sort();
+    analysis.violations.sort();
+    analysis
+}
+
+fn analyze_schema_policy_in_module(file: &syn::File, module: Option<&str>) -> SchemaPolicyAnalysis {
+    let mut analysis = SchemaPolicyAnalysis::default();
+    analyze_schema_items(&file.items, module, &mut analysis);
     analysis.direct_uses.sort();
     analysis.exact_predicates.sort();
     analysis.violations.sort();
@@ -4407,24 +4652,216 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
     }
 }
 
-fn production_rust_sources(root: &Path) -> Vec<PathBuf> {
-    fn collect(directory: &Path, sources: &mut Vec<PathBuf>) {
-        let entries = fs::read_dir(directory)
-            .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()));
-        for entry in entries {
-            let path = entry.expect("source directory entry").path();
-            if path.is_dir() {
-                collect(&path, sources);
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
-                sources.push(path);
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProductionRustSource {
+    path: PathBuf,
+    module: Option<String>,
+}
+
+fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
+    fn module_path_attribute(attributes: &[syn::Attribute]) -> Option<PathBuf> {
+        let path_attributes = attributes
+            .iter()
+            .filter(|attribute| path_is_ident(attribute.path(), "path"))
+            .collect::<Vec<_>>();
+        assert!(
+            path_attributes.len() <= 1,
+            "a module may not declare multiple #[path] attributes"
+        );
+        path_attributes.first().map(|attribute| {
+            let syn::Meta::NameValue(name_value) = &attribute.meta else {
+                panic!("module #[path] must be a name-value attribute");
+            };
+            let syn::Expr::Lit(literal) = &name_value.value else {
+                panic!("module #[path] value must be a string literal");
+            };
+            let syn::Lit::Str(path) = &literal.lit else {
+                panic!("module #[path] value must be a string literal");
+            };
+            PathBuf::from(path.value())
+        })
+    }
+
+    fn collect_modules(
+        items: &[syn::Item],
+        module_directory: &Path,
+        path_attribute_base: &Path,
+        lineage: Option<&str>,
+        sources: &mut Vec<ProductionRustSource>,
+        visited: &mut BTreeSet<(PathBuf, Option<String>)>,
+    ) {
+        for item_mod in items.iter().filter_map(|item| match item {
+            syn::Item::Mod(item_mod) => Some(item_mod),
+            _ => None,
+        }) {
+            if has_cfg_test(&item_mod.attrs) {
+                continue;
             }
+            assert!(
+                !item_mod
+                    .attrs
+                    .iter()
+                    .any(|attribute| path_is_ident(attribute.path(), "cfg_attr")),
+                "cfg_attr on a module is rejected because source reachability would be ambiguous"
+            );
+
+            let identifier = identifier_name(&item_mod.ident);
+            let nested_lineage = lineage.map_or_else(
+                || identifier.clone(),
+                |lineage| format!("{lineage}::{identifier}"),
+            );
+            if let Some((_, nested_items)) = &item_mod.content {
+                let nested_directory = module_directory.join(&identifier);
+                collect_modules(
+                    nested_items,
+                    &nested_directory,
+                    &nested_directory,
+                    Some(&nested_lineage),
+                    sources,
+                    visited,
+                );
+                continue;
+            }
+
+            let explicit_path = module_path_attribute(&item_mod.attrs);
+            let (source_path, nested_directory) = if let Some(explicit_path) = explicit_path {
+                let source_path = path_attribute_base.join(explicit_path);
+                let nested_directory = source_path
+                    .parent()
+                    .expect("path-attributed module source parent")
+                    .to_path_buf();
+                (source_path, nested_directory)
+            } else {
+                let flat_path = module_directory.join(format!("{identifier}.rs"));
+                let mod_path = module_directory.join(&identifier).join("mod.rs");
+                match (flat_path.is_file(), mod_path.is_file()) {
+                    (true, false) => (flat_path, module_directory.join(&identifier)),
+                    (false, true) => (mod_path, module_directory.join(&identifier)),
+                    (true, true) => panic!(
+                        "module {nested_lineage} has both {} and {}",
+                        flat_path.display(),
+                        mod_path.display()
+                    ),
+                    (false, false) => panic!(
+                        "compiled module {nested_lineage} has no source at {} or {}",
+                        flat_path.display(),
+                        mod_path.display()
+                    ),
+                }
+            };
+            collect_source(
+                source_path,
+                Some(nested_lineage),
+                nested_directory,
+                sources,
+                visited,
+            );
         }
     }
 
+    fn collect_source(
+        path: PathBuf,
+        module: Option<String>,
+        module_directory: PathBuf,
+        sources: &mut Vec<ProductionRustSource>,
+        visited: &mut BTreeSet<(PathBuf, Option<String>)>,
+    ) {
+        let canonical_path = fs::canonicalize(&path)
+            .unwrap_or_else(|error| panic!("resolve compiled source {}: {error}", path.display()));
+        if !visited.insert((canonical_path, module.clone())) {
+            return;
+        }
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("read compiled source {}: {error}", path.display()));
+        let file = syn::parse_file(&source)
+            .unwrap_or_else(|error| panic!("parse compiled source {}: {error}", path.display()));
+        sources.push(ProductionRustSource {
+            path: path.clone(),
+            module: module.clone(),
+        });
+        let path_attribute_base = path.parent().expect("compiled source parent");
+        collect_modules(
+            &file.items,
+            &module_directory,
+            path_attribute_base,
+            module.as_deref(),
+            sources,
+            visited,
+        );
+    }
+
+    let mut roots = Vec::new();
+    let lib_root = root.join("lib.rs");
+    if lib_root.is_file() {
+        roots.push((lib_root, None));
+    }
+    let main_root = root.join("main.rs");
+    if main_root.is_file() {
+        roots.push((main_root, Some("bin::main".to_string())));
+    }
+    let conventional_bins = root.join("bin");
+    if conventional_bins.is_dir() {
+        for entry in fs::read_dir(&conventional_bins).unwrap_or_else(|error| {
+            panic!(
+                "read conventional bin roots {}: {error}",
+                conventional_bins.display()
+            )
+        }) {
+            let path = entry.expect("conventional bin root entry").path();
+            if path.extension().is_some_and(|extension| extension == "rs") {
+                let bin_name = path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .expect("UTF-8 conventional bin root")
+                    .to_string();
+                roots.push((path, Some(format!("bin::{bin_name}"))));
+            }
+        }
+    }
+    assert!(
+        !roots.is_empty(),
+        "no Rust crate roots under {}",
+        root.display()
+    );
+
     let mut sources = Vec::new();
-    collect(root, &mut sources);
-    sources.sort();
+    let mut visited = BTreeSet::new();
+    for (path, module) in roots {
+        collect_source(path, module, root.to_path_buf(), &mut sources, &mut visited);
+    }
+    sources.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.module.cmp(&right.module))
+    });
     sources
+}
+
+fn analyze_compiled_source_inventories(
+    sources: &[ProductionRustSource],
+) -> (SchemaPolicyAnalysis, RenderCallInventory) {
+    let mut schema = SchemaPolicyAnalysis::default();
+    let mut calls = RenderCallInventory::default();
+    for production_source in sources {
+        let source = fs::read_to_string(&production_source.path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", production_source.path.display()));
+        let file = syn::parse_file(&source)
+            .unwrap_or_else(|error| panic!("parse {}: {error}", production_source.path.display()));
+        analyze_schema_items(
+            &file.items,
+            production_source.module.as_deref(),
+            &mut schema,
+        );
+        analyze_render_calls_in_items(
+            production_source.module.as_deref().unwrap_or("crate"),
+            &file.items,
+            &mut calls,
+        );
+    }
+    schema.direct_uses.sort();
+    schema.exact_predicates.sort();
+    schema.violations.sort();
+    (schema, calls)
 }
 
 fn type_owner_name(ty: &syn::Type) -> Option<String> {
