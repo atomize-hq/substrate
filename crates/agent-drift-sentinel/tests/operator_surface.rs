@@ -22,7 +22,7 @@ use agent_drift_sentinel::{
     AdjudicationConfig, InputError, ReasoningEffort, ReplayCheckpointBundle, SchedulerPolicy,
     SentinelError, SentinelMode, SentinelRequest, SentinelResult, TriggerClass, WarningPolicy,
 };
-use syn::parse::Parser;
+use syn::parse::{Parse, ParseStream, Parser};
 use syn::visit::{self, Visit};
 
 #[test]
@@ -1141,11 +1141,7 @@ fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
         analyze_render_calls_in_items(module, &file.items, &mut call_inventory);
     }
 
-    let expected_counts = BTreeMap::from([
-        ("ReplayReport::to_console_text".to_string(), 2usize),
-        ("adjudication::shape_request".to_string(), 1usize),
-        ("cli::run_live".to_string(), 1usize),
-    ]);
+    let expected_counts = expected_render_call_counts();
     assert_eq!(call_inventory.counts, expected_counts);
     assert_eq!(call_inventory.counts.values().sum::<usize>(), 4);
     assert_eq!(
@@ -1164,6 +1160,172 @@ fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
         call_inventory.violations.is_empty(),
         "unclassified render-console reference: {:?}",
         call_inventory.violations
+    );
+}
+
+#[test]
+fn ast_policy_self_test_does_not_treat_cfg_not_test_as_test_only() {
+    let file = syn::parse_file(
+        r#"
+        #[cfg(not(test))]
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                if self.checkpoint.schema_version == "v0.8" {}
+                if self.checkpoint.schema_version == "v0.8" {}
+            }
+        }
+
+        #[cfg(not(test))]
+        fn run_live(presentation: CheckpointPresentation) {
+            presentation.render_console_block(None);
+        }
+        "#,
+    )
+    .expect("parse cfg(not(test)) policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec![
+            "CheckpointPresentation::render_console_block".to_string(),
+            "CheckpointPresentation::render_console_block".to_string(),
+        ],
+        "cfg(not(test)) schema uses must remain production-visible"
+    );
+    assert_eq!(
+        schema.exact_predicates,
+        vec![
+            "CheckpointPresentation::render_console_block".to_string(),
+            "CheckpointPresentation::render_console_block".to_string(),
+        ],
+        "the second cfg(not(test)) predicate must fail the exact-one policy"
+    );
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("cli", &file.items, &mut calls);
+    assert_eq!(
+        calls.counts.get("cli::run_live"),
+        Some(&1),
+        "cfg(not(test)) facade calls must remain production-visible"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_local_macro_rules_hiding_schema_predicates() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                macro_rules! hidden_schema_predicate {
+                    () => {
+                        if self.checkpoint.schema_version == "v0.8" {}
+                    };
+                }
+                hidden_schema_predicate!();
+            }
+        }
+        "#,
+    )
+    .expect("parse local macro policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.violations,
+        vec![concat!(
+            "CheckpointPresentation::render_console_block: unparsed macro_rules! macro: ",
+            "macro_rules bodies are not accepted by the production AST policy"
+        )],
+        "local macro_rules schema syntax must fail closed"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_propagates_typed_destructured_schema_aliases() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let ((schema_alias, unrelated),): ((&String, bool),) =
+                    ((&self.checkpoint.schema_version, false),);
+                if schema_alias == "v0.8" {}
+                let _ = unrelated;
+            }
+        }
+        "#,
+    )
+    .expect("parse typed destructuring policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert!(
+        schema
+            .violations
+            .iter()
+            .any(|violation| violation
+                == "CheckpointPresentation::render_console_block: non-exact schema-version binary predicate"),
+        "typed/destructured schema alias predicate must fail closed: {schema:?}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_propagates_schema_aliases_through_nested_control_forms() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                for (schema_alias, unrelated) in
+                    [(&self.checkpoint.schema_version, false)]
+                {
+                    loop {
+                        match unrelated {
+                            _ if schema_alias == "v0.8" => break,
+                            _ => break,
+                        }
+                    }
+                }
+            }
+        }
+        "#,
+    )
+    .expect("parse nested-control policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert!(
+        schema.violations.iter().any(|violation| violation
+            == "CheckpointPresentation::render_console_block: schema-version match guard"),
+        "nested control-flow aliases must not bypass the schema policy: {schema:?}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_a_fifth_call_inside_an_allowed_owner() {
+    let file = syn::parse_file(
+        r#"
+        impl ReplayReport {
+            fn to_console_text(&self) {
+                fifth.render_console_block(None);
+            }
+        }
+        "#,
+    )
+    .expect("parse fifth-call policy fixture");
+
+    let mut calls = RenderCallInventory {
+        counts: expected_render_call_counts(),
+        violations: Vec::new(),
+    };
+    analyze_render_calls_in_items("operator_surface", &file.items, &mut calls);
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([
+            ("ReplayReport::to_console_text".to_string(), 3usize),
+            ("adjudication::shape_request".to_string(), 1usize),
+            ("cli::run_live".to_string(), 1usize),
+        ]),
+        "the fixture must add exactly one fifth call to the otherwise valid inventory"
+    );
+    assert!(
+        !render_call_policy_is_exact(&calls),
+        "an allowed owner must not bypass the global exact-count policy"
     );
 }
 
@@ -1223,12 +1385,12 @@ fn analyze_schema_items(
                                 analysis,
                             );
                         }
-                        syn::ImplItem::Macro(item_macro)
-                            if item_macro.mac.tokens.to_string().contains("schema_version") =>
-                        {
-                            analysis
-                                .violations
-                                .push(format!("{type_name}: unparsed schema-version impl macro"));
+                        syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
+                            analyze_schema_macro(
+                                format!("{type_name}::macro {}", macro_path(&item_macro.mac)),
+                                &item_macro.mac,
+                                analysis,
+                            );
                         }
                         _ => {}
                     }
@@ -1274,24 +1436,39 @@ fn analyze_schema_items(
             }
             syn::Item::Trait(item_trait) => {
                 for trait_item in &item_trait.items {
-                    if let syn::TraitItem::Fn(method) = trait_item {
-                        if let Some(default) = &method.default {
-                            analyze_schema_block(
-                                format!("{}::{}", item_trait.ident, method.sig.ident),
-                                default,
+                    match trait_item {
+                        syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
+                            if let Some(default) = &method.default {
+                                analyze_schema_block(
+                                    format!("{}::{}", item_trait.ident, method.sig.ident),
+                                    default,
+                                    analysis,
+                                );
+                            }
+                        }
+                        syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
+                            analyze_schema_macro(
+                                format!(
+                                    "{}::macro {}",
+                                    item_trait.ident,
+                                    macro_path(&item_macro.mac)
+                                ),
+                                &item_macro.mac,
                                 analysis,
                             );
                         }
+                        _ => {}
                     }
                 }
             }
-            syn::Item::Macro(item_macro)
-                if item_macro.mac.tokens.to_string().contains("schema_version") =>
-            {
-                analysis
-                    .violations
-                    .push("unparsed module-level schema-version macro".to_string());
-            }
+            syn::Item::Macro(item_macro) => analyze_schema_macro(
+                module.map_or_else(
+                    || format!("macro {}", macro_path(&item_macro.mac)),
+                    |module| format!("{module}::macro {}", macro_path(&item_macro.mac)),
+                ),
+                &item_macro.mac,
+                analysis,
+            ),
             syn::Item::Mod(item_mod) => {
                 if let Some((_, nested)) = &item_mod.content {
                     let nested_module = module.map_or_else(
@@ -1318,6 +1495,20 @@ fn analyze_schema_expression(
         analysis,
     }
     .visit_expr(expression);
+}
+
+fn analyze_schema_macro(
+    owner: String,
+    expression: &syn::Macro,
+    analysis: &mut SchemaPolicyAnalysis,
+) {
+    let aliases = HashSet::new();
+    SchemaExpressionVisitor {
+        owner: &owner,
+        aliases: &aliases,
+        analysis,
+    }
+    .inspect_macro(expression);
 }
 
 fn analyze_schema_block(owner: String, block: &syn::Block, analysis: &mut SchemaPolicyAnalysis) {
@@ -1355,31 +1546,159 @@ impl BindingCollector {
         }
     }
 
-    fn record(&mut self, name: String, expression: &syn::Expr) {
-        self.assignments.push((
-            name,
-            expression_has_direct_schema(expression),
-            expression_identifiers(expression),
-        ));
+    fn record_pattern(&mut self, pattern: &syn::Pat, expression: &syn::Expr) {
+        let direct_schema = expression_has_direct_schema(expression);
+        let dependencies = expression_identifiers(expression);
+        for name in pattern_identifiers(pattern) {
+            self.assignments
+                .push((name, direct_schema, dependencies.clone()));
+        }
+    }
+
+    fn record_assignment(&mut self, target: &syn::Expr, expression: &syn::Expr) {
+        let direct_schema = expression_has_direct_schema(expression);
+        let dependencies = expression_identifiers(expression);
+        for name in assignment_identifiers(target) {
+            self.assignments
+                .push((name, direct_schema, dependencies.clone()));
+        }
     }
 }
 
 impl<'ast> Visit<'ast> for BindingCollector {
     fn visit_local(&mut self, local: &'ast syn::Local) {
-        if let (syn::Pat::Ident(binding), Some(init)) = (&local.pat, &local.init) {
-            self.record(binding.ident.to_string(), &init.expr);
+        if let Some(init) = &local.init {
+            self.record_pattern(&local.pat, &init.expr);
         }
         visit::visit_local(self, local);
     }
 
     fn visit_expr_assign(&mut self, assignment: &'ast syn::ExprAssign) {
-        if let syn::Expr::Path(path) = assignment.left.as_ref() {
-            if let Some(identifier) = path.path.get_ident() {
-                self.record(identifier.to_string(), &assignment.right);
-            }
-        }
+        self.record_assignment(&assignment.left, &assignment.right);
         visit::visit_expr_assign(self, assignment);
     }
+
+    fn visit_expr_for_loop(&mut self, expression: &'ast syn::ExprForLoop) {
+        self.record_pattern(&expression.pat, &expression.expr);
+        visit::visit_expr_for_loop(self, expression);
+    }
+
+    fn visit_expr_let(&mut self, expression: &'ast syn::ExprLet) {
+        self.record_pattern(&expression.pat, &expression.expr);
+        visit::visit_expr_let(self, expression);
+    }
+
+    fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
+        for arm in &expression.arms {
+            self.record_pattern(&arm.pat, &expression.expr);
+        }
+        visit::visit_expr_match(self, expression);
+    }
+}
+
+fn pattern_identifiers(pattern: &syn::Pat) -> HashSet<String> {
+    #[derive(Default)]
+    struct Collector(HashSet<String>);
+
+    impl<'ast> Visit<'ast> for Collector {
+        fn visit_pat_ident(&mut self, pattern: &'ast syn::PatIdent) {
+            self.0.insert(pattern.ident.to_string());
+            visit::visit_pat_ident(self, pattern);
+        }
+    }
+
+    let mut collector = Collector::default();
+    collector.visit_pat(pattern);
+    collector.0
+}
+
+fn assignment_identifiers(target: &syn::Expr) -> HashSet<String> {
+    #[derive(Default)]
+    struct Collector(HashSet<String>);
+
+    impl<'ast> Visit<'ast> for Collector {
+        fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
+            if let Some(identifier) = path.path.get_ident() {
+                self.0.insert(identifier.to_string());
+            }
+            visit::visit_expr_path(self, path);
+        }
+    }
+
+    let mut collector = Collector::default();
+    collector.visit_expr(target);
+    collector.0
+}
+
+enum ParsedMacroArguments {
+    Expressions(Vec<syn::Expr>),
+    Matches(Box<MatchesMacroArguments>),
+}
+
+struct MatchesMacroArguments {
+    expression: syn::Expr,
+    pattern: syn::Pat,
+    guard: Option<syn::Expr>,
+}
+
+impl Parse for MatchesMacroArguments {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        let expression = input.parse()?;
+        input.parse::<syn::Token![,]>()?;
+        let pattern = syn::Pat::parse_multi_with_leading_vert(input)?;
+        let guard = if input.peek(syn::Token![if]) {
+            input.parse::<syn::Token![if]>()?;
+            Some(input.parse()?)
+        } else {
+            None
+        };
+        if input.peek(syn::Token![,]) {
+            input.parse::<syn::Token![,]>()?;
+        }
+        if !input.is_empty() {
+            return Err(input.error("unexpected tokens after matches! arguments"));
+        }
+        Ok(Self {
+            expression,
+            pattern,
+            guard,
+        })
+    }
+}
+
+fn parse_macro_arguments(expression: &syn::Macro) -> syn::Result<ParsedMacroArguments> {
+    let macro_name = expression
+        .path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+        .unwrap_or_default();
+    if macro_name == "macro_rules" {
+        return Err(syn::Error::new_spanned(
+            &expression.path,
+            "macro_rules bodies are not accepted by the production AST policy",
+        ));
+    }
+    if macro_name == "matches" {
+        return syn::parse2(expression.tokens.clone())
+            .map(Box::new)
+            .map(ParsedMacroArguments::Matches);
+    }
+
+    let parser = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
+    parser
+        .parse2(expression.tokens.clone())
+        .map(|expressions| ParsedMacroArguments::Expressions(expressions.into_iter().collect()))
+}
+
+fn macro_path(expression: &syn::Macro) -> String {
+    expression
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::")
 }
 
 struct SchemaExpressionVisitor<'a> {
@@ -1393,6 +1712,55 @@ impl SchemaExpressionVisitor<'_> {
         self.analysis
             .violations
             .push(format!("{}: {kind}", self.owner));
+    }
+
+    fn visit_parsed_expression(&mut self, expression: &syn::Expr) {
+        SchemaExpressionVisitor {
+            owner: self.owner,
+            aliases: self.aliases,
+            analysis: self.analysis,
+        }
+        .visit_expr(expression);
+    }
+
+    fn visit_parsed_pattern(&mut self, pattern: &syn::Pat) {
+        SchemaExpressionVisitor {
+            owner: self.owner,
+            aliases: self.aliases,
+            analysis: self.analysis,
+        }
+        .visit_pat(pattern);
+    }
+
+    fn inspect_macro(&mut self, expression: &syn::Macro) {
+        match parse_macro_arguments(expression) {
+            Ok(ParsedMacroArguments::Expressions(arguments)) => {
+                for argument in &arguments {
+                    self.visit_parsed_expression(argument);
+                }
+            }
+            Ok(ParsedMacroArguments::Matches(arguments)) => {
+                if expression_depends_on_schema(&arguments.expression, self.aliases) {
+                    self.violation("schema-version matches! predicate");
+                }
+                if arguments
+                    .guard
+                    .as_ref()
+                    .is_some_and(|guard| expression_depends_on_schema(guard, self.aliases))
+                {
+                    self.violation("schema-version matches! guard");
+                }
+                self.visit_parsed_expression(&arguments.expression);
+                self.visit_parsed_pattern(&arguments.pattern);
+                if let Some(guard) = &arguments.guard {
+                    self.visit_parsed_expression(guard);
+                }
+            }
+            Err(error) => self.violation(&format!(
+                "unparsed {}! macro: {error}",
+                macro_path(expression)
+            )),
+        }
     }
 }
 
@@ -1437,6 +1805,20 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
             self.violation("schema-version while condition");
         }
         visit::visit_expr_while(self, expression);
+    }
+
+    fn visit_expr_for_loop(&mut self, expression: &'ast syn::ExprForLoop) {
+        if expression_depends_on_schema(&expression.expr, self.aliases) {
+            self.violation("schema-version for-loop iterator");
+        }
+        visit::visit_expr_for_loop(self, expression);
+    }
+
+    fn visit_expr_let(&mut self, expression: &'ast syn::ExprLet) {
+        if expression_depends_on_schema(&expression.expr, self.aliases) {
+            self.violation("schema-version let predicate");
+        }
+        visit::visit_expr_let(self, expression);
     }
 
     fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
@@ -1491,14 +1873,15 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         visit::visit_pat_struct(self, pattern);
     }
 
-    fn visit_expr_macro(&mut self, expression: &'ast syn::ExprMacro) {
-        let tokens = expression.mac.tokens.to_string();
-        if tokens.contains("schema_version")
-            || self.aliases.iter().any(|alias| tokens.contains(alias))
-        {
-            self.violation("unclassified schema-version macro");
+    fn visit_pat_ident(&mut self, pattern: &'ast syn::PatIdent) {
+        if pattern.ident == "schema_version" {
+            self.violation("bare schema_version pattern binding");
         }
-        visit::visit_expr_macro(self, expression);
+        visit::visit_pat_ident(self, pattern);
+    }
+
+    fn visit_macro(&mut self, expression: &'ast syn::Macro) {
+        self.inspect_macro(expression);
     }
 }
 
@@ -1581,6 +1964,20 @@ struct RenderCallInventory {
     violations: Vec<String>,
 }
 
+fn expected_render_call_counts() -> BTreeMap<String, usize> {
+    BTreeMap::from([
+        ("ReplayReport::to_console_text".to_string(), 2usize),
+        ("adjudication::shape_request".to_string(), 1usize),
+        ("cli::run_live".to_string(), 1usize),
+    ])
+}
+
+fn render_call_policy_is_exact(inventory: &RenderCallInventory) -> bool {
+    inventory.counts == expected_render_call_counts()
+        && inventory.counts.values().sum::<usize>() == 4
+        && inventory.violations.is_empty()
+}
+
 fn analyze_render_calls_in_items(
     module: &str,
     items: &[syn::Item],
@@ -1612,16 +2009,15 @@ fn analyze_render_calls_in_items(
                             let owner = format!("{type_name}::const {}", constant.ident);
                             RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
                         }
-                        syn::ImplItem::Macro(item_macro)
-                            if item_macro
-                                .mac
-                                .tokens
-                                .to_string()
-                                .contains("render_console_block") =>
-                        {
-                            inventory.violations.push(format!(
-                                "{type_name}: unparsed render_console_block impl macro"
-                            ));
+                        syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
+                            RenderCallVisitor {
+                                owner: format!(
+                                    "{type_name}::macro {}",
+                                    macro_path(&item_macro.mac)
+                                ),
+                                inventory,
+                            }
+                            .inspect_macro(&item_macro.mac);
                         }
                         _ => {}
                     }
@@ -1637,25 +2033,33 @@ fn analyze_render_calls_in_items(
             }
             syn::Item::Trait(item_trait) => {
                 for trait_item in &item_trait.items {
-                    if let syn::TraitItem::Fn(method) = trait_item {
-                        if let Some(default) = &method.default {
-                            let owner = format!("{}::{}", item_trait.ident, method.sig.ident);
-                            RenderCallVisitor { owner, inventory }.visit_block(default);
+                    match trait_item {
+                        syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
+                            if let Some(default) = &method.default {
+                                let owner = format!("{}::{}", item_trait.ident, method.sig.ident);
+                                RenderCallVisitor { owner, inventory }.visit_block(default);
+                            }
                         }
+                        syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
+                            RenderCallVisitor {
+                                owner: format!(
+                                    "{}::macro {}",
+                                    item_trait.ident,
+                                    macro_path(&item_macro.mac)
+                                ),
+                                inventory,
+                            }
+                            .inspect_macro(&item_macro.mac);
+                        }
+                        _ => {}
                     }
                 }
             }
-            syn::Item::Macro(item_macro)
-                if item_macro
-                    .mac
-                    .tokens
-                    .to_string()
-                    .contains("render_console_block") =>
-            {
-                inventory.violations.push(format!(
-                    "{module}: unparsed render_console_block item macro"
-                ));
+            syn::Item::Macro(item_macro) => RenderCallVisitor {
+                owner: format!("{module}::macro {}", macro_path(&item_macro.mac)),
+                inventory,
             }
+            .inspect_macro(&item_macro.mac),
             syn::Item::Mod(item_mod) => {
                 if let Some((_, nested)) = &item_mod.content {
                     analyze_render_calls_in_items(
@@ -1680,25 +2084,31 @@ impl RenderCallVisitor<'_> {
         *self.inventory.counts.entry(self.owner.clone()).or_insert(0) += 1;
     }
 
-    fn visit_render_macro(&mut self, expression: &syn::Macro) {
-        if !expression
-            .tokens
-            .to_string()
-            .contains("render_console_block")
-        {
-            return;
+    fn visit_parsed_expression(&mut self, expression: &syn::Expr) {
+        RenderCallVisitor {
+            owner: self.owner.clone(),
+            inventory: self.inventory,
         }
+        .visit_expr(expression);
+    }
 
-        let parser = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
-        match parser.parse2(expression.tokens.clone()) {
-            Ok(arguments) => {
+    fn inspect_macro(&mut self, expression: &syn::Macro) {
+        match parse_macro_arguments(expression) {
+            Ok(ParsedMacroArguments::Expressions(arguments)) => {
                 for argument in &arguments {
-                    self.visit_expr(argument);
+                    self.visit_parsed_expression(argument);
+                }
+            }
+            Ok(ParsedMacroArguments::Matches(arguments)) => {
+                self.visit_parsed_expression(&arguments.expression);
+                if let Some(guard) = &arguments.guard {
+                    self.visit_parsed_expression(guard);
                 }
             }
             Err(error) => self.inventory.violations.push(format!(
-                "{}: unparsed render_console_block macro: {error}",
-                self.owner
+                "{}: unparsed {}! macro in render-call inventory: {error}",
+                self.owner,
+                macro_path(expression)
             )),
         }
     }
@@ -1745,12 +2155,8 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
         visit::visit_expr_path(self, path);
     }
 
-    fn visit_expr_macro(&mut self, expression: &'ast syn::ExprMacro) {
-        self.visit_render_macro(&expression.mac);
-    }
-
-    fn visit_stmt_macro(&mut self, statement: &'ast syn::StmtMacro) {
-        self.visit_render_macro(&statement.mac);
+    fn visit_macro(&mut self, expression: &'ast syn::Macro) {
+        self.inspect_macro(expression);
     }
 }
 
@@ -1791,7 +2197,9 @@ fn member_is(member: &syn::Member, expected: &str) -> bool {
 fn has_cfg_test(attributes: &[syn::Attribute]) -> bool {
     attributes.iter().any(|attribute| {
         attribute.path().is_ident("cfg")
-            && matches!(&attribute.meta, syn::Meta::List(list) if list.tokens.to_string().contains("test"))
+            && attribute
+                .parse_args::<syn::Meta>()
+                .is_ok_and(|meta| matches!(meta, syn::Meta::Path(path) if path.is_ident("test")))
     })
 }
 
