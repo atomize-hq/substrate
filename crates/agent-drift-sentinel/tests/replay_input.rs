@@ -803,3 +803,50 @@ fn replay_input_preserves_mixed_version_rejection() {
             if versions == &["v0.2".to_string(), "v0.3".to_string()]
     ));
 }
+
+#[test]
+fn replay_input_preserves_unsupported_schema_error_mapping() {
+    let fixture = ReplayFixture::from_checkpoints(
+        vec![schema_checkpoint(
+            "v9.9",
+            "session-alpha",
+            1,
+            0,
+            false,
+            "continue",
+        )],
+        sample_summary(),
+    );
+
+    let error = load_replay_bundle(&fixture.checkpoint_dir)
+        .expect_err("unsupported schema versions must retain the public input error");
+
+    assert!(matches!(
+        error,
+        InputError::UnsupportedSchemaVersion {
+            ref checkpoint_dir,
+            ref schema_version,
+            expected_schema_version,
+        } if checkpoint_dir == &fixture.checkpoint_dir
+            && schema_version == "v9.9"
+            && expected_schema_version == "v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, or v0.8"
+    ));
+}
+
+#[test]
+fn input_error_public_surface_remains_exhaustive() {
+    fn exhaustively_match(error: InputError) {
+        match error {
+            InputError::MissingArtifact { .. }
+            | InputError::ReadArtifact { .. }
+            | InputError::ParseArtifact { .. }
+            | InputError::ParseArtifactLine { .. }
+            | InputError::ContractGap { .. }
+            | InputError::EmptyBundle { .. }
+            | InputError::MixedSchemaVersions { .. }
+            | InputError::UnsupportedSchemaVersion { .. } => {}
+        }
+    }
+
+    let _: fn(InputError) = exhaustively_match;
+}

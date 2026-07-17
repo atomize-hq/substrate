@@ -94,15 +94,6 @@ pub enum InputError {
         field: String,
         reason: String,
     },
-    #[error(
-        "checkpoint {checkpoint_id} with schema {schema_version} violates the typed interpretation contract at {field}: {reason}"
-    )]
-    CheckpointContract {
-        checkpoint_id: String,
-        schema_version: String,
-        field: String,
-        reason: String,
-    },
     #[error("checkpoint bundle {checkpoint_dir} does not contain any checkpoints")]
     EmptyBundle { checkpoint_dir: Utf8PathBuf },
     #[error("checkpoint bundle {checkpoint_dir} mixes schema versions: {versions:?}")]
@@ -125,7 +116,7 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
     let summary_path = checkpoint_dir.join("summary.md");
 
     let summary_markdown = read_text_file(&summary_path)?;
-    let mut checkpoints = read_checkpoint_jsonl_file(&checkpoints_path)?;
+    let mut checkpoints = read_checkpoint_jsonl_file(checkpoint_dir, &checkpoints_path)?;
     if checkpoints.is_empty() {
         return Err(InputError::EmptyBundle {
             checkpoint_dir: checkpoint_dir.to_owned(),
@@ -180,7 +171,10 @@ fn read_text_file(path: &Utf8Path) -> Result<String, InputError> {
     })
 }
 
-fn read_checkpoint_jsonl_file(path: &Utf8Path) -> Result<Vec<Checkpoint>, InputError> {
+fn read_checkpoint_jsonl_file(
+    checkpoint_dir: &Utf8Path,
+    path: &Utf8Path,
+) -> Result<Vec<Checkpoint>, InputError> {
     if !path.exists() {
         return Err(InputError::MissingArtifact {
             path: path.to_owned(),
@@ -210,8 +204,9 @@ fn read_checkpoint_jsonl_file(path: &Utf8Path) -> Result<Vec<Checkpoint>, InputE
                 line_number,
                 source,
             })?;
-        validate_serialized_checkpoint(&value)
-            .map_err(|error| map_serialized_contract_error(path, line_number, error))?;
+        validate_serialized_checkpoint(&value).map_err(|error| {
+            map_serialized_contract_error(checkpoint_dir, path, line_number, error)
+        })?;
 
         let checkpoint =
             serde_json::from_value(value).map_err(|source| InputError::ParseArtifactLine {
@@ -226,21 +221,20 @@ fn read_checkpoint_jsonl_file(path: &Utf8Path) -> Result<Vec<Checkpoint>, InputE
 }
 
 fn map_serialized_contract_error(
+    checkpoint_dir: &Utf8Path,
     path: &Utf8Path,
     line_number: usize,
     error: CheckpointContractError,
 ) -> InputError {
     match error {
         CheckpointContractError::UnsupportedSchema {
-            checkpoint_id,
             schema_version,
             expected,
-        } => InputError::ContractGap {
-            path: path.to_owned(),
-            line_number,
+            ..
+        } => InputError::UnsupportedSchemaVersion {
+            checkpoint_dir: checkpoint_dir.to_owned(),
             schema_version,
-            field: "schema_version".to_string(),
-            reason: format!("checkpoint {checkpoint_id} must use one of {expected}"),
+            expected_schema_version: expected,
         },
         CheckpointContractError::FieldGap {
             checkpoint_id,
@@ -281,41 +275,71 @@ fn replay_contract_field(field: &str) -> String {
     field.to_string()
 }
 
-pub(crate) fn map_typed_contract_error(error: CheckpointContractError) -> InputError {
+pub(crate) fn map_typed_contract_error(
+    bundle: &ReplayCheckpointBundle,
+    error: CheckpointContractError,
+) -> InputError {
     match error {
         CheckpointContractError::UnsupportedSchema {
-            checkpoint_id,
             schema_version,
             expected,
-        } => InputError::CheckpointContract {
-            checkpoint_id,
+            ..
+        } => InputError::UnsupportedSchemaVersion {
+            checkpoint_dir: bundle.checkpoint_dir.clone(),
             schema_version,
-            field: "schema_version".to_string(),
-            reason: format!("must use one of {expected}"),
+            expected_schema_version: expected,
         },
         CheckpointContractError::FieldGap {
             checkpoint_id,
             schema_version,
             field,
             reason,
-        } => InputError::CheckpointContract {
-            checkpoint_id,
+        } => InputError::ContractGap {
+            path: bundle.checkpoints_path.clone(),
+            line_number: checkpoint_artifact_line(bundle, checkpoint_id.as_str()),
             schema_version,
-            field,
-            reason,
+            field: replay_contract_field(field.as_str()),
+            reason: format!("checkpoint {checkpoint_id}: {reason}"),
         },
         CheckpointContractError::CrossSessionHistory {
             checkpoint_id,
             session_id,
             previous_checkpoint_id,
             previous_session_id,
-        } => InputError::CheckpointContract {
-            checkpoint_id,
-            schema_version: "<same-session>".to_string(),
+        } => InputError::ContractGap {
+            path: bundle.checkpoints_path.clone(),
+            line_number: checkpoint_artifact_line(bundle, checkpoint_id.as_str()),
+            schema_version: bundle
+                .checkpoints
+                .iter()
+                .find(|checkpoint| checkpoint.checkpoint_id == checkpoint_id)
+                .map_or_else(
+                    || "<unknown>".to_string(),
+                    |checkpoint| checkpoint.schema_version.clone(),
+                ),
             field: "previous_same_session".to_string(),
             reason: format!(
-                "session {session_id} cannot use checkpoint {previous_checkpoint_id} from session {previous_session_id}"
+                "checkpoint {checkpoint_id} in session {session_id} cannot use checkpoint {previous_checkpoint_id} from session {previous_session_id}"
             ),
         },
     }
+}
+
+fn checkpoint_artifact_line(bundle: &ReplayCheckpointBundle, checkpoint_id: &str) -> usize {
+    if let Ok(contents) = fs::read_to_string(&bundle.checkpoints_path) {
+        if let Some(line_number) = contents.lines().enumerate().find_map(|(index, line)| {
+            serde_json::from_str::<Value>(line).ok().and_then(|value| {
+                (value.get("checkpoint_id").and_then(Value::as_str) == Some(checkpoint_id))
+                    .then_some(index + 1)
+            })
+        }) {
+            return line_number;
+        }
+    }
+
+    bundle
+        .checkpoints
+        .iter()
+        .position(|checkpoint| checkpoint.checkpoint_id == checkpoint_id)
+        .map_or(1, |index| index + 1)
 }

@@ -483,7 +483,7 @@ pub(crate) fn try_render_replay_report(
                 checkpoint,
                 previous_same_session,
             })
-            .map_err(map_typed_contract_error)?,
+            .map_err(|error| map_typed_contract_error(bundle, error))?,
         );
     }
 
