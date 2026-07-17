@@ -1,5 +1,6 @@
 #![allow(unused_crate_dependencies)]
 
+use std::collections::HashSet;
 use std::fs;
 use std::process::Command;
 
@@ -129,6 +130,322 @@ fn real_session_live_source_proof_rejects_compile_valid_delivery_before_observe(
     );
 }
 
+#[test]
+fn real_session_live_source_proof_rejects_delivery_hidden_in_pre_observe_helper() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let helper_delivery = active_control.replacen(
+        r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+        r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                self.record_delivery(Cursor);
+                Event { cursor: Cursor }
+            }"#,
+        1,
+    );
+    assert_ne!(
+        helper_delivery, active_control,
+        "fixture must inject the helper-hidden delivery"
+    );
+    assert_rustc_check(&helper_delivery);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&helper_delivery).expect("parse helper-delivery fixture"),
+        )
+        .is_err(),
+        "delivery hidden in checkpoint_ready_event must be rejected before runtime observation"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_accepts_safe_pre_observe_helper_chain() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let delegated_allocation = active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, checkpoint: bool, path: &str) -> Event {
+                self.allocate_event(checkpoint, path)
+            }"#,
+            1,
+        )
+        .replacen(
+            "            fn record_delivery(&mut self, _cursor: Cursor) {}",
+            r#"            fn allocate_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }
+
+            fn record_delivery(&mut self, _cursor: Cursor) {}"#,
+            1,
+        );
+    assert_ne!(
+        delegated_allocation, active_control,
+        "fixture must inject a safe same-owner helper chain"
+    );
+    assert_rustc_check(&delegated_allocation);
+    assert_poll_once_delivery_contract(
+        &syn::parse_file(&delegated_allocation).expect("parse safe-helper fixture"),
+    )
+    .expect("recursively inspected bookkeeping-only helper chain must remain permitted");
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_aliased_pre_observe_helper_chain() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let aliased_helper = active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, checkpoint: bool, path: &str) -> Event {
+                let allocate = Self::allocate_event;
+                allocate(self, checkpoint, path)
+            }"#,
+            1,
+        )
+        .replacen(
+            "            fn record_delivery(&mut self, _cursor: Cursor) {}",
+            r#"            fn allocate_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }
+
+            fn record_delivery(&mut self, _cursor: Cursor) {}"#,
+            1,
+        );
+    assert_ne!(
+        aliased_helper, active_control,
+        "fixture must inject an aliased same-owner helper"
+    );
+    assert_rustc_check(&aliased_helper);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&aliased_helper).expect("parse aliased-helper fixture"),
+        )
+        .is_err(),
+        "an aliased pre-observe helper chain must fail closed"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_pre_observe_helper_cycle() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let helper_cycle = active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                self.prepare_event();
+                Event { cursor: Cursor }
+            }"#,
+            1,
+        )
+        .replacen(
+            "            fn record_delivery(&mut self, _cursor: Cursor) {}",
+            r#"            fn prepare_event(&mut self) {
+                self.finish_event();
+            }
+
+            fn finish_event(&mut self) {
+                self.prepare_event();
+            }
+
+            fn record_delivery(&mut self, _cursor: Cursor) {}"#,
+            1,
+        );
+    assert_ne!(
+        helper_cycle, active_control,
+        "fixture must inject the same-owner helper cycle"
+    );
+    assert_rustc_check(&helper_cycle);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&helper_cycle).expect("parse helper-cycle fixture"),
+        )
+        .is_err(),
+        "a pre-observe same-source helper cycle must fail closed"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_closure_local_return_as_poll_exit() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let closure_local_return = active_control.replacen(
+        "                let fresh_checkpoints = [true];",
+        r#"                {
+                    let exit_closure_only = || {
+                        return;
+                    };
+                    exit_closure_only();
+                    self.progress.complete_poll(observed_size_bytes);
+                    self.persist_state()?;
+                }
+                let fresh_checkpoints = [true];"#,
+        1,
+    );
+    assert_ne!(
+        closure_local_return, active_control,
+        "fixture must inject closure-local return bookkeeping"
+    );
+    assert_rustc_check(&closure_local_return);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&closure_local_return).expect("parse closure-return fixture"),
+        )
+        .is_err(),
+        "a return inside a closure must not classify continuing poll_once persistence as an exit"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_non_function_exits_for_bookkeeping() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let cases = [
+        (
+            "async return",
+            r#"                {
+                    let _not_polled = async {
+                        return;
+                    };
+                    self.progress.complete_poll(observed_size_bytes);
+                    self.persist_state()?;
+                }
+                let fresh_checkpoints = [true];"#,
+        ),
+        (
+            "const-nested closure return",
+            r#"                {
+                    let _closure_from_const: fn() = const {
+                        || {
+                            return;
+                        }
+                    };
+                    self.progress.complete_poll(observed_size_bytes);
+                    self.persist_state()?;
+                }
+                let fresh_checkpoints = [true];"#,
+        ),
+        (
+            "nested function return",
+            r#"                {
+                    fn nested() {
+                        return;
+                    }
+                    let _not_called = nested;
+                    self.progress.complete_poll(observed_size_bytes);
+                    self.persist_state()?;
+                }
+                let fresh_checkpoints = [true];"#,
+        ),
+        (
+            "loop break",
+            r#"                loop {
+                    self.progress.complete_poll(observed_size_bytes);
+                    self.persist_state()?;
+                    break;
+                }
+                let fresh_checkpoints = [true];"#,
+        ),
+        (
+            "loop continue",
+            r#"                while observed_size_bytes == 0 {
+                    self.progress.complete_poll(observed_size_bytes);
+                    self.persist_state()?;
+                    continue;
+                }
+                let fresh_checkpoints = [true];"#,
+        ),
+    ];
+
+    for (label, replacement) in cases {
+        let non_function_exit = active_control.replacen(
+            "                let fresh_checkpoints = [true];",
+            replacement,
+            1,
+        );
+        assert_ne!(
+            non_function_exit, active_control,
+            "fixture must inject {label}"
+        );
+        assert_rustc_check(&non_function_exit);
+        assert!(
+            assert_poll_once_delivery_contract(
+                &syn::parse_file(&non_function_exit)
+                    .unwrap_or_else(|error| panic!("parse {label} fixture: {error}")),
+            )
+            .is_err(),
+            "{label} must not classify continuing poll_once persistence as an outer exit"
+        );
+    }
+}
+
+#[test]
+fn real_session_live_source_proof_accepts_bookkeeping_with_outer_return() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let outer_return = active_control.replacen(
+        "                let fresh_checkpoints = [true];",
+        r#"                if observed_size_bytes == 0 {
+                    self.progress.complete_poll(observed_size_bytes);
+                    self.persist_state()?;
+                    return Ok(Vec::new());
+                }
+                let fresh_checkpoints = [true];"#,
+        1,
+    );
+    assert_ne!(
+        outer_return, active_control,
+        "fixture must inject outer-function return bookkeeping"
+    );
+    assert_rustc_check(&outer_return);
+    assert_poll_once_delivery_contract(
+        &syn::parse_file(&outer_return).expect("parse outer-return fixture"),
+    )
+    .expect("outer poll_once return keeps bookkeeping-only persistence semantics");
+}
+
 fn assert_rustc_check(source: &str) {
     let temp_dir = TempDir::new().expect("rustc fixture temp dir");
     let source_path = temp_dir.path().join("dominance_fixture.rs");
@@ -181,6 +498,8 @@ fn dominance_fixture(delivery_body: &str) -> String {
 
         impl Progress {{
             fn begin_poll(&mut self, _observed_size_bytes: u64) {{}}
+
+            fn complete_poll(&mut self, _observed_size_bytes: u64) {{}}
 
             fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {{
                 Event {{ cursor: Cursor }}
@@ -311,6 +630,12 @@ fn assert_poll_once_delivery_contract(file: &syn::File) -> Result<(), String> {
     }
 
     assert_exact_dominated_delivery_loop(delivery_loop)?;
+    assert_pre_observe_helpers_are_bookkeeping_only(
+        file,
+        block,
+        *delivery_loop_index,
+        delivery_loop,
+    )?;
 
     let full_scan = protected_surface_in_block(block);
     if !full_scan.errors.is_empty() {
@@ -342,6 +667,379 @@ fn assert_poll_once_delivery_contract(file: &syn::File) -> Result<(), String> {
 
     assert_only_bookkeeping_persistence_outside_delivery(block, *delivery_loop_index)?;
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SameSourceHelperKey {
+    owner: Option<String>,
+    name: String,
+}
+
+struct SameSourceHelper<'ast> {
+    key: SameSourceHelperKey,
+    block: &'ast syn::Block,
+    parameter_owners: Vec<(String, String)>,
+}
+
+struct SameSourceHelpers<'ast> {
+    helpers: Vec<SameSourceHelper<'ast>>,
+    fields: Vec<(String, String, String)>,
+}
+
+impl<'ast> SameSourceHelpers<'ast> {
+    fn collect(file: &'ast syn::File) -> Result<Self, String> {
+        let mut helpers = Vec::new();
+        let mut fields = Vec::new();
+
+        for item in &file.items {
+            match item {
+                syn::Item::Fn(function) => helpers.push(SameSourceHelper {
+                    key: SameSourceHelperKey {
+                        owner: None,
+                        name: function.sig.ident.to_string(),
+                    },
+                    block: &function.block,
+                    parameter_owners: signature_parameter_owners(&function.sig),
+                }),
+                syn::Item::Impl(item_impl) if item_impl.trait_.is_none() => {
+                    let owner = type_path(&item_impl.self_ty)
+                        .filter(|path| !path.is_empty())
+                        .map(|path| path.join("::"))
+                        .ok_or_else(|| {
+                            "same-source helper proof requires path-owned inherent impls"
+                                .to_string()
+                        })?;
+                    for item in &item_impl.items {
+                        if let syn::ImplItem::Fn(method) = item {
+                            helpers.push(SameSourceHelper {
+                                key: SameSourceHelperKey {
+                                    owner: Some(owner.clone()),
+                                    name: method.sig.ident.to_string(),
+                                },
+                                block: &method.block,
+                                parameter_owners: signature_parameter_owners(&method.sig),
+                            });
+                        }
+                    }
+                }
+                syn::Item::Struct(item_struct) => {
+                    let owner = item_struct.ident.to_string();
+                    if let syn::Fields::Named(named) = &item_struct.fields {
+                        for field in &named.named {
+                            let Some(field_name) = field.ident.as_ref() else {
+                                continue;
+                            };
+                            let Some(field_owner) = type_path(&field.ty) else {
+                                continue;
+                            };
+                            fields.push((
+                                owner.clone(),
+                                field_name.to_string(),
+                                field_owner.join("::"),
+                            ));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut unique = HashSet::new();
+        for helper in &helpers {
+            if !unique.insert(helper.key.clone()) {
+                return Err(format!(
+                    "same-source helper proof found duplicate helper {:?}",
+                    helper.key
+                ));
+            }
+        }
+        Ok(Self { helpers, fields })
+    }
+
+    fn helper(&self, key: &SameSourceHelperKey) -> Option<&SameSourceHelper<'ast>> {
+        self.helpers.iter().find(|helper| helper.key == *key)
+    }
+
+    fn has_method_named(&self, name: &str) -> bool {
+        self.helpers
+            .iter()
+            .any(|helper| helper.key.owner.is_some() && helper.key.name == name)
+    }
+
+    fn field_owner(&self, owner: &str, field: &str) -> Option<&str> {
+        self.fields
+            .iter()
+            .find_map(|entry| (entry.0 == owner && entry.1 == field).then_some(entry.2.as_str()))
+    }
+
+    fn calls_in_statement(
+        &self,
+        statement: &'ast syn::Stmt,
+        owner: &str,
+    ) -> Result<Vec<SameSourceHelperKey>, String> {
+        let mut visitor = SameSourceCallVisitor::new(self, owner, &[]);
+        visitor.visit_stmt(statement);
+        visitor.finish()
+    }
+
+    fn calls_in_block(
+        &self,
+        block: &'ast syn::Block,
+        owner: &str,
+        parameter_owners: &[(String, String)],
+    ) -> Result<Vec<SameSourceHelperKey>, String> {
+        let mut visitor = SameSourceCallVisitor::new(self, owner, parameter_owners);
+        visitor.visit_block(block);
+        visitor.finish()
+    }
+}
+
+fn signature_parameter_owners(signature: &syn::Signature) -> Vec<(String, String)> {
+    signature
+        .inputs
+        .iter()
+        .filter_map(|input| {
+            let syn::FnArg::Typed(argument) = input else {
+                return None;
+            };
+            let syn::Pat::Ident(binding) = argument.pat.as_ref() else {
+                return None;
+            };
+            type_path(&argument.ty).map(|owner| (binding.ident.to_string(), owner.join("::")))
+        })
+        .collect()
+}
+
+struct SameSourceCallVisitor<'graph, 'ast> {
+    graph: &'graph SameSourceHelpers<'ast>,
+    owner: &'graph str,
+    parameter_owners: Vec<(String, String)>,
+    calls: Vec<SameSourceHelperKey>,
+    errors: Vec<String>,
+}
+
+impl<'graph, 'ast> SameSourceCallVisitor<'graph, 'ast> {
+    fn new(
+        graph: &'graph SameSourceHelpers<'ast>,
+        owner: &'graph str,
+        parameter_owners: &[(String, String)],
+    ) -> Self {
+        Self {
+            graph,
+            owner,
+            parameter_owners: parameter_owners.to_vec(),
+            calls: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn finish(self) -> Result<Vec<SameSourceHelperKey>, String> {
+        if self.errors.is_empty() {
+            Ok(self.calls)
+        } else {
+            Err(format!(
+                "pre-observe helper graph has unclassified call surfaces: {:?}",
+                self.errors
+            ))
+        }
+    }
+
+    fn receiver_owner(&self, receiver: &syn::Expr) -> Option<String> {
+        match expression_path(receiver)?.as_slice() {
+            [self_name] if self_name == "self" => Some(self.owner.to_string()),
+            [self_name, field] if self_name == "self" => self
+                .graph
+                .field_owner(self.owner, field)
+                .map(str::to_string),
+            [parameter] => self
+                .parameter_owners
+                .iter()
+                .find_map(|(name, owner)| (name == parameter).then_some(owner.clone())),
+            _ => None,
+        }
+    }
+
+    fn helper_key_from_path(&self, path: &syn::Path) -> Option<SameSourceHelperKey> {
+        let mut segments = path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.to_string())
+            .collect::<Vec<_>>();
+        let key = if segments.len() == 1 {
+            SameSourceHelperKey {
+                owner: None,
+                name: segments.remove(0),
+            }
+        } else {
+            let name = segments.pop()?;
+            let owner = if segments == ["Self"] {
+                self.owner.to_string()
+            } else {
+                segments.join("::")
+            };
+            SameSourceHelperKey {
+                owner: Some(owner),
+                name,
+            }
+        };
+        self.graph.helper(&key).is_some().then_some(key)
+    }
+
+    fn direct_helper_alias(&self, expression: &syn::Expr) -> Option<SameSourceHelperKey> {
+        match expression {
+            syn::Expr::Path(path) => self.helper_key_from_path(&path.path),
+            syn::Expr::Cast(cast) => self.direct_helper_alias(&cast.expr),
+            syn::Expr::Group(group) => self.direct_helper_alias(&group.expr),
+            syn::Expr::Paren(paren) => self.direct_helper_alias(&paren.expr),
+            syn::Expr::Reference(reference) => self.direct_helper_alias(&reference.expr),
+            _ => None,
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for SameSourceCallVisitor<'_, 'ast> {
+    fn visit_local(&mut self, local: &'ast syn::Local) {
+        if let Some(key) = local
+            .init
+            .as_ref()
+            .and_then(|initializer| self.direct_helper_alias(&initializer.expr))
+        {
+            self.errors
+                .push(format!("local alias to same-source helper {key:?}"));
+        }
+        visit::visit_local(self, local);
+    }
+
+    fn visit_expr_assign(&mut self, assignment: &'ast syn::ExprAssign) {
+        if let Some(key) = self.direct_helper_alias(&assignment.right) {
+            self.errors
+                .push(format!("assignment alias to same-source helper {key:?}"));
+        }
+        visit::visit_expr_assign(self, assignment);
+    }
+
+    fn visit_item_use(&mut self, item_use: &'ast syn::ItemUse) {
+        self.errors
+            .push("block-local use may alias a same-source helper".to_string());
+        visit::visit_item_use(self, item_use);
+    }
+
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        let method = call.method.to_string();
+        let resolved = self
+            .receiver_owner(&call.receiver)
+            .map(|owner| SameSourceHelperKey {
+                owner: Some(owner),
+                name: method.clone(),
+            });
+        if let Some(key) = resolved
+            .as_ref()
+            .filter(|key| self.graph.helper(key).is_some())
+        {
+            self.calls.push(key.clone());
+        } else if self.graph.has_method_named(&method) {
+            self.errors.push(format!(
+                "could not resolve exact inherent owner for method call `{method}`"
+            ));
+        }
+        visit::visit_expr_method_call(self, call);
+    }
+
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(function) = call.func.as_ref() {
+            if let Some(key) = self.helper_key_from_path(&function.path) {
+                self.calls.push(key);
+            }
+        }
+        visit::visit_expr_call(self, call);
+    }
+}
+
+fn assert_pre_observe_helpers_are_bookkeeping_only(
+    file: &syn::File,
+    poll_once: &syn::Block,
+    delivery_loop_index: usize,
+    delivery_loop: &syn::ExprForLoop,
+) -> Result<(), String> {
+    let graph = SameSourceHelpers::collect(file)?;
+    let mut roots = Vec::new();
+    for statement in &poll_once.stmts[..delivery_loop_index] {
+        roots.extend(graph.calls_in_statement(statement, "LiveSessionCoordinator")?);
+    }
+    roots.extend(graph.calls_in_statement(&delivery_loop.body.stmts[0], "LiveSessionCoordinator")?);
+
+    // Direct poll_once persistence in the two proven bookkeeping-only exit shapes is validated
+    // separately. A helper that reaches persist_state is rejected by the recursive body scan.
+    roots.retain(|key| {
+        key.owner.as_deref() != Some("LiveSessionCoordinator") || key.name != "persist_state"
+    });
+
+    let mut visiting = HashSet::new();
+    let mut verified = HashSet::new();
+    for root in roots {
+        assert_same_source_helper_is_bookkeeping_only(&graph, &root, &mut visiting, &mut verified)?;
+    }
+    Ok(())
+}
+
+fn assert_same_source_helper_is_bookkeeping_only(
+    graph: &SameSourceHelpers<'_>,
+    key: &SameSourceHelperKey,
+    visiting: &mut HashSet<SameSourceHelperKey>,
+    verified: &mut HashSet<SameSourceHelperKey>,
+) -> Result<(), String> {
+    if verified.contains(key) {
+        return Ok(());
+    }
+    if !visiting.insert(key.clone()) {
+        return Err(format!(
+            "pre-observe same-source helper cycle reaches {:?}",
+            key
+        ));
+    }
+    let helper = graph
+        .helper(key)
+        .ok_or_else(|| format!("pre-observe helper {:?} disappeared from source graph", key))?;
+    let scan = protected_surface_in_block(helper.block);
+    let unclassified_errors = scan
+        .errors
+        .iter()
+        .filter(|error| !permitted_pre_observe_helper_error(key, error))
+        .collect::<Vec<_>>();
+    if !unclassified_errors.is_empty() || scan.runtime_roots != 0 {
+        return Err(format!(
+            "pre-observe helper {:?} has protected or unclassified surfaces: errors={:?}, runtime_roots={}",
+            key, unclassified_errors, scan.runtime_roots
+        ));
+    }
+    let disallowed = scan
+        .steps
+        .iter()
+        .copied()
+        .filter(|step| !matches!(step, DeliveryStep::AllocateEmissionOrdinal))
+        .collect::<Vec<_>>();
+    if !disallowed.is_empty() {
+        return Err(format!(
+            "pre-observe helper {:?} reaches non-bookkeeping protected effects: {:?}",
+            key, disallowed
+        ));
+    }
+
+    let owner = key.owner.as_deref().unwrap_or("");
+    for child in graph.calls_in_block(helper.block, owner, &helper.parameter_owners)? {
+        assert_same_source_helper_is_bookkeeping_only(graph, &child, visiting, verified)?;
+    }
+    visiting.remove(key);
+    verified.insert(key.clone());
+    Ok(())
+}
+
+fn permitted_pre_observe_helper_error(key: &SameSourceHelperKey, error: &str) -> bool {
+    // This exact free helper only accumulates borrowed rollout text into its declared Vec<&str>;
+    // it cannot accept a checkpoint or reach a delivery/persistence capability.
+    key.owner.is_none()
+        && key.name == "rollout_text_fragments"
+        && error == "unclassified method call texts.push"
 }
 
 fn assert_exact_dominated_delivery_loop(delivery_loop: &syn::ExprForLoop) -> Result<(), String> {
@@ -434,8 +1132,7 @@ fn assert_only_bookkeeping_persistence_outside_delivery(
         }
         let permitted_pre_delivery_return = index < delivery_loop_index
             && persist_count == 1
-            && statement_has_method_call(statement, "complete_poll", &["self", "progress"])
-            && statement_contains_return(statement);
+            && statement_has_bookkeeping_only_outer_function_exit(statement);
         let permitted_post_delivery_completion = index > delivery_loop_index
             && persist_count == 1
             && statement_fallibly_persists_state(statement)
@@ -673,45 +1370,37 @@ fn simple_pattern_is(pattern: &syn::Pat, name: &str) -> bool {
                 && ident.ident == name)
 }
 
-fn statement_has_method_call(statement: &syn::Stmt, method: &str, receiver: &[&str]) -> bool {
-    struct MethodCallVisitor<'a> {
-        method: &'a str,
-        receiver: &'a [&'a str],
-        found: bool,
-    }
-
-    impl<'ast> Visit<'ast> for MethodCallVisitor<'_> {
-        fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
-            if call.method == self.method && expression_is_path(&call.receiver, self.receiver) {
-                self.found = true;
-            }
-            visit::visit_expr_method_call(self, call);
-        }
-    }
-
-    let mut visitor = MethodCallVisitor {
-        method,
-        receiver,
-        found: false,
-    };
-    visitor.visit_stmt(statement);
-    visitor.found
-}
-
-fn statement_contains_return(statement: &syn::Stmt) -> bool {
+fn statement_has_bookkeeping_only_outer_function_exit(statement: &syn::Stmt) -> bool {
     #[derive(Default)]
-    struct ReturnVisitor {
+    struct BookkeepingExitVisitor {
         found: bool,
     }
 
-    impl<'ast> Visit<'ast> for ReturnVisitor {
-        fn visit_expr_return(&mut self, expression: &'ast syn::ExprReturn) {
-            self.found = true;
-            visit::visit_expr_return(self, expression);
+    impl<'ast> Visit<'ast> for BookkeepingExitVisitor {
+        fn visit_block(&mut self, block: &'ast syn::Block) {
+            self.found |= block.stmts.windows(3).any(|statements| {
+                statement_is_complete_poll(&statements[0])
+                    && statement_fallibly_persists_state(&statements[1])
+                    && matches!(statements[2], syn::Stmt::Expr(syn::Expr::Return(_), _))
+            });
+            visit::visit_block(self, block);
         }
+
+        // These returns exit their own execution context, not LiveSessionCoordinator::poll_once.
+        fn visit_expr_closure(&mut self, _expression: &'ast syn::ExprClosure) {}
+
+        fn visit_expr_async(&mut self, _expression: &'ast syn::ExprAsync) {}
+
+        fn visit_expr_const(&mut self, _expression: &'ast syn::ExprConst) {}
+
+        fn visit_item_fn(&mut self, _function: &'ast syn::ItemFn) {}
+
+        fn visit_impl_item_fn(&mut self, _function: &'ast syn::ImplItemFn) {}
+
+        fn visit_trait_item_fn(&mut self, _function: &'ast syn::TraitItemFn) {}
     }
 
-    let mut visitor = ReturnVisitor::default();
+    let mut visitor = BookkeepingExitVisitor::default();
     visitor.visit_stmt(statement);
     visitor.found
 }
@@ -984,6 +1673,7 @@ fn type_path(ty: &syn::Type) -> Option<Vec<String>> {
         ),
         syn::Type::Group(group) => type_path(&group.elem),
         syn::Type::Paren(paren) => type_path(&paren.elem),
+        syn::Type::Reference(reference) => type_path(&reference.elem),
         _ => None,
     }
 }
