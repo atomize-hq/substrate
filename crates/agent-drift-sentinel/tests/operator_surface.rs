@@ -1443,6 +1443,57 @@ fn ast_policy_self_test_propagates_schema_aliases_through_nested_control_forms()
 }
 
 #[test]
+fn ast_policy_self_test_propagates_schema_aliases_through_macro_aggregates() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let is_v0_8 = self.checkpoint.schema_version == "v0.8";
+                let decisions = vec![is_v0_8];
+                if decisions[0] {}
+            }
+        }
+        "#,
+    )
+    .expect("parse macro aggregate policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.violations,
+        vec![
+            "CheckpointPresentation::render_console_block: schema-version alias or nesting in if condition"
+                .to_string(),
+        ],
+        "a schema-derived alias must remain classified through an allowlisted macro aggregate and index: {schema:?}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_classifies_schema_aliases_in_let_else_control() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let is_v0_8 = self.checkpoint.schema_version == "v0.8";
+                let true = is_v0_8 else { return; };
+            }
+        }
+        "#,
+    )
+    .expect("parse let-else policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.violations,
+        vec![
+            "CheckpointPresentation::render_console_block: schema-version let-else initializer"
+                .to_string(),
+        ],
+        "schema-derived let-else control must fail closed: {schema:?}"
+    );
+}
+
+#[test]
 fn ast_policy_self_test_rejects_a_fifth_call_inside_an_allowed_owner() {
     let file = syn::parse_file(
         r#"
@@ -2518,6 +2569,15 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         analyze_schema_attributes(self.owner, std::slice::from_ref(attribute), self.analysis);
     }
 
+    fn visit_local(&mut self, local: &'ast syn::Local) {
+        if local.init.as_ref().is_some_and(|init| {
+            init.diverge.is_some() && expression_depends_on_schema(&init.expr, self.aliases)
+        }) {
+            self.violation("schema-version let-else initializer");
+        }
+        visit::visit_local(self, local);
+    }
+
     fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
         if member_is(&field.member, "schema_version") {
             self.analysis.direct_uses.push(self.owner.to_string());
@@ -2674,6 +2734,23 @@ fn expression_identifiers(expression: &syn::Expr) -> HashSet<String> {
                 self.0.insert(identifier_name(identifier));
             }
             visit::visit_expr_path(self, path);
+        }
+
+        fn visit_macro(&mut self, expression: &'ast syn::Macro) {
+            match parse_macro_arguments(expression) {
+                Ok(ParsedMacroArguments::Expressions(arguments)) => {
+                    for argument in &arguments {
+                        self.visit_expr(argument);
+                    }
+                }
+                Ok(ParsedMacroArguments::Matches(arguments)) => {
+                    self.visit_expr(&arguments.expression);
+                    if let Some(guard) = &arguments.guard {
+                        self.visit_expr(guard);
+                    }
+                }
+                Err(_) => {}
+            }
         }
     }
     let mut collector = Collector::default();
