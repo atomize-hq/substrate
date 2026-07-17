@@ -435,6 +435,122 @@ fn real_session_live_source_proof_rejects_free_helper_callback_before_observe() 
 }
 
 #[test]
+fn real_session_live_source_proof_rejects_imported_nested_callback_values() {
+    let hidden_callback = r#"
+        mod hidden {
+            pub(super) fn deliver_from_callback(progress: &&super::Progress) -> bool {
+                progress.record_delivery(super::Cursor);
+                true
+            }
+        }
+    "#;
+    let cases = [
+        (
+            "direct import",
+            "use hidden::deliver_from_callback;",
+            "",
+            "deliver_from_callback",
+        ),
+        (
+            "renamed import",
+            "use hidden::deliver_from_callback as renamed_callback;",
+            "",
+            "renamed_callback",
+        ),
+        (
+            "local function-value alias",
+            "use hidden::deliver_from_callback;",
+            "let callback = deliver_from_callback;",
+            "callback",
+        ),
+    ];
+
+    let mut accepted_cases = Vec::new();
+    for (case, import, callback_setup, callback) in cases {
+        let source = callback_value_fixture(import, hidden_callback, callback_setup, callback);
+        assert_rustc_check(&source);
+        if assert_poll_once_delivery_contract(
+            &syn::parse_file(&source).expect("parse imported callback fixture"),
+        )
+        .is_ok()
+        {
+            accepted_cases.push(case);
+        }
+    }
+    assert!(
+        accepted_cases.is_empty(),
+        "nested-module callbacks hid protected delivery through {accepted_cases:?}"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_accepts_callback_value_controls() {
+    let closure = callback_value_fixture("", "", "", "|_| true");
+    assert_rustc_check(&closure);
+    assert_poll_once_delivery_contract(
+        &syn::parse_file(&closure).expect("parse closure callback control"),
+    )
+    .expect("an inline bookkeeping-only closure must remain permitted");
+
+    let known_helper = callback_value_fixture(
+        "",
+        "fn bookkeeping_callback(_: &&Progress) -> bool { true }",
+        "",
+        "bookkeeping_callback",
+    );
+    assert_rustc_check(&known_helper);
+    assert_poll_once_delivery_contract(
+        &syn::parse_file(&known_helper).expect("parse known-helper callback control"),
+    )
+    .expect("a recursively inspected bookkeeping-only helper callback must remain permitted");
+}
+
+fn callback_value_fixture(
+    import: &str,
+    callback_definition: &str,
+    callback_setup: &str,
+    callback: &str,
+) -> String {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let callback_items = format!(
+        r#"        {import}
+
+        {callback_definition}
+
+        fn validate_analyzer_verified_direct_closure(progress: &Progress) -> bool {{
+            let targets = [progress];
+            {callback_setup}
+            targets.iter().all({callback})
+        }}
+
+        struct OperatorSink;"#
+    );
+    active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                validate_analyzer_verified_direct_closure(&*self);
+                Event { cursor: Cursor }
+            }"#,
+            1,
+        )
+        .replacen(
+            "            fn record_delivery(&mut self, _cursor: Cursor) {}",
+            "            fn record_delivery(&self, _cursor: Cursor) {}",
+            1,
+        )
+        .replacen("        struct OperatorSink;", &callback_items, 1)
+}
+
+#[test]
 fn real_session_live_source_proof_rejects_type_alias_helper_before_observe() {
     let active_control = dominance_fixture(
         r#"
@@ -1142,6 +1258,58 @@ impl<'graph, 'ast> SameSourceCallVisitor<'graph, 'ast> {
             _ => None,
         }
     }
+
+    fn visit_callback_argument(&mut self, argument: &'ast syn::Expr) {
+        if matches!(argument, syn::Expr::Closure(_)) {
+            self.visit_expr(argument);
+            return;
+        }
+        let Some(path) = function_value_path(argument) else {
+            self.errors
+                .push("unclassified non-path callback expression".to_string());
+            self.visit_expr(argument);
+            return;
+        };
+        if let Some(key) = self.helper_key_from_path(path) {
+            self.calls.push(key);
+        } else if !permitted_pre_observe_function_reference(self.context, path) {
+            self.errors.push(format!(
+                "unclassified callback function value `{}`",
+                path.segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("::")
+            ));
+        }
+    }
+}
+
+fn function_value_path(expression: &syn::Expr) -> Option<&syn::Path> {
+    match expression {
+        syn::Expr::Path(path) => Some(&path.path),
+        syn::Expr::Cast(cast) => function_value_path(&cast.expr),
+        syn::Expr::Group(group) => function_value_path(&group.expr),
+        syn::Expr::Paren(paren) => function_value_path(&paren.expr),
+        syn::Expr::Reference(reference) => function_value_path(&reference.expr),
+        _ => None,
+    }
+}
+
+fn method_argument_is_callback(method: &str, argument_index: usize) -> bool {
+    argument_index == 0
+        && matches!(
+            method,
+            "all"
+                | "and_then"
+                | "any"
+                | "filter"
+                | "is_none_or"
+                | "is_some_and"
+                | "map"
+                | "map_err"
+                | "then"
+        )
 }
 
 impl<'ast> Visit<'ast> for SameSourceCallVisitor<'_, 'ast> {
@@ -1211,7 +1379,14 @@ impl<'ast> Visit<'ast> for SameSourceCallVisitor<'_, 'ast> {
                 call.args.len()
             ));
         }
-        visit::visit_expr_method_call(self, call);
+        self.visit_expr(&call.receiver);
+        for (index, argument) in call.args.iter().enumerate() {
+            if method_argument_is_callback(&method, index) {
+                self.visit_callback_argument(argument);
+            } else {
+                self.visit_expr(argument);
+            }
+        }
     }
 
     fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
