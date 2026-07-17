@@ -378,7 +378,7 @@ The R2 regression gates are exact labels used by the inventory and packet allowl
 
 | Gate | Required proof before the owning packet can exit |
 |---|---|
-| **R2-UDEV-01** | Unix dev install, uninstall, `dev-shim-bootstrap.sh`, and successful install-sensitive standalone CLI modes each construct exactly one equal A/H/R context from the declared/installed-witness/account-default source before explicit-context home bootstrap; parse/help/version exits mutate no scaffold; hidden argv carrier alone selects internal-child validation and the current account+UID must equal its committed principal; custom A/bin dev symlink self-derives A without an outer override; direct repo and zero/multiple witnesses fail; conflicting ambient B/dev-prefix cannot retarget bootstrap, children, preexec, or uninstall selection; a forged-principal carrier fails before mutation. |
+| **R2-UDEV-01** | Unix dev install, uninstall, `dev-shim-bootstrap.sh`, and successful install-sensitive standalone CLI modes each construct exactly one equal A/H/R context from the declared/installed-witness/account-default source before explicit-context home bootstrap; parse failures, help, `--version`, and `--version-json` mutate no scaffold; installers and focused R1 private-home tests bootstrap only through hidden `--install-bootstrap-home-v1` plus the authenticated argv carrier, current account+UID equality, and checked H/R, after which the process returns without normal dispatch; environment alone cannot select the action; custom A/bin dev symlink self-derives A without an outer override; direct repo and zero/multiple witnesses fail; conflicting ambient B/dev-prefix cannot retarget bootstrap, children, preexec, or uninstall selection; malformed/tampered/forged-principal carriers fail before mutation. |
 | **R2-UREL-01** | Unix release wrapper, direct installer/uninstaller, and installed child distinguish constructor/child modes and preserve the same context across install/uninstall; Unix release A/bin witness self-derives A; every child binds the committed principal to current Unix identity/sudo origin and cannot reinterpret prefix; repeat install preserves commitment; no removal/convergence claim. |
 | **R2-SHIM-01** | Installer-managed, automatic CLI, standalone declared/self-derived deploy/remove/status/doctor/repair, and physical shim paths receive one complete context or verified mapping projection; a bare physical shim recovers exactly one no-follow invocation witness without PATH precedence, resolves the canonical current Unix account+UID or Windows account+SID through its exact OS observation surface, and rejects zero/multiple witnesses or a forged principal before dispatch; repair target derives from the committed principal; telemetry and manager-hint manifest/overlay consume custom A under ambient B, with no compiled-repo or manifest-environment fallback in normal product mode; shell and physical-shim trace output is exactly `A/trace.jsonl`, policy-commit metadata reads only A, unbound trace initialization fails, missing Git metadata does not fall back, and the A/B proof observes zero filesystem access under B; legacy H/R/carriers are consistency checks. Replacement/migration/recursive removal actions and trace rotation/retention semantics remain byte-frozen in R2. |
 | **R2-GEN-01** | Dev/release `env.sh`, manager, Bash preexec, helper, generated `A/manager_hooks.yaml`, configuration, version, install-state, dependency, service, intended-principal PATH, and Lima known-hosts projections are prefix-relative or self-derived, encode/project the same context where consumed, and never treat a conflicting ambient B, repository path, or generated value as selection authority. |
@@ -419,6 +419,17 @@ Lima known-hosts placement, and forwarding unlink/drop/timeout ownership.
 The post-push fresh authority audit additionally closed source-layout omissions for the Unix dev
 A/bin symlink and Windows release A/bin copy, and made current Unix account+UID/Windows account+SID
 equality mandatory for every internal carrier, including forged-valid-carrier negative proof.
+
+The R2-1 preimplementation trigger correction preserves that inventory and DAG. It authorizes the
+hidden authenticated `--install-bootstrap-home-v1` action only inside the existing R2-1 production
+files and adds only `crates/shell/tests/world_deps_home_scaffold_wdh3.rs` to the focused test
+allowlist. That file may construct the shared IH carrier/current Unix principal, replace historical
+`--version` bootstrap triggers, add version nonmutation proof, and perform the exact one-to-one rename
+`test_bootstrap_scaffolds_deps_on_version` ->
+`test_install_bootstrap_action_scaffolds_deps`. This is a canonical trigger rename, not removal or
+substitution: the old/new fixture and scaffold assertions are identical and only the command trigger
+changes; all other historical test names and all R1 security assertions remain unchanged. No
+world-deps production symbol, cleanup/R3 behavior, user-facing feature, or capability is authorized.
 The subsequent lifecycle allowlist review closed the remaining Windows implementation-surface gap:
 R2-3 alone may add the exact `windows-sys` 0.52 features `Win32_Security`,
 `Win32_Storage_FileSystem`, `Win32_System_Threading`, `Win32_System_Com`, and `Win32_UI_Shell` in
@@ -585,6 +596,13 @@ passed. The live shell comparator moved from inherited **1054 passed / 149 faile
 **1080 passed / 149 failed / 1229 total**: `PassToFail = 0`, `FailToPass = 0`, `NewFail = 0`,
 `Removed = 0`, and `RenamedOrSubstituted = 0`; all 149 retained names and normalized failure
 signatures were unchanged, and all 26 added R1 tests passed.
+
+R2-1 differential comparison uses that 1080/149/1229 result with one explicit accounting
+exception: exactly the canonical old/new trigger-name mapping above is accepted, and one new
+`test_version_is_non_mutating` must pass. `PassToFail = 0`, `NewFail = 0`, retained failure names and
+normalized signatures remain unchanged, no test is removed or substituted, and no other rename is
+accepted. The mapped test preserves the R1 scaffold fixture/assertions and changes only its
+authenticated bootstrap trigger.
 
 GitNexus change detection mapped the two authorized runtime files to 132 changed symbols and 24
 existing downstream flows, with aggregate CRITICAL risk from the already authorized

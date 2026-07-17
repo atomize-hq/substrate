@@ -271,8 +271,8 @@ For the current combined installation/state-root architecture, one selected cont
 exactly once at each public install, uninstall, installed world-enable, standalone
 install-context-sensitive product-CLI entry, and physical shim entry point, before any filesystem
 mutation, build, download, shim operation, doctor, generated-file read/write, sudo crossing,
-service action, runtime provisioning, or platform entry. `clap` parse failure, help/version, and
-other explicitly non-mutating syntax exits print and return without private-home/dependency
+service action, runtime provisioning, or platform entry. `clap` parse failure, help, `--version`,
+`--version-json`, and other explicitly non-mutating syntax exits print and return without private-home/dependency
 scaffolding; a successful route that can mutate or consume an install projection constructs the
 context before calling the explicit-context home bootstrap:
 
@@ -502,6 +502,7 @@ Authority is fixed as follows:
 | Direct Lima/WSL/forwarder/pipe helper | Declared normalized host prefix or principal-derived host default constructs `IH`; declared instance, fixed Lima V1 transport target or declared/default Windows pipe, and OS-resolved host platform-control root construct `PM`, except the bounded pre-PM Lima Stage 1 below | Both carriers after PM exists; internal-child mode validates and never reconstructs; child `HOME`/`LIMA_HOME` and Windows projection paths are exact overwritten projections | Platform selector without host context, guest/default home, ambient `HOME`/`LIMA_HOME`/`LOCALAPPDATA`/pipe env, or falling from bad child mode into public mode |
 | Same-process function | Explicit context/carrier parameter | Function-local derived paths | Rereading globals or environment to select a different prefix |
 | Context-aware script child | `--install-bootstrap-context-v1` argv value plus current OS/sudo-origin principal equality | Declared `--prefix`/`--home`/`-Prefix` must match | Ambient context carrier or home/root variables, or a self-consistent carrier for another principal |
+| Hidden installer home-bootstrap action | Exact `--install-bootstrap-context-v1 <carrier>` argv plus `--install-bootstrap-home-v1`; strict commitment/current-principal/checked-projection validation precedes mutation | Calls only the explicit-context private-home/dependency bootstrap and returns; exact retry is idempotent | Public feature discovery, environment-only selection, normal dispatch, world-deps production processing, shim/runtime/world/policy/lifecycle action, or carrier disclosure |
 | Installer-managed leaf product CLI (`substrate` shim/status/doctor/world-deps/config/policy/gateway) | Parent supplies `--install-bootstrap-context-v1 <carrier>` as the authoritative hidden argv child discriminator; leaf decodes/authenticates before dispatch | Leaf overwrites H/R/principal/commitment environment projections from the validated context, passes typed IH to the selected leaf, and requires any inherited tuple to match | Environment carrier/tuple as authority, leaf fallback to home/profile/CWD, or falling from invalid child mode into public construction |
 | `sudo` to a Substrate-owned helper | Full carrier and intended-principal input on the helper's explicit argv; helper authenticates sudo origin as specified below | Helper reconstructs the exact environment tuple after validation | `sudo -E`, `--preserve-env`, root's home/account, a caller-chosen unverified UID, or fresh principal reinterpretation |
 | Linux ACL bridge fixed system leaf | The owning provisioner validates IH/principal before installing or invoking the helper; the root-owned systemd drop-in or provisioner supplies one exact closed mode/target/group tuple | Only the fixed ACL effect and independent enumeration of current `substrate` group members | Supplying or reconstructing A/H/R/account/UID, accepting any other target/group/mode, treating group membership as intended-principal selection, or accepting an ambient context |
@@ -516,6 +517,26 @@ against the argv carrier, and passes the current-principal binding below. A decl
 the context; a conflicting outer home/root/context is a negative diagnostic input, not a competing
 precedence branch. An outer override may be used only by an explicitly named diagnostic test and
 cannot satisfy normal product proof.
+
+##### Hidden installer bootstrap action
+
+`--install-bootstrap-home-v1` is a hidden internal action, not a public user feature. It is accepted
+only when the same invocation includes
+`--install-bootstrap-context-v1 <exact-carrier>`, whose argv presence remains the sole
+internal-child discriminator. An environment carrier or matching H/R tuple alone cannot select the
+action or internal mode. Before mutation, the root dispatcher strictly decodes and authenticates the
+V1 carrier and commitment, binds its Unix account+UID to the current principal, and requires checked
+H/R/principal/commitment projections to match typed IH. Missing, malformed, reordered, tampered,
+conflicting, or forged context fails before any scaffold or other write.
+
+After validation, the action calls only the existing explicit-context private-home/dependency
+scaffold bootstrap, preserves all R1 owner/mode/ACL/no-follow/stable-identity/no-repair semantics,
+and returns without entering the REPL or command dispatcher. Exact retry is idempotent. The action
+does not deploy shims, provision runtimes, enter a world, evaluate policy, clean up, repair, delete,
+roll back, migrate, replace, or converge anything, and it emits no secret or carrier payload in
+normal output, errors, logs, or traces. Installers use this action instead of `--version`; focused R1
+private-home tests may use it only under the narrow R2-1 test authorization. World-deps command
+processing remains owned by R2-2.
 
 Verified installed-product self-derivation first recovers the actual product invocation witness
 with the same explicit-path or unique absolute-PATH-candidate algorithm used for shims below, but
@@ -605,7 +626,8 @@ prefix authority; its ACL application, degraded-warning, and subject-enumeration
 otherwise frozen. This exception cannot be generalized to a helper that reads or reconstructs
 H/R/principal context.
 
-For every internal child, including a product-CLI child, presence of the hidden/child argv carrier
+For every internal child, including a product-CLI child and the hidden installer home-bootstrap
+action, presence of the hidden/child argv carrier
 is the child discriminator; the environment variable carrier alone never selects child mode. The
 script intake or root dispatcher decodes and authenticates argv, then binds the committed principal
 to the current OS identity before dispatch.

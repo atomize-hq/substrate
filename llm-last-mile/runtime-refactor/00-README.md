@@ -209,6 +209,16 @@ both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.
 remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
 proof is not added as a dependency of the B1/B2.1 corridor.
 
+Before R2-1 runtime work, the control pack resolves one historical trigger conflict without changing
+scope or ownership: parse failures, help, `--version`, and `--version-json` are non-mutating, while
+installer-managed and focused private-home regression callers use the hidden
+`--install-bootstrap-home-v1` action together with the authenticated
+`--install-bootstrap-context-v1 <carrier>`. The carrier argv remains the sole internal-child
+discriminator; current-principal and checked H/R validation precede the existing explicit-context
+private-home/dependency bootstrap, after which the process returns without entering normal dispatch.
+This correction adds no user-facing feature, inventory row, seam promotion, world-deps production
+ownership, cleanup authority, or R2-2/R2-3/R2-4/R3 work.
+
 The canonical **A1.1d-5R1 Case A** decision corrects only the Linux security contract: V1 requires
 **no effective other-principal authority**, not unprovable physical ACL-xattr absence. A descriptor-
 bound `ENODATA` result means only that the kernel returned no ACL data; it is accepted under the

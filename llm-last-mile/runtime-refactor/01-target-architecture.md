@@ -361,7 +361,15 @@ The shared Rust wire model lives in `transport-api-types`; OS path/principal con
 at the public shell/script entry. Its fixed line-framed, base64url field encoding has one
 cross-language golden-vector suite and does not reuse, move, or duplicate the shell-private A1
 authority-store canonical codec. Successful install-sensitive CLI routes construct this context
-before private-home/dependency scaffolding; parse/help/version exits are non-mutating. Automatic
+before private-home/dependency scaffolding; parse failures, help, `--version`, and `--version-json`
+exit without creating private-home, dependency, shim, manager, trace, or generated-install state.
+Installer-managed or focused private-home regression callers that need the existing scaffold use the
+hidden `--install-bootstrap-home-v1` action only with
+`--install-bootstrap-context-v1 <carrier>`. The root dispatcher strictly authenticates the carrier,
+binds its Unix account+UID to the current principal, validates checked H/R projections, calls only the
+existing explicit-context private-home/dependency bootstrap, and returns. Environment values alone
+cannot select the action or internal-child mode, and normal output/errors/logs/traces never disclose
+the carrier. Automatic
 shim deploy, shim doctor/repair, physical shim telemetry, and shell/replay backend-factory callers
 consume explicit context or mapping projections rather than common ambient path resolution.
 Installer-managed product-CLI children use the hidden argv carrier as their child discriminator;
