@@ -385,13 +385,21 @@ semantics and diagnostics; selected prefix/home/root propagation across install 
 partial-created-home and managed-artifact cleanup; and missing lifecycle regressions. The bounded
 implementation order is:
 
-1. **A1.1d-5R1 — Ancestor ACL semantics and diagnostics.** Preserve exact-owner, exact `0700`,
-   ACL-free final-root acceptance; limit the unresolved support question to masked non-writing
-   ancestor access ACLs and require R1 security review before any support decision; reject any
-   effective write bit, every ancestor default ACL before creation, and every malformed, unreadable,
-   or ambiguous ACL state; identify the exact offending path/object role/ACL kind/reason without
-   repair or secret disclosure. Supporting a default ACL requires a later separately approved
-   contract.
+1. **A1.1d-5R1 — Ancestor ACL semantics and diagnostics.** Approve Case A on Linux: replace the
+   unprovable physical-ACL-absence requirement with the enforceable no-effective-other-principal-
+   authority contract. Model each access/default read as closed `Present(bytes)`, exact-`ENODATA`
+   `NoData`, or `Failed(error_class)`. `NoData` means only that the kernel returned no ACL data and
+   is accepted solely with descriptor-bound owner/type/stable-identity/no-follow/no-replacement
+   proof plus authoritative mode bits. Strictly parse `Present` Linux POSIX access ACLs, apply
+   `ACL_MASK`, accept masked non-writing `--x`/`r-x`, and reject any effective write. Reject every
+   ancestor default ACL before creation and every observable final-root access/default ACL; keep
+   final-root exact owner/`0700` and sensitive descendant `0700`/`0600` rules. Malformed,
+   unsupported, non-POSIX, unreadable, or otherwise distinguishable non-`ENODATA` state fails
+   closed. Diagnostics distinguish accepted non-writing `Present`, rejected `Present`, qualified
+   `NoData`, and failure/unavailability and identify requested/offending paths, path role, ACL kind,
+   reason, and candidate-creation state without repair language, principals, or secrets. Supporting
+   an ancestor default ACL or proving physical xattr absence requires a later separately approved
+   contract/platform-attestation boundary.
 2. **A1.1d-5R2 — Prefix propagation across install/uninstall.** Carry the selected
    host prefix/`SUBSTRATE_HOME`/`SUBSTRATE_ROOT`/intended-principal context across every child and
    sudo boundary, including shim, world, service, runtime, generated-file, release, dev, and
@@ -430,7 +438,23 @@ trusted-filesystem refactoring. Requiring any implementation file, integration-t
 fixture, or new module outside this allowlist is `CrossDocumentChangeRequired` rather than implicit
 scope expansion.
 
-R1, R2, and R3 are not implemented or review-clean. `RG-HOME-01` and `RG-INSTALL-01` remain open.
+**R1 exit/regression gate.** R1 exits only after the two authorized runtime files prove the closed
+observation model; strict version/length/order/duplicate/base/mask/tag parsing; qualified `NoData`
+versus unsafe mode; effective `--x`, `r-x`, masked-away raw write, multiple named entries, and all
+effective-write rejection; ancestor/final access/default separation; non-`ENODATA` and unsupported
+failure; exact diagnostic provenance and wording; final-root exact owner/`0700` across umasks
+`000`, `022`, `027`, `077`, and `777`; no-follow identity/replacement rejection; invalid-root
+nonmutation; no ACL cleanup; and the real `libvirt-qemu:--x` shape. Focused trusted-filesystem,
+home-bootstrap, complete HostSessionAuthority, product bootstrap scaffold, and relevant installer
+environment tests must pass, as must formatting, warnings-denied Clippy for touched targets,
+workspace all-target check, `git diff --check`, and GitNexus change detection. The inherited shell
+differential remains `1054 passed / 149 failed` with `PassToFail = 0`, `NewFail = 0`, `Removed = 0`,
+and `RenamedOrSubstituted = 0`; retained failing names/signatures are unchanged and any
+`FailToPass` is causally audited. This is not the later privileged Linux installer/product wall,
+R2/R3 proof, native macOS proof, or cross-platform closeout.
+
+The R1 contract correction is approved but its runtime is not yet implemented or review-clean; R2
+and R3 are not begun. `RG-HOME-01` and `RG-INSTALL-01` remain open.
 Their Linux regression wall and normal product lifecycle smoke are prerequisites for A1.1d Linux
 closeout and for the Linux product-smoke portion of the B1/B2.1 joint closeout. They do not reopen
 the review-clean B1/B2.1-0 prerequisite or make native macOS A1.1d proof a B1/B2.1 dependency.

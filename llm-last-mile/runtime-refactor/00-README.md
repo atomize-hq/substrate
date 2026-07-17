@@ -199,6 +199,17 @@ A1.1d-5R3**. Until those packets are review-clean and their Linux lifecycle/prod
 both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
 remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
 proof is not added as a dependency of the B1/B2.1 corridor.
+
+The canonical **A1.1d-5R1 Case A** decision corrects only the Linux security contract: V1 requires
+**no effective other-principal authority**, not unprovable physical ACL-xattr absence. A descriptor-
+bound `ENODATA` result means only that the kernel returned no ACL data; it is accepted under the
+authoritative safe mode/owner/type/identity proof and is never called ACL absence. Strictly parsed
+ancestor access ACLs may grant masked non-writing `--x` or `r-x`, while any effective write,
+ancestor default ACL, observable access/default ACL on the final root, malformed or unsupported
+model, or distinguishable read failure fails closed. Exact final-root `0700` and sensitive
+descendant `0700`/`0600` contracts remain mandatory. This correction adds no seam, privileged
+broker, world capability, policy, gateway, receipt, supervisor, worker, replay, or command change;
+R2 and R3 remain separately owned and unstarted.
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before

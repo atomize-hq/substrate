@@ -111,14 +111,78 @@ validation then proves all of the following before any descendant bootstrap:
 1. the selected absolute UTF-8 physical path is the path represented by the opened handle;
 2. the handle names a directory owned by the intended per-user owner;
 3. permission and special bits are exactly `0700`;
-4. the ACL has only the base owner/group/other access entries represented by mode `0700`, with no
-   named user, named group, inherited, default, or other extended ACL entry, even when an ACL mask
-   would make an unexpected entry ineffective;
+4. Linux access/default ACL observations satisfy the closed R1 result contract below: any
+   observable `Present` access or default ACL is rejected, while `NoData` is accepted only under
+   this exact descriptor/owner/type/`0700`/identity/replacement-safety proof and is never treated as
+   proof of physical ACL-xattr absence;
 5. no path component or final entry was followed through a symlink or substituted with another
    type, and the accepted platform physical identity is sourced only from the opened descriptor;
    and
 6. the candidate resides on the expected filesystem where the trusted-filesystem contract requires
    that constraint.
+
+##### Linux ACL observation and effective-authority boundary
+
+Linux R1 uses one closed descriptor-bound observation for each POSIX access/default ACL request:
+
+```text
+enum LinuxAclObservationV1 {
+    Present(bytes),
+    NoData,
+    Failed(error_class),
+}
+```
+
+`NoData` is exactly an `ENODATA` retrieval result. It means only **the kernel returned no ACL
+data**. It never means ACL absent, ACL-free, xattr physically absent, or proof that no ACL metadata
+exists. Linux documents `ENODATA` for either a nonexistent named attribute or a process that lacks
+access to it; ACL/xattr reads can also be mediated by Linux security hooks. Therefore physical
+absence is not R1 authority. See [`getxattr(2)`](https://man7.org/linux/man-pages/man2/getxattr.2.html)
+and Linux [`security/security.c`](https://github.com/torvalds/linux/blob/master/security/security.c).
+
+For an ancestor access ACL, `Present(bytes)` is accepted only after strict Linux POSIX-ACL parsing:
+the version, complete length, canonical tag order, unique named IDs, exactly one owner/group/other
+base entry, required single mask, permission bits, and supported tags must all be valid. Effective
+permissions for the group object and every named user/group entry are their raw permissions
+intersected with `ACL_MASK`; `ACL_OTHER` remains the other class. Effective non-writing access such
+as `--x` or `r-x` is supported. Any effective write for another principal fails closed, while a raw
+write bit fully removed by the mask is not effective write authority. Multiple named entries are
+evaluated independently under the same mask.
+
+For supported Linux POSIX access ACLs, `ACL_MASK` corresponds to the file group-class mode bits,
+and `ACL_OTHER` corresponds to the other-class mode bits. Consequently a POSIX ACL cannot grant
+effective named-principal write while the descriptor's authoritative group-write bit remains clear;
+the other class cannot grant write while the authoritative world-write bit remains clear. This is
+an intentionally narrow Linux POSIX-ACL proof, supported by [`acl(5)`](https://man7.org/linux/man-pages/man5/acl.5.html)
+and Linux [`fs/posix_acl.c`](https://github.com/torvalds/linux/blob/master/fs/posix_acl.c). It is not
+generalized to NFSv4 or any unknown/non-POSIX ACL model.
+
+Ancestor `NoData` is accepted only after the retained descriptor proves the expected path role,
+expected owner, directory type, stable descriptor identity, component-by-component no-follow
+traversal, no replacement, and authoritative mode bits with neither group nor world write.
+`Failed(error_class)` covers every distinguishable non-`ENODATA` result, including `ENOTSUP`,
+unreadable/unavailable state, malformed/changed data, unsupported version/model/tag, and retrieval
+uncertainty, and always fails closed. Any result outside valid `Present` or qualified `NoData` fails
+closed.
+
+Default ACLs govern the initial access ACL of created children; they do not govern access to the
+directory carrying the default ACL. Accordingly, ancestor `Present` default ACL data is rejected
+before candidate creation and final-root `Present` default ACL data is rejected. Default `NoData`
+has the same limited meaning above. Exact `0700` on the final root prevents other-principal
+traversal, and the existing exact owner-only descendant contracts—directories `0700`, files `0600`,
+or any stricter per-object rule—prevent an inherited Linux POSIX access ACL from conferring
+effective other-principal authority. See the access/default distinction and creation algorithm in
+[`acl(5)`](https://man7.org/linux/man-pages/man5/acl.5.html). No ACL cleanup or repair is added.
+
+For the final authority root, any observable `Present` access ACL and any observable `Present`
+default ACL are rejected even when their entries would be ineffective. Qualified `NoData` is
+accepted only with exact owner, directory type, exact `0700` independent of umask, stable
+descriptor identity, no-follow traversal, and replacement rejection. Existing invalid roots and
+their metadata/contents are never mutated. If a future architecture requires proof that an ACL
+xattr is physically absent, it requires a separately approved privileged platform-attestation
+boundary; R1 does not design or implement one. The selected host location continues to follow the
+existing explicit-home/XDG placement rules; the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/)
+does not supply ACL authority.
 
 Creation uses a directory-relative sequence that distinguishes successful creation from
 `AlreadyExists`. Legitimate concurrent Substrate creators are supported: one may create while
@@ -138,14 +202,10 @@ or validation uncertainty fails closed. No path-based descendant operation is pe
 binding.
 
 The trusted-parent owner, mode, and ACL rules prevent a different-principal attacker from replacing
-the child. For ancestors, access ACL entries are evaluated after their mask and by the authority
-they confer: any effective write bit is rejected after masking, including a write-only entry;
-effective read/search without effective write is not replacement authority and is the bounded
-support question for A1.1d-5R1. A default ACL is not treated as an access ACL because it can be
-inherited by a new child; every ancestor default ACL is rejected before candidate creation in V1,
-and supporting one requires a later separately approved contract. Malformed, unreadable, or
-ambiguous ACL state fails closed. The final root continues to reject every extended access ACL and
-every default ACL, including entries made ineffective by a mask. A1 V1 does not establish a boundary against
+the child. The Linux R1 decision supports strictly parsed masked non-writing ancestor access ACLs
+under the effective-authority proof above; every ancestor default ACL, effective write, unsupported
+model, malformed/unreadable/unavailable state, and observable final-root access/default ACL remains
+rejected. A1 V1 does not establish a boundary against
 malicious root or malicious code already executing under the same UID, so substitution by either
 before the first child descriptor is acquired is outside the threat model. A1.1d-5 makes no atomic
 create-and-bind claim and requires no privileged creation broker, protected staging root, or
@@ -159,7 +219,7 @@ an indeterminate check fails before any descendant write. The current implementa
 legacy shape:
 
 ```text
-substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by intended uid <uid> with exact mode 0700 and no foreign ACL grants; found <reason>. Existing roots are never repaired; reset it manually and retry.
+substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by intended uid <uid> with exact mode 0700 and no effective other-principal authority; found <reason>. Existing roots are never repaired; reset it manually and retry.
 ```
 
 R1 replaces that ambiguous attribution with a structured/error-display contract containing the
@@ -169,6 +229,14 @@ the rejected candidate was created by the current attempt. It must not print ACL
 unrelated path contents, credentials, or authority/session data. An ancestor failure may not be
 reported as if the final root carried the ACL, and a newly created candidate may not receive the
 pre-existing-root repair instruction.
+
+The bounded Linux ACL diagnostic class is one of `PresentAcceptedNoEffectiveWrite` (ancestor access
+ACL only), `PresentRejected`, `NoDataAcceptedUnderModeAuthority`, or `FailedOrUnavailable`.
+Accepted observations may be retained as bounded diagnostic/proof facts but never disclose ACL
+principal identifiers. `NoDataAcceptedUnderModeAuthority` must not use “ACL absent”, “ACL-free”, or
+equivalent physical-absence wording. `PresentRejected` and `FailedOrUnavailable` name the actual
+offending path and role, never attribute an ancestor failure to the requested final root, never
+expose authority payloads or secrets, and never imply that an existing final root was repaired.
 
 When privileged execution cannot resolve an intended non-root account, no intended UID exists to
 render in that shape. It fails before inspecting or creating the root with this separate exact

@@ -286,9 +286,12 @@ If secure gateway handoff is unavailable for a credential-requiring world adapte
 `SUBSTRATE_HOME` contains one operating-system user's configuration, policy, dependency inventory,
 runtime, and authority state. Creating and accepting that root is part of authority bootstrap: the
 physical directory is owned by the intended per-user owner, has exact owner-only mode `0700`
-independent of ambient umask, has no access or default extended ACL entry, and is opened and
-revalidated no-follow before any descendant bootstrap. Existing nonconforming roots fail closed
-without chmod, chown, ACL removal, migration, adoption, deletion, or other automatic repair.
+independent of ambient umask, has no effective other-principal authority, rejects every observable
+POSIX access or default ACL, and is opened and revalidated no-follow before any descendant
+bootstrap. On Linux, `ENODATA` means only that the kernel returned no ACL data; it does not prove
+physical xattr absence and is accepted only with exact owner/type/`0700` mode, stable descriptor
+identity, no-follow traversal, and replacement-safety proof. Existing nonconforming roots fail
+closed without chmod, chown, ACL removal, migration, adoption, deletion, or other automatic repair.
 Custom homes remain valid only when they satisfy the same contract. Multiple operating-system
 principals directly sharing one `SUBSTRATE_HOME` are unsupported in A1 V1.
 
@@ -304,8 +307,11 @@ evaluated after the ACL mask: effective read/search without effective write does
 replacement authority, while any effective write bit remains rejected, including write-only
 entries. Default ACLs can be inherited into a new child and are rejected on every ancestor before
 candidate creation in V1; supporting one requires a later separately approved contract. Malformed,
-unreadable, or ambiguous ACL state also fails closed. These ancestor distinctions never weaken the
-final root's exact owner, exact `0700`, and ACL-free requirements.
+unreadable, unsupported, or ambiguous ACL state also fails closed. Under supported Linux POSIX
+access-ACL semantics, `ACL_MASK` is the file group-class mode bits, so a named user/group entry
+cannot retain effective write while the descriptor's authoritative group-write bit is clear.
+Unknown ACL models are outside that proof and fail closed. These ancestor distinctions never weaken
+the final root's exact owner, exact `0700`, observable-ACL rejection, or owner-only descendant modes.
 Legitimate concurrent Substrate creators converge when one creates and another observes
 `AlreadyExists`: each no-follow opens and validates the candidate, and only its exact accepted
 descriptor identity may proceed.

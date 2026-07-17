@@ -17,7 +17,7 @@ Primary source memos:
 
 | Gate ID | Debug issue | Current classification | Repo-truth basis | Permanent regression gate | Owning slices |
 |---|---|---|---|---|---|
-| **RG-HOME-01** | Private home creation and world capability parity | **Unresolved product gate; A1.1d-5I proves R1/R3 compatibility work is required** | The authority transaction range and focused final-root implementation remain preserved, but the `b29897e0` Linux audit proves that ancestor ACL handling is not contract-complete: masked named access `--x` and `r-x` are rejected despite no effective write authority; a zero-effective default ACL can pass the ancestor check, be inherited into a new child, and leave an invalid candidate; and diagnostics name the requested final home instead of the actual ancestor. Final-root exact owner, exact `0700`, ACL-free, no-follow, identity, and no-repair requirements are unchanged. Integrated Linux and native macOS closeout remain open. | R1 must distinguish access from default ACLs and effective permissions after the mask, reject any effective write bit including write-only entries and every malformed/unreadable/ambiguous ACL, reject every ancestor default ACL before creation in V1, and report the exact path/role/kind/reason without sensitive principals. R3 may remove only an empty current-attempt candidate after descriptor-bound exact-identity rejoin; it never recursively removes a candidate and fails closed on replacement, nonempty state, ambiguity, or pre-existing provenance. Preserve the descriptor-bound creation/open/identity/replacement wall and malicious-root/same-UID exclusions. Then run the complete Linux regression/product wall and later native macOS proof, including filesystem, network, config/dependency, gateway, runtime, shim, replay, trace/diagnostic, PTY/non-PTY, and lifecycle/world-binding parity. | A1.1d-5R1, A1.1d-5R3 |
+| **RG-HOME-01** | Private home creation and world capability parity | **Unresolved product gate; R1 effective-authority contract corrected, runtime/R3/product proof open** | The authority transaction range and focused final-root implementation remain preserved. The `b29897e0` Linux audit proved masked named access `--x` and `r-x` were rejected despite no effective write authority; a zero-effective default ACL could be inherited into an invalid candidate; and diagnostics named the requested final home instead of the actual ancestor. Case A corrects Linux V1 from unprovable physical ACL absence to no effective other-principal authority: exact owner/`0700`, observable final-root access/default ACL rejection, qualified `NoData`, no-follow identity/replacement, owner-only descendants, and no-repair remain mandatory. Integrated Linux and native macOS closeout remain open. | R1 must implement closed `Present`/`NoData`/`Failed` observations, strict Linux POSIX access-ACL parsing and mask evaluation, masked non-writing support, effective-write/default/final-root/failure rejection, and exact bounded diagnostics without physical-absence wording or sensitive principals. R3 may remove only an empty current-attempt candidate after descriptor-bound exact-identity rejoin; it never recursively removes a candidate and fails closed on replacement, nonempty state, ambiguity, or pre-existing provenance. Preserve the descriptor-bound creation/open/identity/replacement wall and malicious-root/same-UID exclusions. Then run the complete Linux regression/product wall and later native macOS proof, including filesystem, network, config/dependency, gateway, runtime, shim, replay, trace/diagnostic, PTY/non-PTY, and lifecycle/world-binding parity. | A1.1d-5R1, A1.1d-5R3 |
 | **RG-INSTALL-01** | Selected install authority context and lifecycle convergence | **Unresolved; A1.1d-5I proves R2/R3 implementation is required** | Normal Unix dev custom-prefix install fails at shim deploy because only `SUBSTRATE_ROOT` is passed; release/dev Unix and Windows paths contain additional ambient-home/context omissions. Unix release service sandbox allowlisting derives from ambient `$HOME`, not the selected home. Unix and Windows uninstall can target ambient/wildcard state, generated manager scripts prefer conflicting ambient home, and Linux cleanup omits prefix-local and system-managed artifacts. Shim doctor reports a default-home trace path under a selected custom home. No native macOS/Windows proof is claimed. | Carry one host `InstallBootstrapContextV1` across private-home bootstrap, shim deploy/remove/status/doctor, generated consumers, uninstall, rollback, and every sudo boundary; bind distinct Lima/WSL/native realization through `PlatformBootstrapMappingV1`. Prove fresh default and custom-prefix install without outer overrides; conflicting ambient home; repeat install; accepted-home/later-stage partial failure and synchronous safe rollback rerun; uninstall/reinstall symmetry; fail-closed unaccepted-invalid-candidate behavior; no wildcard or ambient-home deletion; exact prefix/system managed cleanup and pre/post service parity; release full-world custom prefix outside ambient home; and world/shim/health doctor plus full Linux product smoke. Static platform parity is not native proof. | A1.1d-5R2, A1.1d-5R3 |
 | **RG-AUTH-01** | Helper/session authority and orphaned helper behavior | **Unresolved architecture; narrow continuity behavior partially resolved** | The A0 inventory in `02-seam-crosswalk.md` traces initial attached-posture birth, home/env/CWD-selected state/config/policy/inventory, helper-plan payload plus mode and parent-role selection, launch/join coordination, exit/retry, startup-prompt and auto-park delivery, process-local startup acceptance, private-stop-ownership mode, public-stop delivery gating, terminal-loss park/stop choice, parking/reconciliation, fork-successor allocation, resumed-turn release, auto-attach verification, endpoint-registration startup failure, stream/process completion, whole-session snapshot arbitration, process-local snapshot-write arbitration, episode-local replacement lineage, and world-binding birth/repair/replacement. The parked-successor diagnostic additionally proves that current `Active`/`ParkedResumable` authority survives with no attached episode and that a reconstructed successor snapshot is not authority. Session/posture logic remains spread across `orchestration_session.rs`, `state_store.rs`, `agents_cmd.rs`, `control.rs`, `async_repl.rs`, and the in-world member registry. | Kill or orphan each episode kind after durable authority exists. Exact session, parked posture, world binding, retained workers, receipts, and obligations remain. Process/helper/prompt state cannot create or regress ownership, episode absence does not erase parked authority, and a stale episode cannot rewrite a newer authority revision. | A0, A1, A2, A3 |
 | **RG-AUTH-02** | Process/socket liveness used as durable truth | **Unresolved** | A0 classifies the exact PID/ownership/attachment/heartbeat/socket and ambient-host consumers: constructor-created attached truth, posture/session discovery, helper plan/mode/parent-role gating, participant and parent-session snapshot freshness, process-local snapshot-write arbitration, relative/fallback/re-read authority and workspace paths, effective-config env overrides, UID-selected binding birth/repair/replacement, process-local dispatch and auto-park registries, toolbox cancel's PID-filtered preflight, retained-runtime reuse/exit/replacement, naming-prefix continuity, daemon-memory admission/routing, helper reconciliation, private-stop-ownership-gated startup/parking, public-stop delivery gating, fork/resume PID-zero sentinels, endpoint/startup-prompt state used as durable truth, remote member startup around transport acceptance, fork lineage gated by stop-socket publication, lossy/long-path endpoint identity, last-writer toolbox rebind, hostname-targeted auto-attach, and private-stop fallback. The exact blocker shows `PID=0`, no handle, completed prior prompt, and pending successor prompt are non-authoritative observations. | Table-test every authority use of PID/socket/heartbeat/attached-client/helper/handle/readiness/prompt/ambient-path state and competing process-local writers: availability may classify delivery, but neither presence nor absence may create, delete, regress, rebind, or terminalize durable truth. Episode absence must not erase current parked authority. | A0, A1, A2, A3 |
@@ -202,12 +202,15 @@ inference), and `RG-BASE-01` closure.
 
 Unsafe ACL rejection is a negative security success, not positive product smoke. The positive
 `RG-BASE-01` smoke must run separately against a valid owner-only private bootstrap home with mode
-`0700` and no extended ACL. A1.1d-5I captured the blocked real default path and isolated
+`0700`, no observable POSIX access/default ACL, and qualified mode-authority observations. A
+Linux `ENODATA` result in that proof means only that the kernel returned no ACL data, never that an
+ACL xattr is physically absent. A1.1d-5I captured the blocked real default path and isolated
 effective/default ACL matrix: the supported host ancestor carried only a masked non-writing access
 entry, while the final root was absent; a separate isolated default-ACL case proved inheritance and
 candidate residue. This is now a product compatibility decision, not fixture-only or environmental
-contamination. R1 security review decides only the non-writing access-ACL question; every default
-ACL and every uncertain ACL state remains rejected, and no enforcement is weakened by the audit.
+contamination. R1 Case A approves only strictly parsed masked non-writing Linux POSIX ancestor
+access ACLs; every default ACL, effective write, unsupported model, and uncertain ACL state remains
+rejected, and no enforcement is weakened by the audit.
 
 The corrected A1 V1 identity boundary starts at the first successful no-follow child open beneath
 the retained, validated parent. Candidate creation or `AlreadyExists` convergence precedes that
@@ -235,8 +238,10 @@ and optionally provision the Codex runtime. In host V1 the declared prefix, `SUB
 `SUBSTRATE_ROOT` identify the same host root, and privileged paths must also carry the intended
 platform principal. A Lima/WSL/native realization may use a distinct platform path/principal only
 through an explicit mapping bound to that host-context commitment and platform instance.
-The final root remains exact owner, directory, exact `0700`, no access/default extended ACL,
-no-follow, and stable physical identity. Ancestors must exclude other-principal replacement
+The final root remains exact owner, directory, exact `0700`, rejects every observable access/default
+ACL, and retains no-follow/stable physical identity; qualified `NoData` is accepted only under that
+descriptor and mode authority and is not physical-absence proof. Ancestors must exclude
+other-principal replacement
 authority and uncertainty. Malicious root and malicious same-UID substitution before the first
 accepted descriptor, shared multi-principal homes, separate install-root design, world/policy
 changes, native platform proof, and remediation implementation are non-goals. `RG-HOME-01`,
@@ -261,7 +266,8 @@ changes, native platform proof, and remediation implementation are non-goals. `R
 All mutable cases used the recorded audit-owned root
 `/run/user/1000/substrate-a1d5i-audit-019f6d60`; `/`, `/home`, and `/home/spenser` were read
 only. The real home was owner `1000`, mode `0710`, with a named `libvirt-qemu:--x` access entry and
-mask `--x`; it had no default ACL. The real `/home/spenser/.substrate` did not exist and was never
+mask `--x`; its default-ACL read returned `NoData`, which is not proof of physical xattr absence.
+The real `/home/spenser/.substrate` did not exist and was never
 created, repaired, moved, or removed. Linux ACL semantics were checked against
 [`acl(5)`](https://man7.org/linux/man-pages/man5/acl.5.html),
 [`path_resolution(7)`](https://man7.org/linux/man-pages/man7/path_resolution.7.html),
@@ -278,7 +284,7 @@ and a default ACL is inherited separately from the access ACL.
 | Ancestor named access ACL, effective `rwx` | Write plus search is unsafe replacement authority and must fail closed. | Rejected before child creation (`wrong-mode` from ACL-correlated mode bits); security outcome correct. |
 | Ancestor default ACL with effective `--x` | Separate inheritance surface; reject before candidate creation in V1. Later support requires a separately approved contract. | Rejected before child creation as `foreign-acl`. |
 | Ancestor default named entry masked to `---` | Still inheritable; must not be accepted merely because current effective access is zero. | Ancestor passed; child inherited access/default ACLs; final validation failed `foreign-acl`; invalid candidate remained and identical rerun failed again. |
-| Final root exact owner, `0700`, ACL-free | Accept and idempotently scaffold. | Accepted; `substrate --version` succeeded. |
+| Final root exact owner, `0700`, no observable access/default ACL (`NoData` under mode authority) | Accept and idempotently scaffold without claiming physical absence. | Accepted; `substrate --version` succeeded. |
 | Final root with named access ACL | Reject every extended access entry, even masked ineffective. | Rejected `foreign-acl`. |
 | Final root with default ACL | Reject every default ACL. | Rejected `foreign-acl`. |
 | Wrong owner | Reject exact owner mismatch. | Focused intended-owner test passed; no privileged live mutation was attempted. |
@@ -315,7 +321,7 @@ service/socket/runtime paths matched the initial absent/inactive snapshot.
 | Finding ID | Classification | Expected versus actual / security and product impact | Owner and smallest remediation | Required regression/product smoke | Platform / closeout block |
 |---|---|---|---|---|---|
 | **A1D5I-HOME-01** | `ContractGap` | Ancestor access and default ACLs are not separated by effective authority. A masked `--x`/`r-x` access entry lacks write/replacement authority, while a default ACL can alter a child. | HostSessionAuthority; R1 defines masked access semantics, rejects any effective write bit and every ancestor default ACL in V1, and preserves fail-closed uncertainty without weakening the final root. | Masked `---`/`--x`/`r-x`/write-only/combined-write matrix plus default ACL and malformed/unreadable cases; normal Linux install on the observed host. | Linux proven; static Unix applicability; both A1.1d Linux and B1/B2.1 Linux product smoke blocked. |
-| **A1D5I-HOME-02** | `ImplementationBug` | `parent_acl_grants_named_principal` rejects every nonzero masked permission, so potentially supportable non-writing traversal blocks default install before the R1 security decision can be represented. | HostSessionAuthority; R1 decides the bounded access-ACL question under security review and implements non-writing support only if approved. | Unit/property tests over ACL mask/effective rights and live bootstrap under each approved/rejected access-ACL case. | Linux proven; macOS requires native ACL mapping/proof; both blocked. |
+| **A1D5I-HOME-02** | `ImplementationBug` | `parent_acl_grants_named_principal` rejects every nonzero masked permission, so supportable non-writing traversal blocks default install before the approved Case A decision can be represented. | HostSessionAuthority; R1 implements strictly parsed masked non-writing Linux POSIX access-ACL support and rejects effective write or uncertainty. | Unit/property tests over ACL mask/effective rights and live bootstrap under each approved/rejected access-ACL case. | Linux proven; macOS requires native ACL mapping/proof; both blocked. |
 | **A1D5I-HOME-03** | `DiagnosticBug` | An ancestor failure is attributed to the final requested home as generic `foreign-acl`, without path, role, ACL kind, or effective authority; it can also say “Existing roots” when no final root exists. | HostSessionAuthority error boundary; R1 structured diagnostic with sensitive-principal suppression. | Exact diagnostic assertions for ancestor/final/access/default/unavailable/new-candidate cases. | Unix-facing; both blocked because diagnostic/product proof is required. |
 | **A1D5I-HOME-04** | `ImplementationBug` | A zero-effective default ACL passes ancestor validation, is inherited, fails final validation, and leaves a non-convergent current-attempt candidate. | HostSessionAuthority R1 rejects every ancestor default ACL before creation; R3 may remove only an exact descriptor-rejoined empty candidate created by the current attempt, never recursively or from pre-existing provenance. | Inherited-default pre-create rejection and synchronous current-attempt empty-candidate rollback/rerun tests; replacement/nonempty/ambiguous/`AlreadyExists` candidates and pre-existing invalid roots remain byte/metadata unchanged. | Linux proven; both blocked. |
 | **A1D5I-HOME-05** | `ContractGap` | After an abrupt interruption, an unaccepted invalid candidate has no trustworthy current-attempt provenance on rerun. The no-repair rule forbids treating `AlreadyExists` as deletion authority, so arbitrary crash-window convergence cannot be promised. | R3 proves every reachable post-R1 crash residue is either already valid and exact-joinable or stays fail-closed. If invalid residue is still reachable and product convergence is required, stop for a separately approved provenance/publication mechanism; never infer provenance from the name. | Kill-point matrix around parent validation, creation, first open, validation, cleanup, and acceptance; valid residues join, exact synchronous failures clean safely, invalid unknown-provenance residues remain unchanged/fail-closed. | Unix contract; both gates remain blocked until R3 resolves or explicitly bounds every reachable state. |
@@ -332,6 +338,86 @@ service/socket/runtime paths matched the initial absent/inactive snapshot.
 | **A1D5I-REG-01** | `MissingRegression` | Existing installer tests check selected strings but not real child propagation/lifecycle; one fixture uses `/tmp`, which is invalid under the current ancestor contract and masks its intended assertion. | R1/R2/R3 regression suites. | Secure audit-owned fixture roots; default/custom, accepted-home partial/rerun, synchronous rollback, crash-window fail-closed, uninstall/reinstall, and negative two-home matrices. | Linux proven; both blocked. |
 | **A1D5I-ENV-01** | `EnvironmentUnsupported` | This audit host could not safely run privileged service/Codex provisioning without a sudo prompt/dedicated-host restoration contract. This is an evidence limitation, not a product defect or capability regression. | Later R2/R3 product-smoke environment. | Snapshot, provision, doctor/smoke, runtime sync, uninstall/restore, and post-snapshot parity on a dedicated supported Linux host. | Linux proof still required; gate stays open, but classification itself blocks neither architecture core. |
 | **A1D5I-FP-01** | `FalsePositive` | Install/bootstrap unavailability does not prove loss of world filesystem/network capability, changed policy/enforcement, or regression of review-clean B1 receipt/B2.1 supervisor semantics. | No remediation outside R1/R2/R3. | Preserve the differential world/policy wall and later product smoke; do not reopen B1/B2.1-0. | All platforms; neither semantic core is regressed. |
+
+### A1.1d-5R1 Linux effective-authority contract correction
+
+**Decision/status:** Case A is approved for the bounded Linux R1 implementation. This is a
+security-contract correction from **physically ACL-free** to **no effective other-principal
+authority**; the runtime implementation and proof wall are not yet complete in this docs-only
+checkpoint. R2 and R3 remain separately sequenced and unstarted. No seam is added or promoted.
+
+The bounded primary-source proof is:
+
+1. [`getxattr(2)`](https://man7.org/linux/man-pages/man2/getxattr.2.html) defines `ENODATA` for
+   either a nonexistent named attribute or lack of process access. R1 therefore records exact
+   `ENODATA` as `NoData`—only “the kernel returned no ACL data”—and never as physical absence.
+2. [`acl(5)`](https://man7.org/linux/man-pages/man5/acl.5.html) maps `ACL_MASK` to group-class mode
+   bits and applies the mask to named-user, group-object, and named-group access. Linux
+   [`fs/posix_acl.c`](https://github.com/torvalds/linux/blob/master/fs/posix_acl.c) performs the same
+   mask intersection and mode mapping. Thus, for supported Linux POSIX access ACLs, a named
+   principal cannot retain effective write while the descriptor's authoritative group-write mode
+   bit is clear; raw write fully removed by the mask is not effective authority.
+3. `acl(5)` distinguishes an access ACL, which governs the current object, from a default ACL,
+   which initializes a created child's access ACL. A default ACL does not grant access to its
+   directory. Exact final-root `0700` prevents other-principal traversal, and exact owner-only
+   descendant `0700`/`0600` modes prevent inherited Linux POSIX entries from granting effective
+   other-principal authority.
+4. Linux [`security/security.c`](https://github.com/torvalds/linux/blob/master/security/security.c)
+   mediates POSIX-ACL and xattr reads. `ENOTSUP`, malformed/unsupported bytes or model, and every
+   distinguishable non-`ENODATA` read failure therefore remain `Failed` and fail closed.
+5. The [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/)
+   continues to govern the existing user-specific placement/default inputs; it supplies no ACL or
+   authority attestation. Physical ACL-xattr absence, if ever required, needs a separately approved
+   privileged platform-attestation boundary. R1 neither designs nor implies one.
+
+The canonical observation is `Present(bytes) | NoData | Failed(error_class)`. Ancestor access
+`Present` is strictly parsed and mask-evaluated: non-writing `--x`/`r-x` is accepted, any effective
+write rejects, and all base/mask/tag/order/uniqueness/version/length invariants are mandatory.
+Ancestor default `Present` rejects before creation. Final-root access or default `Present` rejects;
+qualified `NoData` requires exact owner, directory type, exact `0700`, stable descriptor identity,
+no-follow traversal, no replacement, and authoritative safe mode. Existing invalid roots remain
+unchanged and no ACL cleanup/repair is permitted.
+
+Diagnostics use at least `PresentAcceptedNoEffectiveWrite` (ancestor access only),
+`PresentRejected`, `NoDataAcceptedUnderModeAuthority`, and `FailedOrUnavailable`. They carry the
+requested path, actual offending path, path role, ACL kind, reason class, and candidate-created
+boolean. They never call `NoData` absent/ACL-free, disclose ACL principals or authority payloads,
+imply repair, or attribute an ancestor failure to the final root.
+
+**R1 regression gate:** the authorized two-file runtime change must prove all of the following
+without removing, renaming, substituting, or weakening inherited tests:
+
+1. safe ancestor `ENODATA` accepts as `NoData`, never `Absent`;
+2. ancestor `ENODATA` with group/world write rejects by mode authority;
+3. effective-write ancestor access `Present` rejects;
+4. effective `--x` access `Present` accepts;
+5. effective `r-x` access `Present` accepts;
+6. raw write fully removed by `ACL_MASK` accepts;
+7. multiple named entries are mask-evaluated correctly;
+8. final-root access `Present` rejects;
+9. ancestor default `Present` rejects before candidate creation;
+10. final-root default `Present` rejects;
+11. non-`ENODATA` retrieval failure rejects;
+12. unsupported ACL state rejects;
+13. malformed version, length, order, duplicate, missing base/mask, and unsupported tag reject;
+14. diagnostics never claim `NoData` proves absence;
+15. diagnostics identify the actual offending ancestor and path role;
+16. final-root owner and `0700` remain exact under umasks `000`, `022`, `027`, `077`, and `777`;
+17. final-root traversal remains no-follow and identity-stable;
+18. replacement and identity drift reject;
+19. invalid existing roots retain exact metadata and contents;
+20. no ACL cleanup or repair occurs;
+21. a real `libvirt-qemu:--x` ancestor fixture passes; and
+22. world, policy, receipt, supervisor, and retained-runtime behavior remains untouched.
+
+The proof wall additionally requires focused trusted-filesystem and home-bootstrap tests, complete
+HostSessionAuthority tests, product-path bootstrap scaffold tests, relevant installer-environment
+regressions, formatting, warnings-denied Clippy for touched targets, workspace all-target check,
+`git diff --check`, and GitNexus change detection. The shell differential must preserve the
+inherited `1054 passed / 149 failed` baseline with `PassToFail = 0`, `NewFail = 0`, `Removed = 0`,
+`RenamedOrSubstituted = 0`, unchanged retained failure names/signatures, audited `FailToPass`, and
+passing new R1 tests. This does not claim the later privileged Linux installer/product wall, R2
+prefix propagation, R3 cleanup/idempotency, native macOS proof, or cross-platform completion.
 
 The exact next packet is **A1.1d-5R1**, followed by **R2**, then the audit-proven **R3**. After all
 three are independently review-clean, rerun the complete Linux regression and normal product
@@ -984,7 +1070,7 @@ open remains a blocking regression gate until its named owner and real-path proo
 
 | Gate ID | Baseline | Required proof |
 |---|---|---|
-| **RG-BASE-01** | Public world-scoped start → turn/reattach → stop; **open, blocking, and not waived** | A1.2 must supply exact parked-successor `Attach`/`ResumeOneTurn` application and A1.3 must adopt it on the real public CLI/helper/REPL path. Exact session and world binding survive; stop reaches durable terminal truth even when transport posture changes. Stale lifecycle/world-binding overwrite remains rejected. Prove unsafe foreign-principal ACL state fails closed separately, then run the positive smoke against an owner-only private bootstrap home with mode `0700` and no foreign ACL. This gate is neither permanently expected to fail nor successful until that real-path wall is green. |
+| **RG-BASE-01** | Public world-scoped start → turn/reattach → stop; **open, blocking, and not waived** | A1.2 must supply exact parked-successor `Attach`/`ResumeOneTurn` application and A1.3 must adopt it on the real public CLI/helper/REPL path. Exact session and world binding survive; stop reaches durable terminal truth even when transport posture changes. Stale lifecycle/world-binding overwrite remains rejected. Prove unsafe other-principal authority fails closed separately, then run the positive smoke against an owner-only private bootstrap home with exact type/`0700`, descriptor identity/replacement safety, qualified access/default `NoData` under authoritative mode bits, and no effective other-principal authority; `NoData` is not physical-absence proof. This gate is neither permanently expected to fail nor successful until that real-path wall is green. |
 | **RG-BASE-02** | REPL first-dispatch `run_world_task` binding repair | Correct binding succeeds; stale/mismatched world generation fails closed; no generic binding synthesis on unrelated surfaces. A host runtime may carry exact parent-session world binding while its descriptor and participant manifest remain host-scoped. |
 | **RG-BASE-03** | Parked host ordinary-command and continuity parity | Unprefixed `ls`/`pwd` remain usable; policy-required `cd ../` cage denial remains; later targeted host turn reuses session/UAA continuity; public CLI parity stays green. |
 | **RG-BASE-04** | Retained spawn/fork/exact continue/exact stop plus ambiguity close | Exact source and child handles route correctly; backend-only follow-up with multiple retained workers fails closed; source detached stop and child live-transport stop remain valid. |
