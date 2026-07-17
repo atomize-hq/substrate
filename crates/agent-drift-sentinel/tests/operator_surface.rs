@@ -19,7 +19,8 @@ use agent_drift_sentinel::{
     execute,
     operator_surface::{
         present_checkpoint, present_checkpoint_with_previous, render_replay_report,
-        warning_fingerprint, CheckpointPosture, CheckpointPresentation, ReplayReport,
+        warning_fingerprint, CheckpointDiagnosticsSummary, CheckpointPosture,
+        CheckpointPresentation, ReplayReport, WarningDisposition,
     },
     scheduler::{DecisionReason, EvaluationDecision, ReplayScheduler},
     AdjudicationConfig, InputError, ReasoningEffort, ReplayCheckpointBundle, SchedulerPolicy,
@@ -77,6 +78,17 @@ fn checkpoint_presentation_public_shape_witness(
         expected_next_step,
         evidence_lines,
     } = presentation;
+    let checkpoint: Checkpoint = checkpoint;
+    let trigger: TriggerClass = trigger;
+    let posture: Option<CheckpointPosture> = posture;
+    let disposition: WarningDisposition = disposition;
+    let severity: String = severity;
+    let headline: String = headline;
+    let objective: String = objective;
+    let drift_summary: String = drift_summary;
+    let diagnostics_summary: CheckpointDiagnosticsSummary = diagnostics_summary;
+    let expected_next_step: String = expected_next_step;
+    let evidence_lines: Vec<String> = evidence_lines;
     CheckpointPresentation {
         checkpoint,
         trigger,
@@ -1902,6 +1914,226 @@ fn ast_policy_self_test_resolves_modules_from_each_compiled_root_context() {
             ),
         ]),
         "crate roots, default modules, path modules, and inline modules must use rustc's actual child-module bases"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_discovers_block_local_external_modules() {
+    let fixture = tempfile::tempdir().expect("create block-local module fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create block-local source directory");
+    fs::write(
+        source_root.join("lib.rs"),
+        concat!(
+            "pub struct Checkpoint { pub schema_version: &'static str }\n",
+            "pub struct CheckpointPresentation;\n",
+            "impl CheckpointPresentation {\n",
+            "    pub fn render_console_block(&self) {}\n",
+            "}\n",
+            "pub fn function_module_host() {\n",
+            "    if true {\n",
+            "        #[path = \"function_hidden.rs\"] mod hidden;\n",
+            "    }\n",
+            "}\n",
+            "pub const CONST_MODULE_HOST: bool = matches!(\n",
+            "    { #[path = \"const_hidden.rs\"] mod hidden; 0 },\n",
+            "    0\n",
+            ");\n",
+        ),
+    )
+    .expect("write block-local crate root");
+    for source in ["function_hidden.rs", "const_hidden.rs"] {
+        fs::write(
+            source_root.join(source),
+            concat!(
+                "pub fn hidden_schema(checkpoint: &crate::Checkpoint) {\n",
+                "    if checkpoint.schema_version != \"v0.8\" {}\n",
+                "}\n",
+                "pub fn hidden_render(presentation: &crate::CheckpointPresentation) {\n",
+                "    presentation.render_console_block();\n",
+                "}\n",
+            ),
+        )
+        .unwrap_or_else(|error| panic!("write {source}: {error}"));
+    }
+
+    assert_rust_root_compiles(
+        "block_local_module_fixture",
+        "lib",
+        &source_root.join("lib.rs"),
+        &[],
+    );
+
+    let sources = production_rust_sources(&source_root);
+    let source_owners = sources
+        .iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(fixture.path())
+                    .expect("block-local source path")
+                    .to_path_buf(),
+                source.module.clone(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        source_owners,
+        BTreeSet::from([
+            (
+                PathBuf::from("src/const_hidden.rs"),
+                Some("const CONST_MODULE_HOST::hidden".to_string()),
+            ),
+            (
+                PathBuf::from("src/function_hidden.rs"),
+                Some("function_module_host::hidden".to_string()),
+            ),
+            (PathBuf::from("src/lib.rs"), None),
+        ]),
+        "external modules declared in nested function and const blocks must retain their containing item owners"
+    );
+
+    let (schema, calls) = analyze_compiled_source_inventories(&sources);
+    assert_eq!(
+        schema.direct_uses,
+        vec![
+            "const CONST_MODULE_HOST::hidden::hidden_schema".to_string(),
+            "function_module_host::hidden::hidden_schema".to_string(),
+        ],
+    );
+    assert_eq!(schema.exact_predicates, Vec::<String>::new());
+    assert_eq!(
+        schema.violations,
+        vec![
+            "const CONST_MODULE_HOST::hidden::hidden_schema: non-exact schema-version binary predicate"
+                .to_string(),
+            "const CONST_MODULE_HOST::hidden::hidden_schema: schema-version alias or nesting in if condition"
+                .to_string(),
+            "function_module_host::hidden::hidden_schema: non-exact schema-version binary predicate"
+                .to_string(),
+            "function_module_host::hidden::hidden_schema: schema-version alias or nesting in if condition"
+                .to_string(),
+            "struct Checkpoint: schema_version field definition".to_string(),
+        ],
+        "both block-local external sources must fail the schema policy under their real owners"
+    );
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([
+            (
+                "const CONST_MODULE_HOST::hidden::hidden_render".to_string(),
+                1,
+            ),
+            ("function_module_host::hidden::hidden_render".to_string(), 1,),
+        ]),
+        "both block-local external sources must fail the render owner inventory"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_honors_inline_path_for_child_modules() {
+    let fixture = tempfile::tempdir().expect("create inline-path module fixture");
+    let source_root = fixture.path().join("src");
+    let real_directory = source_root.join("hidden_inline");
+    let decoy_directory = source_root.join("inline_path_control");
+    fs::create_dir_all(&real_directory).expect("create inline-path real directory");
+    fs::create_dir_all(&decoy_directory).expect("create inline-path decoy directory");
+    fs::write(
+        source_root.join("lib.rs"),
+        concat!(
+            "pub struct Checkpoint { pub schema_version: &'static str }\n",
+            "pub struct CheckpointPresentation;\n",
+            "impl CheckpointPresentation {\n",
+            "    pub fn render_console_block(&self) {}\n",
+            "}\n",
+            "#[path = \"hidden_inline\"]\n",
+            "mod inline_path_control { mod child; }\n",
+        ),
+    )
+    .expect("write inline-path crate root");
+    fs::write(
+        real_directory.join("child.rs"),
+        concat!(
+            "pub fn hidden_schema(checkpoint: &crate::Checkpoint) {\n",
+            "    if checkpoint.schema_version != \"v0.8\" {}\n",
+            "}\n",
+            "pub fn hidden_render(presentation: &crate::CheckpointPresentation) {\n",
+            "    presentation.render_console_block();\n",
+            "}\n",
+        ),
+    )
+    .expect("write inline-path real child");
+    fs::write(
+        decoy_directory.join("child.rs"),
+        concat!(
+            "pub fn decoy_schema(checkpoint: &crate::Checkpoint) {\n",
+            "    if checkpoint.schema_version != \"decoy\" {}\n",
+            "}\n",
+            "pub fn decoy_render(presentation: &crate::CheckpointPresentation) {\n",
+            "    presentation.render_console_block();\n",
+            "    presentation.render_console_block();\n",
+            "}\n",
+        ),
+    )
+    .expect("write inline-path decoy child");
+
+    assert_rust_root_compiles(
+        "inline_path_module_fixture",
+        "lib",
+        &source_root.join("lib.rs"),
+        &[],
+    );
+
+    let sources = production_rust_sources(&source_root);
+    let source_owners = sources
+        .iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(fixture.path())
+                    .expect("inline-path source path")
+                    .to_path_buf(),
+                source.module.clone(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        source_owners,
+        BTreeSet::from([
+            (
+                PathBuf::from("src/hidden_inline/child.rs"),
+                Some("inline_path_control::child".to_string()),
+            ),
+            (PathBuf::from("src/lib.rs"), None),
+        ]),
+        "an inline module path must replace its default child-module directory and exclude the decoy"
+    );
+
+    let (schema, calls) = analyze_compiled_source_inventories(&sources);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["inline_path_control::child::hidden_schema".to_string()]
+    );
+    assert_eq!(
+        schema.violations,
+        vec![
+            "inline_path_control::child::hidden_schema: non-exact schema-version binary predicate"
+                .to_string(),
+            "inline_path_control::child::hidden_schema: schema-version alias or nesting in if condition"
+                .to_string(),
+            "struct Checkpoint: schema_version field definition".to_string(),
+        ],
+        "the rustc-selected inline-path child must fail the schema policy"
+    );
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([(
+            "inline_path_control::child::hidden_render".to_string(),
+            1,
+        )]),
+        "the rustc-selected child, not the default-directory decoy, must fail the render owner inventory"
     );
 }
 
@@ -5552,56 +5784,72 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
         })
     }
 
-    fn collect_modules(
-        items: &[syn::Item],
-        module_directory: &Path,
-        path_attribute_base: &Path,
-        lineage: Option<&str>,
-        sources: &mut Vec<ProductionRustSource>,
-        visited: &mut BTreeSet<(PathBuf, Option<String>)>,
-        active_paths: &mut BTreeSet<PathBuf>,
-    ) {
-        for item_mod in items.iter().filter_map(|item| match item {
-            syn::Item::Mod(item_mod) => Some(item_mod),
-            _ => None,
-        }) {
+    struct ModuleCollector<'a> {
+        module_directory: PathBuf,
+        path_attribute_base: PathBuf,
+        lineage: Option<String>,
+        impl_context: Option<(Option<String>, String)>,
+        sources: &'a mut Vec<ProductionRustSource>,
+        visited: &'a mut BTreeSet<(PathBuf, Option<String>)>,
+        active_paths: &'a mut BTreeSet<PathBuf>,
+    }
+
+    impl ModuleCollector<'_> {
+        fn qualify(&self, owner: &str) -> String {
+            qualify_owner(self.lineage.as_deref(), owner)
+        }
+
+        fn visit_under_owner<'ast>(
+            &mut self,
+            owner: String,
+            visit_item: impl FnOnce(&mut Self) + 'ast,
+        ) {
+            let previous = self.lineage.replace(owner);
+            visit_item(self);
+            self.lineage = previous;
+        }
+
+        fn collect_module(&mut self, item_mod: &syn::ItemMod) {
             if has_cfg_test(&item_mod.attrs) {
-                continue;
+                return;
             }
 
             let identifier = identifier_name(&item_mod.ident);
-            let nested_lineage = lineage.map_or_else(
-                || identifier.clone(),
-                |lineage| format!("{lineage}::{identifier}"),
-            );
+            let nested_lineage = self.qualify(&identifier);
+            let explicit_path = module_path_attribute(&item_mod.attrs);
             if let Some((_, nested_items)) = &item_mod.content {
-                let nested_directory = module_directory.join(&identifier);
-                collect_modules(
-                    nested_items,
-                    &nested_directory,
-                    &nested_directory,
-                    Some(&nested_lineage),
-                    sources,
-                    visited,
-                    active_paths,
+                let nested_directory = explicit_path.map_or_else(
+                    || self.module_directory.join(&identifier),
+                    |path| self.path_attribute_base.join(path),
                 );
-                continue;
+                let mut nested = ModuleCollector {
+                    module_directory: nested_directory.clone(),
+                    path_attribute_base: nested_directory,
+                    lineage: Some(nested_lineage),
+                    impl_context: None,
+                    sources: &mut *self.sources,
+                    visited: &mut *self.visited,
+                    active_paths: &mut *self.active_paths,
+                };
+                for item in nested_items {
+                    nested.visit_item(item);
+                }
+                return;
             }
 
-            let explicit_path = module_path_attribute(&item_mod.attrs);
             let (source_path, nested_directory) = if let Some(explicit_path) = explicit_path {
-                let source_path = path_attribute_base.join(explicit_path);
+                let source_path = self.path_attribute_base.join(explicit_path);
                 let nested_directory = source_path
                     .parent()
                     .expect("path-attributed module parent")
                     .to_path_buf();
                 (source_path, nested_directory)
             } else {
-                let flat_path = module_directory.join(format!("{identifier}.rs"));
-                let mod_path = module_directory.join(&identifier).join("mod.rs");
+                let flat_path = self.module_directory.join(format!("{identifier}.rs"));
+                let mod_path = self.module_directory.join(&identifier).join("mod.rs");
                 match (flat_path.is_file(), mod_path.is_file()) {
-                    (true, false) => (flat_path, module_directory.join(&identifier)),
-                    (false, true) => (mod_path, module_directory.join(&identifier)),
+                    (true, false) => (flat_path, self.module_directory.join(&identifier)),
+                    (false, true) => (mod_path, self.module_directory.join(&identifier)),
                     (true, true) => panic!(
                         "module {nested_lineage} has both {} and {}",
                         flat_path.display(),
@@ -5618,10 +5866,222 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
                 source_path,
                 Some(nested_lineage),
                 nested_directory,
-                sources,
-                visited,
-                active_paths,
+                self.sources,
+                self.visited,
+                self.active_paths,
             );
+        }
+    }
+
+    impl<'ast> Visit<'ast> for ModuleCollector<'_> {
+        fn visit_item(&mut self, item: &'ast syn::Item) {
+            if has_cfg_test(item_attrs(item)) {
+                return;
+            }
+            if let syn::Item::Mod(item_mod) = item {
+                self.collect_module(item_mod);
+                return;
+            }
+
+            let owner = match item {
+                syn::Item::Const(item) => {
+                    Some(self.qualify(&format!("const {}", identifier_name(&item.ident))))
+                }
+                syn::Item::Enum(item) => {
+                    Some(self.qualify(&format!("enum {}", identifier_name(&item.ident))))
+                }
+                syn::Item::ExternCrate(item) => {
+                    Some(self.qualify(&format!("extern crate {}", identifier_name(&item.ident))))
+                }
+                syn::Item::Fn(item) => Some(self.qualify(&identifier_name(&item.sig.ident))),
+                syn::Item::ForeignMod(_) => Some(self.qualify("extern block")),
+                syn::Item::Impl(item_impl) => {
+                    let type_path = type_owner_name(&item_impl.self_ty)
+                        .unwrap_or_else(|| "<unclassified self type>".to_string());
+                    let identity = impl_identity(item_impl, &type_path);
+                    let base = self.lineage.clone();
+                    let previous_context = self.impl_context.replace((base, identity.clone()));
+                    let owner = self.qualify(&format!("impl {identity}"));
+                    self.visit_under_owner(owner, |collector| {
+                        visit::visit_item(collector, item);
+                    });
+                    self.impl_context = previous_context;
+                    return;
+                }
+                syn::Item::Macro(item) => {
+                    Some(self.qualify(&format!("macro {}", macro_path(&item.mac))))
+                }
+                syn::Item::Static(item) => {
+                    Some(self.qualify(&format!("static {}", identifier_name(&item.ident))))
+                }
+                syn::Item::Struct(item) => {
+                    Some(self.qualify(&format!("struct {}", identifier_name(&item.ident))))
+                }
+                syn::Item::Trait(item) => {
+                    Some(self.qualify(&format!("trait {}", identifier_name(&item.ident))))
+                }
+                syn::Item::TraitAlias(item) => {
+                    Some(self.qualify(&format!("trait alias {}", identifier_name(&item.ident))))
+                }
+                syn::Item::Type(item) => {
+                    Some(self.qualify(&format!("type {}", identifier_name(&item.ident))))
+                }
+                syn::Item::Union(item) => {
+                    Some(self.qualify(&format!("union {}", identifier_name(&item.ident))))
+                }
+                syn::Item::Use(_) | syn::Item::Verbatim(_) => None,
+                _ => None,
+            };
+            if let Some(owner) = owner {
+                self.visit_under_owner(owner, |collector| {
+                    visit::visit_item(collector, item);
+                });
+            } else {
+                visit::visit_item(self, item);
+            }
+        }
+
+        fn visit_impl_item(&mut self, item: &'ast syn::ImplItem) {
+            let attributes: &[syn::Attribute] = match item {
+                syn::ImplItem::Const(item) => &item.attrs,
+                syn::ImplItem::Fn(item) => &item.attrs,
+                syn::ImplItem::Macro(item) => &item.attrs,
+                syn::ImplItem::Type(item) => &item.attrs,
+                syn::ImplItem::Verbatim(_) => &[],
+                _ => &[],
+            };
+            if has_cfg_test(attributes) {
+                return;
+            }
+            let Some((base, identity)) = self.impl_context.clone() else {
+                visit::visit_impl_item(self, item);
+                return;
+            };
+            let member = match item {
+                syn::ImplItem::Const(item) => {
+                    format!("{identity}::const {}", identifier_name(&item.ident))
+                }
+                syn::ImplItem::Fn(item) => {
+                    format!("{identity}::{}", identifier_name(&item.sig.ident))
+                }
+                syn::ImplItem::Macro(item) => {
+                    format!("{identity}::macro {}", macro_path(&item.mac))
+                }
+                syn::ImplItem::Type(item) => {
+                    format!("{identity}::type {}", identifier_name(&item.ident))
+                }
+                syn::ImplItem::Verbatim(_) => return,
+                _ => return,
+            };
+            let owner = qualify_owner(base.as_deref(), &member);
+            self.visit_under_owner(owner, |collector| {
+                visit::visit_impl_item(collector, item);
+            });
+        }
+
+        fn visit_trait_item(&mut self, item: &'ast syn::TraitItem) {
+            let (attributes, member) = match item {
+                syn::TraitItem::Const(item) => (
+                    item.attrs.as_slice(),
+                    format!("const {}", identifier_name(&item.ident)),
+                ),
+                syn::TraitItem::Fn(item) => {
+                    (item.attrs.as_slice(), identifier_name(&item.sig.ident))
+                }
+                syn::TraitItem::Macro(item) => (
+                    item.attrs.as_slice(),
+                    format!("macro {}", macro_path(&item.mac)),
+                ),
+                syn::TraitItem::Type(item) => (
+                    item.attrs.as_slice(),
+                    format!("type {}", identifier_name(&item.ident)),
+                ),
+                syn::TraitItem::Verbatim(_) => return,
+                _ => return,
+            };
+            if has_cfg_test(attributes) {
+                return;
+            }
+            let owner = self.qualify(&member);
+            self.visit_under_owner(owner, |collector| {
+                visit::visit_trait_item(collector, item);
+            });
+        }
+
+        fn visit_foreign_item(&mut self, item: &'ast syn::ForeignItem) {
+            let (attributes, member) = match item {
+                syn::ForeignItem::Fn(item) => {
+                    (item.attrs.as_slice(), identifier_name(&item.sig.ident))
+                }
+                syn::ForeignItem::Macro(item) => (
+                    item.attrs.as_slice(),
+                    format!("macro {}", macro_path(&item.mac)),
+                ),
+                syn::ForeignItem::Static(item) => (
+                    item.attrs.as_slice(),
+                    format!("static {}", identifier_name(&item.ident)),
+                ),
+                syn::ForeignItem::Type(item) => (
+                    item.attrs.as_slice(),
+                    format!("type {}", identifier_name(&item.ident)),
+                ),
+                syn::ForeignItem::Verbatim(_) => return,
+                _ => return,
+            };
+            if has_cfg_test(attributes) {
+                return;
+            }
+            let owner = self.qualify(&member);
+            self.visit_under_owner(owner, |collector| {
+                visit::visit_foreign_item(collector, item);
+            });
+        }
+
+        fn visit_stmt_macro(&mut self, statement: &'ast syn::StmtMacro) {
+            if !has_cfg_test(&statement.attrs) {
+                visit::visit_stmt_macro(self, statement);
+            }
+        }
+
+        fn visit_macro(&mut self, expression: &'ast syn::Macro) {
+            match parse_macro_arguments(expression) {
+                Ok(ParsedMacroArguments::Expressions(arguments)) => {
+                    for argument in &arguments {
+                        self.visit_expr(argument);
+                    }
+                }
+                Ok(ParsedMacroArguments::Matches(arguments)) => {
+                    self.visit_expr(&arguments.expression);
+                    self.visit_pat(&arguments.pattern);
+                    if let Some(guard) = &arguments.guard {
+                        self.visit_expr(guard);
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+    }
+
+    fn collect_modules(
+        items: &[syn::Item],
+        module_directory: &Path,
+        path_attribute_base: &Path,
+        lineage: Option<&str>,
+        sources: &mut Vec<ProductionRustSource>,
+        visited: &mut BTreeSet<(PathBuf, Option<String>)>,
+        active_paths: &mut BTreeSet<PathBuf>,
+    ) {
+        let mut collector = ModuleCollector {
+            module_directory: module_directory.to_path_buf(),
+            path_attribute_base: path_attribute_base.to_path_buf(),
+            lineage: lineage.map(str::to_string),
+            impl_context: None,
+            sources,
+            visited,
+            active_paths,
+        };
+        for item in items {
+            collector.visit_item(item);
         }
     }
 
