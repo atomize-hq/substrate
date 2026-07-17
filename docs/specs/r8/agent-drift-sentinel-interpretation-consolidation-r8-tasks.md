@@ -3,32 +3,23 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-tasks.md`
 
-Status: **R8-SPEC COMPLETE / COMPLETE AUTHORITY FAMILY THROUGH `806e53740` FRESH INDEPENDENT BUILT-IN
-`default` `CLEAN` / `CTX-R8-01` AND `CTX-R8-02` PROVEN / R8-IMPLEMENT SOLE ACTIVE PHASE AT ENTRY
-ONLY / ACTIVE PACKET `none` / ALL `57` IMPLEMENTATION CHECKBOXES UNCHECKED AND UNSTARTED / TRANSITION COMMIT `c66ea29ea` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / ENTRY GATE REVIEW-CLEAN / CURRENT RECEIPT HAS NO REVIEW RESULT**.
+Status: **R8-IMPLEMENT ACTIVE / R8-1 `ec2c5da7d` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
+R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
+R8-3 `963a8202` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-4 DOCS-ONLY AUTHORITY
+AMENDMENT AUTHORIZED AND PENDING COMMIT PLUS FRESH INDEPENDENT REVIEW / NO R8-4 SOURCE OR TEST
+EDITS**.
 
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation. No checkbox below
-authorizes source/test implementation before its owning packet-local prerequisites are satisfied.
+R8-SPEC and the R8-IMPLEMENT entry gate remain review-clean. R8-1 commit `ec2c5da7d`, R8-2 series
+`08e0d0e2a` + `5669e1f6e` + `911dd49b`, and R8-3 commit `963a8202` each received fresh
+independent built-in `default` `CLEAN` with no actionable findings. R8-4 is blocked only on
+committing and independently reviewing this bounded Markdown-only authority amendment; no R8-4
+source or test edit has started. Recorded R8-4 decisions are
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. This amendment assigns itself no commit hash or
+review result, makes no `CLEAN` claim, and starts no code.
 
 ## R8-IMPLEMENT Entry Receipt
 
@@ -38,25 +29,24 @@ authorizes source/test implementation before its owning packet-local prerequisit
   only with packet `none`.
 - `CTX-R8-03` is `OPEN` / current; `CTX-R8-04..06` remain `BLOCKED` / `UNPROVEN` in dependency
   order.
-- Every implementation checkbox below remains unchecked and unstarted. The worktree must be clean
-  before the first later source/test edit.
+- R8-1, R8-2, and R8-3 are landed and fresh-review-clean. R8-4 remains unstarted, with no source or
+  test edit, until this amendment is committed and fresh-review-clean.
 
-## Pending Packet-Local Symbol-Edit Decision Gates
+## Recorded Packet-Local Decisions
 
-The refreshed 2026-07-16 upstream graph records the first four gates below as HIGH. The fifth gate
-records an unresolved public delegation-presence contract. They are packet-local R8-IMPLEMENT
-dependencies: they authorize no edits, remain unresolved at entry, and do not invalidate the active
-entry-only phase. Request each only when its owning packet reaches the named symbol edit. Exact A/B
-options, recommendations, tests, and prompts come from the PLAN decision table; silence is never
-authorization.
+These replies authorize only the exact named seam and manifest. Any additional HIGH/CRITICAL symbol
+or manifest expansion requires a new structured decision.
 
 | Owning task | Stable required reply before symbol edit | Refreshed evidence |
 |---|---|---|
 | R8-2 | `DECISION R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A` | `load_replay_bundle`: HIGH, 17 direct dependents, 1 affected `execute` process, 1 module. |
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` | `verify_live_checkpoint_compatibility`: HIGH, 17 direct dependents, 0 processes, 1 module. |
 | R8-3 | `DECISION R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` | file-disambiguated `LiveRuntime::observe` in `src/live_runtime.rs`: HIGH, 17 direct dependents, 0 processes, 1 module. |
-| R8-4 | `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` | `uses_explicit_analyzer_state`: HIGH, 10 impacted, 2 direct, 1 affected `execute` process, 3 modules. |
-| R8-4 | `DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A` **or** `: B` | `Checkpoint.delegation` is non-optional after pre-v0.8 absence deserializes to `DelegationContext::default()`; public `CheckpointPresentation` has no optional presence carrier, and unchanged `ReplayReport`/`LiveObservation` erase that internal presence before final rendering. Option A accepts the public-field/source-compatibility cost, requires zero presentation `schema_version` uses/predicates, and preserves the same public output. Option B accepts one direct literal-v0.8 predicate in `CheckpointPresentation::render_console_block` plus localized compatibility/presentation coupling/parity cost and permits that facade to serve exact allowed owner set `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. Fail-closed AST/call-path proof independently asserts that set equality and exact raw direct `render_console_block` call-expression count `4` — two replay, one live, and one adjudication — and fails on any fifth call even inside an allowed owner. Validation/interpretation/projection/scheduling/construction and adjudication policy/request-shaping or decision logic contain zero R8-4 schema-presence predicates; on the adjudication path, the predicate may affect only preserved rendered operator-summary content. Both accept dev-only `syn` 2 (`full`, `visit`) plus exact lockfile cost for AST/call-path proof. `adjudication.rs` is read-only evidence, not an edit-manifest file. PLAN recommends B without resolving it. Upstream `Checkpoint` changes are out of scope. |
+| R8-4 | `DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` | `uses_explicit_analyzer_state`: HIGH, 10 impacted, 2 direct, 0 currently mapped processes, 3 modules. |
+| R8-4 | `DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B` | Preserve public shapes/output; accept dev-only `syn` 2 (`full`, `visit`) plus exact lockfile cost and one direct literal-v0.8 predicate in `CheckpointPresentation::render_console_block`; exact owner/count and behavior parity proof remains mandatory. |
+| R8-4 | `DECISION R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A` | `score_has_historical_evidence`: HIGH, 5 impacted, 2 direct, 0 processes, 3 modules. |
+| R8-4 | `DECISION R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A` | `push_evidence_lines`: HIGH, 7 impacted, 3 direct, 1 affected `execute` process, 3 modules. |
+| R8-4 | `DECISION R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A` | Expand only the R8-4 exact manifest from five files to six by adding `src/checkpoint_interpretation.rs`; preserve core fallible validation and add the total compatibility-only projection contract. |
 
 ## Per-Task Rules
 
@@ -95,7 +85,7 @@ git diff --cached -- <exact manifest only>
 
 ## R8-1 — Shared Typed Interpretation And Structured Errors
 
-**Status:** unstarted; blocked by the Entry Gate.
+**Status:** complete; commit `ec2c5da7d` received fresh independent built-in `default` `CLEAN`.
 
 **Description:** Introduce the origin-neutral interpretation module, exact literal schema profile,
 serialized validator, typed interpretation, and structured contract errors. No replay/live core is
@@ -132,20 +122,20 @@ strings); `CTX-R8-06` guard (no protected-path edits).
 
 **Acceptance criteria:**
 
-- [ ] The supported schema set is exactly v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, v0.8; v0.3-v0.8
+- [x] The supported schema set is exactly v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, v0.8; v0.3-v0.8
   explicit state and version-specific required fields fail closed.
-- [ ] Sentinel typed non-empty validation is exactly `session_id`, `checkpoint_id`,
+- [x] Sentinel typed non-empty validation is exactly `session_id`, `checkpoint_id`,
   `task_frame.objective`, and `expected_next_step`; no `DelegationContext` field-level validation
   exists.
-- [ ] Interpretation uses same-session history only, preserves bounded v0.2 behavior, gives
+- [x] Interpretation uses same-session history only, preserves bounded v0.2 behavior, gives
   v0.3-v0.8 explicit analyzer state precedence, and projects analyzer-owned v0.8 delegation without
   raw-event/orchestration inference.
-- [ ] `CheckpointInterpretation` carries validated schema, checkpoint, cursor, fingerprint,
+- [x] `CheckpointInterpretation` carries validated schema, checkpoint, cursor, fingerprint,
   flagged/max score inputs, posture, evidence, and typed delegation facts; no scheduler decision,
   adjudication data, or rendered console strings.
-- [ ] Structured errors identify the schema/checkpoint/field contract gap without panic, unwrap,
+- [x] Structured errors identify the schema/checkpoint/field contract gap without panic, unwrap,
   default acceptance, or legacy fallback.
-- [ ] `checkpoint_interpretation` and every additive item are crate-private (`pub(crate)` only as
+- [x] `checkpoint_interpretation` and every additive item are crate-private (`pub(crate)` only as
   needed), with no public re-export/API expansion; its matrix is in-module `#[cfg(test)]` only.
 
 **Exact verification:**
@@ -166,8 +156,7 @@ parse generalized versions, use cross-session history, or edit another Sentinel 
 
 ## R8-2 — Replay Core Migration With Locked Public Facades
 
-**Status:** unstarted; blocked by R8-1 review-clean and
-`R8-2-HIGH-IMPACT-REPLAY-LOADER-01` operator reply `A`.
+**Status:** complete; series `08e0d0e2a` + `5669e1f6e` + `911dd49b` received fresh independent built-in `default` `CLEAN`.
 
 **Description:** Delegate replay raw validation to the central validator, add the internal fallible
 report core, interpret the complete selected set before constructing scheduler/report state, and
@@ -216,20 +205,20 @@ HIGH/CRITICAL result requires its own named operator decision.
 
 **Acceptance criteria:**
 
-- [ ] Serialized replay gaps retain artifact path/line; typed interpretation gaps retain
+- [x] Serialized replay gaps retain artifact path/line; typed interpretation gaps retain
   checkpoint/schema/field detail; both flow through `InputError` and existing
   `SentinelError::Input`.
-- [ ] All selected checkpoints are validated/interpreted before `ReplayScheduler` or report vectors
+- [x] All selected checkpoints are validated/interpreted before `ReplayScheduler` or report vectors
   are constructed; failure returns no report, decision, presentation, adjudication request, or next
   cursor.
-- [ ] After complete-set interpretation, replay scheduling consumes only typed interpretation inputs
+- [x] After complete-set interpretation, replay scheduling consumes only typed interpretation inputs
   and rendering calls internal `present_interpretation`, not a public compatibility facade.
-- [ ] Sorting, mixed-version rejection, cursor filtering, report grouping, and successful scheduler
+- [x] Sorting, mixed-version rejection, cursor filtering, report grouping, and successful scheduler
   outputs remain behavior-compatible.
-- [ ] Exact compile-time function-pointer assertions lock
+- [x] Exact compile-time function-pointer assertions lock
   `execute: fn(&SentinelRequest) -> Result<SentinelResult, SentinelError>` and
   `render_replay_report`'s current signature.
-- [ ] `execute` calls `try_render_replay_report`, not the infallible `render_replay_report` facade;
+- [x] `execute` calls `try_render_replay_report`, not the infallible `render_replay_report` facade;
   no bridge uses panic, unwrap, swallowed error, or v0.2 fallback.
 
 **Exact verification:**
@@ -256,8 +245,7 @@ sorting, selection, cursor semantics, or report grouping.
 
 ## R8-3 — Live Input And Runtime Migration With Zero-Effect Errors
 
-**Status:** unstarted; blocked by R8-2 review-clean and separate operator replies `A` for
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01` and `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`.
+**Status:** complete; commit `963a8202` received fresh independent built-in `default` `CLEAN`.
 
 **Description:** Delegate live fixture/typed compatibility to the same central contract and make
 `LiveRuntime::observe` interpret before accepted-checkpoint, previous-by-session, scheduler, or
@@ -310,15 +298,15 @@ Refreshed upstream reports mark `verify_live_checkpoint_compatibility` and file-
 
 **Acceptance criteria:**
 
-- [ ] Raw fixture contract errors retain path/line and typed event errors retain checkpoint/source
+- [x] Raw fixture contract errors retain path/line and typed event errors retain checkpoint/source
   detail through `CheckpointContractError -> LiveInputError -> LiveRuntimeError::Input`.
-- [ ] `LiveCheckpointCompatibility` and `verify_live_checkpoint_compatibility` keep their public
+- [x] `LiveCheckpointCompatibility` and `verify_live_checkpoint_compatibility` keep their public
   supported-input behavior while delegating schema/semantic ownership to the central module.
-- [ ] On interpretation failure, latest/previous checkpoints, per-session history, scheduler state,
+- [x] On interpretation failure, latest/previous checkpoints, per-session history, scheduler state,
   processed-event count, last trigger, compatibility/cursor view, and presentation remain unchanged.
-- [ ] Successful checkpoint-ready and synthetic-trigger behavior stays compatible, including the
+- [x] Successful checkpoint-ready and synthetic-trigger behavior stays compatible, including the
   distinction between repeated-failure trigger and analyzer posture.
-- [ ] No edit occurs in `real_session_live.rs`; no scheduler, adjudication, sink, delivery, or
+- [x] No edit occurs in `real_session_live.rs`; no scheduler, adjudication, sink, delivery, or
   persistence behavior changes.
 
 **Exact verification:**
@@ -345,49 +333,67 @@ shape, or any unlisted file; any request to infer delegation or accept malformed
 
 ## R8-4 — Operator Presentation Migration And Public Signature Lock
 
-**Status:** unstarted; blocked by R8-3 review-clean and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01` operator reply `A`, plus an explicit A/B choice for
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`.
+**Status:** unstarted; blocked only until this bounded docs-only authority amendment is committed
+and fresh independent built-in `default` `CLEAN`. R8-3 is review-clean, every current R8-4 decision
+is recorded below, and no R8-4 source/test edit has started.
 
 **Description:** Remove the remaining version/analyzer/evidence decisions before final rendering,
 route compatibility construction through centralized non-validating projection plus the typed
-renderer, and preserve exact public signatures/current supported behavior. Under Option B only,
+renderer, and preserve exact public signatures/current total behavior, including unsupported typed
+facade input. Under recorded Option B,
 the frozen legacy facade and its sole schema-presence predicate may serve exact allowed owner set
 `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}` after the unchanged
 public shapes erase internal presence. Its raw direct `render_console_block` call-expression count
 must equal exactly `4`: two replay, one live, and one adjudication. Any fifth direct call fails even
 inside an allowed owner.
 
-**Dependencies:** R8-3 landed and fresh-review-clean; exact operator reply
-`DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`; and exact operator reply
-`DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A|B`. A `B` reply to the HIGH-impact gate
-requires respec/defer; the presence reply selects the PLAN's A or B implementation/test branch.
-No reply to either gate means every R8-4 symbol remains uneditable.
+**Dependencies:** R8-3 commit `963a8202` landed and fresh-review-clean; exact replies
+`DECISION R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`DECISION R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`DECISION R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`DECISION R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
+`DECISION R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`; plus this amendment committed and
+fresh-review-clean.
 
 **Gate mapping:** `CTX-R8-01` guard; `CTX-R8-02` entry dependency; `CTX-R8-03` direct shared renderer;
 `CTX-R8-04` direct removal of duplicate compatibility; `CTX-R8-05` direct proof;
 `CTX-R8-06` guard through unchanged decision/policy inputs.
 
-**Exact manifest (5 files):**
+**Exact manifest (6 files):**
 
 - `crates/agent-drift-sentinel/Cargo.toml`
 - `Cargo.lock`
+- `crates/agent-drift-sentinel/src/checkpoint_interpretation.rs`
 - `crates/agent-drift-sentinel/src/operator_surface.rs`
 - `crates/agent-drift-sentinel/tests/operator_surface.rs`
 - `crates/agent-drift-sentinel/tests/live_end_to_end.rs`
 
-**Read-only dependency/call-path evidence outside the five-file edit manifest:**
+**Read-only dependency/call-path evidence outside the six-file edit manifest:**
 
 - `crates/agent-drift-sentinel/src/adjudication.rs` — preserve `shape_request` unchanged; edit-
   manifest tests lock exact `operator_summary` bytes, full request equality, request eligibility,
   and every non-summary field. Do not edit this file or adjudication policy/request-shaping logic.
 
-Both branches require the same future dev-only
+Recorded Option B requires the dev-only
 `syn = { version = "2", features = ["full", "visit"] }` addition. Live `Cargo.lock` already
 contains transitive `syn` `2.0.117`, but no manifest exposes it; the expected lock delta adds `syn`
 only to the Sentinel package dependency list and retains the locked package/version. Any resolver
-expansion is a stop. The presence reply must accept this cost for A or B; it is not authorized now.
-No runtime dependency or unrelated lockfile update is allowed. Re-run `live_checkpoint_compatibility` without editing it.
+expansion is a stop. The recorded presence reply accepts this cost. No runtime dependency or
+unrelated lockfile update is allowed. Re-run `live_checkpoint_compatibility` without editing it.
+
+**Central compatibility projection contract:** Add crate-private
+`CheckpointCompatibilityProjectionInput`,
+`CheckpointProjectionProfile::{Schema(CheckpointSchemaVersion), CompatibilityOnly}`, and total
+`project_checkpoint_compatibility(...) -> CheckpointInterpretation` in
+`checkpoint_interpretation.rs`. `interpret_checkpoint` keeps the unchanged fallible validation and
+error contract; after validation it and the total adapter call one private
+posture/evidence/delegation/cursor/fingerprint/flagged-score projection. Exact supported typed facade
+literals select `Schema(...)` without typed validation. Every other facade literal selects explicit
+`CompatibilityOnly`, preserves current legacy-compatible total behavior, and is never relabeled as
+v0.2. The adapter uses the optional previous checkpoint exactly as the current total facade does,
+performs no schema/field/explicit-state/same-session validation, does not call or catch
+`interpret_checkpoint`, and is never called by core replay/live. Both returned interpretations feed
+the same `present_interpretation` renderer. No public API changes.
 
 **GitNexus impact targets before edits:**
 
@@ -403,20 +409,29 @@ No runtime dependency or unrelated lockfile update is allowed. Re-run `live_chec
   `collect_evidence_lines`, `collect_state_backed_evidence_lines`,
   `collect_legacy_evidence_lines`, `push_evidence_lines`, `classify_checkpoint`,
   `warning_fingerprint`, and `max_flagged_score` before delegating/removing their semantic ownership
-- New `present_interpretation` or compatibility-projection helpers: new/no pre-existing target.
+- `CheckpointInterpretation`, `CheckpointSchemaVersion::from_literal`, `interpret_checkpoint`,
+  `checkpoint_posture`, and `checkpoint_evidence` in `src/checkpoint_interpretation.rs`
+- New `CheckpointCompatibilityProjectionInput`, `CheckpointProjectionProfile`,
+  `project_checkpoint_compatibility`, and any new private shared-projection helper: new/no
+  pre-existing target.
 
 Refreshed upstream impact for `uses_explicit_analyzer_state` is HIGH (10 impacted symbols, two
-direct dependents, one affected `execute` process, three modules). It is bound to
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`; no edit/removal is permitted before the operator reply is `A`.
+direct dependents, zero currently mapped processes, three modules), authorized by
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`. `score_has_historical_evidence` is HIGH (five impacted,
+two direct, zero processes, three modules), authorized by
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`. `push_evidence_lines` is HIGH (seven impacted, three
+direct, one affected `execute` process, three modules), authorized by
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`. Before code, run impact for every listed existing central
+item and any other existing symbol actually edited. Any additional HIGH/CRITICAL result needs its
+own decision.
 
 **TDD sequence:**
 
-1. RED: add exact function-pointer signature assertions, facade behavior fixtures, and the `syn`
-   AST ownership policy. Apply only the selected presence branch: Option A directly constructs the
-   new optional public field and proves `None`/`Some` plus zero `schema_version` uses/predicates;
+1. RED: add the central supported/unsupported total-projection matrix, exact function-pointer
+   signature assertions, facade behavior fixtures, and the `syn` AST ownership policy. Recorded
    Option B compile-locks the unchanged public shapes and proves exactly one direct field use and
    literal-v0.8 predicate in `CheckpointPresentation::render_console_block`, with zero in every
-   other item. Both lock the existing signature. The fail-closed production call-owner witness
+   other item. The fail-closed production call-owner witness
    independently asserts exact owner-set equality
    `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}` and exact raw direct
    `render_console_block` call-expression count `4`, partitioned as two replay, one live, and one
@@ -434,37 +449,37 @@ direct dependents, one affected `execute` process, three modules). It is bound t
 - [ ] Exact public signatures of `present_checkpoint`, `present_checkpoint_with_previous`, and
   `CheckpointPresentation::render_console_block` and `render_replay_report` compile unchanged;
   R8-2's `execute` signature assertion remains green.
-- [ ] Public facades preserve current supported-input output and delegate to centralized
-  non-validating projection plus `present_interpretation`; neither core path calls a facade as a
-  validation boundary. Option B explicitly allows the frozen legacy facade and its sole predicate
-  to serve exact allowed owner set
+- [ ] Public facades preserve current total output, including unsupported typed facade input, and
+  delegate to `project_checkpoint_compatibility` plus `present_interpretation`; neither core path
+  calls a facade as a validation boundary. Recorded Option B allows the frozen legacy facade and its
+  sole predicate to serve exact allowed owner set
   `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. No other production
   owner may call it, and exact raw direct `render_console_block` call-expression count must remain
   `4` — two replay, one live, and one adjudication. A fifth direct call fails even inside an allowed
   owner.
-- [ ] The recorded presence decision selects exactly one mutually exclusive schema acceptance
-  branch: Option A proves zero `schema_version` field/path uses and predicates in all of
-  `operator_surface.rs`; Option B proves exactly one direct field use and one predicate
+- [ ] Recorded Option B proves exactly one direct field use and one predicate
   `self.checkpoint.schema_version == "v0.8"` in the named legacy public facade and zero in every
-  other item. Neither branch permits a supported-version table, `DriftState` classification, legacy
+  other item. It permits no supported-version table, `DriftState` classification, legacy
   evidence-prefix recognition, or earlier delegation inference.
+- [ ] Valid typed v0.2-v0.8 inputs produce equal renderer-consumed facts through validated and total
+  central projection. Unsupported typed facade input selects `CompatibilityOnly`, not
+  `Schema(V0_2)`, while preserving the existing legacy-compatible total output. Core
+  `interpret_checkpoint` still rejects unsupported schema, required-field/explicit-state gaps, and
+  cross-session history; the total helper does not call/catch it.
 - [ ] Presentation only formats/truncates/orders typed facts, labels trigger separately from
   posture, and applies existing decision/warning policy.
 - [ ] Core delegation projection and presentation construction follow
-  `CheckpointInterpretation.delegation: Option<DelegationContext>` exactly. The selected public
-  representation is proven: Option A's explicit optional field has the authorized public-field
-  cost and exact `None`/`Some` construction/output tests with no predicate and the same public
-  output; or Option B leaves the public shape/output unchanged and uses its sole named predicate
-  only at final legacy rendering. With Option B,
-  unchanged `CheckpointPresentation`, `ReplayReport`, and `LiveObservation` erase internal optional
+  `CheckpointInterpretation.delegation: Option<DelegationContext>` exactly. Recorded Option B leaves
+  the public shape/output unchanged and uses its sole named predicate only at final legacy rendering.
+  Unchanged `CheckpointPresentation`, `ReplayReport`, and `LiveObservation` erase internal optional
   presence before that final call; no claim says otherwise. Contract validation, typed
   interpretation, posture/evidence/delegation projection, scheduling, construction,
   `present_interpretation`, all other formatting helpers, and adjudication policy/request-shaping or
   decision logic contain no R8-4 presence predicate. On the adjudication path, the predicate may affect only preserved
   rendered operator-summary content; `adjudication.rs` remains unedited.
 - [ ] v0.2-v0.7 absence/default and v0.8 presence cases pass in `operator_surface` and
-  `live_checkpoint_compatibility`. Option A proves its public carrier survives to output. Option B
-  proves legacy-facade v0.2-v0.7/v0.8 absence/presence output and edit-manifest tests separately
+  `live_checkpoint_compatibility`. Recorded Option B proves legacy-facade v0.2-v0.7/v0.8
+  absence/presence output, and edit-manifest tests separately
   prove `ReplayReport::to_console_text`, final `LiveObservation.presentation.render_console_block`
   output corresponding to `cli::run_live`, and `adjudication::shape_request` traverse the legacy
   facade. Exact pre/post assertions lock unchanged `operator_summary` bytes and full
@@ -476,6 +491,7 @@ direct dependents, one affected `execute` process, three modules). It is bound t
 **Exact verification:**
 
 ```bash
+cargo test -p agent-drift-sentinel checkpoint_interpretation::tests --lib -- --nocapture
 cargo test -p agent-drift-sentinel --test operator_surface -- --nocapture
 cargo test -p agent-drift-sentinel --test live_checkpoint_compatibility -- --nocapture
 cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
@@ -493,8 +509,8 @@ and the removed line-oriented regex are not acceptance evidence. Visit every dir
 field/path occurrence, propagate local aliases/assignments, inspect all enclosing predicate/control
 forms (`==`, `!=`, boolean nesting, `if`/`while`, `match` scrutinees/guards, parsed `matches!`,
 method calls, struct field/pattern uses, constants, and aliases), and attribute each use/predicate to its owning Rust item. Any
-unparsed macro, unclassified occurrence, or unowned form fails. Option A expects zero uses and
-predicates. Option B expects exactly one direct field use and one predicate in the whole file, both
+unparsed macro, unclassified occurrence, or unowned form fails. Recorded Option B expects exactly
+one direct field use and one predicate in the whole file, both
 in `CheckpointPresentation::render_console_block`, every other item zero, and direct equality to
 literal `"v0.8"`. The production facade-call owner set must equal exactly
 `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. Independently, raw
@@ -506,9 +522,10 @@ only; separate behavior tests prove the same output, the three actual paths, and
 
 **Decision triggers:** Any public signature/source-compatibility break not explicitly authorized by
 the recorded presence decision; any need for a facade to
-validate, panic, unwrap, or fall back; any analyzer/delegation inference remaining in presentation;
+validate, panic, unwrap, swallow an error, or fall back; inability to preserve unsupported typed
+facade behavior without relabeling it v0.2; any analyzer/delegation inference remaining in presentation;
 any scheduler/adjudication/sink edit; any attempt to improvise the delegation-presence carrier or
-change upstream analyzer `Checkpoint` outside the recorded A/B reply.
+change upstream analyzer `Checkpoint` outside recorded Option B.
 
 **Atomic commit:** suggested message `refactor: render sentinel checkpoints from typed facts`.
 
@@ -674,14 +691,13 @@ evidence only after receipt review; `CTX-R8-03` final shared-seam wall; `CTX-R8-
 - [ ] Focused targets, full Sentinel, workspace fmt/clippy/tests, staged GitNexus, and cached-diff
   inspection are green with exact observed counts recorded (never copied from an older receipt).
 - [ ] Static inspection proves core replay/live ordering and absence of facade-as-validation calls;
-  Option A has zero presentation schema uses/predicates, or Option B has only its exact direct-field/
+  recorded Option B has only its exact direct-field/
   one-predicate `CheckpointPresentation::render_console_block` legacy exception, exact allowed owner
   set `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`, and exact raw
   direct call-expression count `4` — two replay, one live, and one adjudication — with any fifth call
   failing even inside an allowed owner. Validation, interpretation, projection, scheduling, construction,
-  and adjudication policy/request-shaping or decision logic own no such predicate under either
-  branch; Option B behavior proof locks unchanged `operator_summary` bytes/full requests, and
-  Option A has no predicate while preserving the same public output.
+  and adjudication policy/request-shaping or decision logic own no such predicate. Option B behavior
+  proof locks unchanged `operator_summary` bytes/full requests.
 - [ ] Receipts name every task/fix commit and fresh review result, plus every structured decision.
 - [ ] The receipt does not claim its own review result, phase transition, or family completion before
   fresh independent review.
@@ -713,17 +729,19 @@ full family proven before the receipt itself is fresh-review-clean.
 **Review gate:** fresh built-in `default` review of the exact R8-6 receipt must be `CLEAN`. Only then
 may a separate docs-only mirror/phase transition packet be proposed.
 
-## Final Unchecked Wall
+## Final Wall
 
-- [ ] R8-1 fresh-review-clean.
-- [ ] `R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A` recorded; R8-2 fresh-review-clean.
-- [ ] `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` and
+- [x] R8-1 fresh-review-clean.
+- [x] `R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A` recorded; R8-2 fresh-review-clean.
+- [x] `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` and
   `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` recorded; R8-3 fresh-review-clean.
-- [ ] `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A` recorded; R8-4 fresh-review-clean.
-- [ ] `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: A|B` recorded before R8-4 edits, with the selected
-  public-compatibility cost, dev-only `syn`/lockfile cost, AST ownership policy, exact Option B owner
-  set plus raw direct call count `4` lock, and separate final behavior/output/adjudication-request
-  parity proof fresh-review-clean.
+- [x] `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+  `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+  `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+  `R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
+  `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A` recorded before R8-4 edits.
+- [ ] R8-4 implementation/fix series fresh-review-clean, including Option B owner/count proof,
+  compatibility-profile parity, and final behavior/output/adjudication-request parity.
 - [ ] R8-5.1 fresh-review-clean.
 - [ ] R8-5.2 fresh-review-clean.
 - [ ] No production or test file outside exact packet manifests changed.
@@ -731,10 +749,10 @@ may a separate docs-only mirror/phase transition packet be proposed.
   cursor behavior edit landed.
 - [ ] `adjudication.rs` remained read-only R8-4 dependency/call-path evidence; Option B changed no
   adjudication policy/request-shaping logic or decision semantics and preserved exact
-  `operator_summary` bytes/full request behavior; Option A used no presentation predicate and
-  preserved the same public output.
+  `operator_summary` bytes/full request behavior.
 - [ ] Exact v0.2-v0.8 matrix and replay/live parity pass.
-- [ ] Public facade signatures and supported behavior remain locked.
+- [ ] Public facade signatures and current total behavior, including unsupported typed facade input,
+  remain locked.
 - [ ] After interpretation failure there is no scheduler decision, presentation, adjudication,
   operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance;
   existing pre-observe monitor-closure/pending-poll/emission-ordinal bookkeeping is permitted.
@@ -743,7 +761,6 @@ may a separate docs-only mirror/phase transition packet be proposed.
 - [ ] `CTX-R8-01..06` status reconciled only from reviewed evidence.
 - [ ] Separate mirror/phase transition reviewed before any R8 completion or next-phase claim.
 
-All boxes are intentionally unchecked. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02` is `PROVEN` /
-`SATISFIED` by the complete authority family through `806e53740` receiving fresh independent
-built-in `default` `CLEAN`. `CTX-R8-03` is `OPEN` / current at entry; `CTX-R8-04..06` remain
-`BLOCKED` / `UNPROVEN`. This TASKS artifact claims no implementation completion.
+Checked boxes record only review-clean R8-1..R8-3 work and operator decisions already completed.
+R8-4 and every later wall/transition item remain unchecked and unproven. This amendment claims no
+R8-4 code, review result, or family completion.
