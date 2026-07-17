@@ -547,7 +547,7 @@ pub fn render_replay_report(
         let interpretation =
             project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
                 checkpoint,
-                previous_same_session: previous_checkpoint,
+                previous_checkpoint,
             });
         let decision = scheduler.observe(
             interpretation.cursor.clone(),
@@ -596,7 +596,7 @@ pub fn present_checkpoint_with_previous(
 ) -> CheckpointPresentation {
     let interpretation = project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
         checkpoint,
-        previous_same_session: previous_checkpoint,
+        previous_checkpoint,
     });
     present_interpretation(&interpretation, trigger, decision, warning_policy)
 }
@@ -720,7 +720,7 @@ pub fn classify_checkpoint(
 ) -> WarningDisposition {
     let interpretation = project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
         checkpoint,
-        previous_same_session: None,
+        previous_checkpoint: None,
     });
     classify_interpretation(&interpretation, decision, warning_policy)
 }
@@ -728,7 +728,7 @@ pub fn classify_checkpoint(
 pub fn warning_fingerprint(checkpoint: &Checkpoint) -> String {
     project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
         checkpoint,
-        previous_same_session: None,
+        previous_checkpoint: None,
     })
     .warning_fingerprint
 }

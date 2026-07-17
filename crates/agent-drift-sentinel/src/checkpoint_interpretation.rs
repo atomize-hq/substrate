@@ -79,7 +79,7 @@ pub(crate) struct CheckpointInterpretationInput<'a> {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CheckpointCompatibilityProjectionInput<'a> {
     pub(crate) checkpoint: &'a Checkpoint,
-    pub(crate) previous_same_session: Option<&'a Checkpoint>,
+    pub(crate) previous_checkpoint: Option<&'a Checkpoint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,7 +214,7 @@ pub(crate) fn project_checkpoint_compatibility(
     input: CheckpointCompatibilityProjectionInput<'_>,
 ) -> CheckpointInterpretation {
     let profile = compatibility_projection_profile(input.checkpoint.schema_version.as_str());
-    project_checkpoint(input.checkpoint, input.previous_same_session, profile)
+    project_checkpoint(input.checkpoint, input.previous_checkpoint, profile)
 }
 
 fn compatibility_projection_profile(schema_version: &str) -> CheckpointProjectionProfile {
@@ -988,7 +988,7 @@ mod tests {
             let projected =
                 project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
                     checkpoint: &checkpoint,
-                    previous_same_session: None,
+                    previous_checkpoint: None,
                 });
 
             assert_eq!(
@@ -997,6 +997,53 @@ mod tests {
                 "{literal} must retain its exact supported profile"
             );
             assert_eq!(projected, validated, "{literal} projection facts diverged");
+        }
+    }
+
+    #[test]
+    fn total_projection_is_deterministic_for_supported_but_core_invalid_typed_shapes() {
+        let mut empty_required_strings = checkpoint_for_version("v0.8");
+        empty_required_strings.session_id.clear();
+        empty_required_strings.checkpoint_id.clear();
+        empty_required_strings.task_frame.objective.clear();
+        empty_required_strings.expected_next_step.clear();
+
+        let mut missing_turn_context = checkpoint_for_version("v0.4");
+        missing_turn_context.turn_context = None;
+
+        let mut missing_session_archetype = checkpoint_for_version("v0.5");
+        missing_session_archetype.session_archetype = None;
+
+        let mut missing_session_progress = checkpoint_for_version("v0.8");
+        missing_session_progress.session_progress = None;
+
+        for (checkpoint, schema) in [
+            (empty_required_strings, CheckpointSchemaVersion::V0_8),
+            (missing_turn_context, CheckpointSchemaVersion::V0_4),
+            (missing_session_archetype, CheckpointSchemaVersion::V0_5),
+            (missing_session_progress, CheckpointSchemaVersion::V0_8),
+        ] {
+            assert!(
+                interpret(&checkpoint, None).is_err(),
+                "the fallible core must reject the supported-but-invalid typed shape"
+            );
+
+            let project = || {
+                project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+                    checkpoint: &checkpoint,
+                    previous_checkpoint: None,
+                })
+            };
+            let first = project();
+            let second = project();
+
+            assert_eq!(first, second, "the total projection must be deterministic");
+            assert_eq!(
+                first.projection_profile,
+                CheckpointProjectionProfile::Schema(schema),
+                "supported literals must retain their exact compatibility profile"
+            );
+            assert_eq!(first.checkpoint, checkpoint);
         }
     }
 
@@ -1019,7 +1066,7 @@ mod tests {
 
         let projected = project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
             checkpoint: &checkpoint,
-            previous_same_session: Some(&previous),
+            previous_checkpoint: Some(&previous),
         });
 
         assert_eq!(
