@@ -1048,6 +1048,56 @@ mod tests {
     }
 
     #[test]
+    fn total_projection_preserves_supported_profile_without_validating_history_relationships() {
+        let mut checkpoint = checkpoint_for_version("v0.2");
+        checkpoint.ordinal = 2;
+        checkpoint.checkpoint_id = "session-a:0002".to_string();
+        checkpoint.drift_scores[0].evidence = vec![evidence(
+            "historical repeated failure evidence: facade-compatible history",
+        )];
+
+        let mut cross_session = checkpoint_for_version("v0.2");
+        cross_session.session_id = "session-b".to_string();
+        cross_session.checkpoint_id = "session-b:0001".to_string();
+        cross_session.flagged = true;
+        cross_session.drift_scores[0].flagged = true;
+
+        let mut mismatched_schema = checkpoint_for_version("v0.3");
+        mismatched_schema.flagged = true;
+        mismatched_schema.drift_scores[0].flagged = true;
+
+        assert!(matches!(
+            interpret(&checkpoint, Some(&cross_session)),
+            Err(CheckpointContractError::CrossSessionHistory { .. })
+        ));
+        assert!(matches!(
+            interpret(&checkpoint, Some(&mismatched_schema)),
+            Err(CheckpointContractError::FieldGap { field, .. })
+                if field == "previous.schema_version"
+        ));
+
+        for previous in [&cross_session, &mismatched_schema] {
+            let project = || {
+                project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+                    checkpoint: &checkpoint,
+                    previous_checkpoint: Some(previous),
+                })
+            };
+            let first = project();
+            let second = project();
+
+            assert_eq!(first, second, "the total projection must be deterministic");
+            assert_eq!(
+                first.projection_profile,
+                CheckpointProjectionProfile::Schema(CheckpointSchemaVersion::V0_2)
+            );
+            assert_eq!(first.checkpoint, checkpoint);
+            assert_eq!(first.posture, Some(CheckpointPosture::Recovered));
+            assert_eq!(first.evidence, checkpoint.drift_scores[0].evidence);
+        }
+    }
+
+    #[test]
     fn unsupported_typed_facade_input_uses_explicit_total_compatibility_profile() {
         let mut previous = checkpoint_for_version("v0.2");
         previous.schema_version = "v-next".to_string();

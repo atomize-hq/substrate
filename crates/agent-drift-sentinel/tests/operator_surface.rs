@@ -205,6 +205,75 @@ fn legacy_facade_is_total_and_deterministic_for_supported_core_invalid_typed_sha
 }
 
 #[test]
+fn legacy_facade_ignores_invalid_history_relationships_without_changing_exact_output() {
+    let decision = EvaluationDecision {
+        evaluate: true,
+        visible_warning_allowed: true,
+        reason: DecisionReason::InitialCheckpoint,
+    };
+    let policy = WarningPolicy::default();
+
+    let mut checkpoint = support::checkpoint(
+        "session-history",
+        2,
+        0,
+        false,
+        "continue on the current task frame",
+    );
+    checkpoint.drift_scores[0].class = DriftClass::DeadEndThrash;
+    checkpoint.drift_scores[0].evidence = vec![EvidenceRef {
+        row: checkpoint.boundary.start.clone(),
+        reason: "historical repeated failure evidence: facade-compatible history".to_string(),
+    }];
+
+    let mut cross_session = support::checkpoint(
+        "other-session",
+        1,
+        80,
+        true,
+        "continue on the current task frame",
+    );
+    cross_session.drift_scores[0].class = DriftClass::DeadEndThrash;
+
+    let mut mismatched_schema = support::checkpoint(
+        "session-history",
+        1,
+        80,
+        true,
+        "continue on the current task frame",
+    );
+    mismatched_schema.schema_version = "v0.3".to_string();
+    mismatched_schema.drift_scores[0].class = DriftClass::DeadEndThrash;
+
+    let expected = concat!(
+        "[checkpoint] session-history:0002 @ checkpoint_ready (low)\n",
+        "- Objective: /goal Complete replay validation for session-history checkpoint 2\n",
+        "- Drift: no flagged drift classes\n",
+        "- Posture: recovered\n",
+        "- Diagnostics: task_frame_transitioned=false, working_set_changed=false, verification=1/1 (100.00%), evidence_items=1\n",
+        "- Expected next step: continue on the current task frame\n",
+        "- Evidence: session-history.jsonl#2:0 historical repeated failure evidence: facade-compatible history\n",
+        "- Silent reason: checkpoint recorded without a visible warning"
+    );
+
+    for previous in [&cross_session, &mismatched_schema] {
+        let render = || {
+            present_checkpoint_with_previous(
+                &checkpoint,
+                Some(previous),
+                TriggerClass::CheckpointReady,
+                &decision,
+                &policy,
+            )
+            .render_console_block(None)
+        };
+
+        assert_eq!(render(), expected);
+        assert_eq!(render(), expected, "the total facade must be deterministic");
+    }
+}
+
+#[test]
 fn adjudication_shape_request_preserves_exact_legacy_facade_bytes_and_fields() {
     let mut checkpoint = support::checkpoint(
         "session-adjudication",
@@ -1581,6 +1650,138 @@ fn ast_policy_self_test_rejects_unknown_macros_in_both_inventories() {
         == "unknown::hidden_render: unparsed mystery! macro in render-call inventory: macro is not in the production AST policy allowlist"));
 }
 
+#[test]
+fn ast_policy_self_test_rejects_trait_impl_and_nested_schema_owner_lookalikes() {
+    let trait_impl = syn::parse_file(
+        r#"
+        impl PresentationRenderer for CheckpointPresentation {
+            fn render_console_block(&self) {
+                if self.checkpoint.schema_version == "v0.8" {}
+            }
+        }
+        "#,
+    )
+    .expect("parse trait-impl schema owner fixture");
+    assert_eq!(
+        analyze_schema_policy(&trait_impl).direct_uses,
+        vec!["<CheckpointPresentation as PresentationRenderer>::render_console_block".to_string()],
+        "a trait impl must not impersonate the allowed inherent method"
+    );
+
+    let nested_impl = syn::parse_file(
+        r#"
+        fn nested_owner() {
+            impl CheckpointPresentation {
+                fn render_console_block(&self) {
+                    if self.checkpoint.schema_version == "v0.8" {}
+                }
+            }
+        }
+        "#,
+    )
+    .expect("parse nested schema owner fixture");
+    assert_eq!(
+        analyze_schema_policy(&nested_impl).direct_uses,
+        vec!["nested_owner::CheckpointPresentation::render_console_block".to_string()],
+        "a nested inherent impl must retain its enclosing owner lineage"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_trait_impl_and_nested_render_owner_lookalikes() {
+    let trait_impl = syn::parse_file(
+        r#"
+        impl ConsoleRenderer for ReplayReport {
+            fn to_console_text(&self, presentation: &CheckpointPresentation) {
+                presentation.render_console_block(None);
+            }
+        }
+        "#,
+    )
+    .expect("parse trait-impl render owner fixture");
+    let mut trait_calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("operator_surface", &trait_impl.items, &mut trait_calls);
+    assert_eq!(
+        trait_calls.counts,
+        BTreeMap::from([(
+            "<ReplayReport as ConsoleRenderer>::to_console_text".to_string(),
+            1usize,
+        )]),
+        "a trait impl must not impersonate the allowed inherent method"
+    );
+
+    let nested_impl = syn::parse_file(
+        r#"
+        fn nested_owner() {
+            impl ReplayReport {
+                fn to_console_text(&self, presentation: &CheckpointPresentation) {
+                    presentation.render_console_block(None);
+                }
+            }
+        }
+        "#,
+    )
+    .expect("parse nested render owner fixture");
+    let mut nested_calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("operator_surface", &nested_impl.items, &mut nested_calls);
+    assert_eq!(
+        nested_calls.counts,
+        BTreeMap::from([(
+            "operator_surface::nested_owner::ReplayReport::to_console_text".to_string(),
+            1usize,
+        )]),
+        "a nested inherent impl must retain its enclosing owner lineage"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_schema_and_allowlisted_macro_import_aliases() {
+    let file = syn::parse_file(
+        r#"
+        use crate::schema_version as hidden_schema;
+        use shadow::injected as format;
+        use shadow as anyhow;
+
+        fn hidden_schema_branch() {
+            if hidden_schema == "v0.8" {}
+            format!("macro body is unavailable to the AST policy");
+            anyhow::anyhow!("qualified macro body is also unavailable");
+        }
+        "#,
+    )
+    .expect("parse import-alias policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    for expected in [
+        "use hidden_schema: schema_version import `crate::schema_version` binds `hidden_schema`",
+        "use format: untrusted allowlisted macro import `shadow::injected` binds `format`",
+        "use anyhow: untrusted allowlisted macro import `shadow` binds `anyhow`",
+    ] {
+        assert!(
+            schema
+                .violations
+                .iter()
+                .any(|violation| violation == expected),
+            "schema inventory must reject {expected}: {schema:?}"
+        );
+    }
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("aliases", &file.items, &mut calls);
+    for expected in [
+        "aliases::use format: untrusted allowlisted macro import `shadow::injected` binds `format`",
+        "aliases::use anyhow: untrusted allowlisted macro import `shadow` binds `anyhow`",
+    ] {
+        assert!(
+            calls
+                .violations
+                .iter()
+                .any(|violation| violation == expected),
+            "render inventory must reject {expected}: {calls:?}"
+        );
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 struct SchemaPolicyAnalysis {
     direct_uses: Vec<String>,
@@ -1622,24 +1823,35 @@ fn analyze_schema_items(
                         .push("unclassified impl owner".to_string());
                     continue;
                 };
-                analyze_schema_attributes(&format!("impl {type_name}"), &item_impl.attrs, analysis);
+                let impl_identity = impl_identity(item_impl, &type_name);
+                let impl_owner = qualify_owner(module, &format!("impl {impl_identity}"));
+                analyze_schema_attributes(&impl_owner, &item_impl.attrs, analysis);
                 for impl_item in &item_impl.items {
                     match impl_item {
                         syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
-                            let owner =
-                                format!("{type_name}::{}", identifier_name(&method.sig.ident));
+                            let owner = qualify_owner(
+                                module,
+                                &format!("{impl_identity}::{}", identifier_name(&method.sig.ident)),
+                            );
                             analyze_schema_attributes(&owner, &method.attrs, analysis);
                             analyze_schema_block(owner, &method.block, analysis);
                         }
                         syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
-                            let owner =
-                                format!("{type_name}::const {}", identifier_name(&constant.ident));
+                            let owner = qualify_owner(
+                                module,
+                                &format!(
+                                    "{impl_identity}::const {}",
+                                    identifier_name(&constant.ident)
+                                ),
+                            );
                             analyze_schema_attributes(&owner, &constant.attrs, analysis);
                             analyze_schema_expression(owner, &constant.expr, analysis);
                         }
                         syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
-                            let owner =
-                                format!("{type_name}::macro {}", macro_path(&item_macro.mac));
+                            let owner = qualify_owner(
+                                module,
+                                &format!("{impl_identity}::macro {}", macro_path(&item_macro.mac)),
+                            );
                             analyze_schema_attributes(&owner, &item_macro.attrs, analysis);
                             analyze_schema_macro(owner, &item_macro.mac, analysis);
                         }
@@ -1702,18 +1914,18 @@ fn analyze_schema_items(
                 }
             }
             syn::Item::Trait(item_trait) => {
-                analyze_schema_attributes(
+                let trait_identity = qualify_owner(
+                    module,
                     &format!("trait {}", identifier_name(&item_trait.ident)),
-                    &item_trait.attrs,
-                    analysis,
                 );
+                analyze_schema_attributes(&trait_identity, &item_trait.attrs, analysis);
                 for trait_item in &item_trait.items {
                     match trait_item {
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
                             if let Some(default) = &method.default {
                                 let owner = format!(
                                     "{}::{}",
-                                    identifier_name(&item_trait.ident),
+                                    trait_identity,
                                     identifier_name(&method.sig.ident)
                                 );
                                 analyze_schema_attributes(&owner, &method.attrs, analysis);
@@ -1723,7 +1935,7 @@ fn analyze_schema_items(
                         syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
                             let owner = format!(
                                 "{}::macro {}",
-                                identifier_name(&item_trait.ident),
+                                trait_identity,
                                 macro_path(&item_macro.mac)
                             );
                             analyze_schema_attributes(&owner, &item_macro.attrs, analysis);
@@ -1750,6 +1962,9 @@ fn analyze_schema_items(
                 if let Some((_, nested)) = &item_mod.content {
                     analyze_schema_items(nested, Some(&nested_module), analysis);
                 }
+            }
+            syn::Item::Use(item_use) => {
+                analyze_schema_imports(module, item_use, analysis);
             }
             _ => {}
         }
@@ -2017,6 +2232,161 @@ fn macro_path_from_path(path: &syn::Path) -> String {
         .map(|segment| identifier_name(&segment.ident))
         .collect::<Vec<_>>()
         .join("::")
+}
+
+fn qualify_owner(lineage: Option<&str>, owner: &str) -> String {
+    lineage.map_or_else(
+        || owner.to_string(),
+        |lineage| format!("{lineage}::{owner}"),
+    )
+}
+
+fn impl_identity(item_impl: &syn::ItemImpl, type_name: &str) -> String {
+    item_impl.trait_.as_ref().map_or_else(
+        || type_name.to_string(),
+        |(_, trait_path, _)| format!("<{type_name} as {}>", macro_path_from_path(trait_path)),
+    )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ImportBinding {
+    source: String,
+    binding: Option<String>,
+}
+
+fn import_bindings(item_use: &syn::ItemUse) -> Vec<ImportBinding> {
+    fn collect(tree: &syn::UseTree, prefix: &[String], bindings: &mut Vec<ImportBinding>) {
+        match tree {
+            syn::UseTree::Path(path) => {
+                let mut nested = prefix.to_vec();
+                nested.push(identifier_name(&path.ident));
+                collect(&path.tree, &nested, bindings);
+            }
+            syn::UseTree::Name(name) => {
+                let identifier = identifier_name(&name.ident);
+                let (source, binding) = if identifier == "self" {
+                    (
+                        prefix.join("::"),
+                        prefix.last().cloned().unwrap_or(identifier),
+                    )
+                } else {
+                    let mut source = prefix.to_vec();
+                    source.push(identifier.clone());
+                    (source.join("::"), identifier)
+                };
+                bindings.push(ImportBinding {
+                    source,
+                    binding: Some(binding),
+                });
+            }
+            syn::UseTree::Rename(rename) => {
+                let identifier = identifier_name(&rename.ident);
+                let source = if identifier == "self" {
+                    prefix.join("::")
+                } else {
+                    let mut source = prefix.to_vec();
+                    source.push(identifier);
+                    source.join("::")
+                };
+                bindings.push(ImportBinding {
+                    source,
+                    binding: Some(identifier_name(&rename.rename)),
+                });
+            }
+            syn::UseTree::Glob(_) => bindings.push(ImportBinding {
+                source: format!("{}::*", prefix.join("::")),
+                binding: None,
+            }),
+            syn::UseTree::Group(group) => {
+                for tree in &group.items {
+                    collect(tree, prefix, bindings);
+                }
+            }
+        }
+    }
+
+    let mut bindings = Vec::new();
+    collect(&item_use.tree, &[], &mut bindings);
+    bindings
+}
+
+fn import_owner(lineage: Option<&str>, binding: &ImportBinding) -> String {
+    let label = binding
+        .binding
+        .as_deref()
+        .map_or_else(|| binding.source.as_str(), |binding| binding);
+    qualify_owner(lineage, &format!("use {label}"))
+}
+
+fn untrusted_allowlisted_macro_import(binding: &ImportBinding) -> bool {
+    let Some(name) = binding.binding.as_deref() else {
+        return false;
+    };
+    match name {
+        "anyhow" => binding.source != "anyhow",
+        "bail" => binding.source != "anyhow::bail",
+        "format" | "matches" | "println" | "vec" | "writeln" => true,
+        _ => false,
+    }
+}
+
+fn analyze_schema_imports(
+    module: Option<&str>,
+    item_use: &syn::ItemUse,
+    analysis: &mut SchemaPolicyAnalysis,
+) {
+    for binding in import_bindings(item_use) {
+        let owner = import_owner(module, &binding);
+        analyze_schema_attributes(&owner, &item_use.attrs, analysis);
+        let Some(name) = binding.binding.as_deref() else {
+            analysis.violations.push(format!(
+                "{owner}: unclassified glob import `{}` can obscure schema or macro provenance",
+                binding.source
+            ));
+            continue;
+        };
+        if name == "schema_version"
+            || binding
+                .source
+                .split("::")
+                .any(|segment| segment == "schema_version")
+        {
+            analysis.direct_uses.push(owner.clone());
+            analysis.violations.push(format!(
+                "{owner}: schema_version import `{}` binds `{name}`",
+                binding.source
+            ));
+        }
+        if untrusted_allowlisted_macro_import(&binding) {
+            analysis.violations.push(format!(
+                "{owner}: untrusted allowlisted macro import `{}` binds `{name}`",
+                binding.source
+            ));
+        }
+    }
+}
+
+fn analyze_render_imports(
+    module: &str,
+    item_use: &syn::ItemUse,
+    inventory: &mut RenderCallInventory,
+) {
+    for binding in import_bindings(item_use) {
+        let owner = import_owner(Some(module), &binding);
+        let Some(name) = binding.binding.as_deref() else {
+            inventory.violations.push(format!(
+                "{owner}: unclassified glob import `{}` can obscure macro provenance",
+                binding.source
+            ));
+            continue;
+        };
+        if untrusted_allowlisted_macro_import(&binding) {
+            inventory.violations.push(format!(
+                "{owner}: untrusted allowlisted macro import `{}` binds `{name}`",
+                binding.source
+            ));
+        }
+    }
 }
 
 struct SchemaExpressionVisitor<'a> {
@@ -2317,6 +2687,15 @@ fn analyze_render_calls_in_items(
     items: &[syn::Item],
     inventory: &mut RenderCallInventory,
 ) {
+    analyze_render_calls_in_items_with_lineage(module, items, false, inventory);
+}
+
+fn analyze_render_calls_in_items_with_lineage(
+    module: &str,
+    items: &[syn::Item],
+    has_enclosing_lineage: bool,
+    inventory: &mut RenderCallInventory,
+) {
     for item in items {
         if has_cfg_test(item_attrs(item)) {
             continue;
@@ -2333,23 +2712,35 @@ fn analyze_render_calls_in_items(
                         .push(format!("{module}: unclassified impl owner"));
                     continue;
                 };
+                let impl_identity = impl_identity(item_impl, &type_name);
+                let lineage = has_enclosing_lineage.then_some(module);
                 for impl_item in &item_impl.items {
                     match impl_item {
                         syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
-                            let owner =
-                                format!("{type_name}::{}", identifier_name(&method.sig.ident));
+                            let owner = qualify_owner(
+                                lineage,
+                                &format!("{impl_identity}::{}", identifier_name(&method.sig.ident)),
+                            );
                             RenderCallVisitor { owner, inventory }.visit_block(&method.block);
                         }
                         syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
-                            let owner =
-                                format!("{type_name}::const {}", identifier_name(&constant.ident));
+                            let owner = qualify_owner(
+                                lineage,
+                                &format!(
+                                    "{impl_identity}::const {}",
+                                    identifier_name(&constant.ident)
+                                ),
+                            );
                             RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
                         }
                         syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
                             RenderCallVisitor {
-                                owner: format!(
-                                    "{type_name}::macro {}",
-                                    macro_path(&item_macro.mac)
+                                owner: qualify_owner(
+                                    lineage,
+                                    &format!(
+                                        "{impl_identity}::macro {}",
+                                        macro_path(&item_macro.mac)
+                                    ),
                                 ),
                                 inventory,
                             }
@@ -2368,13 +2759,17 @@ fn analyze_render_calls_in_items(
                 RenderCallVisitor { owner, inventory }.visit_expr(&static_item.expr);
             }
             syn::Item::Trait(item_trait) => {
+                let trait_identity = qualify_owner(
+                    has_enclosing_lineage.then_some(module),
+                    &format!("trait {}", identifier_name(&item_trait.ident)),
+                );
                 for trait_item in &item_trait.items {
                     match trait_item {
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
                             if let Some(default) = &method.default {
                                 let owner = format!(
                                     "{}::{}",
-                                    identifier_name(&item_trait.ident),
+                                    trait_identity,
                                     identifier_name(&method.sig.ident)
                                 );
                                 RenderCallVisitor { owner, inventory }.visit_block(default);
@@ -2384,7 +2779,7 @@ fn analyze_render_calls_in_items(
                             RenderCallVisitor {
                                 owner: format!(
                                     "{}::macro {}",
-                                    identifier_name(&item_trait.ident),
+                                    trait_identity,
                                     macro_path(&item_macro.mac)
                                 ),
                                 inventory,
@@ -2402,12 +2797,16 @@ fn analyze_render_calls_in_items(
             .inspect_macro(&item_macro.mac),
             syn::Item::Mod(item_mod) => {
                 if let Some((_, nested)) = &item_mod.content {
-                    analyze_render_calls_in_items(
+                    analyze_render_calls_in_items_with_lineage(
                         &format!("{module}::{}", identifier_name(&item_mod.ident)),
                         nested,
+                        true,
                         inventory,
                     );
                 }
+            }
+            syn::Item::Use(item_use) => {
+                analyze_render_imports(module, item_use, inventory);
             }
             _ => {}
         }
@@ -2457,7 +2856,12 @@ impl RenderCallVisitor<'_> {
 impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
         if let syn::Stmt::Item(item) = statement {
-            analyze_render_calls_in_items(&self.owner, std::slice::from_ref(item), self.inventory);
+            analyze_render_calls_in_items_with_lineage(
+                &self.owner,
+                std::slice::from_ref(item),
+                true,
+                self.inventory,
+            );
         } else {
             visit::visit_stmt(self, statement);
         }
