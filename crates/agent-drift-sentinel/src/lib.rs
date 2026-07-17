@@ -87,12 +87,12 @@ pub fn execute(request: &SentinelRequest) -> Result<SentinelResult, SentinelErro
 
     let bundle = input::load_replay_bundle(&request.checkpoint_dir)?;
     let checkpoints = bundle.checkpoints_after(request.cursor.as_ref());
-    let report = operator_surface::render_replay_report(
+    let report = operator_surface::try_render_replay_report(
         &bundle,
         &checkpoints,
         &request.scheduler_policy,
         &request.warning_policy,
-    );
+    )?;
     let adjudication_requests = report
         .visible_warnings
         .iter()

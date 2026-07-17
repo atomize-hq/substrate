@@ -6,10 +6,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] =
-    &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str =
-    "v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, or v0.8";
+use crate::checkpoint_interpretation::{validate_serialized_checkpoint, CheckpointContractError};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CheckpointCursor {
@@ -97,6 +94,15 @@ pub enum InputError {
         field: String,
         reason: String,
     },
+    #[error(
+        "checkpoint {checkpoint_id} with schema {schema_version} violates the typed interpretation contract at {field}: {reason}"
+    )]
+    CheckpointContract {
+        checkpoint_id: String,
+        schema_version: String,
+        field: String,
+        reason: String,
+    },
     #[error("checkpoint bundle {checkpoint_dir} does not contain any checkpoints")]
     EmptyBundle { checkpoint_dir: Utf8PathBuf },
     #[error("checkpoint bundle {checkpoint_dir} mixes schema versions: {versions:?}")]
@@ -125,6 +131,12 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
             checkpoint_dir: checkpoint_dir.to_owned(),
         });
     }
+    let schema_version = checkpoints
+        .first()
+        .map(|checkpoint| checkpoint.schema_version.clone())
+        .ok_or_else(|| InputError::EmptyBundle {
+            checkpoint_dir: checkpoint_dir.to_owned(),
+        })?;
 
     checkpoints.sort_by(|left, right| {
         left.session_id
@@ -143,15 +155,6 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
         return Err(InputError::MixedSchemaVersions {
             checkpoint_dir: checkpoint_dir.to_owned(),
             versions,
-        });
-    }
-
-    let schema_version = versions.pop().expect("versions is not empty");
-    if !SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS.contains(&schema_version.as_str()) {
-        return Err(InputError::UnsupportedSchemaVersion {
-            checkpoint_dir: checkpoint_dir.to_owned(),
-            schema_version,
-            expected_schema_version: SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION,
         });
     }
 
@@ -207,7 +210,8 @@ fn read_checkpoint_jsonl_file(path: &Utf8Path) -> Result<Vec<Checkpoint>, InputE
                 line_number,
                 source,
             })?;
-        validate_checkpoint_contract(path, line_number, &value)?;
+        validate_serialized_checkpoint(&value)
+            .map_err(|error| map_serialized_contract_error(path, line_number, error))?;
 
         let checkpoint =
             serde_json::from_value(value).map_err(|source| InputError::ParseArtifactLine {
@@ -221,181 +225,97 @@ fn read_checkpoint_jsonl_file(path: &Utf8Path) -> Result<Vec<Checkpoint>, InputE
     Ok(checkpoints)
 }
 
-fn validate_checkpoint_contract(
+fn map_serialized_contract_error(
     path: &Utf8Path,
     line_number: usize,
-    checkpoint: &Value,
-) -> Result<(), InputError> {
-    match checkpoint.get("schema_version").and_then(Value::as_str) {
-        Some("v0.3") => validate_drift_score_state_contract(path, line_number, checkpoint, "v0.3"),
-        Some("v0.4") => {
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.4",
-                "turn_context",
-                "v0.4 checkpoints must serialize explicit turn context",
-            )?;
-            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.4")
-        }
-        Some("v0.5") => {
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.5",
-                "turn_context",
-                "v0.5 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.5",
-                "session_archetype",
-                "v0.5 checkpoints must serialize explicit session archetype",
-            )?;
-            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.5")
-        }
-        Some("v0.6") => {
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.6",
-                "turn_context",
-                "v0.6 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.6",
-                "session_archetype",
-                "v0.6 checkpoints must serialize explicit session archetype",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.6",
-                "session_progress",
-                "v0.6 checkpoints must serialize explicit session progress",
-            )?;
-            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.6")
-        }
-        Some("v0.7") => {
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.7",
-                "turn_context",
-                "v0.7 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.7",
-                "session_archetype",
-                "v0.7 checkpoints must serialize explicit session archetype",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.7",
-                "session_progress",
-                "v0.7 checkpoints must serialize explicit session progress",
-            )?;
-            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.7")
-        }
-        Some("v0.8") => {
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "turn_context",
-                "v0.8 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "session_archetype",
-                "v0.8 checkpoints must serialize explicit session archetype",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "session_progress",
-                "v0.8 checkpoints must serialize explicit session progress",
-            )?;
-            require_non_null_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "delegation",
-                "v0.8 checkpoints must serialize analyzer-owned delegation context",
-            )?;
-            validate_drift_score_state_contract(path, line_number, checkpoint, "v0.8")
-        }
-        _ => Ok(()),
-    }
-}
-
-fn require_non_null_field(
-    path: &Utf8Path,
-    line_number: usize,
-    checkpoint: &Value,
-    schema_version: &str,
-    field: &str,
-    reason: &str,
-) -> Result<(), InputError> {
-    if checkpoint.get(field).is_none() || checkpoint.get(field).is_some_and(Value::is_null) {
-        return Err(InputError::ContractGap {
+    error: CheckpointContractError,
+) -> InputError {
+    match error {
+        CheckpointContractError::UnsupportedSchema {
+            checkpoint_id,
+            schema_version,
+            expected,
+        } => InputError::ContractGap {
             path: path.to_owned(),
             line_number,
-            schema_version: schema_version.to_string(),
-            field: field.to_string(),
-            reason: reason.to_string(),
-        });
+            schema_version,
+            field: "schema_version".to_string(),
+            reason: format!("checkpoint {checkpoint_id} must use one of {expected}"),
+        },
+        CheckpointContractError::FieldGap {
+            checkpoint_id,
+            schema_version,
+            field,
+            reason,
+        } => InputError::ContractGap {
+            path: path.to_owned(),
+            line_number,
+            schema_version,
+            field: replay_contract_field(field.as_str()),
+            reason: format!("checkpoint {checkpoint_id}: {reason}"),
+        },
+        CheckpointContractError::CrossSessionHistory {
+            checkpoint_id,
+            session_id,
+            previous_checkpoint_id,
+            previous_session_id,
+        } => InputError::ContractGap {
+            path: path.to_owned(),
+            line_number,
+            schema_version: "<unknown>".to_string(),
+            field: "previous_same_session".to_string(),
+            reason: format!(
+                "checkpoint {checkpoint_id} in session {session_id} cannot use checkpoint {previous_checkpoint_id} from session {previous_session_id}"
+            ),
+        },
     }
-
-    Ok(())
 }
 
-fn validate_drift_score_state_contract(
-    path: &Utf8Path,
-    line_number: usize,
-    checkpoint: &Value,
-    schema_version: &str,
-) -> Result<(), InputError> {
-    let Some(drift_scores) = checkpoint.get("drift_scores").and_then(Value::as_array) else {
-        return Ok(());
-    };
-
-    for (index, score) in drift_scores.iter().enumerate() {
-        if score.get("state").is_none() {
-            return Err(InputError::ContractGap {
-                path: path.to_owned(),
-                line_number,
-                schema_version: schema_version.to_string(),
-                field: format!("drift_scores[{index}].state"),
-                reason:
-                    format!(
-                        "{schema_version} checkpoints must serialize explicit drift state for every drift score"
-                    ),
-            });
-        }
+fn replay_contract_field(field: &str) -> String {
+    if let Some(index) = field
+        .strip_prefix("drift_scores.")
+        .and_then(|suffix| suffix.strip_suffix(".state"))
+    {
+        return format!("drift_scores[{index}].state");
     }
+    field.to_string()
+}
 
-    Ok(())
+pub(crate) fn map_typed_contract_error(error: CheckpointContractError) -> InputError {
+    match error {
+        CheckpointContractError::UnsupportedSchema {
+            checkpoint_id,
+            schema_version,
+            expected,
+        } => InputError::CheckpointContract {
+            checkpoint_id,
+            schema_version,
+            field: "schema_version".to_string(),
+            reason: format!("must use one of {expected}"),
+        },
+        CheckpointContractError::FieldGap {
+            checkpoint_id,
+            schema_version,
+            field,
+            reason,
+        } => InputError::CheckpointContract {
+            checkpoint_id,
+            schema_version,
+            field,
+            reason,
+        },
+        CheckpointContractError::CrossSessionHistory {
+            checkpoint_id,
+            session_id,
+            previous_checkpoint_id,
+            previous_session_id,
+        } => InputError::CheckpointContract {
+            checkpoint_id,
+            schema_version: "<same-session>".to_string(),
+            field: "previous_same_session".to_string(),
+            reason: format!(
+                "session {session_id} cannot use checkpoint {previous_checkpoint_id} from session {previous_session_id}"
+            ),
+        },
+    }
 }

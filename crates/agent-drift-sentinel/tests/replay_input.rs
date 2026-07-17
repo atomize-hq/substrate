@@ -751,3 +751,55 @@ fn replay_input_accepts_legacy_ignoring_repo_truth_rows_while_mapping_to_truth_g
         agent_drift_analyzer::DriftClass::TruthGroundingGap
     );
 }
+
+#[test]
+fn replay_input_retains_artifact_line_for_central_contract_errors() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let checkpoint_dir = root.join("checkpoint");
+    fs::create_dir_all(&checkpoint_dir).expect("create checkpoint dir");
+
+    let mut malformed = checkpoint("session-alpha", 1, 0, false, "continue");
+    malformed.expected_next_step = "   ".to_string();
+    let serialized = serde_json::to_string(&malformed).expect("serialize malformed checkpoint");
+    let checkpoints_path = checkpoint_dir.join("checkpoints.jsonl");
+    fs::write(&checkpoints_path, format!("\n{serialized}\n")).expect("write checkpoints");
+    fs::write(checkpoint_dir.join("summary.md"), sample_summary()).expect("write summary");
+
+    let error = load_replay_bundle(&checkpoint_dir)
+        .expect_err("central serialized contract gaps must fail closed");
+
+    assert!(matches!(
+        error,
+        InputError::ContractGap {
+            ref path,
+            line_number: 2,
+            ref schema_version,
+            ref field,
+            ref reason,
+        } if path == &checkpoints_path
+            && schema_version == "v0.2"
+            && field == "expected_next_step"
+            && reason.contains("non-empty string")
+    ));
+}
+
+#[test]
+fn replay_input_preserves_mixed_version_rejection() {
+    let fixture = ReplayFixture::from_checkpoints(
+        vec![
+            checkpoint("session-alpha", 1, 0, false, "continue"),
+            schema_checkpoint("v0.3", "session-beta", 1, 0, false, "continue"),
+        ],
+        sample_summary(),
+    );
+
+    let error = load_replay_bundle(&fixture.checkpoint_dir)
+        .expect_err("mixed supported schema versions must remain rejected");
+
+    assert!(matches!(
+        error,
+        InputError::MixedSchemaVersions { ref versions, .. }
+            if versions == &["v0.2".to_string(), "v0.3".to_string()]
+    ));
+}

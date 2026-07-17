@@ -8,7 +8,12 @@ use agent_drift_analyzer::{
 };
 use camino::Utf8Path;
 
-use crate::input::{CheckpointCursor, ReplayCheckpointBundle};
+use crate::checkpoint_interpretation::{
+    interpret_checkpoint, CheckpointInterpretation, CheckpointInterpretationInput,
+};
+use crate::input::{
+    map_typed_contract_error, CheckpointCursor, InputError, ReplayCheckpointBundle,
+};
 use crate::scheduler::{
     DecisionReason, EvaluationDecision, ReplayScheduler, SchedulerPolicy, TriggerClass,
 };
@@ -451,6 +456,69 @@ impl ReplayReport {
     }
 }
 
+pub(crate) fn try_render_replay_report(
+    bundle: &ReplayCheckpointBundle,
+    checkpoints: &[Checkpoint],
+    scheduler_policy: &SchedulerPolicy,
+    warning_policy: &WarningPolicy,
+) -> Result<ReplayReport, InputError> {
+    let included_checkpoint_ids = checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.checkpoint_id.as_str())
+        .collect::<HashSet<_>>();
+    let mut previous_by_session = HashMap::new();
+    let mut interpretations = Vec::new();
+
+    for checkpoint in &bundle.checkpoints {
+        let previous_same_session = previous_by_session
+            .get(checkpoint.session_id.as_str())
+            .copied();
+        previous_by_session.insert(checkpoint.session_id.as_str(), checkpoint);
+        if !included_checkpoint_ids.contains(checkpoint.checkpoint_id.as_str()) {
+            continue;
+        }
+
+        interpretations.push(
+            interpret_checkpoint(CheckpointInterpretationInput {
+                checkpoint,
+                previous_same_session,
+            })
+            .map_err(map_typed_contract_error)?,
+        );
+    }
+
+    let mut scheduler = ReplayScheduler::new(*scheduler_policy);
+    let mut visible_warnings = Vec::new();
+    let mut silent_checkpoints = Vec::new();
+    for interpretation in &interpretations {
+        let decision = scheduler.observe(
+            interpretation.cursor.clone(),
+            TriggerClass::CheckpointReady,
+            interpretation.flagged,
+            Some(&interpretation.warning_fingerprint),
+        );
+        let presentation = present_interpretation(
+            interpretation,
+            TriggerClass::CheckpointReady,
+            &decision,
+            warning_policy,
+        );
+        match presentation.disposition {
+            WarningDisposition::Visible => visible_warnings.push(presentation),
+            WarningDisposition::Silent { .. } => silent_checkpoints.push(presentation),
+        }
+    }
+
+    Ok(ReplayReport {
+        checkpoint_dir: bundle.checkpoint_dir.clone(),
+        analyzer_summary_excerpt: bundle.summary_excerpt(4),
+        processed_checkpoints: checkpoints.len(),
+        visible_warnings,
+        silent_checkpoints,
+        next_cursor: checkpoints.last().map(CheckpointCursor::from),
+    })
+}
+
 pub fn render_replay_report(
     bundle: &ReplayCheckpointBundle,
     checkpoints: &[Checkpoint],
@@ -567,6 +635,102 @@ pub fn present_checkpoint_with_previous(
         expected_next_step: checkpoint.expected_next_step.clone(),
         evidence_lines,
     }
+}
+
+pub(crate) fn present_interpretation(
+    interpretation: &CheckpointInterpretation,
+    trigger: TriggerClass,
+    decision: &EvaluationDecision,
+    warning_policy: &WarningPolicy,
+) -> CheckpointPresentation {
+    let checkpoint = &interpretation.checkpoint;
+    let disposition = classify_interpretation(interpretation, decision, warning_policy);
+    let flagged_scores = checkpoint
+        .drift_scores
+        .iter()
+        .filter(|score| score.flagged)
+        .collect::<Vec<_>>();
+    let mut evidence_lines = Vec::new();
+    push_evidence_lines(
+        &mut evidence_lines,
+        &interpretation.evidence,
+        warning_policy.max_evidence_lines,
+    );
+    let severity = interpretation
+        .max_flagged_score
+        .map(severity_for_score)
+        .unwrap_or("low")
+        .to_string();
+
+    CheckpointPresentation {
+        checkpoint: checkpoint.clone(),
+        trigger,
+        posture: interpretation.posture,
+        disposition,
+        severity,
+        headline: format!("{} @ {}", checkpoint.checkpoint_id, format_trigger(trigger)),
+        objective: truncate(
+            &checkpoint.task_frame.objective,
+            warning_policy.max_objective_chars,
+        ),
+        drift_summary: if flagged_scores.is_empty() {
+            "no flagged drift classes".to_string()
+        } else {
+            flagged_scores
+                .iter()
+                .map(|score| {
+                    format!(
+                        "{}={} ({})",
+                        drift_class_name(score.class),
+                        score.raw_score,
+                        confidence_name(score.confidence)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        },
+        diagnostics_summary: CheckpointDiagnosticsSummary::from_checkpoint(checkpoint),
+        expected_next_step: checkpoint.expected_next_step.clone(),
+        evidence_lines,
+    }
+}
+
+fn classify_interpretation(
+    interpretation: &CheckpointInterpretation,
+    decision: &EvaluationDecision,
+    warning_policy: &WarningPolicy,
+) -> WarningDisposition {
+    if !decision.evaluate {
+        return WarningDisposition::Silent {
+            reason: "scheduler cooldown deferred replay evaluation".to_string(),
+        };
+    }
+    if !interpretation.flagged {
+        return WarningDisposition::Silent {
+            reason: "checkpoint recorded without a visible warning".to_string(),
+        };
+    }
+    let Some(max_score) = interpretation.max_flagged_score else {
+        return WarningDisposition::Silent {
+            reason: "checkpoint flagged without a surfaced drift score".to_string(),
+        };
+    };
+    if max_score < warning_policy.minimum_visible_score {
+        return WarningDisposition::Silent {
+            reason: format!(
+                "flagged checkpoint stayed below visible score threshold ({max_score} < {})",
+                warning_policy.minimum_visible_score
+            ),
+        };
+    }
+    if matches!(decision.reason, DecisionReason::WarningDebounced)
+        || !decision.visible_warning_allowed
+    {
+        return WarningDisposition::Silent {
+            reason: "warning debounce suppressed a duplicate replay warning".to_string(),
+        };
+    }
+    WarningDisposition::Visible
 }
 
 fn classify_checkpoint_posture(

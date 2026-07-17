@@ -9,11 +9,107 @@ use agent_drift_analyzer::{
 };
 use agent_drift_sentinel::{
     execute,
-    operator_surface::{present_checkpoint_with_previous, warning_fingerprint, CheckpointPosture},
+    operator_surface::{
+        present_checkpoint_with_previous, render_replay_report, warning_fingerprint,
+        CheckpointPosture, ReplayReport,
+    },
     scheduler::ReplayScheduler,
-    AdjudicationConfig, SchedulerPolicy, SentinelMode, SentinelRequest, TriggerClass,
-    WarningPolicy,
+    AdjudicationConfig, InputError, ReplayCheckpointBundle, SchedulerPolicy, SentinelError,
+    SentinelMode, SentinelRequest, SentinelResult, TriggerClass, WarningPolicy,
 };
+
+#[test]
+fn operator_surface_locks_replay_public_signatures() {
+    let _: fn(&SentinelRequest) -> Result<SentinelResult, SentinelError> = execute;
+    let _: fn(
+        &ReplayCheckpointBundle,
+        &[Checkpoint],
+        &SchedulerPolicy,
+        &WarningPolicy,
+    ) -> ReplayReport = render_replay_report;
+}
+
+#[test]
+fn replay_infallible_facade_preserves_successful_report_behavior() {
+    let fixture = support::ReplayFixture::sample();
+    let request = SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    };
+    let result = execute(&request).expect("run fallible replay core");
+    let checkpoints = result.bundle.checkpoints_after(None);
+
+    let compatibility_report = render_replay_report(
+        &result.bundle,
+        &checkpoints,
+        &request.scheduler_policy,
+        &request.warning_policy,
+    );
+
+    assert_eq!(compatibility_report, result.report);
+}
+
+#[test]
+fn replay_failure_rejects_the_complete_set_before_returning_any_effects() {
+    let mut checkpoints = support::sample_checkpoints();
+    checkpoints[1].expected_next_step = "".to_string();
+    let invalid_checkpoint_id = checkpoints[1].checkpoint_id.clone();
+    let fixture = support::ReplayFixture::from_checkpoints(checkpoints, support::sample_summary());
+
+    let error = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect_err("one invalid selected checkpoint must reject the entire replay result");
+
+    assert!(matches!(
+        error,
+        SentinelError::Input(InputError::ContractGap {
+            line_number: 2,
+            ref schema_version,
+            ref field,
+            ref reason,
+            ..
+        }) if schema_version == "v0.2"
+            && field == "expected_next_step"
+            && reason.contains("non-empty string")
+    ));
+    assert!(error.to_string().contains(&invalid_checkpoint_id));
+}
+
+#[test]
+fn replay_fallible_core_interprets_the_complete_set_before_scheduler_construction() {
+    let source = include_str!("../src/operator_surface.rs");
+    let core_start = source
+        .find("pub(crate) fn try_render_replay_report")
+        .expect("fallible replay core");
+    let core = &source[core_start..];
+    let interpretation = core
+        .find("interpret_checkpoint")
+        .expect("typed interpretation in replay core");
+    let scheduler = core
+        .find("ReplayScheduler::new")
+        .expect("scheduler construction in replay core");
+    let presentation = core
+        .find("present_interpretation")
+        .expect("typed presentation in replay core");
+
+    assert!(interpretation < scheduler);
+    assert!(scheduler < presentation);
+    assert!(!core[..presentation].contains("present_checkpoint_with_previous"));
+
+    let execute_source = include_str!("../src/lib.rs");
+    assert!(execute_source.contains("operator_surface::try_render_replay_report("));
+    assert!(!execute_source.contains("operator_surface::render_replay_report("));
+}
 
 #[test]
 fn operator_surface_renders_evidence_backed_visible_warning_blocks() {
