@@ -805,6 +805,26 @@ fn replay_input_preserves_mixed_version_rejection() {
 }
 
 #[test]
+fn replay_input_preserves_mixed_version_precedence_over_unsupported_schema() {
+    let fixture = ReplayFixture::from_checkpoints(
+        vec![
+            checkpoint("session-alpha", 1, 0, false, "continue"),
+            schema_checkpoint("v9.9", "session-beta", 1, 0, false, "continue"),
+        ],
+        sample_summary(),
+    );
+
+    let error = load_replay_bundle(&fixture.checkpoint_dir)
+        .expect_err("mixed schema versions must take precedence over unsupported-schema errors");
+
+    assert!(matches!(
+        error,
+        InputError::MixedSchemaVersions { ref versions, .. }
+            if versions == &["v0.2".to_string(), "v9.9".to_string()]
+    ));
+}
+
+#[test]
 fn replay_input_preserves_unsupported_schema_error_mapping() {
     let fixture = ReplayFixture::from_checkpoints(
         vec![schema_checkpoint(

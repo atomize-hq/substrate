@@ -116,7 +116,8 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
     let summary_path = checkpoint_dir.join("summary.md");
 
     let summary_markdown = read_text_file(&summary_path)?;
-    let mut checkpoints = read_checkpoint_jsonl_file(checkpoint_dir, &checkpoints_path)?;
+    let (mut checkpoints, deferred_schema_error) =
+        read_checkpoint_jsonl_file(checkpoint_dir, &checkpoints_path)?;
     if checkpoints.is_empty() {
         return Err(InputError::EmptyBundle {
             checkpoint_dir: checkpoint_dir.to_owned(),
@@ -148,6 +149,9 @@ pub fn load_replay_bundle(checkpoint_dir: &Utf8Path) -> Result<ReplayCheckpointB
             versions,
         });
     }
+    if let Some(error) = deferred_schema_error {
+        return Err(error);
+    }
 
     Ok(ReplayCheckpointBundle {
         checkpoint_dir: checkpoint_dir.to_owned(),
@@ -174,7 +178,7 @@ fn read_text_file(path: &Utf8Path) -> Result<String, InputError> {
 fn read_checkpoint_jsonl_file(
     checkpoint_dir: &Utf8Path,
     path: &Utf8Path,
-) -> Result<Vec<Checkpoint>, InputError> {
+) -> Result<(Vec<Checkpoint>, Option<InputError>), InputError> {
     if !path.exists() {
         return Err(InputError::MissingArtifact {
             path: path.to_owned(),
@@ -187,6 +191,7 @@ fn read_checkpoint_jsonl_file(
     })?;
     let reader = BufReader::new(file);
     let mut checkpoints = Vec::new();
+    let mut deferred_schema_error = None;
 
     for (index, line) in reader.lines().enumerate() {
         let line_number = index + 1;
@@ -204,9 +209,16 @@ fn read_checkpoint_jsonl_file(
                 line_number,
                 source,
             })?;
-        validate_serialized_checkpoint(&value).map_err(|error| {
-            map_serialized_contract_error(checkpoint_dir, path, line_number, error)
-        })?;
+        if let Err(error) = validate_serialized_checkpoint(&value) {
+            let error = map_serialized_contract_error(checkpoint_dir, path, line_number, error);
+            if matches!(&error, InputError::UnsupportedSchemaVersion { .. }) {
+                if deferred_schema_error.is_none() {
+                    deferred_schema_error = Some(error);
+                }
+            } else {
+                return Err(error);
+            }
+        }
 
         let checkpoint =
             serde_json::from_value(value).map_err(|source| InputError::ParseArtifactLine {
@@ -217,7 +229,7 @@ fn read_checkpoint_jsonl_file(
         checkpoints.push(checkpoint);
     }
 
-    Ok(checkpoints)
+    Ok((checkpoints, deferred_schema_error))
 }
 
 fn map_serialized_contract_error(
