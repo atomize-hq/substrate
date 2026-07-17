@@ -156,6 +156,21 @@ join are review-clean through `6436289f`, `c519024b`, `de727091`, `717579b0`, an
 respectively. Their joint production integration closeout has not begun, B3.1 is not
 dependency-ready, and no seam is promoted by these bounded prerequisites.
 
+**A1.1d-5I ownership audit:** this investigation adds no seam and changes no row classification.
+It localizes the compatibility failures to existing boundaries:
+
+| Existing owner/boundary | A1.1d-5I repo truth | Bounded remediation responsibility |
+|---|---|---|
+| HostSessionAuthority / `PrivateSubstrateHomeV1` | `trusted_fs.rs` owns ancestor and final-root acceptance. It currently rejects any effective named ACL permission and reports only the requested final home, while a zero-effective default ACL can pass the ancestor check, be inherited, and fail only after candidate creation. | R1's support question is limited to masked non-writing access ACLs. It rejects any effective write bit, every ancestor default ACL before creation, and every malformed/unreadable/ambiguous ACL state; default-ACL support requires a later separately approved contract. It reports the exact offending path, role, ACL kind, and reason. Final-root owner/`0700`/ACL-free rules do not change. |
+| StateStore plus config/policy/inventory consumers | These consumers are entitled only to the already-accepted physical home capability. They do not own prefix selection, ACL repair, installer fallback, or a second ambient-home lookup. | R1/R2 must not move bootstrap or prefix authority into persistence or projections; every consumer continues from the one accepted home. |
+| Product lifecycle entry/child adapters (not a new semantic seam) | Install/uninstall entry points select host context; shim, doctor, service, and helper subprocesses consume it. Current Unix dev/release and Windows dev/release paths contain ambient-home or missing-context fallbacks. | R2 transports one explicit host context across every child and sudo edge. A child cannot reinterpret it or make an outer environment override part of the product contract. This does not assign installer behavior to `SurfaceAdapter / HostExecutionEpisode`. |
+| Generated installation projections (not authority) | `env.sh` encodes selected values; manager scripts may self-derive their install directory; configuration/install-state/version/dependency artifacts may be prefix-relative without encoding the prefix. Current manager scripts prefer a conflicting ambient home over self-location. | R2 proves encoded values, self-derived locations, prefix-relative placement, and every consumer agree with the selected host context. R3 proves accepted-home/later-stage partial failure, exact synchronous rollback, uninstall, and reinstall convergence without deleting unrelated pre-existing state. An abrupt unaccepted invalid candidate remains fail-closed. This does not promote `CompatibilityReadModel`. |
+| RuntimeFamilyRealizationAdapter / platform provisioning boundary | Linux world provisioning consumes the selected host home, but release unit sandbox allowlisting is derived from ambient home. macOS maps the host selection to a distinct Lima guest home/principal; Windows has its own principal/path domain. Static comparison is not native proof. | R2 preserves the host-context commitment and validates an explicit platform-realization mapping rather than equating host and guest paths/principals. The adapter gains no home-selection authority; later Linux/native platform smoke supplies proof. |
+
+The A1.1d-5I failures are installation/bootstrap availability and authority-home correctness defects,
+not evidence of lost world filesystem/network capability, changed policy enforcement, or regressed
+B1 receipt/B2.1 supervisor semantics.
+
 **A1.2a-WB/A1.2a-S closeout:** A1.2a-WB makes Start issuance, application/persistence, and exact
 current-authority resolution enforce the same Host/world-binding matrix while leaving exact binding
 as session-level truth. A1.2a-S applies or exact-joins that authority before transport or legacy

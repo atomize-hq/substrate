@@ -138,21 +138,37 @@ or validation uncertainty fails closed. No path-based descendant operation is pe
 binding.
 
 The trusted-parent owner, mode, and ACL rules prevent a different-principal attacker from replacing
-the child. A1 V1 does not establish a boundary against malicious root or malicious code already
-executing under the same UID, so substitution by either before the first child descriptor is
-acquired is outside the threat model. A1.1d-5 makes no atomic create-and-bind claim and requires no
-privileged creation broker, protected staging root, or root-owned publication protocol. Such a
-broker is an explicit non-goal unless a later separately approved architecture expands the threat
-model.
+the child. For ancestors, access ACL entries are evaluated after their mask and by the authority
+they confer: any effective write bit is rejected after masking, including a write-only entry;
+effective read/search without effective write is not replacement authority and is the bounded
+support question for A1.1d-5R1. A default ACL is not treated as an access ACL because it can be
+inherited by a new child; every ancestor default ACL is rejected before candidate creation in V1,
+and supporting one requires a later separately approved contract. Malformed, unreadable, or
+ambiguous ACL state fails closed. The final root continues to reject every extended access ACL and
+every default ACL, including entries made ineffective by a mask. A1 V1 does not establish a boundary against
+malicious root or malicious code already executing under the same UID, so substitution by either
+before the first child descriptor is acquired is outside the threat model. A1.1d-5 makes no atomic
+create-and-bind claim and requires no privileged creation broker, protected staging root, or
+root-owned publication protocol. Such a broker is an explicit non-goal unless a later separately
+approved architecture expands the threat model.
 
 An existing root, including a custom `SUBSTRATE_HOME`, is accepted only if it already passes the
 same rules. Wrong type, symlink, owner mismatch, `0755`, `0750`, any group/world permission,
 setuid/setgid/sticky or other special bits, foreign or inherited ACL grants, changed identity, or
-an indeterminate check returns exactly this diagnostic shape before any descendant write:
+an indeterminate check fails before any descendant write. The current implementation emits this
+legacy shape:
 
 ```text
 substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by intended uid <uid> with exact mode 0700 and no foreign ACL grants; found <reason>. Existing roots are never repaired; reset it manually and retry.
 ```
+
+R1 replaces that ambiguous attribution with a structured/error-display contract containing the
+requested final home, exact offending path, object role (`ancestor` or `final-root`), ACL kind
+(`access`, `default`, or `unavailable` where applicable), effective authority/reason, and whether
+the rejected candidate was created by the current attempt. It must not print ACL principals,
+unrelated path contents, credentials, or authority/session data. An ancestor failure may not be
+reported as if the final root carried the ACL, and a newly created candidate may not receive the
+pre-existing-root repair instruction.
 
 When privileged execution cannot resolve an intended non-root account, no intended UID exists to
 render in that shape. It fails before inspecting or creating the root with this separate exact
@@ -176,6 +192,67 @@ pre-existing root. No product path chmods, chowns, removes ACLs from, deletes co
 migrates, adopts, converts, or repairs a pre-existing root or falls back to a shared home. Failure
 occurs before config/runtime scaffolding and before any authority marker, key, root, or legacy state
 mutation. Repeating creation against an unchanged valid root is idempotent.
+
+#### `InstallBootstrapContextV1` propagation rules
+
+For the current combined installation/state-root architecture, one selected context is fixed at
+the public install or uninstall entry point:
+
+```rust
+struct InstallBootstrapContextV1 {
+    selected_host_prefix: AbsoluteHostPath,
+    host_substrate_home: AbsoluteHostPath,
+    host_substrate_root: AbsoluteHostPath,
+    intended_host_principal: PlatformPrincipalV1,
+}
+
+struct PlatformBootstrapMappingV1 {
+    host_context_commitment: Digest,
+    platform_instance: PlatformInstanceIdentityV1,
+    realized_substrate_home: AbsolutePlatformPath,
+    realized_principal: PlatformPrincipalV1,
+}
+```
+
+V1 requires `selected_host_prefix == host_substrate_home == host_substrate_root`; this does not
+introduce a separate host install root. `PlatformPrincipalV1` is platform-scoped (for example,
+Unix account plus UID or Windows account plus SID), not a Unix UID imposed on every platform.
+Every host child/helper and sudo boundary that can bootstrap, deploy/remove shims, run a doctor, or
+write/read generated configuration, environment, or install-state data receives the same host
+context explicitly and may not fall back to ambient `$HOME`/`USERPROFILE`.
+
+A platform backend may realize that committed host selection at a distinct native path and
+principal—for example, the Lima guest user's private home. It must produce and consume one explicit
+`PlatformBootstrapMappingV1` bound to the host-context commitment and exact platform instance;
+host and guest paths or principals are not required to be equal. World dependency
+add/remove/sync/rollback, platform provision/enable/disable, service install/restart, and runtime
+provisioning consume either the unchanged host context or that explicit mapping. Neither a backend
+nor `RuntimeFamilyRealizationAdapter` may select an unrelated home. Generated projections must
+distinguish encoded context, self-derived install location, and prefix-relative placement; their
+existence is not proof that earlier children received the context. Install and uninstall select
+the same host authority home from their declared prefix or recorded matching install context; an
+undocumented outer `SUBSTRATE_HOME` override is never required for normal operation.
+
+Partial failure records which current-attempt artifacts were created or managed. Retry exact-joins
+a valid selected home and managed artifacts; it never repairs an invalid pre-existing home.
+Candidate rollback is descriptor-bound: it may remove only an empty candidate created by the
+current attempt after a no-follow lookup beneath the retained parent still joins the exact opened
+candidate identity. It is never recursive; replacement, nonempty state, ambiguity, or an
+`AlreadyExists`/pre-existing candidate fails closed without removal. Recorded prefix-local and
+system-level managed installer artifacts are a separate cleanup class and may be removed only by
+exact manifest identity; broad name-prefix, wildcard, or ambient-home deletion is forbidden.
+Rollback/uninstall must not delete an ambient default home when a different prefix was selected.
+Service cleanup must return recorded binaries, helpers, units/drop-ins, sockets, and runtime
+directories plus installer-created group/membership/ACL-bridge/linger state to the proven
+pre-install state without removing pre-existing account state. A normal install, repeat install, accepted-home/later-
+stage partial failure, synchronous current-attempt rejection with completed exact safe rollback,
+uninstall, and uninstall-followed-by-reinstall must converge on the same selected context. An abrupt
+interruption leaving an unaccepted candidate is revalidated on rerun and accepted only if already
+valid. If it is invalid, `AlreadyExists`/unknown provenance remains fail-closed and the candidate is
+never automatically repaired or removed. Arbitrary invalid-candidate crash-window convergence is
+an unresolved contract gap unless R3 proves the state unreachable after R1; otherwise it requires a
+separately approved provenance/publication mechanism. These rules are the minimum R2/R3 contract;
+they do not prescribe shell implementation mechanics or authorize service mutation in A1.1d-5I.
 
 Exact `0700` applies to the `SUBSTRATE_HOME` root. Existing stricter authority-store descendant
 contracts remain unchanged: authority directories remain owner-only `0700` and authority files

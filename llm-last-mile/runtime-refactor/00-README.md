@@ -188,6 +188,17 @@ recovered through `c519024bd91b6ca6e332d0b8881f7d13ded940e0` and
 `717579b0744154d343985ad439fb8756158f376f`. B1/B2.1-0 is review-clean through
 `83101dcbcc750e6e8fb8979bea19f1f777792188`. Its joint production integration closeout has not
 begun, B3.1 is not dependency-ready, and no seam is promoted.
+
+The internal **A1.1d-5I installer/bootstrap compatibility audit** is now complete at the
+`b29897e0` baseline. It is evidence beneath A1.1d-5, not an A1.1d-6 checkpoint, and it changes no
+broader architecture owner or sequence. The audit proves that the current private-home ancestor
+ACL rule conflates non-writing traversal with replacement authority, custom-prefix authority is
+not propagated across every install/uninstall child, and partial-install cleanup is not
+convergent. Remediation remains unimplemented and is bounded to **A1.1d-5R1 → A1.1d-5R2 →
+A1.1d-5R3**. Until those packets are review-clean and their Linux lifecycle/product smoke passes,
+both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
+remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
+proof is not added as a dependency of the B1/B2.1 corridor.
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before

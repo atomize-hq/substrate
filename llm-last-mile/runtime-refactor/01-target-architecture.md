@@ -286,11 +286,11 @@ If secure gateway handoff is unavailable for a credential-requiring world adapte
 `SUBSTRATE_HOME` contains one operating-system user's configuration, policy, dependency inventory,
 runtime, and authority state. Creating and accepting that root is part of authority bootstrap: the
 physical directory is owned by the intended per-user owner, has exact owner-only mode `0700`
-independent of ambient umask, has no foreign ACL grants, and is opened and revalidated no-follow
-before any descendant bootstrap. Existing nonconforming roots fail closed without chmod, chown,
-ACL removal, migration, adoption, deletion, or other automatic repair. Custom homes remain valid
-only when they satisfy the same contract. Multiple operating-system principals directly sharing
-one `SUBSTRATE_HOME` are unsupported in A1 V1.
+independent of ambient umask, has no access or default extended ACL entry, and is opened and
+revalidated no-follow before any descendant bootstrap. Existing nonconforming roots fail closed
+without chmod, chown, ACL removal, migration, adoption, deletion, or other automatic repair.
+Custom homes remain valid only when they satisfy the same contract. Multiple operating-system
+principals directly sharing one `SUBSTRATE_HOME` are unsupported in A1 V1.
 
 Directory creation and identity acceptance are distinct. `mkdirat` success establishes only a
 candidate name under an already-opened trusted parent; portable Linux/macOS APIs do not atomically
@@ -298,7 +298,14 @@ create a directory and return its inode-bound handle. The accepted `PrivateSubst
 physical identity begins at the first successful no-follow directory open followed by
 descriptor-based owner, type, exact-mode, ACL, filesystem, and physical-identity validation. The
 parent remains descriptor-bound across candidate creation and opening and must already have the
-expected type and owner, no write authority for another principal, and no disallowed ACL grant.
+expected type and owner and no create/delete/rename/replacement authority for another principal.
+Ancestor access ACLs and default ACLs are different security surfaces. A named access entry is
+evaluated after the ACL mask: effective read/search without effective write does not itself grant
+replacement authority, while any effective write bit remains rejected, including write-only
+entries. Default ACLs can be inherited into a new child and are rejected on every ancestor before
+candidate creation in V1; supporting one requires a later separately approved contract. Malformed,
+unreadable, or ambiguous ACL state also fails closed. These ancestor distinctions never weaken the
+final root's exact owner, exact `0700`, and ACL-free requirements.
 Legitimate concurrent Substrate creators converge when one creates and another observes
 `AlreadyExists`: each no-follow opens and validates the candidate, and only its exact accepted
 descriptor identity may proceed.

@@ -374,6 +374,51 @@ Outcome:
   macOS proof on the exact final runtime commit. Linux-only success leaves A1.1d incomplete; it
   cannot close A1.1d or A1, even though the exact integration hold permits A1.1e to proceed.
 
+##### A1.1d-5I — Installer and bootstrap compatibility audit
+
+This is a completed, docs/evidence-only internal investigation packet beneath A1.1d-5. The suffix
+is capital `I`; it is not A1.1d-6, creates no sixth checkpoint, promotes no seam, and changes none
+of the A1.1e/B1/B2.1/B3.1 corridor or B2.2/A1.2/C1 ownership.
+
+At baseline `b29897e0`, the audit proved four remediation groups: ancestor access/default ACL
+semantics and diagnostics; selected prefix/home/root propagation across install and uninstall;
+partial-created-home and managed-artifact cleanup; and missing lifecycle regressions. The bounded
+implementation order is:
+
+1. **A1.1d-5R1 — Ancestor ACL semantics and diagnostics.** Preserve exact-owner, exact `0700`,
+   ACL-free final-root acceptance; limit the unresolved support question to masked non-writing
+   ancestor access ACLs and require R1 security review before any support decision; reject any
+   effective write bit, every ancestor default ACL before creation, and every malformed, unreadable,
+   or ambiguous ACL state; identify the exact offending path/object role/ACL kind/reason without
+   repair or secret disclosure. Supporting a default ACL requires a later separately approved
+   contract.
+2. **A1.1d-5R2 — Prefix propagation across install/uninstall.** Carry the selected
+   host prefix/`SUBSTRATE_HOME`/`SUBSTRATE_ROOT`/intended-principal context across every child and
+   sudo boundary, including shim, world, service, runtime, generated-file, release, dev, and
+   uninstall paths. A platform backend must preserve that host-context commitment through an
+   explicit mapping to its platform-native path/principal; it cannot equate a host path with a
+   Lima/WSL guest path or invent home authority. An outer `SUBSTRATE_HOME` override is diagnostic
+   only and cannot pass the product gate.
+3. **A1.1d-5R3 — Partial-install cleanup and idempotency.** This packet is required by the audit:
+   a default ACL can leave a newly created invalid candidate, and dev uninstall leaves managed
+   gateway symlinks. Candidate cleanup is descriptor-bound and may remove only an empty directory
+   created by the current attempt after a no-follow parent/name lookup still joins its exact opened
+   identity; it is never recursive and replacement, nonempty state, ambiguity, or `AlreadyExists`
+   provenance fails closed. Recorded prefix-local and system-level managed artifacts, including
+   helpers, gateways, units/drop-ins, sockets, and runtime directories, remain separately removable
+   only by exact manifest identity. Broad name-prefix/wildcard deletion is forbidden. R3 must
+   preserve unrelated/pre-existing state and prove convergence after an accepted valid home or a
+   synchronous current-attempt rejection whose exact safe rollback completes, plus uninstall →
+   reinstall. An abrupt interruption that leaves an unaccepted invalid candidate stays fail-closed
+   on rerun and is never automatically repaired or removed; arbitrary crash-window convergence
+   requires a separately approved provenance/publication contract if R3 cannot prove that state is
+   unreachable after R1.
+
+R1, R2, and R3 are not implemented or review-clean. `RG-HOME-01` and `RG-INSTALL-01` remain open.
+Their Linux regression wall and normal product lifecycle smoke are prerequisites for A1.1d Linux
+closeout and for the Linux product-smoke portion of the B1/B2.1 joint closeout. They do not reopen
+the review-clean B1/B2.1-0 prerequisite or make native macOS A1.1d proof a B1/B2.1 dependency.
+
 The new A1.1 module boundary is organizational only and does not change any A1 contract, semantic gate, or later-slice owner. It enforces these additional reviewability constraints: no path-based authority operation after the trusted root opens; no symlink traversal or ambient-CWD authority; exactly one repository-owned canonical codec; exactly one centralized semantic transaction preflight; no legacy/direct writer may bypass `HostSessionAuthority`; key/object/root crash reconciliation is deterministic; and no new dependency is permitted without explicit dependency review. The bounded modules must not perform A2 episode demotion, helper removal, endpoint redesign, receipt work, unrelated StateStore cleanup, or general persistence extraction.
 
 The `RG-AUTH-01` and `RG-AUTH-02` references in A1 are scoped gates, not whole-ledger closure claims. A1 proves only the `Start`/`Attach`/`ResumeOneTurn`, bounded helper-plan, real-REPL, and bounded auto-attach producer clauses named by A1.1–A1.4. General episode loss/demotion, Stop/Fork adoption, unrelated PID/socket consumers, retained workers, and compatibility/persistence separation remain unresolved for A2/A3 or their named later owners.
@@ -382,7 +427,8 @@ The `RG-AUTH-01` and `RG-AUTH-02` references in A1 are scoped gates, not whole-l
 
 - A1.1d-1 through A1.1d-4 implementation remains preserved.
 - A1.1d-5 focused private-home implementation is review-clean on Linux; A1.1d integrated Linux
-  closeout is open and cross-platform closeout is pending.
+  closeout is open and cross-platform closeout is pending. A1.1d-5I has completed the bounded
+  compatibility audit; R1, R2, and R3 remain unimplemented, and no A1.1d-6 exists or is implied.
 - The public lifecycle failure is owned by A1.2/A1.3, not an A1.1d heartbeat or successor-work
   subpacket. No A1.1d-6 exists or is implied.
 - A1.1e is focused-proof and review clean through `cd676614`; this does not close A1.1d or any
