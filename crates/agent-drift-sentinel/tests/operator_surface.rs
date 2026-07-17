@@ -57,6 +57,137 @@ fn operator_surface_locks_all_legacy_presentation_facade_signatures() {
 }
 
 #[test]
+fn legacy_facade_zero_evidence_limit_stops_after_an_empty_first_selected_group() {
+    let decision = EvaluationDecision {
+        evaluate: true,
+        visible_warning_allowed: true,
+        reason: DecisionReason::InitialCheckpoint,
+    };
+    let policy = WarningPolicy {
+        max_evidence_lines: 0,
+        ..WarningPolicy::default()
+    };
+
+    let actual = ["v0.2", "v0.3"]
+        .into_iter()
+        .map(|schema_version| {
+            let checkpoint = checkpoint_with_selected_evidence_groups(
+                schema_version,
+                &[],
+                &["later selected evidence must remain hidden"],
+            );
+            let presentation = present_checkpoint(
+                &checkpoint,
+                TriggerClass::CheckpointReady,
+                &decision,
+                &policy,
+            );
+            (schema_version, presentation.evidence_lines)
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        actual,
+        vec![("v0.2", Vec::new()), ("v0.3", Vec::new())],
+        "legacy and explicit-state facade paths must preserve the pre-R8 first-group stop"
+    );
+}
+
+#[test]
+fn legacy_facade_zero_evidence_limit_keeps_one_item_from_a_nonempty_first_selected_group() {
+    let decision = EvaluationDecision {
+        evaluate: true,
+        visible_warning_allowed: true,
+        reason: DecisionReason::InitialCheckpoint,
+    };
+    let policy = WarningPolicy {
+        max_evidence_lines: 0,
+        ..WarningPolicy::default()
+    };
+
+    let actual = ["v0.2", "v0.3"]
+        .into_iter()
+        .map(|schema_version| {
+            let checkpoint = checkpoint_with_selected_evidence_groups(
+                schema_version,
+                &["first selected evidence survives the zero limit"],
+                &["later selected evidence stays hidden"],
+            );
+            let presentation = present_checkpoint(
+                &checkpoint,
+                TriggerClass::CheckpointReady,
+                &decision,
+                &policy,
+            );
+            (schema_version, presentation.evidence_lines)
+        })
+        .collect::<Vec<_>>();
+
+    for (schema_version, evidence_lines) in actual {
+        assert_eq!(
+            evidence_lines.len(),
+            1,
+            "{schema_version} must preserve the pre-R8 zero-limit first-item behavior"
+        );
+        assert!(evidence_lines[0].contains("first selected evidence survives the zero limit"));
+        assert!(!evidence_lines[0].contains("later selected evidence stays hidden"));
+    }
+}
+
+#[test]
+fn legacy_facade_nonzero_evidence_limit_preserves_selected_group_order_and_boundary() {
+    let decision = EvaluationDecision {
+        evaluate: true,
+        visible_warning_allowed: true,
+        reason: DecisionReason::InitialCheckpoint,
+    };
+    let policy = WarningPolicy {
+        max_evidence_lines: 3,
+        ..WarningPolicy::default()
+    };
+
+    for schema_version in ["v0.2", "v0.3"] {
+        let checkpoint = checkpoint_with_selected_evidence_groups(
+            schema_version,
+            &["first selected evidence one", "first selected evidence two"],
+            &["later selected evidence one", "later selected evidence two"],
+        );
+        let evidence_lines = present_checkpoint(
+            &checkpoint,
+            TriggerClass::CheckpointReady,
+            &decision,
+            &policy,
+        )
+        .evidence_lines;
+
+        assert_eq!(
+            evidence_lines.len(),
+            3,
+            "{schema_version} must apply the nonzero limit across selected groups"
+        );
+        for (index, expected) in [
+            "first selected evidence one",
+            "first selected evidence two",
+            "later selected evidence one",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(
+                evidence_lines[index].contains(expected),
+                "{schema_version} evidence line {index} must preserve selected-group ordering: {evidence_lines:?}"
+            );
+        }
+        assert!(
+            evidence_lines
+                .iter()
+                .all(|line| !line.contains("later selected evidence two")),
+            "{schema_version} must stop at the selected-group boundary after reaching the limit"
+        );
+    }
+}
+
+#[test]
 fn legacy_facade_preserves_delegation_presence_and_unsupported_total_output() {
     let decision = EvaluationDecision {
         evaluate: true,
@@ -3202,6 +3333,56 @@ fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
         syn::Item::Use(item) => &item.attrs,
         _ => &[],
     }
+}
+
+fn checkpoint_with_selected_evidence_groups(
+    schema_version: &str,
+    first_group_reasons: &[&str],
+    later_group_reasons: &[&str],
+) -> Checkpoint {
+    let mut checkpoint = support::checkpoint(
+        "session-evidence-groups",
+        1,
+        80,
+        true,
+        "preserve selected evidence group ordering",
+    );
+    checkpoint.schema_version = schema_version.to_string();
+
+    let evidence = |reasons: &[&str], historical: bool| {
+        reasons
+            .iter()
+            .map(|reason| EvidenceRef {
+                row: checkpoint.boundary.start.clone(),
+                reason: if historical {
+                    format!("historical repeated failure evidence: {reason}")
+                } else {
+                    (*reason).to_string()
+                },
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let mut first_score = checkpoint.drift_scores[0].clone();
+    first_score.class = DriftClass::WrongPlanBranch;
+    first_score.state = DriftState::Active;
+    first_score.flagged = true;
+    first_score.evidence = evidence(first_group_reasons, false);
+
+    let mut later_score = first_score.clone();
+    later_score.class = DriftClass::DeadEndThrash;
+    later_score.state = if schema_version == "v0.2" {
+        DriftState::Cleared
+    } else {
+        DriftState::Recovered
+    };
+    later_score.flagged = false;
+    later_score.evidence = evidence(later_group_reasons, schema_version == "v0.2");
+
+    checkpoint.diagnostics.evidence_item_count =
+        first_score.evidence.len() + later_score.evidence.len();
+    checkpoint.drift_scores = vec![later_score, first_score];
+    checkpoint
 }
 
 #[allow(clippy::too_many_arguments)]

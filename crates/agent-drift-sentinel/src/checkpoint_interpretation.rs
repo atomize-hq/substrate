@@ -92,6 +92,7 @@ pub(crate) struct CheckpointInterpretation {
     pub(crate) max_flagged_score: Option<u8>,
     pub(crate) posture: Option<CheckpointPosture>,
     pub(crate) evidence: Vec<EvidenceRef>,
+    pub(crate) evidence_groups: Vec<Vec<EvidenceRef>>,
     pub(crate) delegation: Option<DelegationContext>,
 }
 
@@ -236,6 +237,12 @@ fn project_checkpoint(
     previous_same_session: Option<&Checkpoint>,
     profile: CheckpointProjectionProfile,
 ) -> CheckpointInterpretation {
+    let evidence_groups = checkpoint_evidence(checkpoint, profile);
+    let mut evidence = Vec::new();
+    for group in &evidence_groups {
+        append_unique(&mut evidence, group);
+    }
+
     CheckpointInterpretation {
         checkpoint: checkpoint.clone(),
         projection_profile: profile,
@@ -249,7 +256,8 @@ fn project_checkpoint(
             .map(|score| score.raw_score)
             .max(),
         posture: checkpoint_posture(checkpoint, previous_same_session, profile),
-        evidence: checkpoint_evidence(checkpoint, profile),
+        evidence,
+        evidence_groups,
         delegation: matches!(
             profile,
             CheckpointProjectionProfile::Schema(CheckpointSchemaVersion::V0_8)
@@ -438,7 +446,7 @@ fn checkpoint_posture(
 fn checkpoint_evidence(
     checkpoint: &Checkpoint,
     profile: CheckpointProjectionProfile,
-) -> Vec<EvidenceRef> {
+) -> Vec<Vec<EvidenceRef>> {
     let mut selected = Vec::new();
     if profile.uses_explicit_state() {
         for state in [
@@ -451,19 +459,19 @@ fn checkpoint_evidence(
                 .iter()
                 .filter(|score| score.state == state)
             {
-                append_unique(&mut selected, &score.evidence);
+                selected.push(score.evidence.clone());
             }
         }
         return selected;
     }
 
     for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
-        append_unique(&mut selected, &score.evidence);
+        selected.push(score.evidence.clone());
     }
     for score in checkpoint.drift_scores.iter().filter(|score| {
         !score.flagged && has_legacy_historical_evidence(score.class, &score.evidence)
     }) {
-        append_unique(&mut selected, &score.evidence);
+        selected.push(score.evidence.clone());
     }
     selected
 }

@@ -615,11 +615,16 @@ pub(crate) fn present_interpretation(
         .filter(|score| score.flagged)
         .collect::<Vec<_>>();
     let mut evidence_lines = Vec::new();
-    push_evidence_lines(
-        &mut evidence_lines,
-        &interpretation.evidence,
-        warning_policy.max_evidence_lines,
-    );
+    for evidence_group in &interpretation.evidence_groups {
+        push_evidence_lines(
+            &mut evidence_lines,
+            evidence_group,
+            warning_policy.max_evidence_lines,
+        );
+        if evidence_lines.len() >= warning_policy.max_evidence_lines {
+            break;
+        }
+    }
     let severity = interpretation
         .max_flagged_score
         .map(severity_for_score)
