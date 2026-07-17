@@ -353,6 +353,55 @@ fn live_checkpoint_compatibility_rejects_v0_8_fixture_missing_delegation() {
 }
 
 #[test]
+fn live_checkpoint_fixture_contract_error_retains_path_line_and_checkpoint_detail() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let fixture_path = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("live-checkpoints.jsonl");
+    let mut checkpoint = schema_checkpoint(
+        "v0.3",
+        "session-invalid-objective",
+        1,
+        88,
+        true,
+        "re-read the implementation plan",
+    );
+    checkpoint.task_frame.objective = "   ".to_string();
+    let record = serde_json::json!({
+        "event_type": "checkpoint_ready",
+        "emission_ordinal": 1,
+        "checkpoint": checkpoint,
+        "source_label": "fixture/live-checkpoints.jsonl:2",
+    });
+    fs::write(
+        fixture_path.as_std_path(),
+        format!(
+            "\n{}\n",
+            serde_json::to_string(&record).expect("record json")
+        ),
+    )
+    .expect("write live fixture");
+
+    let error = load_live_fixture(&fixture_path)
+        .expect_err("blank serialized objective must fail the shared contract");
+
+    assert!(matches!(
+        error,
+        LiveInputError::FixtureContractGap {
+            ref path,
+            line_number: 2,
+            ref schema_version,
+            ref field,
+            ref reason,
+        } if path == &fixture_path
+            && schema_version == "v0.3"
+            && field == "checkpoint.task_frame.objective"
+            && reason.contains("session-invalid-objective:0001")
+            && reason.contains("non-empty string")
+    ));
+}
+
+#[test]
 fn live_checkpoint_compatibility_preserves_v0_3_through_v0_7_behavior() {
     for schema_version in ["v0.3", "v0.4", "v0.5", "v0.6", "v0.7"] {
         let mut checkpoint = schema_checkpoint(

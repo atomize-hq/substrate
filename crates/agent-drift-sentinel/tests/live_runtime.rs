@@ -112,6 +112,89 @@ fn live_runtime_rejects_synthetic_cursor_mismatches() {
 }
 
 #[test]
+fn live_runtime_interpretation_error_preserves_all_runtime_state_and_source_detail() {
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let session_a_first = current_schema_sample_checkpoints()[0].clone();
+    let session_b_first = current_schema_sample_checkpoints()[3].clone();
+
+    runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            session_a_first,
+            Some("fixture/session-a.jsonl:1".to_string()),
+        ))
+        .expect("seed session A");
+    let session_b_observation = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            session_b_first,
+            Some("fixture/session-b.jsonl:1".to_string()),
+        ))
+        .expect("seed session B");
+    let control = runtime.clone();
+    let before = runtime.snapshot();
+
+    let mut invalid_session_a = current_schema_sample_checkpoints()[1].clone();
+    invalid_session_a.task_frame.objective.clear();
+    let error = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            3,
+            invalid_session_a,
+            Some("fixture/session-a.jsonl:9".to_string()),
+        ))
+        .expect_err("typed interpretation failure must stop the live event");
+
+    assert!(matches!(
+        error,
+        LiveRuntimeError::Input(agent_drift_sentinel::LiveInputError::CompatibilityGap {
+            ref checkpoint_id,
+            field: "task_frame.objective",
+            ref reason,
+        }) if checkpoint_id == "session-alpha:0002"
+            && reason.contains("fixture/session-a.jsonl:9")
+            && reason.contains("non-empty string")
+    ));
+    assert_eq!(runtime.snapshot(), before);
+
+    let mut control = control;
+    let synthetic = LiveCheckpointEvent::heartbeat(
+        4,
+        session_b_observation.event.cursor.clone(),
+        Some("fixture/session-b.jsonl:2".to_string()),
+    );
+    assert_eq!(
+        runtime
+            .observe(synthetic.clone())
+            .expect("runtime remains on session B"),
+        control
+            .observe(synthetic)
+            .expect("control remains on session B")
+    );
+
+    let valid_session_a = current_schema_sample_checkpoints()[1].clone();
+    let resumed = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            5,
+            valid_session_a.clone(),
+            Some("fixture/session-a.jsonl:10".to_string()),
+        ))
+        .expect("session A resumes from its accepted history");
+    let control_resumed = control
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            5,
+            valid_session_a,
+            Some("fixture/session-a.jsonl:10".to_string()),
+        ))
+        .expect("control session A resumes from its accepted history");
+
+    assert_eq!(resumed, control_resumed);
+    assert_eq!(
+        resumed.presentation.posture,
+        Some(CheckpointPosture::Active)
+    );
+}
+
+#[test]
 fn live_runtime_preserves_posture_on_repeated_failure_fast_paths() {
     let checkpoints = vec![
         checkpoint_with_state(

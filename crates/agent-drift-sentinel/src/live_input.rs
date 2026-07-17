@@ -6,14 +6,12 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::checkpoint_interpretation::{
+    interpret_checkpoint, validate_serialized_checkpoint, CheckpointContractError,
+    CheckpointInterpretation, CheckpointInterpretationInput,
+};
 use crate::input::CheckpointCursor;
-use crate::operator_surface::warning_fingerprint;
 use crate::scheduler::TriggerClass;
-
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS: &[&str] =
-    &["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"];
-const SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION: &str =
-    "v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, or v0.8";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCheckpointEvent {
@@ -105,6 +103,17 @@ pub struct LiveCheckpointCompatibility {
     pub warning_fingerprint: String,
     pub max_flagged_score: Option<u8>,
     pub flagged: bool,
+}
+
+impl LiveCheckpointCompatibility {
+    pub(crate) fn from_interpretation(interpretation: &CheckpointInterpretation) -> Self {
+        Self {
+            cursor: interpretation.cursor.clone(),
+            warning_fingerprint: interpretation.warning_fingerprint.clone(),
+            max_flagged_score: interpretation.max_flagged_score,
+            flagged: interpretation.flagged,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -363,91 +372,22 @@ pub fn validate_live_event_sequence(events: &[LiveCheckpointEvent]) -> Result<()
 pub fn verify_live_checkpoint_compatibility(
     checkpoint: &Checkpoint,
 ) -> Result<LiveCheckpointCompatibility, LiveInputError> {
-    if !SUPPORTED_ANALYZER_CHECKPOINT_SCHEMAS.contains(&checkpoint.schema_version.as_str()) {
-        return Err(compatibility_gap(
-            checkpoint,
-            "schema_version",
-            format!(
-                "expected {} but found {}",
-                SUPPORTED_ANALYZER_CHECKPOINT_SCHEMA_DESCRIPTION, checkpoint.schema_version
-            ),
-        ));
-    }
-    if checkpoint.session_id.trim().is_empty() {
-        return Err(compatibility_gap(
-            checkpoint,
-            "session_id",
-            "empty session identifier".to_string(),
-        ));
-    }
-    if checkpoint.checkpoint_id.trim().is_empty() {
-        return Err(compatibility_gap(
-            checkpoint,
-            "checkpoint_id",
-            "empty checkpoint identifier".to_string(),
-        ));
-    }
-    if checkpoint.task_frame.objective.trim().is_empty() {
-        return Err(compatibility_gap(
-            checkpoint,
-            "task_frame.objective",
-            "empty objective prevents live warning summaries".to_string(),
-        ));
-    }
-    if checkpoint.expected_next_step.trim().is_empty() {
-        return Err(compatibility_gap(
-            checkpoint,
-            "expected_next_step",
-            "empty expected next step prevents operator guidance".to_string(),
-        ));
-    }
-    if schema_requires_turn_context(&checkpoint.schema_version) && checkpoint.turn_context.is_none()
-    {
-        return Err(compatibility_gap(
-            checkpoint,
-            "turn_context",
-            format!(
-                "{} checkpoints must carry explicit turn context",
-                checkpoint.schema_version
-            ),
-        ));
-    }
-    if schema_requires_session_archetype(&checkpoint.schema_version)
-        && checkpoint.session_archetype.is_none()
-    {
-        return Err(compatibility_gap(
-            checkpoint,
-            "session_archetype",
-            format!(
-                "{} checkpoints must carry explicit session archetype",
-                checkpoint.schema_version
-            ),
-        ));
-    }
-    if schema_requires_session_progress(&checkpoint.schema_version)
-        && checkpoint.session_progress.is_none()
-    {
-        return Err(compatibility_gap(
-            checkpoint,
-            "session_progress",
-            format!(
-                "{} checkpoints must carry explicit session progress",
-                checkpoint.schema_version
-            ),
-        ));
-    }
+    let interpretation = interpret_live_checkpoint(checkpoint, None, None)?;
+    Ok(LiveCheckpointCompatibility::from_interpretation(
+        &interpretation,
+    ))
+}
 
-    Ok(LiveCheckpointCompatibility {
-        cursor: CheckpointCursor::from(checkpoint),
-        warning_fingerprint: warning_fingerprint(checkpoint),
-        max_flagged_score: checkpoint
-            .drift_scores
-            .iter()
-            .filter(|score| score.flagged)
-            .map(|score| score.raw_score)
-            .max(),
-        flagged: checkpoint.flagged,
+pub(crate) fn interpret_live_checkpoint(
+    checkpoint: &Checkpoint,
+    previous_same_session: Option<&Checkpoint>,
+    source_label: Option<&str>,
+) -> Result<CheckpointInterpretation, LiveInputError> {
+    interpret_checkpoint(CheckpointInterpretationInput {
+        checkpoint,
+        previous_same_session,
     })
+    .map_err(|error| map_typed_contract_error(error, source_label))
 }
 
 fn validate_live_fixture_contract(
@@ -462,219 +402,138 @@ fn validate_live_fixture_contract(
     let Some(checkpoint) = record.get("checkpoint") else {
         return Ok(());
     };
-    match checkpoint.get("schema_version").and_then(Value::as_str) {
-        Some("v0.3") => {
-            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.3")
-        }
-        Some("v0.4") => {
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.4",
-                "checkpoint.turn_context",
-                "turn_context",
-                "v0.4 checkpoints must serialize explicit turn context",
-            )?;
-            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.4")
-        }
-        Some("v0.5") => {
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.5",
-                "checkpoint.turn_context",
-                "turn_context",
-                "v0.5 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.5",
-                "checkpoint.session_archetype",
-                "session_archetype",
-                "v0.5 checkpoints must serialize explicit session archetype",
-            )?;
-            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.5")
-        }
-        Some("v0.6") => {
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.6",
-                "checkpoint.turn_context",
-                "turn_context",
-                "v0.6 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.6",
-                "checkpoint.session_archetype",
-                "session_archetype",
-                "v0.6 checkpoints must serialize explicit session archetype",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.6",
-                "checkpoint.session_progress",
-                "session_progress",
-                "v0.6 checkpoints must serialize explicit session progress",
-            )?;
-            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.6")
-        }
-        Some("v0.7") => {
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.7",
-                "checkpoint.turn_context",
-                "turn_context",
-                "v0.7 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.7",
-                "checkpoint.session_archetype",
-                "session_archetype",
-                "v0.7 checkpoints must serialize explicit session archetype",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.7",
-                "checkpoint.session_progress",
-                "session_progress",
-                "v0.7 checkpoints must serialize explicit session progress",
-            )?;
-            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.7")
-        }
-        Some("v0.8") => {
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "checkpoint.turn_context",
-                "turn_context",
-                "v0.8 checkpoints must serialize explicit turn context",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "checkpoint.session_archetype",
-                "session_archetype",
-                "v0.8 checkpoints must serialize explicit session archetype",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "checkpoint.session_progress",
-                "session_progress",
-                "v0.8 checkpoints must serialize explicit session progress",
-            )?;
-            require_non_null_fixture_field(
-                path,
-                line_number,
-                checkpoint,
-                "v0.8",
-                "checkpoint.delegation",
-                "delegation",
-                "v0.8 checkpoints must serialize analyzer-owned delegation context",
-            )?;
-            validate_fixture_drift_score_state_contract(path, line_number, checkpoint, "v0.8")
-        }
-        _ => Ok(()),
-    }
+    validate_serialized_checkpoint(checkpoint)
+        .map(|_| ())
+        .map_err(|error| map_serialized_contract_error(path, line_number, error))
 }
 
-fn require_non_null_fixture_field(
+fn map_serialized_contract_error(
     path: &Utf8Path,
     line_number: usize,
-    checkpoint: &Value,
-    schema_version: &str,
-    error_field: &str,
-    lookup_field: &str,
-    reason: &str,
-) -> Result<(), LiveInputError> {
-    if checkpoint.get(lookup_field).is_none()
-        || checkpoint.get(lookup_field).is_some_and(Value::is_null)
-    {
-        return Err(LiveInputError::FixtureContractGap {
+    error: CheckpointContractError,
+) -> LiveInputError {
+    match error {
+        CheckpointContractError::UnsupportedSchema {
+            checkpoint_id,
+            schema_version,
+            expected,
+        } => LiveInputError::FixtureContractGap {
             path: path.to_owned(),
             line_number,
-            schema_version: schema_version.to_string(),
-            field: error_field.to_string(),
-            reason: reason.to_string(),
-        });
+            schema_version: schema_version.clone(),
+            field: "checkpoint.schema_version".to_string(),
+            reason: format!(
+                "checkpoint {checkpoint_id}: expected {expected} but found {schema_version}"
+            ),
+        },
+        CheckpointContractError::FieldGap {
+            checkpoint_id,
+            schema_version,
+            field,
+            reason,
+        } => LiveInputError::FixtureContractGap {
+            path: path.to_owned(),
+            line_number,
+            schema_version,
+            field: serialized_contract_field(field.as_str()),
+            reason: format!("checkpoint {checkpoint_id}: {reason}"),
+        },
+        CheckpointContractError::CrossSessionHistory {
+            checkpoint_id,
+            session_id,
+            previous_checkpoint_id,
+            previous_session_id,
+        } => LiveInputError::FixtureContractGap {
+            path: path.to_owned(),
+            line_number,
+            schema_version: "<unknown>".to_string(),
+            field: "checkpoint.previous_same_session".to_string(),
+            reason: format!(
+                "checkpoint {checkpoint_id} in session {session_id} cannot use checkpoint {previous_checkpoint_id} from session {previous_session_id}"
+            ),
+        },
     }
-
-    Ok(())
 }
 
-fn schema_requires_turn_context(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.4" | "v0.5" | "v0.6" | "v0.7" | "v0.8")
-}
-
-fn schema_requires_session_archetype(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.5" | "v0.6" | "v0.7" | "v0.8")
-}
-
-fn schema_requires_session_progress(schema_version: &str) -> bool {
-    matches!(schema_version, "v0.6" | "v0.7" | "v0.8")
-}
-
-fn validate_fixture_drift_score_state_contract(
-    path: &Utf8Path,
-    line_number: usize,
-    checkpoint: &Value,
-    schema_version: &str,
-) -> Result<(), LiveInputError> {
-    let Some(drift_scores) = checkpoint.get("drift_scores").and_then(Value::as_array) else {
-        return Ok(());
-    };
-
-    for (index, score) in drift_scores.iter().enumerate() {
-        if score.get("state").is_none() {
-            return Err(LiveInputError::FixtureContractGap {
-                path: path.to_owned(),
-                line_number,
-                schema_version: schema_version.to_string(),
-                field: format!("checkpoint.drift_scores[{index}].state"),
-                reason:
-                    format!(
-                        "{schema_version} checkpoints must serialize explicit drift state for every drift score"
-                    ),
-            });
-        }
+fn serialized_contract_field(field: &str) -> String {
+    if let Some(index) = field
+        .strip_prefix("drift_scores.")
+        .and_then(|suffix| suffix.strip_suffix(".state"))
+    {
+        return format!("checkpoint.drift_scores[{index}].state");
     }
-
-    Ok(())
+    format!("checkpoint.{field}")
 }
 
-fn compatibility_gap(
-    checkpoint: &Checkpoint,
-    field: &'static str,
-    reason: String,
+fn map_typed_contract_error(
+    error: CheckpointContractError,
+    source_label: Option<&str>,
 ) -> LiveInputError {
+    let (checkpoint_id, field, reason) = match error {
+        CheckpointContractError::UnsupportedSchema {
+            checkpoint_id,
+            schema_version,
+            expected,
+        } => (
+            checkpoint_id,
+            "schema_version",
+            format!("expected {expected} but found {schema_version}"),
+        ),
+        CheckpointContractError::FieldGap {
+            checkpoint_id,
+            schema_version,
+            field,
+            reason,
+        } => {
+            let (field, reason) = if let Some(field) = typed_contract_field(field.as_str()) {
+                (field, reason)
+            } else {
+                ("checkpoint_contract", format!("field {field}: {reason}"))
+            };
+            (
+                checkpoint_id,
+                field,
+                format!("schema {schema_version}: {reason}"),
+            )
+        }
+        CheckpointContractError::CrossSessionHistory {
+            checkpoint_id,
+            session_id,
+            previous_checkpoint_id,
+            previous_session_id,
+        } => (
+            checkpoint_id,
+            "previous_same_session",
+            format!(
+                "session {session_id} cannot use checkpoint {previous_checkpoint_id} from session {previous_session_id}"
+            ),
+        ),
+    };
+    let reason = if let Some(source_label) = source_label {
+        format!("{reason}; live source {source_label}")
+    } else {
+        reason
+    };
     LiveInputError::CompatibilityGap {
-        checkpoint_id: checkpoint.checkpoint_id.clone(),
+        checkpoint_id,
         field,
         reason,
+    }
+}
+
+fn typed_contract_field(field: &str) -> Option<&'static str> {
+    match field {
+        "schema_version" => Some("schema_version"),
+        "session_id" => Some("session_id"),
+        "checkpoint_id" => Some("checkpoint_id"),
+        "task_frame.objective" => Some("task_frame.objective"),
+        "expected_next_step" => Some("expected_next_step"),
+        "turn_context" => Some("turn_context"),
+        "session_archetype" => Some("session_archetype"),
+        "session_progress" => Some("session_progress"),
+        "previous.schema_version" => Some("previous.schema_version"),
+        "previous_same_session" => Some("previous_same_session"),
+        _ => None,
     }
 }
 

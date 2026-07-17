@@ -4,12 +4,10 @@ use agent_drift_analyzer::Checkpoint;
 
 use crate::input::CheckpointCursor;
 use crate::live_input::{
-    verify_live_checkpoint_compatibility, LiveCheckpointCompatibility, LiveCheckpointEvent,
+    interpret_live_checkpoint, LiveCheckpointCompatibility, LiveCheckpointEvent,
     LiveCheckpointSource, LiveInputError,
 };
-use crate::operator_surface::{
-    present_checkpoint_with_previous, CheckpointPresentation, WarningPolicy,
-};
+use crate::operator_surface::{present_interpretation, CheckpointPresentation, WarningPolicy};
 use crate::scheduler::{
     EvaluationDecision, ReplayScheduler, SchedulerPolicy, SchedulerState, TriggerClass,
 };
@@ -102,62 +100,52 @@ impl LiveRuntime {
         &mut self,
         event: LiveCheckpointEvent,
     ) -> Result<LiveObservation, LiveRuntimeError> {
-        let (checkpoint, previous_checkpoint, compatibility) =
-            if let Some(checkpoint) = event.checkpoint.as_ref() {
-                let previous_checkpoint = self
-                    .latest_checkpoint_by_session
-                    .get(checkpoint.session_id.as_str())
-                    .cloned();
-                let compatibility = verify_live_checkpoint_compatibility(checkpoint)?;
-                if compatibility.cursor != event.cursor {
-                    return Err(LiveRuntimeError::CursorMismatch {
-                        trigger: trigger_name(event.trigger),
-                        expected_session_id: compatibility.cursor.session_id,
-                        expected_ordinal: compatibility.cursor.ordinal,
-                        actual_session_id: event.cursor.session_id.clone(),
-                        actual_ordinal: event.cursor.ordinal,
-                    });
+        let (interpretation, compatibility) = if let Some(checkpoint) = event.checkpoint.as_ref() {
+            let previous_checkpoint = self
+                .latest_checkpoint_by_session
+                .get(checkpoint.session_id.as_str())
+                .cloned();
+            let interpretation = interpret_live_checkpoint(
+                checkpoint,
+                previous_checkpoint.as_ref(),
+                event.source_label.as_deref(),
+            )?;
+            let compatibility = LiveCheckpointCompatibility::from_interpretation(&interpretation);
+            ensure_cursor_matches(&event, &compatibility)?;
+
+            self.previous_checkpoint = previous_checkpoint;
+            self.latest_checkpoint_by_session
+                .insert(checkpoint.session_id.clone(), checkpoint.clone());
+            self.latest_checkpoint = Some(checkpoint.clone());
+            self.latest_compatibility = Some(compatibility.clone());
+            (interpretation, compatibility)
+        } else {
+            let checkpoint = self.latest_checkpoint.as_ref().cloned().ok_or_else(|| {
+                LiveRuntimeError::MissingCheckpoint {
+                    trigger: trigger_name(event.trigger),
+                    actual_session_id: event.cursor.session_id.clone(),
+                    actual_ordinal: event.cursor.ordinal,
                 }
-                self.previous_checkpoint = previous_checkpoint.clone();
-                self.latest_checkpoint_by_session
-                    .insert(checkpoint.session_id.clone(), checkpoint.clone());
-                self.latest_checkpoint = Some(checkpoint.clone());
-                self.latest_compatibility = Some(compatibility.clone());
-                (checkpoint.clone(), previous_checkpoint, compatibility)
-            } else {
-                let checkpoint = self.latest_checkpoint.as_ref().cloned().ok_or_else(|| {
-                    LiveRuntimeError::MissingCheckpoint {
-                        trigger: trigger_name(event.trigger),
-                        actual_session_id: event.cursor.session_id.clone(),
-                        actual_ordinal: event.cursor.ordinal,
-                    }
-                })?;
-                let compatibility = self
-                    .latest_compatibility
-                    .as_ref()
-                    .cloned()
-                    .expect("latest compatibility tracks latest checkpoint");
-                if compatibility.cursor != event.cursor {
-                    return Err(LiveRuntimeError::CursorMismatch {
-                        trigger: trigger_name(event.trigger),
-                        expected_session_id: compatibility.cursor.session_id,
-                        expected_ordinal: compatibility.cursor.ordinal,
-                        actual_session_id: event.cursor.session_id.clone(),
-                        actual_ordinal: event.cursor.ordinal,
-                    });
-                }
-                (checkpoint, self.previous_checkpoint.clone(), compatibility)
-            };
+            })?;
+            let previous_checkpoint = self.previous_checkpoint.clone();
+            let interpretation = interpret_live_checkpoint(
+                &checkpoint,
+                previous_checkpoint.as_ref(),
+                event.source_label.as_deref(),
+            )?;
+            let compatibility = LiveCheckpointCompatibility::from_interpretation(&interpretation);
+            ensure_cursor_matches(&event, &compatibility)?;
+            (interpretation, compatibility)
+        };
 
         let decision = self.scheduler.observe(
             event.cursor.clone(),
             event.trigger,
-            checkpoint.flagged,
-            Some(&compatibility.warning_fingerprint),
+            interpretation.flagged,
+            Some(&interpretation.warning_fingerprint),
         );
-        let presentation = present_checkpoint_with_previous(
-            &checkpoint,
-            previous_checkpoint.as_ref(),
+        let presentation = present_interpretation(
+            &interpretation,
             event.trigger,
             &decision,
             &self.warning_policy,
@@ -185,6 +173,22 @@ impl LiveRuntime {
         }
         Ok(observations)
     }
+}
+
+fn ensure_cursor_matches(
+    event: &LiveCheckpointEvent,
+    compatibility: &LiveCheckpointCompatibility,
+) -> Result<(), LiveRuntimeError> {
+    if compatibility.cursor == event.cursor {
+        return Ok(());
+    }
+    Err(LiveRuntimeError::CursorMismatch {
+        trigger: trigger_name(event.trigger),
+        expected_session_id: compatibility.cursor.session_id.clone(),
+        expected_ordinal: compatibility.cursor.ordinal,
+        actual_session_id: event.cursor.session_id.clone(),
+        actual_ordinal: event.cursor.ordinal,
+    })
 }
 
 fn trigger_name(trigger: TriggerClass) -> &'static str {

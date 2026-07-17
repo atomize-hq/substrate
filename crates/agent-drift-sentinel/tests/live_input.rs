@@ -3,7 +3,8 @@
 mod support;
 
 use agent_drift_sentinel::{
-    validate_live_event_sequence, CheckpointCursor, LiveCheckpointEvent, LiveInputError,
+    validate_live_event_sequence, verify_live_checkpoint_compatibility, CheckpointCursor,
+    LiveCheckpointEvent, LiveInputError,
 };
 
 fn current_schema_checkpoint(
@@ -82,5 +83,30 @@ fn live_input_rejects_trigger_before_first_checkpoint() {
     assert!(matches!(
         error,
         LiveInputError::SyntheticEventBeforeCheckpoint { .. }
+    ));
+}
+
+#[test]
+fn live_input_typed_contract_error_retains_checkpoint_and_field_detail() {
+    let mut checkpoint = current_schema_checkpoint(
+        "session-invalid-next-step",
+        4,
+        60,
+        true,
+        "repair the implementation",
+    );
+    checkpoint.expected_next_step.clear();
+
+    let error = verify_live_checkpoint_compatibility(&checkpoint)
+        .expect_err("blank expected next step must fail the shared contract");
+
+    assert!(matches!(
+        error,
+        LiveInputError::CompatibilityGap {
+            ref checkpoint_id,
+            field: "expected_next_step",
+            ref reason,
+        } if checkpoint_id == "session-invalid-next-step:0004"
+            && reason.contains("non-empty string")
     ));
 }
