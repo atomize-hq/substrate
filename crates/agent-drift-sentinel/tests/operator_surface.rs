@@ -2033,6 +2033,325 @@ fn ast_policy_self_test_visits_all_compile_valid_trait_type_surfaces() {
 }
 
 #[test]
+fn ast_policy_self_test_visits_compile_valid_trait_const_generic_defaults() {
+    let source = r#"
+        #![allow(dead_code)]
+
+        struct Checkpoint;
+
+        impl Checkpoint {
+            const schema_version: u8 = 8;
+        }
+
+        struct CheckpointPresentation;
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {}
+        }
+
+        trait HiddenConstDefault<
+            const HIDDEN: usize = {
+                let _render = CheckpointPresentation::render_console_block;
+                (Checkpoint::schema_version == 8) as usize
+            },
+        > {}
+    "#;
+    assert_rust_fixture_compiles("trait_const_generic_default", source);
+    let file = syn::parse_file(source).expect("parse trait const-generic default fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["trait HiddenConstDefault".to_string()],
+        "a trait const-generic default must retain the trait owner"
+    );
+    assert!(schema
+        .violations
+        .iter()
+        .any(|violation| violation == "trait HiddenConstDefault: qualified schema_version path"));
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("trait_default", &file.items, &mut calls);
+    assert_eq!(
+        calls.violations,
+        vec![concat!(
+            "trait HiddenConstDefault: ",
+            "unclassified render_console_block path reference"
+        )],
+        "a render reference in a trait const-generic default must fail closed"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_visits_compile_valid_trait_supertrait_const_arguments() {
+    let source = r#"
+        #![allow(dead_code)]
+
+        struct Checkpoint;
+
+        impl Checkpoint {
+            const schema_version: u8 = 8;
+        }
+
+        struct CheckpointPresentation;
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {}
+        }
+
+        trait ConstArgument<const VALUE: usize> {}
+
+        trait HiddenSupertrait: ConstArgument<{
+            let _render = CheckpointPresentation::render_console_block;
+            (Checkpoint::schema_version == 8) as usize
+        }> {}
+    "#;
+    assert_rust_fixture_compiles("trait_supertrait_const_argument", source);
+    let file = syn::parse_file(source).expect("parse trait supertrait const-argument fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["trait HiddenSupertrait".to_string()],
+        "a supertrait const argument must retain the trait owner"
+    );
+    assert!(schema
+        .violations
+        .iter()
+        .any(|violation| violation == "trait HiddenSupertrait: qualified schema_version path"));
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("trait_supertrait", &file.items, &mut calls);
+    assert_eq!(
+        calls.violations,
+        vec![concat!(
+            "trait HiddenSupertrait: ",
+            "unclassified render_console_block path reference"
+        )],
+        "a render reference in a supertrait const argument must fail closed"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_visits_compile_valid_free_fn_parameter_types() {
+    let source = r#"
+        #![allow(dead_code)]
+
+        struct Checkpoint;
+
+        impl Checkpoint {
+            const schema_version: u8 = 8;
+        }
+
+        struct CheckpointPresentation;
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {}
+        }
+
+        fn hidden_parameter(_: [(); {
+            let _render = CheckpointPresentation::render_console_block;
+            (Checkpoint::schema_version == 8) as usize
+        }]) {}
+    "#;
+    assert_rust_fixture_compiles("free_fn_parameter_type", source);
+    let file = syn::parse_file(source).expect("parse free-fn parameter type fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["hidden_parameter".to_string()],
+        "a free-function parameter type must retain the function owner"
+    );
+    assert!(schema
+        .violations
+        .iter()
+        .any(|violation| violation == "hidden_parameter: qualified schema_version path"));
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("free_fn", &file.items, &mut calls);
+    assert_eq!(
+        calls.violations,
+        vec![concat!(
+            "free_fn::hidden_parameter: ",
+            "unclassified render_console_block path reference"
+        )],
+        "a render reference in a free-function parameter type must fail closed"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_visits_all_item_impl_and_foreign_header_surfaces() {
+    const MARKER: &str = r#"{
+        let _render = CheckpointPresentation::render_console_block;
+        (Checkpoint::schema_version == 8) as usize
+    }"#;
+
+    let cases = [
+        (
+            "free function signature",
+            "fn free<T: Bound<$M>>(_: [(); $M]) -> [(); $M] where T: Other<$M> { loop {} }",
+            "free",
+            "headers::free",
+            4,
+        ),
+        (
+            "const type",
+            "const VALUE: [(); $M] = [];",
+            "const VALUE",
+            "headers::const VALUE",
+            1,
+        ),
+        (
+            "static type",
+            "static VALUE: [(); $M] = [];",
+            "static VALUE",
+            "headers::static VALUE",
+            1,
+        ),
+        (
+            "type alias generics, where clause, and type",
+            "type Alias<const N: usize = $M, T> where T: Bound<$M> = [(); $M];",
+            "type Alias",
+            "type Alias",
+            3,
+        ),
+        (
+            "struct generics, where clause, and field type",
+            "struct Struct<const N: usize = $M, T> where T: Bound<$M> { field: [(); $M] }",
+            "struct Struct",
+            "struct Struct",
+            3,
+        ),
+        (
+            "enum generics, where clause, field type, and discriminant",
+            concat!(
+                "enum Enum<const N: usize = $M, T> where T: Bound<$M> { ",
+                "Field([(); $M]), Discriminant = $M }"
+            ),
+            "enum Enum",
+            "enum Enum",
+            4,
+        ),
+        (
+            "union generics, where clause, and field type",
+            concat!(
+                "union Union<const N: usize = $M, T> where T: Bound<$M> { ",
+                "field: ManuallyDrop<[(); $M]> }"
+            ),
+            "union Union",
+            "union Union",
+            3,
+        ),
+        (
+            "trait generics, supertraits, and where clause",
+            "trait Trait<const N: usize = $M, T>: Bound<$M> where T: Other<$M> {}",
+            "trait Trait",
+            "trait Trait",
+            3,
+        ),
+        (
+            "trait alias generics, bounds, and where clause",
+            "trait Alias<const N: usize = $M, T> = Bound<$M> where T: Other<$M>;",
+            "trait alias Alias",
+            "trait alias Alias",
+            3,
+        ),
+        (
+            "impl generics, trait, self type, and where clause",
+            concat!(
+                "impl<T: Bound<$M>> Trait<$M> for Target<$M> ",
+                "where T: Other<$M> {}"
+            ),
+            "impl <Target<...> as Trait>",
+            "impl <Target<...> as Trait>",
+            4,
+        ),
+        (
+            "impl function signature",
+            concat!(
+                "impl Target { fn method<T: Bound<$M>>(_: [(); $M]) -> [(); $M] ",
+                "where T: Other<$M> { loop {} } }"
+            ),
+            "Target::method",
+            "Target::method",
+            4,
+        ),
+        (
+            "impl const type",
+            "impl Target { const VALUE: [(); $M] = []; }",
+            "Target::const VALUE",
+            "Target::const VALUE",
+            1,
+        ),
+        (
+            "impl type generics, where clause, and type",
+            concat!(
+                "impl Target { type Value<const N: usize = $M, T> = [(); $M] ",
+                "where T: Bound<$M>; }"
+            ),
+            "Target::type Value",
+            "Target::type Value",
+            3,
+        ),
+        (
+            "foreign function signature",
+            concat!(
+                "extern \"C\" { fn foreign<T: Bound<$M>>(_: [(); $M]) -> [(); $M] ",
+                "where T: Other<$M>; }"
+            ),
+            "extern block::foreign",
+            "extern block::foreign",
+            4,
+        ),
+        (
+            "foreign static type",
+            "extern \"C\" { static FOREIGN: [(); $M]; }",
+            "extern block::static FOREIGN",
+            "extern block::static FOREIGN",
+            1,
+        ),
+        (
+            "foreign type generics and where clause",
+            "extern \"C\" { type Foreign<T: Bound<$M>> where T: Other<$M>; }",
+            "extern block::type Foreign",
+            "extern block::type Foreign",
+            2,
+        ),
+        (
+            "module attribute",
+            "#[policy(Checkpoint::schema_version == 8, CheckpointPresentation::render_console_block)] mod nested;",
+            "nested",
+            "headers::nested",
+            1,
+        ),
+    ];
+
+    for (label, template, schema_owner, render_owner, expected_count) in cases {
+        let source = template.replace("$M", MARKER);
+        let file = syn::parse_file(&source)
+            .unwrap_or_else(|error| panic!("parse {label} header fixture: {error}\n{source}"));
+
+        let schema = analyze_schema_policy(&file);
+        assert_eq!(
+            schema.direct_uses,
+            vec![schema_owner.to_string(); expected_count],
+            "schema inventory missed {label}: {schema:?}"
+        );
+
+        let mut calls = RenderCallInventory::default();
+        analyze_render_calls_in_items("headers", &file.items, &mut calls);
+        let expected_violation =
+            format!("{render_owner}: unclassified render_console_block path reference");
+        assert_eq!(
+            calls.violations,
+            vec![expected_violation; expected_count],
+            "render inventory missed {label}: {calls:?}"
+        );
+    }
+}
+
+#[test]
 fn ast_policy_self_test_records_unsupported_trait_item_forms() {
     let mut file = syn::parse_file("trait HiddenControls {}")
         .expect("parse unsupported trait-item fixture shell");
@@ -2058,6 +2377,59 @@ fn ast_policy_self_test_records_unsupported_trait_item_forms() {
         calls.violations,
         vec!["trait HiddenControls: unsupported trait item form: verbatim".to_string()],
         "render inventory must not silently ignore an unsupported trait item"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_records_unsupported_item_impl_and_foreign_forms() {
+    let mut file = syn::parse_file("impl Target {} extern \"C\" {}")
+        .expect("parse unsupported item-form fixture shell");
+    file.items.insert(
+        0,
+        syn::Item::Verbatim(
+            "unsupported item"
+                .parse()
+                .expect("parse verbatim item tokens"),
+        ),
+    );
+    let syn::Item::Impl(item_impl) = &mut file.items[1] else {
+        panic!("fixture shell must contain an impl");
+    };
+    item_impl.items.push(syn::ImplItem::Verbatim(
+        "unsupported impl item"
+            .parse()
+            .expect("parse verbatim impl-item tokens"),
+    ));
+    let syn::Item::ForeignMod(foreign_mod) = &mut file.items[2] else {
+        panic!("fixture shell must contain a foreign block");
+    };
+    foreign_mod.items.push(syn::ForeignItem::Verbatim(
+        "unsupported foreign item"
+            .parse()
+            .expect("parse verbatim foreign-item tokens"),
+    ));
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.violations,
+        vec![
+            "crate: unsupported item form: verbatim".to_string(),
+            "extern block: unsupported foreign item form: verbatim".to_string(),
+            "impl Target: unsupported impl item form: verbatim".to_string(),
+        ],
+        "schema inventory must fail explicitly for every unsupported item family"
+    );
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("unsupported", &file.items, &mut calls);
+    assert_eq!(
+        calls.violations,
+        vec![
+            "unsupported: unsupported item form: verbatim".to_string(),
+            "impl Target: unsupported impl item form: verbatim".to_string(),
+            "extern block: unsupported foreign item form: verbatim".to_string(),
+        ],
+        "render inventory must fail explicitly for every unsupported item family"
     );
 }
 
@@ -2268,6 +2640,166 @@ fn ast_policy_self_test_rejects_schema_and_allowlisted_macro_import_aliases() {
     }
 }
 
+fn visit_item_header<'ast, V: Visit<'ast>>(visitor: &mut V, item: &'ast syn::Item) {
+    for attribute in item_attrs(item) {
+        visitor.visit_attribute(attribute);
+    }
+    match item {
+        syn::Item::Const(item) => {
+            visitor.visit_generics(&item.generics);
+            visitor.visit_type(&item.ty);
+        }
+        syn::Item::Enum(item) => {
+            visitor.visit_generics(&item.generics);
+            for variant in &item.variants {
+                visitor.visit_variant(variant);
+            }
+        }
+        syn::Item::ExternCrate(_) => {}
+        syn::Item::Fn(item) => visitor.visit_signature(&item.sig),
+        syn::Item::ForeignMod(item) => visitor.visit_abi(&item.abi),
+        syn::Item::Impl(item) => {
+            visitor.visit_generics(&item.generics);
+            if let Some((_, trait_path, _)) = &item.trait_ {
+                visitor.visit_path(trait_path);
+            }
+            visitor.visit_type(&item.self_ty);
+        }
+        syn::Item::Macro(_) | syn::Item::Mod(_) => {}
+        syn::Item::Static(item) => visitor.visit_type(&item.ty),
+        syn::Item::Struct(item) => {
+            visitor.visit_generics(&item.generics);
+            for field in &item.fields {
+                visitor.visit_field(field);
+            }
+        }
+        syn::Item::Trait(item) => {
+            visitor.visit_generics(&item.generics);
+            for supertrait in &item.supertraits {
+                visitor.visit_type_param_bound(supertrait);
+            }
+        }
+        syn::Item::TraitAlias(item) => {
+            visitor.visit_generics(&item.generics);
+            for bound in &item.bounds {
+                visitor.visit_type_param_bound(bound);
+            }
+        }
+        syn::Item::Type(item) => {
+            visitor.visit_generics(&item.generics);
+            visitor.visit_type(&item.ty);
+        }
+        syn::Item::Union(item) => {
+            visitor.visit_generics(&item.generics);
+            for field in &item.fields.named {
+                visitor.visit_field(field);
+            }
+        }
+        syn::Item::Use(item) => visitor.visit_use_tree(&item.tree),
+        syn::Item::Verbatim(_) => {}
+        _ => {}
+    }
+}
+
+fn visit_impl_item_header<'ast, V: Visit<'ast>>(visitor: &mut V, item: &'ast syn::ImplItem) {
+    match item {
+        syn::ImplItem::Const(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_generics(&item.generics);
+            visitor.visit_type(&item.ty);
+        }
+        syn::ImplItem::Fn(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_signature(&item.sig);
+        }
+        syn::ImplItem::Type(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_generics(&item.generics);
+            visitor.visit_type(&item.ty);
+        }
+        syn::ImplItem::Macro(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+        }
+        syn::ImplItem::Verbatim(_) => {}
+        _ => {}
+    }
+}
+
+fn visit_trait_item_header<'ast, V: Visit<'ast>>(visitor: &mut V, item: &'ast syn::TraitItem) {
+    match item {
+        syn::TraitItem::Const(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_generics(&item.generics);
+            visitor.visit_type(&item.ty);
+        }
+        syn::TraitItem::Fn(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_signature(&item.sig);
+        }
+        syn::TraitItem::Type(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_generics(&item.generics);
+            for bound in &item.bounds {
+                visitor.visit_type_param_bound(bound);
+            }
+            if let Some((_, default)) = &item.default {
+                visitor.visit_type(default);
+            }
+        }
+        syn::TraitItem::Macro(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+        }
+        syn::TraitItem::Verbatim(_) => {}
+        _ => {}
+    }
+}
+
+fn visit_foreign_item_header<'ast, V: Visit<'ast>>(visitor: &mut V, item: &'ast syn::ForeignItem) {
+    match item {
+        syn::ForeignItem::Fn(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_signature(&item.sig);
+        }
+        syn::ForeignItem::Static(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_type(&item.ty);
+        }
+        syn::ForeignItem::Type(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+            visitor.visit_generics(&item.generics);
+        }
+        syn::ForeignItem::Macro(item) => {
+            for attribute in &item.attrs {
+                visitor.visit_attribute(attribute);
+            }
+        }
+        syn::ForeignItem::Verbatim(_) => {}
+        _ => {}
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 struct SchemaPolicyAnalysis {
     direct_uses: Vec<String>,
@@ -2284,6 +2816,58 @@ fn analyze_schema_policy(file: &syn::File) -> SchemaPolicyAnalysis {
     analysis
 }
 
+fn analyze_schema_item_header(owner: &str, item: &syn::Item, analysis: &mut SchemaPolicyAnalysis) {
+    let aliases = HashSet::new();
+    let mut visitor = SchemaExpressionVisitor {
+        owner,
+        aliases: &aliases,
+        analysis,
+    };
+    visit_item_header(&mut visitor, item);
+}
+
+fn analyze_schema_impl_item_header(
+    owner: &str,
+    item: &syn::ImplItem,
+    analysis: &mut SchemaPolicyAnalysis,
+) {
+    let aliases = HashSet::new();
+    let mut visitor = SchemaExpressionVisitor {
+        owner,
+        aliases: &aliases,
+        analysis,
+    };
+    visit_impl_item_header(&mut visitor, item);
+}
+
+fn analyze_schema_trait_item_header(
+    owner: &str,
+    item: &syn::TraitItem,
+    analysis: &mut SchemaPolicyAnalysis,
+) {
+    let aliases = HashSet::new();
+    let mut visitor = SchemaExpressionVisitor {
+        owner,
+        aliases: &aliases,
+        analysis,
+    };
+    visit_trait_item_header(&mut visitor, item);
+}
+
+fn analyze_schema_foreign_item_header(
+    owner: &str,
+    item: &syn::ForeignItem,
+    analysis: &mut SchemaPolicyAnalysis,
+) {
+    let aliases = HashSet::new();
+    let mut visitor = SchemaExpressionVisitor {
+        owner,
+        aliases: &aliases,
+        analysis,
+    };
+    visit_foreign_item_header(&mut visitor, item);
+}
+
 fn analyze_schema_items(
     items: &[syn::Item],
     module: Option<&str>,
@@ -2295,23 +2879,21 @@ fn analyze_schema_items(
         }
         match item {
             syn::Item::Fn(function) => {
-                let owner = module.map_or_else(
-                    || identifier_name(&function.sig.ident),
-                    |module| format!("{module}::{}", identifier_name(&function.sig.ident)),
-                );
-                analyze_schema_attributes(&owner, &function.attrs, analysis);
+                let owner = qualify_owner(module, &identifier_name(&function.sig.ident));
+                analyze_schema_item_header(&owner, item, analysis);
                 analyze_schema_block(owner, &function.block, analysis);
             }
             syn::Item::Impl(item_impl) => {
-                let Some(type_path) = simple_type_name(&item_impl.self_ty) else {
-                    analysis
-                        .violations
-                        .push("unclassified impl owner".to_string());
-                    continue;
-                };
+                let type_path = type_owner_name(&item_impl.self_ty).unwrap_or_else(|| {
+                    analysis.violations.push(format!(
+                        "{}: unclassified impl self type",
+                        qualify_owner(module, "impl <unclassified self type>")
+                    ));
+                    "<unclassified self type>".to_string()
+                });
                 let impl_identity = impl_identity(item_impl, &type_path);
                 let impl_owner = qualify_owner(module, &format!("impl {impl_identity}"));
-                analyze_schema_attributes(&impl_owner, &item_impl.attrs, analysis);
+                analyze_schema_item_header(&impl_owner, item, analysis);
                 for impl_item in &item_impl.items {
                     match impl_item {
                         syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
@@ -2319,7 +2901,7 @@ fn analyze_schema_items(
                                 module,
                                 &format!("{impl_identity}::{}", identifier_name(&method.sig.ident)),
                             );
-                            analyze_schema_attributes(&owner, &method.attrs, analysis);
+                            analyze_schema_impl_item_header(&owner, impl_item, analysis);
                             analyze_schema_block(owner, &method.block, analysis);
                         }
                         syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
@@ -2330,61 +2912,81 @@ fn analyze_schema_items(
                                     identifier_name(&constant.ident)
                                 ),
                             );
-                            analyze_schema_attributes(&owner, &constant.attrs, analysis);
+                            analyze_schema_impl_item_header(&owner, impl_item, analysis);
                             analyze_schema_expression(owner, &constant.expr, analysis);
+                        }
+                        syn::ImplItem::Type(associated_type)
+                            if !has_cfg_test(&associated_type.attrs) =>
+                        {
+                            let owner = qualify_owner(
+                                module,
+                                &format!(
+                                    "{impl_identity}::type {}",
+                                    identifier_name(&associated_type.ident)
+                                ),
+                            );
+                            analyze_schema_impl_item_header(&owner, impl_item, analysis);
                         }
                         syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
                             let owner = qualify_owner(
                                 module,
                                 &format!("{impl_identity}::macro {}", macro_path(&item_macro.mac)),
                             );
-                            analyze_schema_attributes(&owner, &item_macro.attrs, analysis);
+                            analyze_schema_impl_item_header(&owner, impl_item, analysis);
                             analyze_schema_macro(owner, &item_macro.mac, analysis);
                         }
-                        _ => {}
+                        syn::ImplItem::Verbatim(_) => analysis.violations.push(format!(
+                            "{impl_owner}: unsupported impl item form: verbatim"
+                        )),
+                        syn::ImplItem::Fn(_)
+                        | syn::ImplItem::Const(_)
+                        | syn::ImplItem::Type(_)
+                        | syn::ImplItem::Macro(_) => {}
+                        _ => analysis
+                            .violations
+                            .push(format!("{impl_owner}: unsupported impl item form: unknown")),
                     }
                 }
             }
             syn::Item::Const(constant) => {
-                let owner = module.map_or_else(
-                    || format!("const {}", identifier_name(&constant.ident)),
-                    |module| format!("{module}::const {}", identifier_name(&constant.ident)),
+                let owner = qualify_owner(
+                    module,
+                    &format!("const {}", identifier_name(&constant.ident)),
                 );
-                analyze_schema_attributes(&owner, &constant.attrs, analysis);
+                analyze_schema_item_header(&owner, item, analysis);
                 analyze_schema_expression(owner, &constant.expr, analysis);
             }
             syn::Item::Static(static_item) => {
-                let owner = module.map_or_else(
-                    || format!("static {}", identifier_name(&static_item.ident)),
-                    |module| format!("{module}::static {}", identifier_name(&static_item.ident)),
+                let owner = qualify_owner(
+                    module,
+                    &format!("static {}", identifier_name(&static_item.ident)),
                 );
-                analyze_schema_attributes(&owner, &static_item.attrs, analysis);
+                analyze_schema_item_header(&owner, item, analysis);
                 analyze_schema_expression(owner, &static_item.expr, analysis);
             }
             syn::Item::Struct(item_struct) => {
-                let owner = module.map_or_else(
-                    || format!("struct {}", identifier_name(&item_struct.ident)),
-                    |module| format!("{module}::struct {}", identifier_name(&item_struct.ident)),
+                let owner = qualify_owner(
+                    module,
+                    &format!("struct {}", identifier_name(&item_struct.ident)),
                 );
-                analyze_schema_attributes(&owner, &item_struct.attrs, analysis);
+                analyze_schema_item_header(&owner, item, analysis);
                 if item_struct.fields.iter().any(|field| {
                     field
                         .ident
                         .as_ref()
                         .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
                 }) {
-                    analysis.violations.push(format!(
-                        "struct {}: schema_version field definition",
-                        identifier_name(&item_struct.ident)
-                    ));
+                    analysis
+                        .violations
+                        .push(format!("{owner}: schema_version field definition"));
                 }
             }
             syn::Item::Enum(item_enum) => {
-                let owner = module.map_or_else(
-                    || format!("enum {}", identifier_name(&item_enum.ident)),
-                    |module| format!("{module}::enum {}", identifier_name(&item_enum.ident)),
+                let owner = qualify_owner(
+                    module,
+                    &format!("enum {}", identifier_name(&item_enum.ident)),
                 );
-                analyze_schema_attributes(&owner, &item_enum.attrs, analysis);
+                analyze_schema_item_header(&owner, item, analysis);
                 if item_enum.variants.iter().any(|variant| {
                     variant.fields.iter().any(|field| {
                         field
@@ -2393,10 +2995,26 @@ fn analyze_schema_items(
                             .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
                     })
                 }) {
-                    analysis.violations.push(format!(
-                        "enum {}: schema_version field definition",
-                        identifier_name(&item_enum.ident)
-                    ));
+                    analysis
+                        .violations
+                        .push(format!("{owner}: schema_version field definition"));
+                }
+            }
+            syn::Item::Union(item_union) => {
+                let owner = qualify_owner(
+                    module,
+                    &format!("union {}", identifier_name(&item_union.ident)),
+                );
+                analyze_schema_item_header(&owner, item, analysis);
+                if item_union.fields.named.iter().any(|field| {
+                    field
+                        .ident
+                        .as_ref()
+                        .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
+                }) {
+                    analysis
+                        .violations
+                        .push(format!("{owner}: schema_version field definition"));
                 }
             }
             syn::Item::Trait(item_trait) => {
@@ -2404,7 +3022,7 @@ fn analyze_schema_items(
                     module,
                     &format!("trait {}", identifier_name(&item_trait.ident)),
                 );
-                analyze_schema_attributes(&trait_identity, &item_trait.attrs, analysis);
+                analyze_schema_item_header(&trait_identity, item, analysis);
                 for trait_item in &item_trait.items {
                     match trait_item {
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
@@ -2413,14 +3031,7 @@ fn analyze_schema_items(
                                 trait_identity,
                                 identifier_name(&method.sig.ident)
                             );
-                            analyze_schema_attributes(&owner, &method.attrs, analysis);
-                            let aliases = HashSet::new();
-                            SchemaExpressionVisitor {
-                                owner: &owner,
-                                aliases: &aliases,
-                                analysis,
-                            }
-                            .visit_signature(&method.sig);
+                            analyze_schema_trait_item_header(&owner, trait_item, analysis);
                             if let Some(default) = &method.default {
                                 analyze_schema_block(owner, default, analysis);
                             }
@@ -2431,14 +3042,7 @@ fn analyze_schema_items(
                                 trait_identity,
                                 identifier_name(&constant.ident)
                             );
-                            analyze_schema_attributes(&owner, &constant.attrs, analysis);
-                            let aliases = HashSet::new();
-                            SchemaExpressionVisitor {
-                                owner: &owner,
-                                aliases: &aliases,
-                                analysis,
-                            }
-                            .visit_type(&constant.ty);
+                            analyze_schema_trait_item_header(&owner, trait_item, analysis);
                             if let Some((_, default)) = &constant.default {
                                 analyze_schema_expression(owner, default, analysis);
                             }
@@ -2451,13 +3055,7 @@ fn analyze_schema_items(
                                 trait_identity,
                                 identifier_name(&associated_type.ident)
                             );
-                            let aliases = HashSet::new();
-                            SchemaExpressionVisitor {
-                                owner: &owner,
-                                aliases: &aliases,
-                                analysis,
-                            }
-                            .visit_trait_item_type(associated_type);
+                            analyze_schema_trait_item_header(&owner, trait_item, analysis);
                         }
                         syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
                             let owner = format!(
@@ -2465,7 +3063,7 @@ fn analyze_schema_items(
                                 trait_identity,
                                 macro_path(&item_macro.mac)
                             );
-                            analyze_schema_attributes(&owner, &item_macro.attrs, analysis);
+                            analyze_schema_trait_item_header(&owner, trait_item, analysis);
                             analyze_schema_macro(owner, &item_macro.mac, analysis);
                         }
                         syn::TraitItem::Verbatim(_) => analysis.violations.push(format!(
@@ -2481,12 +3079,80 @@ fn analyze_schema_items(
                     }
                 }
             }
-            syn::Item::Macro(item_macro) => {
-                let owner = module.map_or_else(
-                    || format!("macro {}", macro_path(&item_macro.mac)),
-                    |module| format!("{module}::macro {}", macro_path(&item_macro.mac)),
+            syn::Item::TraitAlias(item_alias) => {
+                let owner = qualify_owner(
+                    module,
+                    &format!("trait alias {}", identifier_name(&item_alias.ident)),
                 );
-                analyze_schema_attributes(&owner, &item_macro.attrs, analysis);
+                analyze_schema_item_header(&owner, item, analysis);
+            }
+            syn::Item::Type(item_type) => {
+                let owner = qualify_owner(
+                    module,
+                    &format!("type {}", identifier_name(&item_type.ident)),
+                );
+                analyze_schema_item_header(&owner, item, analysis);
+            }
+            syn::Item::ForeignMod(foreign_mod) => {
+                let foreign_owner = qualify_owner(module, "extern block");
+                analyze_schema_item_header(&foreign_owner, item, analysis);
+                for foreign_item in &foreign_mod.items {
+                    match foreign_item {
+                        syn::ForeignItem::Fn(function) if !has_cfg_test(&function.attrs) => {
+                            let owner = format!(
+                                "{foreign_owner}::{}",
+                                identifier_name(&function.sig.ident)
+                            );
+                            analyze_schema_foreign_item_header(&owner, foreign_item, analysis);
+                        }
+                        syn::ForeignItem::Static(static_item)
+                            if !has_cfg_test(&static_item.attrs) =>
+                        {
+                            let owner = format!(
+                                "{foreign_owner}::static {}",
+                                identifier_name(&static_item.ident)
+                            );
+                            analyze_schema_foreign_item_header(&owner, foreign_item, analysis);
+                        }
+                        syn::ForeignItem::Type(foreign_type)
+                            if !has_cfg_test(&foreign_type.attrs) =>
+                        {
+                            let owner = format!(
+                                "{foreign_owner}::type {}",
+                                identifier_name(&foreign_type.ident)
+                            );
+                            analyze_schema_foreign_item_header(&owner, foreign_item, analysis);
+                        }
+                        syn::ForeignItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
+                            let owner =
+                                format!("{foreign_owner}::macro {}", macro_path(&item_macro.mac));
+                            analyze_schema_foreign_item_header(&owner, foreign_item, analysis);
+                            analyze_schema_macro(owner, &item_macro.mac, analysis);
+                        }
+                        syn::ForeignItem::Verbatim(_) => analysis.violations.push(format!(
+                            "{foreign_owner}: unsupported foreign item form: verbatim"
+                        )),
+                        syn::ForeignItem::Fn(_)
+                        | syn::ForeignItem::Static(_)
+                        | syn::ForeignItem::Type(_)
+                        | syn::ForeignItem::Macro(_) => {}
+                        _ => analysis.violations.push(format!(
+                            "{foreign_owner}: unsupported foreign item form: unknown"
+                        )),
+                    }
+                }
+            }
+            syn::Item::ExternCrate(extern_crate) => {
+                let owner = qualify_owner(
+                    module,
+                    &format!("extern crate {}", identifier_name(&extern_crate.ident)),
+                );
+                analyze_schema_item_header(&owner, item, analysis);
+            }
+            syn::Item::Macro(item_macro) => {
+                let owner =
+                    qualify_owner(module, &format!("macro {}", macro_path(&item_macro.mac)));
+                analyze_schema_item_header(&owner, item, analysis);
                 analyze_schema_macro(owner, &item_macro.mac, analysis);
             }
             syn::Item::Mod(item_mod) => {
@@ -2494,7 +3160,7 @@ fn analyze_schema_items(
                     || identifier_name(&item_mod.ident),
                     |module| format!("{module}::{}", identifier_name(&item_mod.ident)),
                 );
-                analyze_schema_attributes(&nested_module, &item_mod.attrs, analysis);
+                analyze_schema_item_header(&nested_module, item, analysis);
                 if let Some((_, nested)) = &item_mod.content {
                     analyze_schema_items(nested, Some(&nested_module), analysis);
                 }
@@ -2502,7 +3168,14 @@ fn analyze_schema_items(
             syn::Item::Use(item_use) => {
                 analyze_schema_imports(module, item_use, analysis);
             }
-            _ => {}
+            syn::Item::Verbatim(_) => analysis.violations.push(format!(
+                "{}: unsupported item form: verbatim",
+                module.unwrap_or("crate")
+            )),
+            _ => analysis.violations.push(format!(
+                "{}: unsupported item form: unknown",
+                module.unwrap_or("crate")
+            )),
         }
     }
 }
@@ -2909,6 +3582,13 @@ fn analyze_render_imports(
 ) {
     for binding in import_bindings(item_use) {
         let owner = import_owner(Some(module), &binding);
+        for attribute in &item_use.attrs {
+            RenderCallVisitor {
+                owner: owner.clone(),
+                inventory,
+            }
+            .visit_attribute(attribute);
+        }
         let Some(name) = binding.binding.as_deref() else {
             inventory.violations.push(format!(
                 "{owner}: unclassified glob import `{}` can obscure macro provenance",
@@ -3261,6 +3941,50 @@ fn render_call_policy_is_exact(inventory: &RenderCallInventory) -> bool {
         && inventory.violations.is_empty()
 }
 
+fn analyze_render_item_header(owner: &str, item: &syn::Item, inventory: &mut RenderCallInventory) {
+    let mut visitor = RenderCallVisitor {
+        owner: owner.to_string(),
+        inventory,
+    };
+    visit_item_header(&mut visitor, item);
+}
+
+fn analyze_render_impl_item_header(
+    owner: &str,
+    item: &syn::ImplItem,
+    inventory: &mut RenderCallInventory,
+) {
+    let mut visitor = RenderCallVisitor {
+        owner: owner.to_string(),
+        inventory,
+    };
+    visit_impl_item_header(&mut visitor, item);
+}
+
+fn analyze_render_trait_item_header(
+    owner: &str,
+    item: &syn::TraitItem,
+    inventory: &mut RenderCallInventory,
+) {
+    let mut visitor = RenderCallVisitor {
+        owner: owner.to_string(),
+        inventory,
+    };
+    visit_trait_item_header(&mut visitor, item);
+}
+
+fn analyze_render_foreign_item_header(
+    owner: &str,
+    item: &syn::ForeignItem,
+    inventory: &mut RenderCallInventory,
+) {
+    let mut visitor = RenderCallVisitor {
+        owner: owner.to_string(),
+        inventory,
+    };
+    visit_foreign_item_header(&mut visitor, item);
+}
+
 fn analyze_render_calls_in_items(
     module: &str,
     items: &[syn::Item],
@@ -3279,20 +4003,24 @@ fn analyze_render_calls_in_items_with_lineage(
         if has_cfg_test(item_attrs(item)) {
             continue;
         }
+        let lineage = has_enclosing_lineage.then_some(module);
         match item {
             syn::Item::Fn(function) => {
                 let owner = format!("{module}::{}", identifier_name(&function.sig.ident));
+                analyze_render_item_header(&owner, item, inventory);
                 RenderCallVisitor { owner, inventory }.visit_block(&function.block);
             }
             syn::Item::Impl(item_impl) => {
-                let Some(type_path) = simple_type_name(&item_impl.self_ty) else {
+                let type_path = type_owner_name(&item_impl.self_ty).unwrap_or_else(|| {
+                    let owner = qualify_owner(lineage, "impl <unclassified self type>");
                     inventory
                         .violations
-                        .push(format!("{module}: unclassified impl owner"));
-                    continue;
-                };
+                        .push(format!("{owner}: unclassified impl self type"));
+                    "<unclassified self type>".to_string()
+                });
                 let impl_identity = impl_identity(item_impl, &type_path);
-                let lineage = has_enclosing_lineage.then_some(module);
+                let impl_owner = qualify_owner(lineage, &format!("impl {impl_identity}"));
+                analyze_render_item_header(&impl_owner, item, inventory);
                 for impl_item in &item_impl.items {
                     match impl_item {
                         syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
@@ -3300,6 +4028,7 @@ fn analyze_render_calls_in_items_with_lineage(
                                 lineage,
                                 &format!("{impl_identity}::{}", identifier_name(&method.sig.ident)),
                             );
+                            analyze_render_impl_item_header(&owner, impl_item, inventory);
                             RenderCallVisitor { owner, inventory }.visit_block(&method.block);
                         }
                         syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
@@ -3310,38 +4039,79 @@ fn analyze_render_calls_in_items_with_lineage(
                                     identifier_name(&constant.ident)
                                 ),
                             );
+                            analyze_render_impl_item_header(&owner, impl_item, inventory);
                             RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
                         }
-                        syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
-                            RenderCallVisitor {
-                                owner: qualify_owner(
-                                    lineage,
-                                    &format!(
-                                        "{impl_identity}::macro {}",
-                                        macro_path(&item_macro.mac)
-                                    ),
+                        syn::ImplItem::Type(associated_type)
+                            if !has_cfg_test(&associated_type.attrs) =>
+                        {
+                            let owner = qualify_owner(
+                                lineage,
+                                &format!(
+                                    "{impl_identity}::type {}",
+                                    identifier_name(&associated_type.ident)
                                 ),
-                                inventory,
-                            }
-                            .inspect_macro(&item_macro.mac);
+                            );
+                            analyze_render_impl_item_header(&owner, impl_item, inventory);
                         }
-                        _ => {}
+                        syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
+                            let owner = qualify_owner(
+                                lineage,
+                                &format!("{impl_identity}::macro {}", macro_path(&item_macro.mac)),
+                            );
+                            analyze_render_impl_item_header(&owner, impl_item, inventory);
+                            RenderCallVisitor { owner, inventory }.inspect_macro(&item_macro.mac);
+                        }
+                        syn::ImplItem::Verbatim(_) => inventory.violations.push(format!(
+                            "{impl_owner}: unsupported impl item form: verbatim"
+                        )),
+                        syn::ImplItem::Fn(_)
+                        | syn::ImplItem::Const(_)
+                        | syn::ImplItem::Type(_)
+                        | syn::ImplItem::Macro(_) => {}
+                        _ => inventory
+                            .violations
+                            .push(format!("{impl_owner}: unsupported impl item form: unknown")),
                     }
                 }
             }
             syn::Item::Const(constant) => {
                 let owner = format!("{module}::const {}", identifier_name(&constant.ident));
+                analyze_render_item_header(&owner, item, inventory);
                 RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
             }
             syn::Item::Static(static_item) => {
                 let owner = format!("{module}::static {}", identifier_name(&static_item.ident));
+                analyze_render_item_header(&owner, item, inventory);
                 RenderCallVisitor { owner, inventory }.visit_expr(&static_item.expr);
+            }
+            syn::Item::Struct(item_struct) => {
+                let owner = qualify_owner(
+                    lineage,
+                    &format!("struct {}", identifier_name(&item_struct.ident)),
+                );
+                analyze_render_item_header(&owner, item, inventory);
+            }
+            syn::Item::Enum(item_enum) => {
+                let owner = qualify_owner(
+                    lineage,
+                    &format!("enum {}", identifier_name(&item_enum.ident)),
+                );
+                analyze_render_item_header(&owner, item, inventory);
+            }
+            syn::Item::Union(item_union) => {
+                let owner = qualify_owner(
+                    lineage,
+                    &format!("union {}", identifier_name(&item_union.ident)),
+                );
+                analyze_render_item_header(&owner, item, inventory);
             }
             syn::Item::Trait(item_trait) => {
                 let trait_identity = qualify_owner(
-                    has_enclosing_lineage.then_some(module),
+                    lineage,
                     &format!("trait {}", identifier_name(&item_trait.ident)),
                 );
+                analyze_render_item_header(&trait_identity, item, inventory);
                 for trait_item in &item_trait.items {
                     match trait_item {
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
@@ -3350,10 +4120,9 @@ fn analyze_render_calls_in_items_with_lineage(
                                 trait_identity,
                                 identifier_name(&method.sig.ident)
                             );
-                            let mut visitor = RenderCallVisitor { owner, inventory };
-                            visitor.visit_signature(&method.sig);
+                            analyze_render_trait_item_header(&owner, trait_item, inventory);
                             if let Some(default) = &method.default {
-                                visitor.visit_block(default);
+                                RenderCallVisitor { owner, inventory }.visit_block(default);
                             }
                         }
                         syn::TraitItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
@@ -3362,10 +4131,9 @@ fn analyze_render_calls_in_items_with_lineage(
                                 trait_identity,
                                 identifier_name(&constant.ident)
                             );
-                            let mut visitor = RenderCallVisitor { owner, inventory };
-                            visitor.visit_type(&constant.ty);
+                            analyze_render_trait_item_header(&owner, trait_item, inventory);
                             if let Some((_, default)) = &constant.default {
-                                visitor.visit_expr(default);
+                                RenderCallVisitor { owner, inventory }.visit_expr(default);
                             }
                         }
                         syn::TraitItem::Type(associated_type)
@@ -3376,19 +4144,16 @@ fn analyze_render_calls_in_items_with_lineage(
                                 trait_identity,
                                 identifier_name(&associated_type.ident)
                             );
-                            RenderCallVisitor { owner, inventory }
-                                .visit_trait_item_type(associated_type);
+                            analyze_render_trait_item_header(&owner, trait_item, inventory);
                         }
                         syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
-                            RenderCallVisitor {
-                                owner: format!(
-                                    "{}::macro {}",
-                                    trait_identity,
-                                    macro_path(&item_macro.mac)
-                                ),
-                                inventory,
-                            }
-                            .inspect_macro(&item_macro.mac);
+                            let owner = format!(
+                                "{}::macro {}",
+                                trait_identity,
+                                macro_path(&item_macro.mac)
+                            );
+                            analyze_render_trait_item_header(&owner, trait_item, inventory);
+                            RenderCallVisitor { owner, inventory }.inspect_macro(&item_macro.mac);
                         }
                         syn::TraitItem::Verbatim(_) => inventory.violations.push(format!(
                             "{trait_identity}: unsupported trait item form: verbatim"
@@ -3403,15 +4168,87 @@ fn analyze_render_calls_in_items_with_lineage(
                     }
                 }
             }
-            syn::Item::Macro(item_macro) => RenderCallVisitor {
-                owner: format!("{module}::macro {}", macro_path(&item_macro.mac)),
-                inventory,
+            syn::Item::TraitAlias(item_alias) => {
+                let owner = qualify_owner(
+                    lineage,
+                    &format!("trait alias {}", identifier_name(&item_alias.ident)),
+                );
+                analyze_render_item_header(&owner, item, inventory);
             }
-            .inspect_macro(&item_macro.mac),
+            syn::Item::Type(item_type) => {
+                let owner = qualify_owner(
+                    lineage,
+                    &format!("type {}", identifier_name(&item_type.ident)),
+                );
+                analyze_render_item_header(&owner, item, inventory);
+            }
+            syn::Item::ForeignMod(foreign_mod) => {
+                let foreign_owner = qualify_owner(lineage, "extern block");
+                analyze_render_item_header(&foreign_owner, item, inventory);
+                for foreign_item in &foreign_mod.items {
+                    match foreign_item {
+                        syn::ForeignItem::Fn(function) if !has_cfg_test(&function.attrs) => {
+                            let owner = format!(
+                                "{foreign_owner}::{}",
+                                identifier_name(&function.sig.ident)
+                            );
+                            analyze_render_foreign_item_header(&owner, foreign_item, inventory);
+                        }
+                        syn::ForeignItem::Static(static_item)
+                            if !has_cfg_test(&static_item.attrs) =>
+                        {
+                            let owner = format!(
+                                "{foreign_owner}::static {}",
+                                identifier_name(&static_item.ident)
+                            );
+                            analyze_render_foreign_item_header(&owner, foreign_item, inventory);
+                        }
+                        syn::ForeignItem::Type(foreign_type)
+                            if !has_cfg_test(&foreign_type.attrs) =>
+                        {
+                            let owner = format!(
+                                "{foreign_owner}::type {}",
+                                identifier_name(&foreign_type.ident)
+                            );
+                            analyze_render_foreign_item_header(&owner, foreign_item, inventory);
+                        }
+                        syn::ForeignItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
+                            let owner =
+                                format!("{foreign_owner}::macro {}", macro_path(&item_macro.mac));
+                            analyze_render_foreign_item_header(&owner, foreign_item, inventory);
+                            RenderCallVisitor { owner, inventory }.inspect_macro(&item_macro.mac);
+                        }
+                        syn::ForeignItem::Verbatim(_) => inventory.violations.push(format!(
+                            "{foreign_owner}: unsupported foreign item form: verbatim"
+                        )),
+                        syn::ForeignItem::Fn(_)
+                        | syn::ForeignItem::Static(_)
+                        | syn::ForeignItem::Type(_)
+                        | syn::ForeignItem::Macro(_) => {}
+                        _ => inventory.violations.push(format!(
+                            "{foreign_owner}: unsupported foreign item form: unknown"
+                        )),
+                    }
+                }
+            }
+            syn::Item::ExternCrate(extern_crate) => {
+                let owner = qualify_owner(
+                    lineage,
+                    &format!("extern crate {}", identifier_name(&extern_crate.ident)),
+                );
+                analyze_render_item_header(&owner, item, inventory);
+            }
+            syn::Item::Macro(item_macro) => {
+                let owner = format!("{module}::macro {}", macro_path(&item_macro.mac));
+                analyze_render_item_header(&owner, item, inventory);
+                RenderCallVisitor { owner, inventory }.inspect_macro(&item_macro.mac);
+            }
             syn::Item::Mod(item_mod) => {
+                let nested_module = format!("{module}::{}", identifier_name(&item_mod.ident));
+                analyze_render_item_header(&nested_module, item, inventory);
                 if let Some((_, nested)) = &item_mod.content {
                     analyze_render_calls_in_items_with_lineage(
-                        &format!("{module}::{}", identifier_name(&item_mod.ident)),
+                        &nested_module,
                         nested,
                         true,
                         inventory,
@@ -3421,7 +4258,12 @@ fn analyze_render_calls_in_items_with_lineage(
             syn::Item::Use(item_use) => {
                 analyze_render_imports(module, item_use, inventory);
             }
-            _ => {}
+            syn::Item::Verbatim(_) => inventory
+                .violations
+                .push(format!("{module}: unsupported item form: verbatim")),
+            _ => inventory
+                .violations
+                .push(format!("{module}: unsupported item form: unknown")),
         }
     }
 }
@@ -3467,6 +4309,46 @@ impl RenderCallVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        match &attribute.meta {
+            syn::Meta::Path(path) => {
+                if path_last_is(path, "render_console_block") {
+                    self.inventory.violations.push(format!(
+                        "{}: render_console_block attribute path reference",
+                        self.owner
+                    ));
+                }
+            }
+            syn::Meta::NameValue(name_value) => self.visit_expr(&name_value.value),
+            syn::Meta::List(list) => {
+                let parser =
+                    syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
+                match parser.parse2(list.tokens.clone()) {
+                    Ok(arguments) => {
+                        for argument in &arguments {
+                            self.visit_expr(argument);
+                        }
+                    }
+                    Err(error) => {
+                        let tokens = list.tokens.to_string();
+                        if tokens
+                            .split(|character: char| {
+                                !character.is_alphanumeric() && character != '_'
+                            })
+                            .any(|token| token == "render_console_block")
+                        {
+                            self.inventory.violations.push(format!(
+                                "{}: unparsed {} attribute render_console_block tokens: {error}",
+                                self.owner,
+                                macro_path_from_path(&list.path)
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
         if let syn::Stmt::Item(item) = statement {
             analyze_render_calls_in_items_with_lineage(
@@ -3545,26 +4427,65 @@ fn production_rust_sources(root: &Path) -> Vec<PathBuf> {
     sources
 }
 
-fn simple_type_name(ty: &syn::Type) -> Option<String> {
-    let syn::Type::Path(path) = ty else {
-        return None;
-    };
-    if path.qself.is_some()
-        || path
-            .path
-            .segments
-            .iter()
-            .any(|segment| !matches!(segment.arguments, syn::PathArguments::None))
-    {
-        return None;
+fn type_owner_name(ty: &syn::Type) -> Option<String> {
+    match ty {
+        syn::Type::Array(array) => {
+            type_owner_name(&array.elem).map(|element| format!("[{element}; const]"))
+        }
+        syn::Type::Group(group) => type_owner_name(&group.elem),
+        syn::Type::Infer(_) => Some("_".to_string()),
+        syn::Type::Never(_) => Some("!".to_string()),
+        syn::Type::Paren(paren) => type_owner_name(&paren.elem).map(|inner| format!("({inner})")),
+        syn::Type::Path(path) if path.qself.is_none() => {
+            let identity = path
+                .path
+                .segments
+                .iter()
+                .map(|segment| {
+                    let arguments = match &segment.arguments {
+                        syn::PathArguments::None => "",
+                        syn::PathArguments::AngleBracketed(_) => "<...>",
+                        syn::PathArguments::Parenthesized(_) => "(...)",
+                    };
+                    format!("{}{arguments}", identifier_name(&segment.ident))
+                })
+                .collect::<Vec<_>>()
+                .join("::");
+            Some(if path.path.leading_colon.is_some() {
+                format!("::{identity}")
+            } else {
+                identity
+            })
+        }
+        syn::Type::Ptr(pointer) => type_owner_name(&pointer.elem).map(|element| {
+            let mutability = if pointer.mutability.is_some() {
+                "mut"
+            } else {
+                "const"
+            };
+            format!("*{mutability} {element}")
+        }),
+        syn::Type::Reference(reference) => type_owner_name(&reference.elem).map(|element| {
+            let mutability = if reference.mutability.is_some() {
+                "mut "
+            } else {
+                ""
+            };
+            format!("&{mutability}{element}")
+        }),
+        syn::Type::Slice(slice) => {
+            type_owner_name(&slice.elem).map(|element| format!("[{element}]"))
+        }
+        syn::Type::Tuple(tuple) => {
+            let elements = tuple
+                .elems
+                .iter()
+                .map(type_owner_name)
+                .collect::<Option<Vec<_>>>()?;
+            Some(format!("({})", elements.join(", ")))
+        }
+        _ => None,
     }
-
-    let identity = macro_path_from_path(&path.path);
-    Some(if path.path.leading_colon.is_some() {
-        format!("::{identity}")
-    } else {
-        identity
-    })
 }
 
 fn member_is(member: &syn::Member, expected: &str) -> bool {
