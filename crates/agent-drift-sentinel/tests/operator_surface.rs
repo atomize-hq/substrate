@@ -2483,6 +2483,72 @@ fn ast_policy_self_test_validates_every_compound_cfg_child_before_evaluation() {
 }
 
 #[test]
+fn ast_policy_self_test_validates_every_attribute_before_computing_activity() {
+    let fixture = tempfile::tempdir().expect("create attribute-list unknown-cfg fixture");
+    let source_path = fixture.path().join("lib.rs");
+    let cases = [
+        (
+            "separate_inactive_first",
+            "#[cfg(test)]\n#[cfg(custom_unknown)]",
+        ),
+        (
+            "separate_unknown_first",
+            "#[cfg(custom_unknown)]\n#[cfg(test)]",
+        ),
+        (
+            "expanded_inactive_first",
+            "#[cfg_attr(not(test), cfg(test), cfg(custom_unknown))]",
+        ),
+        (
+            "expanded_unknown_first",
+            "#[cfg_attr(not(test), cfg(custom_unknown), cfg(test))]",
+        ),
+    ];
+
+    for (name, attributes) in cases {
+        fs::write(
+            &source_path,
+            format!("#![allow(unexpected_cfgs)]\n{attributes}\nfn selected() {{}}\n"),
+        )
+        .unwrap_or_else(|error| panic!("write {name} attribute-list fixture: {error}"));
+        assert_rust_root_compiles(name, "lib", &source_path, &[]);
+
+        let failure = match std::panic::catch_unwind(|| production_rust_sources(fixture.path())) {
+            Ok(_) => panic!("{name} must validate custom_unknown before activity reduction"),
+            Err(failure) => failure,
+        };
+        let message = failure
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| failure.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic");
+        assert!(
+            message.contains("unsupported production cfg predicate `custom_unknown`"),
+            "{name} unknown cfg failure must be explicit: {message}"
+        );
+    }
+
+    let controls = syn::parse_file(
+        r#"
+        #[cfg(not(test))]
+        fn active() {}
+
+        #[cfg(test)]
+        fn inactive() {}
+
+        #[cfg_attr(not(test), cfg(not(test)))]
+        fn expanded_active() {}
+        "#,
+    )
+    .expect("parse active attribute-list controls");
+    assert!(production_attributes_active(item_attrs(&controls.items[0])));
+    assert!(!production_attributes_active(item_attrs(
+        &controls.items[1]
+    )));
+    assert!(production_attributes_active(item_attrs(&controls.items[2])));
+}
+
+#[test]
 fn ast_policy_self_test_fails_closed_without_resolved_cargo_feature_state() {
     let fixture = tempfile::tempdir().expect("create unresolved-feature fixture");
     let source_root = fixture.path().join("src");
@@ -3137,6 +3203,190 @@ fn ast_policy_self_test_propagates_typed_destructured_schema_aliases() {
 }
 
 #[test]
+fn ast_policy_self_test_maps_destructured_schema_bindings_by_expression_shape() {
+    let source = r#"
+        struct Checkpoint {
+            schema_version: &'static str,
+        }
+
+        struct Named<'a> {
+            schema: &'a str,
+            unrelated: bool,
+        }
+
+        struct Pair<'a>(&'a str, bool);
+
+        struct CheckpointPresentation {
+            checkpoint: Checkpoint,
+        }
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let (tuple_schema, tuple_unrelated) =
+                    (self.checkpoint.schema_version, false);
+                if tuple_schema == "v0.8" {}
+                if tuple_unrelated {}
+
+                let Named {
+                    schema: struct_schema,
+                    unrelated: struct_unrelated,
+                } = Named {
+                    schema: self.checkpoint.schema_version,
+                    unrelated: false,
+                };
+                if struct_schema == "v0.8" {}
+                if struct_unrelated {}
+
+                let Pair(tuple_struct_schema, tuple_struct_unrelated) =
+                    Pair(self.checkpoint.schema_version, false);
+                if tuple_struct_schema == "v0.8" {}
+                if tuple_struct_unrelated {}
+
+                let [slice_schema, slice_unrelated, ..] = [
+                    self.checkpoint.schema_version == "v0.8",
+                    false,
+                    true,
+                ];
+                if slice_schema {}
+                if slice_unrelated {}
+
+                let &((reference_schema, reference_unrelated),): &((&str, bool),) =
+                    &((self.checkpoint.schema_version, false),);
+                if reference_schema == "v0.8" {}
+                if reference_unrelated {}
+
+                let (rest_schema, .., rest_unrelated) =
+                    (self.checkpoint.schema_version, 8_u8, false);
+                if rest_schema == "v0.8" {}
+                if rest_unrelated {}
+
+                let whole @ (at_schema, at_unrelated) =
+                    (self.checkpoint.schema_version, false);
+                if whole.0 == "v0.8" {}
+                if at_schema == "v0.8" {}
+                if at_unrelated {}
+
+                match (self.checkpoint.schema_version, false) {
+                    (or_schema, false) | (or_schema, true) => {
+                        if or_schema == "v0.8" {}
+                    }
+                }
+            }
+        }
+    "#;
+    assert_rust_fixture_compiles("structural_schema_bindings", source);
+    let file = syn::parse_file(source).expect("parse structural schema-binding fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema
+            .violations
+            .iter()
+            .filter(|violation| violation.ends_with("schema-version alias or nesting in if condition"))
+            .count(),
+        9,
+        "only the corresponding tuple, struct, tuple-struct, slice, reference/type/paren, @, rest, and or-pattern bindings may inherit schema dependence: {schema:?}"
+    );
+    assert!(
+        !schema
+            .violations
+            .iter()
+            .any(|violation| violation.contains("ambiguous schema-version binding dependency")),
+        "compile-visible matching shapes must not be classified as ambiguous: {schema:?}"
+    );
+
+    let mutation = source.replace("schema_version", "version");
+    assert_rust_fixture_compiles("structural_schema_bindings_mutation", &mutation);
+    let mutation = syn::parse_file(&mutation).expect("parse structural binding mutation");
+    assert_eq!(
+        analyze_schema_policy(&mutation),
+        SchemaPolicyAnalysis::default(),
+        "removing the schema identifier must clear every shape-propagated dependency"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_respects_schema_binding_shadowing_and_scope() {
+    let source = r#"
+        struct Checkpoint { schema_version: &'static str }
+        struct CheckpointPresentation { checkpoint: Checkpoint }
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let ((schema_alias, unrelated),): ((&str, bool),) =
+                    ((self.checkpoint.schema_version, false),);
+                if schema_alias == "v0.8" {}
+                if unrelated {}
+
+                let schema_alias = false;
+                if schema_alias {}
+
+                let mut assignment_alias =
+                    self.checkpoint.schema_version == "v0.8";
+                if assignment_alias {}
+                assignment_alias = false;
+                if assignment_alias {}
+
+                {
+                    let schema_alias = self.checkpoint.schema_version;
+                    if schema_alias == "v0.8" {}
+                }
+
+                if schema_alias {}
+            }
+        }
+    "#;
+    assert_rust_fixture_compiles("schema_binding_shadowing", source);
+    let file = syn::parse_file(source).expect("parse schema-binding shadowing fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema
+            .violations
+            .iter()
+            .filter(|violation| violation.ends_with("schema-version alias or nesting in if condition"))
+            .count(),
+        3,
+        "only the three live schema aliases may taint their conditions; unrelated tuple positions, assignment/let resets, and exited scopes must remain clean: {schema:?}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_fails_closed_on_ambiguous_schema_binding_shapes() {
+    let source = r#"
+        fn opaque<T>(value: T) -> T { value }
+
+        struct Checkpoint { schema_version: &'static str }
+        struct CheckpointPresentation { checkpoint: Checkpoint }
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let (maybe_schema, unrelated) =
+                    opaque((self.checkpoint.schema_version, false));
+                let _ = maybe_schema;
+                if unrelated {}
+            }
+        }
+    "#;
+    assert_rust_fixture_compiles("ambiguous_schema_binding", source);
+    let file = syn::parse_file(source).expect("parse ambiguous schema-binding fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert!(
+        schema.violations.iter().any(|violation| violation
+            == "CheckpointPresentation::render_console_block: ambiguous schema-version binding dependency"),
+        "an initializer whose destructured correspondence cannot be proven must fail closed: {schema:?}"
+    );
+    assert!(
+        !schema
+            .violations
+            .iter()
+            .any(|violation| violation.ends_with("schema-version alias or nesting in if condition")),
+        "an ambiguous whole initializer must not over-taint an unrelated binding: {schema:?}"
+    );
+}
+
+#[test]
 fn ast_policy_self_test_propagates_schema_aliases_through_nested_control_forms() {
     let file = syn::parse_file(
         r#"
@@ -3342,6 +3592,73 @@ fn ast_policy_self_test_normalizes_raw_schema_field_identifiers() {
         ],
         "an unauthorized raw schema predicate must fail closed"
     );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_schema_version_method_calls() {
+    let source = r#"
+        struct Checkpoint;
+
+        impl Checkpoint {
+            fn schema_version(&self) -> &'static str {
+                "v0.8"
+            }
+        }
+
+        struct CheckpointPresentation {
+            checkpoint: Checkpoint,
+        }
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                if self.checkpoint.schema_version() == "v0.8" {}
+            }
+        }
+    "#;
+    assert_rust_fixture_compiles("schema_version_method_call", source);
+    let file = syn::parse_file(source).expect("parse schema-version method-call fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["CheckpointPresentation::render_console_block".to_string()],
+        "a method named schema_version must remain visible to the direct-use inventory"
+    );
+    assert!(
+        schema.exact_predicates.is_empty(),
+        "a schema_version() method call must never normalize to the allowed direct-field predicate"
+    );
+    assert!(
+        schema.violations.iter().any(|violation| violation
+            == "CheckpointPresentation::render_console_block: schema_version method call"),
+        "a schema_version() method occurrence must fail closed: {schema:?}"
+    );
+
+    let mutation = source.replace("schema_version", "version");
+    assert_rust_fixture_compiles("schema_version_method_call_mutation", &mutation);
+    let mutation = syn::parse_file(&mutation).expect("parse renamed method-call mutation");
+    assert_eq!(
+        analyze_schema_policy(&mutation),
+        SchemaPolicyAnalysis::default(),
+        "renaming the method must remove the schema dependency instead of leaving a shape-only false positive"
+    );
+
+    let direct_field_control = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                if self.checkpoint.schema_version == "v0.8" {}
+            }
+        }
+        "#,
+    )
+    .expect("parse allowed direct-field control");
+    let direct_field_control = analyze_schema_policy(&direct_field_control);
+    assert_eq!(
+        direct_field_control.exact_predicates,
+        vec!["CheckpointPresentation::render_console_block".to_string()]
+    );
+    assert!(direct_field_control.violations.is_empty());
 }
 
 #[test]
@@ -4537,10 +4854,9 @@ fn analyze_schema_policy_in_module(file: &syn::File, module: Option<&str>) -> Sc
 }
 
 fn analyze_schema_item_header(owner: &str, item: &syn::Item, analysis: &mut SchemaPolicyAnalysis) {
-    let aliases = HashSet::new();
     let mut visitor = SchemaExpressionVisitor {
         owner,
-        aliases: &aliases,
+        bindings: BindingEnvironment::default(),
         analysis,
     };
     visit_item_header(&mut visitor, item);
@@ -4551,10 +4867,9 @@ fn analyze_schema_impl_item_header(
     item: &syn::ImplItem,
     analysis: &mut SchemaPolicyAnalysis,
 ) {
-    let aliases = HashSet::new();
     let mut visitor = SchemaExpressionVisitor {
         owner,
-        aliases: &aliases,
+        bindings: BindingEnvironment::default(),
         analysis,
     };
     visit_impl_item_header(&mut visitor, item);
@@ -4565,10 +4880,9 @@ fn analyze_schema_trait_item_header(
     item: &syn::TraitItem,
     analysis: &mut SchemaPolicyAnalysis,
 ) {
-    let aliases = HashSet::new();
     let mut visitor = SchemaExpressionVisitor {
         owner,
-        aliases: &aliases,
+        bindings: BindingEnvironment::default(),
         analysis,
     };
     visit_trait_item_header(&mut visitor, item);
@@ -4579,10 +4893,9 @@ fn analyze_schema_foreign_item_header(
     item: &syn::ForeignItem,
     analysis: &mut SchemaPolicyAnalysis,
 ) {
-    let aliases = HashSet::new();
     let mut visitor = SchemaExpressionVisitor {
         owner,
-        aliases: &aliases,
+        bindings: BindingEnvironment::default(),
         analysis,
     };
     visit_foreign_item_header(&mut visitor, item);
@@ -4962,10 +5275,9 @@ fn analyze_schema_expression(
     expression: &syn::Expr,
     analysis: &mut SchemaPolicyAnalysis,
 ) {
-    let aliases = HashSet::new();
     SchemaExpressionVisitor {
         owner: &owner,
-        aliases: &aliases,
+        bindings: BindingEnvironment::default(),
         analysis,
     }
     .visit_expr(expression);
@@ -4976,22 +5288,18 @@ fn analyze_schema_macro(
     expression: &syn::Macro,
     analysis: &mut SchemaPolicyAnalysis,
 ) {
-    let aliases = HashSet::new();
     SchemaExpressionVisitor {
         owner: &owner,
-        aliases: &aliases,
+        bindings: BindingEnvironment::default(),
         analysis,
     }
     .inspect_macro(expression);
 }
 
 fn analyze_schema_block(owner: String, block: &syn::Block, analysis: &mut SchemaPolicyAnalysis) {
-    let mut bindings = BindingCollector::default();
-    bindings.visit_block(block);
-    let aliases = bindings.schema_aliases();
     let mut visitor = SchemaExpressionVisitor {
         owner: &owner,
-        aliases: &aliases,
+        bindings: BindingEnvironment::default(),
         analysis,
     };
     visitor.visit_block(block);
@@ -5166,102 +5474,338 @@ macro_rules! production_cfg_helper_dispatch {
     };
 }
 
-#[derive(Default)]
-struct BindingCollector {
-    assignments: Vec<(String, bool, HashSet<String>)>,
+#[derive(Clone, Debug)]
+struct BindingEnvironment {
+    scopes: Vec<BTreeMap<String, bool>>,
 }
 
-impl BindingCollector {
-    fn schema_aliases(&self) -> HashSet<String> {
-        let mut aliases = HashSet::new();
-        loop {
-            let mut changed = false;
-            for (name, has_direct_schema, dependencies) in &self.assignments {
-                if (*has_direct_schema || !dependencies.is_disjoint(&aliases))
-                    && aliases.insert(name.clone())
-                {
-                    changed = true;
-                }
-            }
-            if !changed {
-                return aliases;
-            }
-        }
-    }
-
-    fn record_pattern(&mut self, pattern: &syn::Pat, expression: &syn::Expr) {
-        let direct_schema = expression_has_direct_schema(expression);
-        let dependencies = expression_identifiers(expression);
-        for name in pattern_identifiers(pattern) {
-            self.assignments
-                .push((name, direct_schema, dependencies.clone()));
-        }
-    }
-
-    fn record_assignment(&mut self, target: &syn::Expr, expression: &syn::Expr) {
-        let direct_schema = expression_has_direct_schema(expression);
-        let dependencies = expression_identifiers(expression);
-        for name in assignment_identifiers(target) {
-            self.assignments
-                .push((name, direct_schema, dependencies.clone()));
+impl Default for BindingEnvironment {
+    fn default() -> Self {
+        Self {
+            scopes: vec![BTreeMap::new()],
         }
     }
 }
 
-impl<'ast> Visit<'ast> for BindingCollector {
-    fn visit_expr(&mut self, expression: &'ast syn::Expr) {
-        if production_expression_active(expression) {
-            visit::visit_expr(self, expression);
-        }
+impl BindingEnvironment {
+    fn enter_scope(&mut self) {
+        self.scopes.push(BTreeMap::new());
     }
 
-    fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
-        visit_production_pattern(self, pattern);
+    fn exit_scope(&mut self) {
+        assert!(
+            self.scopes.len() > 1,
+            "schema binding scope stack must retain its root"
+        );
+        self.scopes.pop();
     }
 
-    fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
-        if !matches!(statement, syn::Stmt::Item(_)) {
-            visit::visit_stmt(self, statement);
-        }
+    fn declare(&mut self, name: String, depends_on_schema: bool) {
+        self.scopes
+            .last_mut()
+            .expect("schema binding environment must have a scope")
+            .insert(name, depends_on_schema);
     }
 
-    fn visit_local(&mut self, local: &'ast syn::Local) {
-        if !production_attributes_active(&local.attrs) {
-            return;
-        }
-        if let Some(init) = &local.init {
-            self.record_pattern(&local.pat, &init.expr);
-        }
-        visit::visit_local(self, local);
-    }
-
-    fn visit_expr_assign(&mut self, assignment: &'ast syn::ExprAssign) {
-        self.record_assignment(&assignment.left, &assignment.right);
-        visit::visit_expr_assign(self, assignment);
-    }
-
-    fn visit_expr_for_loop(&mut self, expression: &'ast syn::ExprForLoop) {
-        self.record_pattern(&expression.pat, &expression.expr);
-        visit::visit_expr_for_loop(self, expression);
-    }
-
-    fn visit_expr_let(&mut self, expression: &'ast syn::ExprLet) {
-        self.record_pattern(&expression.pat, &expression.expr);
-        visit::visit_expr_let(self, expression);
-    }
-
-    fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
-        for arm in expression
-            .arms
-            .iter()
-            .filter(|arm| production_attributes_active(&arm.attrs))
+    fn assign(&mut self, name: String, depends_on_schema: bool) {
+        if let Some(scope) = self
+            .scopes
+            .iter_mut()
+            .rev()
+            .find(|scope| scope.contains_key(&name))
         {
-            self.record_pattern(&arm.pat, &expression.expr);
+            scope.insert(name, depends_on_schema);
+        } else {
+            self.scopes
+                .first_mut()
+                .expect("schema binding environment must have a root scope")
+                .insert(name, depends_on_schema);
         }
-        visit::visit_expr_match(self, expression);
     }
 
-    production_cfg_structural_gates!();
+    fn schema_aliases(&self) -> HashSet<String> {
+        let mut visible = BTreeMap::new();
+        for scope in &self.scopes {
+            visible.extend(
+                scope
+                    .iter()
+                    .map(|(name, dependency)| (name.clone(), *dependency)),
+            );
+        }
+        visible
+            .into_iter()
+            .filter_map(|(name, dependency)| dependency.then_some(name))
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct PatternDependencies {
+    bindings: BTreeMap<String, bool>,
+    ambiguous_schema: bool,
+}
+
+impl PatternDependencies {
+    fn merge(&mut self, other: Self) {
+        self.ambiguous_schema |= other.ambiguous_schema;
+        for (name, dependency) in other.bindings {
+            self.bindings
+                .entry(name)
+                .and_modify(|current| *current |= dependency)
+                .or_insert(dependency);
+        }
+    }
+}
+
+fn expression_without_groups(mut expression: &syn::Expr) -> &syn::Expr {
+    loop {
+        expression = match expression {
+            syn::Expr::Group(group) => &group.expr,
+            syn::Expr::Paren(paren) => &paren.expr,
+            _ => return expression,
+        };
+    }
+}
+
+fn ambiguous_pattern_dependencies(
+    pattern: &syn::Pat,
+    expression: &syn::Expr,
+    aliases: &HashSet<String>,
+) -> PatternDependencies {
+    PatternDependencies {
+        bindings: BTreeMap::new(),
+        ambiguous_schema: !pattern_identifiers(pattern).is_empty()
+            && expression_depends_on_schema(expression, aliases),
+    }
+}
+
+fn sequence_pattern_dependencies(
+    patterns: &[&syn::Pat],
+    expressions: &[&syn::Expr],
+    whole_pattern: &syn::Pat,
+    whole_expression: &syn::Expr,
+    aliases: &HashSet<String>,
+) -> PatternDependencies {
+    let rest = patterns
+        .iter()
+        .position(|pattern| matches!(pattern, syn::Pat::Rest(_)));
+    let required = patterns.len() - usize::from(rest.is_some());
+    if expressions.len() < required || (rest.is_none() && expressions.len() != required) {
+        return ambiguous_pattern_dependencies(whole_pattern, whole_expression, aliases);
+    }
+
+    let mut dependencies = PatternDependencies::default();
+    let prefix = rest.unwrap_or(patterns.len());
+    for index in 0..prefix {
+        dependencies.merge(pattern_dependencies(
+            patterns[index],
+            expressions[index],
+            aliases,
+        ));
+    }
+    if let Some(rest) = rest {
+        let suffix = patterns.len() - rest - 1;
+        for offset in 0..suffix {
+            dependencies.merge(pattern_dependencies(
+                patterns[patterns.len() - 1 - offset],
+                expressions[expressions.len() - 1 - offset],
+                aliases,
+            ));
+        }
+    }
+    dependencies
+}
+
+fn member_name(member: &syn::Member) -> String {
+    match member {
+        syn::Member::Named(identifier) => identifier_name(identifier),
+        syn::Member::Unnamed(index) => index.index.to_string(),
+    }
+}
+
+fn pattern_dependencies(
+    pattern: &syn::Pat,
+    expression: &syn::Expr,
+    aliases: &HashSet<String>,
+) -> PatternDependencies {
+    if !matches!(pattern, syn::Pat::Type(_)) && !production_pattern_active(pattern) {
+        return PatternDependencies::default();
+    }
+
+    let expression = expression_without_groups(expression);
+    match pattern {
+        syn::Pat::Ident(identifier) => {
+            let mut dependencies = PatternDependencies::default();
+            dependencies.bindings.insert(
+                identifier_name(&identifier.ident),
+                expression_depends_on_schema(expression, aliases),
+            );
+            if let Some((_, subpattern)) = &identifier.subpat {
+                dependencies.merge(pattern_dependencies(subpattern, expression, aliases));
+            }
+            dependencies
+        }
+        syn::Pat::Type(typed) => pattern_dependencies(&typed.pat, expression, aliases),
+        syn::Pat::Paren(paren) => pattern_dependencies(&paren.pat, expression, aliases),
+        syn::Pat::Reference(reference) => {
+            if let syn::Expr::Reference(reference_expression) = expression {
+                pattern_dependencies(&reference.pat, &reference_expression.expr, aliases)
+            } else {
+                pattern_dependencies(&reference.pat, expression, aliases)
+            }
+        }
+        syn::Pat::Tuple(tuple) => {
+            let whole_expression = expression;
+            let syn::Expr::Tuple(tuple_expression) = expression else {
+                return ambiguous_pattern_dependencies(pattern, expression, aliases);
+            };
+            let patterns = tuple
+                .elems
+                .iter()
+                .filter(|pattern| {
+                    matches!(pattern, syn::Pat::Type(_)) || production_pattern_active(pattern)
+                })
+                .collect::<Vec<_>>();
+            let expressions = tuple_expression
+                .elems
+                .iter()
+                .filter(|expression| production_expression_active(expression))
+                .collect::<Vec<_>>();
+            sequence_pattern_dependencies(
+                &patterns,
+                &expressions,
+                pattern,
+                whole_expression,
+                aliases,
+            )
+        }
+        syn::Pat::Slice(slice) => {
+            let whole_expression = expression;
+            let syn::Expr::Array(array_expression) = expression else {
+                return ambiguous_pattern_dependencies(pattern, expression, aliases);
+            };
+            let patterns = slice
+                .elems
+                .iter()
+                .filter(|pattern| production_pattern_active(pattern))
+                .collect::<Vec<_>>();
+            let expressions = array_expression
+                .elems
+                .iter()
+                .filter(|expression| production_expression_active(expression))
+                .collect::<Vec<_>>();
+            sequence_pattern_dependencies(
+                &patterns,
+                &expressions,
+                pattern,
+                whole_expression,
+                aliases,
+            )
+        }
+        syn::Pat::TupleStruct(tuple_struct) => {
+            let whole_expression = expression;
+            let syn::Expr::Call(call) = expression else {
+                return ambiguous_pattern_dependencies(pattern, expression, aliases);
+            };
+            let syn::Expr::Path(function) = expression_without_groups(&call.func) else {
+                return ambiguous_pattern_dependencies(pattern, expression, aliases);
+            };
+            if macro_path_from_path(&tuple_struct.path) != macro_path_from_path(&function.path) {
+                return ambiguous_pattern_dependencies(pattern, expression, aliases);
+            }
+            let patterns = tuple_struct
+                .elems
+                .iter()
+                .filter(|pattern| production_pattern_active(pattern))
+                .collect::<Vec<_>>();
+            let expressions = call
+                .args
+                .iter()
+                .filter(|expression| production_expression_active(expression))
+                .collect::<Vec<_>>();
+            sequence_pattern_dependencies(
+                &patterns,
+                &expressions,
+                pattern,
+                whole_expression,
+                aliases,
+            )
+        }
+        syn::Pat::Struct(structure) => {
+            let whole_expression = expression;
+            let syn::Expr::Struct(struct_expression) = expression else {
+                return ambiguous_pattern_dependencies(pattern, expression, aliases);
+            };
+            if macro_path_from_path(&structure.path)
+                != macro_path_from_path(&struct_expression.path)
+            {
+                return ambiguous_pattern_dependencies(pattern, expression, aliases);
+            }
+
+            let mut dependencies = PatternDependencies::default();
+            for field in structure
+                .fields
+                .iter()
+                .filter(|field| production_attributes_active(&field.attrs))
+            {
+                let name = member_name(&field.member);
+                let Some(value) = struct_expression.fields.iter().find(|value| {
+                    production_attributes_active(&value.attrs) && member_name(&value.member) == name
+                }) else {
+                    dependencies.ambiguous_schema |=
+                        expression_depends_on_schema(whole_expression, aliases);
+                    continue;
+                };
+                dependencies.merge(pattern_dependencies(&field.pat, &value.expr, aliases));
+            }
+            dependencies
+        }
+        syn::Pat::Or(alternatives) => {
+            let mut alternatives = alternatives.cases.iter();
+            let Some(first) = alternatives.next() else {
+                return PatternDependencies::default();
+            };
+            let first = pattern_dependencies(first, expression, aliases);
+            if alternatives
+                .all(|alternative| pattern_dependencies(alternative, expression, aliases) == first)
+            {
+                first
+            } else {
+                ambiguous_pattern_dependencies(pattern, expression, aliases)
+            }
+        }
+        syn::Pat::Const(_)
+        | syn::Pat::Lit(_)
+        | syn::Pat::Path(_)
+        | syn::Pat::Range(_)
+        | syn::Pat::Rest(_)
+        | syn::Pat::Wild(_) => PatternDependencies::default(),
+        syn::Pat::Macro(_) | syn::Pat::Verbatim(_) => PatternDependencies {
+            bindings: BTreeMap::new(),
+            ambiguous_schema: expression_depends_on_schema(expression, aliases),
+        },
+        _ => ambiguous_pattern_dependencies(pattern, expression, aliases),
+    }
+}
+
+fn iterator_pattern_dependencies(
+    pattern: &syn::Pat,
+    expression: &syn::Expr,
+    aliases: &HashSet<String>,
+) -> PatternDependencies {
+    let expression = expression_without_groups(expression);
+    let syn::Expr::Array(array) = expression else {
+        return ambiguous_pattern_dependencies(pattern, expression, aliases);
+    };
+    let mut dependencies = PatternDependencies::default();
+    for element in array
+        .elems
+        .iter()
+        .filter(|element| production_expression_active(element))
+    {
+        dependencies.merge(pattern_dependencies(pattern, element, aliases));
+    }
+    dependencies
 }
 
 fn pattern_identifiers(pattern: &syn::Pat) -> HashSet<String> {
@@ -5289,27 +5833,74 @@ fn pattern_identifiers(pattern: &syn::Pat) -> HashSet<String> {
 }
 
 fn assignment_identifiers(target: &syn::Expr) -> HashSet<String> {
-    #[derive(Default)]
-    struct Collector(HashSet<String>);
-
-    impl<'ast> Visit<'ast> for Collector {
-        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
-            if production_expression_active(expression) {
-                visit::visit_expr(self, expression);
-            }
-        }
-
-        fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
-            if let Some(identifier) = path.path.get_ident() {
-                self.0.insert(identifier_name(identifier));
-            }
-            visit::visit_expr_path(self, path);
-        }
+    if !production_expression_active(target) {
+        return HashSet::new();
     }
+    match expression_without_groups(target) {
+        syn::Expr::Path(path) => path
+            .path
+            .get_ident()
+            .map(identifier_name)
+            .into_iter()
+            .collect(),
+        syn::Expr::Tuple(tuple) => tuple
+            .elems
+            .iter()
+            .flat_map(assignment_identifiers)
+            .collect(),
+        syn::Expr::Array(array) => array
+            .elems
+            .iter()
+            .flat_map(assignment_identifiers)
+            .collect(),
+        _ => HashSet::new(),
+    }
+}
 
-    let mut collector = Collector::default();
-    collector.visit_expr(target);
-    collector.0
+fn assignment_dependencies(
+    target: &syn::Expr,
+    value: &syn::Expr,
+    aliases: &HashSet<String>,
+) -> PatternDependencies {
+    let target = expression_without_groups(target);
+    let value = expression_without_groups(value);
+    match (target, value) {
+        (syn::Expr::Path(path), _) => {
+            let Some(identifier) = path.path.get_ident() else {
+                return PatternDependencies::default();
+            };
+            PatternDependencies {
+                bindings: BTreeMap::from([(
+                    identifier_name(identifier),
+                    expression_depends_on_schema(value, aliases),
+                )]),
+                ambiguous_schema: false,
+            }
+        }
+        (syn::Expr::Tuple(target), syn::Expr::Tuple(value))
+            if target.elems.len() == value.elems.len() =>
+        {
+            let mut dependencies = PatternDependencies::default();
+            for (target, value) in target.elems.iter().zip(&value.elems) {
+                dependencies.merge(assignment_dependencies(target, value, aliases));
+            }
+            dependencies
+        }
+        (syn::Expr::Array(target), syn::Expr::Array(value))
+            if target.elems.len() == value.elems.len() =>
+        {
+            let mut dependencies = PatternDependencies::default();
+            for (target, value) in target.elems.iter().zip(&value.elems) {
+                dependencies.merge(assignment_dependencies(target, value, aliases));
+            }
+            dependencies
+        }
+        _ => PatternDependencies {
+            bindings: BTreeMap::new(),
+            ambiguous_schema: !assignment_identifiers(target).is_empty()
+                && expression_depends_on_schema(value, aliases),
+        },
+    }
 }
 
 enum ParsedMacroArguments {
@@ -5553,7 +6144,7 @@ fn analyze_render_imports(
 
 struct SchemaExpressionVisitor<'a> {
     owner: &'a str,
-    aliases: &'a HashSet<String>,
+    bindings: BindingEnvironment,
     analysis: &'a mut SchemaPolicyAnalysis,
 }
 
@@ -5564,10 +6155,61 @@ impl SchemaExpressionVisitor<'_> {
             .push(format!("{}: {kind}", self.owner));
     }
 
+    fn aliases(&self) -> HashSet<String> {
+        self.bindings.schema_aliases()
+    }
+
+    fn depends_on_schema(&self, expression: &syn::Expr) -> bool {
+        expression_depends_on_schema(expression, &self.aliases())
+    }
+
+    fn declare_pattern_dependencies(&mut self, pattern: &syn::Pat, expression: &syn::Expr) {
+        let dependencies = pattern_dependencies(pattern, expression, &self.aliases());
+        if dependencies.ambiguous_schema {
+            self.violation("ambiguous schema-version binding dependency");
+        }
+        for name in pattern_identifiers(pattern) {
+            self.bindings.declare(
+                name.clone(),
+                dependencies.bindings.get(&name).copied().unwrap_or(false),
+            );
+        }
+    }
+
+    fn declare_iterator_pattern_dependencies(
+        &mut self,
+        pattern: &syn::Pat,
+        expression: &syn::Expr,
+    ) {
+        let dependencies = iterator_pattern_dependencies(pattern, expression, &self.aliases());
+        if dependencies.ambiguous_schema {
+            self.violation("ambiguous schema-version binding dependency");
+        }
+        for name in pattern_identifiers(pattern) {
+            self.bindings.declare(
+                name.clone(),
+                dependencies.bindings.get(&name).copied().unwrap_or(false),
+            );
+        }
+    }
+
+    fn update_assignment_dependencies(&mut self, target: &syn::Expr, value: &syn::Expr) {
+        let dependencies = assignment_dependencies(target, value, &self.aliases());
+        if dependencies.ambiguous_schema {
+            self.violation("ambiguous schema-version assignment dependency");
+        }
+        for name in assignment_identifiers(target) {
+            self.bindings.assign(
+                name.clone(),
+                dependencies.bindings.get(&name).copied().unwrap_or(false),
+            );
+        }
+    }
+
     fn visit_parsed_expression(&mut self, expression: &syn::Expr) {
         SchemaExpressionVisitor {
             owner: self.owner,
-            aliases: self.aliases,
+            bindings: self.bindings.clone(),
             analysis: self.analysis,
         }
         .visit_expr(expression);
@@ -5576,7 +6218,7 @@ impl SchemaExpressionVisitor<'_> {
     fn visit_parsed_pattern(&mut self, pattern: &syn::Pat) {
         SchemaExpressionVisitor {
             owner: self.owner,
-            aliases: self.aliases,
+            bindings: self.bindings.clone(),
             analysis: self.analysis,
         }
         .visit_pat(pattern);
@@ -5590,21 +6232,24 @@ impl SchemaExpressionVisitor<'_> {
                 }
             }
             Ok(ParsedMacroArguments::Matches(arguments)) => {
-                if expression_depends_on_schema(&arguments.expression, self.aliases) {
+                if self.depends_on_schema(&arguments.expression) {
                     self.violation("schema-version matches! predicate");
-                }
-                if arguments
-                    .guard
-                    .as_ref()
-                    .is_some_and(|guard| expression_depends_on_schema(guard, self.aliases))
-                {
-                    self.violation("schema-version matches! guard");
                 }
                 self.visit_parsed_expression(&arguments.expression);
                 self.visit_parsed_pattern(&arguments.pattern);
+                self.bindings.enter_scope();
+                self.declare_pattern_dependencies(&arguments.pattern, &arguments.expression);
+                if arguments
+                    .guard
+                    .as_ref()
+                    .is_some_and(|guard| self.depends_on_schema(guard))
+                {
+                    self.violation("schema-version matches! guard");
+                }
                 if let Some(guard) = &arguments.guard {
                     self.visit_parsed_expression(guard);
                 }
+                self.bindings.exit_scope();
             }
             Err(error) => self.violation(&format!(
                 "unparsed {}! macro: {error}",
@@ -5625,6 +6270,12 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         visit_production_pattern(self, pattern);
     }
 
+    fn visit_block(&mut self, block: &'ast syn::Block) {
+        self.bindings.enter_scope();
+        visit::visit_block(self, block);
+        self.bindings.exit_scope();
+    }
+
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
         if let syn::Stmt::Item(item) = statement {
             analyze_schema_items(std::slice::from_ref(item), Some(self.owner), self.analysis);
@@ -5641,12 +6292,26 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         if !production_attributes_active(&local.attrs) {
             return;
         }
-        if local.init.as_ref().is_some_and(|init| {
-            init.diverge.is_some() && expression_depends_on_schema(&init.expr, self.aliases)
-        }) {
+        if local
+            .init
+            .as_ref()
+            .is_some_and(|init| init.diverge.is_some() && self.depends_on_schema(&init.expr))
+        {
             self.violation("schema-version let-else initializer");
         }
         visit::visit_local(self, local);
+        if let Some(init) = &local.init {
+            self.declare_pattern_dependencies(&local.pat, &init.expr);
+        } else {
+            for name in pattern_identifiers(&local.pat) {
+                self.bindings.declare(name, false);
+            }
+        }
+    }
+
+    fn visit_expr_assign(&mut self, assignment: &'ast syn::ExprAssign) {
+        visit::visit_expr_assign(self, assignment);
+        self.update_assignment_dependencies(&assignment.left, &assignment.right);
     }
 
     fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
@@ -5669,7 +6334,7 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
     }
 
     fn visit_expr_binary(&mut self, binary: &'ast syn::ExprBinary) {
-        if expression_depends_on_schema(&syn::Expr::Binary(binary.clone()), self.aliases) {
+        if self.depends_on_schema(&syn::Expr::Binary(binary.clone())) {
             if is_exact_v0_8_schema_predicate(binary) {
                 self.analysis.exact_predicates.push(self.owner.to_string());
             } else {
@@ -5680,64 +6345,106 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
     }
 
     fn visit_expr_if(&mut self, expression: &'ast syn::ExprIf) {
-        if expression_depends_on_schema(&expression.cond, self.aliases)
+        if self.depends_on_schema(&expression.cond)
             && !matches!(expression.cond.as_ref(), syn::Expr::Binary(binary) if is_exact_v0_8_schema_predicate(binary))
         {
             self.violation("schema-version alias or nesting in if condition");
         }
-        visit::visit_expr_if(self, expression);
+        for attribute in &expression.attrs {
+            self.visit_attribute(attribute);
+        }
+        self.visit_expr(&expression.cond);
+        self.bindings.enter_scope();
+        if let syn::Expr::Let(binding) = expression_without_groups(&expression.cond) {
+            self.declare_pattern_dependencies(&binding.pat, &binding.expr);
+        }
+        self.visit_block(&expression.then_branch);
+        self.bindings.exit_scope();
+        if let Some((_, otherwise)) = &expression.else_branch {
+            self.visit_expr(otherwise);
+        }
     }
 
     fn visit_expr_while(&mut self, expression: &'ast syn::ExprWhile) {
-        if expression_depends_on_schema(&expression.cond, self.aliases) {
+        if self.depends_on_schema(&expression.cond) {
             self.violation("schema-version while condition");
         }
-        visit::visit_expr_while(self, expression);
+        for attribute in &expression.attrs {
+            self.visit_attribute(attribute);
+        }
+        self.visit_expr(&expression.cond);
+        self.bindings.enter_scope();
+        if let syn::Expr::Let(binding) = expression_without_groups(&expression.cond) {
+            self.declare_pattern_dependencies(&binding.pat, &binding.expr);
+        }
+        self.visit_block(&expression.body);
+        self.bindings.exit_scope();
     }
 
     fn visit_expr_for_loop(&mut self, expression: &'ast syn::ExprForLoop) {
-        if expression_depends_on_schema(&expression.expr, self.aliases) {
+        if self.depends_on_schema(&expression.expr) {
             self.violation("schema-version for-loop iterator");
         }
-        visit::visit_expr_for_loop(self, expression);
+        for attribute in &expression.attrs {
+            self.visit_attribute(attribute);
+        }
+        self.visit_pat(&expression.pat);
+        self.visit_expr(&expression.expr);
+        self.bindings.enter_scope();
+        self.declare_iterator_pattern_dependencies(&expression.pat, &expression.expr);
+        self.visit_block(&expression.body);
+        self.bindings.exit_scope();
     }
 
     fn visit_expr_let(&mut self, expression: &'ast syn::ExprLet) {
-        if expression_depends_on_schema(&expression.expr, self.aliases) {
+        if self.depends_on_schema(&expression.expr) {
             self.violation("schema-version let predicate");
         }
         visit::visit_expr_let(self, expression);
     }
 
     fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
-        if expression_depends_on_schema(&expression.expr, self.aliases) {
+        if self.depends_on_schema(&expression.expr) {
             self.violation("schema-version match scrutinee");
         }
-        for arm in expression
-            .arms
-            .iter()
-            .filter(|arm| production_attributes_active(&arm.attrs))
-        {
-            if arm
-                .guard
-                .as_ref()
-                .is_some_and(|(_, guard)| expression_depends_on_schema(guard, self.aliases))
-            {
-                self.violation("schema-version match guard");
-            }
+        for attribute in &expression.attrs {
+            self.visit_attribute(attribute);
         }
-        visit::visit_expr_match(self, expression);
+        self.visit_expr(&expression.expr);
+        for arm in &expression.arms {
+            if !production_attributes_active(&arm.attrs) {
+                continue;
+            }
+            for attribute in &arm.attrs {
+                self.visit_attribute(attribute);
+            }
+            self.visit_pat(&arm.pat);
+            self.bindings.enter_scope();
+            self.declare_pattern_dependencies(&arm.pat, &expression.expr);
+            if let Some((_, guard)) = &arm.guard {
+                if self.depends_on_schema(guard) {
+                    self.violation("schema-version match guard");
+                }
+                self.visit_expr(guard);
+            }
+            self.visit_expr(&arm.body);
+            self.bindings.exit_scope();
+        }
     }
 
     fn visit_expr_call(&mut self, expression: &'ast syn::ExprCall) {
-        if expression_depends_on_schema(&syn::Expr::Call(expression.clone()), self.aliases) {
+        if self.depends_on_schema(&syn::Expr::Call(expression.clone())) {
             self.violation("schema-version function-call dependency");
         }
         visit::visit_expr_call(self, expression);
     }
 
     fn visit_expr_method_call(&mut self, expression: &'ast syn::ExprMethodCall) {
-        if expression_depends_on_schema(&syn::Expr::MethodCall(expression.clone()), self.aliases) {
+        if identifier_is(&expression.method, "schema_version") {
+            self.analysis.direct_uses.push(self.owner.to_string());
+            self.violation("schema_version method call");
+        }
+        if self.depends_on_schema(&syn::Expr::MethodCall(expression.clone())) {
             self.violation("schema-version method-call dependency");
         }
         visit::visit_expr_method_call(self, expression);
@@ -5797,6 +6504,13 @@ fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
                 self.0 = true;
             }
             visit::visit_expr_path(self, path);
+        }
+
+        fn visit_expr_method_call(&mut self, expression: &'ast syn::ExprMethodCall) {
+            if identifier_is(&expression.method, "schema_version") {
+                self.0 = true;
+            }
+            visit::visit_expr_method_call(self, expression);
         }
 
         fn visit_macro(&mut self, expression: &'ast syn::Macro) {
@@ -7370,10 +8084,10 @@ fn effective_production_attributes(attributes: &[syn::Attribute]) -> Vec<syn::Me
 }
 
 fn production_attributes_active(attributes: &[syn::Attribute]) -> bool {
-    effective_production_attributes(attributes)
+    let values = effective_production_attributes(attributes)
         .iter()
         .filter(|meta| path_is_ident(meta.path(), "cfg"))
-        .all(|meta| {
+        .map(|meta| {
             let syn::Meta::List(list) = meta else {
                 panic!("cfg must be a list attribute");
             };
@@ -7385,6 +8099,8 @@ fn production_attributes_active(attributes: &[syn::Attribute]) -> bool {
             );
             evaluate_production_cfg(&arguments[0])
         })
+        .collect::<Vec<_>>();
+    values.into_iter().all(std::convert::identity)
 }
 
 fn has_cfg_test(attributes: &[syn::Attribute]) -> bool {
