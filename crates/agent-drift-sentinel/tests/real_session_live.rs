@@ -17,6 +17,7 @@ enum DeliveryStep {
     AllocateEmissionOrdinal,
     ObserveRuntime,
     RecordDelivery,
+    CompletePoll,
     PersistState,
     AcceptObservation,
 }
@@ -293,6 +294,224 @@ fn real_session_live_source_proof_rejects_pre_observe_helper_cycle() {
 }
 
 #[test]
+fn real_session_live_source_proof_rejects_trait_helper_before_observe() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let trait_helper = active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, checkpoint: bool, path: &str) -> Event {
+                self.allocate_event(checkpoint, path)
+            }"#,
+            1,
+        )
+        .replacen(
+            "        struct OperatorSink;",
+            r#"        trait PreObserveEvent {
+            fn allocate_event(&mut self, checkpoint: bool, path: &str) -> Event;
+        }
+
+        impl PreObserveEvent for Progress {
+            fn allocate_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                self.record_delivery(Cursor);
+                Event { cursor: Cursor }
+            }
+        }
+
+        struct OperatorSink;"#,
+            1,
+        );
+    assert_ne!(
+        trait_helper, active_control,
+        "fixture must inject a trait-owned delivery helper"
+    );
+    assert_rustc_check(&trait_helper);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&trait_helper).expect("parse trait-helper fixture"),
+        )
+        .is_err(),
+        "a trait method and trait impl must not hide pre-observe delivery"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_nested_module_helper_before_observe() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let nested_module_helper = active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, checkpoint: bool, path: &str) -> Event {
+                hidden::allocate_event(self, checkpoint, path)
+            }"#,
+            1,
+        )
+        .replacen(
+            "        struct OperatorSink;",
+            r#"        mod hidden {
+            pub(super) fn allocate_event(
+                progress: &mut super::Progress,
+                _checkpoint: bool,
+                _path: &str,
+            ) -> super::Event {
+                progress.record_delivery(super::Cursor);
+                super::Event { cursor: super::Cursor }
+            }
+        }
+
+        struct OperatorSink;"#,
+            1,
+        );
+    assert_ne!(
+        nested_module_helper, active_control,
+        "fixture must inject a nested-module delivery helper"
+    );
+    assert_rustc_check(&nested_module_helper);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&nested_module_helper).expect("parse nested-module fixture"),
+        )
+        .is_err(),
+        "an inline module helper must not hide pre-observe delivery"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_free_helper_callback_before_observe() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let callback_helper = active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                std::iter::once(self).for_each(deliver_from_callback);
+                Event { cursor: Cursor }
+            }"#,
+            1,
+        )
+        .replacen(
+            "        struct OperatorSink;",
+            r#"        fn deliver_from_callback(progress: &mut Progress) {
+            progress.record_delivery(Cursor);
+        }
+
+        struct OperatorSink;"#,
+            1,
+        );
+    assert_ne!(
+        callback_helper, active_control,
+        "fixture must inject a free helper used as an iterator callback"
+    );
+    assert_rustc_check(&callback_helper);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&callback_helper).expect("parse callback-helper fixture"),
+        )
+        .is_err(),
+        "a free helper function value must not hide pre-observe delivery"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_type_alias_helper_before_observe() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let type_alias_helper = active_control
+        .replacen(
+            r#"fn checkpoint_ready_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                Event { cursor: Cursor }
+            }"#,
+            r#"fn checkpoint_ready_event(&mut self, checkpoint: bool, path: &str) -> Event {
+                ProgressAlias::allocate_event(self, checkpoint, path)
+            }"#,
+            1,
+        )
+        .replacen(
+            "            fn record_delivery(&mut self, _cursor: Cursor) {}",
+            r#"            fn allocate_event(&mut self, _checkpoint: bool, _path: &str) -> Event {
+                self.record_delivery(Cursor);
+                Event { cursor: Cursor }
+            }
+
+            fn record_delivery(&mut self, _cursor: Cursor) {}"#,
+            1,
+        )
+        .replacen(
+            "        struct OperatorSink;",
+            "        type ProgressAlias = Progress;\n\n        struct OperatorSink;",
+            1,
+        );
+    assert_ne!(
+        type_alias_helper, active_control,
+        "fixture must inject a type-alias-qualified delivery helper"
+    );
+    assert_rustc_check(&type_alias_helper);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&type_alias_helper).expect("parse type-alias-helper fixture"),
+        )
+        .is_err(),
+        "a type-alias-qualified inherent helper must not hide pre-observe delivery"
+    );
+}
+
+#[test]
+fn real_session_live_source_proof_rejects_completion_before_delivery() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let premature_completion = active_control.replacen(
+        "                self.progress.begin_poll(observed_size_bytes);",
+        r#"                self.progress.begin_poll(observed_size_bytes);
+                self.progress.complete_poll(observed_size_bytes);"#,
+        1,
+    );
+    assert_ne!(
+        premature_completion, active_control,
+        "fixture must complete pending bookkeeping before delivery"
+    );
+    assert_rustc_check(&premature_completion);
+    assert!(
+        assert_poll_once_delivery_contract(
+            &syn::parse_file(&premature_completion).expect("parse premature-completion fixture"),
+        )
+        .is_err(),
+        "complete_poll before observe must not continue into delivery"
+    );
+}
+
+#[test]
 fn real_session_live_source_proof_rejects_closure_local_return_as_poll_exit() {
     let active_control = dominance_fixture(
         r#"
@@ -444,6 +663,35 @@ fn real_session_live_source_proof_accepts_bookkeeping_with_outer_return() {
         &syn::parse_file(&outer_return).expect("parse outer-return fixture"),
     )
     .expect("outer poll_once return keeps bookkeeping-only persistence semantics");
+}
+
+#[test]
+fn real_session_live_source_proof_accepts_completion_with_direct_outer_return() {
+    let active_control = dominance_fixture(
+        r#"
+            let observation = self.runtime.observe(event)?;
+            self.progress
+                .record_delivery(observation.event.cursor.clone());
+        "#,
+    );
+    let direct_outer_return = active_control.replacen(
+        "                let fresh_checkpoints = [true];",
+        r#"                if observed_size_bytes == 0 {
+                    self.progress.complete_poll(observed_size_bytes);
+                    return Ok(Vec::new());
+                }
+                let fresh_checkpoints = [true];"#,
+        1,
+    );
+    assert_ne!(
+        direct_outer_return, active_control,
+        "fixture must inject completion immediately followed by an outer return"
+    );
+    assert_rustc_check(&direct_outer_return);
+    assert_poll_once_delivery_contract(
+        &syn::parse_file(&direct_outer_return).expect("parse direct-return fixture"),
+    )
+    .expect("completion may omit persistence only when the next action exits poll_once");
 }
 
 fn assert_rustc_check(source: &str) {
@@ -760,12 +1008,6 @@ impl<'ast> SameSourceHelpers<'ast> {
         self.helpers.iter().find(|helper| helper.key == *key)
     }
 
-    fn has_method_named(&self, name: &str) -> bool {
-        self.helpers
-            .iter()
-            .any(|helper| helper.key.owner.is_some() && helper.key.name == name)
-    }
-
     fn field_owner(&self, owner: &str, field: &str) -> Option<&str> {
         self.fields
             .iter()
@@ -777,7 +1019,11 @@ impl<'ast> SameSourceHelpers<'ast> {
         statement: &'ast syn::Stmt,
         owner: &str,
     ) -> Result<Vec<SameSourceHelperKey>, String> {
-        let mut visitor = SameSourceCallVisitor::new(self, owner, &[]);
+        let context = SameSourceHelperKey {
+            owner: Some(owner.to_string()),
+            name: "poll_once".to_string(),
+        };
+        let mut visitor = SameSourceCallVisitor::new(self, &context, &[]);
         visitor.visit_stmt(statement);
         visitor.finish()
     }
@@ -785,10 +1031,10 @@ impl<'ast> SameSourceHelpers<'ast> {
     fn calls_in_block(
         &self,
         block: &'ast syn::Block,
-        owner: &str,
+        key: &SameSourceHelperKey,
         parameter_owners: &[(String, String)],
     ) -> Result<Vec<SameSourceHelperKey>, String> {
-        let mut visitor = SameSourceCallVisitor::new(self, owner, parameter_owners);
+        let mut visitor = SameSourceCallVisitor::new(self, key, parameter_owners);
         visitor.visit_block(block);
         visitor.finish()
     }
@@ -812,7 +1058,7 @@ fn signature_parameter_owners(signature: &syn::Signature) -> Vec<(String, String
 
 struct SameSourceCallVisitor<'graph, 'ast> {
     graph: &'graph SameSourceHelpers<'ast>,
-    owner: &'graph str,
+    context: &'graph SameSourceHelperKey,
     parameter_owners: Vec<(String, String)>,
     calls: Vec<SameSourceHelperKey>,
     errors: Vec<String>,
@@ -821,12 +1067,12 @@ struct SameSourceCallVisitor<'graph, 'ast> {
 impl<'graph, 'ast> SameSourceCallVisitor<'graph, 'ast> {
     fn new(
         graph: &'graph SameSourceHelpers<'ast>,
-        owner: &'graph str,
+        context: &'graph SameSourceHelperKey,
         parameter_owners: &[(String, String)],
     ) -> Self {
         Self {
             graph,
-            owner,
+            context,
             parameter_owners: parameter_owners.to_vec(),
             calls: Vec::new(),
             errors: Vec::new(),
@@ -838,19 +1084,20 @@ impl<'graph, 'ast> SameSourceCallVisitor<'graph, 'ast> {
             Ok(self.calls)
         } else {
             Err(format!(
-                "pre-observe helper graph has unclassified call surfaces: {:?}",
-                self.errors
+                "pre-observe helper graph has unclassified call surfaces in {:?}: {:?}",
+                self.context, self.errors
             ))
         }
     }
 
     fn receiver_owner(&self, receiver: &syn::Expr) -> Option<String> {
         match expression_path(receiver)?.as_slice() {
-            [self_name] if self_name == "self" => Some(self.owner.to_string()),
+            [self_name] if self_name == "self" => self.context.owner.clone(),
             [self_name, field] if self_name == "self" => self
-                .graph
-                .field_owner(self.owner, field)
-                .map(str::to_string),
+                .context
+                .owner
+                .as_deref()
+                .and_then(|owner| self.graph.field_owner(owner, field).map(str::to_string)),
             [parameter] => self
                 .parameter_owners
                 .iter()
@@ -873,7 +1120,7 @@ impl<'graph, 'ast> SameSourceCallVisitor<'graph, 'ast> {
         } else {
             let name = segments.pop()?;
             let owner = if segments == ["Self"] {
-                self.owner.to_string()
+                self.context.owner.clone()?
             } else {
                 segments.join("::")
             };
@@ -924,6 +1171,27 @@ impl<'ast> Visit<'ast> for SameSourceCallVisitor<'_, 'ast> {
         visit::visit_item_use(self, item_use);
     }
 
+    fn visit_expr_path(&mut self, expression: &'ast syn::ExprPath) {
+        if let Some(key) = self.helper_key_from_path(&expression.path) {
+            self.errors
+                .push(format!("function reference to same-source helper {key:?}"));
+        } else if expression.path.segments.len() > 1
+            && !permitted_pre_observe_function_reference(self.context, &expression.path)
+        {
+            self.errors.push(format!(
+                "unclassified qualified function reference `{}`",
+                expression
+                    .path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("::")
+            ));
+        }
+        visit::visit_expr_path(self, expression);
+    }
+
     fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
         let method = call.method.to_string();
         let resolved = self
@@ -937,22 +1205,320 @@ impl<'ast> Visit<'ast> for SameSourceCallVisitor<'_, 'ast> {
             .filter(|key| self.graph.helper(key).is_some())
         {
             self.calls.push(key.clone());
-        } else if self.graph.has_method_named(&method) {
+        } else if !permitted_pre_observe_method_call(self.context, call) {
             self.errors.push(format!(
-                "could not resolve exact inherent owner for method call `{method}`"
+                "unclassified method call `{method}` with {} arguments",
+                call.args.len()
             ));
         }
         visit::visit_expr_method_call(self, call);
     }
 
     fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
-        if let syn::Expr::Path(function) = call.func.as_ref() {
-            if let Some(key) = self.helper_key_from_path(&function.path) {
-                self.calls.push(key);
+        let syn::Expr::Path(function) = call.func.as_ref() else {
+            self.errors
+                .push("unclassified non-path callable expression".to_string());
+            for argument in &call.args {
+                self.visit_expr(argument);
             }
+            return;
+        };
+        if let Some(key) = self.helper_key_from_path(&function.path) {
+            self.calls.push(key);
+        } else if !permitted_pre_observe_function_call(self.context, call, &function.path) {
+            self.errors.push(format!(
+                "unclassified function call `{}` with {} arguments",
+                function
+                    .path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("::"),
+                call.args.len()
+            ));
         }
-        visit::visit_expr_call(self, call);
+        for argument in &call.args {
+            self.visit_expr(argument);
+        }
     }
+}
+
+fn permitted_pre_observe_method_call(
+    key: &SameSourceHelperKey,
+    call: &syn::ExprMethodCall,
+) -> bool {
+    // This is a source-checkpoint allowlist, not a general purity inference. Every reachable
+    // pre-observe call must either resolve to a recursively inspected same-source helper or match
+    // the current helper owner/name plus its exact benign method/arity shape below. New call names,
+    // arities, qualified function values, callback shapes, or callable expressions fail closed.
+    let owner = key.owner.as_deref();
+    let name = key.name.as_str();
+    let method = call.method.to_string();
+    match (owner, name, method.as_str(), call.args.len()) {
+        (Some("LiveSessionCoordinator"), "poll_once", "iter", 0) => {
+            expression_is_path(&call.receiver, &["checkpoints"])
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "any", 1) => {
+            method_call_is(&call.receiver, "iter", &["checkpoints"], 0)
+                && call.args.first().is_some_and(|argument| {
+                    matches!(argument, syn::Expr::Closure(closure) if closure.inputs.len() == 1)
+                })
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "into_iter", 0) => {
+            expression_is_path(&call.receiver, &["checkpoints"])
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "filter", 1) => {
+            method_call_is(&call.receiver, "into_iter", &["checkpoints"], 0)
+                && call.args.first().is_some_and(|argument| {
+                    matches!(argument, syn::Expr::Closure(closure) if closure.inputs.len() == 1)
+                })
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "collect", 0) => {
+            matches!(call.receiver.as_ref(), syn::Expr::MethodCall(filter)
+                if filter.method == "filter" && filter.args.len() == 1)
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "len", 0) => {
+            expression_is_path(&call.receiver, &["fresh_checkpoints"])
+                || expression_is_path(&call.receiver, &["observations"])
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "cloned", 0) => {
+            matches!(call.receiver.as_ref(), syn::Expr::MethodCall(latest)
+                if latest.method == "latest_cursor" && latest.args.len() == 1)
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "clone", 0) => {
+            expression_is_path(&call.receiver, &["self", "rollout_path"])
+        }
+        (Some("LiveSessionProgress"), "checkpoint_ready_event", "as_str", 0) => {
+            expression_is_path(&call.receiver, &["rollout_path"])
+        }
+        (Some("LiveSessionProgress"), "checkpoint_ready_event", "to_string", 0) => {
+            method_call_is(&call.receiver, "as_str", &["rollout_path"], 0)
+        }
+        (None, "file_size_bytes", "map_err", 1) => {
+            matches!(call.receiver.as_ref(), syn::Expr::Call(metadata)
+                if matches!(metadata.func.as_ref(), syn::Expr::Path(function)
+                    if path_is(&function.path, &["fs", "metadata"]))
+                    && metadata.args.len() == 1)
+                && call.args.first().is_some_and(|argument| {
+                    matches!(argument, syn::Expr::Closure(closure) if closure.inputs.len() == 1)
+                })
+        }
+        (None, "file_size_bytes", "to_owned", 0) => {
+            expression_is_path(&call.receiver, &["path"])
+        }
+        (None, "file_size_bytes", "len", 0) => {
+            expression_is_path(&call.receiver, &["metadata"])
+        }
+        (Some("LiveSessionProgress"), "largest_observed_size_bytes", "max", 1) => {
+            expression_is_path(&call.receiver, &["last_completed"])
+                && call
+                    .args
+                    .first()
+                    .is_some_and(|argument| expression_is_path(argument, &["pending"]))
+        }
+        (Some("LiveSessionProgress"), "tracks_linked_session", "keys", 0) => {
+            expression_is_path(&call.receiver, &["self", "last_delivered_cursors"])
+        }
+        (Some("LiveSessionProgress"), "tracks_linked_session", "any", 1) => {
+            matches!(call.receiver.as_ref(), syn::Expr::MethodCall(keys)
+                if keys.method == "keys"
+                    && keys.args.is_empty()
+                    && expression_is_path(&keys.receiver, &["self", "last_delivered_cursors"]))
+                && call.args.first().is_some_and(|argument| {
+                    matches!(argument, syn::Expr::Closure(closure) if closure.inputs.len() == 1)
+                })
+        }
+        (Some("LiveSessionProgress"), "latest_cursor", "get", 1) => {
+            expression_is_path(&call.receiver, &["self", "last_delivered_cursors"])
+                && call
+                    .args
+                    .first()
+                    .is_some_and(|argument| expression_is_path(argument, &["session_id"]))
+        }
+        (Some("LiveSessionProgress"), "has_delivered_checkpoint", "is_empty", 0) => {
+            expression_is_path(&call.receiver, &["self", "last_delivered_cursors"])
+        }
+        (Some("LiveSessionProgress"), "checkpoint_is_fresh", method, arguments) => {
+            matches!((method, arguments), ("get", 1) | ("is_none_or", 1))
+        }
+        (Some("LiveSessionCoordinator"), "run_pipeline", "map_err", 1) => {
+            matches!(call.receiver.as_ref(), syn::Expr::Call(create)
+                if matches!(create.func.as_ref(), syn::Expr::Path(function)
+                    if path_is(&function.path, &["fs", "create_dir_all"]))
+                    && create.args.len() == 1)
+                && call.args.first().is_some_and(|argument| {
+                    matches!(argument, syn::Expr::Closure(closure) if closure.inputs.len() == 1)
+                })
+        }
+        (Some("LiveSessionCoordinator"), "run_pipeline", "clone", 0) => {
+            expression_is_path(&call.receiver, &["self", "request", "state_dir"])
+                || expression_is_path(&call.receiver, &["self", "request", "codex_home"])
+                || expression_is_path(&call.receiver, &["self", "request", "session_id"])
+        }
+        (Some("LiveSessionCoordinator"), "compactor_output_dir", "join", 1) => {
+            expression_is_path(&call.receiver, &["self", "request", "state_dir"])
+                && method_argument_is_string(call, "compactor")
+        }
+        (Some("LiveSessionCoordinator"), "analyzer_output_dir", "join", 1) => {
+            expression_is_path(&call.receiver, &["self", "request", "state_dir"])
+                && method_argument_is_string(call, "analyzer")
+        }
+        (None, "validate_analyzer_verified_direct_closure", method, arguments) => matches!(
+            (method, arguments),
+            ("iter", 0)
+                | ("filter", 1)
+                | ("extend", 1)
+                | ("cloned", 0)
+                | ("collect", 0)
+                | ("map", 1)
+                | ("clone", 0)
+                | ("all", 1)
+                | ("as_deref", 0)
+                | ("keys", 0)
+                | ("contains", 1)
+                | ("chain", 1)
+                | ("into_iter", 0)
+                | ("to_string", 0)
+                | ("max", 0)
+        ),
+        (None, "inspect_rollout_startup_readiness", method, arguments) => matches!(
+            (method, arguments),
+            ("map_err", 1)
+                | ("to_owned", 0)
+                | ("lines", 0)
+                | ("trim", 0)
+                | ("is_empty", 0)
+        ),
+        (None, "update_rollout_startup_readiness", method, arguments) => matches!(
+            (method, arguments),
+            ("get", 1)
+                | ("and_then", 1)
+                | ("is_some_and", 1)
+                | ("trim", 0)
+                | ("is_empty", 0)
+                | ("is_some", 0)
+        ),
+        (None, "rollout_text_fragments", method, arguments) => matches!(
+            (method, arguments),
+            ("get", 1) | ("and_then", 1) | ("push", 1)
+        ),
+        (None, "rollout_text_has_path_hint", method, arguments) => matches!(
+            (method, arguments),
+            ("split_whitespace", 0)
+                | ("any", 1)
+                | ("trim_matches", 1)
+                | ("trim_end_matches", 1)
+                | ("is_empty", 0)
+                | ("starts_with", 1)
+                | ("contains", 1)
+                | ("iter", 0)
+                | ("ends_with", 1)
+        ),
+        (None, "rollout_tool_call_arguments", method, arguments) => matches!(
+            (method, arguments),
+            ("get", 1) | ("and_then", 1) | ("then", 1) | ("flatten", 0)
+        ),
+        (None, "parse_tool_arguments", method, arguments) => {
+            matches!((method, arguments), ("ok", 0) | ("filter", 1))
+        }
+        (None, "sparse_startup_checkpoint_emission_deferred", method, arguments) => {
+            matches!((method, arguments), ("map", 1) | ("unwrap_or", 1))
+        }
+        _ => false,
+    }
+}
+
+fn permitted_pre_observe_function_call(
+    key: &SameSourceHelperKey,
+    call: &syn::ExprCall,
+    path: &syn::Path,
+) -> bool {
+    let owner = key.owner.as_deref();
+    let name = key.name.as_str();
+    match (owner, name, call.args.len()) {
+        (Some("LiveSessionCoordinator"), "poll_once", 0) => path_is(path, &["Vec", "new"]),
+        (Some("LiveSessionPollResult"), "idle", 0) => path_is(path, &["Vec", "new"]),
+        (Some("LiveSessionCoordinator"), "poll_once", 1) => {
+            path_is(path, &["Ok"])
+                || path_is(path, &["Err"])
+                || path_is(path, &["Vec", "with_capacity"])
+        }
+        (Some("LiveSessionProgress"), "checkpoint_ready_event", 3) => {
+            path_is(path, &["LiveCheckpointEvent", "checkpoint_ready"])
+        }
+        (Some("LiveSessionProgress"), "checkpoint_ready_event", 1) => path_is(path, &["Some"]),
+        (None, "file_size_bytes", 1) => {
+            path_is(path, &["fs", "metadata"]) || path_is(path, &["Ok"])
+        }
+        (Some("LiveSessionProgress"), "largest_observed_size_bytes", 1) => path_is(path, &["Some"]),
+        (Some("LiveSessionProgress"), "begin_poll" | "complete_poll", 1) => {
+            path_is(path, &["Some"])
+        }
+        (Some("LiveSessionCoordinator"), "run_pipeline", 1) => {
+            path_is(path, &["fs", "create_dir_all"])
+                || path_is(path, &["compact_codex_sessions"])
+                || path_is(path, &["Some"])
+                || path_is(path, &["analyze_bundle"])
+                || path_is(path, &["load_replay_bundle"])
+                || path_is(path, &["Ok"])
+        }
+        (None, "validate_analyzer_verified_direct_closure", 1) => {
+            path_is(path, &["BTreeSet", "from"])
+                || path_is(path, &["Some"])
+                || path_is(path, &["Err"])
+                || path_is(path, &["Ok"])
+        }
+        (None, "inspect_rollout_startup_readiness", 0) => {
+            path_is(path, &["RolloutStartupReadiness", "default"])
+        }
+        (None, "inspect_rollout_startup_readiness", 1) => {
+            path_is(path, &["fs", "File", "open"])
+                || path_is(path, &["BufReader", "new"])
+                || path_is(path, &["serde_json", "from_str"])
+                || path_is(path, &["Ok"])
+        }
+        (None, "rollout_text_fragments", 0) => path_is(path, &["Vec", "new"]),
+        (None, "rollout_text_fragments", 1) => path_is(path, &["Some"]),
+        (None, "rollout_tool_call_arguments", 1) => path_is(path, &["Some"]),
+        (None, "parse_tool_arguments", 1) => path_is(path, &["serde_json", "from_str"]),
+        (None, "update_rollout_startup_readiness", 1) => path_is(path, &["Some"]),
+        _ => false,
+    }
+}
+
+fn permitted_pre_observe_function_reference(key: &SameSourceHelperKey, path: &syn::Path) -> bool {
+    match (key.owner.as_deref(), key.name.as_str()) {
+        (None, "update_rollout_startup_readiness")
+        | (None, "rollout_text_fragments")
+        | (None, "rollout_tool_call_arguments") => {
+            path_is(path, &["Value", "as_str"]) || path_is(path, &["Value", "as_array"])
+        }
+        (None, "parse_tool_arguments") => path_is(path, &["Value", "is_object"]),
+        _ => false,
+    }
+}
+
+fn method_call_is(
+    receiver: &syn::Expr,
+    method: &str,
+    base: &[&str],
+    argument_count: usize,
+) -> bool {
+    matches!(receiver,
+        syn::Expr::MethodCall(call)
+            if call.method == method
+                && call.turbofish.is_none()
+                && call.args.len() == argument_count
+                && expression_is_path(&call.receiver, base))
+}
+
+fn method_argument_is_string(call: &syn::ExprMethodCall, expected: &str) -> bool {
+    matches!(call.args.first(),
+        Some(syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(value),
+            ..
+        })) if value.value() == expected)
 }
 
 fn assert_pre_observe_helpers_are_bookkeeping_only(
@@ -1025,8 +1591,7 @@ fn assert_same_source_helper_is_bookkeeping_only(
         ));
     }
 
-    let owner = key.owner.as_deref().unwrap_or("");
-    for child in graph.calls_in_block(helper.block, owner, &helper.parameter_owners)? {
+    for child in graph.calls_in_block(helper.block, key, &helper.parameter_owners)? {
         assert_same_source_helper_is_bookkeeping_only(graph, &child, visiting, verified)?;
     }
     visiting.remove(key);
@@ -1096,6 +1661,9 @@ fn assert_exact_dominated_delivery_loop(delivery_loop: &syn::ExprForLoop) -> Res
             ));
         }
     }
+    if loop_scan.count(DeliveryStep::CompletePoll) != 0 {
+        return Err("delivery loop must not complete pending poll bookkeeping".to_string());
+    }
     Ok(())
 }
 
@@ -1116,31 +1684,47 @@ fn assert_only_bookkeeping_persistence_outside_delivery(
                 scan.errors
             ));
         }
-        if scan
-            .steps
-            .iter()
-            .any(|step| !matches!(step, DeliveryStep::PersistState))
-        {
+        if scan.steps.iter().any(|step| {
+            !matches!(
+                step,
+                DeliveryStep::CompletePoll | DeliveryStep::PersistState
+            )
+        }) {
             return Err(format!(
                 "statement {index} outside the dominated loop reaches a protected delivery effect: {:?}",
                 scan.steps
             ));
         }
+        let complete_count = scan.count(DeliveryStep::CompletePoll);
         let persist_count = scan.count(DeliveryStep::PersistState);
-        if persist_count == 0 {
+        if complete_count == 0 && persist_count == 0 {
             continue;
         }
         let permitted_pre_delivery_return = index < delivery_loop_index
-            && persist_count == 1
+            && complete_count == 1
+            && persist_count <= 1
+            && scan.steps.len() == complete_count + persist_count
             && statement_has_bookkeeping_only_outer_function_exit(statement);
         let permitted_post_delivery_completion = index > delivery_loop_index
+            && complete_count == 1
+            && persist_count == 0
+            && statement_is_complete_poll(statement)
+            && block
+                .stmts
+                .get(index + 1)
+                .is_some_and(statement_fallibly_persists_state);
+        let permitted_post_delivery_persistence = index > delivery_loop_index
+            && complete_count == 0
             && persist_count == 1
             && statement_fallibly_persists_state(statement)
             && index > 0
             && statement_is_complete_poll(&block.stmts[index - 1]);
-        if !permitted_pre_delivery_return && !permitted_post_delivery_completion {
+        if !permitted_pre_delivery_return
+            && !permitted_post_delivery_completion
+            && !permitted_post_delivery_persistence
+        {
             return Err(format!(
-                "statement {index} persists outside the dominated delivery sequence without a classified bookkeeping-only exit"
+                "statement {index} completes or persists outside the dominated delivery sequence without a classified bookkeeping-only exit"
             ));
         }
     }
@@ -1378,11 +1962,16 @@ fn statement_has_bookkeeping_only_outer_function_exit(statement: &syn::Stmt) -> 
 
     impl<'ast> Visit<'ast> for BookkeepingExitVisitor {
         fn visit_block(&mut self, block: &'ast syn::Block) {
-            self.found |= block.stmts.windows(3).any(|statements| {
+            let direct_return = block.stmts.as_slice().windows(2).any(|statements| {
+                statement_is_complete_poll(&statements[0])
+                    && matches!(statements[1], syn::Stmt::Expr(syn::Expr::Return(_), _))
+            });
+            let persisted_return = block.stmts.as_slice().windows(3).any(|statements| {
                 statement_is_complete_poll(&statements[0])
                     && statement_fallibly_persists_state(&statements[1])
                     && matches!(statements[2], syn::Stmt::Expr(syn::Expr::Return(_), _))
             });
+            self.found |= direct_return || persisted_return;
             visit::visit_block(self, block);
         }
 
@@ -1575,6 +2164,9 @@ fn classify_protected_method_call(call: &syn::ExprMethodCall) -> Option<Delivery
         "record_delivery" if expression_is_path(&call.receiver, &["self", "progress"]) => {
             Some(DeliveryStep::RecordDelivery)
         }
+        "complete_poll" if expression_is_path(&call.receiver, &["self", "progress"]) => {
+            Some(DeliveryStep::CompletePoll)
+        }
         "persist_state" if expression_is_path(&call.receiver, &["self"]) => {
             Some(DeliveryStep::PersistState)
         }
@@ -1591,6 +2183,7 @@ fn protected_method_name(name: &str) -> bool {
         "checkpoint_ready_event"
             | "observe"
             | "record_delivery"
+            | "complete_poll"
             | "persist_state"
             | "push"
             | "emit"
