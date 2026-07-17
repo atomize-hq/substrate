@@ -2676,6 +2676,142 @@ fn ast_policy_self_test_honors_production_cfg_on_expressions_and_members() {
 }
 
 #[test]
+fn ast_policy_self_test_honors_production_cfg_on_typed_parameters() {
+    let fixture = tempfile::tempdir().expect("create typed-parameter cfg fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create typed-parameter source directory");
+    let source_path = source_root.join("lib.rs");
+    let source = r#"
+        #![allow(dead_code, non_upper_case_globals)]
+
+        struct Checkpoint;
+        impl Checkpoint { const schema_version: usize = 8; }
+        struct Presentation;
+        impl Presentation { const fn render_console_block(&self) {} }
+        const PRESENTATION: Presentation = Presentation;
+
+        fn typed_parameters(
+            #[cfg(test)]
+            _test_only: [(); {
+                PRESENTATION.render_console_block();
+                mod test_only_missing;
+                (Checkpoint::schema_version == 8) as usize
+            }],
+            #[cfg(all(not(test), any(unix, windows)))]
+            _production: [(); {
+                PRESENTATION.render_console_block();
+                #[path = "active.rs"] mod active;
+                (Checkpoint::schema_version == 8) as usize
+            }],
+        ) {}
+    "#;
+    fs::write(&source_path, source).expect("write typed-parameter cfg source");
+    fs::write(source_root.join("active.rs"), "pub fn marker() {}\n")
+        .expect("write active typed-parameter module");
+
+    assert_rust_root_compiles("typed_parameter_cfg_fixture", "lib", &source_path, &[]);
+    let file = syn::parse_file(source).expect("parse typed-parameter cfg fixture");
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["typed_parameters".to_string()],
+        "only the production-active typed parameter may record a schema owner"
+    );
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("typed_parameters", &file.items, &mut calls);
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([("typed_parameters::typed_parameters".to_string(), 1)]),
+        "only the production-active typed parameter may record a render call"
+    );
+    assert!(
+        calls.violations.is_empty(),
+        "typed-parameter render calls must remain classified: {calls:?}"
+    );
+
+    let sources = production_rust_sources(&source_root)
+        .into_iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(&source_root)
+                    .expect("typed-parameter fixture source")
+                    .to_path_buf(),
+                source.module,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        sources,
+        BTreeSet::from([
+            (
+                PathBuf::from("active.rs"),
+                Some("typed_parameters::active".to_string()),
+            ),
+            (PathBuf::from("lib.rs"), None),
+        ]),
+        "module discovery must skip the missing test-only parameter module and visit the active compound cfg"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_fails_closed_on_unknown_typed_parameter_cfg() {
+    let fixture = tempfile::tempdir().expect("create unknown typed-parameter cfg fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create unknown typed-parameter source directory");
+    let source_path = source_root.join("lib.rs");
+    let source = r#"
+        #![allow(dead_code, non_upper_case_globals)]
+
+        struct Checkpoint;
+        impl Checkpoint { const schema_version: usize = 8; }
+        struct Presentation;
+        impl Presentation { const fn render_console_block(&self) {} }
+        const PRESENTATION: Presentation = Presentation;
+
+        fn unknown_parameter(
+            #[cfg(custom_unknown)]
+            _unknown: [(); {
+                PRESENTATION.render_console_block();
+                mod unknown_missing;
+                (Checkpoint::schema_version == 8) as usize
+            }],
+        ) {}
+    "#;
+    fs::write(&source_path, source).expect("write unknown typed-parameter cfg source");
+    assert_rust_root_compiles(
+        "unknown_typed_parameter_cfg_fixture",
+        "lib",
+        &source_path,
+        &[],
+    );
+    let file = syn::parse_file(source).expect("parse unknown typed-parameter cfg fixture");
+
+    for failure in [
+        std::panic::catch_unwind(|| analyze_schema_policy(&file))
+            .expect_err("schema traversal must fail closed on unknown typed-parameter cfg"),
+        std::panic::catch_unwind(|| {
+            let mut calls = RenderCallInventory::default();
+            analyze_render_calls_in_items("unknown_parameter", &file.items, &mut calls);
+        })
+        .expect_err("render traversal must fail closed on unknown typed-parameter cfg"),
+        std::panic::catch_unwind(|| production_rust_sources(&source_root))
+            .expect_err("module traversal must fail closed on unknown typed-parameter cfg"),
+    ] {
+        let message = failure
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| failure.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic");
+        assert!(
+            message.contains("unsupported production cfg predicate `custom_unknown`"),
+            "unknown typed-parameter cfg failure must be explicit: {message}"
+        );
+    }
+}
+
+#[test]
 fn ast_policy_self_test_skips_test_only_local_modules_before_resolution() {
     let fixture = tempfile::tempdir().expect("create local-module cfg fixture");
     let source_root = fixture.path().join("src");
@@ -4772,6 +4908,12 @@ fn production_pattern_active(pattern: &syn::Pat) -> bool {
     production_attributes_active(pattern_attributes(pattern))
 }
 
+fn visit_production_pattern<'ast, V: Visit<'ast>>(visitor: &mut V, pattern: &'ast syn::Pat) {
+    if matches!(pattern, syn::Pat::Type(_)) || production_pattern_active(pattern) {
+        visit::visit_pat(visitor, pattern);
+    }
+}
+
 macro_rules! production_cfg_gate {
     ($method:ident, $node:ty, $visit:path) => {
         fn $method(&mut self, node: &'ast $node) {
@@ -5260,9 +5402,7 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
     }
 
     fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
-        if production_pattern_active(pattern) {
-            visit::visit_pat(self, pattern);
-        }
+        visit_production_pattern(self, pattern);
     }
 
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
@@ -5434,6 +5574,7 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         syn::LifetimeParam,
         visit::visit_lifetime_param
     );
+    production_cfg_gate!(visit_pat_type, syn::PatType, visit::visit_pat_type);
     production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
     production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
     production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
@@ -6057,9 +6198,7 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
     }
 
     fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
-        if production_pattern_active(pattern) {
-            visit::visit_pat(self, pattern);
-        }
+        visit_production_pattern(self, pattern);
     }
 
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
@@ -6136,6 +6275,7 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
         visit::visit_lifetime_param
     );
     production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
+    production_cfg_gate!(visit_pat_type, syn::PatType, visit::visit_pat_type);
     production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
     production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
     production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
@@ -6465,9 +6605,7 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
         }
 
         fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
-            if production_pattern_active(pattern) {
-                visit::visit_pat(self, pattern);
-            }
+            visit_production_pattern(self, pattern);
         }
 
         fn visit_item(&mut self, item: &'ast syn::Item) {
@@ -6668,6 +6806,7 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
             visit::visit_lifetime_param
         );
         production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
+        production_cfg_gate!(visit_pat_type, syn::PatType, visit::visit_pat_type);
         production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
         production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
         production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
