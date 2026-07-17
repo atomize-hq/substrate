@@ -227,6 +227,169 @@ fn v0_8_checkpoint(session_id: &str, ordinal: usize) -> Checkpoint {
     checkpoint
 }
 
+fn exact_matrix_checkpoint(schema_version: &str) -> Checkpoint {
+    let mut checkpoint = schema_checkpoint(
+        schema_version,
+        "session-matrix",
+        1,
+        87,
+        true,
+        "run the exact parity proof",
+    );
+    checkpoint.drift_scores[0].state = if schema_version == "v0.2" {
+        DriftState::Cleared
+    } else {
+        DriftState::Recovered
+    };
+    checkpoint.drift_scores[0].evidence = vec![agent_drift_analyzer::EvidenceRef {
+        row: checkpoint.boundary.start.clone(),
+        reason: format!("{schema_version} analyzer-owned matrix evidence"),
+    }];
+
+    match schema_version {
+        "v0.2" | "v0.3" => {}
+        "v0.4" => checkpoint.turn_context = Some(sample_turn_context(1)),
+        "v0.5" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+        }
+        "v0.6" | "v0.7" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+            checkpoint.session_progress = Some(sample_session_progress());
+        }
+        "v0.8" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+            checkpoint.session_progress = Some(sample_session_progress());
+            checkpoint.delegation = DelegationContext {
+                topology: DelegationTopology::DelegatingParent,
+                parent_session_id: None,
+                child_session_ids: vec!["session-child".to_string()],
+                child_work_visibility: ChildWorkVisibility::Linked,
+                confidence: Confidence::High,
+                markers: vec!["typed delegation marker".to_string()],
+                supporting_evidence: vec![agent_drift_analyzer::EvidenceRef {
+                    row: checkpoint.boundary.start.clone(),
+                    reason: "typed delegation evidence".to_string(),
+                }],
+                counter_evidence: Vec::new(),
+            };
+        }
+        _ => panic!("matrix helper accepts only literal v0.2 through v0.8"),
+    }
+
+    checkpoint
+}
+
+#[test]
+fn replay_input_exact_named_v0_2_through_v0_8_matrix_preserves_every_typed_fact() {
+    for schema_version in ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"] {
+        let checkpoint = exact_matrix_checkpoint(schema_version);
+        let fixture = ReplayFixture::from_checkpoints(vec![checkpoint.clone()], sample_summary());
+
+        let bundle = load_replay_bundle(&fixture.checkpoint_dir)
+            .unwrap_or_else(|error| panic!("load {schema_version} replay bundle: {error}"));
+
+        assert_eq!(bundle.schema_version, schema_version, "{schema_version}");
+        assert_eq!(bundle.checkpoints, vec![checkpoint], "{schema_version}");
+    }
+}
+
+#[test]
+fn replay_input_v0_3_through_v0_8_missing_explicit_state_never_uses_legacy_inference() {
+    for schema_version in ["v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"] {
+        let fixture = ReplayFixture::from_checkpoints(
+            vec![exact_matrix_checkpoint(schema_version)],
+            sample_summary(),
+        );
+        let mut malformed = serde_json::to_value(exact_matrix_checkpoint(schema_version))
+            .expect("serialize matrix checkpoint");
+        malformed["drift_scores"][0]
+            .as_object_mut()
+            .expect("drift score object")
+            .remove("state");
+        write_jsonl(
+            fixture.checkpoint_dir.join("checkpoints.jsonl"),
+            &[malformed],
+        );
+
+        let error = load_replay_bundle(&fixture.checkpoint_dir)
+            .expect_err("explicit schemas missing state must fail closed");
+
+        assert!(matches!(
+            error,
+            InputError::ContractGap {
+                schema_version: ref actual_schema,
+                ref field,
+                ..
+            } if actual_schema == schema_version && field == "drift_scores[0].state"
+        ));
+    }
+}
+
+#[test]
+fn replay_input_raw_contract_has_exactly_four_non_empty_fields_and_whole_v0_8_delegation() {
+    for (pointer, expected_field) in [
+        ("/session_id", "session_id"),
+        ("/checkpoint_id", "checkpoint_id"),
+        ("/task_frame/objective", "task_frame.objective"),
+        ("/expected_next_step", "expected_next_step"),
+    ] {
+        let fixture = ReplayFixture::from_checkpoints(
+            vec![exact_matrix_checkpoint("v0.8")],
+            sample_summary(),
+        );
+        let mut malformed = serde_json::to_value(exact_matrix_checkpoint("v0.8"))
+            .expect("serialize v0.8 matrix checkpoint");
+        *malformed
+            .pointer_mut(pointer)
+            .expect("matrix field must exist") = serde_json::json!(" \t\n ");
+        write_jsonl(
+            fixture.checkpoint_dir.join("checkpoints.jsonl"),
+            &[malformed],
+        );
+
+        let error = load_replay_bundle(&fixture.checkpoint_dir)
+            .expect_err("the closed non-empty field set must fail closed");
+        assert!(matches!(
+            error,
+            InputError::ContractGap {
+                ref schema_version,
+                ref field,
+                ..
+            } if schema_version == "v0.8" && field == expected_field
+        ));
+    }
+
+    let fixture =
+        ReplayFixture::from_checkpoints(vec![exact_matrix_checkpoint("v0.8")], sample_summary());
+    let mut permitted = serde_json::to_value(exact_matrix_checkpoint("v0.8"))
+        .expect("serialize v0.8 matrix checkpoint");
+    permitted["task_frame"]["truth_artifacts"] = serde_json::json!([""]);
+    permitted["drift_scores"][0]["evidence"][0]["reason"] = serde_json::json!("");
+    permitted["delegation"]["parent_session_id"] = serde_json::json!("");
+    permitted["delegation"]["child_session_ids"] = serde_json::json!([""]);
+    permitted["delegation"]["markers"] = serde_json::json!([""]);
+    permitted["delegation"]["supporting_evidence"] = serde_json::json!([]);
+    write_jsonl(
+        fixture.checkpoint_dir.join("checkpoints.jsonl"),
+        &[permitted],
+    );
+
+    let bundle = load_replay_bundle(&fixture.checkpoint_dir)
+        .expect("v0.8 validates delegation as one non-null object");
+    assert_eq!(
+        bundle.checkpoints[0]
+            .delegation
+            .parent_session_id
+            .as_deref(),
+        Some("")
+    );
+    assert_eq!(bundle.checkpoints[0].delegation.child_session_ids, [""]);
+    assert_eq!(bundle.checkpoints[0].delegation.markers, [""]);
+}
+
 #[test]
 fn replay_input_loads_v0_8_checkpoint_with_analyzer_delegation() {
     let checkpoint = v0_8_checkpoint("session-parent", 1);

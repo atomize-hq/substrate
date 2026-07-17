@@ -1009,6 +1009,177 @@ mod tests {
     }
 
     #[test]
+    fn exact_named_v0_2_through_v0_8_matrix_locks_all_interpreted_facts() {
+        for (literal, schema, expected_posture, expects_delegation) in [
+            (
+                "v0.2",
+                CheckpointSchemaVersion::V0_2,
+                CheckpointPosture::Active,
+                false,
+            ),
+            (
+                "v0.3",
+                CheckpointSchemaVersion::V0_3,
+                CheckpointPosture::Recovered,
+                false,
+            ),
+            (
+                "v0.4",
+                CheckpointSchemaVersion::V0_4,
+                CheckpointPosture::Recovered,
+                false,
+            ),
+            (
+                "v0.5",
+                CheckpointSchemaVersion::V0_5,
+                CheckpointPosture::Recovered,
+                false,
+            ),
+            (
+                "v0.6",
+                CheckpointSchemaVersion::V0_6,
+                CheckpointPosture::Recovered,
+                false,
+            ),
+            (
+                "v0.7",
+                CheckpointSchemaVersion::V0_7,
+                CheckpointPosture::Recovered,
+                false,
+            ),
+            (
+                "v0.8",
+                CheckpointSchemaVersion::V0_8,
+                CheckpointPosture::Recovered,
+                true,
+            ),
+        ] {
+            let matrix_evidence = evidence(&format!("{literal} analyzer-owned matrix evidence"));
+            let mut checkpoint = checkpoint_for_version(literal);
+            checkpoint.flagged = true;
+            checkpoint.drift_scores[0].flagged = true;
+            checkpoint.drift_scores[0].raw_score = 87;
+            checkpoint.drift_scores[0].state = if literal == "v0.2" {
+                DriftState::Cleared
+            } else {
+                DriftState::Recovered
+            };
+            checkpoint.drift_scores[0].evidence = vec![matrix_evidence.clone()];
+            checkpoint.delegation = DelegationContext {
+                topology: DelegationTopology::DelegatingParent,
+                parent_session_id: None,
+                child_session_ids: vec!["session-child".to_string()],
+                child_work_visibility: ChildWorkVisibility::Linked,
+                confidence: Confidence::High,
+                markers: vec!["typed delegation marker".to_string()],
+                supporting_evidence: vec![evidence("typed delegation evidence")],
+                counter_evidence: Vec::new(),
+            };
+
+            let validated = interpret(&checkpoint, None)
+                .unwrap_or_else(|error| panic!("{literal} must interpret: {error}"));
+            let projected =
+                project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+                    checkpoint: &checkpoint,
+                    previous_checkpoint: None,
+                });
+
+            assert_eq!(validated.checkpoint, checkpoint, "{literal} checkpoint");
+            assert_eq!(
+                validated.projection_profile,
+                CheckpointProjectionProfile::Schema(schema),
+                "{literal} schema profile"
+            );
+            assert_eq!(validated.cursor.session_id, "session-a", "{literal} cursor");
+            assert_eq!(validated.cursor.ordinal, 1, "{literal} cursor");
+            assert_eq!(
+                validated.warning_fingerprint, "session-a:dead_end_thrash:run focused proof",
+                "{literal} warning fingerprint"
+            );
+            assert!(validated.flagged, "{literal} flagged input");
+            assert_eq!(
+                validated.max_flagged_score,
+                Some(87),
+                "{literal} max-score input"
+            );
+            assert_eq!(
+                validated.posture,
+                Some(expected_posture),
+                "{literal} posture"
+            );
+            assert_eq!(
+                validated.evidence,
+                vec![matrix_evidence.clone()],
+                "{literal} flattened evidence"
+            );
+            assert_eq!(
+                validated.evidence_groups,
+                vec![vec![matrix_evidence]],
+                "{literal} grouped evidence"
+            );
+            assert_eq!(
+                validated.delegation,
+                expects_delegation.then(|| checkpoint.delegation.clone()),
+                "{literal} whole-delegation projection"
+            );
+            assert_eq!(
+                projected, validated,
+                "{literal} validated and compatibility facts"
+            );
+        }
+    }
+
+    #[test]
+    fn parent_orchestration_remains_distinct_from_child_progress_and_drift_evidence() {
+        let mut checkpoint = checkpoint_for_version("v0.8");
+        checkpoint.task_frame.objective =
+            "parent orchestrates child agents and waits for delegated results".to_string();
+        checkpoint.session_archetype = Some(SessionArchetype {
+            label: SessionArchetypeLabel::Planning,
+            confidence: Confidence::High,
+            supporting_evidence: vec![evidence("parent planning evidence")],
+            counter_evidence: Vec::new(),
+        });
+        checkpoint.session_progress = Some(SessionProgress {
+            status: ProgressStatus::Advancing,
+            dimension: ProgressDimension::ParentVisibleOrchestration,
+            confidence: Confidence::High,
+            signals: Vec::new(),
+            supporting_evidence: vec![evidence("parent orchestration evidence")],
+            counter_evidence: Vec::new(),
+        });
+        checkpoint.delegation = DelegationContext {
+            topology: DelegationTopology::DelegatingParent,
+            parent_session_id: None,
+            child_session_ids: vec!["session-child".to_string()],
+            child_work_visibility: ChildWorkVisibility::Linked,
+            confidence: Confidence::High,
+            markers: vec!["spawn_agent".to_string()],
+            supporting_evidence: vec![evidence("verified child link")],
+            counter_evidence: Vec::new(),
+        };
+        checkpoint.drift_scores[0].state = DriftState::HistoricalOnly;
+        checkpoint.drift_scores[0].evidence = vec![evidence("analyzer-owned drift evidence")];
+
+        let interpreted = interpret(&checkpoint, None).expect("v0.8 checkpoint must interpret");
+
+        assert_eq!(
+            interpreted.checkpoint.session_archetype,
+            checkpoint.session_archetype
+        );
+        assert_eq!(
+            interpreted.checkpoint.session_progress,
+            checkpoint.session_progress
+        );
+        assert_eq!(interpreted.evidence, checkpoint.drift_scores[0].evidence);
+        assert!(!interpreted
+            .evidence
+            .iter()
+            .any(|item| item.reason.contains("orchestration") || item.reason.contains("child")));
+        assert_eq!(interpreted.delegation, Some(checkpoint.delegation));
+    }
+
+    #[test]
     fn total_projection_is_deterministic_for_supported_but_core_invalid_typed_shapes() {
         let mut empty_required_strings = checkpoint_for_version("v0.8");
         empty_required_strings.session_id.clear();

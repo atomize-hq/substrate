@@ -10,9 +10,11 @@ use agent_drift_analyzer::{
 use camino::Utf8PathBuf;
 
 use agent_drift_sentinel::{
-    emit_operator_events, execute, operator_surface::CheckpointPosture, AdjudicationConfig,
-    FixtureLiveCheckpointSource, LiveCheckpointEvent, LiveRuntime, OperatorEvent,
-    RecordingOperatorSink, SchedulerPolicy, SentinelMode, SentinelRequest, WarningPolicy,
+    emit_operator_events, execute,
+    operator_surface::{present_checkpoint, render_replay_report, CheckpointPosture},
+    AdjudicationConfig, FixtureLiveCheckpointSource, LiveCheckpointEvent, LiveRuntime,
+    OperatorEvent, RecordingOperatorSink, SchedulerPolicy, SentinelMode, SentinelRequest,
+    TriggerClass, WarningPolicy,
 };
 
 #[test]
@@ -431,6 +433,283 @@ fn live_end_to_end_replay_and_live_surfaces_share_archetype_rendering_for_v0_5_c
     assert!(replay_silent_render.contains("+1 more"));
     assert!(replay_visible_render
         .contains("counter[inspection-style command widened the visible search space]"));
+}
+
+#[test]
+fn live_end_to_end_v0_6_replay_and_live_render_identically() {
+    let mut checkpoint = support::sample_checkpoints()
+        .into_iter()
+        .next()
+        .expect("sample checkpoint");
+    checkpoint.schema_version = "v0.6".to_string();
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(
+        &checkpoint,
+        SessionArchetypeLabel::AutonomousImplementation,
+    ));
+    checkpoint.session_progress = Some(sample_session_progress(
+        &checkpoint,
+        ProgressStatus::Advancing,
+        ProgressDimension::ImplementationVerificationWall,
+    ));
+
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        vec![checkpoint.clone()],
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run v0.6 replay");
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoint,
+            Some("fixture".to_string()),
+        ))
+        .expect("observe v0.6 live checkpoint");
+
+    assert_eq!(
+        replay.report.visible_warnings[0], live.presentation,
+        "v0.6 validated replay and live paths must project identical facts"
+    );
+}
+
+#[test]
+fn live_end_to_end_exact_named_v0_2_through_v0_8_core_and_facade_matrix_agrees() {
+    for (
+        schema_version,
+        expected_posture,
+        expects_turn_context,
+        expects_archetype,
+        expects_progress,
+        expects_delegation,
+    ) in [
+        (
+            "v0.2",
+            CheckpointPosture::Active,
+            false,
+            false,
+            false,
+            false,
+        ),
+        (
+            "v0.3",
+            CheckpointPosture::Recovered,
+            false,
+            false,
+            false,
+            false,
+        ),
+        (
+            "v0.4",
+            CheckpointPosture::Recovered,
+            true,
+            false,
+            false,
+            false,
+        ),
+        (
+            "v0.5",
+            CheckpointPosture::Recovered,
+            true,
+            true,
+            false,
+            false,
+        ),
+        (
+            "v0.6",
+            CheckpointPosture::Recovered,
+            true,
+            true,
+            true,
+            false,
+        ),
+        (
+            "v0.7",
+            CheckpointPosture::Recovered,
+            true,
+            true,
+            true,
+            false,
+        ),
+        ("v0.8", CheckpointPosture::Recovered, true, true, true, true),
+    ] {
+        let checkpoint = exact_e2e_matrix_checkpoint(schema_version);
+        let scheduler_policy = SchedulerPolicy::default();
+        let warning_policy = WarningPolicy::default();
+        let replay_fixture = support::ReplayFixture::from_checkpoints(
+            vec![checkpoint.clone()],
+            support::sample_summary(),
+        );
+        let replay = execute(&SentinelRequest {
+            checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+            mode: SentinelMode::Replay,
+            cursor: None,
+            scheduler_policy,
+            warning_policy,
+            adjudication: AdjudicationConfig::default(),
+        })
+        .unwrap_or_else(|error| panic!("run {schema_version} replay: {error}"));
+        let typed_replay = render_replay_report(
+            &replay.bundle,
+            &replay.bundle.checkpoints,
+            &scheduler_policy,
+            &warning_policy,
+        );
+
+        let mut runtime = LiveRuntime::new(scheduler_policy, warning_policy);
+        let live = runtime
+            .observe(LiveCheckpointEvent::checkpoint_ready(
+                1,
+                checkpoint.clone(),
+                Some("fixture".to_string()),
+            ))
+            .unwrap_or_else(|error| panic!("observe {schema_version} live checkpoint: {error}"));
+        let typed_live = present_checkpoint(
+            &checkpoint,
+            TriggerClass::CheckpointReady,
+            &live.decision,
+            &warning_policy,
+        );
+
+        let replay_presentation = &replay.report.visible_warnings[0];
+        let typed_replay_presentation = &typed_replay.visible_warnings[0];
+        assert_eq!(
+            replay.report.next_cursor,
+            Some(live.compatibility.cursor.clone())
+        );
+        assert_eq!(
+            live.compatibility.warning_fingerprint,
+            "session-matrix:wrong_plan_branch:run the exact parity proof"
+        );
+        assert!(live.compatibility.flagged, "{schema_version}");
+        assert_eq!(live.compatibility.max_flagged_score, Some(87));
+        assert_eq!(replay_presentation, &live.presentation, "{schema_version}");
+        assert_eq!(
+            typed_replay_presentation, replay_presentation,
+            "{schema_version}"
+        );
+        assert_eq!(typed_live, *replay_presentation, "{schema_version}");
+        assert_eq!(replay_presentation.trigger, TriggerClass::CheckpointReady);
+        assert_eq!(
+            replay_presentation.headline,
+            "session-matrix:0001 @ checkpoint_ready"
+        );
+        assert_eq!(replay_presentation.posture, Some(expected_posture));
+        assert_eq!(
+            replay_presentation.checkpoint.turn_context.is_some(),
+            expects_turn_context,
+            "{schema_version} turn context"
+        );
+        assert_eq!(
+            replay_presentation.checkpoint.session_archetype.is_some(),
+            expects_archetype,
+            "{schema_version} archetype"
+        );
+        assert_eq!(
+            replay_presentation.checkpoint.session_progress.is_some(),
+            expects_progress,
+            "{schema_version} progress"
+        );
+        assert_eq!(
+            replay_presentation
+                .render_console_block(None)
+                .contains("- Delegation:"),
+            expects_delegation,
+            "{schema_version} delegation"
+        );
+        assert_eq!(
+            replay_presentation
+                .diagnostics_summary
+                .interval_command_count,
+            1
+        );
+        assert_eq!(
+            replay_presentation
+                .diagnostics_summary
+                .interval_verification_command_count,
+            1
+        );
+        assert_eq!(
+            replay_presentation
+                .diagnostics_summary
+                .verification_density_basis_points,
+            Some(10_000)
+        );
+        assert_eq!(
+            replay_presentation.diagnostics_summary.evidence_item_count,
+            1
+        );
+        assert_eq!(replay_presentation.evidence_lines.len(), 1);
+        assert!(replay_presentation.evidence_lines[0]
+            .contains(&format!("{schema_version} analyzer-owned matrix evidence")));
+    }
+}
+
+#[test]
+fn live_end_to_end_parent_orchestration_never_becomes_child_progress_or_drift_evidence() {
+    let mut checkpoint = exact_e2e_matrix_checkpoint("v0.8");
+    checkpoint.task_frame.objective =
+        "parent orchestrates child agents and waits for delegated results".to_string();
+    checkpoint.session_archetype = Some(sample_session_archetype(
+        &checkpoint,
+        SessionArchetypeLabel::Planning,
+    ));
+    checkpoint.session_progress = Some(sample_session_progress(
+        &checkpoint,
+        ProgressStatus::Advancing,
+        ProgressDimension::ParentVisibleOrchestration,
+    ));
+    checkpoint.drift_scores[0].evidence = vec![EvidenceRef {
+        row: checkpoint.boundary.start.clone(),
+        reason: "analyzer-owned parent drift evidence".to_string(),
+    }];
+    checkpoint.delegation.supporting_evidence = vec![EvidenceRef {
+        row: checkpoint.boundary.start.clone(),
+        reason: "verified child link".to_string(),
+    }];
+
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        vec![checkpoint.clone()],
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run parent-orchestration replay");
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoint,
+            Some("fixture".to_string()),
+        ))
+        .expect("observe parent-orchestration live checkpoint");
+
+    let replay_presentation = &replay.report.visible_warnings[0];
+    let rendered = replay_presentation.render_console_block(None);
+    assert_eq!(replay_presentation, &live.presentation);
+    assert!(rendered.contains("parent orchestrates child agents"));
+    assert!(rendered.contains("label=planning"));
+    assert!(rendered.contains("dimension=parent_visible_orchestration"));
+    assert!(!rendered.contains("label=autonomous_implementation"));
+    assert!(!rendered.contains("dimension=implementation_verification_wall"));
+    assert_eq!(replay_presentation.evidence_lines.len(), 1);
+    assert!(replay_presentation.evidence_lines[0].contains("analyzer-owned parent drift evidence"));
+    assert!(!replay_presentation.evidence_lines[0].contains("verified child link"));
 }
 
 #[test]
@@ -936,6 +1215,74 @@ fn extract_progress_line(rendered: &str) -> Option<&str> {
     rendered
         .lines()
         .find(|line| line.starts_with("- Progress: "))
+}
+
+fn exact_e2e_matrix_checkpoint(schema_version: &str) -> Checkpoint {
+    let mut checkpoint =
+        support::checkpoint("session-matrix", 1, 87, true, "run the exact parity proof");
+    checkpoint.schema_version = schema_version.to_string();
+    checkpoint.diagnostics.evidence_item_count = 1;
+    checkpoint.drift_scores[0].state = if schema_version == "v0.2" {
+        DriftState::Cleared
+    } else {
+        DriftState::Recovered
+    };
+    checkpoint.drift_scores[0].evidence = vec![EvidenceRef {
+        row: checkpoint.boundary.start.clone(),
+        reason: format!("{schema_version} analyzer-owned matrix evidence"),
+    }];
+
+    match schema_version {
+        "v0.2" | "v0.3" => {}
+        "v0.4" => checkpoint.turn_context = Some(sample_turn_context(1)),
+        "v0.5" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(
+                &checkpoint,
+                SessionArchetypeLabel::Planning,
+            ));
+        }
+        "v0.6" | "v0.7" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(
+                &checkpoint,
+                SessionArchetypeLabel::Planning,
+            ));
+            checkpoint.session_progress = Some(sample_session_progress(
+                &checkpoint,
+                ProgressStatus::Advancing,
+                ProgressDimension::PlanningConvergence,
+            ));
+        }
+        "v0.8" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(
+                &checkpoint,
+                SessionArchetypeLabel::Planning,
+            ));
+            checkpoint.session_progress = Some(sample_session_progress(
+                &checkpoint,
+                ProgressStatus::Advancing,
+                ProgressDimension::PlanningConvergence,
+            ));
+            checkpoint.delegation = DelegationContext {
+                topology: DelegationTopology::DelegatingParent,
+                parent_session_id: None,
+                child_session_ids: vec!["session-child".to_string()],
+                child_work_visibility: ChildWorkVisibility::Linked,
+                confidence: Confidence::High,
+                markers: vec!["typed delegation marker".to_string()],
+                supporting_evidence: vec![EvidenceRef {
+                    row: checkpoint.boundary.start.clone(),
+                    reason: "typed delegation evidence".to_string(),
+                }],
+                counter_evidence: Vec::new(),
+            };
+        }
+        _ => panic!("matrix helper accepts only literal v0.2 through v0.8"),
+    }
+
+    checkpoint
 }
 
 #[allow(clippy::too_many_arguments)]

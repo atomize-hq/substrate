@@ -183,6 +183,215 @@ fn v0_8_checkpoint_with_state(state: DriftState, evidence_reason: &str) -> Check
     checkpoint
 }
 
+fn exact_matrix_checkpoint(schema_version: &str) -> Checkpoint {
+    let mut checkpoint = schema_checkpoint(
+        schema_version,
+        "session-matrix",
+        1,
+        87,
+        true,
+        "run the exact parity proof",
+    );
+    checkpoint.drift_scores[0].state = if schema_version == "v0.2" {
+        DriftState::Cleared
+    } else {
+        DriftState::Recovered
+    };
+    checkpoint.drift_scores[0].evidence = vec![EvidenceRef {
+        row: checkpoint.boundary.start.clone(),
+        reason: format!("{schema_version} analyzer-owned matrix evidence"),
+    }];
+
+    match schema_version {
+        "v0.2" | "v0.3" => {}
+        "v0.4" => checkpoint.turn_context = Some(sample_turn_context(1)),
+        "v0.5" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+        }
+        "v0.6" | "v0.7" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+            checkpoint.session_progress = Some(sample_session_progress());
+        }
+        "v0.8" => {
+            checkpoint.turn_context = Some(sample_turn_context(1));
+            checkpoint.session_archetype = Some(sample_session_archetype(&checkpoint));
+            checkpoint.session_progress = Some(sample_session_progress());
+            checkpoint.delegation = DelegationContext {
+                topology: DelegationTopology::DelegatingParent,
+                parent_session_id: None,
+                child_session_ids: vec!["session-child".to_string()],
+                child_work_visibility: ChildWorkVisibility::Linked,
+                confidence: Confidence::High,
+                markers: vec!["typed delegation marker".to_string()],
+                supporting_evidence: vec![EvidenceRef {
+                    row: checkpoint.boundary.start.clone(),
+                    reason: "typed delegation evidence".to_string(),
+                }],
+                counter_evidence: Vec::new(),
+            };
+        }
+        _ => panic!("matrix helper accepts only literal v0.2 through v0.8"),
+    }
+
+    checkpoint
+}
+
+struct MatrixLiveFixture {
+    _temp_dir: TempDir,
+    path: camino::Utf8PathBuf,
+}
+
+impl MatrixLiveFixture {
+    fn from_checkpoint_value(checkpoint: serde_json::Value) -> Self {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let path = Utf8Path::from_path(temp_dir.path())
+            .expect("utf8 temp dir")
+            .join("live-checkpoints.jsonl");
+        let record = serde_json::json!({
+            "event_type": "checkpoint_ready",
+            "emission_ordinal": 1,
+            "checkpoint": checkpoint,
+        });
+        fs::write(
+            path.as_std_path(),
+            format!("{}\n", serde_json::to_string(&record).expect("record json")),
+        )
+        .expect("write live fixture");
+        Self {
+            _temp_dir: temp_dir,
+            path,
+        }
+    }
+}
+
+#[test]
+fn live_checkpoint_exact_named_v0_2_through_v0_8_raw_and_typed_matrix_agrees() {
+    for schema_version in ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"] {
+        let checkpoint = exact_matrix_checkpoint(schema_version);
+        let fixture = MatrixLiveFixture::from_checkpoint_value(
+            serde_json::to_value(&checkpoint).expect("serialize matrix checkpoint"),
+        );
+
+        let events = load_live_fixture(&fixture.path)
+            .unwrap_or_else(|error| panic!("load {schema_version} live fixture: {error}"));
+        let loaded = events[0]
+            .checkpoint
+            .as_ref()
+            .expect("checkpoint-ready payload");
+        let raw_compatibility = verify_live_checkpoint_compatibility(loaded)
+            .unwrap_or_else(|error| panic!("verify raw {schema_version} checkpoint: {error}"));
+        let typed_compatibility = verify_live_checkpoint_compatibility(&checkpoint)
+            .unwrap_or_else(|error| panic!("verify typed {schema_version} checkpoint: {error}"));
+
+        assert_eq!(loaded, &checkpoint, "{schema_version} raw typed payload");
+        assert_eq!(raw_compatibility, typed_compatibility, "{schema_version}");
+        assert_eq!(typed_compatibility.cursor.session_id, "session-matrix");
+        assert_eq!(typed_compatibility.cursor.ordinal, 1);
+        assert_eq!(
+            typed_compatibility.warning_fingerprint,
+            "session-matrix:wrong_plan_branch:run the exact parity proof"
+        );
+        assert!(typed_compatibility.flagged);
+        assert_eq!(typed_compatibility.max_flagged_score, Some(87));
+    }
+}
+
+#[test]
+fn live_checkpoint_v0_3_through_v0_8_missing_explicit_state_never_uses_legacy_inference() {
+    for schema_version in ["v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"] {
+        let mut malformed = serde_json::to_value(exact_matrix_checkpoint(schema_version))
+            .expect("serialize matrix checkpoint");
+        malformed["drift_scores"][0]
+            .as_object_mut()
+            .expect("drift score object")
+            .remove("state");
+        let fixture = MatrixLiveFixture::from_checkpoint_value(malformed);
+
+        let error = load_live_fixture(&fixture.path)
+            .expect_err("explicit schemas missing state must fail closed");
+
+        assert!(matches!(
+            error,
+            LiveInputError::FixtureContractGap {
+                schema_version: ref actual_schema,
+                ref field,
+                ..
+            } if actual_schema == schema_version
+                && field == "checkpoint.drift_scores[0].state"
+        ));
+    }
+}
+
+#[test]
+fn live_checkpoint_contract_has_exactly_four_non_empty_fields_and_whole_v0_8_delegation() {
+    for (pointer, expected_field) in [
+        ("/session_id", "session_id"),
+        ("/checkpoint_id", "checkpoint_id"),
+        ("/task_frame/objective", "task_frame.objective"),
+        ("/expected_next_step", "expected_next_step"),
+    ] {
+        let mut raw = serde_json::to_value(exact_matrix_checkpoint("v0.8"))
+            .expect("serialize v0.8 matrix checkpoint");
+        *raw.pointer_mut(pointer).expect("matrix field must exist") = serde_json::json!(" \t\n ");
+        let fixture = MatrixLiveFixture::from_checkpoint_value(raw);
+        let raw_error = load_live_fixture(&fixture.path)
+            .expect_err("raw live input must enforce the closed non-empty field set");
+        assert!(matches!(
+            raw_error,
+            LiveInputError::FixtureContractGap {
+                ref schema_version,
+                ref field,
+                ..
+            } if schema_version == "v0.8"
+                && field == &format!("checkpoint.{expected_field}")
+        ));
+
+        let mut typed = exact_matrix_checkpoint("v0.8");
+        match expected_field {
+            "session_id" => typed.session_id = " \t\n ".to_string(),
+            "checkpoint_id" => typed.checkpoint_id = " \t\n ".to_string(),
+            "task_frame.objective" => typed.task_frame.objective = " \t\n ".to_string(),
+            "expected_next_step" => typed.expected_next_step = " \t\n ".to_string(),
+            _ => unreachable!("matrix contains exactly four fields"),
+        }
+        let typed_error = verify_live_checkpoint_compatibility(&typed)
+            .expect_err("typed live input must enforce the closed non-empty field set");
+        assert!(matches!(
+            typed_error,
+            LiveInputError::CompatibilityGap { field, .. } if field == expected_field
+        ));
+    }
+
+    let mut checkpoint = exact_matrix_checkpoint("v0.8");
+    checkpoint.task_frame.truth_artifacts = vec![String::new()];
+    checkpoint.drift_scores[0].evidence[0].reason.clear();
+    checkpoint.delegation = DelegationContext {
+        topology: DelegationTopology::MixedOrAmbiguous,
+        parent_session_id: Some(String::new()),
+        child_session_ids: vec![String::new()],
+        child_work_visibility: ChildWorkVisibility::Opaque,
+        confidence: Confidence::Low,
+        markers: vec![String::new()],
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    };
+    let fixture = MatrixLiveFixture::from_checkpoint_value(
+        serde_json::to_value(&checkpoint).expect("serialize whole delegation checkpoint"),
+    );
+    let events = load_live_fixture(&fixture.path)
+        .expect("raw live validates delegation as one non-null object");
+    let loaded = events[0]
+        .checkpoint
+        .as_ref()
+        .expect("checkpoint-ready payload");
+    verify_live_checkpoint_compatibility(&checkpoint)
+        .expect("typed live accepts analyzer-owned whole delegation");
+    assert_eq!(loaded, &checkpoint);
+    assert_eq!(loaded.delegation, checkpoint.delegation);
+}
+
 #[test]
 fn live_checkpoint_compatibility_accepts_and_renders_v0_8_analyzer_delegation() {
     let checkpoint =
