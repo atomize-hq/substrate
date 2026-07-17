@@ -6,6 +6,9 @@ use tempfile as _;
 
 use camino::Utf8PathBuf;
 
+#[allow(dead_code)]
+mod checkpoint_interpretation;
+
 pub mod adjudication;
 pub mod cli;
 pub mod input;
