@@ -3,9 +3,9 @@
 mod support;
 
 use agent_drift_analyzer::{
-    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, ProgressDimension, ProgressStatus,
-    SessionArchetype, SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    Checkpoint, ChildWorkVisibility, Confidence, DelegationContext, DelegationTopology, DriftClass,
+    DriftState, EvidenceRef, ProgressDimension, ProgressStatus, SessionArchetype,
+    SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use camino::Utf8PathBuf;
 
@@ -840,6 +840,69 @@ fn live_end_to_end_keeps_scheduler_trigger_labels_distinct_from_analyzer_posture
     assert!(live_historical_status
         .message
         .contains("scheduler_repeated_failure_trigger"));
+}
+
+#[test]
+fn live_end_to_end_v0_8_final_facade_matches_replay_and_renders_typed_delegation() {
+    let mut checkpoint = support::checkpoint(
+        "session-v0-8",
+        1,
+        82,
+        true,
+        "continue on the current task frame",
+    );
+    checkpoint.schema_version = "v0.8".to_string();
+    checkpoint.turn_context = Some(sample_turn_context(1));
+    checkpoint.session_archetype = Some(sample_session_archetype(
+        &checkpoint,
+        SessionArchetypeLabel::AutonomousImplementation,
+    ));
+    checkpoint.session_progress = Some(sample_session_progress(
+        &checkpoint,
+        ProgressStatus::Advancing,
+        ProgressDimension::ParentVisibleOrchestration,
+    ));
+    checkpoint.delegation = DelegationContext {
+        topology: DelegationTopology::MixedOrAmbiguous,
+        parent_session_id: Some("session-root".to_string()),
+        child_session_ids: vec!["session-child".to_string()],
+        child_work_visibility: ChildWorkVisibility::Opaque,
+        confidence: Confidence::Low,
+        markers: vec!["analyzer-owned marker".to_string()],
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    };
+
+    let replay_fixture = support::ReplayFixture::from_checkpoints(
+        vec![checkpoint.clone()],
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: replay_fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy: WarningPolicy::default(),
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("run v0.8 replay");
+    let replay_rendered = replay.report.visible_warnings[0].render_console_block(None);
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let live = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoint,
+            Some("fixture".to_string()),
+        ))
+        .expect("observe v0.8 live checkpoint");
+    let live_rendered = live.presentation.render_console_block(None);
+
+    assert_eq!(live_rendered, replay_rendered);
+    assert!(live_rendered.contains(
+        "- Delegation: topology=mixed_or_ambiguous parent=session-root children=[session-child] visibility=opaque confidence=low"
+    ));
+    assert!(replay.report.to_console_text().contains(&live_rendered));
 }
 
 fn fixture_path(name: &str) -> Utf8PathBuf {

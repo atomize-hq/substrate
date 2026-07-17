@@ -28,6 +28,7 @@ serde_json = { workspace = true }
 thiserror = "1.0"
 
 [dev-dependencies]
+syn = { version = "2", features = ["full", "visit"] }
 tempfile = "3.10"
 
 [lints.rust]

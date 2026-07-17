@@ -2,14 +2,15 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use agent_drift_analyzer::{
-    Checkpoint, ChildWorkVisibility, DelegationContext, DelegationTopology, DriftClass, DriftState,
+    Checkpoint, ChildWorkVisibility, DelegationContext, DelegationTopology, DriftClass,
     EvidenceRef, ProgressDimension, ProgressStatus, SessionArchetype, SessionArchetypeLabel,
     SessionProgress, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use camino::Utf8Path;
 
 use crate::checkpoint_interpretation::{
-    interpret_checkpoint, CheckpointInterpretation, CheckpointInterpretationInput,
+    interpret_checkpoint, project_checkpoint_compatibility, CheckpointCompatibilityProjectionInput,
+    CheckpointInterpretation, CheckpointInterpretationInput,
 };
 use crate::input::{
     map_typed_contract_error, CheckpointCursor, InputError, ReplayCheckpointBundle,
@@ -543,17 +544,19 @@ pub fn render_replay_report(
             continue;
         }
 
-        let cursor = CheckpointCursor::from(checkpoint);
-        let fingerprint = warning_fingerprint(checkpoint);
+        let interpretation =
+            project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+                checkpoint,
+                previous_same_session: previous_checkpoint,
+            });
         let decision = scheduler.observe(
-            cursor,
+            interpretation.cursor.clone(),
             TriggerClass::CheckpointReady,
-            checkpoint.flagged,
-            Some(&fingerprint),
+            interpretation.flagged,
+            Some(&interpretation.warning_fingerprint),
         );
-        let presentation = present_checkpoint_with_previous(
-            checkpoint,
-            previous_checkpoint,
+        let presentation = present_interpretation(
+            &interpretation,
             TriggerClass::CheckpointReady,
             &decision,
             warning_policy,
@@ -591,50 +594,11 @@ pub fn present_checkpoint_with_previous(
     decision: &EvaluationDecision,
     warning_policy: &WarningPolicy,
 ) -> CheckpointPresentation {
-    let disposition = classify_checkpoint(checkpoint, decision, warning_policy);
-    let posture = classify_checkpoint_posture(checkpoint, previous_checkpoint);
-    let flagged_scores = checkpoint
-        .drift_scores
-        .iter()
-        .filter(|score| score.flagged)
-        .collect::<Vec<_>>();
-    let evidence_lines = collect_evidence_lines(checkpoint, warning_policy.max_evidence_lines);
-    let severity = max_flagged_score(checkpoint)
-        .map(severity_for_score)
-        .unwrap_or("low")
-        .to_string();
-
-    CheckpointPresentation {
-        checkpoint: checkpoint.clone(),
-        trigger,
-        posture,
-        disposition,
-        severity,
-        headline: format!("{} @ {}", checkpoint.checkpoint_id, format_trigger(trigger)),
-        objective: truncate(
-            &checkpoint.task_frame.objective,
-            warning_policy.max_objective_chars,
-        ),
-        drift_summary: if flagged_scores.is_empty() {
-            "no flagged drift classes".to_string()
-        } else {
-            flagged_scores
-                .iter()
-                .map(|score| {
-                    format!(
-                        "{}={} ({})",
-                        drift_class_name(score.class),
-                        score.raw_score,
-                        confidence_name(score.confidence)
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
-        },
-        diagnostics_summary: CheckpointDiagnosticsSummary::from_checkpoint(checkpoint),
-        expected_next_step: checkpoint.expected_next_step.clone(),
-        evidence_lines,
-    }
+    let interpretation = project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+        checkpoint,
+        previous_same_session: previous_checkpoint,
+    });
+    present_interpretation(&interpretation, trigger, decision, warning_policy)
 }
 
 pub(crate) fn present_interpretation(
@@ -733,168 +697,6 @@ fn classify_interpretation(
     WarningDisposition::Visible
 }
 
-fn classify_checkpoint_posture(
-    checkpoint: &Checkpoint,
-    previous_checkpoint: Option<&Checkpoint>,
-) -> Option<CheckpointPosture> {
-    if uses_explicit_analyzer_state(checkpoint) {
-        return classify_checkpoint_posture_from_state(checkpoint);
-    }
-
-    classify_checkpoint_posture_legacy(checkpoint, previous_checkpoint)
-}
-
-fn uses_explicit_analyzer_state(checkpoint: &Checkpoint) -> bool {
-    matches!(
-        checkpoint.schema_version.as_str(),
-        "v0.3" | "v0.4" | "v0.5" | "v0.6" | "v0.7" | "v0.8"
-    )
-}
-
-fn classify_checkpoint_posture_from_state(checkpoint: &Checkpoint) -> Option<CheckpointPosture> {
-    if checkpoint
-        .drift_scores
-        .iter()
-        .any(|score| score.state == DriftState::Active)
-    {
-        return Some(CheckpointPosture::Active);
-    }
-
-    if checkpoint
-        .drift_scores
-        .iter()
-        .any(|score| score.state == DriftState::Recovered)
-    {
-        return Some(CheckpointPosture::Recovered);
-    }
-
-    if checkpoint
-        .drift_scores
-        .iter()
-        .any(|score| score.state == DriftState::HistoricalOnly)
-    {
-        return Some(CheckpointPosture::HistoricalOnly);
-    }
-
-    None
-}
-
-fn classify_checkpoint_posture_legacy(
-    checkpoint: &Checkpoint,
-    previous_checkpoint: Option<&Checkpoint>,
-) -> Option<CheckpointPosture> {
-    if checkpoint.flagged || checkpoint.drift_scores.iter().any(|score| score.flagged) {
-        return Some(CheckpointPosture::Active);
-    }
-
-    let historical_classes = checkpoint
-        .drift_scores
-        .iter()
-        .filter(|score| score_has_historical_evidence(score))
-        .map(|score| score.class)
-        .collect::<Vec<_>>();
-    if historical_classes.is_empty() {
-        return None;
-    }
-
-    if previous_checkpoint.is_some_and(|previous| {
-        historical_classes
-            .iter()
-            .copied()
-            .any(|class| checkpoint_had_active_class(previous, class))
-    }) {
-        return Some(CheckpointPosture::Recovered);
-    }
-
-    Some(CheckpointPosture::HistoricalOnly)
-}
-
-fn checkpoint_had_active_class(checkpoint: &Checkpoint, class: DriftClass) -> bool {
-    checkpoint
-        .drift_scores
-        .iter()
-        .any(|score| score.class == class && score.flagged)
-}
-
-fn score_has_historical_evidence(score: &agent_drift_analyzer::DriftScore) -> bool {
-    historical_reason_prefixes(score.class)
-        .iter()
-        .any(|prefix| {
-            score
-                .evidence
-                .iter()
-                .any(|evidence| evidence.reason.starts_with(prefix))
-        })
-}
-
-fn historical_reason_prefixes(class: DriftClass) -> &'static [&'static str] {
-    match class {
-        DriftClass::TruthGroundingGap => &["historical truth-grounding gap:"],
-        DriftClass::DeadEndThrash => &[
-            "historical repeated failure evidence:",
-            "historical repeated verification evidence:",
-        ],
-        DriftClass::WrongPlanBranch => &[],
-        DriftClass::SemanticGoalDrift => &[],
-    }
-}
-
-fn collect_evidence_lines(checkpoint: &Checkpoint, max_evidence_lines: usize) -> Vec<String> {
-    if uses_explicit_analyzer_state(checkpoint) {
-        return collect_state_backed_evidence_lines(checkpoint, max_evidence_lines);
-    }
-
-    collect_legacy_evidence_lines(checkpoint, max_evidence_lines)
-}
-
-fn collect_state_backed_evidence_lines(
-    checkpoint: &Checkpoint,
-    max_evidence_lines: usize,
-) -> Vec<String> {
-    let mut evidence_lines = Vec::new();
-    for state in [
-        DriftState::Active,
-        DriftState::Recovered,
-        DriftState::HistoricalOnly,
-    ] {
-        for score in checkpoint
-            .drift_scores
-            .iter()
-            .filter(|score| score.state == state)
-        {
-            push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);
-            if evidence_lines.len() >= max_evidence_lines {
-                return evidence_lines;
-            }
-        }
-    }
-    evidence_lines
-}
-
-fn collect_legacy_evidence_lines(
-    checkpoint: &Checkpoint,
-    max_evidence_lines: usize,
-) -> Vec<String> {
-    let mut evidence_lines = Vec::new();
-    for score in checkpoint.drift_scores.iter().filter(|score| score.flagged) {
-        push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);
-        if evidence_lines.len() >= max_evidence_lines {
-            return evidence_lines;
-        }
-    }
-    for score in checkpoint
-        .drift_scores
-        .iter()
-        .filter(|score| !score.flagged && score_has_historical_evidence(score))
-    {
-        push_evidence_lines(&mut evidence_lines, &score.evidence, max_evidence_lines);
-        if evidence_lines.len() >= max_evidence_lines {
-            return evidence_lines;
-        }
-    }
-    evidence_lines
-}
-
 fn push_evidence_lines(
     evidence_lines: &mut Vec<String>,
     evidence_refs: &[EvidenceRef],
@@ -916,65 +718,19 @@ pub fn classify_checkpoint(
     decision: &EvaluationDecision,
     warning_policy: &WarningPolicy,
 ) -> WarningDisposition {
-    if !decision.evaluate {
-        return WarningDisposition::Silent {
-            reason: "scheduler cooldown deferred replay evaluation".to_string(),
-        };
-    }
-
-    if !checkpoint.flagged {
-        return WarningDisposition::Silent {
-            reason: "checkpoint recorded without a visible warning".to_string(),
-        };
-    }
-
-    let Some(max_score) = max_flagged_score(checkpoint) else {
-        return WarningDisposition::Silent {
-            reason: "checkpoint flagged without a surfaced drift score".to_string(),
-        };
-    };
-
-    if max_score < warning_policy.minimum_visible_score {
-        return WarningDisposition::Silent {
-            reason: format!(
-                "flagged checkpoint stayed below visible score threshold ({max_score} < {})",
-                warning_policy.minimum_visible_score
-            ),
-        };
-    }
-
-    if matches!(decision.reason, DecisionReason::WarningDebounced)
-        || !decision.visible_warning_allowed
-    {
-        return WarningDisposition::Silent {
-            reason: "warning debounce suppressed a duplicate replay warning".to_string(),
-        };
-    }
-
-    WarningDisposition::Visible
+    let interpretation = project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+        checkpoint,
+        previous_same_session: None,
+    });
+    classify_interpretation(&interpretation, decision, warning_policy)
 }
 
 pub fn warning_fingerprint(checkpoint: &Checkpoint) -> String {
-    let classes = checkpoint
-        .drift_scores
-        .iter()
-        .filter(|score| score.flagged)
-        .map(|score| drift_class_name(score.class))
-        .collect::<Vec<_>>()
-        .join(",");
-    format!(
-        "{}:{}:{}",
-        checkpoint.session_id, classes, checkpoint.expected_next_step
-    )
-}
-
-fn max_flagged_score(checkpoint: &Checkpoint) -> Option<u8> {
-    checkpoint
-        .drift_scores
-        .iter()
-        .filter(|score| score.flagged)
-        .map(|score| score.raw_score)
-        .max()
+    project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+        checkpoint,
+        previous_same_session: None,
+    })
+    .warning_fingerprint
 }
 
 fn severity_for_score(score: u8) -> &'static str {

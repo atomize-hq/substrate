@@ -35,6 +35,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
+ "syn",
  "tempfile",
  "thiserror 1.0.69",
 ]

@@ -58,8 +58,26 @@ impl CheckpointSchemaVersion {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CheckpointProjectionProfile {
+    Schema(CheckpointSchemaVersion),
+    CompatibilityOnly,
+}
+
+impl CheckpointProjectionProfile {
+    fn uses_explicit_state(self) -> bool {
+        matches!(self, Self::Schema(schema) if schema.uses_explicit_state())
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CheckpointInterpretationInput<'a> {
+    pub(crate) checkpoint: &'a Checkpoint,
+    pub(crate) previous_same_session: Option<&'a Checkpoint>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CheckpointCompatibilityProjectionInput<'a> {
     pub(crate) checkpoint: &'a Checkpoint,
     pub(crate) previous_same_session: Option<&'a Checkpoint>,
 }
@@ -67,7 +85,7 @@ pub(crate) struct CheckpointInterpretationInput<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CheckpointInterpretation {
     pub(crate) checkpoint: Checkpoint,
-    pub(crate) schema_version: CheckpointSchemaVersion,
+    pub(crate) projection_profile: CheckpointProjectionProfile,
     pub(crate) cursor: CheckpointCursor,
     pub(crate) warning_fingerprint: String,
     pub(crate) flagged: bool,
@@ -185,9 +203,42 @@ pub(crate) fn interpret_checkpoint(
         }
     }
 
-    Ok(CheckpointInterpretation {
+    Ok(project_checkpoint(
+        checkpoint,
+        input.previous_same_session,
+        CheckpointProjectionProfile::Schema(schema),
+    ))
+}
+
+pub(crate) fn project_checkpoint_compatibility(
+    input: CheckpointCompatibilityProjectionInput<'_>,
+) -> CheckpointInterpretation {
+    let profile = compatibility_projection_profile(input.checkpoint.schema_version.as_str());
+    project_checkpoint(input.checkpoint, input.previous_same_session, profile)
+}
+
+fn compatibility_projection_profile(schema_version: &str) -> CheckpointProjectionProfile {
+    let schema = match schema_version {
+        "v0.2" => CheckpointSchemaVersion::V0_2,
+        "v0.3" => CheckpointSchemaVersion::V0_3,
+        "v0.4" => CheckpointSchemaVersion::V0_4,
+        "v0.5" => CheckpointSchemaVersion::V0_5,
+        "v0.6" => CheckpointSchemaVersion::V0_6,
+        "v0.7" => CheckpointSchemaVersion::V0_7,
+        "v0.8" => CheckpointSchemaVersion::V0_8,
+        _ => return CheckpointProjectionProfile::CompatibilityOnly,
+    };
+    CheckpointProjectionProfile::Schema(schema)
+}
+
+fn project_checkpoint(
+    checkpoint: &Checkpoint,
+    previous_same_session: Option<&Checkpoint>,
+    profile: CheckpointProjectionProfile,
+) -> CheckpointInterpretation {
+    CheckpointInterpretation {
         checkpoint: checkpoint.clone(),
-        schema_version: schema,
+        projection_profile: profile,
         cursor: CheckpointCursor::from(checkpoint),
         warning_fingerprint: warning_fingerprint(checkpoint),
         flagged: checkpoint.flagged,
@@ -197,11 +248,14 @@ pub(crate) fn interpret_checkpoint(
             .filter(|score| score.flagged)
             .map(|score| score.raw_score)
             .max(),
-        posture: checkpoint_posture(checkpoint, input.previous_same_session, schema),
-        evidence: checkpoint_evidence(checkpoint, schema),
-        delegation: matches!(schema, CheckpointSchemaVersion::V0_8)
-            .then(|| checkpoint.delegation.clone()),
-    })
+        posture: checkpoint_posture(checkpoint, previous_same_session, profile),
+        evidence: checkpoint_evidence(checkpoint, profile),
+        delegation: matches!(
+            profile,
+            CheckpointProjectionProfile::Schema(CheckpointSchemaVersion::V0_8)
+        )
+        .then(|| checkpoint.delegation.clone()),
+    }
 }
 
 fn validate_typed_checkpoint(
@@ -335,9 +389,9 @@ fn require_explicit_drift_states(
 fn checkpoint_posture(
     checkpoint: &Checkpoint,
     previous_same_session: Option<&Checkpoint>,
-    schema: CheckpointSchemaVersion,
+    profile: CheckpointProjectionProfile,
 ) -> Option<CheckpointPosture> {
-    if schema.uses_explicit_state() {
+    if profile.uses_explicit_state() {
         return [
             (DriftState::Active, CheckpointPosture::Active),
             (DriftState::Recovered, CheckpointPosture::Recovered),
@@ -383,10 +437,10 @@ fn checkpoint_posture(
 
 fn checkpoint_evidence(
     checkpoint: &Checkpoint,
-    schema: CheckpointSchemaVersion,
+    profile: CheckpointProjectionProfile,
 ) -> Vec<EvidenceRef> {
     let mut selected = Vec::new();
-    if schema.uses_explicit_state() {
+    if profile.uses_explicit_state() {
         for state in [
             DriftState::Active,
             DriftState::Recovered,
@@ -482,8 +536,9 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::{
-        interpret_checkpoint, validate_serialized_checkpoint, CheckpointContractError,
-        CheckpointInterpretationInput, CheckpointSchemaVersion,
+        interpret_checkpoint, project_checkpoint_compatibility, validate_serialized_checkpoint,
+        CheckpointCompatibilityProjectionInput, CheckpointContractError,
+        CheckpointInterpretationInput, CheckpointProjectionProfile, CheckpointSchemaVersion,
     };
     use crate::operator_surface::CheckpointPosture;
 
@@ -898,7 +953,10 @@ mod tests {
 
         let interpreted = interpret(&checkpoint, None).expect("checkpoint should interpret");
         assert_eq!(interpreted.checkpoint, checkpoint);
-        assert_eq!(interpreted.schema_version, CheckpointSchemaVersion::V0_8);
+        assert_eq!(
+            interpreted.projection_profile,
+            CheckpointProjectionProfile::Schema(CheckpointSchemaVersion::V0_8)
+        );
         assert_eq!(interpreted.cursor.session_id, "session-a");
         assert_eq!(interpreted.cursor.ordinal, 1);
         assert_eq!(
@@ -910,6 +968,67 @@ mod tests {
         assert_eq!(interpreted.posture, Some(CheckpointPosture::Active));
         assert_eq!(interpreted.evidence, checkpoint.drift_scores[0].evidence);
         assert_eq!(interpreted.delegation, Some(DelegationContext::default()));
+    }
+
+    #[test]
+    fn total_projection_matches_validated_facts_for_every_supported_typed_schema() {
+        for (literal, schema) in SUPPORTED {
+            let mut checkpoint = checkpoint_for_version(literal);
+            checkpoint.flagged = true;
+            checkpoint.drift_scores[0].flagged = true;
+            checkpoint.drift_scores[0].raw_score = 87;
+            checkpoint.drift_scores[0].state = if literal == "v0.2" {
+                DriftState::Cleared
+            } else {
+                DriftState::Active
+            };
+            checkpoint.drift_scores[0].evidence = vec![evidence("typed projection evidence")];
+
+            let validated = interpret(&checkpoint, None).expect("supported checkpoint interprets");
+            let projected =
+                project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+                    checkpoint: &checkpoint,
+                    previous_same_session: None,
+                });
+
+            assert_eq!(
+                projected.projection_profile,
+                CheckpointProjectionProfile::Schema(schema),
+                "{literal} must retain its exact supported profile"
+            );
+            assert_eq!(projected, validated, "{literal} projection facts diverged");
+        }
+    }
+
+    #[test]
+    fn unsupported_typed_facade_input_uses_explicit_total_compatibility_profile() {
+        let mut previous = checkpoint_for_version("v0.2");
+        previous.schema_version = "v-next".to_string();
+        previous.flagged = true;
+        previous.drift_scores[0].flagged = true;
+
+        let mut checkpoint = checkpoint_for_version("v0.2");
+        checkpoint.schema_version = "v-next".to_string();
+        checkpoint.session_id = String::new();
+        checkpoint.checkpoint_id = String::new();
+        checkpoint.task_frame.objective = String::new();
+        checkpoint.expected_next_step = String::new();
+        checkpoint.drift_scores[0].evidence = vec![evidence(
+            "historical repeated failure evidence: facade-compatible history",
+        )];
+
+        let projected = project_checkpoint_compatibility(CheckpointCompatibilityProjectionInput {
+            checkpoint: &checkpoint,
+            previous_same_session: Some(&previous),
+        });
+
+        assert_eq!(
+            projected.projection_profile,
+            CheckpointProjectionProfile::CompatibilityOnly
+        );
+        assert_eq!(projected.posture, Some(CheckpointPosture::Recovered));
+        assert_eq!(projected.evidence, checkpoint.drift_scores[0].evidence);
+        assert_eq!(projected.delegation, None);
     }
 
     #[test]

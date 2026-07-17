@@ -2,21 +2,28 @@
 
 mod support;
 
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use agent_drift_analyzer::{
-    Checkpoint, Confidence, DriftClass, DriftState, EvidenceRef, ProgressDimension, ProgressStatus,
-    SessionArchetype, SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext,
-    TurnExecutionMode,
+    Checkpoint, ChildWorkVisibility, Confidence, DelegationContext, DelegationTopology, DriftClass,
+    DriftState, EvidenceRef, ProgressDimension, ProgressStatus, SessionArchetype,
+    SessionArchetypeLabel, SessionProgress, TurnActivityMix, TurnContext, TurnExecutionMode,
 };
 use agent_drift_sentinel::{
+    adjudication::{shape_request, AdjudicationRequest},
     execute,
     operator_surface::{
-        present_checkpoint_with_previous, render_replay_report, warning_fingerprint,
-        CheckpointPosture, ReplayReport,
+        present_checkpoint, present_checkpoint_with_previous, render_replay_report,
+        warning_fingerprint, CheckpointPosture, CheckpointPresentation, ReplayReport,
     },
-    scheduler::ReplayScheduler,
-    AdjudicationConfig, InputError, ReplayCheckpointBundle, SchedulerPolicy, SentinelError,
-    SentinelMode, SentinelRequest, SentinelResult, TriggerClass, WarningPolicy,
+    scheduler::{DecisionReason, EvaluationDecision, ReplayScheduler},
+    AdjudicationConfig, InputError, ReasoningEffort, ReplayCheckpointBundle, SchedulerPolicy,
+    SentinelError, SentinelMode, SentinelRequest, SentinelResult, TriggerClass, WarningPolicy,
 };
+use syn::parse::Parser;
+use syn::visit::{self, Visit};
 
 #[test]
 fn operator_surface_locks_replay_public_signatures() {
@@ -27,6 +34,164 @@ fn operator_surface_locks_replay_public_signatures() {
         &SchedulerPolicy,
         &WarningPolicy,
     ) -> ReplayReport = render_replay_report;
+}
+
+#[test]
+fn operator_surface_locks_all_legacy_presentation_facade_signatures() {
+    let _: fn(
+        &Checkpoint,
+        TriggerClass,
+        &EvaluationDecision,
+        &WarningPolicy,
+    ) -> CheckpointPresentation = present_checkpoint;
+    let _: fn(
+        &Checkpoint,
+        Option<&Checkpoint>,
+        TriggerClass,
+        &EvaluationDecision,
+        &WarningPolicy,
+    ) -> CheckpointPresentation = present_checkpoint_with_previous;
+    let _: fn(&CheckpointPresentation, Option<&str>) -> String =
+        CheckpointPresentation::render_console_block;
+}
+
+#[test]
+fn legacy_facade_preserves_delegation_presence_and_unsupported_total_output() {
+    let decision = EvaluationDecision {
+        evaluate: true,
+        visible_warning_allowed: true,
+        reason: DecisionReason::InitialCheckpoint,
+    };
+    let policy = WarningPolicy::default();
+    let delegation = DelegationContext {
+        topology: DelegationTopology::MixedOrAmbiguous,
+        parent_session_id: Some("parent-session".to_string()),
+        child_session_ids: vec!["child-a".to_string(), "child-b".to_string()],
+        child_work_visibility: ChildWorkVisibility::Opaque,
+        confidence: Confidence::Low,
+        markers: vec!["typed marker".to_string()],
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    };
+
+    for version in ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7"] {
+        let mut checkpoint = support::checkpoint(
+            "session-delegation",
+            1,
+            0,
+            false,
+            "continue on the current task frame",
+        );
+        checkpoint.schema_version = version.to_string();
+        checkpoint.delegation = delegation.clone();
+        let rendered = present_checkpoint(
+            &checkpoint,
+            TriggerClass::CheckpointReady,
+            &decision,
+            &policy,
+        )
+        .render_console_block(None);
+        assert!(
+            !rendered.contains("- Delegation:"),
+            "{version} must preserve absent delegation presentation"
+        );
+    }
+
+    let mut v0_8 = support::checkpoint(
+        "session-delegation",
+        1,
+        0,
+        false,
+        "continue on the current task frame",
+    );
+    v0_8.schema_version = "v0.8".to_string();
+    v0_8.delegation = delegation;
+    let v0_8_rendered =
+        present_checkpoint(&v0_8, TriggerClass::CheckpointReady, &decision, &policy)
+            .render_console_block(None);
+    assert!(v0_8_rendered.contains(
+        "- Delegation: topology=mixed_or_ambiguous parent=parent-session children=[child-a,child-b] visibility=opaque confidence=low"
+    ));
+
+    let mut unsupported = v0_8;
+    unsupported.schema_version = "v-next".to_string();
+    unsupported.drift_scores[0].state = DriftState::Active;
+    unsupported.flagged = false;
+    unsupported.drift_scores[0].flagged = false;
+    unsupported.drift_scores[0].evidence = vec![EvidenceRef {
+        row: unsupported.boundary.start.clone(),
+        reason: "historical truth-grounding gap: facade-compatible evidence".to_string(),
+    }];
+    let unsupported_rendered = present_checkpoint(
+        &unsupported,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &policy,
+    )
+    .render_console_block(None);
+    assert!(!unsupported_rendered.contains("- Delegation:"));
+    assert!(!unsupported_rendered.contains("- Posture: active"));
+}
+
+#[test]
+fn adjudication_shape_request_preserves_exact_legacy_facade_bytes_and_fields() {
+    let mut checkpoint = support::checkpoint(
+        "session-adjudication",
+        1,
+        0,
+        false,
+        "continue on the current task frame",
+    );
+    checkpoint.schema_version = "v0.8".to_string();
+    checkpoint.delegation = DelegationContext {
+        topology: DelegationTopology::MixedOrAmbiguous,
+        parent_session_id: Some("parent".to_string()),
+        child_session_ids: vec!["child-a".to_string()],
+        child_work_visibility: ChildWorkVisibility::Opaque,
+        confidence: Confidence::Low,
+        markers: Vec::new(),
+        supporting_evidence: Vec::new(),
+        counter_evidence: Vec::new(),
+    };
+    let decision = EvaluationDecision {
+        evaluate: true,
+        visible_warning_allowed: true,
+        reason: DecisionReason::InitialCheckpoint,
+    };
+    let presentation = present_checkpoint(
+        &checkpoint,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &WarningPolicy::default(),
+    );
+    let config = AdjudicationConfig {
+        enabled: true,
+        model: "gpt-5.4-mini".to_string(),
+        reasoning_effort: ReasoningEffort::Medium,
+        max_evidence_items: 3,
+        max_context_chars: usize::MAX,
+    };
+    let expected_summary = concat!(
+        "[checkpoint] session-adjudication:0001 @ checkpoint_ready (low)\n",
+        "- Objective: /goal Complete replay validation for session-adjudication checkpoint 1\n",
+        "- Drift: no flagged drift classes\n",
+        "- Delegation: topology=mixed_or_ambiguous parent=parent children=[child-a] visibility=opaque confidence=low\n",
+        "- Diagnostics: task_frame_transitioned=true, working_set_changed=false, verification=1/1 (100.00%), evidence_items=1\n",
+        "- Expected next step: continue on the current task frame\n",
+        "- Silent reason: checkpoint recorded without a visible warning"
+    );
+    let expected = AdjudicationRequest {
+        model: "gpt-5.4-mini".to_string(),
+        reasoning_effort: "medium".to_string(),
+        checkpoint_id: "session-adjudication:0001".to_string(),
+        session_id: "session-adjudication".to_string(),
+        operator_summary: expected_summary.to_string(),
+        expected_next_step: "continue on the current task frame".to_string(),
+        evidence: Vec::new(),
+    };
+
+    assert_eq!(presentation.render_console_block(None), expected_summary);
+    assert_eq!(shape_request(&presentation, &config), Some(expected));
 }
 
 #[test]
@@ -939,6 +1104,716 @@ fn operator_surface_labels_scheduler_trigger_separately_from_analyzer_posture() 
         historical_presentation.posture,
         Some(CheckpointPosture::HistoricalOnly)
     );
+}
+
+#[test]
+fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let operator_path = manifest_dir.join("src/operator_surface.rs");
+    let operator_source = fs::read_to_string(&operator_path).expect("read operator surface source");
+    let operator_file = syn::parse_file(&operator_source).expect("parse operator surface source");
+    let schema_analysis = analyze_schema_policy(&operator_file);
+
+    assert_eq!(
+        schema_analysis.direct_uses,
+        vec!["CheckpointPresentation::render_console_block".to_string()]
+    );
+    assert_eq!(
+        schema_analysis.exact_predicates,
+        vec!["CheckpointPresentation::render_console_block".to_string()]
+    );
+    assert!(
+        schema_analysis.violations.is_empty(),
+        "unclassified schema-version syntax: {:?}",
+        schema_analysis.violations
+    );
+
+    let mut call_inventory = RenderCallInventory::default();
+    for source_path in production_rust_sources(&manifest_dir.join("src")) {
+        let source = fs::read_to_string(&source_path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()));
+        let file = syn::parse_file(&source)
+            .unwrap_or_else(|error| panic!("parse {}: {error}", source_path.display()));
+        let module = source_path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .expect("Rust source file stem");
+        analyze_render_calls_in_items(module, &file.items, &mut call_inventory);
+    }
+
+    let expected_counts = BTreeMap::from([
+        ("ReplayReport::to_console_text".to_string(), 2usize),
+        ("adjudication::shape_request".to_string(), 1usize),
+        ("cli::run_live".to_string(), 1usize),
+    ]);
+    assert_eq!(call_inventory.counts, expected_counts);
+    assert_eq!(call_inventory.counts.values().sum::<usize>(), 4);
+    assert_eq!(
+        call_inventory
+            .counts
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "ReplayReport::to_console_text".to_string(),
+            "adjudication::shape_request".to_string(),
+            "cli::run_live".to_string(),
+        ])
+    );
+    assert!(
+        call_inventory.violations.is_empty(),
+        "unclassified render-console reference: {:?}",
+        call_inventory.violations
+    );
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct SchemaPolicyAnalysis {
+    direct_uses: Vec<String>,
+    exact_predicates: Vec<String>,
+    violations: Vec<String>,
+}
+
+fn analyze_schema_policy(file: &syn::File) -> SchemaPolicyAnalysis {
+    let mut analysis = SchemaPolicyAnalysis::default();
+    analyze_schema_items(&file.items, None, &mut analysis);
+    analysis.direct_uses.sort();
+    analysis.exact_predicates.sort();
+    analysis.violations.sort();
+    analysis
+}
+
+fn analyze_schema_items(
+    items: &[syn::Item],
+    module: Option<&str>,
+    analysis: &mut SchemaPolicyAnalysis,
+) {
+    for item in items {
+        if has_cfg_test(item_attrs(item)) {
+            continue;
+        }
+        match item {
+            syn::Item::Fn(function) => {
+                let owner = module.map_or_else(
+                    || function.sig.ident.to_string(),
+                    |module| format!("{module}::{}", function.sig.ident),
+                );
+                analyze_schema_block(owner, &function.block, analysis);
+            }
+            syn::Item::Impl(item_impl) => {
+                let Some(type_name) = simple_type_name(&item_impl.self_ty) else {
+                    analysis
+                        .violations
+                        .push("unclassified impl owner".to_string());
+                    continue;
+                };
+                for impl_item in &item_impl.items {
+                    match impl_item {
+                        syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
+                            analyze_schema_block(
+                                format!("{type_name}::{}", method.sig.ident),
+                                &method.block,
+                                analysis,
+                            );
+                        }
+                        syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
+                            analyze_schema_expression(
+                                format!("{type_name}::const {}", constant.ident),
+                                &constant.expr,
+                                analysis,
+                            );
+                        }
+                        syn::ImplItem::Macro(item_macro)
+                            if item_macro.mac.tokens.to_string().contains("schema_version") =>
+                        {
+                            analysis
+                                .violations
+                                .push(format!("{type_name}: unparsed schema-version impl macro"));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            syn::Item::Const(constant) => analyze_schema_expression(
+                format!("const {}", constant.ident),
+                &constant.expr,
+                analysis,
+            ),
+            syn::Item::Static(static_item) => analyze_schema_expression(
+                format!("static {}", static_item.ident),
+                &static_item.expr,
+                analysis,
+            ),
+            syn::Item::Struct(item_struct) => {
+                if item_struct.fields.iter().any(|field| {
+                    field
+                        .ident
+                        .as_ref()
+                        .is_some_and(|identifier| identifier == "schema_version")
+                }) {
+                    analysis.violations.push(format!(
+                        "struct {}: schema_version field definition",
+                        item_struct.ident
+                    ));
+                }
+            }
+            syn::Item::Enum(item_enum) => {
+                if item_enum.variants.iter().any(|variant| {
+                    variant.fields.iter().any(|field| {
+                        field
+                            .ident
+                            .as_ref()
+                            .is_some_and(|identifier| identifier == "schema_version")
+                    })
+                }) {
+                    analysis.violations.push(format!(
+                        "enum {}: schema_version field definition",
+                        item_enum.ident
+                    ));
+                }
+            }
+            syn::Item::Trait(item_trait) => {
+                for trait_item in &item_trait.items {
+                    if let syn::TraitItem::Fn(method) = trait_item {
+                        if let Some(default) = &method.default {
+                            analyze_schema_block(
+                                format!("{}::{}", item_trait.ident, method.sig.ident),
+                                default,
+                                analysis,
+                            );
+                        }
+                    }
+                }
+            }
+            syn::Item::Macro(item_macro)
+                if item_macro.mac.tokens.to_string().contains("schema_version") =>
+            {
+                analysis
+                    .violations
+                    .push("unparsed module-level schema-version macro".to_string());
+            }
+            syn::Item::Mod(item_mod) => {
+                if let Some((_, nested)) = &item_mod.content {
+                    let nested_module = module.map_or_else(
+                        || item_mod.ident.to_string(),
+                        |module| format!("{module}::{}", item_mod.ident),
+                    );
+                    analyze_schema_items(nested, Some(&nested_module), analysis);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn analyze_schema_expression(
+    owner: String,
+    expression: &syn::Expr,
+    analysis: &mut SchemaPolicyAnalysis,
+) {
+    let aliases = HashSet::new();
+    SchemaExpressionVisitor {
+        owner: &owner,
+        aliases: &aliases,
+        analysis,
+    }
+    .visit_expr(expression);
+}
+
+fn analyze_schema_block(owner: String, block: &syn::Block, analysis: &mut SchemaPolicyAnalysis) {
+    let mut bindings = BindingCollector::default();
+    bindings.visit_block(block);
+    let aliases = bindings.schema_aliases();
+    let mut visitor = SchemaExpressionVisitor {
+        owner: &owner,
+        aliases: &aliases,
+        analysis,
+    };
+    visitor.visit_block(block);
+}
+
+#[derive(Default)]
+struct BindingCollector {
+    assignments: Vec<(String, bool, HashSet<String>)>,
+}
+
+impl BindingCollector {
+    fn schema_aliases(&self) -> HashSet<String> {
+        let mut aliases = HashSet::new();
+        loop {
+            let mut changed = false;
+            for (name, has_direct_schema, dependencies) in &self.assignments {
+                if (*has_direct_schema || !dependencies.is_disjoint(&aliases))
+                    && aliases.insert(name.clone())
+                {
+                    changed = true;
+                }
+            }
+            if !changed {
+                return aliases;
+            }
+        }
+    }
+
+    fn record(&mut self, name: String, expression: &syn::Expr) {
+        self.assignments.push((
+            name,
+            expression_has_direct_schema(expression),
+            expression_identifiers(expression),
+        ));
+    }
+}
+
+impl<'ast> Visit<'ast> for BindingCollector {
+    fn visit_local(&mut self, local: &'ast syn::Local) {
+        if let (syn::Pat::Ident(binding), Some(init)) = (&local.pat, &local.init) {
+            self.record(binding.ident.to_string(), &init.expr);
+        }
+        visit::visit_local(self, local);
+    }
+
+    fn visit_expr_assign(&mut self, assignment: &'ast syn::ExprAssign) {
+        if let syn::Expr::Path(path) = assignment.left.as_ref() {
+            if let Some(identifier) = path.path.get_ident() {
+                self.record(identifier.to_string(), &assignment.right);
+            }
+        }
+        visit::visit_expr_assign(self, assignment);
+    }
+}
+
+struct SchemaExpressionVisitor<'a> {
+    owner: &'a str,
+    aliases: &'a HashSet<String>,
+    analysis: &'a mut SchemaPolicyAnalysis,
+}
+
+impl SchemaExpressionVisitor<'_> {
+    fn violation(&mut self, kind: &str) {
+        self.analysis
+            .violations
+            .push(format!("{}: {kind}", self.owner));
+    }
+}
+
+impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
+    fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
+        if member_is(&field.member, "schema_version") {
+            self.analysis.direct_uses.push(self.owner.to_string());
+        }
+        visit::visit_expr_field(self, field);
+    }
+
+    fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
+        if path.path.is_ident("schema_version") {
+            self.analysis.direct_uses.push(self.owner.to_string());
+            self.violation("bare schema_version path");
+        }
+        visit::visit_expr_path(self, path);
+    }
+
+    fn visit_expr_binary(&mut self, binary: &'ast syn::ExprBinary) {
+        if expression_depends_on_schema(&syn::Expr::Binary(binary.clone()), self.aliases) {
+            if is_exact_v0_8_schema_predicate(binary) {
+                self.analysis.exact_predicates.push(self.owner.to_string());
+            } else {
+                self.violation("non-exact schema-version binary predicate");
+            }
+        }
+        visit::visit_expr_binary(self, binary);
+    }
+
+    fn visit_expr_if(&mut self, expression: &'ast syn::ExprIf) {
+        if expression_depends_on_schema(&expression.cond, self.aliases)
+            && !matches!(expression.cond.as_ref(), syn::Expr::Binary(binary) if is_exact_v0_8_schema_predicate(binary))
+        {
+            self.violation("schema-version alias or nesting in if condition");
+        }
+        visit::visit_expr_if(self, expression);
+    }
+
+    fn visit_expr_while(&mut self, expression: &'ast syn::ExprWhile) {
+        if expression_depends_on_schema(&expression.cond, self.aliases) {
+            self.violation("schema-version while condition");
+        }
+        visit::visit_expr_while(self, expression);
+    }
+
+    fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
+        if expression_depends_on_schema(&expression.expr, self.aliases) {
+            self.violation("schema-version match scrutinee");
+        }
+        for arm in &expression.arms {
+            if arm
+                .guard
+                .as_ref()
+                .is_some_and(|(_, guard)| expression_depends_on_schema(guard, self.aliases))
+            {
+                self.violation("schema-version match guard");
+            }
+        }
+        visit::visit_expr_match(self, expression);
+    }
+
+    fn visit_expr_call(&mut self, expression: &'ast syn::ExprCall) {
+        if expression_depends_on_schema(&syn::Expr::Call(expression.clone()), self.aliases) {
+            self.violation("schema-version function-call dependency");
+        }
+        visit::visit_expr_call(self, expression);
+    }
+
+    fn visit_expr_method_call(&mut self, expression: &'ast syn::ExprMethodCall) {
+        if expression_depends_on_schema(&syn::Expr::MethodCall(expression.clone()), self.aliases) {
+            self.violation("schema-version method-call dependency");
+        }
+        visit::visit_expr_method_call(self, expression);
+    }
+
+    fn visit_expr_struct(&mut self, expression: &'ast syn::ExprStruct) {
+        if expression
+            .fields
+            .iter()
+            .any(|field| member_is(&field.member, "schema_version"))
+        {
+            self.violation("schema_version struct field construction");
+        }
+        visit::visit_expr_struct(self, expression);
+    }
+
+    fn visit_pat_struct(&mut self, pattern: &'ast syn::PatStruct) {
+        if pattern
+            .fields
+            .iter()
+            .any(|field| member_is(&field.member, "schema_version"))
+        {
+            self.violation("schema_version struct pattern");
+        }
+        visit::visit_pat_struct(self, pattern);
+    }
+
+    fn visit_expr_macro(&mut self, expression: &'ast syn::ExprMacro) {
+        let tokens = expression.mac.tokens.to_string();
+        if tokens.contains("schema_version")
+            || self.aliases.iter().any(|alias| tokens.contains(alias))
+        {
+            self.violation("unclassified schema-version macro");
+        }
+        visit::visit_expr_macro(self, expression);
+    }
+}
+
+fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
+    #[derive(Default)]
+    struct Finder(bool);
+    impl<'ast> Visit<'ast> for Finder {
+        fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
+            if member_is(&field.member, "schema_version") {
+                self.0 = true;
+            }
+            visit::visit_expr_field(self, field);
+        }
+
+        fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
+            if path.path.is_ident("schema_version") {
+                self.0 = true;
+            }
+            visit::visit_expr_path(self, path);
+        }
+    }
+    let mut finder = Finder::default();
+    finder.visit_expr(expression);
+    finder.0
+}
+
+fn expression_identifiers(expression: &syn::Expr) -> HashSet<String> {
+    #[derive(Default)]
+    struct Collector(HashSet<String>);
+    impl<'ast> Visit<'ast> for Collector {
+        fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
+            if let Some(identifier) = path.path.get_ident() {
+                self.0.insert(identifier.to_string());
+            }
+            visit::visit_expr_path(self, path);
+        }
+    }
+    let mut collector = Collector::default();
+    collector.visit_expr(expression);
+    collector.0
+}
+
+fn expression_depends_on_schema(expression: &syn::Expr, aliases: &HashSet<String>) -> bool {
+    expression_has_direct_schema(expression)
+        || !expression_identifiers(expression).is_disjoint(aliases)
+}
+
+fn is_exact_v0_8_schema_predicate(binary: &syn::ExprBinary) -> bool {
+    matches!(binary.op, syn::BinOp::Eq(_))
+        && is_self_checkpoint_schema_version(&binary.left)
+        && matches!(
+            binary.right.as_ref(),
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(literal),
+                ..
+            }) if literal.value() == "v0.8"
+        )
+}
+
+fn is_self_checkpoint_schema_version(expression: &syn::Expr) -> bool {
+    let syn::Expr::Field(schema) = expression else {
+        return false;
+    };
+    if !member_is(&schema.member, "schema_version") {
+        return false;
+    }
+    let syn::Expr::Field(checkpoint) = schema.base.as_ref() else {
+        return false;
+    };
+    member_is(&checkpoint.member, "checkpoint")
+        && matches!(
+            checkpoint.base.as_ref(),
+            syn::Expr::Path(path) if path.path.is_ident("self")
+        )
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct RenderCallInventory {
+    counts: BTreeMap<String, usize>,
+    violations: Vec<String>,
+}
+
+fn analyze_render_calls_in_items(
+    module: &str,
+    items: &[syn::Item],
+    inventory: &mut RenderCallInventory,
+) {
+    for item in items {
+        if has_cfg_test(item_attrs(item)) {
+            continue;
+        }
+        match item {
+            syn::Item::Fn(function) => {
+                let owner = format!("{module}::{}", function.sig.ident);
+                RenderCallVisitor { owner, inventory }.visit_block(&function.block);
+            }
+            syn::Item::Impl(item_impl) => {
+                let Some(type_name) = simple_type_name(&item_impl.self_ty) else {
+                    inventory
+                        .violations
+                        .push(format!("{module}: unclassified impl owner"));
+                    continue;
+                };
+                for impl_item in &item_impl.items {
+                    match impl_item {
+                        syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
+                            let owner = format!("{type_name}::{}", method.sig.ident);
+                            RenderCallVisitor { owner, inventory }.visit_block(&method.block);
+                        }
+                        syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
+                            let owner = format!("{type_name}::const {}", constant.ident);
+                            RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
+                        }
+                        syn::ImplItem::Macro(item_macro)
+                            if item_macro
+                                .mac
+                                .tokens
+                                .to_string()
+                                .contains("render_console_block") =>
+                        {
+                            inventory.violations.push(format!(
+                                "{type_name}: unparsed render_console_block impl macro"
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            syn::Item::Const(constant) => {
+                let owner = format!("{module}::const {}", constant.ident);
+                RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
+            }
+            syn::Item::Static(static_item) => {
+                let owner = format!("{module}::static {}", static_item.ident);
+                RenderCallVisitor { owner, inventory }.visit_expr(&static_item.expr);
+            }
+            syn::Item::Trait(item_trait) => {
+                for trait_item in &item_trait.items {
+                    if let syn::TraitItem::Fn(method) = trait_item {
+                        if let Some(default) = &method.default {
+                            let owner = format!("{}::{}", item_trait.ident, method.sig.ident);
+                            RenderCallVisitor { owner, inventory }.visit_block(default);
+                        }
+                    }
+                }
+            }
+            syn::Item::Macro(item_macro)
+                if item_macro
+                    .mac
+                    .tokens
+                    .to_string()
+                    .contains("render_console_block") =>
+            {
+                inventory.violations.push(format!(
+                    "{module}: unparsed render_console_block item macro"
+                ));
+            }
+            syn::Item::Mod(item_mod) => {
+                if let Some((_, nested)) = &item_mod.content {
+                    analyze_render_calls_in_items(
+                        &format!("{module}::{}", item_mod.ident),
+                        nested,
+                        inventory,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+struct RenderCallVisitor<'a> {
+    owner: String,
+    inventory: &'a mut RenderCallInventory,
+}
+
+impl RenderCallVisitor<'_> {
+    fn record(&mut self) {
+        *self.inventory.counts.entry(self.owner.clone()).or_insert(0) += 1;
+    }
+
+    fn visit_render_macro(&mut self, expression: &syn::Macro) {
+        if !expression
+            .tokens
+            .to_string()
+            .contains("render_console_block")
+        {
+            return;
+        }
+
+        let parser = syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
+        match parser.parse2(expression.tokens.clone()) {
+            Ok(arguments) => {
+                for argument in &arguments {
+                    self.visit_expr(argument);
+                }
+            }
+            Err(error) => self.inventory.violations.push(format!(
+                "{}: unparsed render_console_block macro: {error}",
+                self.owner
+            )),
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
+    fn visit_expr_method_call(&mut self, expression: &'ast syn::ExprMethodCall) {
+        if expression.method == "render_console_block" {
+            self.record();
+        }
+        visit::visit_expr_method_call(self, expression);
+    }
+
+    fn visit_expr_call(&mut self, expression: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(path) = expression.func.as_ref() {
+            if path
+                .path
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident == "render_console_block")
+            {
+                self.record();
+                for argument in &expression.args {
+                    self.visit_expr(argument);
+                }
+                return;
+            }
+        }
+        visit::visit_expr_call(self, expression);
+    }
+
+    fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
+        if path
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "render_console_block")
+        {
+            self.inventory.violations.push(format!(
+                "{}: unclassified render_console_block path reference",
+                self.owner
+            ));
+        }
+        visit::visit_expr_path(self, path);
+    }
+
+    fn visit_expr_macro(&mut self, expression: &'ast syn::ExprMacro) {
+        self.visit_render_macro(&expression.mac);
+    }
+
+    fn visit_stmt_macro(&mut self, statement: &'ast syn::StmtMacro) {
+        self.visit_render_macro(&statement.mac);
+    }
+}
+
+fn production_rust_sources(root: &Path) -> Vec<PathBuf> {
+    fn collect(directory: &Path, sources: &mut Vec<PathBuf>) {
+        let entries = fs::read_dir(directory)
+            .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()));
+        for entry in entries {
+            let path = entry.expect("source directory entry").path();
+            if path.is_dir() {
+                collect(&path, sources);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                sources.push(path);
+            }
+        }
+    }
+
+    let mut sources = Vec::new();
+    collect(root, &mut sources);
+    sources.sort();
+    sources
+}
+
+fn simple_type_name(ty: &syn::Type) -> Option<String> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+    path.path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+}
+
+fn member_is(member: &syn::Member, expected: &str) -> bool {
+    matches!(member, syn::Member::Named(identifier) if identifier == expected)
+}
+
+fn has_cfg_test(attributes: &[syn::Attribute]) -> bool {
+    attributes.iter().any(|attribute| {
+        attribute.path().is_ident("cfg")
+            && matches!(&attribute.meta, syn::Meta::List(list) if list.tokens.to_string().contains("test"))
+    })
+}
+
+fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
+    match item {
+        syn::Item::Const(item) => &item.attrs,
+        syn::Item::Enum(item) => &item.attrs,
+        syn::Item::ExternCrate(item) => &item.attrs,
+        syn::Item::Fn(item) => &item.attrs,
+        syn::Item::ForeignMod(item) => &item.attrs,
+        syn::Item::Impl(item) => &item.attrs,
+        syn::Item::Macro(item) => &item.attrs,
+        syn::Item::Mod(item) => &item.attrs,
+        syn::Item::Static(item) => &item.attrs,
+        syn::Item::Struct(item) => &item.attrs,
+        syn::Item::Trait(item) => &item.attrs,
+        syn::Item::TraitAlias(item) => &item.attrs,
+        syn::Item::Type(item) => &item.attrs,
+        syn::Item::Union(item) => &item.attrs,
+        syn::Item::Use(item) => &item.attrs,
+        _ => &[],
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
