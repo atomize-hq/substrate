@@ -2352,6 +2352,57 @@ fn ast_policy_self_test_fails_closed_on_unknown_production_cfg() {
 }
 
 #[test]
+fn ast_policy_self_test_validates_every_compound_cfg_child_before_evaluation() {
+    let fixture = tempfile::tempdir().expect("create compound unknown-cfg fixture");
+    let source_path = fixture.path().join("lib.rs");
+    let cases = [
+        ("any_decisive_first", "cfg(any(not(test), custom_unknown))"),
+        ("any_unknown_first", "cfg(any(custom_unknown, not(test)))"),
+        ("all_decisive_first", "cfg(all(test, custom_unknown))"),
+        ("all_unknown_first", "cfg(all(custom_unknown, test))"),
+        (
+            "nested_any_decisive_first",
+            "cfg(any(not(test), all(test, custom_unknown)))",
+        ),
+        (
+            "nested_all_decisive_first",
+            "cfg(all(test, any(not(test), custom_unknown)))",
+        ),
+        (
+            "cfg_attr_any_decisive_first",
+            "cfg_attr(any(not(test), custom_unknown), allow(dead_code))",
+        ),
+        (
+            "cfg_attr_all_decisive_first",
+            "cfg_attr(all(test, custom_unknown), allow(dead_code))",
+        ),
+    ];
+
+    for (name, attribute) in cases {
+        fs::write(
+            &source_path,
+            format!("#![allow(unexpected_cfgs)]\n#[{attribute}] fn selected() {{}}\n"),
+        )
+        .unwrap_or_else(|error| panic!("write {name} compound unknown-cfg fixture: {error}"));
+        assert_rust_root_compiles(name, "lib", &source_path, &[]);
+
+        let failure = match std::panic::catch_unwind(|| production_rust_sources(fixture.path())) {
+            Ok(_) => panic!("{name} must fail closed on custom_unknown"),
+            Err(failure) => failure,
+        };
+        let message = failure
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| failure.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic");
+        assert!(
+            message.contains("unsupported production cfg predicate `custom_unknown`"),
+            "{name} unknown cfg failure must be explicit: {message}"
+        );
+    }
+}
+
+#[test]
 fn ast_policy_self_test_fails_closed_without_resolved_cargo_feature_state() {
     let fixture = tempfile::tempdir().expect("create unresolved-feature fixture");
     let source_root = fixture.path().join("src");
@@ -2752,6 +2803,43 @@ fn ast_policy_self_test_honors_production_cfg_on_typed_parameters() {
             (PathBuf::from("lib.rs"), None),
         ]),
         "module discovery must skip the missing test-only parameter module and visit the active compound cfg"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_skips_inactive_cfg_in_alias_dependency_helpers() {
+    let fixture = tempfile::tempdir().expect("create cfg alias-helper fixture");
+    let source_path = fixture.path().join("lib.rs");
+    let source = r#"
+        #![allow(dead_code)]
+
+        struct Checkpoint;
+        impl Checkpoint { const schema_version: usize = 8; }
+
+        fn alias_helpers() {
+            let closure_alias =
+                |#[cfg(test)] _test: [(); (Checkpoint::schema_version == 8) as usize]| false;
+            let nested_item_alias = {
+                #[cfg(test)]
+                const TEST_ONLY: bool = Checkpoint::schema_version == 8;
+                false
+            };
+
+            if closure_alias() || nested_item_alias {}
+        }
+    "#;
+    fs::write(&source_path, source).expect("write cfg alias-helper source");
+    assert_rust_root_compiles("cfg_alias_helper_fixture", "lib", &source_path, &[]);
+
+    let file = syn::parse_file(source).expect("parse cfg alias-helper fixture");
+    let schema = analyze_schema_policy(&file);
+    assert!(
+        schema.direct_uses.is_empty(),
+        "inactive typed parameters and nested items must not record direct schema uses: {schema:?}"
+    );
+    assert!(
+        schema.violations.is_empty(),
+        "inactive typed parameters and nested items must not taint production alias dependencies: {schema:?}"
     );
 }
 
@@ -4924,6 +5012,80 @@ macro_rules! production_cfg_gate {
     };
 }
 
+macro_rules! production_cfg_structural_gates {
+    () => {
+        production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
+        production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
+        production_cfg_gate!(
+            visit_bare_variadic,
+            syn::BareVariadic,
+            visit::visit_bare_variadic
+        );
+        production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
+        production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
+        production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
+        production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
+        production_cfg_gate!(
+            visit_lifetime_param,
+            syn::LifetimeParam,
+            visit::visit_lifetime_param
+        );
+        production_cfg_gate!(visit_pat_type, syn::PatType, visit::visit_pat_type);
+        production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
+        production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
+        production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
+        production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
+        production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
+    };
+}
+
+macro_rules! production_cfg_structural_gates_with_local {
+    () => {
+        production_cfg_structural_gates!();
+        production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
+    };
+}
+
+macro_rules! production_cfg_helper_dispatch {
+    () => {
+        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+            if production_expression_active(expression) {
+                visit::visit_expr(self, expression);
+            }
+        }
+
+        fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
+            visit_production_pattern(self, pattern);
+        }
+
+        fn visit_item(&mut self, item: &'ast syn::Item) {
+            if production_attributes_active(item_attrs(item)) {
+                visit::visit_item(self, item);
+            }
+        }
+
+        fn visit_impl_item(&mut self, item: &'ast syn::ImplItem) {
+            if production_attributes_active(impl_item_attrs(item)) {
+                visit::visit_impl_item(self, item);
+            }
+        }
+
+        fn visit_trait_item(&mut self, item: &'ast syn::TraitItem) {
+            if production_attributes_active(trait_item_attrs(item)) {
+                visit::visit_trait_item(self, item);
+            }
+        }
+
+        fn visit_foreign_item(&mut self, item: &'ast syn::ForeignItem) {
+            if production_attributes_active(foreign_item_attrs(item)) {
+                visit::visit_foreign_item(self, item);
+            }
+        }
+
+        production_cfg_structural_gates_with_local!();
+    };
+}
+
 #[derive(Default)]
 struct BindingCollector {
     assignments: Vec<(String, bool, HashSet<String>)>,
@@ -4974,9 +5136,7 @@ impl<'ast> Visit<'ast> for BindingCollector {
     }
 
     fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
-        if production_pattern_active(pattern) {
-            visit::visit_pat(self, pattern);
-        }
+        visit_production_pattern(self, pattern);
     }
 
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
@@ -5021,27 +5181,7 @@ impl<'ast> Visit<'ast> for BindingCollector {
         visit::visit_expr_match(self, expression);
     }
 
-    production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
-    production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
-    production_cfg_gate!(
-        visit_bare_variadic,
-        syn::BareVariadic,
-        visit::visit_bare_variadic
-    );
-    production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
-    production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
-    production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
-    production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
-    production_cfg_gate!(
-        visit_lifetime_param,
-        syn::LifetimeParam,
-        visit::visit_lifetime_param
-    );
-    production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
-    production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
-    production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
-    production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
-    production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
+    production_cfg_structural_gates!();
 }
 
 fn pattern_identifiers(pattern: &syn::Pat) -> HashSet<String> {
@@ -5558,40 +5698,13 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         self.inspect_macro(expression);
     }
 
-    production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
-    production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
-    production_cfg_gate!(
-        visit_bare_variadic,
-        syn::BareVariadic,
-        visit::visit_bare_variadic
-    );
-    production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
-    production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
-    production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
-    production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
-    production_cfg_gate!(
-        visit_lifetime_param,
-        syn::LifetimeParam,
-        visit::visit_lifetime_param
-    );
-    production_cfg_gate!(visit_pat_type, syn::PatType, visit::visit_pat_type);
-    production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
-    production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
-    production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
-    production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
-    production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
+    production_cfg_structural_gates!();
 }
 
 fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
     #[derive(Default)]
     struct Finder(bool);
     impl<'ast> Visit<'ast> for Finder {
-        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
-            if production_expression_active(expression) {
-                visit::visit_expr(self, expression);
-            }
-        }
-
         fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
             if member_is(&field.member, "schema_version") {
                 self.0 = true;
@@ -5623,10 +5736,7 @@ fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
             }
         }
 
-        production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
-        production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
-        production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
-        production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
+        production_cfg_helper_dispatch!();
     }
     let mut finder = Finder::default();
     finder.visit_expr(expression);
@@ -5637,12 +5747,6 @@ fn expression_identifiers(expression: &syn::Expr) -> HashSet<String> {
     #[derive(Default)]
     struct Collector(HashSet<String>);
     impl<'ast> Visit<'ast> for Collector {
-        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
-            if production_expression_active(expression) {
-                visit::visit_expr(self, expression);
-            }
-        }
-
         fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
             if let Some(identifier) = path.path.segments.last().map(|segment| &segment.ident) {
                 self.0.insert(identifier_name(identifier));
@@ -5667,10 +5771,7 @@ fn expression_identifiers(expression: &syn::Expr) -> HashSet<String> {
             }
         }
 
-        production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
-        production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
-        production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
-        production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
+        production_cfg_helper_dispatch!();
     }
     let mut collector = Collector::default();
     collector.visit_expr(expression);
@@ -6258,29 +6359,7 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
         self.inspect_macro(expression);
     }
 
-    production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
-    production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
-    production_cfg_gate!(
-        visit_bare_variadic,
-        syn::BareVariadic,
-        visit::visit_bare_variadic
-    );
-    production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
-    production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
-    production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
-    production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
-    production_cfg_gate!(
-        visit_lifetime_param,
-        syn::LifetimeParam,
-        visit::visit_lifetime_param
-    );
-    production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
-    production_cfg_gate!(visit_pat_type, syn::PatType, visit::visit_pat_type);
-    production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
-    production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
-    production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
-    production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
-    production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
+    production_cfg_structural_gates_with_local!();
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6789,29 +6868,7 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
             }
         }
 
-        production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
-        production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
-        production_cfg_gate!(
-            visit_bare_variadic,
-            syn::BareVariadic,
-            visit::visit_bare_variadic
-        );
-        production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
-        production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
-        production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
-        production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
-        production_cfg_gate!(
-            visit_lifetime_param,
-            syn::LifetimeParam,
-            visit::visit_lifetime_param
-        );
-        production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
-        production_cfg_gate!(visit_pat_type, syn::PatType, visit::visit_pat_type);
-        production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
-        production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
-        production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
-        production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
-        production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
+        production_cfg_structural_gates_with_local!();
     }
 
     fn collect_modules(
@@ -7138,7 +7195,7 @@ fn parse_meta_arguments(list: &syn::MetaList, context: &str) -> Vec<syn::Meta> {
         .collect()
 }
 
-fn evaluate_production_cfg(meta: &syn::Meta) -> bool {
+fn try_evaluate_production_cfg(meta: &syn::Meta) -> Result<bool, String> {
     let config = production_cfg();
     match meta {
         syn::Meta::Path(path) => {
@@ -7147,49 +7204,62 @@ fn evaluate_production_cfg(meta: &syn::Meta) -> bool {
                 .map(identifier_name)
                 .unwrap_or_else(|| cfg_meta_name(meta));
             match name.as_str() {
-                "test" => false,
+                "test" => Ok(false),
                 // These are the portable target-family flags and are valid even when absent from
                 // the current rustc output. Other unknown bare predicates fail closed.
-                "unix" | "windows" => config.flags.contains(&name),
-                _ if config.flags.contains(&name) => true,
-                _ => panic!("unsupported production cfg predicate `{name}`"),
+                "unix" | "windows" => Ok(config.flags.contains(&name)),
+                _ if config.flags.contains(&name) => Ok(true),
+                _ => Err(format!("unsupported production cfg predicate `{name}`")),
             }
         }
         syn::Meta::NameValue(name_value) => {
             let key = cfg_meta_name(meta);
             let syn::Expr::Lit(literal) = &name_value.value else {
-                panic!("unsupported production cfg predicate `{key}`");
+                return Err(format!("unsupported production cfg predicate `{key}`"));
             };
             let syn::Lit::Str(value) = &literal.lit else {
-                panic!("unsupported production cfg predicate `{key}`");
+                return Err(format!("unsupported production cfg predicate `{key}`"));
             };
             if key == "feature" {
-                return active_production_features().contains(&value.value());
+                return Ok(active_production_features().contains(&value.value()));
             }
-            config
+            Ok(config
                 .values
                 .get(&key)
-                .unwrap_or_else(|| panic!("unsupported production cfg predicate `{key}`"))
-                .contains(&value.value())
+                .ok_or_else(|| format!("unsupported production cfg predicate `{key}`"))?
+                .contains(&value.value()))
         }
         syn::Meta::List(list) => {
             let name = cfg_meta_name(meta);
             let arguments = parse_meta_arguments(list, &format!("production cfg `{name}`"));
             match name.as_str() {
-                "all" => arguments.iter().all(evaluate_production_cfg),
-                "any" => arguments.iter().any(evaluate_production_cfg),
+                "all" | "any" => {
+                    let values = arguments
+                        .iter()
+                        .map(try_evaluate_production_cfg)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(if name == "all" {
+                        values.into_iter().all(std::convert::identity)
+                    } else {
+                        values.into_iter().any(std::convert::identity)
+                    })
+                }
                 "not" => {
                     assert_eq!(
                         arguments.len(),
                         1,
                         "production cfg not(...) requires exactly one predicate"
                     );
-                    !evaluate_production_cfg(&arguments[0])
+                    Ok(!try_evaluate_production_cfg(&arguments[0])?)
                 }
-                _ => panic!("unsupported production cfg predicate `{name}`"),
+                _ => Err(format!("unsupported production cfg predicate `{name}`")),
             }
         }
     }
+}
+
+fn evaluate_production_cfg(meta: &syn::Meta) -> bool {
+    try_evaluate_production_cfg(meta).unwrap_or_else(|error| panic!("{error}"))
 }
 
 fn expand_production_attribute(meta: syn::Meta, effective: &mut Vec<syn::Meta>) {
@@ -7258,6 +7328,39 @@ fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
         syn::Item::Type(item) => &item.attrs,
         syn::Item::Union(item) => &item.attrs,
         syn::Item::Use(item) => &item.attrs,
+        _ => &[],
+    }
+}
+
+fn impl_item_attrs(item: &syn::ImplItem) -> &[syn::Attribute] {
+    match item {
+        syn::ImplItem::Const(item) => &item.attrs,
+        syn::ImplItem::Fn(item) => &item.attrs,
+        syn::ImplItem::Macro(item) => &item.attrs,
+        syn::ImplItem::Type(item) => &item.attrs,
+        syn::ImplItem::Verbatim(_) => &[],
+        _ => &[],
+    }
+}
+
+fn trait_item_attrs(item: &syn::TraitItem) -> &[syn::Attribute] {
+    match item {
+        syn::TraitItem::Const(item) => &item.attrs,
+        syn::TraitItem::Fn(item) => &item.attrs,
+        syn::TraitItem::Macro(item) => &item.attrs,
+        syn::TraitItem::Type(item) => &item.attrs,
+        syn::TraitItem::Verbatim(_) => &[],
+        _ => &[],
+    }
+}
+
+fn foreign_item_attrs(item: &syn::ForeignItem) -> &[syn::Attribute] {
+    match item {
+        syn::ForeignItem::Fn(item) => &item.attrs,
+        syn::ForeignItem::Macro(item) => &item.attrs,
+        syn::ForeignItem::Static(item) => &item.attrs,
+        syn::ForeignItem::Type(item) => &item.attrs,
+        syn::ForeignItem::Verbatim(_) => &[],
         _ => &[],
     }
 }
