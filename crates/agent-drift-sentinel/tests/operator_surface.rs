@@ -5,6 +5,7 @@ mod support;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use agent_drift_analyzer::{
     Checkpoint, ChildWorkVisibility, Confidence, DelegationContext, DelegationTopology, DriftClass,
@@ -1947,6 +1948,142 @@ fn ast_policy_self_test_rejects_render_references_in_trait_const_defaults() {
 }
 
 #[test]
+fn ast_policy_self_test_visits_all_compile_valid_trait_type_surfaces() {
+    let source = r#"
+        #![allow(dead_code, non_upper_case_globals)]
+
+        struct Checkpoint;
+
+        impl Checkpoint {
+            const schema_version: u8 = 8;
+        }
+
+        struct CheckpointPresentation;
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {}
+        }
+
+        trait HiddenControls {
+            const HIDDEN: [(); {
+                let _render = CheckpointPresentation::render_console_block;
+                (Checkpoint::schema_version == 8) as usize
+            }];
+
+            fn hidden(_: [(); {
+                let _render = CheckpointPresentation::render_console_block;
+                (Checkpoint::schema_version == 8) as usize
+            }]);
+
+            type HiddenType: Into<[(); {
+                let _render = CheckpointPresentation::render_console_block;
+                (Checkpoint::schema_version == 8) as usize
+            }]>;
+        }
+    "#;
+    assert_rust_fixture_compiles("trait_type_surfaces", source);
+    let file = syn::parse_file(source).expect("parse compile-valid trait type-surface fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec![
+            "trait HiddenControls::const HIDDEN".to_string(),
+            "trait HiddenControls::hidden".to_string(),
+            "trait HiddenControls::type HiddenType".to_string(),
+        ],
+        "every trait signature/type surface must retain its actual schema owner"
+    );
+    assert_eq!(
+        schema.violations,
+        vec![
+            "trait HiddenControls::const HIDDEN: non-exact schema-version binary predicate"
+                .to_string(),
+            "trait HiddenControls::const HIDDEN: qualified schema_version path".to_string(),
+            "trait HiddenControls::hidden: non-exact schema-version binary predicate".to_string(),
+            "trait HiddenControls::hidden: qualified schema_version path".to_string(),
+            "trait HiddenControls::type HiddenType: non-exact schema-version binary predicate"
+                .to_string(),
+            "trait HiddenControls::type HiddenType: qualified schema_version path".to_string(),
+        ],
+        "schema inventory must fail closed across associated-const types, method signatures, and associated types"
+    );
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("trait_types", &file.items, &mut calls);
+    assert!(calls.counts.is_empty());
+    assert_eq!(
+        calls.violations,
+        vec![
+            concat!(
+                "trait HiddenControls::const HIDDEN: ",
+                "unclassified render_console_block path reference"
+            ),
+            concat!(
+                "trait HiddenControls::hidden: ",
+                "unclassified render_console_block path reference"
+            ),
+            concat!(
+                "trait HiddenControls::type HiddenType: ",
+                "unclassified render_console_block path reference"
+            ),
+        ],
+        "render inventory must fail closed across associated-const types, method signatures, and associated types"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_records_unsupported_trait_item_forms() {
+    let mut file = syn::parse_file("trait HiddenControls {}")
+        .expect("parse unsupported trait-item fixture shell");
+    let syn::Item::Trait(item_trait) = &mut file.items[0] else {
+        panic!("fixture shell must contain a trait");
+    };
+    item_trait.items.push(syn::TraitItem::Verbatim(
+        "unsupported trait item"
+            .parse()
+            .expect("parse verbatim trait-item tokens"),
+    ));
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.violations,
+        vec!["trait HiddenControls: unsupported trait item form: verbatim".to_string()],
+        "schema inventory must not silently ignore an unsupported trait item"
+    );
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("trait_items", &file.items, &mut calls);
+    assert_eq!(
+        calls.violations,
+        vec!["trait HiddenControls: unsupported trait item form: verbatim".to_string()],
+        "render inventory must not silently ignore an unsupported trait item"
+    );
+}
+
+fn assert_rust_fixture_compiles(crate_name: &str, source: &str) {
+    let fixture_dir = tempfile::tempdir().expect("create Rust fixture directory");
+    let source_path = fixture_dir.path().join("lib.rs");
+    let output_path = fixture_dir.path().join("fixture.rlib");
+    fs::write(&source_path, source).expect("write Rust fixture source");
+    let output = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+        .arg("--crate-name")
+        .arg(crate_name)
+        .arg("--crate-type=lib")
+        .arg("--edition=2021")
+        .arg(&source_path)
+        .arg("-o")
+        .arg(output_path)
+        .output()
+        .expect("run rustc for fixture");
+    assert!(
+        output.status.success(),
+        "fixture must compile successfully:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn ast_policy_self_test_rejects_trait_impl_and_nested_schema_owner_lookalikes() {
     let trait_impl = syn::parse_file(
         r#"
@@ -2271,26 +2408,56 @@ fn analyze_schema_items(
                 for trait_item in &item_trait.items {
                     match trait_item {
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
+                            let owner = format!(
+                                "{}::{}",
+                                trait_identity,
+                                identifier_name(&method.sig.ident)
+                            );
+                            analyze_schema_attributes(&owner, &method.attrs, analysis);
+                            let aliases = HashSet::new();
+                            SchemaExpressionVisitor {
+                                owner: &owner,
+                                aliases: &aliases,
+                                analysis,
+                            }
+                            .visit_signature(&method.sig);
                             if let Some(default) = &method.default {
-                                let owner = format!(
-                                    "{}::{}",
-                                    trait_identity,
-                                    identifier_name(&method.sig.ident)
-                                );
-                                analyze_schema_attributes(&owner, &method.attrs, analysis);
                                 analyze_schema_block(owner, default, analysis);
                             }
                         }
                         syn::TraitItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
+                            let owner = format!(
+                                "{}::const {}",
+                                trait_identity,
+                                identifier_name(&constant.ident)
+                            );
+                            analyze_schema_attributes(&owner, &constant.attrs, analysis);
+                            let aliases = HashSet::new();
+                            SchemaExpressionVisitor {
+                                owner: &owner,
+                                aliases: &aliases,
+                                analysis,
+                            }
+                            .visit_type(&constant.ty);
                             if let Some((_, default)) = &constant.default {
-                                let owner = format!(
-                                    "{}::const {}",
-                                    trait_identity,
-                                    identifier_name(&constant.ident)
-                                );
-                                analyze_schema_attributes(&owner, &constant.attrs, analysis);
                                 analyze_schema_expression(owner, default, analysis);
                             }
+                        }
+                        syn::TraitItem::Type(associated_type)
+                            if !has_cfg_test(&associated_type.attrs) =>
+                        {
+                            let owner = format!(
+                                "{}::type {}",
+                                trait_identity,
+                                identifier_name(&associated_type.ident)
+                            );
+                            let aliases = HashSet::new();
+                            SchemaExpressionVisitor {
+                                owner: &owner,
+                                aliases: &aliases,
+                                analysis,
+                            }
+                            .visit_trait_item_type(associated_type);
                         }
                         syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
                             let owner = format!(
@@ -2301,7 +2468,16 @@ fn analyze_schema_items(
                             analyze_schema_attributes(&owner, &item_macro.attrs, analysis);
                             analyze_schema_macro(owner, &item_macro.mac, analysis);
                         }
-                        _ => {}
+                        syn::TraitItem::Verbatim(_) => analysis.violations.push(format!(
+                            "{trait_identity}: unsupported trait item form: verbatim"
+                        )),
+                        syn::TraitItem::Fn(_)
+                        | syn::TraitItem::Const(_)
+                        | syn::TraitItem::Type(_)
+                        | syn::TraitItem::Macro(_) => {}
+                        _ => analysis.violations.push(format!(
+                            "{trait_identity}: unsupported trait item form: unknown"
+                        )),
                     }
                 }
             }
@@ -3169,24 +3345,39 @@ fn analyze_render_calls_in_items_with_lineage(
                 for trait_item in &item_trait.items {
                     match trait_item {
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
+                            let owner = format!(
+                                "{}::{}",
+                                trait_identity,
+                                identifier_name(&method.sig.ident)
+                            );
+                            let mut visitor = RenderCallVisitor { owner, inventory };
+                            visitor.visit_signature(&method.sig);
                             if let Some(default) = &method.default {
-                                let owner = format!(
-                                    "{}::{}",
-                                    trait_identity,
-                                    identifier_name(&method.sig.ident)
-                                );
-                                RenderCallVisitor { owner, inventory }.visit_block(default);
+                                visitor.visit_block(default);
                             }
                         }
                         syn::TraitItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
+                            let owner = format!(
+                                "{}::const {}",
+                                trait_identity,
+                                identifier_name(&constant.ident)
+                            );
+                            let mut visitor = RenderCallVisitor { owner, inventory };
+                            visitor.visit_type(&constant.ty);
                             if let Some((_, default)) = &constant.default {
-                                let owner = format!(
-                                    "{}::const {}",
-                                    trait_identity,
-                                    identifier_name(&constant.ident)
-                                );
-                                RenderCallVisitor { owner, inventory }.visit_expr(default);
+                                visitor.visit_expr(default);
                             }
+                        }
+                        syn::TraitItem::Type(associated_type)
+                            if !has_cfg_test(&associated_type.attrs) =>
+                        {
+                            let owner = format!(
+                                "{}::type {}",
+                                trait_identity,
+                                identifier_name(&associated_type.ident)
+                            );
+                            RenderCallVisitor { owner, inventory }
+                                .visit_trait_item_type(associated_type);
                         }
                         syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
                             RenderCallVisitor {
@@ -3199,7 +3390,16 @@ fn analyze_render_calls_in_items_with_lineage(
                             }
                             .inspect_macro(&item_macro.mac);
                         }
-                        _ => {}
+                        syn::TraitItem::Verbatim(_) => inventory.violations.push(format!(
+                            "{trait_identity}: unsupported trait item form: verbatim"
+                        )),
+                        syn::TraitItem::Fn(_)
+                        | syn::TraitItem::Const(_)
+                        | syn::TraitItem::Type(_)
+                        | syn::TraitItem::Macro(_) => {}
+                        _ => inventory.violations.push(format!(
+                            "{trait_identity}: unsupported trait item form: unknown"
+                        )),
                     }
                 }
             }
