@@ -22,6 +22,7 @@ use agent_drift_sentinel::{
     AdjudicationConfig, InputError, ReasoningEffort, ReplayCheckpointBundle, SchedulerPolicy,
     SentinelError, SentinelMode, SentinelRequest, SentinelResult, TriggerClass, WarningPolicy,
 };
+use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::visit::{self, Visit};
 
@@ -115,6 +116,7 @@ fn legacy_facade_preserves_delegation_presence_and_unsupported_total_output() {
 
     let mut unsupported = v0_8;
     unsupported.schema_version = "v-next".to_string();
+    unsupported.drift_scores[0].class = DriftClass::TruthGroundingGap;
     unsupported.drift_scores[0].state = DriftState::Active;
     unsupported.flagged = false;
     unsupported.drift_scores[0].flagged = false;
@@ -122,6 +124,15 @@ fn legacy_facade_preserves_delegation_presence_and_unsupported_total_output() {
         row: unsupported.boundary.start.clone(),
         reason: "historical truth-grounding gap: facade-compatible evidence".to_string(),
     }];
+    let mut legacy_equivalent = unsupported.clone();
+    legacy_equivalent.schema_version = "v0.2".to_string();
+    let legacy_rendered = present_checkpoint(
+        &legacy_equivalent,
+        TriggerClass::CheckpointReady,
+        &decision,
+        &policy,
+    )
+    .render_console_block(None);
     let unsupported_rendered = present_checkpoint(
         &unsupported,
         TriggerClass::CheckpointReady,
@@ -129,8 +140,11 @@ fn legacy_facade_preserves_delegation_presence_and_unsupported_total_output() {
         &policy,
     )
     .render_console_block(None);
-    assert!(!unsupported_rendered.contains("- Delegation:"));
-    assert!(!unsupported_rendered.contains("- Posture: active"));
+    assert!(legacy_rendered.contains("- Posture: historical-only"));
+    assert!(legacy_rendered.contains(
+        "- Evidence: session-delegation.jsonl#1:0 historical truth-grounding gap: facade-compatible evidence"
+    ));
+    assert_eq!(unsupported_rendered, legacy_rendered);
 }
 
 #[test]
@@ -1329,6 +1343,75 @@ fn ast_policy_self_test_rejects_a_fifth_call_inside_an_allowed_owner() {
     );
 }
 
+#[test]
+fn ast_policy_self_test_normalizes_raw_schema_field_identifiers() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                if self.checkpoint.r#schema_version == "v0.8" {}
+            }
+        }
+
+        fn hidden_schema_branch(checkpoint: &Checkpoint) {
+            if checkpoint.r#schema_version != "v0.8" {}
+        }
+        "#,
+    )
+    .expect("parse raw schema-field policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec![
+            "CheckpointPresentation::render_console_block".to_string(),
+            "hidden_schema_branch".to_string(),
+        ],
+        "raw schema fields must remain visible to the direct-use inventory"
+    );
+    assert_eq!(
+        schema.exact_predicates,
+        vec!["CheckpointPresentation::render_console_block".to_string()],
+        "the allowed raw field spelling must normalize to the exact v0.8 predicate"
+    );
+    assert_eq!(
+        schema.violations,
+        vec![
+            "hidden_schema_branch: non-exact schema-version binary predicate".to_string(),
+            "hidden_schema_branch: schema-version alias or nesting in if condition".to_string(),
+        ],
+        "an unauthorized raw schema predicate must fail closed"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_normalizes_raw_render_call_identifiers() {
+    let file = syn::parse_file(
+        r#"
+        fn raw_calls(presentation: CheckpointPresentation) {
+            presentation.r#render_console_block(None);
+            CheckpointPresentation::r#render_console_block(&presentation, None);
+            let escaped = CheckpointPresentation::r#render_console_block;
+            let _ = escaped;
+        }
+        "#,
+    )
+    .expect("parse raw render-call policy fixture");
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("raw", &file.items, &mut calls);
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([("raw::raw_calls".to_string(), 2usize)]),
+        "raw method and associated-function calls must remain countable"
+    );
+    assert_eq!(
+        calls.violations,
+        vec!["raw::raw_calls: unclassified render_console_block path reference".to_string()],
+        "an uncalled raw facade reference must fail closed"
+    );
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 struct SchemaPolicyAnalysis {
     direct_uses: Vec<String>,
@@ -1357,8 +1440,8 @@ fn analyze_schema_items(
         match item {
             syn::Item::Fn(function) => {
                 let owner = module.map_or_else(
-                    || function.sig.ident.to_string(),
-                    |module| format!("{module}::{}", function.sig.ident),
+                    || identifier_name(&function.sig.ident),
+                    |module| format!("{module}::{}", identifier_name(&function.sig.ident)),
                 );
                 analyze_schema_block(owner, &function.block, analysis);
             }
@@ -1373,14 +1456,14 @@ fn analyze_schema_items(
                     match impl_item {
                         syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
                             analyze_schema_block(
-                                format!("{type_name}::{}", method.sig.ident),
+                                format!("{type_name}::{}", identifier_name(&method.sig.ident)),
                                 &method.block,
                                 analysis,
                             );
                         }
                         syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
                             analyze_schema_expression(
-                                format!("{type_name}::const {}", constant.ident),
+                                format!("{type_name}::const {}", identifier_name(&constant.ident)),
                                 &constant.expr,
                                 analysis,
                             );
@@ -1397,12 +1480,12 @@ fn analyze_schema_items(
                 }
             }
             syn::Item::Const(constant) => analyze_schema_expression(
-                format!("const {}", constant.ident),
+                format!("const {}", identifier_name(&constant.ident)),
                 &constant.expr,
                 analysis,
             ),
             syn::Item::Static(static_item) => analyze_schema_expression(
-                format!("static {}", static_item.ident),
+                format!("static {}", identifier_name(&static_item.ident)),
                 &static_item.expr,
                 analysis,
             ),
@@ -1411,11 +1494,11 @@ fn analyze_schema_items(
                     field
                         .ident
                         .as_ref()
-                        .is_some_and(|identifier| identifier == "schema_version")
+                        .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
                 }) {
                     analysis.violations.push(format!(
                         "struct {}: schema_version field definition",
-                        item_struct.ident
+                        identifier_name(&item_struct.ident)
                     ));
                 }
             }
@@ -1425,12 +1508,12 @@ fn analyze_schema_items(
                         field
                             .ident
                             .as_ref()
-                            .is_some_and(|identifier| identifier == "schema_version")
+                            .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
                     })
                 }) {
                     analysis.violations.push(format!(
                         "enum {}: schema_version field definition",
-                        item_enum.ident
+                        identifier_name(&item_enum.ident)
                     ));
                 }
             }
@@ -1440,7 +1523,11 @@ fn analyze_schema_items(
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
                             if let Some(default) = &method.default {
                                 analyze_schema_block(
-                                    format!("{}::{}", item_trait.ident, method.sig.ident),
+                                    format!(
+                                        "{}::{}",
+                                        identifier_name(&item_trait.ident),
+                                        identifier_name(&method.sig.ident)
+                                    ),
                                     default,
                                     analysis,
                                 );
@@ -1450,7 +1537,7 @@ fn analyze_schema_items(
                             analyze_schema_macro(
                                 format!(
                                     "{}::macro {}",
-                                    item_trait.ident,
+                                    identifier_name(&item_trait.ident),
                                     macro_path(&item_macro.mac)
                                 ),
                                 &item_macro.mac,
@@ -1472,8 +1559,8 @@ fn analyze_schema_items(
             syn::Item::Mod(item_mod) => {
                 if let Some((_, nested)) = &item_mod.content {
                     let nested_module = module.map_or_else(
-                        || item_mod.ident.to_string(),
-                        |module| format!("{module}::{}", item_mod.ident),
+                        || identifier_name(&item_mod.ident),
+                        |module| format!("{module}::{}", identifier_name(&item_mod.ident)),
                     );
                     analyze_schema_items(nested, Some(&nested_module), analysis);
                 }
@@ -1602,7 +1689,7 @@ fn pattern_identifiers(pattern: &syn::Pat) -> HashSet<String> {
 
     impl<'ast> Visit<'ast> for Collector {
         fn visit_pat_ident(&mut self, pattern: &'ast syn::PatIdent) {
-            self.0.insert(pattern.ident.to_string());
+            self.0.insert(identifier_name(&pattern.ident));
             visit::visit_pat_ident(self, pattern);
         }
     }
@@ -1619,7 +1706,7 @@ fn assignment_identifiers(target: &syn::Expr) -> HashSet<String> {
     impl<'ast> Visit<'ast> for Collector {
         fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
             if let Some(identifier) = path.path.get_ident() {
-                self.0.insert(identifier.to_string());
+                self.0.insert(identifier_name(identifier));
             }
             visit::visit_expr_path(self, path);
         }
@@ -1671,7 +1758,7 @@ fn parse_macro_arguments(expression: &syn::Macro) -> syn::Result<ParsedMacroArgu
         .path
         .segments
         .last()
-        .map(|segment| segment.ident.to_string())
+        .map(|segment| identifier_name(&segment.ident))
         .unwrap_or_default();
     if macro_name == "macro_rules" {
         return Err(syn::Error::new_spanned(
@@ -1696,7 +1783,7 @@ fn macro_path(expression: &syn::Macro) -> String {
         .path
         .segments
         .iter()
-        .map(|segment| segment.ident.to_string())
+        .map(|segment| identifier_name(&segment.ident))
         .collect::<Vec<_>>()
         .join("::")
 }
@@ -1773,7 +1860,7 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
     }
 
     fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
-        if path.path.is_ident("schema_version") {
+        if path_is_ident(&path.path, "schema_version") {
             self.analysis.direct_uses.push(self.owner.to_string());
             self.violation("bare schema_version path");
         }
@@ -1874,7 +1961,7 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
     }
 
     fn visit_pat_ident(&mut self, pattern: &'ast syn::PatIdent) {
-        if pattern.ident == "schema_version" {
+        if identifier_is(&pattern.ident, "schema_version") {
             self.violation("bare schema_version pattern binding");
         }
         visit::visit_pat_ident(self, pattern);
@@ -1897,7 +1984,7 @@ fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
         }
 
         fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
-            if path.path.is_ident("schema_version") {
+            if path_is_ident(&path.path, "schema_version") {
                 self.0 = true;
             }
             visit::visit_expr_path(self, path);
@@ -1914,7 +2001,7 @@ fn expression_identifiers(expression: &syn::Expr) -> HashSet<String> {
     impl<'ast> Visit<'ast> for Collector {
         fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
             if let Some(identifier) = path.path.get_ident() {
-                self.0.insert(identifier.to_string());
+                self.0.insert(identifier_name(identifier));
             }
             visit::visit_expr_path(self, path);
         }
@@ -1954,7 +2041,7 @@ fn is_self_checkpoint_schema_version(expression: &syn::Expr) -> bool {
     member_is(&checkpoint.member, "checkpoint")
         && matches!(
             checkpoint.base.as_ref(),
-            syn::Expr::Path(path) if path.path.is_ident("self")
+            syn::Expr::Path(path) if path_is_ident(&path.path, "self")
         )
 }
 
@@ -1989,7 +2076,7 @@ fn analyze_render_calls_in_items(
         }
         match item {
             syn::Item::Fn(function) => {
-                let owner = format!("{module}::{}", function.sig.ident);
+                let owner = format!("{module}::{}", identifier_name(&function.sig.ident));
                 RenderCallVisitor { owner, inventory }.visit_block(&function.block);
             }
             syn::Item::Impl(item_impl) => {
@@ -2002,11 +2089,13 @@ fn analyze_render_calls_in_items(
                 for impl_item in &item_impl.items {
                     match impl_item {
                         syn::ImplItem::Fn(method) if !has_cfg_test(&method.attrs) => {
-                            let owner = format!("{type_name}::{}", method.sig.ident);
+                            let owner =
+                                format!("{type_name}::{}", identifier_name(&method.sig.ident));
                             RenderCallVisitor { owner, inventory }.visit_block(&method.block);
                         }
                         syn::ImplItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
-                            let owner = format!("{type_name}::const {}", constant.ident);
+                            let owner =
+                                format!("{type_name}::const {}", identifier_name(&constant.ident));
                             RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
                         }
                         syn::ImplItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
@@ -2024,11 +2113,11 @@ fn analyze_render_calls_in_items(
                 }
             }
             syn::Item::Const(constant) => {
-                let owner = format!("{module}::const {}", constant.ident);
+                let owner = format!("{module}::const {}", identifier_name(&constant.ident));
                 RenderCallVisitor { owner, inventory }.visit_expr(&constant.expr);
             }
             syn::Item::Static(static_item) => {
-                let owner = format!("{module}::static {}", static_item.ident);
+                let owner = format!("{module}::static {}", identifier_name(&static_item.ident));
                 RenderCallVisitor { owner, inventory }.visit_expr(&static_item.expr);
             }
             syn::Item::Trait(item_trait) => {
@@ -2036,7 +2125,11 @@ fn analyze_render_calls_in_items(
                     match trait_item {
                         syn::TraitItem::Fn(method) if !has_cfg_test(&method.attrs) => {
                             if let Some(default) = &method.default {
-                                let owner = format!("{}::{}", item_trait.ident, method.sig.ident);
+                                let owner = format!(
+                                    "{}::{}",
+                                    identifier_name(&item_trait.ident),
+                                    identifier_name(&method.sig.ident)
+                                );
                                 RenderCallVisitor { owner, inventory }.visit_block(default);
                             }
                         }
@@ -2044,7 +2137,7 @@ fn analyze_render_calls_in_items(
                             RenderCallVisitor {
                                 owner: format!(
                                     "{}::macro {}",
-                                    item_trait.ident,
+                                    identifier_name(&item_trait.ident),
                                     macro_path(&item_macro.mac)
                                 ),
                                 inventory,
@@ -2063,7 +2156,7 @@ fn analyze_render_calls_in_items(
             syn::Item::Mod(item_mod) => {
                 if let Some((_, nested)) = &item_mod.content {
                     analyze_render_calls_in_items(
-                        &format!("{module}::{}", item_mod.ident),
+                        &format!("{module}::{}", identifier_name(&item_mod.ident)),
                         nested,
                         inventory,
                     );
@@ -2116,7 +2209,7 @@ impl RenderCallVisitor<'_> {
 
 impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
     fn visit_expr_method_call(&mut self, expression: &'ast syn::ExprMethodCall) {
-        if expression.method == "render_console_block" {
+        if identifier_is(&expression.method, "render_console_block") {
             self.record();
         }
         visit::visit_expr_method_call(self, expression);
@@ -2128,7 +2221,7 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
                 .path
                 .segments
                 .last()
-                .is_some_and(|segment| segment.ident == "render_console_block")
+                .is_some_and(|segment| identifier_is(&segment.ident, "render_console_block"))
             {
                 self.record();
                 for argument in &expression.args {
@@ -2145,7 +2238,7 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
             .path
             .segments
             .last()
-            .is_some_and(|segment| segment.ident == "render_console_block")
+            .is_some_and(|segment| identifier_is(&segment.ident, "render_console_block"))
         {
             self.inventory.violations.push(format!(
                 "{}: unclassified render_console_block path reference",
@@ -2187,19 +2280,32 @@ fn simple_type_name(ty: &syn::Type) -> Option<String> {
     path.path
         .segments
         .last()
-        .map(|segment| segment.ident.to_string())
+        .map(|segment| identifier_name(&segment.ident))
 }
 
 fn member_is(member: &syn::Member, expected: &str) -> bool {
-    matches!(member, syn::Member::Named(identifier) if identifier == expected)
+    matches!(member, syn::Member::Named(identifier) if identifier_is(identifier, expected))
+}
+
+fn identifier_is(identifier: &syn::Ident, expected: &str) -> bool {
+    identifier.unraw() == expected
+}
+
+fn identifier_name(identifier: &syn::Ident) -> String {
+    identifier.unraw().to_string()
+}
+
+fn path_is_ident(path: &syn::Path, expected: &str) -> bool {
+    path.get_ident()
+        .is_some_and(|identifier| identifier_is(identifier, expected))
 }
 
 fn has_cfg_test(attributes: &[syn::Attribute]) -> bool {
     attributes.iter().any(|attribute| {
-        attribute.path().is_ident("cfg")
-            && attribute
-                .parse_args::<syn::Meta>()
-                .is_ok_and(|meta| matches!(meta, syn::Meta::Path(path) if path.is_ident("test")))
+        path_is_ident(attribute.path(), "cfg")
+            && attribute.parse_args::<syn::Meta>().is_ok_and(
+                |meta| matches!(meta, syn::Meta::Path(path) if path_is_ident(&path, "test")),
+            )
     })
 }
 
