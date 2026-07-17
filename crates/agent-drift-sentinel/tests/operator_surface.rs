@@ -1883,6 +1883,70 @@ fn ast_policy_self_test_rejects_unknown_macros_in_both_inventories() {
 }
 
 #[test]
+fn ast_policy_self_test_rejects_schema_predicates_in_trait_const_defaults() {
+    let file = syn::parse_file(
+        r#"
+        struct Checkpoint;
+
+        impl Checkpoint {
+            const schema_version: u8 = 8;
+        }
+
+        trait SchemaGate {
+            const HIDDEN_SCHEMA_PREDICATE: bool = Checkpoint::schema_version == 8;
+        }
+        "#,
+    )
+    .expect("parse trait associated-const schema fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.direct_uses,
+        vec!["trait SchemaGate::const HIDDEN_SCHEMA_PREDICATE".to_string()],
+        "a trait associated-const default must retain its actual owner"
+    );
+    assert!(
+        schema.violations.iter().any(|violation| violation
+            == "trait SchemaGate::const HIDDEN_SCHEMA_PREDICATE: qualified schema_version path"),
+        "a schema predicate in a trait associated-const default must fail closed: {schema:?}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_render_references_in_trait_const_defaults() {
+    let file = syn::parse_file(
+        r#"
+        struct CheckpointPresentation;
+
+        impl CheckpointPresentation {
+            fn render_console_block(&self, _: Option<&str>) -> String {
+                String::new()
+            }
+        }
+
+        trait RenderReference {
+            const HIDDEN_RENDER_REFERENCE: fn(
+                &CheckpointPresentation,
+                Option<&str>,
+            ) -> String = CheckpointPresentation::render_console_block;
+        }
+        "#,
+    )
+    .expect("parse trait associated-const render-reference fixture");
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("trait_const", &file.items, &mut calls);
+    assert_eq!(
+        calls.violations,
+        vec![concat!(
+            "trait RenderReference::const HIDDEN_RENDER_REFERENCE: ",
+            "unclassified render_console_block path reference"
+        )],
+        "a render function reference in a trait associated-const default must fail closed"
+    );
+}
+
+#[test]
 fn ast_policy_self_test_rejects_trait_impl_and_nested_schema_owner_lookalikes() {
     let trait_impl = syn::parse_file(
         r#"
@@ -2215,6 +2279,17 @@ fn analyze_schema_items(
                                 );
                                 analyze_schema_attributes(&owner, &method.attrs, analysis);
                                 analyze_schema_block(owner, default, analysis);
+                            }
+                        }
+                        syn::TraitItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
+                            if let Some((_, default)) = &constant.default {
+                                let owner = format!(
+                                    "{}::const {}",
+                                    trait_identity,
+                                    identifier_name(&constant.ident)
+                                );
+                                analyze_schema_attributes(&owner, &constant.attrs, analysis);
+                                analyze_schema_expression(owner, default, analysis);
                             }
                         }
                         syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
@@ -3101,6 +3176,16 @@ fn analyze_render_calls_in_items_with_lineage(
                                     identifier_name(&method.sig.ident)
                                 );
                                 RenderCallVisitor { owner, inventory }.visit_block(default);
+                            }
+                        }
+                        syn::TraitItem::Const(constant) if !has_cfg_test(&constant.attrs) => {
+                            if let Some((_, default)) = &constant.default {
+                                let owner = format!(
+                                    "{}::const {}",
+                                    trait_identity,
+                                    identifier_name(&constant.ident)
+                                );
+                                RenderCallVisitor { owner, inventory }.visit_expr(default);
                             }
                         }
                         syn::TraitItem::Macro(item_macro) if !has_cfg_test(&item_macro.attrs) => {
