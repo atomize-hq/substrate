@@ -1,6 +1,8 @@
 //! Shared request/response models and error types for the Agent API.
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::Path;
@@ -18,6 +20,442 @@ pub use world_api::{
     SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
     SharedWorldOwnerSpec, WorldReuseMode,
 };
+
+const INSTALL_BOOTSTRAP_CONTEXT_DOMAIN_V1: &str = "substrate.install_bootstrap_context";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PlatformPrincipalV1 {
+    Unix { account: String, uid: u32 },
+    Windows { account: String, sid: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstallBootstrapContextV1 {
+    pub selected_host_prefix: String,
+    pub host_substrate_home: String,
+    pub host_substrate_root: String,
+    pub intended_host_principal: PlatformPrincipalV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstallBootstrapContextCarrierV1 {
+    pub context: InstallBootstrapContextV1,
+    pub host_context_commitment: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum InstallBootstrapContextErrorV1 {
+    #[error("invalid install bootstrap path")]
+    InvalidPath,
+    #[error("invalid install bootstrap principal")]
+    InvalidPrincipal,
+    #[error("invalid install bootstrap context")]
+    InvalidContext,
+    #[error("invalid install bootstrap carrier")]
+    InvalidCarrier,
+    #[error("install bootstrap commitment mismatch")]
+    CommitmentMismatch,
+}
+
+impl InstallBootstrapContextV1 {
+    pub fn new_unix(
+        selected_host_prefix: &str,
+        account: &str,
+        uid: u32,
+    ) -> Result<Self, InstallBootstrapContextErrorV1> {
+        let selected_host_prefix = normalize_unix_install_bootstrap_path(selected_host_prefix)?;
+        let context = Self {
+            host_substrate_home: selected_host_prefix.clone(),
+            host_substrate_root: selected_host_prefix.clone(),
+            selected_host_prefix,
+            intended_host_principal: PlatformPrincipalV1::Unix {
+                account: account.to_string(),
+                uid,
+            },
+        };
+        context.validate()?;
+        Ok(context)
+    }
+
+    pub fn new_windows(
+        selected_host_prefix: &str,
+        account: &str,
+        sid: &str,
+    ) -> Result<Self, InstallBootstrapContextErrorV1> {
+        let selected_host_prefix = normalize_windows_install_bootstrap_path(selected_host_prefix)?;
+        let context = Self {
+            host_substrate_home: selected_host_prefix.clone(),
+            host_substrate_root: selected_host_prefix.clone(),
+            selected_host_prefix,
+            intended_host_principal: PlatformPrincipalV1::Windows {
+                account: account.to_string(),
+                sid: sid.to_string(),
+            },
+        };
+        context.validate()?;
+        Ok(context)
+    }
+
+    pub fn validate(&self) -> Result<(), InstallBootstrapContextErrorV1> {
+        if self.selected_host_prefix != self.host_substrate_home
+            || self.selected_host_prefix != self.host_substrate_root
+        {
+            return Err(InstallBootstrapContextErrorV1::InvalidContext);
+        }
+
+        match &self.intended_host_principal {
+            PlatformPrincipalV1::Unix { account, uid } => {
+                if normalize_unix_install_bootstrap_path(&self.selected_host_prefix)?
+                    != self.selected_host_prefix
+                    || !valid_principal_text(account)
+                    || *uid == 0
+                {
+                    return Err(InstallBootstrapContextErrorV1::InvalidPrincipal);
+                }
+            }
+            PlatformPrincipalV1::Windows { account, sid } => {
+                if normalize_windows_install_bootstrap_path(&self.selected_host_prefix)?
+                    != self.selected_host_prefix
+                    || !valid_principal_text(account)
+                    || !valid_windows_sid(sid)
+                {
+                    return Err(InstallBootstrapContextErrorV1::InvalidPrincipal);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl InstallBootstrapContextCarrierV1 {
+    pub fn from_context(
+        context: InstallBootstrapContextV1,
+    ) -> Result<Self, InstallBootstrapContextErrorV1> {
+        context.validate()?;
+        let host_context_commitment = commitment_for_context(&context)?;
+        Ok(Self {
+            context,
+            host_context_commitment,
+        })
+    }
+
+    pub fn commitment_input(&self) -> Result<Vec<u8>, InstallBootstrapContextErrorV1> {
+        self.context.validate()?;
+        commitment_input_for_context(&self.context)
+    }
+
+    pub fn validate(&self) -> Result<(), InstallBootstrapContextErrorV1> {
+        self.context.validate()?;
+        if !is_lower_hex_digest(&self.host_context_commitment) {
+            return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+        }
+        if commitment_for_context(&self.context)? != self.host_context_commitment {
+            return Err(InstallBootstrapContextErrorV1::CommitmentMismatch);
+        }
+        Ok(())
+    }
+
+    pub fn encode(&self) -> Result<String, InstallBootstrapContextErrorV1> {
+        self.validate()?;
+        let mut record = self.commitment_input()?;
+        record.extend_from_slice(b"host_context_commitment=");
+        record.extend_from_slice(self.host_context_commitment.as_bytes());
+        record.push(b'\n');
+        Ok(URL_SAFE_NO_PAD.encode(record))
+    }
+
+    pub fn decode(encoded: &str) -> Result<Self, InstallBootstrapContextErrorV1> {
+        if encoded.is_empty()
+            || encoded
+                .bytes()
+                .any(|byte| !byte.is_ascii_alphanumeric() && byte != b'_' && byte != b'-')
+        {
+            return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+        }
+        let bytes = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)?;
+        if URL_SAFE_NO_PAD.encode(&bytes) != encoded {
+            return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+        }
+        let record = std::str::from_utf8(&bytes)
+            .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)?;
+        parse_install_bootstrap_record(record)
+    }
+}
+
+pub fn normalize_unix_install_bootstrap_path(
+    raw: &str,
+) -> Result<String, InstallBootstrapContextErrorV1> {
+    if raw.is_empty()
+        || raw == "/"
+        || !raw.starts_with('/')
+        || raw.starts_with("//")
+        || raw.contains('\0')
+    {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+
+    let mut components = Vec::new();
+    for component in raw[1..].split('/') {
+        if component.is_empty() {
+            continue;
+        }
+        if component == "." || component == ".." {
+            return Err(InstallBootstrapContextErrorV1::InvalidPath);
+        }
+        components.push(component);
+    }
+    if components.is_empty() {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+    Ok(format!("/{}", components.join("/")))
+}
+
+pub fn normalize_windows_install_bootstrap_path(
+    raw: &str,
+) -> Result<String, InstallBootstrapContextErrorV1> {
+    if raw.is_empty() || raw.contains('\0') {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+    let normalized_separators = raw.replace('/', "\\");
+    let lower = normalized_separators.to_ascii_lowercase();
+    if lower.starts_with(r"\\?\") || lower.starts_with(r"\\.\") {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+
+    let normalized = if normalized_separators.starts_with(r"\\") {
+        normalize_windows_unc_path(&normalized_separators)?
+    } else {
+        normalize_windows_drive_path(&normalized_separators)?
+    };
+    Ok(normalized)
+}
+
+fn normalize_windows_drive_path(raw: &str) -> Result<String, InstallBootstrapContextErrorV1> {
+    let bytes = raw.as_bytes();
+    if bytes.len() < 4 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' || bytes[2] != b'\\' {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+    let components = windows_components(&raw[3..])?;
+    let drive = (bytes[0] as char).to_ascii_uppercase();
+    Ok(format!("{drive}:\\{}", components.join("\\")))
+}
+
+fn normalize_windows_unc_path(raw: &str) -> Result<String, InstallBootstrapContextErrorV1> {
+    let components = windows_components(&raw[2..])?;
+    if components.len() < 3 {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+    Ok(format!(r"\\{}", components.join("\\")))
+}
+
+fn windows_components(raw: &str) -> Result<Vec<&str>, InstallBootstrapContextErrorV1> {
+    let components = raw
+        .split('\\')
+        .filter(|component| !component.is_empty())
+        .collect::<Vec<_>>();
+    if components.is_empty()
+        || components
+            .iter()
+            .any(|component| !valid_windows_component(component))
+    {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+    Ok(components)
+}
+
+fn valid_windows_component(component: &str) -> bool {
+    if component == "."
+        || component == ".."
+        || component.ends_with('.')
+        || component.ends_with(' ')
+        || component.chars().any(|ch| {
+            ch == '\0'
+                || ('\u{1}'..='\u{1f}').contains(&ch)
+                || matches!(ch, '<' | '>' | '"' | '|' | '?' | '*' | ':')
+        })
+    {
+        return false;
+    }
+    let stem = component
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_uppercase();
+    !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        && !reserved_numbered_windows_name(&stem, "COM")
+        && !reserved_numbered_windows_name(&stem, "LPT")
+}
+
+fn reserved_numbered_windows_name(stem: &str, prefix: &str) -> bool {
+    let Some(suffix) = stem.strip_prefix(prefix) else {
+        return false;
+    };
+    matches!(
+        suffix,
+        "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+    )
+}
+
+fn valid_principal_text(value: &str) -> bool {
+    !value.is_empty() && !value.chars().any(|ch| matches!(ch, '\0' | '\n' | '\r'))
+}
+
+fn valid_windows_sid(sid: &str) -> bool {
+    let mut parts = sid.split('-');
+    if parts.next() != Some("S") {
+        return false;
+    }
+    let numeric = parts.collect::<Vec<_>>();
+    numeric.len() >= 2
+        && numeric.iter().all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && (*part == "0" || !part.starts_with('0'))
+        })
+}
+
+fn commitment_input_for_context(
+    context: &InstallBootstrapContextV1,
+) -> Result<Vec<u8>, InstallBootstrapContextErrorV1> {
+    context.validate()?;
+    let selected = encode_inner_field(&context.selected_host_prefix);
+    let home = encode_inner_field(&context.host_substrate_home);
+    let root = encode_inner_field(&context.host_substrate_root);
+    let principal = match &context.intended_host_principal {
+        PlatformPrincipalV1::Unix { account, uid } => format!(
+            "principal_kind=unix\nprincipal_account={}\nprincipal_uid={}\n",
+            encode_inner_field(account),
+            uid
+        ),
+        PlatformPrincipalV1::Windows { account, sid } => format!(
+            "principal_kind=windows\nprincipal_account={}\nprincipal_sid={}\n",
+            encode_inner_field(account),
+            encode_inner_field(sid)
+        ),
+    };
+    Ok(format!(
+        "domain={INSTALL_BOOTSTRAP_CONTEXT_DOMAIN_V1}\nversion=1\nselected_host_prefix={selected}\nhost_substrate_home={home}\nhost_substrate_root={root}\n{principal}"
+    )
+    .into_bytes())
+}
+
+fn commitment_for_context(
+    context: &InstallBootstrapContextV1,
+) -> Result<String, InstallBootstrapContextErrorV1> {
+    let digest = Sha256::digest(commitment_input_for_context(context)?);
+    Ok(format!("{digest:x}"))
+}
+
+fn encode_inner_field(value: &str) -> String {
+    URL_SAFE_NO_PAD.encode(value.as_bytes())
+}
+
+fn decode_inner_field(value: &str) -> Result<String, InstallBootstrapContextErrorV1> {
+    if value.is_empty()
+        || value
+            .bytes()
+            .any(|byte| !byte.is_ascii_alphanumeric() && byte != b'_' && byte != b'-')
+    {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    let decoded = URL_SAFE_NO_PAD
+        .decode(value)
+        .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)?;
+    if URL_SAFE_NO_PAD.encode(&decoded) != value {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    String::from_utf8(decoded).map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)
+}
+
+fn parse_install_bootstrap_record(
+    record: &str,
+) -> Result<InstallBootstrapContextCarrierV1, InstallBootstrapContextErrorV1> {
+    if !record.ends_with('\n') || record.contains('\r') || record.contains('\0') {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    let lines = record.split_terminator('\n').collect::<Vec<_>>();
+    if lines.len() != 9 {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    require_record_value(lines[0], "domain", INSTALL_BOOTSTRAP_CONTEXT_DOMAIN_V1)?;
+    require_record_value(lines[1], "version", "1")?;
+    let selected_host_prefix = decode_inner_field(record_value(lines[2], "selected_host_prefix")?)?;
+    let host_substrate_home = decode_inner_field(record_value(lines[3], "host_substrate_home")?)?;
+    let host_substrate_root = decode_inner_field(record_value(lines[4], "host_substrate_root")?)?;
+    let principal_kind = record_value(lines[5], "principal_kind")?;
+    let account = decode_inner_field(record_value(lines[6], "principal_account")?)?;
+    let intended_host_principal = match principal_kind {
+        "unix" => {
+            let raw_uid = record_value(lines[7], "principal_uid")?;
+            if raw_uid.is_empty()
+                || !raw_uid.bytes().all(|byte| byte.is_ascii_digit())
+                || (raw_uid.len() > 1 && raw_uid.starts_with('0'))
+            {
+                return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+            }
+            let uid = raw_uid
+                .parse::<u32>()
+                .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)?;
+            PlatformPrincipalV1::Unix { account, uid }
+        }
+        "windows" => PlatformPrincipalV1::Windows {
+            account,
+            sid: decode_inner_field(record_value(lines[7], "principal_sid")?)?,
+        },
+        _ => return Err(InstallBootstrapContextErrorV1::InvalidCarrier),
+    };
+    let host_context_commitment = record_value(lines[8], "host_context_commitment")?.to_string();
+    if !is_lower_hex_digest(&host_context_commitment) {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    let carrier = InstallBootstrapContextCarrierV1 {
+        context: InstallBootstrapContextV1 {
+            selected_host_prefix,
+            host_substrate_home,
+            host_substrate_root,
+            intended_host_principal,
+        },
+        host_context_commitment,
+    };
+    carrier.validate()?;
+    Ok(carrier)
+}
+
+fn record_value<'a>(
+    line: &'a str,
+    expected_key: &str,
+) -> Result<&'a str, InstallBootstrapContextErrorV1> {
+    let (key, value) = line
+        .split_once('=')
+        .ok_or(InstallBootstrapContextErrorV1::InvalidCarrier)?;
+    if key != expected_key || value.contains('=') {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    Ok(value)
+}
+
+fn require_record_value(
+    line: &str,
+    key: &str,
+    expected_value: &str,
+) -> Result<(), InstallBootstrapContextErrorV1> {
+    if record_value(line, key)? != expected_value {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    Ok(())
+}
+
+fn is_lower_hex_digest(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -2288,7 +2726,128 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 mod tests {
     use super::*;
 
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use serde_json::{json, Value};
+
+    const UNIX_IH_FRAME: &str = "domain=substrate.install_bootstrap_context\n\
+version=1\n\
+selected_host_prefix=L29wdC9zdWJzdHJhdGUtZGV2\n\
+host_substrate_home=L29wdC9zdWJzdHJhdGUtZGV2\n\
+host_substrate_root=L29wdC9zdWJzdHJhdGUtZGV2\n\
+principal_kind=unix\n\
+principal_account=YWxpY2U\n\
+principal_uid=1000\n";
+    const UNIX_IH_COMMITMENT: &str =
+        "0320704f788ba8e9f13b2eed7af83ad3f33fc999ab80f21abc83722314c9a79d";
+    const UNIX_IH_CARRIER: &str = "ZG9tYWluPXN1YnN0cmF0ZS5pbnN0YWxsX2Jvb3RzdHJhcF9jb250ZXh0CnZlcnNpb249MQpzZWxlY3RlZF9ob3N0X3ByZWZpeD1MMjl3ZEM5emRXSnpkSEpoZEdVdFpHVjIKaG9zdF9zdWJzdHJhdGVfaG9tZT1MMjl3ZEM5emRXSnpkSEpoZEdVdFpHVjIKaG9zdF9zdWJzdHJhdGVfcm9vdD1MMjl3ZEM5emRXSnpkSEpoZEdVdFpHVjIKcHJpbmNpcGFsX2tpbmQ9dW5peApwcmluY2lwYWxfYWNjb3VudD1ZV3hwWTJVCnByaW5jaXBhbF91aWQ9MTAwMApob3N0X2NvbnRleHRfY29tbWl0bWVudD0wMzIwNzA0Zjc4OGJhOGU5ZjEzYjJlZWQ3YWY4M2FkM2YzM2ZjOTk5YWI4MGYyMWFiYzgzNzIyMzE0YzlhNzlkCg";
+    const WINDOWS_IH_COMMITMENT: &str =
+        "3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7";
+    const WINDOWS_IH_CARRIER: &str = "ZG9tYWluPXN1YnN0cmF0ZS5pbnN0YWxsX2Jvb3RzdHJhcF9jb250ZXh0CnZlcnNpb249MQpzZWxlY3RlZF9ob3N0X3ByZWZpeD1RenBjVlhObGNuTmNRV3hwWTJWY1FYQndSR0YwWVZ4TWIyTmhiRnhUZFdKemRISmhkR1UKaG9zdF9zdWJzdHJhdGVfaG9tZT1RenBjVlhObGNuTmNRV3hwWTJWY1FYQndSR0YwWVZ4TWIyTmhiRnhUZFdKemRISmhkR1UKaG9zdF9zdWJzdHJhdGVfcm9vdD1RenBjVlhObGNuTmNRV3hwWTJWY1FYQndSR0YwWVZ4TWIyTmhiRnhUZFdKemRISmhkR1UKcHJpbmNpcGFsX2tpbmQ9d2luZG93cwpwcmluY2lwYWxfYWNjb3VudD1RVU5OUlZ4QmJHbGpaUQpwcmluY2lwYWxfc2lkPVV5MHhMVFV0TWpFdE1UQXdNQQpob3N0X2NvbnRleHRfY29tbWl0bWVudD0zZTFlNzFiMzI1ZTkyYjE2ZjViZmMwZjNkODc1ZmQxNWYwNGExNjE1YWM5MGIxNDM5ZWIzN2FmZGY5MGE1YWM3Cg";
+
+    fn encode_ih_record(record: &str) -> String {
+        URL_SAFE_NO_PAD.encode(record.as_bytes())
+    }
+
+    #[test]
+    fn install_bootstrap_context_unix_golden_vector_is_exact() {
+        let context =
+            InstallBootstrapContextV1::new_unix("/opt//substrate-dev/", "alice", 1000).unwrap();
+        let carrier = InstallBootstrapContextCarrierV1::from_context(context.clone()).unwrap();
+
+        assert_eq!(context.selected_host_prefix, "/opt/substrate-dev");
+        assert_eq!(
+            carrier.commitment_input().unwrap(),
+            UNIX_IH_FRAME.as_bytes()
+        );
+        assert_eq!(carrier.host_context_commitment, UNIX_IH_COMMITMENT);
+        assert_eq!(carrier.encode().unwrap(), UNIX_IH_CARRIER);
+        assert_eq!(
+            InstallBootstrapContextCarrierV1::decode(UNIX_IH_CARRIER).unwrap(),
+            carrier
+        );
+    }
+
+    #[test]
+    fn install_bootstrap_context_windows_golden_vector_is_exact() {
+        let context = InstallBootstrapContextV1::new_windows(
+            r"c:/Users//Alice/AppData/Local/Substrate/",
+            r"ACME\Alice",
+            "S-1-5-21-1000",
+        )
+        .unwrap();
+        let carrier = InstallBootstrapContextCarrierV1::from_context(context.clone()).unwrap();
+
+        assert_eq!(
+            context.selected_host_prefix,
+            r"C:\Users\Alice\AppData\Local\Substrate"
+        );
+        assert_eq!(carrier.host_context_commitment, WINDOWS_IH_COMMITMENT);
+        assert_eq!(carrier.encode().unwrap(), WINDOWS_IH_CARRIER);
+        assert_eq!(
+            InstallBootstrapContextCarrierV1::decode(WINDOWS_IH_CARRIER).unwrap(),
+            carrier
+        );
+    }
+
+    #[test]
+    fn install_bootstrap_context_rejects_noncanonical_paths() {
+        for raw in [
+            "",
+            "/",
+            "//server/path",
+            "relative/path",
+            "/a/./b",
+            "/a/../b",
+        ] {
+            assert!(InstallBootstrapContextV1::new_unix(raw, "alice", 1000).is_err());
+        }
+
+        for raw in [
+            r"C:relative",
+            r"\root-relative",
+            r"C:\",
+            r"\\server\share",
+            r"\\?\C:\Substrate",
+            r"C:\a\..\b",
+            r"C:\CON\Substrate",
+            r"C:\bad.\Substrate",
+            r"C:\bad:name\Substrate",
+        ] {
+            assert!(
+                InstallBootstrapContextV1::new_windows(raw, "ACME\\Alice", "S-1-5-21-1").is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn install_bootstrap_context_rejects_record_and_commitment_tampering() {
+        let canonical_record =
+            format!("{UNIX_IH_FRAME}host_context_commitment={UNIX_IH_COMMITMENT}\n");
+        let cases = [
+            canonical_record.replacen("version=1\n", "", 1),
+            canonical_record.replacen("version=1\n", "version=1\nversion=1\n", 1),
+            canonical_record.replacen("version=1", "unknown=1", 1),
+            canonical_record.replacen(
+                "version=1\nselected_host_prefix=",
+                "selected_host_prefix=version=1\n",
+                1,
+            ),
+            canonical_record.replacen("L29wdC9zdWJzdHJhdGUtZGV2", "***", 1),
+            canonical_record.replacen("principal_uid=1000", "principal_uid=01000", 1),
+            canonical_record.replacen("principal_uid=1000\n", "principal_uid=1000\r\n", 1),
+            canonical_record.replacen(UNIX_IH_COMMITMENT, &"0".repeat(64), 1),
+            format!("{canonical_record}extra=field\n"),
+        ];
+
+        for record in cases {
+            assert!(
+                InstallBootstrapContextCarrierV1::decode(&encode_ih_record(&record)).is_err(),
+                "accepted tampered record: {record:?}"
+            );
+        }
+        assert!(InstallBootstrapContextCarrierV1::decode("not+base64").is_err());
+        assert!(InstallBootstrapContextCarrierV1::decode(&format!("{UNIX_IH_CARRIER}=")).is_err());
+    }
 
     const LAITDP2_CLIENT: &str = "codex";
     const LAITDP2_ROUTER: &str = "substrate_gateway";

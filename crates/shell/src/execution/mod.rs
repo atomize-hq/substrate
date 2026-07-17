@@ -12,6 +12,7 @@ mod env_scripts;
 mod home_bootstrap;
 #[cfg(any(target_os = "linux", test))]
 pub(crate) mod host_inbox_materialization;
+pub(crate) mod install_bootstrap;
 mod invocation;
 pub mod lock;
 mod manager;
