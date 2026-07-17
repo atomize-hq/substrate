@@ -1469,6 +1469,56 @@ fn ast_policy_self_test_propagates_schema_aliases_through_macro_aggregates() {
 }
 
 #[test]
+fn ast_policy_self_test_propagates_direct_schema_through_macro_aggregate_if() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let decisions = vec![self.checkpoint.schema_version == "v0.8"];
+                if decisions[0] {}
+            }
+        }
+        "#,
+    )
+    .expect("parse direct-schema macro aggregate if policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.violations,
+        vec![
+            "CheckpointPresentation::render_console_block: schema-version alias or nesting in if condition"
+                .to_string(),
+        ],
+        "a direct schema source must remain classified through an allowlisted macro aggregate and index: {schema:?}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_propagates_direct_schema_through_macro_aggregate_let_else() {
+    let file = syn::parse_file(
+        r#"
+        impl CheckpointPresentation {
+            fn render_console_block(&self) {
+                let decisions = vec![self.checkpoint.schema_version == "v0.8"];
+                let true = decisions[0] else { return; };
+            }
+        }
+        "#,
+    )
+    .expect("parse direct-schema macro aggregate let-else policy fixture");
+
+    let schema = analyze_schema_policy(&file);
+    assert_eq!(
+        schema.violations,
+        vec![
+            "CheckpointPresentation::render_console_block: schema-version let-else initializer"
+                .to_string(),
+        ],
+        "a direct schema source must remain classified through an allowlisted macro aggregate and let-else: {schema:?}"
+    );
+}
+
+#[test]
 fn ast_policy_self_test_classifies_schema_aliases_in_let_else_control() {
     let file = syn::parse_file(
         r#"
@@ -2718,6 +2768,23 @@ fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
                 self.0 = true;
             }
             visit::visit_expr_path(self, path);
+        }
+
+        fn visit_macro(&mut self, expression: &'ast syn::Macro) {
+            match parse_macro_arguments(expression) {
+                Ok(ParsedMacroArguments::Expressions(arguments)) => {
+                    for argument in &arguments {
+                        self.visit_expr(argument);
+                    }
+                }
+                Ok(ParsedMacroArguments::Matches(arguments)) => {
+                    self.visit_expr(&arguments.expression);
+                    if let Some(guard) = &arguments.guard {
+                        self.visit_expr(guard);
+                    }
+                }
+                Err(_) => {}
+            }
         }
     }
     let mut finder = Finder::default();
