@@ -2465,6 +2465,312 @@ fn ast_policy_self_test_does_not_treat_cfg_not_test_as_test_only() {
 }
 
 #[test]
+fn ast_policy_self_test_honors_production_cfg_on_expressions_and_members() {
+    let fixture = tempfile::tempdir().expect("create expression-cfg fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create expression-cfg source directory");
+    let active_cfg = "cfg(all(not(test), any(unix, windows)))";
+    let source = format!(
+        r#"
+        #![allow(dead_code, unreachable_patterns, unused_unsafe)]
+
+        struct Presentation;
+        impl Presentation {{
+            const fn render_console_block(&self, _note: Option<&str>) {{}}
+        }}
+        struct Checkpoint {{ schema_version: &'static str }}
+        struct Harness {{ checkpoint: Checkpoint }}
+        struct Holder {{
+            #[cfg(test)]
+            value: bool,
+            #[{active_cfg}]
+            value: bool,
+        }}
+        const PRESENTATION: Presentation = Presentation;
+        const STATE: Harness = Harness {{
+            checkpoint: Checkpoint {{ schema_version: "v0.8" }},
+        }};
+
+        impl Harness {{
+            fn inventory(&self) {{
+                #[cfg(test)]
+                {{
+                    PRESENTATION.render_console_block(None);
+                    let _ = self.checkpoint.schema_version == "v0.8";
+                }}
+                #[{active_cfg}]
+                {{
+                    PRESENTATION.render_console_block(None);
+                    let _ = self.checkpoint.schema_version == "v0.8";
+                }}
+
+                #[cfg(test)]
+                let _hidden_local = {{
+                    PRESENTATION.render_console_block(None);
+                    self.checkpoint.schema_version == "v0.8"
+                }};
+                #[{active_cfg}]
+                let _active_local = {{
+                    PRESENTATION.render_console_block(None);
+                    self.checkpoint.schema_version == "v0.8"
+                }};
+
+                let _ = match () {{
+                    #[cfg(test)]
+                    () => {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    #[{active_cfg}]
+                    () => {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    _ => false,
+                }};
+
+                let _ = Holder {{
+                    #[cfg(test)]
+                    value: {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    #[{active_cfg}]
+                    value: {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                }};
+
+                let _ = (
+                    #[cfg(test)]
+                    const {{
+                        PRESENTATION.render_console_block(None);
+                        STATE.checkpoint.schema_version
+                    }},
+                    #[{active_cfg}]
+                    const {{
+                        PRESENTATION.render_console_block(None);
+                        STATE.checkpoint.schema_version
+                    }},
+                    #[cfg(test)]
+                    async {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    #[{active_cfg}]
+                    async {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    #[cfg(test)]
+                    unsafe {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    #[{active_cfg}]
+                    unsafe {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    #[cfg(test)]
+                    loop {{
+                        PRESENTATION.render_console_block(None);
+                        break self.checkpoint.schema_version == "v0.8";
+                    }},
+                    #[{active_cfg}]
+                    loop {{
+                        PRESENTATION.render_console_block(None);
+                        break self.checkpoint.schema_version == "v0.8";
+                    }},
+                    #[cfg(test)]
+                    if true {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }} else {{
+                        false
+                    }},
+                    #[{active_cfg}]
+                    if true {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }} else {{
+                        false
+                    }},
+                    #[cfg(test)]
+                    || {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                    #[{active_cfg}]
+                    || {{
+                        PRESENTATION.render_console_block(None);
+                        self.checkpoint.schema_version == "v0.8"
+                    }},
+                );
+
+                #[cfg_attr(not(test), cfg(all(not(test), any(unix, windows))))]
+                {{
+                    PRESENTATION.render_console_block(None);
+                    let _ = self.checkpoint.schema_version == "v0.8";
+                }}
+                #[cfg_attr(not(test), cfg(test))]
+                {{
+                    PRESENTATION.render_console_block(None);
+                    let _ = self.checkpoint.schema_version == "v0.8";
+                }}
+            }}
+        }}
+        "#
+    );
+    let source_path = source_root.join("lib.rs");
+    fs::write(&source_path, &source).expect("write expression-cfg source");
+
+    assert_rust_root_compiles("expression_cfg_fixture", "lib", &source_path, &[]);
+    let (schema, calls) =
+        analyze_compiled_source_inventories(&production_rust_sources(&source_root));
+    assert_eq!(
+        schema
+            .direct_uses
+            .iter()
+            .filter(|owner| owner.as_str() == "Harness::inventory")
+            .count(),
+        11,
+        "only production-active expression, local, arm, field, and nested-block schema uses count"
+    );
+    assert_eq!(
+        schema
+            .exact_predicates
+            .iter()
+            .filter(|owner| owner.as_str() == "Harness::inventory")
+            .count(),
+        10,
+        "every production-active non-const control remains an exact schema predicate"
+    );
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([("crate::Harness::inventory".to_string(), 11)]),
+        "only production-active expression, local, arm, field, and nested-block render calls count"
+    );
+
+    let disabled_source = source.replace(active_cfg, "cfg(test)");
+    fs::write(&source_path, disabled_source).expect("disable production mutation controls");
+    assert_rust_root_compiles("expression_cfg_mutation", "lib", &source_path, &[]);
+    let (schema_without_active_controls, calls_without_active_controls) =
+        analyze_compiled_source_inventories(&production_rust_sources(&source_root));
+    assert!(
+        schema_without_active_controls
+            .direct_uses
+            .iter()
+            .all(|owner| owner != "Harness::inventory"),
+        "production-disabled schema decoys must not satisfy the schema inventory"
+    );
+    assert!(
+        schema_without_active_controls.exact_predicates.is_empty(),
+        "production-disabled predicates must not satisfy the exact-predicate inventory"
+    );
+    assert!(
+        calls_without_active_controls.counts.is_empty(),
+        "production-disabled render decoys must not satisfy the render inventory"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_skips_test_only_local_modules_before_resolution() {
+    let fixture = tempfile::tempdir().expect("create local-module cfg fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create local-module cfg source directory");
+    let source_path = source_root.join("lib.rs");
+    fs::write(
+        &source_path,
+        concat!(
+            "fn modules() {\n",
+            "    #[cfg(test)] { mod review_hidden; }\n",
+            "    #[cfg(all(not(test), any(unix, windows)))] {\n",
+            "        #[path = \"review_active.rs\"] mod review_active;\n",
+            "    }\n",
+            "}\n",
+        ),
+    )
+    .expect("write local-module cfg source");
+    fs::write(source_root.join("review_active.rs"), "pub fn marker() {}\n")
+        .expect("write production-active local module");
+
+    assert_rust_root_compiles("local_module_cfg_fixture", "lib", &source_path, &[]);
+    let sources = production_rust_sources(&source_root)
+        .into_iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(&source_root)
+                    .expect("local-module fixture source")
+                    .to_path_buf(),
+                source.module,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        sources,
+        BTreeSet::from([
+            (PathBuf::from("lib.rs"), None),
+            (
+                PathBuf::from("review_active.rs"),
+                Some("modules::review_active".to_string()),
+            ),
+        ]),
+        "the collector must skip the missing test-only module but visit the active compound cfg"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_fails_closed_on_unknown_cfg_below_item_level() {
+    let file = syn::parse_file(
+        r#"
+        fn inventory(presentation: Presentation, checkpoint: Checkpoint) {
+            #[cfg(custom_unknown)] {
+                presentation.render_console_block(None);
+                let _ = checkpoint.schema_version;
+            }
+        }
+        "#,
+    )
+    .expect("parse unknown expression-cfg fixture");
+    let fixture = tempfile::tempdir().expect("create unknown local-module cfg fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create unknown local-module source directory");
+    let source_path = source_root.join("lib.rs");
+    fs::write(
+        &source_path,
+        "fn modules() { #[cfg(custom_unknown)] { mod hidden; } }\n",
+    )
+    .expect("write unknown local-module cfg fixture");
+    assert_rust_root_compiles("unknown_local_module_cfg", "lib", &source_path, &[]);
+
+    for failure in [
+        std::panic::catch_unwind(|| analyze_schema_policy(&file))
+            .expect_err("schema traversal must fail closed on unknown expression cfg"),
+        std::panic::catch_unwind(|| {
+            let mut calls = RenderCallInventory::default();
+            analyze_render_calls_in_items("crate", &file.items, &mut calls);
+        })
+        .expect_err("render traversal must fail closed on unknown expression cfg"),
+        std::panic::catch_unwind(|| production_rust_sources(&source_root))
+            .expect_err("module traversal must fail closed on unknown expression cfg"),
+    ] {
+        let message = failure
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| failure.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic");
+        assert!(
+            message.contains("unsupported production cfg predicate `custom_unknown`"),
+            "unknown expression cfg failure must be explicit: {message}"
+        );
+    }
+}
+
+#[test]
 fn ast_policy_self_test_rejects_local_macro_rules_hiding_schema_predicates() {
     let file = syn::parse_file(
         r#"
@@ -4080,12 +4386,17 @@ fn analyze_schema_items(
                     &format!("struct {}", identifier_name(&item_struct.ident)),
                 );
                 analyze_schema_item_header(&owner, item, analysis);
-                if item_struct.fields.iter().any(|field| {
-                    field
-                        .ident
-                        .as_ref()
-                        .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
-                }) {
+                if item_struct
+                    .fields
+                    .iter()
+                    .filter(|field| production_attributes_active(&field.attrs))
+                    .any(|field| {
+                        field
+                            .ident
+                            .as_ref()
+                            .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
+                    })
+                {
                     analysis
                         .violations
                         .push(format!("{owner}: schema_version field definition"));
@@ -4097,14 +4408,22 @@ fn analyze_schema_items(
                     &format!("enum {}", identifier_name(&item_enum.ident)),
                 );
                 analyze_schema_item_header(&owner, item, analysis);
-                if item_enum.variants.iter().any(|variant| {
-                    variant.fields.iter().any(|field| {
-                        field
-                            .ident
-                            .as_ref()
-                            .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
+                if item_enum
+                    .variants
+                    .iter()
+                    .filter(|variant| production_attributes_active(&variant.attrs))
+                    .any(|variant| {
+                        variant
+                            .fields
+                            .iter()
+                            .filter(|field| production_attributes_active(&field.attrs))
+                            .any(|field| {
+                                field.ident.as_ref().is_some_and(|identifier| {
+                                    identifier_is(identifier, "schema_version")
+                                })
+                            })
                     })
-                }) {
+                {
                     analysis
                         .violations
                         .push(format!("{owner}: schema_version field definition"));
@@ -4116,12 +4435,18 @@ fn analyze_schema_items(
                     &format!("union {}", identifier_name(&item_union.ident)),
                 );
                 analyze_schema_item_header(&owner, item, analysis);
-                if item_union.fields.named.iter().any(|field| {
-                    field
-                        .ident
-                        .as_ref()
-                        .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
-                }) {
+                if item_union
+                    .fields
+                    .named
+                    .iter()
+                    .filter(|field| production_attributes_active(&field.attrs))
+                    .any(|field| {
+                        field
+                            .ident
+                            .as_ref()
+                            .is_some_and(|identifier| identifier_is(identifier, "schema_version"))
+                    })
+                {
                     analysis
                         .violations
                         .push(format!("{owner}: schema_version field definition"));
@@ -4296,29 +4621,34 @@ fn analyze_schema_attributes(
     analysis: &mut SchemaPolicyAnalysis,
 ) {
     for attribute in attributes {
-        let contains_schema = match &attribute.meta {
-            syn::Meta::Path(path) => path_last_is(path, "schema_version"),
-            syn::Meta::NameValue(name_value) => expression_has_direct_schema(&name_value.value),
-            syn::Meta::List(list) => {
-                let parser =
-                    syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
-                match parser.parse2(list.tokens.clone()) {
-                    Ok(arguments) => arguments.iter().any(expression_has_direct_schema),
-                    Err(error) => {
-                        analysis.violations.push(format!(
-                            "{owner}: unparsed {} attribute tokens: {error}",
-                            macro_path_from_path(&list.path)
-                        ));
-                        false
+        for meta in effective_production_attributes(std::slice::from_ref(attribute)) {
+            if path_is_ident(meta.path(), "cfg") {
+                continue;
+            }
+            let contains_schema = match &meta {
+                syn::Meta::Path(path) => path_last_is(path, "schema_version"),
+                syn::Meta::NameValue(name_value) => expression_has_direct_schema(&name_value.value),
+                syn::Meta::List(list) => {
+                    let parser =
+                        syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
+                    match parser.parse2(list.tokens.clone()) {
+                        Ok(arguments) => arguments.iter().any(expression_has_direct_schema),
+                        Err(error) => {
+                            analysis.violations.push(format!(
+                                "{owner}: unparsed {} attribute tokens: {error}",
+                                macro_path_from_path(&list.path)
+                            ));
+                            false
+                        }
                     }
                 }
+            };
+            if contains_schema {
+                analysis.direct_uses.push(owner.to_string());
+                analysis
+                    .violations
+                    .push(format!("{owner}: schema_version attribute token"));
             }
-        };
-        if contains_schema {
-            analysis.direct_uses.push(owner.to_string());
-            analysis
-                .violations
-                .push(format!("{owner}: schema_version attribute token"));
         }
     }
 }
@@ -4361,6 +4691,95 @@ fn analyze_schema_block(owner: String, block: &syn::Block, analysis: &mut Schema
         analysis,
     };
     visitor.visit_block(block);
+}
+
+fn expression_attributes(expression: &syn::Expr) -> &[syn::Attribute] {
+    match expression {
+        syn::Expr::Array(expression) => &expression.attrs,
+        syn::Expr::Assign(expression) => &expression.attrs,
+        syn::Expr::Async(expression) => &expression.attrs,
+        syn::Expr::Await(expression) => &expression.attrs,
+        syn::Expr::Binary(expression) => &expression.attrs,
+        syn::Expr::Block(expression) => &expression.attrs,
+        syn::Expr::Break(expression) => &expression.attrs,
+        syn::Expr::Call(expression) => &expression.attrs,
+        syn::Expr::Cast(expression) => &expression.attrs,
+        syn::Expr::Closure(expression) => &expression.attrs,
+        syn::Expr::Const(expression) => &expression.attrs,
+        syn::Expr::Continue(expression) => &expression.attrs,
+        syn::Expr::Field(expression) => &expression.attrs,
+        syn::Expr::ForLoop(expression) => &expression.attrs,
+        syn::Expr::Group(expression) => &expression.attrs,
+        syn::Expr::If(expression) => &expression.attrs,
+        syn::Expr::Index(expression) => &expression.attrs,
+        syn::Expr::Infer(expression) => &expression.attrs,
+        syn::Expr::Let(expression) => &expression.attrs,
+        syn::Expr::Lit(expression) => &expression.attrs,
+        syn::Expr::Loop(expression) => &expression.attrs,
+        syn::Expr::Macro(expression) => &expression.attrs,
+        syn::Expr::Match(expression) => &expression.attrs,
+        syn::Expr::MethodCall(expression) => &expression.attrs,
+        syn::Expr::Paren(expression) => &expression.attrs,
+        syn::Expr::Path(expression) => &expression.attrs,
+        syn::Expr::Range(expression) => &expression.attrs,
+        syn::Expr::RawAddr(expression) => &expression.attrs,
+        syn::Expr::Reference(expression) => &expression.attrs,
+        syn::Expr::Repeat(expression) => &expression.attrs,
+        syn::Expr::Return(expression) => &expression.attrs,
+        syn::Expr::Struct(expression) => &expression.attrs,
+        syn::Expr::Try(expression) => &expression.attrs,
+        syn::Expr::TryBlock(expression) => &expression.attrs,
+        syn::Expr::Tuple(expression) => &expression.attrs,
+        syn::Expr::Unary(expression) => &expression.attrs,
+        syn::Expr::Unsafe(expression) => &expression.attrs,
+        syn::Expr::While(expression) => &expression.attrs,
+        syn::Expr::Yield(expression) => &expression.attrs,
+        syn::Expr::Verbatim(_) => {
+            panic!("unsupported production expression form: verbatim")
+        }
+        _ => panic!("unsupported production expression form: unknown"),
+    }
+}
+
+fn pattern_attributes(pattern: &syn::Pat) -> &[syn::Attribute] {
+    match pattern {
+        syn::Pat::Const(pattern) => &pattern.attrs,
+        syn::Pat::Ident(pattern) => &pattern.attrs,
+        syn::Pat::Lit(pattern) => &pattern.attrs,
+        syn::Pat::Macro(pattern) => &pattern.attrs,
+        syn::Pat::Or(pattern) => &pattern.attrs,
+        syn::Pat::Paren(pattern) => &pattern.attrs,
+        syn::Pat::Path(pattern) => &pattern.attrs,
+        syn::Pat::Range(pattern) => &pattern.attrs,
+        syn::Pat::Reference(pattern) => &pattern.attrs,
+        syn::Pat::Rest(pattern) => &pattern.attrs,
+        syn::Pat::Slice(pattern) => &pattern.attrs,
+        syn::Pat::Struct(pattern) => &pattern.attrs,
+        syn::Pat::Tuple(pattern) => &pattern.attrs,
+        syn::Pat::TupleStruct(pattern) => &pattern.attrs,
+        syn::Pat::Type(pattern) => &pattern.attrs,
+        syn::Pat::Wild(pattern) => &pattern.attrs,
+        syn::Pat::Verbatim(_) => panic!("unsupported production pattern form: verbatim"),
+        _ => panic!("unsupported production pattern form: unknown"),
+    }
+}
+
+fn production_expression_active(expression: &syn::Expr) -> bool {
+    production_attributes_active(expression_attributes(expression))
+}
+
+fn production_pattern_active(pattern: &syn::Pat) -> bool {
+    production_attributes_active(pattern_attributes(pattern))
+}
+
+macro_rules! production_cfg_gate {
+    ($method:ident, $node:ty, $visit:path) => {
+        fn $method(&mut self, node: &'ast $node) {
+            if production_attributes_active(&node.attrs) {
+                $visit(self, node);
+            }
+        }
+    };
 }
 
 #[derive(Default)]
@@ -4406,6 +4825,18 @@ impl BindingCollector {
 }
 
 impl<'ast> Visit<'ast> for BindingCollector {
+    fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+        if production_expression_active(expression) {
+            visit::visit_expr(self, expression);
+        }
+    }
+
+    fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
+        if production_pattern_active(pattern) {
+            visit::visit_pat(self, pattern);
+        }
+    }
+
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
         if !matches!(statement, syn::Stmt::Item(_)) {
             visit::visit_stmt(self, statement);
@@ -4413,6 +4844,9 @@ impl<'ast> Visit<'ast> for BindingCollector {
     }
 
     fn visit_local(&mut self, local: &'ast syn::Local) {
+        if !production_attributes_active(&local.attrs) {
+            return;
+        }
         if let Some(init) = &local.init {
             self.record_pattern(&local.pat, &init.expr);
         }
@@ -4435,11 +4869,37 @@ impl<'ast> Visit<'ast> for BindingCollector {
     }
 
     fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
-        for arm in &expression.arms {
+        for arm in expression
+            .arms
+            .iter()
+            .filter(|arm| production_attributes_active(&arm.attrs))
+        {
             self.record_pattern(&arm.pat, &expression.expr);
         }
         visit::visit_expr_match(self, expression);
     }
+
+    production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
+    production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
+    production_cfg_gate!(
+        visit_bare_variadic,
+        syn::BareVariadic,
+        visit::visit_bare_variadic
+    );
+    production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
+    production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
+    production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
+    production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
+    production_cfg_gate!(
+        visit_lifetime_param,
+        syn::LifetimeParam,
+        visit::visit_lifetime_param
+    );
+    production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
+    production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
+    production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
+    production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
+    production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
 }
 
 fn pattern_identifiers(pattern: &syn::Pat) -> HashSet<String> {
@@ -4447,10 +4907,18 @@ fn pattern_identifiers(pattern: &syn::Pat) -> HashSet<String> {
     struct Collector(HashSet<String>);
 
     impl<'ast> Visit<'ast> for Collector {
+        fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
+            if production_pattern_active(pattern) {
+                visit::visit_pat(self, pattern);
+            }
+        }
+
         fn visit_pat_ident(&mut self, pattern: &'ast syn::PatIdent) {
             self.0.insert(identifier_name(&pattern.ident));
             visit::visit_pat_ident(self, pattern);
         }
+
+        production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
     }
 
     let mut collector = Collector::default();
@@ -4463,6 +4931,12 @@ fn assignment_identifiers(target: &syn::Expr) -> HashSet<String> {
     struct Collector(HashSet<String>);
 
     impl<'ast> Visit<'ast> for Collector {
+        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+            if production_expression_active(expression) {
+                visit::visit_expr(self, expression);
+            }
+        }
+
         fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
             if let Some(identifier) = path.path.get_ident() {
                 self.0.insert(identifier_name(identifier));
@@ -4779,6 +5253,18 @@ impl SchemaExpressionVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
+    fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+        if production_expression_active(expression) {
+            visit::visit_expr(self, expression);
+        }
+    }
+
+    fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
+        if production_pattern_active(pattern) {
+            visit::visit_pat(self, pattern);
+        }
+    }
+
     fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
         if let syn::Stmt::Item(item) = statement {
             analyze_schema_items(std::slice::from_ref(item), Some(self.owner), self.analysis);
@@ -4792,6 +5278,9 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
     }
 
     fn visit_local(&mut self, local: &'ast syn::Local) {
+        if !production_attributes_active(&local.attrs) {
+            return;
+        }
         if local.init.as_ref().is_some_and(|init| {
             init.diverge.is_some() && expression_depends_on_schema(&init.expr, self.aliases)
         }) {
@@ -4864,7 +5353,11 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         if expression_depends_on_schema(&expression.expr, self.aliases) {
             self.violation("schema-version match scrutinee");
         }
-        for arm in &expression.arms {
+        for arm in expression
+            .arms
+            .iter()
+            .filter(|arm| production_attributes_active(&arm.attrs))
+        {
             if arm
                 .guard
                 .as_ref()
@@ -4894,6 +5387,7 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         if expression
             .fields
             .iter()
+            .filter(|field| production_attributes_active(&field.attrs))
             .any(|field| member_is(&field.member, "schema_version"))
         {
             self.violation("schema_version struct field construction");
@@ -4905,6 +5399,7 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
         if pattern
             .fields
             .iter()
+            .filter(|field| production_attributes_active(&field.attrs))
             .any(|field| member_is(&field.member, "schema_version"))
         {
             self.violation("schema_version struct pattern");
@@ -4922,12 +5417,40 @@ impl<'ast> Visit<'ast> for SchemaExpressionVisitor<'_> {
     fn visit_macro(&mut self, expression: &'ast syn::Macro) {
         self.inspect_macro(expression);
     }
+
+    production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
+    production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
+    production_cfg_gate!(
+        visit_bare_variadic,
+        syn::BareVariadic,
+        visit::visit_bare_variadic
+    );
+    production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
+    production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
+    production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
+    production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
+    production_cfg_gate!(
+        visit_lifetime_param,
+        syn::LifetimeParam,
+        visit::visit_lifetime_param
+    );
+    production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
+    production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
+    production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
+    production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
+    production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
 }
 
 fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
     #[derive(Default)]
     struct Finder(bool);
     impl<'ast> Visit<'ast> for Finder {
+        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+            if production_expression_active(expression) {
+                visit::visit_expr(self, expression);
+            }
+        }
+
         fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
             if member_is(&field.member, "schema_version") {
                 self.0 = true;
@@ -4958,6 +5481,11 @@ fn expression_has_direct_schema(expression: &syn::Expr) -> bool {
                 Err(_) => {}
             }
         }
+
+        production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
+        production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
+        production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
+        production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
     }
     let mut finder = Finder::default();
     finder.visit_expr(expression);
@@ -4968,6 +5496,12 @@ fn expression_identifiers(expression: &syn::Expr) -> HashSet<String> {
     #[derive(Default)]
     struct Collector(HashSet<String>);
     impl<'ast> Visit<'ast> for Collector {
+        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+            if production_expression_active(expression) {
+                visit::visit_expr(self, expression);
+            }
+        }
+
         fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
             if let Some(identifier) = path.path.segments.last().map(|segment| &segment.ident) {
                 self.0.insert(identifier_name(identifier));
@@ -4991,6 +5525,11 @@ fn expression_identifiers(expression: &syn::Expr) -> HashSet<String> {
                 Err(_) => {}
             }
         }
+
+        production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
+        production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
+        production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
+        production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
     }
     let mut collector = Collector::default();
     collector.visit_expr(expression);
@@ -5458,11 +5997,9 @@ impl RenderCallVisitor<'_> {
             )),
         }
     }
-}
 
-impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
-    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
-        match &attribute.meta {
+    fn inspect_attribute_meta(&mut self, meta: &syn::Meta) {
+        match meta {
             syn::Meta::Path(path) => {
                 if path_last_is(path, "render_console_block") {
                     self.inventory.violations.push(format!(
@@ -5471,14 +6008,16 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
                     ));
                 }
             }
-            syn::Meta::NameValue(name_value) => self.visit_expr(&name_value.value),
+            syn::Meta::NameValue(name_value) => {
+                self.visit_parsed_expression(&name_value.value);
+            }
             syn::Meta::List(list) => {
                 let parser =
                     syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated;
                 match parser.parse2(list.tokens.clone()) {
                     Ok(arguments) => {
                         for argument in &arguments {
-                            self.visit_expr(argument);
+                            self.visit_parsed_expression(argument);
                         }
                     }
                     Err(error) => {
@@ -5498,6 +6037,28 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
                     }
                 }
             }
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        for meta in effective_production_attributes(std::slice::from_ref(attribute)) {
+            if !path_is_ident(meta.path(), "cfg") {
+                self.inspect_attribute_meta(&meta);
+            }
+        }
+    }
+
+    fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+        if production_expression_active(expression) {
+            visit::visit_expr(self, expression);
+        }
+    }
+
+    fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
+        if production_pattern_active(pattern) {
+            visit::visit_pat(self, pattern);
         }
     }
 
@@ -5557,6 +6118,29 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
     fn visit_macro(&mut self, expression: &'ast syn::Macro) {
         self.inspect_macro(expression);
     }
+
+    production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
+    production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
+    production_cfg_gate!(
+        visit_bare_variadic,
+        syn::BareVariadic,
+        visit::visit_bare_variadic
+    );
+    production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
+    production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
+    production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
+    production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
+    production_cfg_gate!(
+        visit_lifetime_param,
+        syn::LifetimeParam,
+        visit::visit_lifetime_param
+    );
+    production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
+    production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
+    production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
+    production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
+    production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
+    production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -5874,6 +6458,18 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
     }
 
     impl<'ast> Visit<'ast> for ModuleCollector<'_> {
+        fn visit_expr(&mut self, expression: &'ast syn::Expr) {
+            if production_expression_active(expression) {
+                visit::visit_expr(self, expression);
+            }
+        }
+
+        fn visit_pat(&mut self, pattern: &'ast syn::Pat) {
+            if production_pattern_active(pattern) {
+                visit::visit_pat(self, pattern);
+            }
+        }
+
         fn visit_item(&mut self, item: &'ast syn::Item) {
             if has_cfg_test(item_attrs(item)) {
                 return;
@@ -6037,12 +6633,6 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
             });
         }
 
-        fn visit_stmt_macro(&mut self, statement: &'ast syn::StmtMacro) {
-            if !has_cfg_test(&statement.attrs) {
-                visit::visit_stmt_macro(self, statement);
-            }
-        }
-
         fn visit_macro(&mut self, expression: &'ast syn::Macro) {
             match parse_macro_arguments(expression) {
                 Ok(ParsedMacroArguments::Expressions(arguments)) => {
@@ -6060,6 +6650,29 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
                 Err(_) => {}
             }
         }
+
+        production_cfg_gate!(visit_arm, syn::Arm, visit::visit_arm);
+        production_cfg_gate!(visit_bare_fn_arg, syn::BareFnArg, visit::visit_bare_fn_arg);
+        production_cfg_gate!(
+            visit_bare_variadic,
+            syn::BareVariadic,
+            visit::visit_bare_variadic
+        );
+        production_cfg_gate!(visit_const_param, syn::ConstParam, visit::visit_const_param);
+        production_cfg_gate!(visit_field, syn::Field, visit::visit_field);
+        production_cfg_gate!(visit_field_pat, syn::FieldPat, visit::visit_field_pat);
+        production_cfg_gate!(visit_field_value, syn::FieldValue, visit::visit_field_value);
+        production_cfg_gate!(
+            visit_lifetime_param,
+            syn::LifetimeParam,
+            visit::visit_lifetime_param
+        );
+        production_cfg_gate!(visit_local, syn::Local, visit::visit_local);
+        production_cfg_gate!(visit_receiver, syn::Receiver, visit::visit_receiver);
+        production_cfg_gate!(visit_stmt_macro, syn::StmtMacro, visit::visit_stmt_macro);
+        production_cfg_gate!(visit_type_param, syn::TypeParam, visit::visit_type_param);
+        production_cfg_gate!(visit_variadic, syn::Variadic, visit::visit_variadic);
+        production_cfg_gate!(visit_variant, syn::Variant, visit::visit_variant);
     }
 
     fn collect_modules(
