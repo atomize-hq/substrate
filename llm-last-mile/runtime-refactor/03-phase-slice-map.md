@@ -414,6 +414,22 @@ implementation order is:
    requires a separately approved provenance/publication contract if R3 cannot prove that state is
    unreachable after R1.
 
+**A1.1d-5R1 exact allowlist.** R1 may edit only
+`crates/shell/src/execution/agent_runtime/host_session_authority/trusted_fs.rs` and
+`crates/shell/src/execution/home_bootstrap.rs`, with tests only in the colocated `#[cfg(test)]`
+modules in those two files. Control-pack changes are limited to the existing six files under
+`llm-last-mile/runtime-refactor/` and only for this allowlist or compact R1 closeout. Within that
+file boundary, R1 permits only strict Linux ancestor access/default ACL parsing and validation,
+structured private-home error provenance owned by HostSessionAuthority in `trusted_fs.rs`,
+rendering of that typed canonical diagnostic by `home_bootstrap.rs`, and directly colocated tests.
+`home_bootstrap.rs` gains no ACL-semantic or provenance authority. R1 explicitly excludes installer
+or uninstaller propagation, shim behavior,
+cleanup or deletion, prefix selection, generated configuration, provisioning, services, world or
+policy behavior, macOS or Windows implementation, new schema or persistence formats, and general
+trusted-filesystem refactoring. Requiring any implementation file, integration-test file, script,
+fixture, or new module outside this allowlist is `CrossDocumentChangeRequired` rather than implicit
+scope expansion.
+
 R1, R2, and R3 are not implemented or review-clean. `RG-HOME-01` and `RG-INSTALL-01` remain open.
 Their Linux regression wall and normal product lifecycle smoke are prerequisites for A1.1d Linux
 closeout and for the Linux product-smoke portion of the B1/B2.1 joint closeout. They do not reopen
