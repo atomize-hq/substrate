@@ -2,6 +2,7 @@
 
 mod support;
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -56,6 +57,39 @@ fn operator_surface_locks_all_legacy_presentation_facade_signatures() {
     ) -> CheckpointPresentation = present_checkpoint_with_previous;
     let _: fn(&CheckpointPresentation, Option<&str>) -> String =
         CheckpointPresentation::render_console_block;
+    let _: fn(CheckpointPresentation) -> CheckpointPresentation =
+        checkpoint_presentation_public_shape_witness;
+}
+
+fn checkpoint_presentation_public_shape_witness(
+    presentation: CheckpointPresentation,
+) -> CheckpointPresentation {
+    let CheckpointPresentation {
+        checkpoint,
+        trigger,
+        posture,
+        disposition,
+        severity,
+        headline,
+        objective,
+        drift_summary,
+        diagnostics_summary,
+        expected_next_step,
+        evidence_lines,
+    } = presentation;
+    CheckpointPresentation {
+        checkpoint,
+        trigger,
+        posture,
+        disposition,
+        severity,
+        headline,
+        objective,
+        drift_summary,
+        diagnostics_summary,
+        expected_next_step,
+        evidence_lines,
+    }
 }
 
 #[test]
@@ -1395,10 +1429,14 @@ fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
         .iter()
         .find(|source| source.module.as_deref() == Some("operator_surface"))
         .expect("compiled operator_surface module source");
-    let operator_source =
+    let operator_features = operator_source.features.clone();
+    let operator_source_text =
         fs::read_to_string(&operator_source.path).expect("read compiled operator surface source");
-    let operator_file = syn::parse_file(&operator_source).expect("parse operator surface source");
-    let schema_analysis = analyze_schema_policy_in_module(&operator_file, Some("operator_surface"));
+    let operator_file =
+        syn::parse_file(&operator_source_text).expect("parse operator surface source");
+    let schema_analysis = with_production_features(operator_features, || {
+        analyze_schema_policy_in_module(&operator_file, Some("operator_surface"))
+    });
 
     assert_eq!(
         schema_analysis.direct_uses,
@@ -1421,7 +1459,9 @@ fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
         let file = syn::parse_file(&source)
             .unwrap_or_else(|error| panic!("parse {}: {error}", production_source.path.display()));
         let module = production_source.module.as_deref().unwrap_or("crate");
-        analyze_render_calls_in_source_module(module, &file.items, &mut call_inventory);
+        with_production_features(production_source.features.clone(), || {
+            analyze_render_calls_in_source_module(module, &file.items, &mut call_inventory);
+        });
     }
 
     assert_eq!(call_inventory.counts, expected_render_source_call_counts());
@@ -1715,11 +1755,279 @@ fn ast_policy_self_test_discovers_directory_and_explicit_bin_roots() {
     );
 }
 
+fn assert_rust_root_compiles(
+    crate_name: &str,
+    crate_type: &str,
+    source_path: &Path,
+    features: &[&str],
+) {
+    let output_directory = tempfile::tempdir().expect("create Rust root output directory");
+    let mut command = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
+    command
+        .arg("--crate-name")
+        .arg(crate_name)
+        .arg("--crate-type")
+        .arg(crate_type)
+        .arg("--edition=2021")
+        .arg("--emit=metadata")
+        .arg(source_path)
+        .arg("-o")
+        .arg(output_directory.path().join("fixture.rmeta"));
+    for feature in features {
+        command.arg("--cfg").arg(format!("feature={feature:?}"));
+    }
+    let output = command.output().expect("run rustc for module-root fixture");
+    assert!(
+        output.status.success(),
+        "fixture root {} must compile successfully:\n{}",
+        source_path.display(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn ast_policy_self_test_resolves_modules_from_each_compiled_root_context() {
+    let fixture = tempfile::tempdir().expect("create module-resolution fixture");
+    let custom = fixture.path().join("custom");
+    let directory_bin = fixture.path().join("src/bin/tool");
+    for directory in [
+        custom.join("flat"),
+        custom.join("directory"),
+        custom.join("alt"),
+        custom.join("inline"),
+        directory_bin.clone(),
+    ] {
+        fs::create_dir_all(directory).expect("create module-resolution directory");
+    }
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        concat!(
+            "[package]\n",
+            "name = \"module-resolution-fixture\"\n",
+            "version = \"0.0.0\"\n",
+            "edition = \"2021\"\n",
+            "\n",
+            "[lib]\n",
+            "path = \"custom/library.rs\"\n",
+            "\n",
+            "[[bin]]\n",
+            "name = \"tool\"\n",
+            "path = \"src/bin/tool/main.rs\"\n",
+        ),
+    )
+    .expect("write module-resolution manifest");
+    fs::write(
+        custom.join("library.rs"),
+        concat!(
+            "mod root_child;\n",
+            "mod flat;\n",
+            "mod directory;\n",
+            "#[path = \"alt/host.rs\"] mod alias;\n",
+            "mod inline { mod child; }\n",
+        ),
+    )
+    .expect("write custom library root");
+    fs::write(custom.join("root_child.rs"), "").expect("write custom-root child");
+    fs::write(custom.join("flat.rs"), "mod child;\n").expect("write flat module");
+    fs::write(custom.join("flat/child.rs"), "").expect("write flat-module child");
+    fs::write(custom.join("directory/mod.rs"), "mod child;\n").expect("write directory module");
+    fs::write(custom.join("directory/child.rs"), "").expect("write directory-module child");
+    fs::write(custom.join("alt/host.rs"), "mod child;\n").expect("write path module");
+    fs::write(custom.join("alt/child.rs"), "").expect("write path-module child");
+    fs::write(custom.join("inline/child.rs"), "").expect("write inline-module child");
+    fs::write(directory_bin.join("main.rs"), "mod child;\nfn main() {}\n")
+        .expect("write directory-bin root");
+    fs::write(directory_bin.join("child.rs"), "").expect("write directory-bin child");
+
+    assert_rust_root_compiles(
+        "module_resolution_fixture",
+        "lib",
+        &custom.join("library.rs"),
+        &[],
+    );
+    assert_rust_root_compiles(
+        "module_resolution_tool",
+        "bin",
+        &directory_bin.join("main.rs"),
+        &[],
+    );
+
+    let sources = production_rust_sources(&fixture.path().join("src"))
+        .into_iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(fixture.path())
+                    .expect("module-resolution source")
+                    .to_path_buf(),
+                source.module,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        sources,
+        BTreeSet::from([
+            (PathBuf::from("custom/alt/child.rs"), Some("alias::child".to_string())),
+            (PathBuf::from("custom/alt/host.rs"), Some("alias".to_string())),
+            (
+                PathBuf::from("custom/directory/child.rs"),
+                Some("directory::child".to_string()),
+            ),
+            (
+                PathBuf::from("custom/directory/mod.rs"),
+                Some("directory".to_string()),
+            ),
+            (
+                PathBuf::from("custom/flat/child.rs"),
+                Some("flat::child".to_string()),
+            ),
+            (PathBuf::from("custom/flat.rs"), Some("flat".to_string())),
+            (
+                PathBuf::from("custom/inline/child.rs"),
+                Some("inline::child".to_string()),
+            ),
+            (PathBuf::from("custom/library.rs"), None),
+            (
+                PathBuf::from("custom/root_child.rs"),
+                Some("root_child".to_string()),
+            ),
+            (
+                PathBuf::from("src/bin/tool/child.rs"),
+                Some("bin::tool::child".to_string()),
+            ),
+            (
+                PathBuf::from("src/bin/tool/main.rs"),
+                Some("bin::tool".to_string()),
+            ),
+        ]),
+        "crate roots, default modules, path modules, and inline modules must use rustc's actual child-module bases"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_uses_resolved_default_features_and_required_feature_targets() {
+    let fixture = tempfile::tempdir().expect("create feature-resolution fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(source_root.join("enabled")).expect("create enabled module directory");
+    fs::create_dir_all(source_root.join("bin")).expect("create feature bin directory");
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        concat!(
+            "[package]\n",
+            "name = \"feature-resolution-fixture\"\n",
+            "version = \"0.0.0\"\n",
+            "edition = \"2021\"\n",
+            "\n",
+            "[features]\n",
+            "default = [\"enabled\"]\n",
+            "enabled = []\n",
+            "disabled = []\n",
+            "\n",
+            "[[bin]]\n",
+            "name = \"enabled-bin\"\n",
+            "path = \"src/bin/enabled.rs\"\n",
+            "required-features = [\"enabled\"]\n",
+            "\n",
+            "[[bin]]\n",
+            "name = \"disabled-bin\"\n",
+            "path = \"src/bin/disabled.rs\"\n",
+            "required-features = [\"disabled\"]\n",
+        ),
+    )
+    .expect("write feature-resolution manifest");
+    fs::write(
+        source_root.join("lib.rs"),
+        concat!(
+            "struct Presentation;\n",
+            "impl Presentation { fn render_console_block(&self, _note: Option<&str>) {} }\n",
+            "#[cfg(feature = \"enabled\")] mod enabled;\n",
+            "#[cfg(not(feature = \"enabled\"))] mod wrongly_disabled;\n",
+            "#[cfg(feature = \"enabled\")]\n",
+            "fn enabled_render(presentation: Presentation) { presentation.render_console_block(None); }\n",
+            "#[cfg(not(feature = \"enabled\"))]\n",
+            "fn wrongly_disabled_render(presentation: Presentation) { presentation.render_console_block(None); }\n",
+        ),
+    )
+    .expect("write feature-gated library root");
+    fs::write(source_root.join("enabled.rs"), "mod child;\n").expect("write enabled module");
+    fs::write(source_root.join("enabled/child.rs"), "").expect("write enabled child module");
+    fs::write(source_root.join("wrongly_disabled.rs"), "")
+        .expect("write inactive default-feature module");
+    fs::write(source_root.join("bin/enabled.rs"), "fn main() {}\n")
+        .expect("write enabled required-feature bin");
+    fs::write(source_root.join("bin/disabled.rs"), "fn main() {}\n")
+        .expect("write disabled required-feature bin");
+
+    assert_rust_root_compiles(
+        "feature_resolution_fixture",
+        "lib",
+        &source_root.join("lib.rs"),
+        &["enabled"],
+    );
+    assert_rust_root_compiles(
+        "enabled_feature_bin",
+        "bin",
+        &source_root.join("bin/enabled.rs"),
+        &["enabled"],
+    );
+
+    let production_sources = production_rust_sources(&source_root);
+    let sources = production_sources
+        .iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(fixture.path())
+                    .expect("feature-resolution source")
+                    .to_path_buf(),
+                source.module.clone(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        sources,
+        BTreeSet::from([
+            (
+                PathBuf::from("src/bin/enabled.rs"),
+                Some("bin::enabled_bin".to_string()),
+            ),
+            (PathBuf::from("src/enabled.rs"), Some("enabled".to_string())),
+            (
+                PathBuf::from("src/enabled/child.rs"),
+                Some("enabled::child".to_string()),
+            ),
+            (PathBuf::from("src/lib.rs"), None),
+        ]),
+        "Cargo's resolved default features must drive cfg(feature) modules and required-feature targets"
+    );
+    let (_, calls) = analyze_compiled_source_inventories(&production_sources);
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([("crate::enabled_render".to_string(), 1)]),
+        "resolved feature state must remain authoritative during AST inventory analysis"
+    );
+}
+
 #[test]
 fn ast_policy_self_test_resolves_production_cfg_and_inner_attributes() {
     let fixture = tempfile::tempdir().expect("create production-cfg fixture");
     let source_root = fixture.path().join("src");
     fs::create_dir_all(&source_root).expect("create production-cfg source directory");
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        concat!(
+            "[package]\n",
+            "name = \"production-cfg-fixture\"\n",
+            "version = \"0.0.0\"\n",
+            "edition = \"2021\"\n",
+            "\n",
+            "[features]\n",
+            "not_enabled = []\n",
+        ),
+    )
+    .expect("write production-cfg manifest");
     fs::write(
         source_root.join("lib.rs"),
         concat!(
@@ -1748,8 +2056,14 @@ fn ast_policy_self_test_resolves_production_cfg_and_inner_attributes() {
         "#![cfg(all(not(test), any(unix, windows)))]\nmod leaf;\n",
     )
     .expect("write active inner-cfg module");
-    fs::create_dir_all(source_root.join("inner_active")).expect("create active inner module dir");
-    fs::write(source_root.join("inner_active/leaf.rs"), "").expect("write active inner leaf");
+    fs::write(source_root.join("leaf.rs"), "").expect("write active path-module leaf");
+
+    assert_rust_root_compiles(
+        "production_cfg_fixture",
+        "lib",
+        &source_root.join("lib.rs"),
+        &[],
+    );
 
     let sources = production_rust_sources(&source_root)
         .into_iter()
@@ -1769,7 +2083,7 @@ fn ast_policy_self_test_resolves_production_cfg_and_inner_attributes() {
         BTreeSet::from([
             (PathBuf::from("inner_active.rs"), Some("inner_active".to_string())),
             (
-                PathBuf::from("inner_active/leaf.rs"),
+                PathBuf::from("leaf.rs"),
                 Some("inner_active::leaf".to_string()),
             ),
             (PathBuf::from("lib.rs"), None),
@@ -1802,6 +2116,31 @@ fn ast_policy_self_test_fails_closed_on_unknown_production_cfg() {
     assert!(
         message.contains("unsupported production cfg predicate `custom_unknown`"),
         "unknown cfg failure must be explicit: {message}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_fails_closed_without_resolved_cargo_feature_state() {
+    let fixture = tempfile::tempdir().expect("create unresolved-feature fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create unresolved-feature source directory");
+    fs::write(
+        source_root.join("lib.rs"),
+        "#[cfg(feature = \"unresolved\")] mod hidden;\n",
+    )
+    .expect("write unresolved-feature crate root");
+    fs::write(source_root.join("hidden.rs"), "").expect("write unresolved-feature module");
+
+    let failure = std::panic::catch_unwind(|| production_rust_sources(&source_root))
+        .expect_err("feature predicates without Cargo metadata must fail closed");
+    let message = failure
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| failure.downcast_ref::<&str>().copied())
+        .unwrap_or("non-string panic");
+    assert!(
+        message.contains("production Cargo feature state is unresolved"),
+        "unresolved feature-state failure must be explicit: {message}"
     );
 }
 
@@ -4992,6 +5331,13 @@ impl<'ast> Visit<'ast> for RenderCallVisitor<'_> {
 struct ProductionRustSource {
     path: PathBuf,
     module: Option<String>,
+    features: Option<BTreeSet<String>>,
+}
+
+#[derive(Debug)]
+struct CargoTargetSelection {
+    roots: Vec<(PathBuf, Option<String>)>,
+    features: BTreeSet<String>,
 }
 
 fn conventional_rust_roots(root: &Path) -> Vec<(PathBuf, Option<String>)> {
@@ -5040,21 +5386,10 @@ fn conventional_rust_roots(root: &Path) -> Vec<(PathBuf, Option<String>)> {
     roots
 }
 
-fn cargo_target_roots(root: &Path) -> Option<Vec<(PathBuf, Option<String>)>> {
-    let manifest = root.parent()?.join("Cargo.toml");
-    if !manifest.is_file() {
-        return None;
-    }
-
+fn resolved_cargo_package(manifest: &Path) -> (serde_json::Value, BTreeSet<String>) {
     let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-        .args([
-            "metadata",
-            "--format-version",
-            "1",
-            "--no-deps",
-            "--manifest-path",
-        ])
-        .arg(&manifest)
+        .args(["metadata", "--format-version", "1", "--manifest-path"])
+        .arg(manifest)
         .output()
         .unwrap_or_else(|error| panic!("run cargo metadata for {}: {error}", manifest.display()));
     assert!(
@@ -5065,7 +5400,7 @@ fn cargo_target_roots(root: &Path) -> Option<Vec<(PathBuf, Option<String>)>> {
     );
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
         .unwrap_or_else(|error| panic!("parse cargo metadata for {}: {error}", manifest.display()));
-    let canonical_manifest = fs::canonicalize(&manifest)
+    let canonical_manifest = fs::canonicalize(manifest)
         .unwrap_or_else(|error| panic!("resolve manifest {}: {error}", manifest.display()));
     let package = metadata["packages"]
         .as_array()
@@ -5077,20 +5412,74 @@ fn cargo_target_roots(root: &Path) -> Option<Vec<(PathBuf, Option<String>)>> {
                     .is_some_and(|path| path == canonical_manifest)
             })
         })
+        .cloned()
         .unwrap_or_else(|| panic!("cargo metadata omitted package {}", manifest.display()));
+    let package_id = package["id"].as_str().unwrap_or_else(|| {
+        panic!(
+            "cargo metadata package omitted id for {}",
+            manifest.display()
+        )
+    });
+    let resolved_package = metadata["resolve"]["nodes"]
+        .as_array()
+        .and_then(|nodes| {
+            nodes
+                .iter()
+                .find(|node| node["id"].as_str() == Some(package_id))
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "cargo metadata omitted resolved feature state for {}",
+                manifest.display()
+            )
+        });
+    let features = resolved_package["features"]
+        .as_array()
+        .unwrap_or_else(|| {
+            panic!(
+                "cargo metadata resolved feature state was not an array for {}",
+                manifest.display()
+            )
+        })
+        .iter()
+        .map(|feature| {
+            feature
+                .as_str()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "cargo metadata resolved a non-string feature for {}",
+                        manifest.display()
+                    )
+                })
+                .to_string()
+        })
+        .collect();
+    (package, features)
+}
 
-    let active_features = production_cfg().features.clone();
+fn cargo_target_roots(root: &Path) -> Option<CargoTargetSelection> {
+    let manifest = root.parent()?.join("Cargo.toml");
+    if !manifest.is_file() {
+        return None;
+    }
+
+    let (package, active_features) = resolved_cargo_package(&manifest);
     let mut roots = BTreeSet::new();
     for target in package["targets"]
         .as_array()
         .expect("cargo metadata package targets")
     {
-        let required_features = target["required_features"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|feature| feature.as_str().expect("required feature name"))
-            .collect::<Vec<_>>();
+        let required_features = match target
+            .get("required-features")
+            .or_else(|| target.get("required_features"))
+        {
+            None | Some(serde_json::Value::Null) => Vec::new(),
+            Some(serde_json::Value::Array(features)) => features
+                .iter()
+                .map(|feature| feature.as_str().expect("required feature name"))
+                .collect::<Vec<_>>(),
+            Some(_) => panic!("cargo metadata target required-features must be an array"),
+        };
         if !required_features
             .iter()
             .all(|feature| active_features.contains(*feature))
@@ -5121,7 +5510,10 @@ fn cargo_target_roots(root: &Path) -> Option<Vec<(PathBuf, Option<String>)>> {
         );
         roots.insert((path, module));
     }
-    Some(roots.into_iter().collect())
+    Some(CargoTargetSelection {
+        roots: roots.into_iter().collect(),
+        features: active_features,
+    })
 }
 
 fn rust_identifier(name: &str) -> String {
@@ -5199,15 +5591,10 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
             let explicit_path = module_path_attribute(&item_mod.attrs);
             let (source_path, nested_directory) = if let Some(explicit_path) = explicit_path {
                 let source_path = path_attribute_base.join(explicit_path);
-                let nested_directory =
-                    if source_path.file_name().is_some_and(|name| name == "mod.rs") {
-                        source_path
-                            .parent()
-                            .expect("path-attributed mod.rs parent")
-                            .to_path_buf()
-                    } else {
-                        source_path.with_extension("")
-                    };
+                let nested_directory = source_path
+                    .parent()
+                    .expect("path-attributed module parent")
+                    .to_path_buf();
                 (source_path, nested_directory)
             } else {
                 let flat_path = module_directory.join(format!("{identifier}.rs"));
@@ -5268,6 +5655,7 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
         sources.push(ProductionRustSource {
             path: path.clone(),
             module: module.clone(),
+            features: production_feature_state(),
         });
         let path_attribute_base = path.parent().expect("compiled source parent");
         collect_modules(
@@ -5282,7 +5670,10 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
         active_paths.remove(&canonical_path);
     }
 
-    let roots = cargo_target_roots(root).unwrap_or_else(|| conventional_rust_roots(root));
+    let (roots, features) = cargo_target_roots(root).map_or_else(
+        || (conventional_rust_roots(root), None),
+        |selection| (selection.roots, Some(selection.features)),
+    );
     assert!(
         !roots.is_empty(),
         "no Rust crate roots under {}",
@@ -5293,14 +5684,20 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
     let mut visited = BTreeSet::new();
     let mut active_paths = BTreeSet::new();
     for (path, module) in roots {
-        collect_source(
-            path,
-            module,
-            root.to_path_buf(),
-            &mut sources,
-            &mut visited,
-            &mut active_paths,
-        );
+        let module_directory = path
+            .parent()
+            .unwrap_or_else(|| panic!("crate root {} has no parent", path.display()))
+            .to_path_buf();
+        with_production_features(features.clone(), || {
+            collect_source(
+                path,
+                module,
+                module_directory,
+                &mut sources,
+                &mut visited,
+                &mut active_paths,
+            );
+        });
     }
     sources.sort_by(|left, right| {
         left.path
@@ -5320,16 +5717,18 @@ fn analyze_compiled_source_inventories(
             .unwrap_or_else(|error| panic!("read {}: {error}", production_source.path.display()));
         let file = syn::parse_file(&source)
             .unwrap_or_else(|error| panic!("parse {}: {error}", production_source.path.display()));
-        analyze_schema_items(
-            &file.items,
-            production_source.module.as_deref(),
-            &mut schema,
-        );
-        analyze_render_calls_in_source_module(
-            production_source.module.as_deref().unwrap_or("crate"),
-            &file.items,
-            &mut calls,
-        );
+        with_production_features(production_source.features.clone(), || {
+            analyze_schema_items(
+                &file.items,
+                production_source.module.as_deref(),
+                &mut schema,
+            );
+            analyze_render_calls_in_source_module(
+                production_source.module.as_deref().unwrap_or("crate"),
+                &file.items,
+                &mut calls,
+            );
+        });
     }
     schema.direct_uses.sort();
     schema.exact_predicates.sort();
@@ -5425,7 +5824,51 @@ fn path_last_is(path: &syn::Path, expected: &str) -> bool {
 struct ProductionCfg {
     flags: BTreeSet<String>,
     values: BTreeMap<String, BTreeSet<String>>,
-    features: BTreeSet<String>,
+}
+
+thread_local! {
+    static PRODUCTION_FEATURE_CONTEXT: RefCell<Vec<Option<BTreeSet<String>>>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+struct ProductionFeatureContextGuard;
+
+impl Drop for ProductionFeatureContextGuard {
+    fn drop(&mut self) {
+        PRODUCTION_FEATURE_CONTEXT.with(|context| {
+            context
+                .borrow_mut()
+                .pop()
+                .expect("production feature context guard must be balanced");
+        });
+    }
+}
+
+fn with_production_features<T>(
+    features: Option<BTreeSet<String>>,
+    action: impl FnOnce() -> T,
+) -> T {
+    PRODUCTION_FEATURE_CONTEXT.with(|context| context.borrow_mut().push(features));
+    let _guard = ProductionFeatureContextGuard;
+    action()
+}
+
+fn production_feature_state() -> Option<BTreeSet<String>> {
+    PRODUCTION_FEATURE_CONTEXT.with(|context| {
+        context
+            .borrow()
+            .last()
+            .cloned()
+            .expect("production feature state requires an active source context")
+    })
+}
+
+fn active_production_features() -> BTreeSet<String> {
+    production_feature_state().unwrap_or_else(|| {
+        panic!(
+            "production Cargo feature state is unresolved; inspect a Cargo.toml with cargo metadata"
+        )
+    })
 }
 
 fn production_cfg() -> &'static ProductionCfg {
@@ -5461,22 +5904,7 @@ fn production_cfg() -> &'static ProductionCfg {
             }
         }
 
-        // Cargo exposes enabled features to build-time subprocesses with these names. The
-        // Sentinel crate currently has no features, so an empty set is also exact for its normal
-        // test wall; retaining this input keeps fixture evaluation honest if features are added.
-        let mut features = BTreeSet::new();
-        for (name, _) in std::env::vars().filter(|(name, _)| name.starts_with("CARGO_FEATURE_")) {
-            let normalized = name
-                .trim_start_matches("CARGO_FEATURE_")
-                .to_ascii_lowercase();
-            features.insert(normalized.clone());
-            features.insert(normalized.replace('_', "-"));
-        }
-        ProductionCfg {
-            flags,
-            values,
-            features,
-        }
+        ProductionCfg { flags, values }
     })
 }
 
@@ -5524,7 +5952,7 @@ fn evaluate_production_cfg(meta: &syn::Meta) -> bool {
                 panic!("unsupported production cfg predicate `{key}`");
             };
             if key == "feature" {
-                return config.features.contains(&value.value());
+                return active_production_features().contains(&value.value());
             }
             config
                 .values
