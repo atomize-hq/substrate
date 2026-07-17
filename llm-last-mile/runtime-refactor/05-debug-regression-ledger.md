@@ -337,18 +337,94 @@ service/socket/runtime paths matched the initial absent/inactive snapshot.
 | **A1D5I-INSTALL-05** | `ImplementationBug` | Unix release unit sets `SUBSTRATE_HOME` to the selected prefix but derives `ReadWritePaths` from ambient `$HOME`; `ProtectSystem=strict` can deny a valid custom home outside that allowlist. | Release Linux service projection; R2 derives the sandbox allowlist from the selected host context. | Full-world release smoke with a custom prefix outside ambient home, service write/bootstrap proof, and exact unit assertions. | Linux static; both blocked. |
 | **A1D5I-INSTALL-06** | `ImplementationBug` | Linux provisioning installs the gateway, ACL helper, and socket drop-in, but dev removal omits them; release removal also omits the installed gateway. Prefix-local success cannot stand in for system lifecycle convergence. | Linux managed-system lifecycle; R3 records exact pre-state/managed manifest and restores binaries, helpers, units/drop-ins, sockets, runtime/state paths, and installer-created account-state changes without broad deletion or removing pre-existing state. | Dedicated-host install/uninstall pre/post diff, repeat uninstall, accepted-home partial provisioning/rerun, exact group/ACL-bridge/linger accounting, and preservation of pre-existing system artifacts. | Linux static; both blocked. |
 | **A1D5I-INSTALL-07** | `ImplementationBug` | Windows release uninstall recursively deletes every `$USERPROFILE/.substrate*` match independent of `-Prefix`, so unrelated backups/state can be destroyed. | Windows uninstall boundary; R2 selects exact context and R3 forbids wildcard cleanup in favor of exact managed identity. | Hermetic native Windows negative test with selected prefix plus unrelated `.substrate*` siblings; only selected recorded artifacts may change. | Windows static only; native Windows product proof pending; neither named Linux closeout gate is blocked by this row alone. |
-| **A1D5I-INSTALL-08** | `ImplementationBug` | Windows release `-NoAutoSource` deploys shims without explicit selected context; macOS dev cleanup targets `${HOME}/.substrate/sock/agent.sock` instead of the selected host prefix. | Platform lifecycle adapters; R2 carries host context and the exact platform mapping through deploy/cleanup. | Native Windows `-NoAutoSource` custom-prefix shim proof and native macOS custom-prefix socket cleanup/preservation proof. | Static Windows/macOS only; native macOS/product proof remains open; neither named Linux closeout gate is blocked by this row alone. |
+| **A1D5I-INSTALL-08** | `ImplementationBug` | Windows release `-NoAutoSource` deploys shims without explicit selected context; macOS dev cleanup targets `${HOME}/.substrate/sock/agent.sock` instead of the selected host prefix. | Platform lifecycle adapters; R2 carries host context and exact platform mapping through deploy and transports the selected macOS socket target; R3 alone performs socket cleanup and preservation/convergence. | Native Windows `-NoAutoSource` custom-prefix shim proof, R2 native macOS selected-socket mapping proof, and R3 native macOS cleanup/preservation proof. | Static Windows/macOS only; native macOS/product proof remains open; neither named Linux closeout gate is blocked by this row alone. |
 | **A1D5I-INSTALL-09** | `ImplementationBug` | Generated release/dev manager scripts prefer ambient `SUBSTRATE_HOME=B` over their installed self-location A, so a custom-prefix projection can consume a different authority home. | Generated projection consumer; R2 binds encoded/self-derived location to the selected host context and rejects conflicting ambient selection. | Install at A, source under ambient B, and prove only A is consumed; include missing/malformed A and B negative cases. | Unix static; both blocked. |
-| **A1D5I-INSTALL-10** | `ContractGap` | Windows release uses a prefix-independent forwarder PID path and removes the prefix tree without a selected-context shim-remove boundary. The current pack does not define which artifacts are per-prefix versus intentionally per-user shared. | R2 defines the host managed-artifact ownership manifest; R3 removes only artifacts whose exact ownership/provenance matches it. | Two-prefix native Windows lifecycle matrix covering shared/per-prefix forwarder and shim state, conflict, partial install, uninstall order, and unrelated-state preservation. | Windows static only; native Windows product proof pending; neither named Linux closeout gate is blocked by this row alone. |
+| **A1D5I-INSTALL-10** | `ContractGap` | Windows release uses a prefix-independent forwarder PID path and removes the prefix tree without a selected-context shim-remove boundary. The current pack does not define which artifacts are per-prefix versus intentionally per-user shared. | R2 classifies and transports exact prefix-scoped versus SID+platform-instance+pipe-scoped context without deletion authority; R3 alone defines any managed-artifact ownership manifest used for removal and removes only exact matching provenance. | Two-prefix native Windows lifecycle matrix covering shared/per-prefix forwarder and shim state, conflict, partial install, uninstall order, and unrelated-state preservation. | Windows static only; native Windows product proof pending; neither named Linux closeout gate is blocked by this row alone. |
 | **A1D5I-REG-01** | `MissingRegression` | Existing installer tests check selected strings but not real child propagation/lifecycle; one fixture uses `/tmp`, which is invalid under the current ancestor contract and masks its intended assertion. | R1/R2/R3 regression suites. | Secure audit-owned fixture roots; default/custom, accepted-home partial/rerun, synchronous rollback, crash-window fail-closed, uninstall/reinstall, and negative two-home matrices. | Linux proven; both blocked. |
 | **A1D5I-ENV-01** | `EnvironmentUnsupported` | This audit host could not safely run privileged service/Codex provisioning without a sudo prompt/dedicated-host restoration contract. This is an evidence limitation, not a product defect or capability regression. | Later R2/R3 product-smoke environment. | Snapshot, provision, doctor/smoke, runtime sync, uninstall/restore, and post-snapshot parity on a dedicated supported Linux host. | Linux proof still required; gate stays open, but classification itself blocks neither architecture core. |
 | **A1D5I-FP-01** | `FalsePositive` | Install/bootstrap unavailability does not prove loss of world filesystem/network capability, changed policy/enforcement, or regression of review-clean B1 receipt/B2.1 supervisor semantics. | No remediation outside R1/R2/R3. | Preserve the differential world/policy wall and later product smoke; do not reopen B1/B2.1-0. | All platforms; neither semantic core is regressed. |
+
+### A1.1d-5R2-0 propagation planning record
+
+**Decision/status:** the docs/evidence-only planning packet starts at
+`6ab2a515e13946324d0aac25b144e1c3408cb2c1` and freezes 114 live propagation edges as
+PI-001–PI-114 in `02-seam-crosswalk.md`. It changes only the existing six control-pack files,
+implements no runtime behavior, performs no privileged/platform mutation, promotes no seam, and
+claims no native macOS or Windows proof. R2 implementation is ordered
+R2-1 -> R2-2 -> R2-3 -> R2-4; R3 follows and remains unimplemented.
+
+Every A1.1d-5I finding has an explicit terminal owner:
+
+| A1.1d-5I finding | Frozen owner/packet | Closure rule |
+|---|---|---|
+| HOME-01, HOME-02, HOME-03 | R1, already review-clean | Preserve effective-authority and diagnostic contract; R2/R3 do not reopen it. |
+| HOME-04 | R1 pre-create rejection; R3 synchronous exact-candidate cleanup | R2 may carry context only; it cannot remove the candidate. |
+| HOME-05 | R3 crash-window reachability/convergence decision | Unknown-provenance invalid residues remain unchanged and fail closed absent a separately approved boundary. |
+| INSTALL-01 | R2-1 Unix dev/shim; R2-2 Unix release; R2-3 Windows/platform | Complete context reaches deploy/remove/status/doctor without outer override. |
+| INSTALL-02 | R2-2 exact release-uninstall selection; R3 deletion/convergence | Selection and deletion authority stay separate. |
+| INSTALL-03 | R3 | Exact managed gateway/symlink cleanup only. |
+| INSTALL-04 | R2-1, joined in R2-4 | Shim/trace diagnostic reports selected A. |
+| INSTALL-05 | R2-2, proven in R2-4 | Linux `ReadWritePaths` is derived from selected context. |
+| INSTALL-06 | R3 | System helper/gateway/unit/drop-in/socket/account-state cleanup. |
+| INSTALL-07 | R2-3 exact Windows selection; R3 deletion | Wildcard removal is never R2 authority. |
+| INSTALL-08 | R2-3 context/mapping/target transport; R3 cleanup action | Windows `-NoAutoSource` and macOS selected-prefix socket mapping are R2; socket removal/preservation/convergence is R3; native evidence remains assigned. |
+| INSTALL-09 | R2-1/R2-2, joined in R2-4 | Generated manager binds A and cannot accept ambient B as authority. |
+| INSTALL-10 | R2-3 scope classification/context transport; R3 deletion manifest/action | R2 records prefix versus SID+instance+pipe scope without inventing a removal manifest. |
+| REG-01 | R1 preserved; R2-1/R2-2/R2-3 tests; R2-4 join; R3 lifecycle suite | Secure fixture roots and the named two-home/lifecycle matrices are mandatory. |
+| ENV-01 | R2-4 Linux product host; native platform assignments remain separate | Evidence limitation is not positive product proof. |
+| FP-01 | Out of scope; preserve review-clean behavior | No world capability, policy, B1 receipt, or B2.1 supervisor reopening. |
+
+The R2 regression gates are exact labels used by the inventory and packet allowlists:
+
+| Gate | Required proof before the owning packet can exit |
+|---|---|
+| **R2-UDEV-01** | Unix dev install, uninstall, `dev-shim-bootstrap.sh`, and successful install-sensitive standalone CLI modes each construct exactly one equal A/H/R context from the declared/self-derived/account default source before explicit-context home bootstrap; parse/help/version exits mutate no scaffold; hidden argv carrier alone selects internal-child validation and an environment carrier cannot; custom A works without an outer override; conflicting ambient B/dev-prefix cannot retarget bootstrap, children, preexec, or uninstall selection. |
+| **R2-UREL-01** | Unix release wrapper, direct installer/uninstaller, and installed child distinguish constructor/child modes and preserve the same context across install/uninstall; child cannot reinterpret prefix; repeat install preserves commitment; no removal/convergence claim. |
+| **R2-SHIM-01** | Installer-managed, automatic CLI, standalone declared/self-derived deploy/remove/status/doctor/repair, and physical shim telemetry paths receive one complete context or verified mapping projection; a bare physical shim recovers exactly one no-follow invocation witness without PATH precedence and zero/multiple witnesses fail; repair target derives from the committed principal; custom A is the only shim/trace projection under ambient B; legacy H/R/carriers are consistency checks. Replacement/migration/recursive removal actions remain R3 and byte-frozen in R2. |
+| **R2-GEN-01** | Dev/release `env.sh`, manager, Bash preexec, helper, configuration, version, install-state, dependency, service, intended-principal PATH, and Lima known-hosts projections are prefix-relative or self-derived, encode/project the same context where consumed, and never treat a conflicting ambient B or generated value as selection authority. |
+| **R2-RUNTIME-01** | Dependency add/remove/current/list/sync, world-deps global/current inner leaves, runtime-family/Codex provisioning, config/policy proof producers and consumers, and gateway sync/status/restart leaves receive the exact context; member-dispatch/gateway Codex paths and synthetic-auth creation target the committed principal's account-database home. Rollback and synthetic-auth deletion remain R3. Runtime, policy, gateway, and provider semantics do not change. |
+| **R2-LINUX-01** | Unix account+UID and context survive every release, dev-install, and provision sudo boundary: Substrate helpers validate the full argv carrier, while arbitrary tools receive only exact context-derived argv after parent revalidation and no preserved environment. Linux unit environment carries H=A, R=A, commitment, and intended-principal projection; socket/drop-in and `ReadWritePaths` derive from A; only the fixed same-attempt Linux socket-restart unlink is exercised; focused/static proof passes in R2-2 and dedicated-host service/world/Codex product proof passes in R2-4. |
+| **R2-DIAG-01** | Trace, shim, repair, world, host, health, world-deps, config/policy proof, gateway, Lima/WSL, and pipe diagnostics report selected host commitment and any verified platform mapping/transport; direct mode constructs from declared/principal-default inputs, internal mode validates hidden argv, and no default-home/guest/pipe reconstruction is represented as authority. |
+| **R2-MAP-MAC-01** | IH plus the VM selector performs only Stage-1 declared-instance realization; PM is finalized from running-guest machine ID/account+UID+home before R2 guest projection. Host commitment binds guest unit, A-scoped host socket, and A-scoped known-hosts projection; shell/shim/replay factory callers are explicit; destroy/rebuild/staging/unit/socket/unlink/drop/timeout cleanup remains R3; no path/principal equality. Static proof is labeled static and a native pre-existing-Lima mapping-only run is assigned separately. |
+| **R2-MAP-WIN-01** | Windows account+SID host context survives dev/release/uninstall and `-NoAutoSource`; it binds one WSL instance, WSL-native account+UID+home, one normalized public-selected/default pipe shared by warm/forwarder/backend/status/doctor plus shell/shim/replay factory callers. The fail-closed WSL guards remain byte-identical; timeout kill/stop/deletion remains R3; static proof is labeled static and native existing-instance mapping-only proof is assigned without claiming provisioning. |
+| **R3-LIFE-01** | R3-only candidate, rollback, manifest, managed-system cleanup, account-state restoration, crash-window, uninstall/reinstall, shim/payload/bin/cache/helper/unit/socket/platform-staging/forwarder unlink/drop/timeout/synthetic-auth cleanup, and unrelated-state preservation matrix. Referencing this gate from R2 transports a target only. |
+| **R3-WIN-01** | R3-only native Windows two-prefix cleanup matrix: no wildcard removal; exact per-prefix versus shared state; version/bin/profile replacement, timeout rollback, uninstall order, WSL/forwarder/shim cleanup, partial install, and unrelated-state preservation. |
+
+R2-0 cross-document checkpoint rules are: inventory counts and owner/packet columns must agree;
+every R2 packet has an exact production/test allowlist; R2-4 has no production allowlist; every R3
+action above stays exclusive to R3; host and Lima/WSL paths/principals are never equated;
+`InstallBootstrapContextV1` commitment framing is canonical and unambiguous; and the serial graph is
+acyclic. The exact next packet after a clean R2-0 commit is **A1.1d-5R2-1 — Host context
+construction and Unix dev propagation**.
+
+**Frozen planning validation record:** the inventory contains exactly 114 unique, contiguous rows
+and dispositions: 18 owned by R2-1, 41 by R2-2, 32 by R2-3, one by R2-4, and 22 by R3. Each row
+has exactly one approved edge class and one packet owner; the class totals are 16
+`ContextConstruction`, 26 `ExplicitHostPropagation`, five `PrivilegeBoundaryPropagation`, 16
+`PlatformMapping`, 12 `GeneratedProjectionConsumption`, 13 `DiagnosticProjection`, 22
+`R3CleanupOnly`, and four `OutOfScope`. The frozen DAG is exactly
+R1 -> R2-0 -> R2-1 -> R2-2 -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
+field-count, class, owner, packet-count, table-column, fence-pair, relative-link, and allowlist-path
+checks, plus `git diff --check`, `cargo fmt --all -- --check`, and GitNexus change detection. The
+GitNexus index was refreshed at the starting commit; only generated count lines changed during
+refresh and those exact lines were restored, while final change detection reports six documentation
+files, zero affected execution flows, and LOW risk. Successive isolated read-only review rounds found and
+closed missing CLI pre-bootstrap ordering, automatic shim/repair paths, dev sudo and provisioning
+children, shim/release/Windows/Lima cleanup ownership, shim-telemetry and replay factory callers,
+two-stage Lima realization, Windows timeout-kill ownership, invalid native-smoke assignments,
+symlink-shim invocation recovery, generated preexec and Codex-home projections, direct
+world-deps/doctor/config/policy/gateway consumers, exact helper-versus-system-tool sudo carriers,
+Lima known-hosts placement, and forwarding unlink/drop/timeout ownership.
+No reviewer modified the repository. Final fresh review is required against the unchanged validated
+diff before commit; no runtime implementation or native platform proof can be inferred from this
+record.
 
 ### A1.1d-5R1 Linux effective-authority contract correction
 
 **Decision/status:** Case A is implemented and review-clean for the bounded Linux R1 scope. This is a
 security-contract correction from **physically ACL-free** to **no effective other-principal
-authority**. R2 and R3 remain separately sequenced and unstarted. No seam is added or promoted.
+authority**. R2-0 planning is complete; R2 implementation and R3 remain separately sequenced and
+unstarted. No seam is added or promoted.
 
 The bounded primary-source proof is:
 
@@ -464,8 +540,9 @@ provenance gaps; those were remediated with red/green tests. Fresh reviewers
 CLEAN against the frozen runtime hashes. No privileged installer/product wall, native macOS proof,
 or cross-platform completion is claimed.
 
-The exact next packet is **A1.1d-5R2 — Prefix propagation across install/uninstall**, followed by
-the audit-proven **R3**. After all three are independently review-clean, rerun the complete Linux
+The exact next packet is **A1.1d-5R2-1 — Host context construction and Unix dev propagation**,
+followed by R2-2, R2-3, R2-4, and the audit-proven **R3**. After the implementation packets are
+independently review-clean, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
 product-smoke portion of the B1/B2.1 joint closeout. Native macOS proof remains separately required
@@ -1105,8 +1182,8 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 **yes**. B1/B2.1-0 review-clean: **yes**. B1/B2.1 joint production integration closeout:
 **not begun**. B3.1 dependency-ready: **no**. Seam promotions: **none**. Within the B corridor, the
 next architectural packet remains the B1/B2.1 joint production integration closeout. The
-repository's exact next packet is A1.1d-5R2 — Prefix propagation across install/uninstall,
-followed by R3; only the joint closeout's Linux
+repository's exact next packet is A1.1d-5R2-1 — Host context construction and Unix dev
+propagation, followed by R2-2, R2-3, R2-4, and R3; only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
 

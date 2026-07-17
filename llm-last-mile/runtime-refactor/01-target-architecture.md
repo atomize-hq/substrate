@@ -338,6 +338,66 @@ handoff, runtime availability, shims, replay, traces, diagnostics, and lifecycle
 remain governed by their existing contracts. A separate shared installation root may be designed
 later; `SUBSTRATE_ROOT`/installation-root separation is not part of A1.1d-5.
 
+#### Installation prefix authority and platform realization
+
+The public installer or uninstaller selects exactly one normalized `InstallBootstrapContextV1`.
+For V1, `selected_host_prefix`, `host_substrate_home`, and `host_substrate_root` are the same host
+path and are bound to one platform-scoped intended principal. A declared `--prefix`, `--home`,
+`-Prefix`, or the wrapper's self-derived installed prefix fixes that context before any child,
+generated projection, sudo crossing, service renderer, doctor, runtime provisioner, or platform
+adapter runs. A child may validate the transported context but may not reconstruct it from
+`$HOME`, `$USERPROFILE`, CWD, an outer `SUBSTRATE_HOME`, or an independently selected root.
+
+Generated `env.sh`, manager/profile/preexec helpers, configuration, version, dependency,
+install-state, and Lima known-hosts files are projections of that decision. They never become
+prefix-selection authority. When an
+installed helper at A runs under conflicting ambient home B, it must self-derive A, validate any
+encoded context/commitment against A, export both `SUBSTRATE_HOME=A` and `SUBSTRATE_ROOT=A`, and
+consume only A. A missing, malformed, or conflicting projection fails closed; B is not a fallback.
+The normal install/uninstall product gate must pass without an outer override. An explicitly named
+diagnostic override may exercise a negative test, but it cannot satisfy product proof.
+
+The shared Rust wire model lives in `transport-api-types`; OS path/principal construction remains
+at the public shell/script entry. Its fixed line-framed, base64url field encoding has one
+cross-language golden-vector suite and does not reuse, move, or duplicate the shell-private A1
+authority-store canonical codec. Successful install-sensitive CLI routes construct this context
+before private-home/dependency scaffolding; parse/help/version exits are non-mutating. Automatic
+shim deploy, shim doctor/repair, physical shim telemetry, and shell/replay backend-factory callers
+consume explicit context or mapping projections rather than common ambient path resolution.
+Installer-managed product-CLI children use the hidden argv carrier as their child discriminator;
+an environment carrier never selects internal mode. A Substrate-owned sudo child validates that
+same argv carrier, while an arbitrary system tool receives only minimal context-derived argv from
+the still-owning installer and never receives a meaningless carrier or preserved ambient home.
+World-deps/doctor/config/policy/gateway leaves receive typed context or a checked projection, and
+host Codex paths derive from the committed Unix principal's account-database home.
+
+A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
+no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no
+prefix precedence; zero or multiple candidates fail closed. CWD may resolve only an explicitly
+relative invocation pathname and is never a prefix fallback. This preserves the current shim
+deployment shape without granting R2 replacement or cleanup authority.
+
+Lima and WSL are separate authority domains. One `PlatformBootstrapMappingV1` binds the host-context
+commitment to an exact platform instance, then independently resolves the platform-native home and
+principal. The host path/account is never asserted equal to the guest path/account. A host prefix
+does not become a guest path by string conversion, and a backend may not choose a guest home that
+is unrelated to the committed mapping. Prefix-scoped host sockets and shims remain derived from the
+host context; instance-scoped guest sockets/services and Windows forwarder state must reject a
+conflicting commitment rather than silently switch owners. Native macOS and Windows execution is
+required for native proof; static cross-platform inspection is only static evidence.
+
+Lima construction is two-stage: validated host context plus the declared/default VM selector may
+only realize the absent/stopped declared instance; the running guest's machine ID, account-database
+principal, and native home then finalize the mapping before R2-owned guest/service/socket
+propagation. VM delete/rebuild, staged-tree replacement, legacy-unit/socket cleanup, forwarded
+socket unlink, forwarding-handle teardown, and timeout kill remain R3. Shim telemetry and replay pass a typed verified projection into the backend
+factory; the factory never selects a home, socket, pipe, instance, or principal from ambient state.
+
+R2 owns selection and transport of this context, including the exact context later consumed by
+rollback or removal. R3 alone owns deletion authority, current-attempt rollback, managed-artifact
+ownership used for deletion, crash cleanup, uninstall convergence, and restoration of
+installer-created account/system state. No R2 carrier or mapping is deletion provenance.
+
 The bounded Linux A1.1d-5R1 implementation is review-clean through
 `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. That evidence proves only this effective-authority
 correction: it does not close `RG-HOME-01` or `RG-INSTALL-01`, complete A1.1d/A1, promote a seam,

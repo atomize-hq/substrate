@@ -3,7 +3,7 @@
 **Status:** canonical control pack for future runtime-refactor slices
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
-**Repo-truth snapshot:** 2026-07-14; re-check live code before every slice
+**Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
 
 ## Canonical repo location
 
@@ -35,7 +35,7 @@ Unit tests, type names, persisted rows, helper functions, process liveness, sock
 | File | Load when | Canonical content |
 |---|---|---|
 | [`01-target-architecture.md`](01-target-architecture.md) | deciding ownership or reviewing a boundary | target layers, authority map, non-negotiable invariants |
-| [`02-seam-crosswalk.md`](02-seam-crosswalk.md) | scoping a slice or assessing current landing status | current artifacts, semantic classification, required action, sibling context |
+| [`02-seam-crosswalk.md`](02-seam-crosswalk.md) | scoping a slice or assessing current landing status | current artifacts, semantic classification, required action, sibling context, and the canonical A1.1d-5R2 propagation inventory |
 | [`03-phase-slice-map.md`](03-phase-slice-map.md) | planning or executing a slice | five tracks, bounded slices, allowed areas, non-goals, exit and regression gates |
 | [`04-contracts-and-gates.md`](04-contracts-and-gates.md) | changing schemas, receipts, supervisor behavior, policy, or UAA execution | concrete V1 contracts and acceptance rules |
 | [`05-debug-regression-ledger.md`](05-debug-regression-ledger.md) | writing tests, smoke plans, or closeout evidence | resolved baselines, open debug seams, permanent regression gates |
@@ -120,6 +120,11 @@ Promotion to `ContractCorrectAndProven` requires explicit evidence for all four 
 - **Materialization cut:** the ObligationLedger-owned proof that canonical obligation
   materialization covers an exact terminal event identity and sequence for one scoped run.
 - **Secret handoff:** one-time secure-FD delivery from host credential authority to the in-world Substrate gateway; never a UAA-native credential file projection.
+- **Install bootstrap context:** the one normalized, principal-bound host prefix selected at a public
+  install/uninstall entry point and transported without child reinterpretation; in V1 its selected
+  prefix, `SUBSTRATE_HOME`, and `SUBSTRATE_ROOT` are identical.
+- **Platform bootstrap mapping:** an explicit commitment-preserving realization of that host context
+  inside one exact Lima or WSL instance; it does not imply host/guest path or principal equality.
 - **Runtime-family adapter:** provider mechanics only; never Substrate lifecycle or policy semantics.
 - **Runtime placement versus session binding:** `AgentDescriptorV1.execution_scope` and the matching
   launch knob select where the runtime process executes. `DurableSessionAuthorityV1.world_binding`
@@ -195,8 +200,10 @@ broader architecture owner or sequence. The audit proves that the current privat
 ACL rule conflates non-writing traversal with replacement authority, custom-prefix authority is
 not propagated across every install/uninstall child, and partial-install cleanup is not
 convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5R3**. R1 is
-implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`; R2 and R3 are
-unstarted. Until the remaining packets are review-clean and their Linux lifecycle/product smoke
+implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
+**A1.1d-5R2-0 is planning-complete in this control-pack packet; no R2 runtime implementation has
+begun.** R2 implementation is frozen as **R2-1 → R2-2 → R2-3 → R2-4**, followed by R3. R3 is
+unstarted. Until the implementation packets are review-clean and their Linux lifecycle/product smoke
 passes,
 both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
 remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
@@ -213,8 +220,14 @@ descendant `0700`/`0600` contracts remain mandatory. This correction adds no sea
 broker, world capability, policy, gateway, receipt, supervisor, worker, replay, or command change;
 the contract correction is recorded by `17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded
 runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INSTALL-01` remain open,
-A1.1d and A1 remain incomplete, B3.1 remains blocked, and R2/R3 remain separately owned and
-unstarted.
+A1.1d and A1 remain incomplete, B3.1 remains blocked, and R2 implementation/R3 remain separately
+owned and unstarted. Static macOS/Windows inspection in R2-0 is not native platform proof.
+
+The exact next packet is **A1.1d-5R2-1 — Host context construction and Unix dev propagation**.
+It may use only its frozen allowlist in [`03-phase-slice-map.md`](03-phase-slice-map.md), the
+114-edge inventory in [`02-seam-crosswalk.md`](02-seam-crosswalk.md), and the exact authority/carrier
+rules in [`04-contracts-and-gates.md`](04-contracts-and-gates.md). It must not implement release,
+systemd, Lima, WSL, Windows, cleanup, deletion, rollback-convergence, or managed-artifact ownership.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant

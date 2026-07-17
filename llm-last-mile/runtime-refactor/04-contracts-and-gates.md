@@ -267,8 +267,14 @@ mutation. Repeating creation against an unchanged valid root is idempotent.
 
 #### `InstallBootstrapContextV1` propagation rules
 
-For the current combined installation/state-root architecture, one selected context is fixed at
-the public install or uninstall entry point:
+For the current combined installation/state-root architecture, one selected context is constructed
+exactly once at each public install, uninstall, installed world-enable, standalone
+install-context-sensitive product-CLI entry, and physical shim entry point, before any filesystem
+mutation, build, download, shim operation, doctor, generated-file read/write, sudo crossing,
+service action, runtime provisioning, or platform entry. `clap` parse failure, help/version, and
+other explicitly non-mutating syntax exits print and return without private-home/dependency
+scaffolding; a successful route that can mutate or consume an install projection constructs the
+context before calling the explicit-context home bootstrap:
 
 ```rust
 struct InstallBootstrapContextV1 {
@@ -278,53 +284,467 @@ struct InstallBootstrapContextV1 {
     intended_host_principal: PlatformPrincipalV1,
 }
 
+enum PlatformPrincipalV1 {
+    Unix { account: String, uid: u32 },
+    Windows { account: String, sid: String },
+}
+
 struct PlatformBootstrapMappingV1 {
     host_context_commitment: Digest,
     platform_instance: PlatformInstanceIdentityV1,
     realized_substrate_home: AbsolutePlatformPath,
     realized_principal: PlatformPrincipalV1,
+    realized_transport: PlatformTransportIdentityV1,
+}
+
+enum PlatformInstanceIdentityV1 {
+    Lima { vm_name: String, guest_machine_id: String },
+    Wsl { distro_name: String, guest_machine_id: String },
+}
+
+enum PlatformTransportIdentityV1 {
+    Lima { host_socket: AbsoluteHostPath, guest_socket: AbsolutePlatformPath },
+    Wsl { pipe_path: NormalizedWindowsPipePath, guest_socket: AbsolutePlatformPath },
+}
+
+struct InstallBootstrapContextCarrierV1 {
+    context: InstallBootstrapContextV1,
+    host_context_commitment: Digest,
 }
 ```
 
-V1 requires `selected_host_prefix == host_substrate_home == host_substrate_root`; this does not
-introduce a separate host install root. `PlatformPrincipalV1` is platform-scoped (for example,
-Unix account plus UID or Windows account plus SID), not a Unix UID imposed on every platform.
-Every host child/helper and sudo boundary that can bootstrap, deploy/remove shims, run a doctor, or
-write/read generated configuration, environment, or install-state data receives the same host
-context explicitly and may not fall back to ambient `$HOME`/`USERPROFILE`.
+The one Rust wire-model/strict-framing implementation is owned by
+`transport-api-types::{InstallBootstrapContextV1, InstallBootstrapContextCarrierV1,
+PlatformBootstrapMappingV1}`. Host OS principal/path construction is owned only by
+`crates/shell/src/execution/install_bootstrap.rs` and the equivalent public shell/PowerShell entry
+sections. `world-backend-factory`, shim, replay, and platform backends consume those shared wire
+types or a factory-owned typed projection derived from them; they never define a second prefix
+constructor. Cross-language scripts implement the same fixed framing below and must match the Rust
+golden vectors byte-for-byte. This is one shared contract model, not a new seam, persistence table,
+or backend-selection authority.
+These bootstrap/mapping records are in-memory/transport contracts; the A1 durable-object convention
+above does not create persistence or lifecycle semantics for them. An install-state copy is only the
+generated consistency projection defined below.
 
-A platform backend may realize that committed host selection at a distinct native path and
-principal—for example, the Lima guest user's private home. It must produce and consume one explicit
-`PlatformBootstrapMappingV1` bound to the host-context commitment and exact platform instance;
-host and guest paths or principals are not required to be equal. World dependency
-add/remove/sync/rollback, platform provision/enable/disable, service install/restart, and runtime
-provisioning consume either the unchanged host context or that explicit mapping. Neither a backend
-nor `RuntimeFamilyRealizationAdapter` may select an unrelated home. Generated projections must
-distinguish encoded context, self-derived install location, and prefix-relative placement; their
-existence is not proof that earlier children received the context. Install and uninstall select
-the same host authority home from their declared prefix or recorded matching install context; an
-undocumented outer `SUBSTRATE_HOME` override is never required for normal operation.
+V1 requires byte-for-byte equality after normalization:
 
-Partial failure records which current-attempt artifacts were created or managed. Retry exact-joins
-a valid selected home and managed artifacts; it never repairs an invalid pre-existing home.
-Candidate rollback is descriptor-bound: it may remove only an empty candidate created by the
-current attempt after a no-follow lookup beneath the retained parent still joins the exact opened
-candidate identity. It is never recursive; replacement, nonempty state, ambiguity, or an
-`AlreadyExists`/pre-existing candidate fails closed without removal. Recorded prefix-local and
-system-level managed installer artifacts are a separate cleanup class and may be removed only by
-exact manifest identity; broad name-prefix, wildcard, or ambient-home deletion is forbidden.
-Rollback/uninstall must not delete an ambient default home when a different prefix was selected.
-Service cleanup must return recorded binaries, helpers, units/drop-ins, sockets, and runtime
-directories plus installer-created group/membership/ACL-bridge/linger state to the proven
-pre-install state without removing pre-existing account state. A normal install, repeat install, accepted-home/later-
-stage partial failure, synchronous current-attempt rejection with completed exact safe rollback,
-uninstall, and uninstall-followed-by-reinstall must converge on the same selected context. An abrupt
-interruption leaving an unaccepted candidate is revalidated on rerun and accepted only if already
-valid. If it is invalid, `AlreadyExists`/unknown provenance remains fail-closed and the candidate is
-never automatically repaired or removed. Arbitrary invalid-candidate crash-window convergence is
-an unresolved contract gap unless R3 proves the state unreachable after R1; otherwise it requires a
-separately approved provenance/publication mechanism. These rules are the minimum R2/R3 contract;
-they do not prescribe shell implementation mechanics or authorize service mutation in A1.1d-5I.
+```text
+selected_host_prefix == host_substrate_home == host_substrate_root
+```
+
+No R2 implementation may introduce a separate installation root, state root, path-selection side
+table, second context constructor, or parallel prefix-precedence function.
+
+##### Host-path normalization and validation
+
+The public entry point normalizes its one selected path before populating any of the three fields.
+Normalization is lexical because the selected root may not yet exist; `PrivateSubstrateHomeV1`
+later performs the existing no-follow physical acceptance. Normalization never expands `~`, an
+environment variable, or CWD; never follows a symlink; never case-folds or Unicode-normalizes; and
+rejects invalid UTF-8/unpaired surrogates so the result has one UTF-8 wire encoding.
+
+On Unix hosts, the raw value must begin with exactly one `/`. Empty input, `/`, `//...`, a NUL,
+and `.` or `..` components are rejected. One or more trailing `/` characters are removed, and each
+remaining non-leading run of `/` characters is collapsed to one. The resulting absolute UTF-8
+string is the normalized path. The lexical contract does not invent one cross-filesystem
+`NAME_MAX`; component/path length failures remain exact errors from the existing descriptor-bound
+filesystem operation before product scaffolding. This intentionally rejects POSIX's
+implementation-defined double-leading-slash namespace and does not call `realpath`.
+
+On Windows hosts, `[System.IO.Path]::IsPathFullyQualified` must be true and the raw value must be
+either a drive-rooted path (`X:\...` or `X:/...`) or a UNC path with nonempty server and share.
+Drive-relative (`X:foo`), root-relative (`\foo`), device/extended namespaces (`\\.\...`,
+`\\?\...`), a bare drive root, a bare UNC share root, empty input, NUL/unpaired surrogates,
+alternate data-stream colons after the drive, and `.` or `..` components are rejected. Every
+component also rejects U+0001–U+001F; `<`, `>`, `"`, `|`, `?`, or `*`; a trailing dot or space;
+and, case-insensitively before the first dot, `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`,
+`COM¹`–`COM³`, `LPT1`–`LPT9`, or `LPT¹`–`LPT³`. UNC server/share components obey the same rules. `/` becomes `\`; repeated
+separators after the drive root or UNC introducer collapse; a drive letter is uppercased; and
+trailing separators are removed. All other component spelling and Unicode scalar values are
+preserved.
+
+V1 does not case-fold a not-yet-existing Windows path. It instead rejects physical aliases before
+product scaffolding: walk every existing ancestor using a directory handle opened with
+`FILE_FLAG_OPEN_REPARSE_POINT`, reject every reparse point, obtain the normalized DOS path with
+`GetFinalPathNameByHandleW`, strip only the documented `\\?\` or `\\?\UNC\` presentation prefix,
+and require exact component spelling against the normalized selected path. After creating or
+joining the final root, repeat that handle check and require exact normalized path plus stable
+volume serial number and file ID for the duration of the operation. A short-name, case variant,
+junction, mount/reparse alias, or spelling that resolves to the same physical prefix under a
+different commitment fails closed; it is never silently joined. These installer-path rules do not
+claim Windows A1 authority-store initialization, which remains unsupported by the later
+authority-transition contract.
+
+The same normalizer is used for a default and a declared prefix. If Unix receives no declared
+prefix, the default is the intended Unix principal's account-database home plus `/.substrate`; it
+is not `$HOME`. If Windows receives no `-Prefix`, the default is the intended Windows principal's
+OS Known Folder `LocalApplicationData` plus `\Substrate`; it is not `$USERPROFILE`, the
+`LOCALAPPDATA` environment variable, or another ambient value. This preserves the current product
+default location while removing its environment authority. Install and uninstall use the identical
+rule.
+
+These restrictions are grounded in POSIX pathname resolution (relative input depends on CWD and
+exactly two leading slashes are implementation-defined), Microsoft `Path.IsPathFullyQualified`
+(drive-relative/rooted is not necessarily fully qualified), and the existing no-follow private-home
+contract. See [POSIX.1-2024 pathname resolution](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap04.html)
+[Microsoft `Path.IsPathFullyQualified`](https://learn.microsoft.com/en-us/dotnet/api/system.io.path.ispathfullyqualified),
+[Microsoft file/path naming rules](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file),
+and [`GetFinalPathNameByHandleW`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew).
+
+##### Intended-principal construction
+
+On Unix, the representation is exactly `Unix { account, uid }`. For a non-root public process,
+`uid` is the effective UID and `account` is the canonical account name returned by `getpwuid(uid)`;
+`$USER`, `$LOGNAME`, and `SUDO_USER` are ignored. For effective UID 0, an explicit intended-account
+parameter has first priority; otherwise both `SUDO_USER` and decimal `SUDO_UID` must be present,
+nonempty, mutually consistent with `getpwnam`/`getpwuid`, and non-root. A direct effective-UID-0
+public invocation may instead require an explicit intended-account parameter, but that account must
+resolve and round-trip to a nonzero UID. UID 0 is never an accepted intended principal, even when
+explicitly named. Missing, root-inferred, nonexistent, mismatched, root, or non-round-tripping
+identity fails before mutation. UID is a canonical unsigned decimal `u32`, never a string. This
+preserves the review-clean R1 requirement for one unambiguous intended non-root owner.
+
+On Windows, the representation is exactly `Windows { account, sid }`. The public entry reads
+`WindowsIdentity.GetCurrent()` once, stores its canonical logon `Name` and `User.Value` SID, and
+rejects anonymous, missing, or untranslatable identity. An explicitly declared account must
+translate to that same SID; R2 does not install on behalf of a different Windows principal.
+The SID string uses the OS canonical `S-1-...` form. No Unix UID field exists on Windows. See
+[Microsoft `WindowsIdentity.GetCurrent`](https://learn.microsoft.com/en-us/dotnet/api/system.security.principal.windowsidentity.getcurrent)
+and [`WindowsIdentity.User`](https://learn.microsoft.com/en-us/dotnet/api/system.security.principal.windowsidentity).
+
+##### Exact host-context commitment and carrier encoding
+
+The commitment input is this closed object and no other field:
+
+```rust
+struct InstallBootstrapContextCommitmentInputV1 {
+    domain: String, // exactly "substrate.install_bootstrap_context"
+    version: u32,   // exactly 1
+    selected_host_prefix: String,
+    host_substrate_home: String,
+    host_substrate_root: String,
+    intended_host_principal: PlatformPrincipalV1,
+}
+```
+
+For this install contract only, cross-crate and cross-language source truth requires a fixed
+line-framed encoding rather than the shell-private A1 authority-store `CanonicalJsonV1` codec. This
+does not change or duplicate that A1 codec. Define `B64(s)` as unpadded RFC 4648 base64url of the
+UTF-8 bytes of `s`; its canonical spelling contains only `[A-Za-z0-9_-]`, and decoding must
+re-encode to the identical spelling. Define `U32(n)` as unsigned base-10 with no sign and no
+leading zero except `0`. The commitment input is the exact ASCII/UTF-8 byte sequence below, with
+the shown key order, one `=` per line, LF (`0x0a`) separators, and a required final LF:
+
+```text
+domain=substrate.install_bootstrap_context
+version=1
+selected_host_prefix=<B64(normalized selected_host_prefix)>
+host_substrate_home=<B64(normalized host_substrate_home)>
+host_substrate_root=<B64(normalized host_substrate_root)>
+principal_kind=unix
+principal_account=<B64(canonical account)>
+principal_uid=<U32(uid)>
+```
+
+For Windows, the last three lines are exactly:
+
+```text
+principal_kind=windows
+principal_account=<B64(canonical account)>
+principal_sid=<B64(canonical SID)>
+```
+
+`host_context_commitment` is lowercase 64-character hex of SHA-256 over those exact bytes. A parser
+accepts exactly eight lines, the exact platform-specific keys/order, LF-only termination, and no
+empty encoded path/account/SID; it rejects CR, NUL, whitespace, an unknown/duplicate/reordered key,
+noncanonical inner base64url, noncanonical UID, the wrong principal variant, or any extra byte.
+Thus field framing is unambiguous without delimiter-sensitive raw values. The normalized path
+values must already satisfy the V1 equality invariant.
+
+The carrier payload is the same eight commitment-input lines followed by exactly
+`host_context_commitment=<64-lowercase-hex>\n`; the entire nine-line ASCII record is then encoded
+once as unpadded base64url. Decoding is strict: outer decode/re-encode equality, exact record
+grammar, recomputed digest, path equality, principal round trip, and any declared-prefix match are
+all required before child mutation. It is passed as
+`--install-bootstrap-context-v1 <carrier>`. Presentation JSON is never a hash or carrier input.
+See [RFC 4648 sections 3.2 and 5](https://www.rfc-editor.org/rfc/rfc4648#section-5). The carrier is
+not persistence, an artifact-ownership manifest, or deletion provenance.
+
+##### Boundary carriers and selection precedence
+
+Authority is fixed as follows:
+
+| Boundary | Authoritative input | Mandatory matching projections | Forbidden substitution |
+|---|---|---|---|
+| Public install/uninstall entry | Declared normalized prefix, or the principal-derived default when no parameter exists; principal is OS-resolved once | In-memory `InstallBootstrapContextV1` and commitment | Outer context carrier/env, `$HOME`, `$USERPROFILE`, CWD, outer `SUBSTRATE_HOME`/`SUBSTRATE_ROOT` |
+| Dual-mode installer/uninstaller script | With internal carrier argv: validate child mode and forbid construction. Without it: public mode constructs from declared prefix/default; direct Unix uninstall gains a declared `--prefix` | Exactly one mode and one context | Treating an outer carrier as public authority or falling from invalid child mode into public mode |
+| Installed `substrate world enable` entry | Declared normalized `--home` when present; otherwise A self-derived from the verified release layout below; a repository/development-layout invocation without `--home` fails before mutation | In-memory `InstallBootstrapContextV1` and commitment matching any installed projection | Environment/home/profile/CWD, generated record contents, or a different executable ancestor |
+| Standalone `substrate` shim/status/doctor/world/deps/config/policy/gateway entry | Declared normalized global `--install-prefix`; otherwise A self-derived from the verified release layout below; if neither works, fail before mutation | In-memory context supplied to the selected leaf | Ambient home/root/profile, generated record contents, or silently accepting a dev/repo binary as installed |
+| Physical `substrate-shim` command entry | A self-derived from the unique no-follow-validated invocation witness at `A/shims/<command>` under the exact pathname/PATH rules below; current host principal; exact default platform selector where platform telemetry is requested | Recomputed `IH`; any inherited carrier/commitment/PM must match; verified factory projection | PATH order/precedence, home/profile/carrier selecting A, an ambient instance/pipe override, or a contextless backend factory |
+| Direct Lima/WSL/forwarder/pipe helper | Declared normalized host prefix or principal-derived host default constructs `IH`; declared instance plus declared/default normalized transport constructs `PM`, except the bounded pre-PM Lima Stage 1 below | Both carriers after PM exists; internal-child mode validates and never reconstructs | Platform selector without host context, guest/default home, ambient pipe env, or falling from bad child mode into public mode |
+| Same-process function | Explicit context/carrier parameter | Function-local derived paths | Rereading globals or environment to select a different prefix |
+| Context-aware script child | `--install-bootstrap-context-v1` argv value | Declared `--prefix`/`--home`/`-Prefix` must match | Ambient context carrier or home/root variables |
+| Installer-managed leaf product CLI (`substrate` shim/status/doctor/world-deps/config/policy/gateway) | Parent supplies `--install-bootstrap-context-v1 <carrier>` as the authoritative hidden argv child discriminator; leaf decodes/authenticates before dispatch | Leaf overwrites H/R/principal/commitment environment projections from the validated context, passes typed IH to the selected leaf, and requires any inherited tuple to match | Environment carrier/tuple as authority, leaf fallback to home/profile/CWD, or falling from invalid child mode into public construction |
+| `sudo` to a Substrate-owned helper | Full carrier and intended-principal input on the helper's explicit argv; helper authenticates sudo origin as specified below | Helper reconstructs the exact environment tuple after validation | `sudo -E`, `--preserve-env`, root's home/account, a caller-chosen unverified UID, or fresh principal reinterpretation |
+| `sudo` to an arbitrary system tool | The still-owning installer validates IH/principal before `sudo --` and derives the tool's complete target/principal argv from that context | Only the minimum boundary-specific argv (`install` target, account, UID, unit path/name, or service operation); the arbitrary tool never parses a Substrate carrier | Appending a carrier as meaningless tool argv, preserved env, ambient root/user/home paths, shell re-evaluation, or target reconstruction in the tool |
+| Generated file or install record | No selection authority | Encoded carrier, digest, and/or self-derived A as specified below | Selecting B from ambient values or treating file location/existence as proof |
+| Platform adapter | Validated host carrier plus adapter's public instance selector | `PlatformBootstrapMappingV1` carrier and matching service/socket/forwarder projection | Host-path string conversion, guest `$HOME`, backend default account/home, or unrelated instance |
+
+At a public entry, an outer `SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1` is ignored as authority. It is
+accepted only when the process was explicitly invoked as an internal child by argv and validates
+against the argv carrier. A declared public `--prefix`, `--home`, or `-Prefix` always wins by fixing
+the context; a conflicting outer home/root/context is a negative diagnostic input, not a competing
+precedence branch. An outer override may be used only by an explicitly named diagnostic test and
+cannot satisfy normal product proof.
+
+Verified release-layout self-derivation accepts only a physical executable at
+`A/versions/<nonempty-version>/bin/substrate[.exe]` for which `A/bin/substrate[.exe]` exists and
+resolves to that exact physical file; A is then normalized and physically checked by the host rule.
+A dev/repository executable, an arbitrary symlink, a missing/mismatched public link, or any other
+layout cannot self-select and requires the declared public prefix parameter. This is a constructor
+rule, not a generated-file or executable-parent precedence table.
+
+Verified shim-layout self-derivation must remain implementable with the current Unix symlink and
+Windows-copy deployment shape; R2 does not change shim replacement/deployment ownership. If
+`argv[0]` is an absolute pathname, or contains a separator and therefore names an explicit relative
+invocation pathname, resolve only that pathname (using CWD solely to resolve its explicit relative
+spelling) and validate it. If `argv[0]` is a bare command, enumerate only absolute, nonempty PATH
+entries and collect every `entry/<command>` whose no-follow metadata is an installed shim link/copy
+and whose resolved file identity is the running `substrate-shim` target. Exactly one candidate must
+exist. Zero or multiple candidates fail closed; PATH order is never a prefix-precedence rule and a
+different earlier executable is not a candidate merely because the shell could have selected it.
+The accepted witness must be exactly `A/shims/<nonempty-command>` and its A/`shims` ancestors must
+pass the applicable no-follow owner/path checks. CWD, PATH, inherited H/R, or a carrier cannot supply
+a fallback A after witness failure. This uses PATH/CWD only to recover the invocation witness that
+the current symlink form otherwise loses; it creates no general prefix selector.
+
+The current principal must reproduce the resulting host context. Because shim commands expose no
+instance selector, direct platform telemetry uses only the exact product default Lima/WSL instance
+and default normalized pipe; inherited platform carriers are consistency projections. A shim child
+launched by an already-validated shell may consume that parent's explicit factory projection, but
+the backend factory still receives typed fields and cannot reread ambient home/socket/pipe values.
+
+An effective-UID-0 Substrate-owned internal helper reached through sudo accepts a carrier only when the sudo-set
+`SUDO_UID` and `SUDO_USER` are both present, name/UID round-trip through the account database,
+identify a non-root principal, and exactly match the already-committed principal. The helper does
+not use them to reselect A. Missing or conflicting sudo origin fails. A direct-root public entry has
+no internal-child mode: it must declare a non-root intended account at the public boundary, builds
+the context there, and may then perform its already-authorized privileged operations in-process.
+An unkeyed SHA-256 commitment proves consistency only; these OS identity checks provide the
+principal authorization.
+
+An arbitrary privileged executable such as a package manager, `groupadd`, `usermod`, `install`, or
+`systemctl` is not a context validator and must not receive the encoded carrier as an invented
+option. Immediately before each such crossing, the owning installer revalidates its in-memory
+context and derives an exact, shell-free argv projection from A and the committed account/UID. It
+invokes `sudo -- <program> <derived argv>` without preserved environment; the child receives no
+home/root selection input and has no permission to reconstruct one. A Substrate script/CLI that
+does need H/R remains the first sudo case and must validate the full carrier itself. This reviewed
+split is the exact carrier authority at every current sudo boundary.
+
+For an internal product-CLI child, presence of the hidden argv carrier is the child discriminator;
+the environment variable carrier alone never selects child mode. The root dispatcher decodes and
+authenticates argv, snapshots inherited H/R only for conflict diagnostics, overwrites the mandatory
+H/R/principal/commitment environment projections from IH, and passes typed IH to the inventoried
+leaf before config, policy, dependency, gateway, doctor, or shim resolution. The same ordering
+applies after a standalone public constructor. PI-106–PI-111 name the legacy inner consumers:
+where a downstream resolver still reads the process projection, its owning leaf must first assert
+that projection equals typed IH. That read is a checked projection consumption, never a second
+constructor or mutable side table. No unlisted same-process consumer gains this exception.
+
+Every shim deploy/remove/status/doctor/repair, automatic CLI shim deployment, trace projection,
+world/host/health doctor, dependency global add/remove, current sync/list, config/policy proof,
+gateway lifecycle proof, runtime-family/Codex provision step, generated-file writer/reader,
+service renderer/restart, and uninstall child receives the applicable tuple. Existing rollback or
+remove calls receive the same context in R2, but R2 may change only their carrier—not their decision,
+deletion, or convergence semantics.
+
+##### `PlatformBootstrapMappingV1` construction and verification
+
+The host adapter constructs the mapping only after validating the host carrier. It recomputes the
+host commitment, resolves the exact platform instance, queries the guest account database, and
+normalizes the platform-native absolute home with the Unix rule above. Lima identity is
+`Lima { vm_name, guest_machine_id }`; WSL identity is
+`Wsl { distro_name, guest_machine_id }`. `vm_name` is the exact name supplied to `limactl`; WSL
+matches the declared name against `wsl --list --quiet` case-insensitively but stores the exact
+registered spelling. `guest_machine_id` is the lowercase 32-hex content of `/etc/machine-id` read
+inside that exact running guest; empty, missing, malformed, or changed identity fails closed. This
+OS instance observation is not a Substrate-generated install projection and does not select host or
+guest home authority.
+
+The guest principal is always the Unix account plus UID returned by `id -un`/`id -u` and verified
+by `getpwnam`/`getpwuid` round trip in that guest. Its account-database home must exist as an
+absolute normalized Unix path; `/home/<name>`, guest `$HOME`, or a host-mounted home is not a
+fallback. `realized_substrate_home` is that guest account home plus `/.substrate`. The resulting
+`realized_principal` is the guest Unix principal, even when the host principal is Windows. Thus no
+host/guest path equality, account equality, or host UID-to-guest UID equality is asserted.
+
+Lima has an exact two-stage construction order. Stage 1 validates `IH` and the declared/default
+normalized `vm_name`, may read instance status, render the existing fixed host profile, create an
+absent declared instance or start that same stopped instance, and wait for it to run. Those are the
+only pre-mapping instance-realization actions; they may not select or project a guest home,
+principal, service, unit, socket, forwarded socket, or staged workspace. Once the exact instance is
+running, Stage 2 reads machine ID and account-database identity/home and constructs/revalidates
+`PM` before any R2-owned guest-home/service/socket/platform child propagation. Lima's fixed base
+image provisioning during first creation is part of instance realization and may not receive A or
+invent a guest home. `destroy_vm`, layout-mismatch delete/rebuild, staged-tree replacement,
+legacy-unit/socket deletion, and forwarded-socket unlink are PI-098–PI-101 R3 actions;
+active-handle teardown and timeout kill are PI-113–PI-114 R3 actions. R2-3 does not edit or
+exercise them as mapping proof. If an existing instance requires one of those actions,
+R2-3 stops with the R3 prerequisite unmet rather than treating delete/rebuild as Stage 1.
+
+`PlatformBootstrapMappingV1` uses the same strict line-framing rules and outer unpadded base64url.
+Its exact platform-specific record is:
+
+```text
+domain=substrate.platform_bootstrap_mapping
+version=1
+host_context_commitment=<64-lowercase-hex>
+platform_kind=<lima-or-wsl>
+instance_name=<B64(exact vm_name or registered distro spelling)>
+guest_machine_id=<32-lowercase-hex>
+realized_substrate_home=<B64(normalized guest absolute path)>
+realized_principal_account=<B64(guest account)>
+realized_principal_uid=<U32(guest uid)>
+transport_kind=<same lima-or-wsl>
+transport_host=<B64(normalized host socket or normalized pipe path)>
+transport_guest_socket=<B64(normalized guest socket)>
+```
+
+It is exactly twelve LF-terminated lines in that order. `platform_kind` and `transport_kind` must
+match; all base64url, decimal, digest, path, instance, and transport rules re-encode canonically.
+It has no second home selector and no independent host commitment: its
+`host_context_commitment` must equal the recomputed host-carrier commitment. Each platform-adapter
+boundary carries that mapping and revalidates all five semantic fields against the host carrier and
+live instance before any post-realization R2 mutation. After that validation,
+a leaf service/forwarder process may receive only the exact required typed/argv fields plus the host
+commitment; those values are authoritative for that child only because the validated parent passed
+them, and the child must reject a conflicting carrier/projection rather than reselect. Generated
+units, socket paths, and forwarder files may echo the mapping/digest only as projections. The default Lima VM or WSL distro
+has one instance-scoped guest service/socket; if it is already projected for a different valid host
+commitment, a second prefix fails closed or uses a separately declared instance. No mapping side
+table or backend-selected home is permitted.
+
+`world-backend-factory::factory` accepts an explicit typed factory projection derived from the
+verified host/mapping records on macOS/Windows; the contextless platform overload is removed or
+fails closed. Shell platform adapters, shim telemetry, and replay are all explicit callers. Replay
+only threads this projection through its public config/shell entry and planner/executor call chain;
+recorded command, environment reconstruction, origin, policy, timeout, strategy, and execution
+semantics are unchanged. A direct replay-library world call on macOS/Windows without explicit
+bootstrap input fails before backend construction. Linux may use the platform-independent factory
+variant because it selects no home/socket/guest mapping.
+
+On macOS, the host-side forwarded socket is always
+`<selected_host_prefix>/sock/agent.sock`; the guest socket remains `/run/substrate.sock`; those
+exact paths populate `PlatformTransportIdentityV1::Lima`. The SSH `UserKnownHostsFile` is exactly
+`<selected_host_prefix>/lima_known_hosts`, passed from verified IH into forwarding as a generated
+helper projection; its file existence or contents cannot select A, the VM, or PM. Explicit socket
+unlink, SSH `StreamLocalBindUnlink`, `ForwardingHandle::drop` child/socket teardown, and the SSH
+timeout kill remain byte-frozen R3 lifecycle actions in R2-3. On Windows, shims and
+`substrate-profile.ps1` are prefix-scoped. The first public Windows mapping entry selects the pipe
+from an explicit `-PipePath`/equivalent parameter or the exact default
+`\\.\pipe\substrate-agent`; no later child selects it. A normalized pipe is exactly
+`\\.\pipe\<name>`, where `<name>` is 1–128 ASCII characters from `[A-Za-z0-9._-]`; the prefix is
+canonicalized as shown and the name is lowercased so Windows case aliases have one commitment.
+Slash variants, nested names, whitespace/control characters, and any other spelling are rejected.
+Warm, forwarder, backend, pipe-status, and doctor consume this mapping field. A public parameter in
+a downstream child must match it; `SUBSTRATE_FORWARDER_PIPE`, a hard-coded default, or an ambient
+value is only a consistency/diagnostic input and cannot select another pipe.
+This deliberate subset follows the documented local pipe form and case-insensitive name behavior;
+see [Microsoft Pipe Names](https://learn.microsoft.com/en-us/windows/win32/ipc/pipe-names).
+
+The Windows guest socket remains `/run/substrate.sock`. The named pipe, forwarder PID/config/logs,
+and WSL service are shared only within the exact `(Windows SID, WSL platform-instance,
+normalized PipePath)` scope and must carry/reject conflicting host commitments. That classification
+transports identity only; it is not a managed-artifact deletion manifest. Lima's documented host mount and
+independent guest home make path equality specifically invalid; WSL supports multiple named
+distributions, so the declared distro is part of the instance identity. See
+[Lima usage](https://lima-vm.io/docs/usage/) and
+[Microsoft WSL commands](https://learn.microsoft.com/en-us/windows/wsl/basic-commands).
+
+At this starting commit, `scripts/windows/wsl-warm.ps1` intentionally fails closed before WSL
+mutation and `scripts/wsl/provision.sh` is an unconditional exit-4 guard. R2-3 may add only carrier
+parameter validation before the warm guard and may construct/verify `PlatformBootstrapMappingV1`
+against a separately existing named WSL instance through the backend/doctor paths. It must preserve
+both guards byte-for-byte, may not execute the currently unreachable provisioning body, and may not
+claim Windows world provisioning proof. Moving either guard is
+`ArchitecturalBoundaryDecisionRequired`, not prefix propagation.
+
+##### Generated projections, install/uninstall symmetry, and diagnostics
+
+`env.sh` and Windows `substrate-profile.ps1` encode both `SUBSTRATE_HOME=A` and
+`SUBSTRATE_ROOT=A`, the host commitment, and the encoded carrier. Unix `manager_env.sh` and the
+runtime `MANAGER_ENV_SCRIPT` derive A from their own file directory before reading any ambient
+value, then source only `A/env.sh`; Windows profiles use their own parent directory. The dev shim
+helper encodes the same tuple. Configuration, version, dependency inventory, and binaries are
+prefix-relative projections and do not need to repeat the path merely to look authoritative.
+
+The generated Bash preexec script and its writer receive A explicitly. The dispatcher places the
+helper at an A-derived location and passes that path into `ShellConfig`; the script derives A from
+its own no-follow-validated file location, validates/consumes only `A/manager_env.sh`, and rejects a
+conflicting outer H/R/carrier rather than using `$HOME` or `$USERPROFILE`. `BASH_ENV` and the user's
+interactive `.bashrc` remain user shell inputs but cannot select Substrate's manager, trace, or
+prefix projections. No new per-user helper location outside A is authority.
+
+Every generated Linux service unit carries `SUBSTRATE_HOME=A`, `SUBSTRATE_ROOT=A`,
+`SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=<hex>`,
+`SUBSTRATE_INSTALL_PRIMARY_USER=<account>`,
+`SUBSTRATE_INSTALL_PRIMARY_UID=<decimal UID>`, and the encoded carrier; every `ReadWritePaths` entry for the
+selected home derives from A. An inherited/root `$HOME` is never a service allowlist input. The
+fixed `/run/substrate.sock` may be removed only as the existing operational step immediately before
+same-attempt service restart/socket recreation; this is not general cleanup authority. Legacy-unit,
+uninstall, wildcard, recursive, or managed-artifact removal remains R3.
+
+Unix PATH-snippet upsert and its wrapper diagnostic derive the target shell files from the intended
+principal's account-database home, not the invoking/root `$HOME`. The snippet is a projection of
+`A/bin`. Removing snippets, choosing ownership for removal, and preserving unrelated profile text
+remain R3 lifecycle work.
+
+Every Linux Codex host-credential projection resolves the committed Unix account+UID through the
+account database and derives that account's home plus `/.codex`; `dirs::home_dir`, invoking/root
+HOME, USERPROFILE, and A are not substitutes. This applies both to gateway integrated-auth reads
+and member-dispatch seed-home injection. It changes neither policy authorization nor credential
+contents and grants no cleanup authority; synthetic-auth removal remains R3.
+
+The existing `install_state.json` may record the canonical carrier and commitment as a consistency
+projection. R2 adds no deletion inventory, ownership manifest, rollback journal, or cleanup
+provenance. Uninstall constructs A by the same public rule as install, then may validate a matching
+record under A; the record can confirm or reject A but cannot select a different prefix. Missing or
+malformed records never authorize ambient fallback. A direct installed uninstaller must receive
+`--prefix A` from its wrapper or self-derive A from its installed location; the Unix wrapper may no
+longer locate by one root and let its child select another home.
+
+Under conflicting ambient `SUBSTRATE_HOME=B`, `SUBSTRATE_ROOT=B`, `$HOME=B`, or
+`$USERPROFILE=B`, an installed projection at A consumes only A or fails closed. Repeat install and
+install/uninstall use the same normalized context and commitment. No product proof may pre-export A
+as an outer workaround; tests must include A versus B and prove zero reads/writes/deletes under B.
+
+Shim, trace, world, and health doctors invoked by an installer consume the same validated tuple and
+project A, the commitment, and the carrier source (`install_context`). A direct diagnostic may
+accept an explicitly named diagnostic home/trace override and labels it `diagnostic_override`; it
+cannot be reported as install-context proof. `SHIM_TRACE_LOG` is a diagnostic trace-path override,
+not prefix authority. A normal selected-context doctor derives `A/trace.jsonl`, `A/shims`, A's
+configuration/dependency state, the prefix-scoped macOS host socket, and the applicable platform
+mapping without `dirs::home_dir()`/`$HOME` fallback.
+
+##### R3-exclusive lifecycle authority
+
+R2 selects and transports the exact context that later lifecycle operations consume. It does not
+define or exercise their deletion authority. A1.1d-5R3 exclusively owns: deleting partial
+candidates; current-attempt rollback; removing managed gateway/helper/unit/socket artifacts;
+managed-artifact ownership manifests used for deletion; removing recursive or wildcard deletion;
+uninstall convergence; restoration of installer-created group/membership/ACL/linger state;
+crash-window cleanup; uninstall-to-reinstall convergence; and preservation of unrelated or
+pre-existing artifacts. Shared Lima/WSL stop action, recursive dev-shim fallback removal,
+shell-profile snippet removal, and legacy ambient-home `.substrate_preexec` removal are cleanup
+actions under that same R3 authority. So are shim-tree
+replacement/migration/removal; dev/release/Windows payload, version, bin, profile, cache, and legacy
+helper/unit replacement; Lima destroy/rebuild, staged-tree/temp/unit/socket cleanup, forwarded
+socket unlink, SSH-side bind unlink, active forwarding-handle teardown, and SSH timeout kill;
+Windows forwarder timeout process kill; and synthetic Codex-auth deletion. Any R2
+change that adds, broadens, or claims one of those behaviors stops as
+an ownership violation and moves to R3. The existing R1 no-repair/private-home contract remains
+unchanged.
 
 Exact `0700` applies to the `SUBSTRATE_HOME` root. Existing stricter authority-store descendant
 contracts remain unchanged: authority directories remain owner-only `0700` and authority files
