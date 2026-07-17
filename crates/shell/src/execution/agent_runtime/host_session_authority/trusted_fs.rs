@@ -66,18 +66,185 @@ impl PrivateHomeReason {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PrivateHomeObjectRole {
+    Ancestor,
+    FinalRoot,
+}
+
+impl PrivateHomeObjectRole {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Ancestor => "ancestor",
+            Self::FinalRoot => "final-root",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PrivateHomeAclKind {
+    Access,
+    Default,
+    Unavailable,
+}
+
+impl PrivateHomeAclKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Access => "access",
+            Self::Default => "default",
+            Self::Unavailable => "unavailable",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PrivateHomeAclAuthority {
+    EffectiveWrite,
+    DefaultAclPresent,
+    ExtendedAccessAcl,
+    Malformed,
+    Unavailable,
+}
+
+impl PrivateHomeAclAuthority {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::EffectiveWrite => "effective-write",
+            Self::DefaultAclPresent => "default-acl-present",
+            Self::ExtendedAccessAcl => "extended-access-acl",
+            Self::Malformed => "malformed-acl",
+            Self::Unavailable => "acl-validation-unavailable",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PrivateHomeCandidateProvenance {
+    NotCreated,
+    Created,
+    Unknown,
+}
+
+impl PrivateHomeCandidateProvenance {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::NotCreated => "no",
+            Self::Created => "yes",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct PrivateHomeError {
     reason: PrivateHomeReason,
+    requested_home: Option<std::path::PathBuf>,
+    offending_path: Option<std::path::PathBuf>,
+    object_role: Option<PrivateHomeObjectRole>,
+    acl_kind: Option<PrivateHomeAclKind>,
+    acl_authority: Option<PrivateHomeAclAuthority>,
+    candidate_provenance: PrivateHomeCandidateProvenance,
 }
 
 impl PrivateHomeError {
     fn new(reason: PrivateHomeReason) -> Self {
-        Self { reason }
+        Self {
+            reason,
+            requested_home: None,
+            offending_path: None,
+            object_role: None,
+            acl_kind: None,
+            acl_authority: None,
+            candidate_provenance: PrivateHomeCandidateProvenance::NotCreated,
+        }
+    }
+
+    fn acl(
+        reason: PrivateHomeReason,
+        kind: PrivateHomeAclKind,
+        authority: PrivateHomeAclAuthority,
+    ) -> Self {
+        Self {
+            acl_kind: Some(kind),
+            acl_authority: Some(authority),
+            ..Self::new(reason)
+        }
+    }
+
+    fn at_path(mut self, path: &std::path::Path, role: PrivateHomeObjectRole) -> Self {
+        if self.offending_path.is_none() {
+            self.offending_path = Some(path.to_path_buf());
+        }
+        if self.object_role.is_none() {
+            self.object_role = Some(role);
+        }
+        self
+    }
+
+    fn for_attempt(mut self, requested_home: &std::path::Path, candidate_created: bool) -> Self {
+        self.requested_home = Some(requested_home.to_path_buf());
+        if candidate_created {
+            self.candidate_provenance = PrivateHomeCandidateProvenance::Created;
+        }
+        self
+    }
+
+    fn with_candidate_provenance(mut self, provenance: PrivateHomeCandidateProvenance) -> Self {
+        self.candidate_provenance = provenance;
+        self
     }
 
     pub(crate) fn reason(&self) -> PrivateHomeReason {
         self.reason
+    }
+
+    pub(crate) fn requested_home(&self) -> Option<&std::path::Path> {
+        self.requested_home.as_deref()
+    }
+
+    pub(crate) fn offending_path(&self) -> Option<&std::path::Path> {
+        self.offending_path.as_deref()
+    }
+
+    pub(crate) fn object_role(&self) -> Option<PrivateHomeObjectRole> {
+        self.object_role
+    }
+
+    pub(crate) fn acl_kind(&self) -> Option<PrivateHomeAclKind> {
+        self.acl_kind
+    }
+
+    pub(crate) fn acl_authority(&self) -> Option<PrivateHomeAclAuthority> {
+        self.acl_authority
+    }
+
+    pub(crate) fn candidate_created(&self) -> bool {
+        self.candidate_provenance == PrivateHomeCandidateProvenance::Created
+    }
+
+    pub(crate) fn candidate_provenance(&self) -> PrivateHomeCandidateProvenance {
+        self.candidate_provenance
+    }
+
+    #[cfg(test)]
+    pub(crate) fn acl_diagnostic_for_test(
+        requested_home: &std::path::Path,
+        offending_path: &std::path::Path,
+        role: PrivateHomeObjectRole,
+        kind: PrivateHomeAclKind,
+        authority: PrivateHomeAclAuthority,
+        candidate_provenance: PrivateHomeCandidateProvenance,
+    ) -> Self {
+        let reason = if authority == PrivateHomeAclAuthority::Unavailable {
+            PrivateHomeReason::ValidationUnavailable
+        } else {
+            PrivateHomeReason::ForeignAcl
+        };
+        Self::acl(reason, kind, authority)
+            .at_path(offending_path, role)
+            .for_attempt(requested_home, false)
+            .with_candidate_provenance(candidate_provenance)
     }
 }
 
@@ -91,9 +258,13 @@ mod platform {
     use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::OpenOptionsExt;
-    use std::path::{Component, Path};
+    use std::path::{Component, Path, PathBuf};
 
-    use super::{CanonicalDirectoryV1, File, PrivateHomeError, PrivateHomeReason, TrustedFsError};
+    use super::{
+        CanonicalDirectoryV1, File, PrivateHomeAclAuthority, PrivateHomeAclKind,
+        PrivateHomeCandidateProvenance, PrivateHomeError, PrivateHomeObjectRole, PrivateHomeReason,
+        TrustedFsError,
+    };
     use crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1;
 
     const DIRECTORY_MODE: libc::mode_t = 0o700;
@@ -102,6 +273,17 @@ mod platform {
     const ACL_GROUP: u16 = 0x0008;
     #[cfg(target_os = "linux")]
     const ACL_MASK: u16 = 0x0010;
+    #[cfg(all(test, target_os = "linux"))]
+    enum TestLinuxAclRead {
+        Present(PrivateHomeAclKind, Vec<u8>),
+        Unavailable(PrivateHomeAclKind),
+    }
+    #[cfg(all(test, target_os = "linux"))]
+    std::thread_local! {
+        static TEST_LINUX_ACL_READ: std::cell::RefCell<Option<TestLinuxAclRead>> = const {
+            std::cell::RefCell::new(None)
+        };
+    }
     #[cfg(target_os = "macos")]
     const MACOS_ACL_EXTENDED_ALLOW: libc::c_int = 1;
     #[cfg(target_os = "macos")]
@@ -112,6 +294,8 @@ mod platform {
         directory: TrustedDirectory,
         identity: CanonicalDirectoryV1,
         owner_uid: libc::uid_t,
+        requested_home: PathBuf,
+        candidate_created: bool,
     }
 
     #[derive(Debug)]
@@ -160,26 +344,44 @@ mod platform {
 
         fn revalidate(&self, owner_uid: libc::uid_t) -> Result<(), PrivateHomeError> {
             for (index, directory) in self.directories.iter().enumerate() {
-                let stat = validate_private_home_ancestor(directory, owner_uid)?;
+                let path = self.path_at(index);
+                let stat = validate_private_home_ancestor(directory, owner_uid)
+                    .map_err(|error| error.at_path(&path, PrivateHomeObjectRole::Ancestor))?;
                 if (stat.st_dev as u64, stat.st_ino as u64) != self.identities[index] {
-                    return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+                    return Err(PrivateHomeError::new(PrivateHomeReason::Replaced)
+                        .at_path(&path, PrivateHomeObjectRole::Ancestor));
                 }
                 if index > 0 {
                     let named = fstatat_nofollow(
                         self.directories[index - 1].as_raw_fd(),
                         &self.components[index - 1],
                     )
-                    .map_err(|_| PrivateHomeError::new(PrivateHomeReason::Replaced))?;
+                    .map_err(|_| {
+                        PrivateHomeError::new(PrivateHomeReason::Replaced)
+                            .at_path(&path, PrivateHomeObjectRole::Ancestor)
+                    })?;
                     if kind_from_mode(named.st_mode) == EntryKind::Symlink {
-                        return Err(PrivateHomeError::new(PrivateHomeReason::Symlink));
+                        return Err(PrivateHomeError::new(PrivateHomeReason::Symlink)
+                            .at_path(&path, PrivateHomeObjectRole::Ancestor));
                     }
                     if (named.st_dev as u64, named.st_ino as u64) != self.identities[index] {
-                        return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+                        return Err(PrivateHomeError::new(PrivateHomeReason::Replaced)
+                            .at_path(&path, PrivateHomeObjectRole::Ancestor));
                     }
                 }
             }
-            validate_private_home_parent(self.final_directory(), owner_uid)?;
+            let path = self.path_at(self.directories.len() - 1);
+            validate_private_home_parent(self.final_directory(), owner_uid)
+                .map_err(|error| error.at_path(&path, PrivateHomeObjectRole::Ancestor))?;
             Ok(())
+        }
+
+        fn path_at(&self, directory_index: usize) -> PathBuf {
+            let mut path = PathBuf::from("/");
+            for component in self.components.iter().take(directory_index) {
+                path.push(OsStr::from_bytes(component.as_bytes()));
+            }
+            path
         }
     }
 
@@ -307,7 +509,8 @@ mod platform {
             let stat = fstat(file.as_raw_fd())?;
             validate_private_home_stat(&stat, owner_uid).map_err(private_home_trusted_error)?;
             validate_private_home_acl(file.as_raw_fd()).map_err(private_home_trusted_error)?;
-            let root = Self::from_opened(file, owner_uid)?;
+            let root = Self::from_opened(file, owner_uid, raw_path, false)
+                .map_err(private_home_trusted_error)?;
             parent_chain
                 .revalidate(owner_uid)
                 .map_err(private_home_trusted_error)?;
@@ -316,18 +519,42 @@ mod platform {
             Ok(root)
         }
 
-        fn from_opened(file: File, owner_uid: libc::uid_t) -> Result<Self, TrustedFsError> {
-            let stat = fstat(file.as_raw_fd())?;
-            validate_private_home_stat(&stat, owner_uid).map_err(private_home_trusted_error)?;
-            validate_private_home_acl(file.as_raw_fd()).map_err(private_home_trusted_error)?;
-            let opened_physical_path = physical_path_from_handle(&file)?;
+        fn from_opened(
+            file: File,
+            owner_uid: libc::uid_t,
+            requested_home: &Path,
+            candidate_created: bool,
+        ) -> Result<Self, PrivateHomeError> {
+            let error_at_root = |error: PrivateHomeError| {
+                error
+                    .at_path(requested_home, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(requested_home, candidate_created)
+            };
+            let stat = fstat(file.as_raw_fd()).map_err(|_| {
+                error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ))
+            })?;
+            validate_private_home_stat(&stat, owner_uid).map_err(error_at_root)?;
+            validate_private_home_acl(file.as_raw_fd()).map_err(error_at_root)?;
+            let opened_physical_path = physical_path_from_handle(&file).map_err(|_| {
+                error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ))
+            })?;
             let physical_utf8 = opened_physical_path
                 .to_str()
                 .filter(|path| path.starts_with('/') && !path.ends_with(" (deleted)"))
                 .ok_or_else(|| {
-                    TrustedFsError::new("opened trusted root has no stable UTF-8 physical path")
+                    error_at_root(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    ))
                 })?;
-            let identity = directory_identity(&file, physical_utf8, &stat)?;
+            let identity = directory_identity(&file, physical_utf8, &stat).map_err(|_| {
+                error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ))
+            })?;
             let root = Self {
                 directory: TrustedDirectory {
                     file,
@@ -335,8 +562,10 @@ mod platform {
                 },
                 identity,
                 owner_uid,
+                requested_home: requested_home.to_path_buf(),
+                candidate_created,
             };
-            root.revalidate()?;
+            root.revalidate_private_home()?;
             Ok(root)
         }
 
@@ -388,6 +617,64 @@ mod platform {
                     "trusted root physical identity changed",
                 )),
             }
+        }
+
+        pub(crate) fn revalidate_private_home(&self) -> Result<(), PrivateHomeError> {
+            let error_at_root = |error: PrivateHomeError| {
+                error
+                    .at_path(&self.requested_home, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(&self.requested_home, self.candidate_created)
+            };
+            let stat = fstat(self.directory.file.as_raw_fd()).map_err(|_| {
+                error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ))
+            })?;
+            validate_private_home_stat(&stat, self.owner_uid).map_err(error_at_root)?;
+            validate_private_home_acl(self.directory.file.as_raw_fd()).map_err(error_at_root)?;
+            if stat.st_dev as u64 != self.directory.device_id {
+                return Err(error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::Replaced,
+                )));
+            }
+            let current_path = physical_path_from_handle(&self.directory.file).map_err(|_| {
+                error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ))
+            })?;
+            if current_path.to_str() != Some(self.identity.physical_path.as_str()) {
+                return Err(error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::Replaced,
+                )));
+            }
+            let identity_matches = match &self.identity.physical_identity {
+                DirectoryPhysicalIdentityV1::Linux { device_id, inode } => {
+                    *device_id == stat.st_dev as u64 && *inode == stat.st_ino as u64
+                }
+                #[cfg(target_os = "macos")]
+                DirectoryPhysicalIdentityV1::MacOs {
+                    volume_uuid,
+                    file_id,
+                    case_sensitive,
+                } => {
+                    let (current_uuid, current_case_sensitive) =
+                        macos_volume_identity(self.directory.file.as_raw_fd()).map_err(|_| {
+                            error_at_root(PrivateHomeError::new(
+                                PrivateHomeReason::ValidationUnavailable,
+                            ))
+                        })?;
+                    *volume_uuid == current_uuid
+                        && *file_id == stat.st_ino as u64
+                        && *case_sensitive == current_case_sensitive
+                }
+                _ => false,
+            };
+            if !identity_matches {
+                return Err(error_at_root(PrivateHomeError::new(
+                    PrivateHomeReason::Replaced,
+                )));
+            }
+            Ok(())
         }
 
         pub(crate) fn directory(&self) -> &TrustedDirectory {
@@ -546,7 +833,25 @@ mod platform {
         raw_path: &Path,
         owner_uid: libc::uid_t,
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
-        ensure_private_substrate_home_with(raw_path, owner_uid, || {}, || {})
+        ensure_private_substrate_home_with(raw_path, owner_uid, || {}, || {}, || {})
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ensure_private_substrate_home_with_after_create_for_test(
+        raw_path: &Path,
+        owner_uid: libc::uid_t,
+        after_create: impl FnOnce(),
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        ensure_private_substrate_home_with(raw_path, owner_uid, after_create, || {}, || {})
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ensure_private_substrate_home_with_before_from_opened_for_test(
+        raw_path: &Path,
+        owner_uid: libc::uid_t,
+        before_from_opened: impl FnOnce(),
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        ensure_private_substrate_home_with(raw_path, owner_uid, || {}, || {}, before_from_opened)
     }
 
     #[cfg_attr(
@@ -561,27 +866,62 @@ mod platform {
         owner_uid: libc::uid_t,
         after_create: impl FnOnce(),
         after_first_open: impl FnOnce(),
+        before_from_opened: impl FnOnce(),
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
         validate_bootstrap_input(raw_path)
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+            .map_err(|error| {
+                error
+                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(raw_path, false)
+            })?;
         let parent_path = raw_path
             .parent()
             .filter(|parent| *parent != raw_path)
-            .ok_or_else(|| PrivateHomeError::new(PrivateHomeReason::MissingParent))?;
+            .ok_or_else(|| PrivateHomeError::new(PrivateHomeReason::MissingParent))
+            .map_err(|error| {
+                error
+                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(raw_path, false)
+            })?;
         let name = raw_path
             .file_name()
-            .ok_or_else(|| PrivateHomeError::new(PrivateHomeReason::WrongType))?;
+            .ok_or_else(|| PrivateHomeError::new(PrivateHomeReason::WrongType))
+            .map_err(|error| {
+                error
+                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(raw_path, false)
+            })?;
         let name = c_string(name)
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
-        let parent_chain = open_private_home_parent_chain(parent_path, owner_uid)?;
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+            .map_err(|error| {
+                error
+                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(raw_path, false)
+            })?;
+        let parent_chain = open_private_home_parent_chain(parent_path, owner_uid)
+            .map_err(|error| error.for_attempt(raw_path, false))?;
         let parent = parent_chain.final_directory();
         let _lock = TrustedDirectoryLock::acquire(parent)
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+            .map_err(|error| {
+                error
+                    .at_path(parent_path, PrivateHomeObjectRole::Ancestor)
+                    .for_attempt(raw_path, false)
+            })?;
+        parent_chain
+            .revalidate(owner_uid)
+            .map_err(|error| error.for_attempt(raw_path, false))?;
 
-        let creation = mkdirat_exact_mode(parent.as_raw_fd(), &name)?;
+        let creation = mkdirat_exact_mode(parent.as_raw_fd(), &name).map_err(|error| {
+            error
+                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                .for_attempt(raw_path, false)
+        })?;
         if creation == DirectoryCreation::Created {
             after_create();
         }
+        let candidate_created = creation == DirectoryCreation::Created;
 
         let opened = openat_file(
             parent.as_raw_fd(),
@@ -591,10 +931,17 @@ mod platform {
         )
         .map_err(|_| {
             private_home_candidate_open_error(parent.as_raw_fd(), &name, owner_uid, creation)
+                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                .for_attempt(raw_path, candidate_created)
         })?;
 
         let opened_stat = fstat(opened.as_raw_fd())
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+            .map_err(|error| {
+                error
+                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(raw_path, candidate_created)
+            })?;
         after_first_open();
 
         if creation == DirectoryCreation::Created {
@@ -604,41 +951,81 @@ mod platform {
             let effective = effective_uid();
             if effective != owner_uid {
                 if effective != 0 {
-                    return Err(PrivateHomeError::new(PrivateHomeReason::WrongOwner));
+                    return Err(PrivateHomeError::new(PrivateHomeReason::WrongOwner)
+                        .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                        .for_attempt(raw_path, candidate_created));
                 }
                 // SAFETY: opened is the newly created directory and gid -1 preserves its group.
                 if unsafe { libc::fchown(opened.as_raw_fd(), owner_uid, !0 as libc::gid_t) } != 0 {
-                    return Err(PrivateHomeError::new(
-                        PrivateHomeReason::ValidationUnavailable,
-                    ));
+                    return Err(
+                        PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
+                            .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                            .for_attempt(raw_path, candidate_created),
+                    );
                 }
             }
             // SAFETY: opened is the newly created directory; fchmod defeats ambient umask.
             if unsafe { libc::fchmod(opened.as_raw_fd(), DIRECTORY_MODE) } != 0 {
-                return Err(PrivateHomeError::new(
-                    PrivateHomeReason::ValidationUnavailable,
-                ));
+                return Err(
+                    PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
+                        .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                        .for_attempt(raw_path, candidate_created),
+                );
             }
             opened
                 .sync_all()
-                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+                .map_err(|error| {
+                    error
+                        .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                        .for_attempt(raw_path, candidate_created)
+                })?;
             parent
                 .sync_all()
-                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+                .map_err(|error| {
+                    error
+                        .at_path(parent_path, PrivateHomeObjectRole::Ancestor)
+                        .for_attempt(raw_path, candidate_created)
+                })?;
         }
 
         let accepted_stat = fstat(opened.as_raw_fd())
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+            .map_err(|error| {
+                error
+                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(raw_path, candidate_created)
+            })?;
         if accepted_stat.st_dev != opened_stat.st_dev || accepted_stat.st_ino != opened_stat.st_ino
         {
-            return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+            return Err(PrivateHomeError::new(PrivateHomeReason::Replaced)
+                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                .for_attempt(raw_path, candidate_created));
         }
-        validate_private_home_stat(&accepted_stat, owner_uid)?;
-        validate_private_home_acl(opened.as_raw_fd())?;
-        let root = TrustedAuthorityRoot::from_opened(opened, owner_uid)
-            .map_err(private_home_reason_from_trusted_error)?;
-        parent_chain.revalidate(owner_uid)?;
-        validate_named_private_home(parent.as_raw_fd(), &name, &accepted_stat, owner_uid)?;
+        validate_private_home_stat(&accepted_stat, owner_uid).map_err(|error| {
+            error
+                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                .for_attempt(raw_path, candidate_created)
+        })?;
+        validate_private_home_acl(opened.as_raw_fd()).map_err(|error| {
+            error
+                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                .for_attempt(raw_path, candidate_created)
+        })?;
+        before_from_opened();
+        let root =
+            TrustedAuthorityRoot::from_opened(opened, owner_uid, raw_path, candidate_created)?;
+        parent_chain
+            .revalidate(owner_uid)
+            .map_err(|error| error.for_attempt(raw_path, candidate_created))?;
+        validate_named_private_home(parent.as_raw_fd(), &name, &accepted_stat, owner_uid).map_err(
+            |error| {
+                error
+                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                    .for_attempt(raw_path, candidate_created)
+            },
+        )?;
         Ok(root)
     }
 
@@ -653,6 +1040,31 @@ mod platform {
         parent: RawFd,
         name: &CStr,
     ) -> Result<DirectoryCreation, PrivateHomeError> {
+        mkdirat_exact_mode_inner(parent, name, false)
+    }
+
+    #[cfg(test)]
+    fn mkdirat_exact_mode_with_signaled_child_for_test(
+        parent: RawFd,
+        name: &CStr,
+    ) -> Result<DirectoryCreation, PrivateHomeError> {
+        mkdirat_exact_mode_inner(parent, name, true)
+    }
+
+    fn mkdirat_exact_mode_inner(
+        parent: RawFd,
+        name: &CStr,
+        _signal_after_create: bool,
+    ) -> Result<DirectoryCreation, PrivateHomeError> {
+        match fstatat_nofollow(parent, name) {
+            Ok(_) => return Ok(DirectoryCreation::Existing),
+            Err(error) if error.kind == Some(io::ErrorKind::NotFound) => {}
+            Err(_) => {
+                return Err(PrivateHomeError::new(
+                    PrivateHomeReason::ValidationUnavailable,
+                ));
+            }
+        }
         // `umask` is process-global. Perform the umask-independent creation in a short-lived
         // child so concurrent threads in the parent can never observe a broadened mask. The
         // child calls only async-signal-safe functions between `fork` and `_exit`.
@@ -668,13 +1080,13 @@ mod platform {
             // immutable input. mkdirat establishes only a candidate name, never child identity.
             unsafe {
                 libc::umask(0);
-                libc::_exit(
-                    if libc::mkdirat(parent, name.as_ptr(), DIRECTORY_MODE) == 0 {
-                        0
-                    } else {
-                        1
-                    },
-                );
+                let created = libc::mkdirat(parent, name.as_ptr(), DIRECTORY_MODE) == 0;
+                #[cfg(test)]
+                if created && _signal_after_create {
+                    libc::kill(libc::getpid(), libc::SIGKILL);
+                    libc::_exit(127);
+                }
+                libc::_exit(if created { 0 } else { 1 });
             }
         }
 
@@ -685,23 +1097,29 @@ mod platform {
                 break;
             }
             if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-                return Err(PrivateHomeError::new(
-                    PrivateHomeReason::ValidationUnavailable,
-                ));
+                return Err(private_home_creation_wait_error(parent, name));
             }
         }
         if !libc::WIFEXITED(status) {
-            return Err(PrivateHomeError::new(
-                PrivateHomeReason::ValidationUnavailable,
-            ));
+            return Err(private_home_creation_wait_error(parent, name));
         }
         match libc::WEXITSTATUS(status) {
             0 => Ok(DirectoryCreation::Created),
             1 if fstatat_nofollow(parent, name).is_ok() => Ok(DirectoryCreation::Existing),
-            _ => Err(PrivateHomeError::new(
-                PrivateHomeReason::ValidationUnavailable,
-            )),
+            _ => Err(private_home_creation_wait_error(parent, name)),
         }
+    }
+
+    fn private_home_creation_wait_error(parent: RawFd, name: &CStr) -> PrivateHomeError {
+        let provenance = match fstatat_nofollow(parent, name) {
+            Ok(_) => PrivateHomeCandidateProvenance::Created,
+            Err(error) if error.kind == Some(io::ErrorKind::NotFound) => {
+                PrivateHomeCandidateProvenance::NotCreated
+            }
+            Err(_) => PrivateHomeCandidateProvenance::Unknown,
+        };
+        PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
+            .with_candidate_provenance(provenance)
     }
 
     impl TrustedDirectory {
@@ -1485,8 +1903,10 @@ mod platform {
             },
             "open private home path root",
         )
-        .map_err(private_home_parent_open_error)?;
-        let root_stat = validate_private_home_ancestor(&root, owner_uid)?;
+        .map_err(private_home_parent_open_error)
+        .map_err(|error| error.at_path(Path::new("/"), PrivateHomeObjectRole::Ancestor))?;
+        let root_stat = validate_private_home_ancestor(&root, owner_uid)
+            .map_err(|error| error.at_path(Path::new("/"), PrivateHomeObjectRole::Ancestor))?;
         let mut chain = TrustedDirectoryChain {
             directories: vec![root],
             components: Vec::new(),
@@ -1497,17 +1917,25 @@ mod platform {
             let Component::Normal(component_value) = component_value else {
                 continue;
             };
-            let component = c_string(component_value)
-                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+            let path = chain
+                .path_at(chain.directories.len() - 1)
+                .join(component_value);
+            let component = c_string(component_value).map_err(|_| {
+                PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
+                    .at_path(&path, PrivateHomeObjectRole::Ancestor)
+            })?;
             let observed = fstatat_nofollow(chain.final_directory().as_raw_fd(), &component)
-                .map_err(private_home_parent_open_error)?;
+                .map_err(private_home_parent_open_error)
+                .map_err(|error| error.at_path(&path, PrivateHomeObjectRole::Ancestor))?;
             match kind_from_mode(observed.st_mode) {
                 EntryKind::Directory => {}
                 EntryKind::Symlink => {
-                    return Err(PrivateHomeError::new(PrivateHomeReason::Symlink));
+                    return Err(PrivateHomeError::new(PrivateHomeReason::Symlink)
+                        .at_path(&path, PrivateHomeObjectRole::Ancestor));
                 }
                 EntryKind::RegularFile | EntryKind::Other => {
-                    return Err(PrivateHomeError::new(PrivateHomeReason::WrongType));
+                    return Err(PrivateHomeError::new(PrivateHomeReason::WrongType)
+                        .at_path(&path, PrivateHomeObjectRole::Ancestor));
                 }
             }
             let next = openat_file(
@@ -1516,10 +1944,13 @@ mod platform {
                 libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
                 0,
             )
-            .map_err(private_home_parent_open_error)?;
-            let opened = validate_private_home_ancestor(&next, owner_uid)?;
+            .map_err(private_home_parent_open_error)
+            .map_err(|error| error.at_path(&path, PrivateHomeObjectRole::Ancestor))?;
+            let opened = validate_private_home_ancestor(&next, owner_uid)
+                .map_err(|error| error.at_path(&path, PrivateHomeObjectRole::Ancestor))?;
             if opened.st_dev != observed.st_dev || opened.st_ino != observed.st_ino {
-                return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
+                return Err(PrivateHomeError::new(PrivateHomeReason::Replaced)
+                    .at_path(&path, PrivateHomeObjectRole::Ancestor));
             }
             chain.components.push(component);
             chain
@@ -1576,10 +2007,10 @@ mod platform {
         if stat.st_uid != 0 && stat.st_uid != owner_uid {
             return Err(PrivateHomeError::new(PrivateHomeReason::WrongOwner));
         }
+        validate_private_home_parent_acl(directory.as_raw_fd())?;
         if stat.st_mode & 0o022 != 0 {
             return Err(PrivateHomeError::new(PrivateHomeReason::WrongMode));
         }
-        validate_private_home_parent_acl(directory.as_raw_fd())?;
         Ok(stat)
     }
 
@@ -1727,10 +2158,41 @@ mod platform {
     fn validate_private_home_acl(fd: RawFd) -> Result<(), PrivateHomeError> {
         #[cfg(target_os = "linux")]
         {
-            validate_no_access_acl(fd)
-                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ForeignAcl))?;
-            validate_no_default_acl(fd)
-                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ForeignAcl))?;
+            for (name, kind, authority) in [
+                (
+                    c"system.posix_acl_access",
+                    PrivateHomeAclKind::Access,
+                    PrivateHomeAclAuthority::ExtendedAccessAcl,
+                ),
+                (
+                    c"system.posix_acl_default",
+                    PrivateHomeAclKind::Default,
+                    PrivateHomeAclAuthority::DefaultAclPresent,
+                ),
+            ] {
+                let state = read_linux_acl_xattr(fd, name).map_err(|_| {
+                    PrivateHomeError::acl(
+                        PrivateHomeReason::ValidationUnavailable,
+                        PrivateHomeAclKind::Unavailable,
+                        PrivateHomeAclAuthority::Unavailable,
+                    )
+                })?;
+                let LinuxAclXattr::Present(bytes) = state else {
+                    continue;
+                };
+                if parse_parent_acl(&bytes).is_err() {
+                    return Err(PrivateHomeError::acl(
+                        PrivateHomeReason::ForeignAcl,
+                        kind,
+                        PrivateHomeAclAuthority::Malformed,
+                    ));
+                }
+                return Err(PrivateHomeError::acl(
+                    PrivateHomeReason::ForeignAcl,
+                    kind,
+                    authority,
+                ));
+            }
         }
         #[cfg(target_os = "macos")]
         validate_macos_acl(fd, true)
@@ -1741,31 +2203,51 @@ mod platform {
     fn validate_private_home_parent_acl(fd: RawFd) -> Result<(), PrivateHomeError> {
         #[cfg(target_os = "linux")]
         {
-            for name in [c"system.posix_acl_access", c"system.posix_acl_default"] {
-                // SAFETY: fd is live; null buffer with zero length queries the xattr size.
-                let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
-                if size < 0 {
-                    let error = io::Error::last_os_error();
-                    if error.raw_os_error() == Some(libc::ENODATA) {
-                        continue;
+            let access = read_linux_acl_xattr(fd, c"system.posix_acl_access").map_err(|_| {
+                PrivateHomeError::acl(
+                    PrivateHomeReason::ValidationUnavailable,
+                    PrivateHomeAclKind::Unavailable,
+                    PrivateHomeAclAuthority::Unavailable,
+                )
+            })?;
+            if let LinuxAclXattr::Present(bytes) = access {
+                match parse_parent_acl(&bytes) {
+                    Ok(false) => {}
+                    Ok(true) => {
+                        return Err(PrivateHomeError::acl(
+                            PrivateHomeReason::ForeignAcl,
+                            PrivateHomeAclKind::Access,
+                            PrivateHomeAclAuthority::EffectiveWrite,
+                        ));
                     }
-                    return Err(PrivateHomeError::new(
-                        PrivateHomeReason::ValidationUnavailable,
-                    ));
+                    Err(()) => {
+                        return Err(PrivateHomeError::acl(
+                            PrivateHomeReason::ForeignAcl,
+                            PrivateHomeAclKind::Access,
+                            PrivateHomeAclAuthority::Malformed,
+                        ));
+                    }
                 }
-                let mut bytes = vec![0_u8; size as usize];
-                // SAFETY: buffer is allocated to the queried size.
-                if unsafe {
-                    libc::fgetxattr(fd, name.as_ptr(), bytes.as_mut_ptr().cast(), bytes.len())
-                } < 0
-                {
-                    return Err(PrivateHomeError::new(
-                        PrivateHomeReason::ValidationUnavailable,
-                    ));
-                }
-                if parent_acl_grants_named_principal(&bytes) {
-                    return Err(PrivateHomeError::new(PrivateHomeReason::ForeignAcl));
-                }
+            }
+
+            let default = read_linux_acl_xattr(fd, c"system.posix_acl_default").map_err(|_| {
+                PrivateHomeError::acl(
+                    PrivateHomeReason::ValidationUnavailable,
+                    PrivateHomeAclKind::Unavailable,
+                    PrivateHomeAclAuthority::Unavailable,
+                )
+            })?;
+            if let LinuxAclXattr::Present(bytes) = default {
+                let authority = if parse_parent_acl(&bytes).is_ok() {
+                    PrivateHomeAclAuthority::DefaultAclPresent
+                } else {
+                    PrivateHomeAclAuthority::Malformed
+                };
+                return Err(PrivateHomeError::acl(
+                    PrivateHomeReason::ForeignAcl,
+                    PrivateHomeAclKind::Default,
+                    authority,
+                ));
             }
         }
         #[cfg(target_os = "macos")]
@@ -1779,23 +2261,6 @@ mod platform {
             "private SUBSTRATE_HOME validation failed: {}",
             error.reason().as_str()
         ))
-    }
-
-    fn private_home_reason_from_trusted_error(error: TrustedFsError) -> PrivateHomeError {
-        let reason = if error.message.contains("symlink") {
-            PrivateHomeReason::Symlink
-        } else if error.message.contains("wrong-owner") {
-            PrivateHomeReason::WrongOwner
-        } else if error.message.contains("wrong-mode") {
-            PrivateHomeReason::WrongMode
-        } else if error.message.contains("foreign-acl") || error.message.contains("ACL") {
-            PrivateHomeReason::ForeignAcl
-        } else if error.message.contains("changed") || error.message.contains("identity") {
-            PrivateHomeReason::Replaced
-        } else {
-            PrivateHomeReason::ValidationUnavailable
-        };
-        PrivateHomeError::new(reason)
     }
 
     fn validate_open_file(file: &File, expected_device: u64) -> Result<(), TrustedFsError> {
@@ -1934,99 +2399,155 @@ mod platform {
     }
 
     #[cfg(target_os = "linux")]
-    fn parent_acl_grants_named_principal(bytes: &[u8]) -> bool {
+    enum LinuxAclXattr {
+        Absent,
+        Present(Vec<u8>),
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_linux_acl_xattr(fd: RawFd, name: &CStr) -> Result<LinuxAclXattr, ()> {
+        const MAX_ACL_XATTR_BYTES: usize = 64 * 1024;
+
+        #[cfg(test)]
+        {
+            let kind = match name.to_bytes() {
+                b"system.posix_acl_access" => Some(PrivateHomeAclKind::Access),
+                b"system.posix_acl_default" => Some(PrivateHomeAclKind::Default),
+                _ => None,
+            };
+            if let Some(result) = TEST_LINUX_ACL_READ.with(|state| match &*state.borrow() {
+                Some(TestLinuxAclRead::Present(expected, bytes)) if Some(*expected) == kind => {
+                    Some(Ok(LinuxAclXattr::Present(bytes.clone())))
+                }
+                Some(TestLinuxAclRead::Unavailable(expected)) if Some(*expected) == kind => {
+                    Some(Err(()))
+                }
+                _ => None,
+            }) {
+                return result;
+            }
+        }
+
+        // SAFETY: fd is live; a null buffer with zero length queries the xattr size.
+        let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
+        if size < 0 {
+            if io::Error::last_os_error().raw_os_error() != Some(libc::ENODATA) {
+                return Err(());
+            }
+            // Linux routes POSIX ACL names through do_get_acl/vfs_get_acl. LSM denial and
+            // filesystem errors are returned before ENODATA, which vfs_get_acl emits only when
+            // the descriptor-bound ACL lookup returns no ACL.
+            return Ok(LinuxAclXattr::Absent);
+        }
+        let size = usize::try_from(size).map_err(|_| ())?;
+        if size > MAX_ACL_XATTR_BYTES {
+            return Err(());
+        }
+        let mut bytes = vec![0_u8; size];
+        // SAFETY: bytes owns exactly the queried writable capacity.
+        let read =
+            unsafe { libc::fgetxattr(fd, name.as_ptr(), bytes.as_mut_ptr().cast(), bytes.len()) };
+        if read < 0 || usize::try_from(read).map_err(|_| ())? != bytes.len() {
+            return Err(());
+        }
+        Ok(LinuxAclXattr::Present(bytes))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn parse_parent_acl(bytes: &[u8]) -> Result<bool, ()> {
+        #[derive(Clone, Copy, Eq, PartialEq)]
+        enum AclEntryState {
+            UserObject,
+            Users,
+            Groups,
+            Other,
+            Complete,
+        }
+
         let Some(entries) = bytes.get(4..) else {
-            return true;
+            return Err(());
         };
         if bytes.get(..4) != Some(2_u32.to_le_bytes().as_slice()) || entries.len() % 8 != 0 {
-            return true;
+            return Err(());
         }
         let mut mask = None;
-        let mut user_object = false;
-        let mut group_object = false;
-        let mut other = false;
         let mut named_entries = Vec::new();
+        let mut state = AclEntryState::UserObject;
         for entry in entries.chunks_exact(8) {
             let tag = u16::from_le_bytes([entry[0], entry[1]]);
             let permissions = u16::from_le_bytes([entry[2], entry[3]]);
             let identifier = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
             if permissions & !0o7 != 0 {
-                return true;
+                return Err(());
             }
             match tag {
-                ACL_USER | ACL_GROUP => {
+                0x0001 if state == AclEntryState::UserObject => {
+                    if identifier != u32::MAX {
+                        return Err(());
+                    }
+                    state = AclEntryState::Users;
+                }
+                ACL_USER if state == AclEntryState::Users => {
                     if identifier == u32::MAX
                         || named_entries.iter().any(|(seen_tag, seen_id, _)| {
                             *seen_tag == tag && *seen_id == identifier
                         })
                     {
-                        return true;
+                        return Err(());
                     }
                     named_entries.push((tag, identifier, permissions));
                 }
-                ACL_MASK => {
+                0x0004 if state == AclEntryState::Users => {
+                    if identifier != u32::MAX {
+                        return Err(());
+                    }
+                    state = AclEntryState::Groups;
+                }
+                ACL_GROUP if state == AclEntryState::Groups => {
+                    if identifier == u32::MAX
+                        || named_entries.iter().any(|(seen_tag, seen_id, _)| {
+                            *seen_tag == tag && *seen_id == identifier
+                        })
+                    {
+                        return Err(());
+                    }
+                    named_entries.push((tag, identifier, permissions));
+                }
+                ACL_MASK if state == AclEntryState::Groups => {
                     if identifier != u32::MAX || mask.replace(permissions).is_some() {
-                        return true;
+                        return Err(());
                     }
+                    state = AclEntryState::Other;
                 }
-                0x0001 => {
-                    if identifier != u32::MAX || std::mem::replace(&mut user_object, true) {
-                        return true;
+                0x0020
+                    if state == AclEntryState::Other
+                        || (state == AclEntryState::Groups && named_entries.is_empty()) =>
+                {
+                    if identifier != u32::MAX {
+                        return Err(());
                     }
+                    state = AclEntryState::Complete;
                 }
-                0x0004 => {
-                    if identifier != u32::MAX || std::mem::replace(&mut group_object, true) {
-                        return true;
-                    }
-                }
-                0x0020 => {
-                    if identifier != u32::MAX || std::mem::replace(&mut other, true) {
-                        return true;
-                    }
-                }
-                _ => return true,
+                _ => return Err(()),
             }
         }
-        if !user_object || !group_object || !other {
-            return true;
+        if state != AclEntryState::Complete {
+            return Err(());
         }
         if named_entries.is_empty() {
-            return false;
+            return Ok(false);
         }
         let Some(mask) = mask else {
-            return true;
+            return Err(());
         };
-        named_entries
+        Ok(named_entries
             .into_iter()
-            .any(|(_, _, permissions)| permissions & mask != 0)
+            .any(|(_, _, permissions)| permissions & mask & 0o2 != 0))
     }
 
     #[cfg(target_os = "linux")]
-    fn validate_no_access_acl(fd: RawFd) -> Result<(), TrustedFsError> {
-        validate_no_acl_xattr(fd, c"system.posix_acl_access", "access")
-    }
-
-    #[cfg(target_os = "linux")]
-    fn validate_no_default_acl(fd: RawFd) -> Result<(), TrustedFsError> {
-        validate_no_acl_xattr(fd, c"system.posix_acl_default", "default")
-    }
-
-    #[cfg(target_os = "linux")]
-    fn validate_no_acl_xattr(fd: RawFd, name: &CStr, kind: &str) -> Result<(), TrustedFsError> {
-        // SAFETY: fd is live; null buffer with zero length queries the xattr size.
-        let size = unsafe { libc::fgetxattr(fd, name.as_ptr(), std::ptr::null_mut(), 0) };
-        if size < 0 {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() == Some(libc::ENODATA) {
-                return Ok(());
-            }
-            return Err(TrustedFsError::new(format!(
-                "read trusted default ACL: {error}"
-            )));
-        }
-        Err(TrustedFsError::new(format!(
-            "trusted directory has an unexpected {kind} ACL"
-        )))
+    fn parent_acl_grants_named_principal(bytes: &[u8]) -> bool {
+        parse_parent_acl(bytes).unwrap_or(true)
     }
 
     fn kind_from_mode(mode: libc::mode_t) -> EntryKind {
@@ -2101,6 +2622,427 @@ mod platform {
             (temp, root)
         }
 
+        #[cfg(target_os = "linux")]
+        fn linux_acl(entries: &[(u16, u16, u32)]) -> Vec<u8> {
+            let mut acl = 2_u32.to_le_bytes().to_vec();
+            for (tag, permissions, identifier) in entries {
+                acl.extend_from_slice(&tag.to_le_bytes());
+                acl.extend_from_slice(&permissions.to_le_bytes());
+                acl.extend_from_slice(&identifier.to_le_bytes());
+            }
+            acl
+        }
+
+        #[cfg(target_os = "linux")]
+        fn linux_named_user_acl(permissions: u16, mask: u16) -> Vec<u8> {
+            linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (ACL_USER, permissions, effective_uid().saturating_add(1)),
+                (0x0004, 0, u32::MAX),
+                (ACL_MASK, mask, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ])
+        }
+
+        #[cfg(target_os = "linux")]
+        fn set_linux_acl(directory: &File, name: &CStr, acl: &[u8]) {
+            // SAFETY: directory is live and acl points to an initialized buffer.
+            assert_eq!(
+                unsafe {
+                    libc::fsetxattr(
+                        directory.as_raw_fd(),
+                        name.as_ptr(),
+                        acl.as_ptr().cast(),
+                        acl.len(),
+                        0,
+                    )
+                },
+                0,
+                "{}",
+                io::Error::last_os_error()
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        fn with_test_linux_acl_read<T>(
+            override_value: TestLinuxAclRead,
+            run: impl FnOnce() -> T,
+        ) -> T {
+            struct Reset;
+            impl Drop for Reset {
+                fn drop(&mut self) {
+                    TEST_LINUX_ACL_READ.with(|state| *state.borrow_mut() = None);
+                }
+            }
+
+            TEST_LINUX_ACL_READ.with(|state| *state.borrow_mut() = Some(override_value));
+            let _reset = Reset;
+            run()
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn ancestor_access_acl_matrix_rejects_only_effective_named_write_or_invalid_state() {
+            for (permissions, mask) in [(0o1, 0o1), (0o5, 0o5), (0o7, 0o5)] {
+                let acl = linux_named_user_acl(permissions, mask);
+                assert!(
+                    !parent_acl_grants_named_principal(&acl),
+                    "raw permissions {permissions:o} under mask {mask:o} confer no write"
+                );
+            }
+
+            let multiple_non_writers = linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (ACL_USER, 0o1, effective_uid().saturating_add(1)),
+                (0x0004, 0, u32::MAX),
+                (ACL_GROUP, 0o5, effective_uid().saturating_add(1)),
+                (ACL_MASK, 0o5, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ]);
+            assert!(!parent_acl_grants_named_principal(&multiple_non_writers));
+
+            for (permissions, mask) in [(0o2, 0o2), (0o3, 0o3), (0o6, 0o6), (0o7, 0o7)] {
+                let acl = linux_named_user_acl(permissions, mask);
+                assert!(
+                    parent_acl_grants_named_principal(&acl),
+                    "raw permissions {permissions:o} under mask {mask:o} confer write"
+                );
+            }
+
+            let duplicate_named = linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (ACL_USER, 0o1, 1),
+                (ACL_USER, 0o1, 1),
+                (0x0004, 0, u32::MAX),
+                (ACL_MASK, 0o1, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ]);
+            let missing_base = linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (ACL_USER, 0o1, 1),
+                (ACL_MASK, 0o1, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ]);
+            let missing_mask = linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (ACL_USER, 0o1, 1),
+                (0x0004, 0, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ]);
+            let duplicate_mask = linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (ACL_USER, 0o1, 1),
+                (0x0004, 0, u32::MAX),
+                (ACL_MASK, 0o1, u32::MAX),
+                (ACL_MASK, 0o1, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ]);
+            let out_of_order_named_group = linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (ACL_USER, 0o1, 1),
+                (ACL_GROUP, 0o1, 2),
+                (0x0004, 0, u32::MAX),
+                (ACL_MASK, 0o1, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ]);
+            let unsupported_tag = linux_acl(&[
+                (0x0001, 0o7, u32::MAX),
+                (0x0040, 0, u32::MAX),
+                (0x0004, 0, u32::MAX),
+                (0x0020, 0, u32::MAX),
+            ]);
+            let mut malformed_version = linux_named_user_acl(0o1, 0o1);
+            malformed_version[..4].copy_from_slice(&3_u32.to_le_bytes());
+            let mut invalid_length = linux_named_user_acl(0o1, 0o1);
+            invalid_length.push(0);
+
+            for malformed in [
+                duplicate_named,
+                missing_base,
+                missing_mask,
+                duplicate_mask,
+                out_of_order_named_group,
+                unsupported_tag,
+                malformed_version,
+                invalid_length,
+            ] {
+                assert!(parent_acl_grants_named_principal(&malformed));
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn every_present_ancestor_default_acl_is_rejected_before_candidate_creation() {
+            for (label, permissions, mask) in [
+                ("granting", 0o7, 0o7),
+                ("zero-effective", 0, 0),
+                ("masked", 0o7, 0o1),
+            ] {
+                let temp = tempfile::Builder::new()
+                    .prefix(&format!("substrate-a1-default-acl-{label}-"))
+                    .tempdir_in(safe_test_parent())
+                    .unwrap();
+                fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+                let directory = File::open(temp.path()).unwrap();
+                let acl = linux_named_user_acl(permissions, mask);
+                set_linux_acl(&directory, c"system.posix_acl_default", &acl);
+                let target = temp.path().join("home");
+
+                let error = ensure_private_substrate_home(&target, effective_uid()).unwrap_err();
+                assert_eq!(error.reason(), PrivateHomeReason::ForeignAcl, "{label}");
+                assert!(!target.exists(), "{label} default ACL created a candidate");
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn malformed_and_unavailable_ancestor_acl_state_fails_closed_before_creation() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-invalid-acl-state-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+
+            let mut malformed_default = linux_named_user_acl(0, 0);
+            malformed_default[..4].copy_from_slice(&3_u32.to_le_bytes());
+            let malformed_access = malformed_default.clone();
+            for (label, override_value, reason, kind, authority) in [
+                (
+                    "malformed-access",
+                    TestLinuxAclRead::Present(PrivateHomeAclKind::Access, malformed_access),
+                    PrivateHomeReason::ForeignAcl,
+                    PrivateHomeAclKind::Access,
+                    PrivateHomeAclAuthority::Malformed,
+                ),
+                (
+                    "malformed-default",
+                    TestLinuxAclRead::Present(PrivateHomeAclKind::Default, malformed_default),
+                    PrivateHomeReason::ForeignAcl,
+                    PrivateHomeAclKind::Default,
+                    PrivateHomeAclAuthority::Malformed,
+                ),
+                (
+                    "unavailable-default",
+                    TestLinuxAclRead::Unavailable(PrivateHomeAclKind::Default),
+                    PrivateHomeReason::ValidationUnavailable,
+                    PrivateHomeAclKind::Unavailable,
+                    PrivateHomeAclAuthority::Unavailable,
+                ),
+                (
+                    "unavailable-access",
+                    TestLinuxAclRead::Unavailable(PrivateHomeAclKind::Access),
+                    PrivateHomeReason::ValidationUnavailable,
+                    PrivateHomeAclKind::Unavailable,
+                    PrivateHomeAclAuthority::Unavailable,
+                ),
+            ] {
+                let target = temp.path().join(label);
+                let error = with_test_linux_acl_read(override_value, || {
+                    ensure_private_substrate_home(&target, effective_uid()).unwrap_err()
+                });
+                assert_eq!(error.reason(), reason, "{label}");
+                assert_eq!(error.acl_kind(), Some(kind), "{label}");
+                assert_eq!(error.acl_authority(), Some(authority), "{label}");
+                assert_eq!(error.object_role(), Some(PrivateHomeObjectRole::Ancestor));
+                assert!(!error.candidate_created(), "{label}");
+                assert!(!target.exists(), "{label} created a candidate");
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn ancestor_acl_failure_records_exact_non_sensitive_provenance() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-acl-provenance-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let directory = File::open(temp.path()).unwrap();
+            set_linux_acl(
+                &directory,
+                c"system.posix_acl_access",
+                &linux_named_user_acl(0o2, 0o2),
+            );
+            let target = temp.path().join("home");
+
+            let error = ensure_private_substrate_home(&target, effective_uid()).unwrap_err();
+            assert_eq!(error.requested_home(), Some(target.as_path()));
+            assert_eq!(error.offending_path(), Some(temp.path()));
+            assert_eq!(error.object_role(), Some(PrivateHomeObjectRole::Ancestor));
+            assert_eq!(error.acl_kind(), Some(PrivateHomeAclKind::Access));
+            assert_eq!(
+                error.acl_authority(),
+                Some(PrivateHomeAclAuthority::EffectiveWrite)
+            );
+            assert!(!error.candidate_created());
+            assert!(!target.exists());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn rejected_current_attempt_candidate_records_final_root_provenance_without_cleanup() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-created-acl-provenance-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let target = temp.path().join("home");
+            let error = ensure_private_substrate_home_with(
+                &target,
+                effective_uid(),
+                || {
+                    let candidate = File::open(&target).unwrap();
+                    set_linux_acl(
+                        &candidate,
+                        c"system.posix_acl_default",
+                        &linux_named_user_acl(0, 0),
+                    );
+                },
+                || {},
+                || {},
+            )
+            .unwrap_err();
+
+            assert_eq!(error.requested_home(), Some(target.as_path()));
+            assert_eq!(error.offending_path(), Some(target.as_path()));
+            assert_eq!(error.object_role(), Some(PrivateHomeObjectRole::FinalRoot));
+            assert_eq!(error.acl_kind(), Some(PrivateHomeAclKind::Default));
+            assert_eq!(
+                error.acl_authority(),
+                Some(PrivateHomeAclAuthority::DefaultAclPresent)
+            );
+            assert!(error.candidate_created());
+            assert!(
+                target.is_dir(),
+                "R1 must not clean up the rejected candidate"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn existing_final_root_matrix_preserves_acl_mode_and_identity_on_rejection() {
+            for (label, xattr_name, expected_kind, expected_authority) in [
+                (
+                    "access",
+                    c"system.posix_acl_access",
+                    PrivateHomeAclKind::Access,
+                    PrivateHomeAclAuthority::ExtendedAccessAcl,
+                ),
+                (
+                    "default",
+                    c"system.posix_acl_default",
+                    PrivateHomeAclKind::Default,
+                    PrivateHomeAclAuthority::DefaultAclPresent,
+                ),
+            ] {
+                let temp = tempfile::Builder::new()
+                    .prefix(&format!("substrate-a1-final-{label}-acl-"))
+                    .tempdir_in(safe_test_parent())
+                    .unwrap();
+                fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+                let target = temp.path().join("home");
+                fs::create_dir(&target).unwrap();
+                fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+                let directory = File::open(&target).unwrap();
+                let acl = linux_named_user_acl(0o7, 0);
+                set_linux_acl(&directory, xattr_name, &acl);
+                let before = fs::symlink_metadata(&target).unwrap();
+
+                let error = ensure_private_substrate_home(&target, effective_uid()).unwrap_err();
+                let after = fs::symlink_metadata(&target).unwrap();
+                assert_eq!(error.requested_home(), Some(target.as_path()));
+                assert_eq!(error.offending_path(), Some(target.as_path()));
+                assert_eq!(error.object_role(), Some(PrivateHomeObjectRole::FinalRoot));
+                assert_eq!(error.acl_kind(), Some(expected_kind));
+                assert_eq!(error.acl_authority(), Some(expected_authority));
+                assert!(!error.candidate_created());
+                assert_eq!(before.ino(), after.ino());
+                assert_eq!(before.mode(), after.mode());
+                assert_eq!(before.uid(), after.uid());
+                let LinuxAclXattr::Present(after_acl) =
+                    read_linux_acl_xattr(directory.as_raw_fd(), xattr_name).unwrap()
+                else {
+                    panic!("{label} ACL disappeared after rejection");
+                };
+                assert_eq!(after_acl, acl);
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn valid_created_and_existing_final_root_is_exact_owner_0700_and_acl_free() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-valid-final-root-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let target = temp.path().join("home");
+
+            let created = ensure_private_substrate_home(&target, effective_uid()).unwrap();
+            let first = fs::symlink_metadata(&target).unwrap();
+            assert_eq!(first.uid(), effective_uid());
+            assert_eq!(first.mode() & 0o7777, 0o700);
+            let directory = File::open(&target).unwrap();
+            assert!(matches!(
+                read_linux_acl_xattr(directory.as_raw_fd(), c"system.posix_acl_access").unwrap(),
+                LinuxAclXattr::Absent
+            ));
+            assert!(matches!(
+                read_linux_acl_xattr(directory.as_raw_fd(), c"system.posix_acl_default").unwrap(),
+                LinuxAclXattr::Absent
+            ));
+            created.revalidate().unwrap();
+
+            let existing = ensure_private_substrate_home(&target, effective_uid()).unwrap();
+            let second = fs::symlink_metadata(&target).unwrap();
+            assert_eq!(first.ino(), second.ino());
+            existing.revalidate().unwrap();
+        }
+
+        #[test]
+        fn final_root_type_mode_and_special_bit_rejections_are_non_mutating() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-final-state-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+
+            for mode in [0o755, 0o750, 0o1700, 0o2700, 0o4700] {
+                let target = temp.path().join(format!("mode-{mode:o}"));
+                fs::create_dir(&target).unwrap();
+                fs::set_permissions(&target, fs::Permissions::from_mode(mode)).unwrap();
+                let before = fs::symlink_metadata(&target).unwrap();
+                let error = ensure_private_substrate_home(&target, effective_uid()).unwrap_err();
+                let after = fs::symlink_metadata(&target).unwrap();
+                assert_eq!(error.reason(), PrivateHomeReason::WrongMode);
+                assert_eq!(error.object_role(), Some(PrivateHomeObjectRole::FinalRoot));
+                assert!(!error.candidate_created());
+                assert_eq!(before.ino(), after.ino());
+                assert_eq!(before.mode(), after.mode());
+            }
+
+            let file = temp.path().join("file");
+            fs::write(&file, b"unchanged").unwrap();
+            let file_before = fs::read(&file).unwrap();
+            let error = ensure_private_substrate_home(&file, effective_uid()).unwrap_err();
+            assert_eq!(error.reason(), PrivateHomeReason::WrongType);
+            assert_eq!(error.object_role(), Some(PrivateHomeObjectRole::FinalRoot));
+            assert_eq!(fs::read(&file).unwrap(), file_before);
+
+            let destination = temp.path().join("destination");
+            fs::create_dir(&destination).unwrap();
+            fs::set_permissions(&destination, fs::Permissions::from_mode(0o700)).unwrap();
+            let link = temp.path().join("link");
+            symlink(&destination, &link).unwrap();
+            let error = ensure_private_substrate_home(&link, effective_uid()).unwrap_err();
+            assert_eq!(error.reason(), PrivateHomeReason::Symlink);
+            assert_eq!(error.object_role(), Some(PrivateHomeObjectRole::FinalRoot));
+            assert!(fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink());
+        }
+
         #[test]
         fn trusted_root_rejects_relative_dot_file_and_unsafe_mode_inputs() {
             assert!(TrustedAuthorityRoot::open(Path::new("relative")).is_err());
@@ -2152,6 +3094,7 @@ mod platform {
                     fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
                 },
                 || {},
+                || {},
             );
             let root = outcome.expect("the first opened valid candidate defines accepted identity");
             let retained_inode = fs::symlink_metadata(&retained).unwrap().ino();
@@ -2192,6 +3135,7 @@ mod platform {
                     fs::set_permissions(parent.join("home"), fs::Permissions::from_mode(0o700))
                         .unwrap();
                 },
+                || {},
             );
 
             assert_eq!(outcome.unwrap_err().reason(), PrivateHomeReason::Replaced);
@@ -2289,9 +3233,9 @@ mod platform {
             let mut acl = 2_u32.to_le_bytes().to_vec();
             for (tag, permissions, id) in [
                 (0x0001_u16, 7_u16, u32::MAX),
-                (ACL_USER, 1_u16, effective_uid().saturating_add(1)),
+                (ACL_USER, 2_u16, effective_uid().saturating_add(1)),
                 (0x0004_u16, 0_u16, u32::MAX),
-                (0x0010_u16, 1_u16, u32::MAX),
+                (0x0010_u16, 2_u16, u32::MAX),
                 (0x0020_u16, 0_u16, u32::MAX),
             ] {
                 acl.extend_from_slice(&tag.to_le_bytes());
@@ -2320,6 +3264,37 @@ mod platform {
             assert!(!target.exists());
         }
 
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn private_home_accepts_execute_only_named_parent_acl() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-parent-acl-search-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let directory = File::open(temp.path()).unwrap();
+            let acl = linux_named_user_acl(0o1, 0o1);
+            // SAFETY: directory is live and acl points to an initialized buffer.
+            assert_eq!(
+                unsafe {
+                    libc::fsetxattr(
+                        directory.as_raw_fd(),
+                        c"system.posix_acl_access".as_ptr(),
+                        acl.as_ptr().cast(),
+                        acl.len(),
+                        0,
+                    )
+                },
+                0,
+                "{}",
+                io::Error::last_os_error()
+            );
+            let target = temp.path().join("home");
+
+            let root = ensure_private_substrate_home(&target, effective_uid()).unwrap();
+            root.revalidate().unwrap();
+        }
+
         #[cfg(target_os = "macos")]
         #[test]
         fn private_home_accepts_deny_only_parent_acl() {
@@ -2344,6 +3319,31 @@ mod platform {
                 .unwrap();
             assert!(cleanup.success());
             result.unwrap().revalidate().unwrap();
+        }
+
+        #[test]
+        fn signaled_creation_child_preserves_created_candidate_provenance() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-signaled-create-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let parent = File::open(temp.path()).unwrap();
+            let name = component("candidate").unwrap();
+            let target = temp.path().join("candidate");
+
+            let error = mkdirat_exact_mode_with_signaled_child_for_test(parent.as_raw_fd(), &name)
+                .unwrap_err()
+                .at_path(&target, PrivateHomeObjectRole::FinalRoot)
+                .for_attempt(&target, false);
+
+            assert_eq!(error.reason(), PrivateHomeReason::ValidationUnavailable);
+            assert_eq!(
+                error.candidate_provenance(),
+                PrivateHomeCandidateProvenance::Created
+            );
+            assert!(error.candidate_created());
+            assert!(target.is_dir());
         }
 
         #[test]

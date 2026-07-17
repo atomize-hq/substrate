@@ -32,10 +32,48 @@ impl HomeBootstrapError {
     }
 
     #[cfg(unix)]
-    fn unsupported_private_home(path: &Path, uid: libc::uid_t, reason: &str) -> Self {
+    fn unsupported_private_home(
+        path: &Path,
+        _uid: libc::uid_t,
+        error: &crate::execution::agent_runtime::host_session_authority::trusted_fs::PrivateHomeError,
+    ) -> Self {
+        let requested = error.requested_home().unwrap_or(path);
+        let offending = error.offending_path().unwrap_or(path);
+        let role = error
+            .object_role()
+            .map(|role| role.as_str())
+            .unwrap_or("final-root");
+        let mut provenance = format!("offending path '{}' (role={role}", offending.display());
+        if let Some(kind) = error.acl_kind() {
+            provenance.push_str(&format!(", acl-kind={}", kind.as_str()));
+        }
+        if let Some(authority) = error.acl_authority() {
+            provenance.push_str(&format!(", authority={}", authority.as_str()));
+        }
+        provenance.push_str(&format!(
+            ", reason={}, candidate-created={})",
+            error.reason().as_str(),
+            error.candidate_provenance().as_str()
+        ));
+
+        use crate::execution::agent_runtime::host_session_authority::trusted_fs::PrivateHomeCandidateProvenance;
+        let instruction = match error.candidate_provenance() {
+            PrivateHomeCandidateProvenance::Created => {
+                "The rejected candidate was created by this attempt and remains in place; this attempt performs no cleanup."
+            }
+            PrivateHomeCandidateProvenance::Unknown => {
+                "Candidate creation could not be determined after a failed creation wait; this attempt performs no cleanup and gives no existing-root reset instruction."
+            }
+            PrivateHomeCandidateProvenance::NotCreated if role == "ancestor" => {
+                "The offending ancestor was not modified; correct that object and retry."
+            }
+            PrivateHomeCandidateProvenance::NotCreated => {
+                "Existing roots are never repaired; reset it manually and retry."
+            }
+        };
         Self::denied(format!(
-            "substrate: unsupported SUBSTRATE_HOME '{}': expected a private directory owned by intended uid {uid} with exact mode 0700 and no foreign ACL grants; found {reason}. Existing roots are never repaired; reset it manually and retry.",
-            path.display()
+            "substrate: unsupported SUBSTRATE_HOME '{}': expected a private directory owned by the intended user with exact mode 0700 and no extended access or default ACL; {provenance}. {instruction}",
+            requested.display()
         ))
     }
 
@@ -162,7 +200,7 @@ pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapE
             HomeBootstrapError::unsupported_private_home(
                 &substrate_home,
                 owner.uid,
-                error.reason().as_str(),
+                &error,
             )
         })?;
 
@@ -212,8 +250,8 @@ pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapE
                 map_trusted_scaffold_error("deps/scripts/example-install.sh", "file", error)
             })?;
 
-        trusted_home.revalidate().map_err(|_| {
-            HomeBootstrapError::unsupported_private_home(&substrate_home, owner.uid, "replaced")
+        trusted_home.revalidate_private_home().map_err(|error| {
+            HomeBootstrapError::unsupported_private_home(&substrate_home, owner.uid, &error)
         })?;
     }
 
@@ -482,8 +520,336 @@ fn is_denied_io(err: &io::Error) -> bool {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::select_intended_owner_name;
+    use super::{select_intended_owner_name, HomeBootstrapError};
+    use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
+        PrivateHomeAclAuthority, PrivateHomeAclKind, PrivateHomeCandidateProvenance,
+        PrivateHomeError, PrivateHomeObjectRole,
+    };
     use std::ffi::OsString;
+    #[cfg(target_os = "linux")]
+    use std::fs::{self, File};
+    #[cfg(target_os = "linux")]
+    use std::os::fd::AsRawFd;
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(target_os = "linux")]
+    fn set_zero_effective_default_acl(path: &std::path::Path, principal_id: libc::uid_t) {
+        let mut default_acl = 2_u32.to_le_bytes().to_vec();
+        for (tag, permissions, identifier) in [
+            (0x0001_u16, 0o7_u16, u32::MAX),
+            (0x0002, 0, principal_id),
+            (0x0004, 0, u32::MAX),
+            (0x0010, 0, u32::MAX),
+            (0x0020, 0, u32::MAX),
+        ] {
+            default_acl.extend_from_slice(&tag.to_le_bytes());
+            default_acl.extend_from_slice(&permissions.to_le_bytes());
+            default_acl.extend_from_slice(&identifier.to_le_bytes());
+        }
+        let candidate = File::open(path).unwrap();
+        // SAFETY: candidate is live and default_acl points to initialized storage.
+        assert_eq!(
+            unsafe {
+                libc::fsetxattr(
+                    candidate.as_raw_fd(),
+                    c"system.posix_acl_default".as_ptr(),
+                    default_acl.as_ptr().cast(),
+                    default_acl.len(),
+                    0,
+                )
+            },
+            0,
+            "{}",
+            std::io::Error::last_os_error()
+        );
+    }
+
+    #[test]
+    fn malformed_unavailable_and_unknown_acl_diagnostics_are_typed_and_conservative() {
+        let requested = std::path::Path::new("/private/requested-home");
+        let offending = std::path::Path::new("/private");
+        for (kind, authority, provenance, expected_kind, expected_authority) in [
+            (
+                PrivateHomeAclKind::Access,
+                PrivateHomeAclAuthority::Malformed,
+                PrivateHomeCandidateProvenance::NotCreated,
+                "acl-kind=access",
+                "authority=malformed-acl",
+            ),
+            (
+                PrivateHomeAclKind::Unavailable,
+                PrivateHomeAclAuthority::Unavailable,
+                PrivateHomeCandidateProvenance::NotCreated,
+                "acl-kind=unavailable",
+                "authority=acl-validation-unavailable",
+            ),
+            (
+                PrivateHomeAclKind::Unavailable,
+                PrivateHomeAclAuthority::Unavailable,
+                PrivateHomeCandidateProvenance::Unknown,
+                "acl-kind=unavailable",
+                "authority=acl-validation-unavailable",
+            ),
+        ] {
+            let private_error = PrivateHomeError::acl_diagnostic_for_test(
+                requested,
+                offending,
+                PrivateHomeObjectRole::Ancestor,
+                kind,
+                authority,
+                provenance,
+            );
+            let rendered = HomeBootstrapError::unsupported_private_home(
+                requested,
+                // This value must never be rendered.
+                4_294_000_001,
+                &private_error,
+            )
+            .to_string();
+            assert!(rendered.contains(expected_kind));
+            assert!(rendered.contains(expected_authority));
+            assert!(rendered.contains(&format!("candidate-created={}", provenance.as_str())));
+            assert!(!rendered.contains("4294000001"));
+            assert!(!rendered.contains("principal"));
+            assert!(!rendered.contains("credential"));
+            assert!(!rendered.contains("session"));
+            if provenance == PrivateHomeCandidateProvenance::Unknown {
+                assert!(rendered.contains("performs no cleanup"));
+                assert!(!rendered.contains("reset it manually"));
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn private_home_diagnostic_identifies_ancestor_acl_without_principal_disclosure() {
+        // SAFETY: geteuid has no preconditions.
+        let owner_uid = unsafe { libc::geteuid() };
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(format!("/run/user/{owner_uid}")));
+        let temp = tempfile::Builder::new()
+            .prefix("substrate-a1-home-diagnostic-")
+            .tempdir_in(safe_parent)
+            .unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let principal_id = owner_uid.saturating_add(7_919);
+        let mut acl = 2_u32.to_le_bytes().to_vec();
+        for (tag, permissions, identifier) in [
+            (0x0001_u16, 0o7_u16, u32::MAX),
+            (0x0002, 0o2, principal_id),
+            (0x0004, 0, u32::MAX),
+            (0x0010, 0o2, u32::MAX),
+            (0x0020, 0, u32::MAX),
+        ] {
+            acl.extend_from_slice(&tag.to_le_bytes());
+            acl.extend_from_slice(&permissions.to_le_bytes());
+            acl.extend_from_slice(&identifier.to_le_bytes());
+        }
+        let directory = File::open(temp.path()).unwrap();
+        // SAFETY: directory is live and acl points to initialized storage.
+        assert_eq!(
+            unsafe {
+                libc::fsetxattr(
+                    directory.as_raw_fd(),
+                    c"system.posix_acl_access".as_ptr(),
+                    acl.as_ptr().cast(),
+                    acl.len(),
+                    0,
+                )
+            },
+            0,
+            "{}",
+            std::io::Error::last_os_error()
+        );
+        let requested = temp.path().join("home");
+        let private_error = crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home(
+            &requested,
+            owner_uid,
+        )
+        .unwrap_err();
+
+        let diagnostic =
+            HomeBootstrapError::unsupported_private_home(&requested, owner_uid, &private_error);
+        assert_eq!(diagnostic.exit_code(), 5);
+        let rendered = diagnostic.to_string();
+        assert!(rendered.contains(&requested.display().to_string()));
+        assert!(rendered.contains(&temp.path().display().to_string()));
+        assert!(rendered.contains("role=ancestor"));
+        assert!(rendered.contains("acl-kind=access"));
+        assert!(rendered.contains("authority=effective-write"));
+        assert!(rendered.contains("candidate-created=no"));
+        assert!(rendered.contains("offending ancestor was not modified"));
+        assert!(!rendered.contains("reset it manually"));
+        assert!(!rendered.contains(&principal_id.to_string()));
+        assert!(!rendered.contains("session"));
+        assert!(!rendered.contains("credential"));
+        assert!(!requested.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn current_attempt_candidate_diagnostic_omits_existing_root_reset_instruction() {
+        // SAFETY: geteuid has no preconditions.
+        let owner_uid = unsafe { libc::geteuid() };
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(format!("/run/user/{owner_uid}")));
+        let temp = tempfile::Builder::new()
+            .prefix("substrate-a1-created-home-diagnostic-")
+            .tempdir_in(safe_parent)
+            .unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let requested = temp.path().join("home");
+        let mut default_acl = 2_u32.to_le_bytes().to_vec();
+        for (tag, permissions, identifier) in [
+            (0x0001_u16, 0o7_u16, u32::MAX),
+            (0x0002, 0, owner_uid.saturating_add(1)),
+            (0x0004, 0, u32::MAX),
+            (0x0010, 0, u32::MAX),
+            (0x0020, 0, u32::MAX),
+        ] {
+            default_acl.extend_from_slice(&tag.to_le_bytes());
+            default_acl.extend_from_slice(&permissions.to_le_bytes());
+            default_acl.extend_from_slice(&identifier.to_le_bytes());
+        }
+        let private_error = crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home_with_after_create_for_test(
+            &requested,
+            owner_uid,
+            || {
+                let candidate = File::open(&requested).unwrap();
+                // SAFETY: candidate is live and default_acl points to initialized storage.
+                assert_eq!(unsafe {
+                    libc::fsetxattr(
+                        candidate.as_raw_fd(),
+                        c"system.posix_acl_default".as_ptr(),
+                        default_acl.as_ptr().cast(),
+                        default_acl.len(),
+                        0,
+                    )
+                }, 0, "{}", std::io::Error::last_os_error());
+            },
+        )
+        .unwrap_err();
+
+        let diagnostic =
+            HomeBootstrapError::unsupported_private_home(&requested, owner_uid, &private_error);
+        assert_eq!(diagnostic.exit_code(), 5);
+        let rendered = diagnostic.to_string();
+        assert!(rendered.contains("role=final-root"));
+        assert!(rendered.contains("acl-kind=default"));
+        assert!(rendered.contains("candidate-created=yes"));
+        assert!(rendered.contains("performs no cleanup"));
+        assert!(!rendered.contains("reset it manually"));
+        assert!(requested.is_dir());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn construction_revalidation_preserves_typed_acl_race_diagnostic() {
+        // SAFETY: geteuid has no preconditions.
+        let owner_uid = unsafe { libc::geteuid() };
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(format!("/run/user/{owner_uid}")));
+        let temp = tempfile::Builder::new()
+            .prefix("substrate-a1-construction-revalidate-")
+            .tempdir_in(safe_parent)
+            .unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let requested = temp.path().join("home");
+
+        let private_error = crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home_with_before_from_opened_for_test(
+            &requested,
+            owner_uid,
+            || set_zero_effective_default_acl(&requested, owner_uid.saturating_add(1)),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            private_error.object_role(),
+            Some(PrivateHomeObjectRole::FinalRoot)
+        );
+        assert_eq!(private_error.acl_kind(), Some(PrivateHomeAclKind::Default));
+        assert_eq!(
+            private_error.acl_authority(),
+            Some(PrivateHomeAclAuthority::DefaultAclPresent)
+        );
+        assert_eq!(
+            private_error.candidate_provenance(),
+            PrivateHomeCandidateProvenance::Created
+        );
+        let rendered =
+            HomeBootstrapError::unsupported_private_home(&requested, owner_uid, &private_error)
+                .to_string();
+        assert!(rendered.contains("role=final-root"));
+        assert!(rendered.contains("acl-kind=default"));
+        assert!(rendered.contains("authority=default-acl-present"));
+        assert!(rendered.contains("candidate-created=yes"));
+        assert!(rendered.contains("performs no cleanup"));
+        assert!(!rendered.contains("reset it manually"));
+        assert!(requested.is_dir());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn post_scaffold_revalidation_preserves_typed_candidate_provenance() {
+        // SAFETY: geteuid has no preconditions.
+        let owner_uid = unsafe { libc::geteuid() };
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(format!("/run/user/{owner_uid}")));
+        let temp = tempfile::Builder::new()
+            .prefix("substrate-a1-revalidate-diagnostic-")
+            .tempdir_in(safe_parent)
+            .unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+
+        for (label, preexisting, expected_provenance) in [
+            ("created", false, PrivateHomeCandidateProvenance::Created),
+            ("existing", true, PrivateHomeCandidateProvenance::NotCreated),
+        ] {
+            let requested = temp.path().join(label);
+            if preexisting {
+                fs::create_dir(&requested).unwrap();
+                fs::set_permissions(&requested, fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            let trusted_home = crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home(
+                &requested,
+                owner_uid,
+            )
+            .unwrap();
+            set_zero_effective_default_acl(&requested, owner_uid.saturating_add(1));
+
+            let private_error = trusted_home.revalidate_private_home().unwrap_err();
+            assert_eq!(
+                private_error.object_role(),
+                Some(PrivateHomeObjectRole::FinalRoot)
+            );
+            assert_eq!(private_error.acl_kind(), Some(PrivateHomeAclKind::Default));
+            assert_eq!(
+                private_error.acl_authority(),
+                Some(PrivateHomeAclAuthority::DefaultAclPresent)
+            );
+            assert_eq!(private_error.candidate_provenance(), expected_provenance);
+            let rendered =
+                HomeBootstrapError::unsupported_private_home(&requested, owner_uid, &private_error)
+                    .to_string();
+            assert!(rendered.contains("role=final-root"));
+            assert!(rendered.contains("acl-kind=default"));
+            assert!(rendered.contains(&format!(
+                "candidate-created={}",
+                expected_provenance.as_str()
+            )));
+            if preexisting {
+                assert!(rendered.contains("reset it manually"));
+            } else {
+                assert!(rendered.contains("performs no cleanup"));
+                assert!(!rendered.contains("reset it manually"));
+            }
+        }
+    }
 
     #[test]
     fn explicit_install_owner_precedes_sudo_user() {
