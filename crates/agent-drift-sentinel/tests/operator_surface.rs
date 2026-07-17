@@ -1735,6 +1735,59 @@ fn ast_policy_self_test_rejects_trait_impl_and_nested_render_owner_lookalikes() 
 }
 
 #[test]
+fn ast_policy_self_test_rejects_qualified_inherent_schema_owner_lookalike() {
+    let file = syn::parse_file(
+        r#"
+        impl lookalike::CheckpointPresentation {
+            fn render_console_block(&self) {
+                if self.checkpoint.schema_version == "v0.8" {}
+            }
+        }
+        "#,
+    )
+    .expect("parse qualified inherent schema owner fixture");
+
+    let schema = analyze_schema_policy(&file);
+    let owner = "lookalike::CheckpointPresentation::render_console_block".to_string();
+    assert_eq!(
+        schema.direct_uses,
+        vec![owner.clone()],
+        "a qualified inherent impl must retain its full self-type path"
+    );
+    assert_eq!(
+        schema.exact_predicates,
+        vec![owner],
+        "qualified inherent schema syntax must not be attributed to the allowed top-level owner"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_rejects_qualified_inherent_render_owner_lookalike() {
+    let file = syn::parse_file(
+        r#"
+        impl lookalike::ReplayReport {
+            fn to_console_text(&self, presentation: &CheckpointPresentation) {
+                presentation.render_console_block(None);
+                presentation.render_console_block(None);
+            }
+        }
+        "#,
+    )
+    .expect("parse qualified inherent render owner fixture");
+
+    let mut calls = RenderCallInventory::default();
+    analyze_render_calls_in_items("operator_surface", &file.items, &mut calls);
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([(
+            "lookalike::ReplayReport::to_console_text".to_string(),
+            2usize,
+        )]),
+        "a qualified inherent impl must not impersonate the allowed top-level render owner"
+    );
+}
+
+#[test]
 fn ast_policy_self_test_rejects_schema_and_allowlisted_macro_import_aliases() {
     let file = syn::parse_file(
         r#"
@@ -1817,13 +1870,13 @@ fn analyze_schema_items(
                 analyze_schema_block(owner, &function.block, analysis);
             }
             syn::Item::Impl(item_impl) => {
-                let Some(type_name) = simple_type_name(&item_impl.self_ty) else {
+                let Some(type_path) = simple_type_name(&item_impl.self_ty) else {
                     analysis
                         .violations
                         .push("unclassified impl owner".to_string());
                     continue;
                 };
-                let impl_identity = impl_identity(item_impl, &type_name);
+                let impl_identity = impl_identity(item_impl, &type_path);
                 let impl_owner = qualify_owner(module, &format!("impl {impl_identity}"));
                 analyze_schema_attributes(&impl_owner, &item_impl.attrs, analysis);
                 for impl_item in &item_impl.items {
@@ -2241,10 +2294,10 @@ fn qualify_owner(lineage: Option<&str>, owner: &str) -> String {
     )
 }
 
-fn impl_identity(item_impl: &syn::ItemImpl, type_name: &str) -> String {
+fn impl_identity(item_impl: &syn::ItemImpl, type_path: &str) -> String {
     item_impl.trait_.as_ref().map_or_else(
-        || type_name.to_string(),
-        |(_, trait_path, _)| format!("<{type_name} as {}>", macro_path_from_path(trait_path)),
+        || type_path.to_string(),
+        |(_, trait_path, _)| format!("<{type_path} as {}>", macro_path_from_path(trait_path)),
     )
 }
 
@@ -2706,13 +2759,13 @@ fn analyze_render_calls_in_items_with_lineage(
                 RenderCallVisitor { owner, inventory }.visit_block(&function.block);
             }
             syn::Item::Impl(item_impl) => {
-                let Some(type_name) = simple_type_name(&item_impl.self_ty) else {
+                let Some(type_path) = simple_type_name(&item_impl.self_ty) else {
                     inventory
                         .violations
                         .push(format!("{module}: unclassified impl owner"));
                     continue;
                 };
-                let impl_identity = impl_identity(item_impl, &type_name);
+                let impl_identity = impl_identity(item_impl, &type_path);
                 let lineage = has_enclosing_lineage.then_some(module);
                 for impl_item in &item_impl.items {
                     match impl_item {
@@ -2936,10 +2989,22 @@ fn simple_type_name(ty: &syn::Type) -> Option<String> {
     let syn::Type::Path(path) = ty else {
         return None;
     };
-    path.path
-        .segments
-        .last()
-        .map(|segment| identifier_name(&segment.ident))
+    if path.qself.is_some()
+        || path
+            .path
+            .segments
+            .iter()
+            .any(|segment| !matches!(segment.arguments, syn::PathArguments::None))
+    {
+        return None;
+    }
+
+    let identity = macro_path_from_path(&path.path);
+    Some(if path.path.leading_colon.is_some() {
+        format!("::{identity}")
+    } else {
+        identity
+    })
 }
 
 fn member_is(member: &syn::Member, expected: &str) -> bool {
