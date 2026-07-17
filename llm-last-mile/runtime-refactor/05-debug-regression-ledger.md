@@ -17,7 +17,7 @@ Primary source memos:
 
 | Gate ID | Debug issue | Current classification | Repo-truth basis | Permanent regression gate | Owning slices |
 |---|---|---|---|---|---|
-| **RG-HOME-01** | Private home creation and world capability parity | **Unresolved product gate; R1 effective-authority contract corrected, runtime/R3/product proof open** | The authority transaction range and focused final-root implementation remain preserved. The `b29897e0` Linux audit proved masked named access `--x` and `r-x` were rejected despite no effective write authority; a zero-effective default ACL could be inherited into an invalid candidate; and diagnostics named the requested final home instead of the actual ancestor. Case A corrects Linux V1 from unprovable physical ACL absence to no effective other-principal authority: exact owner/`0700`, observable final-root access/default ACL rejection, qualified `NoData`, no-follow identity/replacement, owner-only descendants, and no-repair remain mandatory. Integrated Linux and native macOS closeout remain open. | R1 must implement closed `Present`/`NoData`/`Failed` observations, strict Linux POSIX access-ACL parsing and mask evaluation, masked non-writing support, effective-write/default/final-root/failure rejection, and exact bounded diagnostics without physical-absence wording or sensitive principals. R3 may remove only an empty current-attempt candidate after descriptor-bound exact-identity rejoin; it never recursively removes a candidate and fails closed on replacement, nonempty state, ambiguity, or pre-existing provenance. Preserve the descriptor-bound creation/open/identity/replacement wall and malicious-root/same-UID exclusions. Then run the complete Linux regression/product wall and later native macOS proof, including filesystem, network, config/dependency, gateway, runtime, shim, replay, trace/diagnostic, PTY/non-PTY, and lifecycle/world-binding parity. | A1.1d-5R1, A1.1d-5R3 |
+| **RG-HOME-01** | Private home creation and world capability parity | **Unresolved product gate; R1 review-clean, R3/product proof open** | The authority transaction range and focused final-root implementation remain preserved. The `b29897e0` Linux audit proved masked named access `--x` and `r-x` were rejected despite no effective write authority; a zero-effective default ACL could be inherited into an invalid candidate; and diagnostics named the requested final home instead of the actual ancestor. Case A and runtime commit `4d0acff68e20d86b97fe5367b8a4617554f33ef4` correct Linux V1 from unprovable physical ACL absence to no effective other-principal authority: exact owner/`0700`, observable final-root access/default ACL rejection, qualified `NoData`, no-follow identity/replacement, owner-only descendants, and no-repair remain mandatory. Integrated Linux and native macOS closeout remain open. | Preserve the review-clean R1 closed `Present`/`NoData`/`Failed` observations, strict Linux POSIX access-ACL parsing and mask evaluation, masked non-writing support, effective-write/default/final-root/failure rejection, and exact bounded diagnostics without physical-absence wording or sensitive principals. R3 may remove only an empty current-attempt candidate after descriptor-bound exact-identity rejoin; it never recursively removes a candidate and fails closed on replacement, nonempty state, ambiguity, or pre-existing provenance. Preserve the descriptor-bound creation/open/identity/replacement wall and malicious-root/same-UID exclusions. Then run the complete Linux regression/product wall and later native macOS proof, including filesystem, network, config/dependency, gateway, runtime, shim, replay, trace/diagnostic, PTY/non-PTY, and lifecycle/world-binding parity. | A1.1d-5R1, A1.1d-5R3 |
 | **RG-INSTALL-01** | Selected install authority context and lifecycle convergence | **Unresolved; A1.1d-5I proves R2/R3 implementation is required** | Normal Unix dev custom-prefix install fails at shim deploy because only `SUBSTRATE_ROOT` is passed; release/dev Unix and Windows paths contain additional ambient-home/context omissions. Unix release service sandbox allowlisting derives from ambient `$HOME`, not the selected home. Unix and Windows uninstall can target ambient/wildcard state, generated manager scripts prefer conflicting ambient home, and Linux cleanup omits prefix-local and system-managed artifacts. Shim doctor reports a default-home trace path under a selected custom home. No native macOS/Windows proof is claimed. | Carry one host `InstallBootstrapContextV1` across private-home bootstrap, shim deploy/remove/status/doctor, generated consumers, uninstall, rollback, and every sudo boundary; bind distinct Lima/WSL/native realization through `PlatformBootstrapMappingV1`. Prove fresh default and custom-prefix install without outer overrides; conflicting ambient home; repeat install; accepted-home/later-stage partial failure and synchronous safe rollback rerun; uninstall/reinstall symmetry; fail-closed unaccepted-invalid-candidate behavior; no wildcard or ambient-home deletion; exact prefix/system managed cleanup and pre/post service parity; release full-world custom prefix outside ambient home; and world/shim/health doctor plus full Linux product smoke. Static platform parity is not native proof. | A1.1d-5R2, A1.1d-5R3 |
 | **RG-AUTH-01** | Helper/session authority and orphaned helper behavior | **Unresolved architecture; narrow continuity behavior partially resolved** | The A0 inventory in `02-seam-crosswalk.md` traces initial attached-posture birth, home/env/CWD-selected state/config/policy/inventory, helper-plan payload plus mode and parent-role selection, launch/join coordination, exit/retry, startup-prompt and auto-park delivery, process-local startup acceptance, private-stop-ownership mode, public-stop delivery gating, terminal-loss park/stop choice, parking/reconciliation, fork-successor allocation, resumed-turn release, auto-attach verification, endpoint-registration startup failure, stream/process completion, whole-session snapshot arbitration, process-local snapshot-write arbitration, episode-local replacement lineage, and world-binding birth/repair/replacement. The parked-successor diagnostic additionally proves that current `Active`/`ParkedResumable` authority survives with no attached episode and that a reconstructed successor snapshot is not authority. Session/posture logic remains spread across `orchestration_session.rs`, `state_store.rs`, `agents_cmd.rs`, `control.rs`, `async_repl.rs`, and the in-world member registry. | Kill or orphan each episode kind after durable authority exists. Exact session, parked posture, world binding, retained workers, receipts, and obligations remain. Process/helper/prompt state cannot create or regress ownership, episode absence does not erase parked authority, and a stale episode cannot rewrite a newer authority revision. | A0, A1, A2, A3 |
 | **RG-AUTH-02** | Process/socket liveness used as durable truth | **Unresolved** | A0 classifies the exact PID/ownership/attachment/heartbeat/socket and ambient-host consumers: constructor-created attached truth, posture/session discovery, helper plan/mode/parent-role gating, participant and parent-session snapshot freshness, process-local snapshot-write arbitration, relative/fallback/re-read authority and workspace paths, effective-config env overrides, UID-selected binding birth/repair/replacement, process-local dispatch and auto-park registries, toolbox cancel's PID-filtered preflight, retained-runtime reuse/exit/replacement, naming-prefix continuity, daemon-memory admission/routing, helper reconciliation, private-stop-ownership-gated startup/parking, public-stop delivery gating, fork/resume PID-zero sentinels, endpoint/startup-prompt state used as durable truth, remote member startup around transport acceptance, fork lineage gated by stop-socket publication, lossy/long-path endpoint identity, last-writer toolbox rebind, hostname-targeted auto-attach, and private-stop fallback. The exact blocker shows `PID=0`, no handle, completed prior prompt, and pending successor prompt are non-authoritative observations. | Table-test every authority use of PID/socket/heartbeat/attached-client/helper/handle/readiness/prompt/ambient-path state and competing process-local writers: availability may classify delivery, but neither presence nor absence may create, delete, regress, rebind, or terminalize durable truth. Episode absence must not erase current parked authority. | A0, A1, A2, A3 |
@@ -171,6 +171,11 @@ open and cross-platform closeout remains pending. The exact cross-packet hold ma
 implementation-ready without declaring A1.1d complete; A1.1e is now focused-proof and review clean
 through `cd676614`. This does not close A1.1d, its integrated/cross-platform proof, or any
 cross-document seam.
+
+The later A1.1d-5R1 Case A contract is recorded by
+`17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded Linux runtime is review-clean through
+`4d0acff68e20d86b97fe5367b8a4617554f33ef4`. This corrects only effective-authority semantics and
+diagnostics; it does not supersede the historical checkpoints above, close A1.1d/A1, or start R2/R3.
 
 The rejected A1.1d-6 heartbeat hypothesis is recorded as `PreexistingExposedByA1d`. With the same
 hermetic lifecycle fixture, pre-A1.1d `c800436d` and pre-rejection `f73e8a81` pass three of three
@@ -341,10 +346,9 @@ service/socket/runtime paths matched the initial absent/inactive snapshot.
 
 ### A1.1d-5R1 Linux effective-authority contract correction
 
-**Decision/status:** Case A is approved for the bounded Linux R1 implementation. This is a
+**Decision/status:** Case A is implemented and review-clean for the bounded Linux R1 scope. This is a
 security-contract correction from **physically ACL-free** to **no effective other-principal
-authority**; the runtime implementation and proof wall are not yet complete in this docs-only
-checkpoint. R2 and R3 remain separately sequenced and unstarted. No seam is added or promoted.
+authority**. R2 and R3 remain separately sequenced and unstarted. No seam is added or promoted.
 
 The bounded primary-source proof is:
 
@@ -380,9 +384,9 @@ unchanged and no ACL cleanup/repair is permitted.
 
 Diagnostics use at least `PresentAcceptedNoEffectiveWrite` (ancestor access only),
 `PresentRejected`, `NoDataAcceptedUnderModeAuthority`, and `FailedOrUnavailable`. They carry the
-requested path, actual offending path, path role, ACL kind, reason class, and candidate-created
-boolean. They never call `NoData` absent/ACL-free, disclose ACL principals or authority payloads,
-imply repair, or attribute an ancestor failure to the final root.
+requested path, actual offending path, path role, ACL kind, reason class, and candidate-creation
+state (`yes`, `no`, or `unknown`). They never call `NoData` absent/ACL-free, disclose ACL principals
+or authority payloads, imply repair, or attribute an ancestor failure to the final root.
 
 **R1 regression gate:** the authorized two-file runtime change must prove all of the following
 without removing, renaming, substituting, or weakening inherited tests:
@@ -419,9 +423,51 @@ inherited `1054 passed / 149 failed` baseline with `PassToFail = 0`, `NewFail = 
 passing new R1 tests. This does not claim the later privileged Linux installer/product wall, R2
 prefix propagation, R3 cleanup/idempotency, native macOS proof, or cross-platform completion.
 
-The exact next packet is **A1.1d-5R1**, followed by **R2**, then the audit-proven **R3**. After all
-three are independently review-clean, rerun the complete Linux regression and normal product
-lifecycle smoke without outer overrides. That proof can unblock A1.1d Linux closeout and the Linux
+**R1 recorded result (2026-07-17):** the source began at
+`ebbc5d5649be5ac0c006aac5806e60701e9903da`. The original two-file WIP is preserved on
+`feat/preserve-a1-1d-5r1-linux-acl-wip-20260717` at
+`395705a5b893aa7704e3a424904a8cd42f247dd3` with exact parent `ebbc5d56`. Its binary and ordinary
+patch SHA-256 are both `e852cb8da883e2bffaecde3b46502ee374010a74d56584f1846707c94749719f`;
+the original file SHA-256 values are `c0655e3fd0a7b5d5b31cdbdc9219265c52fbc5be9fbde084c66cd171dba1767e`
+for `trusted_fs.rs` and `0aad8f5bc01a41b98de174842e92ec2910f12b9a946ad965788d33bab10ed391`
+for `home_bootstrap.rs`. The docs-only contract commit is
+`17ea3a839345cd47a5b2409cde0d4facdde09446`; the separate two-file runtime commit is
+`4d0acff68e20d86b97fe5367b8a4617554f33ef4`. Its final per-file SHA-256 values are
+`eeb55bef5c4ef74cf2cb6d0ff5ca723bc8b35417a4d8b12cc0f1e0f660edc994` and
+`861e5c5e71e1cde9480ea9d502565edac217eb8db10866e98cffcc51fff8eb9a`, respectively; its binary
+diff SHA-256 is `1c9be9810e7f0048d8265b8fb79e7fd3920a0b6e0b34e2e05d4d377f088b7c99`.
+
+The exact proof commands/results were:
+`cargo test -p shell --lib execution::agent_runtime::host_session_authority::trusted_fs::platform::tests`
+**48 passed**; `cargo test -p shell --lib execution::home_bootstrap::tests` **9 passed**;
+`cargo test -p shell --lib execution::agent_runtime::host_session_authority` **165 passed**;
+`cargo test -p shell --test world_deps_home_scaffold_wdh3` **14 passed**;
+`cargo test -p shell --test installer_env_wcu4` **4 passed / 1 inherited hard-coded `/tmp`
+failure unchanged**; `cargo test -p shell --test world_deps_scaffold_wdh3` **0 passed / 2 inherited
+hard-coded `/tmp` failures unchanged**; `cargo clippy -p shell --lib --tests -- -D warnings`,
+`cargo check --workspace --all-targets`, `cargo fmt --all -- --check`, and `git diff --check` all
+passed. The live shell comparator moved from inherited **1054 passed / 149 failed / 1203 total** to
+**1080 passed / 149 failed / 1229 total**: `PassToFail = 0`, `FailToPass = 0`, `NewFail = 0`,
+`Removed = 0`, and `RenamedOrSubstituted = 0`; all 149 retained names and normalized failure
+signatures were unchanged, and all 26 added R1 tests passed.
+
+GitNexus change detection mapped the two authorized runtime files to 132 changed symbols and 24
+existing downstream flows, with aggregate CRITICAL risk from the already authorized
+HostSessionAuthority revalidation surface; it found no new world/policy/gateway product-flow owner.
+The docs proof reviewers `/root/docs_acl_proof_review_2` and
+`/root/docs_security_boundary_review_2` returned CLEAN after one stale phrase was corrected. Initial
+runtime reviewers `/root/runtime_acl_vfs_review_1`, `/root/runtime_security_race_review_1`, and
+`/root/runtime_diagnostics_compat_review_1` identified final-snapshot/mask/race and candidate-
+provenance gaps; those were remediated with red/green tests. Fresh reviewers
+`/root/runtime_acl_vfs_review_2`, `/root/runtime_security_race_review_2`,
+`/root/runtime_diagnostics_compat_review_2`, and `/root/runtime_integrated_r1_review_1` then returned
+CLEAN against the frozen runtime hashes. No privileged installer/product wall, native macOS proof,
+or cross-platform completion is claimed.
+
+The exact next packet is **A1.1d-5R2 — Prefix propagation across install/uninstall**, followed by
+the audit-proven **R3**. After all three are independently review-clean, rerun the complete Linux
+regression and normal product lifecycle smoke without outer overrides. That proof can unblock
+A1.1d Linux closeout and the Linux
 product-smoke portion of the B1/B2.1 joint closeout. Native macOS proof remains separately required
 to close A1.1d, but is not a prerequisite for the B1/B2.1 architectural corridor. B3.1 remains
 blocked on the joint closeout, and no A1.1d-5I evidence authorizes B3.1 or remediation work.
@@ -1059,7 +1105,8 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 **yes**. B1/B2.1-0 review-clean: **yes**. B1/B2.1 joint production integration closeout:
 **not begun**. B3.1 dependency-ready: **no**. Seam promotions: **none**. Within the B corridor, the
 next architectural packet remains the B1/B2.1 joint production integration closeout. The
-repository's exact next packet is A1.1d-5R1, followed by R2 and R3; only the joint closeout's Linux
+repository's exact next packet is A1.1d-5R2 — Prefix propagation across install/uninstall,
+followed by R3; only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
 

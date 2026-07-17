@@ -338,6 +338,11 @@ handoff, runtime availability, shims, replay, traces, diagnostics, and lifecycle
 remain governed by their existing contracts. A separate shared installation root may be designed
 later; `SUBSTRATE_ROOT`/installation-root separation is not part of A1.1d-5.
 
+The bounded Linux A1.1d-5R1 implementation is review-clean through
+`4d0acff68e20d86b97fe5367b8a4617554f33ef4`. That evidence proves only this effective-authority
+correction: it does not close `RG-HOME-01` or `RG-INSTALL-01`, complete A1.1d/A1, promote a seam,
+or begin R2/R3.
+
 ## Review question
 
 Every refactor PR must be able to answer:

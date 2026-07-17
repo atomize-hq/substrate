@@ -222,7 +222,7 @@ legacy shape:
 substrate: unsupported SUBSTRATE_HOME '<path>': expected a private directory owned by intended uid <uid> with exact mode 0700 and no effective other-principal authority; found <reason>. Existing roots are never repaired; reset it manually and retry.
 ```
 
-R1 replaces that ambiguous attribution with a structured/error-display contract containing the
+R1 implements a structured/error-display contract containing the
 requested final home, exact offending path, object role (`ancestor` or `final-root`), ACL kind
 (`access`, `default`, or `unavailable` where applicable), effective authority/reason, and whether
 the rejected candidate was created by the current attempt. It must not print ACL principals,
@@ -237,6 +237,10 @@ principal identifiers. `NoDataAcceptedUnderModeAuthority` must not use “ACL ab
 equivalent physical-absence wording. `PresentRejected` and `FailedOrUnavailable` name the actual
 offending path and role, never attribute an ancestor failure to the requested final root, never
 expose authority payloads or secrets, and never imply that an existing final root was repaired.
+
+This bounded Linux contract and diagnostic implementation is review-clean through
+`4d0acff68e20d86b97fe5367b8a4617554f33ef4`. It does not close the later R2/R3 or product-wall
+proof, promote a seam, or extend authority beyond the two-file R1 allowlist.
 
 When privileged execution cannot resolve an intended non-root account, no intended UID exists to
 render in that shape. It fails before inspecting or creating the root with this separate exact

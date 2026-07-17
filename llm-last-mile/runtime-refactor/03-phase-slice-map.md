@@ -453,8 +453,9 @@ and `RenamedOrSubstituted = 0`; retained failing names/signatures are unchanged 
 `FailToPass` is causally audited. This is not the later privileged Linux installer/product wall,
 R2/R3 proof, native macOS proof, or cross-platform closeout.
 
-The R1 contract correction is approved but its runtime is not yet implemented or review-clean; R2
-and R3 are not begun. `RG-HOME-01` and `RG-INSTALL-01` remain open.
+The R1 contract correction and bounded runtime are review-clean through
+`4d0acff68e20d86b97fe5367b8a4617554f33ef4`; R2 and R3 are not begun. `RG-HOME-01` and
+`RG-INSTALL-01` remain open, A1.1d/A1 remain incomplete, and B3.1 remains blocked.
 Their Linux regression wall and normal product lifecycle smoke are prerequisites for A1.1d Linux
 closeout and for the Linux product-smoke portion of the B1/B2.1 joint closeout. They do not reopen
 the review-clean B1/B2.1-0 prerequisite or make native macOS A1.1d proof a B1/B2.1 dependency.
@@ -468,7 +469,9 @@ The `RG-AUTH-01` and `RG-AUTH-02` references in A1 are scoped gates, not whole-l
 - A1.1d-1 through A1.1d-4 implementation remains preserved.
 - A1.1d-5 focused private-home implementation is review-clean on Linux; A1.1d integrated Linux
   closeout is open and cross-platform closeout is pending. A1.1d-5I has completed the bounded
-  compatibility audit; R1, R2, and R3 remain unimplemented, and no A1.1d-6 exists or is implied.
+  compatibility audit; R1 is review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`,
+  R2 and R3 remain unimplemented, and no A1.1d-6 exists or is implied. The exact next packet is
+  **A1.1d-5R2 — Prefix propagation across install/uninstall**.
 - The public lifecycle failure is owned by A1.2/A1.3, not an A1.1d heartbeat or successor-work
   subpacket. No A1.1d-6 exists or is implied.
 - A1.1e is focused-proof and review clean through `cd676614`; this does not close A1.1d or any

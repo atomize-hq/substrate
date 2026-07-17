@@ -194,8 +194,10 @@ The internal **A1.1d-5I installer/bootstrap compatibility audit** is now complet
 broader architecture owner or sequence. The audit proves that the current private-home ancestor
 ACL rule conflates non-writing traversal with replacement authority, custom-prefix authority is
 not propagated across every install/uninstall child, and partial-install cleanup is not
-convergent. Remediation remains unimplemented and is bounded to **A1.1d-5R1 → A1.1d-5R2 →
-A1.1d-5R3**. Until those packets are review-clean and their Linux lifecycle/product smoke passes,
+convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5R3**. R1 is
+implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`; R2 and R3 are
+unstarted. Until the remaining packets are review-clean and their Linux lifecycle/product smoke
+passes,
 both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
 remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
 proof is not added as a dependency of the B1/B2.1 corridor.
@@ -209,7 +211,11 @@ ancestor default ACL, observable access/default ACL on the final root, malformed
 model, or distinguishable read failure fails closed. Exact final-root `0700` and sensitive
 descendant `0700`/`0600` contracts remain mandatory. This correction adds no seam, privileged
 broker, world capability, policy, gateway, receipt, supervisor, worker, replay, or command change;
-R2 and R3 remain separately owned and unstarted.
+the contract correction is recorded by `17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded
+runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INSTALL-01` remain open,
+A1.1d and A1 remain incomplete, B3.1 remains blocked, and R2/R3 remain separately owned and
+unstarted.
+
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
 identity supplied by its caller, and fix the replay-stable registration/object identities before
