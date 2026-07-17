@@ -167,7 +167,8 @@ scheduler, or cursor-visible runtime state.
    preserved rendered operator-summary content, and `adjudication.rs` remains unchanged read-only
    evidence. Option B does not claim the internal `Option` reaches final rendering. The operator
    rejected Option A's public-field/source-compatibility cost. No R8-4 source/test symbol is editable
-   until the six-file manifest amendment itself is committed and fresh-review-clean.
+   until the landed authority amendment/status series `849393029` + `bf954c4a` receives fresh
+   independent review.
 6. **Crate-private implementation/testing.** `checkpoint_interpretation` and every additive item are
    `pub(crate)` only as needed. R8-1 RED/GREEN is an in-module `#[cfg(test)]` unit-test matrix; public-
    flow integration tests begin with R8-2/R8-3 and exercise the existing public facades.
@@ -677,9 +678,9 @@ proof complete; recorded Option B cannot be claimed from `Checkpoint.delegation`
 | `R8-4-HIGH-IMPACT-EVIDENCE-LINES-01` | `A` | `push_evidence_lines`: HIGH, 7 impacted, 3 direct, 1 affected `execute` process, 3 modules. Authorizes only the typed-evidence cutover. |
 | `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01` | `A` | Expands only R8-4's exact manifest from five files to six by adding `src/checkpoint_interpretation.rs`; requires the total central compatibility profile/projection contract in this amendment. |
 
-No table row authorizes an additional HIGH/CRITICAL symbol, a seventh R8-4 file, or code before this
-docs amendment is committed and fresh-review-clean. Any such need requires a new structured
-`DECISION REQUIRED` gate.
+No table row authorizes an additional HIGH/CRITICAL symbol, a seventh R8-4 file, or code before the
+landed authority amendment/status series `849393029` + `bf954c4a` receives fresh independent review.
+Any such need requires a new structured `DECISION REQUIRED` gate.
 
 Stop and emit a concrete `DECISION REQUIRED <ID>: A|B` prompt when any of these occurs:
 
@@ -703,5 +704,5 @@ is green. Completion requires every
 packet and fix series fresh-review-clean, the full wall recorded with exact counts, the canonical
 status receipt fresh-review-clean, `CTX-R8-01..06` reconciled against the control ledger, and a
 separate authorized phase/status transition. R8-1 through R8-3 are landed and fresh-review-clean;
-R8-4 remains unstarted until this amendment is committed and fresh-review-clean. This plan claims
-no R8-4 or family completion.
+R8-4 remains unstarted until the landed authority amendment/status series `849393029` + `bf954c4a`
+receives fresh independent review. This plan claims no R8-4 or family completion.

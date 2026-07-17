@@ -136,8 +136,9 @@ is authorized.
   This is a localized compatibility/presentation exception with an explicit parity-test cost, not
   a claim that the erased internal `Option` reaches later rendering and not an adjudication-policy
   exception. The operator rejected Option A's public-field/source-compatibility cost by selecting B.
-  R8-4 still may not edit any source/test symbol until this six-file manifest amendment is committed
-  and fresh-review-clean. Changing the upstream analyzer `Checkpoint` schema is outside R8.
+  R8-4 still may not edit any source/test symbol until the landed authority amendment/status series
+  `849393029` + `bf954c4a` receives fresh independent review. Changing the upstream analyzer
+  `Checkpoint` schema is outside R8.
 
 ## Compatibility Contract
 
@@ -215,4 +216,5 @@ authoritative until reviewed implementation evidence updates those rows.
 All four artifacts are included in the complete authoring/review-fix series through `806e53740`,
 which received fresh independent built-in `default` `CLEAN` with no findings. This satisfies
 `CTX-R8-02` and the R8-IMPLEMENT entry gate. Later decisions and review-clean R8-1..R8-3 commits do
-not authorize R8-4 code before this amendment itself is committed and fresh-review-clean.
+not authorize R8-4 code before the landed authority amendment/status series `849393029` +
+`bf954c4a` receives fresh independent review.

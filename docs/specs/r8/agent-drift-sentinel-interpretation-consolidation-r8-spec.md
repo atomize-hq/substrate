@@ -274,8 +274,9 @@ unchanged and read-only, adjudication policy/request-shaping logic and decision 
 change. On the adjudication path, the predicate may affect only preserved rendered
 `operator_summary` content. The operator selected B rather than Option A's public-field/source-
 compatibility cost and also accepted the R8-4 dev-only AST parser/lockfile cost. That decision does
-not itself start code: R8-4 remains blocked until this six-file manifest amendment is committed and
-fresh-review-clean. Changing the upstream analyzer `Checkpoint` schema is outside R8.
+not itself start code: R8-4 remains blocked until the landed authority amendment/status series
+`849393029` + `bf954c4a` receives fresh independent review. Changing the upstream analyzer
+`Checkpoint` schema is outside R8.
 `format_delegation_summary`, `format_delegation_topology`, and
 `format_child_work_visibility` remain formatting-only and do not validate analyzer-owned facts.
 
@@ -435,4 +436,5 @@ family through `806e53740` receiving fresh independent built-in `default` `CLEAN
 `CTX-R8-03` is `OPEN` / current at R8-IMPLEMENT entry; `CTX-R8-04..06` remain `BLOCKED` /
 `UNPROVEN` in dependency order. R8-1 through R8-3 are landed and fresh-review-clean as recorded at
 the top of this document. R8-4's five operator decisions are resolved, but no R8-4 source/test edit
-is authorized until this six-file docs amendment is committed and fresh-review-clean.
+is authorized until the landed authority amendment/status series `849393029` + `bf954c4a` receives
+fresh independent review.
