@@ -3,14 +3,14 @@
 Status: **R8-IMPLEMENT ACTIVE / R8-1 `ec2c5da7d` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
 R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
 R8-3 `963a8202` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-4 DOCS-ONLY AUTHORITY
-AMENDMENT AUTHORIZED AND PENDING COMMIT PLUS FRESH INDEPENDENT REVIEW / NO R8-4 SOURCE OR TEST
-EDITS**.
+AMENDMENT `849393029` LANDED / FRESH INDEPENDENT REVIEW PENDING / NO R8-4 SOURCE OR TEST EDITS**.
 
 R8-SPEC is `COMPLETE`, and the R8-SPEC -> R8-IMPLEMENT transition/entry gate remains review-clean.
 R8-1 commit `ec2c5da7d`, R8-2 series `08e0d0e2a` + `5669e1f6e` + `911dd49b`, and R8-3 commit
 `963a8202` each received fresh independent built-in `default` `CLEAN` with no actionable findings.
-R8-IMPLEMENT remains the sole active phase. R8-4 is blocked only on committing and independently
-reviewing this bounded Markdown-only authority amendment; no R8-4 source or test edit has started.
+R8-IMPLEMENT remains the sole active phase. R8-4 is blocked only on fresh independent review of
+landed bounded Markdown-only authority amendment `849393029`; no R8-4 source or test edit has
+started.
 The operator resolved every current R8-4 gate as
 `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
 `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
@@ -18,9 +18,9 @@ The operator resolved every current R8-4 gate as
 `R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
 `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. The last decision expands the R8-4 exact code
 manifest from five files to six by adding
-`crates/agent-drift-sentinel/src/checkpoint_interpretation.rs`. This amendment candidate assigns
-itself no commit hash or review result, makes no `CLEAN` claim, and authorizes no R8-4 code until it
-is committed and fresh-review-clean.
+`crates/agent-drift-sentinel/src/checkpoint_interpretation.rs`. Landed amendment candidate
+`849393029` is pending fresh independent review, has no review result, makes no `CLEAN` claim, and
+authorizes no R8-4 code until it is fresh-review-clean.
 
 ## Objective
 

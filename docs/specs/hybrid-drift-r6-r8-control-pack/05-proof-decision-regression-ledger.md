@@ -3,9 +3,8 @@
 **Ledger status:** R6 CLOSED / R7 CLOSED / R8-SPEC COMPLETE / R8-IMPLEMENT ACTIVE / R8-1
 `ec2c5da7d` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-2 `08e0d0e2a` + `5669e1f6e` +
 `911dd49b` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-3 `963a8202` FRESH INDEPENDENT
-BUILT-IN `default` `CLEAN` / R8-4 DOCS-ONLY AUTHORITY AMENDMENT AUTHORIZED AND PENDING COMMIT PLUS
-FRESH INDEPENDENT REVIEW / NO R8-4 SOURCE OR TEST EDITS / CURRENT AMENDMENT HAS NO COMMIT HASH OR
-REVIEW RESULT**
+BUILT-IN `default` `CLEAN` / R8-4 DOCS-ONLY AUTHORITY AMENDMENT `849393029` LANDED / FRESH
+INDEPENDENT REVIEW PENDING / NO R8-4 SOURCE OR TEST EDITS / CURRENT AMENDMENT HAS NO REVIEW RESULT**
 
 **Verified against:** R8-1 commit `ec2c5da7d`, R8-2 series `08e0d0e2a` + `5669e1f6e` +
 `911dd49b`, and R8-3 commit `963a8202` each received fresh independent built-in `default` `CLEAN`
@@ -19,9 +18,9 @@ files to six by adding `crates/agent-drift-sentinel/src/checkpoint_interpretatio
 crate-private total `CompatibilityOnly` projection profile must share central
 posture/evidence/delegation normalization with validated `CheckpointInterpretation` without
 validation, panic, unwrap, error swallowing, v0.2 relabeling/fallback, public API change, or any
-change to core replay/live fallible validation. R8-4 remains unstarted and blocked only until this
-bounded Markdown-only amendment is committed and fresh-review-clean. The amendment assigns itself
-no commit hash or review result and makes no `CLEAN` claim.
+change to core replay/live fallible validation. R8-4 remains unstarted and blocked only on fresh
+independent review of landed bounded Markdown-only amendment `849393029`. The amendment has no
+review result and makes no `CLEAN` claim.
 
 ## Status Values
 
@@ -95,10 +94,10 @@ series plus the exact 2026-07-15 rerun recorded below.
 | ID | Gate | Status | Required proof |
 |---|---|---|---|
 | `CTX-R8-01` | Stable analyzer/delegation contract plus clean R8 authority family | PROVEN — R8-SPEC COMPLETE | R7 is closed with a stable analyzer/delegation contract, and the complete R8 authority series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` + `806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings. |
-| `CTX-R8-02` | R8 MAP/SPEC/PLAN/TASKS | PROVEN / SATISFIED — R8-IMPLEMENT ENTRY | The complete authority series through `806e53740` is review-clean. R8-1 through R8-3 are now landed/fresh-review-clean; this later R8-4 amendment must itself be committed and fresh-review-clean before R8-4 code. |
+| `CTX-R8-02` | R8 MAP/SPEC/PLAN/TASKS | PROVEN / SATISFIED — R8-IMPLEMENT ENTRY | The complete authority series through `806e53740` is review-clean. R8-1 through R8-3 are now landed/fresh-review-clean; later R8-4 amendment `849393029` is landed and must itself be fresh-review-clean before R8-4 code. |
 | `CTX-R8-03` | Shared replay/live interpretation seam | OPEN — PARTIAL REVIEW-CLEAN IMPLEMENTATION | R8-1 `ec2c5da7d`, R8-2 series through `911dd49b`, and R8-3 `963a8202` are fresh-review-clean; final R8-4/R8-5 parity and family-wall proof remain pending. |
 | `CTX-R8-04` | Central compatibility | BLOCKED / UNPROVEN — R8-4 NEXT | The central fallible replay/live seam is review-clean, but remaining public facade duplication and the amended total compatibility projection are unimplemented. |
-| `CTX-R8-05` | Presentation-first operator surface | BLOCKED / UNPROVEN — OPTION B RECORDED | `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B` preserves public shapes and requires exactly one direct literal-v0.8 predicate in `CheckpointPresentation::render_console_block`, exact owner/count proof, and unchanged behavior. `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A` adds central `checkpoint_interpretation.rs` to the exact six-file manifest. R8-4 code remains blocked until this amendment is fresh-review-clean. |
+| `CTX-R8-05` | Presentation-first operator surface | BLOCKED / UNPROVEN — OPTION B RECORDED | `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B` preserves public shapes and requires exactly one direct literal-v0.8 predicate in `CheckpointPresentation::render_console_block`, exact owner/count proof, and unchanged behavior. `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A` adds central `checkpoint_interpretation.rs` to the exact six-file manifest. Amendment `849393029` is landed, and R8-4 code remains blocked pending its fresh independent review. |
 | `CTX-R8-06` | Scheduling/adjudication boundary | BLOCKED / UNPROVEN | R8-2/R8-3 focused proof is review-clean; final protected-boundary and family-wall proof remain pending. |
 
 ## Regression Rules
@@ -114,6 +113,7 @@ series plus the exact 2026-07-15 rerun recorded below.
 
 | Date | Commit verified | Change |
 |---|---|---|
+| 2026-07-16 | R8-4 docs-only authority amendment `849393029` landed; fresh independent built-in `default` review pending | Reconciles only the current amendment status after landing. R8-4 remains unstarted and blocked on fresh independent review of `849393029`; no R8-4 source/test edit, amendment `CLEAN` claim, self-review, implementation, family completion, or phase-exit claim exists. The next action is fresh independent review of the landed amendment. The older rows below preserve their historical boundary state unchanged. |
 | 2026-07-16 | R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b`, and R8-3 `963a8202` each fresh independent built-in `default` `CLEAN`; operator decisions `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`, `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`, `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`, `R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`; current amendment has no commit hash or review result | Records current R8 truth without rewriting historical update rows. The exact R8-4 manifest expands from five files to six only by adding `src/checkpoint_interpretation.rs`. That central file owns a crate-private total compatibility projection with explicit `CompatibilityOnly` profile; valid supported typed inputs share the validated posture/evidence/delegation projection, unsupported typed facade input preserves current total behavior without v0.2 relabeling, and core replay/live remain on unchanged fallible validation. Existing central symbols require impact before code; new helpers have no pre-existing target. R8-4 has no source/test edits and remains blocked until this docs-only amendment is committed and fresh-review-clean. This row assigns no hash/review result or `CLEAN` claim to the amendment itself. |
 | 2026-07-16 | R8-SPEC -> R8-IMPLEMENT phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` fresh independent built-in `default` `CLEAN` with no findings; current Markdown-only receipt has no review result | Records the already-reviewed transition without rewriting any historical row. R8-SPEC is complete; `CTX-R8-01` and `CTX-R8-02` are proven; and the phase transition plus R8-IMPLEMENT entry gate are review-clean. R8-IMPLEMENT remains the sole active phase at entry only with packet `none`; all `57` implementation checkboxes remain unchecked and unstarted; and no source/test work has begun. `CTX-R8-03` is open/current; `CTX-R8-04..06` remain blocked/unproven. The four future HIGH gates and unresolved `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` remain pending, non-authorizing packet-local prerequisites. Prompt 1 selectors `PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` remain prepared and eligible but uninvoked. This receipt commit assigns itself no commit hash or review result, does not claim to be clean, and must be independently reviewed next. |
 | 2026-07-16 | Complete R8 authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` + `806e53740` fresh independent built-in `default` `CLEAN` with no findings; narrow R8-SPEC -> R8-IMPLEMENT transition update awaiting fresh independent review | R8-SPEC is complete; `CTX-R8-01` and `CTX-R8-02` are proven. R8-IMPLEMENT is the sole active phase at entry only with active packet `none`; entry is satisfied by the review-clean R8 docs. `CTX-R8-03` is open/current; `CTX-R8-04..06` remain blocked/unproven in dependency order. Every implementation task/checkbox remains unchecked and unstarted; no source/test work has begun. The four future HIGH gates and unresolved `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` remain pending packet-local prerequisites; they authorize no edits and do not invalidate entry. Prompt 1 selectors `PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but uninvoked. This transition update assigns itself no hash or review result, awaits fresh independent review, and does not claim to be clean. |

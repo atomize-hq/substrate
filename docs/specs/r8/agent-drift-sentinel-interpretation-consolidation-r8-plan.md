@@ -6,20 +6,19 @@ Canonical path:
 Status: **R8-IMPLEMENT ACTIVE / R8-1 `ec2c5da7d` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
 R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
 R8-3 `963a8202` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-4 DOCS-ONLY AUTHORITY
-AMENDMENT AUTHORIZED AND PENDING COMMIT PLUS FRESH INDEPENDENT REVIEW / NO R8-4 SOURCE OR TEST
-EDITS**.
+AMENDMENT `849393029` LANDED / FRESH INDEPENDENT REVIEW PENDING / NO R8-4 SOURCE OR TEST EDITS**.
 
 R8-SPEC and the R8-IMPLEMENT entry gate remain review-clean. R8-1 commit `ec2c5da7d`, R8-2 series
 `08e0d0e2a` + `5669e1f6e` + `911dd49b`, and R8-3 commit `963a8202` each received fresh
 independent built-in `default` `CLEAN` with no actionable findings. R8-4 is blocked only on
-committing and independently reviewing this bounded Markdown-only authority amendment; no R8-4
+fresh independent review of landed bounded Markdown-only authority amendment `849393029`; no R8-4
 source or test edit has started. Recorded R8-4 decisions are
 `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
 `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
 `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
 `R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
-`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. This amendment assigns itself no commit hash or
-review result, makes no `CLEAN` claim, and starts no code.
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. Landed amendment candidate `849393029` is pending
+fresh independent review, has no review result, makes no `CLEAN` claim, and starts no code.
 
 ## Objective
 
@@ -385,14 +384,15 @@ Remove remaining schema/state/evidence inference from `operator_surface.rs`, rou
 through centralized non-validating projection and `present_interpretation`, and lock exact public
 signatures plus current total behavior, including unsupported typed facade input.
 
-Status/dependency gate: **UNSTARTED / BLOCKED ONLY UNTIL THIS DOCS-ONLY AMENDMENT IS COMMITTED AND
-FRESH-REVIEW-CLEAN**. R8-3 commit `963a8202` is fresh independent built-in `default` `CLEAN`.
+Status/dependency gate: **UNSTARTED / BLOCKED ONLY ON FRESH INDEPENDENT REVIEW OF LANDED DOCS-ONLY
+AMENDMENT `849393029`**. R8-3 commit `963a8202` is fresh independent built-in `default` `CLEAN`.
 The operator recorded `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
 `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
 `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
 `R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
 `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. No R8-4 source/test edit has started. The amendment
-candidate has no commit hash or review result and makes no `CLEAN` claim.
+candidate `849393029` is pending fresh independent review, has no review result, and makes no
+`CLEAN` claim.
 
 Exact manifest (6 files):
 
