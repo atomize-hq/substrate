@@ -555,7 +555,7 @@ pub fn render_replay_report(
             interpretation.flagged,
             Some(&interpretation.warning_fingerprint),
         );
-        let presentation = present_interpretation(
+        let presentation = present_compatibility_interpretation(
             &interpretation,
             TriggerClass::CheckpointReady,
             &decision,
@@ -598,7 +598,7 @@ pub fn present_checkpoint_with_previous(
         checkpoint,
         previous_checkpoint,
     });
-    present_interpretation(&interpretation, trigger, decision, warning_policy)
+    present_compatibility_interpretation(&interpretation, trigger, decision, warning_policy)
 }
 
 pub(crate) fn present_interpretation(
@@ -606,6 +606,43 @@ pub(crate) fn present_interpretation(
     trigger: TriggerClass,
     decision: &EvaluationDecision,
     warning_policy: &WarningPolicy,
+) -> CheckpointPresentation {
+    present_interpretation_with_evidence_limit(
+        interpretation,
+        trigger,
+        decision,
+        warning_policy,
+        EvidenceLimitApplication::ValidatedCoreFlattened,
+    )
+}
+
+fn present_compatibility_interpretation(
+    interpretation: &CheckpointInterpretation,
+    trigger: TriggerClass,
+    decision: &EvaluationDecision,
+    warning_policy: &WarningPolicy,
+) -> CheckpointPresentation {
+    present_interpretation_with_evidence_limit(
+        interpretation,
+        trigger,
+        decision,
+        warning_policy,
+        EvidenceLimitApplication::CompatibilityGroupedStop,
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EvidenceLimitApplication {
+    ValidatedCoreFlattened,
+    CompatibilityGroupedStop,
+}
+
+fn present_interpretation_with_evidence_limit(
+    interpretation: &CheckpointInterpretation,
+    trigger: TriggerClass,
+    decision: &EvaluationDecision,
+    warning_policy: &WarningPolicy,
+    evidence_limit_application: EvidenceLimitApplication,
 ) -> CheckpointPresentation {
     let checkpoint = &interpretation.checkpoint;
     let disposition = classify_interpretation(interpretation, decision, warning_policy);
@@ -615,14 +652,23 @@ pub(crate) fn present_interpretation(
         .filter(|score| score.flagged)
         .collect::<Vec<_>>();
     let mut evidence_lines = Vec::new();
-    for evidence_group in &interpretation.evidence_groups {
-        push_evidence_lines(
+    match evidence_limit_application {
+        EvidenceLimitApplication::ValidatedCoreFlattened => push_evidence_lines(
             &mut evidence_lines,
-            evidence_group,
+            &interpretation.evidence,
             warning_policy.max_evidence_lines,
-        );
-        if evidence_lines.len() >= warning_policy.max_evidence_lines {
-            break;
+        ),
+        EvidenceLimitApplication::CompatibilityGroupedStop => {
+            for evidence_group in &interpretation.evidence_groups {
+                push_evidence_lines(
+                    &mut evidence_lines,
+                    evidence_group,
+                    warning_policy.max_evidence_lines,
+                );
+                if evidence_lines.len() >= warning_policy.max_evidence_lines {
+                    break;
+                }
+            }
         }
     }
     let severity = interpretation

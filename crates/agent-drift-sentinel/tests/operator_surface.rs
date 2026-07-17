@@ -23,8 +23,9 @@ use agent_drift_sentinel::{
         CheckpointPresentation, ReplayReport, WarningDisposition,
     },
     scheduler::{DecisionReason, EvaluationDecision, ReplayScheduler},
-    AdjudicationConfig, InputError, ReasoningEffort, ReplayCheckpointBundle, SchedulerPolicy,
-    SentinelError, SentinelMode, SentinelRequest, SentinelResult, TriggerClass, WarningPolicy,
+    AdjudicationConfig, InputError, LiveCheckpointEvent, LiveRuntime, ReasoningEffort,
+    ReplayCheckpointBundle, SchedulerPolicy, SentinelError, SentinelMode, SentinelRequest,
+    SentinelResult, TriggerClass, WarningPolicy,
 };
 use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream, Parser};
@@ -240,6 +241,85 @@ fn legacy_facade_nonzero_evidence_limit_preserves_selected_group_order_and_bound
                 .all(|line| !line.contains("later selected evidence two")),
             "{schema_version} must stop at the selected-group boundary after reaching the limit"
         );
+    }
+}
+
+#[test]
+fn validated_replay_and_live_zero_limit_flatten_across_an_empty_first_selected_group() {
+    let policy = WarningPolicy {
+        max_evidence_lines: 0,
+        ..WarningPolicy::default()
+    };
+
+    for schema_version in ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"] {
+        let checkpoint = checkpoint_with_selected_evidence_groups(
+            schema_version,
+            &[],
+            &["later selected evidence survives the flattened zero limit"],
+        );
+        let (replay, live) = validated_core_evidence_lines(checkpoint, policy);
+
+        for (surface, evidence_lines) in [("replay", replay), ("live", live)] {
+            assert_eq!(
+                evidence_lines.len(),
+                1,
+                "validated {surface} {schema_version} must apply the zero limit to flattened evidence"
+            );
+            assert!(evidence_lines[0]
+                .contains("later selected evidence survives the flattened zero limit"));
+        }
+    }
+}
+
+#[test]
+fn validated_replay_and_live_preserve_first_group_and_nonzero_evidence_limits() {
+    for schema_version in ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"] {
+        for (limit, expected) in [
+            (
+                0,
+                vec!["first selected evidence one survives the zero limit"],
+            ),
+            (
+                1,
+                vec!["first selected evidence one survives the zero limit"],
+            ),
+            (
+                3,
+                vec![
+                    "first selected evidence one survives the zero limit",
+                    "first selected evidence two",
+                    "later selected evidence one",
+                ],
+            ),
+        ] {
+            let checkpoint = checkpoint_with_selected_evidence_groups(
+                schema_version,
+                &[
+                    "first selected evidence one survives the zero limit",
+                    "first selected evidence two",
+                ],
+                &["later selected evidence one", "later selected evidence two"],
+            );
+            let policy = WarningPolicy {
+                max_evidence_lines: limit,
+                ..WarningPolicy::default()
+            };
+            let (replay, live) = validated_core_evidence_lines(checkpoint, policy);
+
+            for (surface, evidence_lines) in [("replay", replay), ("live", live)] {
+                assert_eq!(
+                    evidence_lines.len(),
+                    expected.len(),
+                    "validated {surface} {schema_version} must preserve limit {limit}"
+                );
+                for (actual, expected) in evidence_lines.iter().zip(&expected) {
+                    assert!(
+                        actual.contains(expected),
+                        "validated {surface} {schema_version} evidence order for limit {limit}: {evidence_lines:?}"
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -7412,7 +7492,55 @@ fn checkpoint_with_selected_evidence_groups(
     checkpoint.diagnostics.evidence_item_count =
         first_score.evidence.len() + later_score.evidence.len();
     checkpoint.drift_scores = vec![later_score, first_score];
+
+    if matches!(schema_version, "v0.4" | "v0.5" | "v0.6" | "v0.7" | "v0.8") {
+        checkpoint.turn_context = Some(sample_turn_context(checkpoint.ordinal));
+    }
+    if matches!(schema_version, "v0.5" | "v0.6" | "v0.7" | "v0.8") {
+        checkpoint.session_archetype = Some(sample_session_archetype(
+            &checkpoint,
+            SessionArchetypeLabel::AutonomousImplementation,
+        ));
+    }
+    if matches!(schema_version, "v0.6" | "v0.7" | "v0.8") {
+        checkpoint.session_progress = Some(sample_session_progress(
+            &checkpoint,
+            ProgressStatus::Advancing,
+            ProgressDimension::ImplementationVerificationWall,
+        ));
+    }
     checkpoint
+}
+
+fn validated_core_evidence_lines(
+    checkpoint: Checkpoint,
+    warning_policy: WarningPolicy,
+) -> (Vec<String>, Vec<String>) {
+    let fixture = support::ReplayFixture::from_checkpoints(
+        vec![checkpoint.clone()],
+        support::sample_summary(),
+    );
+    let replay = execute(&SentinelRequest {
+        checkpoint_dir: fixture.checkpoint_dir.clone(),
+        mode: SentinelMode::Replay,
+        cursor: None,
+        scheduler_policy: SchedulerPolicy::default(),
+        warning_policy,
+        adjudication: AdjudicationConfig::default(),
+    })
+    .expect("validated replay checkpoint");
+    let replay_evidence = replay.report.visible_warnings[0].evidence_lines.clone();
+
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), warning_policy);
+    let live = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoint,
+            Some("validated core evidence-limit fixture".to_string()),
+        ))
+        .expect("validated live checkpoint");
+
+    (replay_evidence, live.presentation.evidence_lines)
 }
 
 #[allow(clippy::too_many_arguments)]
