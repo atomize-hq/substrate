@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use agent_drift_analyzer::{
     Checkpoint, ChildWorkVisibility, Confidence, DelegationContext, DelegationTopology, DriftClass,
@@ -69,7 +70,7 @@ fn legacy_facade_zero_evidence_limit_stops_after_an_empty_first_selected_group()
         ..WarningPolicy::default()
     };
 
-    let actual = ["v0.2", "v0.3"]
+    let actual = ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"]
         .into_iter()
         .map(|schema_version| {
             let checkpoint = checkpoint_with_selected_evidence_groups(
@@ -89,7 +90,15 @@ fn legacy_facade_zero_evidence_limit_stops_after_an_empty_first_selected_group()
 
     assert_eq!(
         actual,
-        vec![("v0.2", Vec::new()), ("v0.3", Vec::new())],
+        vec![
+            ("v0.2", Vec::new()),
+            ("v0.3", Vec::new()),
+            ("v0.4", Vec::new()),
+            ("v0.5", Vec::new()),
+            ("v0.6", Vec::new()),
+            ("v0.7", Vec::new()),
+            ("v0.8", Vec::new()),
+        ],
         "legacy and explicit-state facade paths must preserve the pre-R8 first-group stop"
     );
 }
@@ -106,7 +115,7 @@ fn legacy_facade_zero_evidence_limit_keeps_one_item_from_a_nonempty_first_select
         ..WarningPolicy::default()
     };
 
-    let actual = ["v0.2", "v0.3"]
+    let actual = ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"]
         .into_iter()
         .map(|schema_version| {
             let checkpoint = checkpoint_with_selected_evidence_groups(
@@ -147,7 +156,7 @@ fn legacy_facade_nonzero_evidence_limit_preserves_selected_group_order_and_bound
         ..WarningPolicy::default()
     };
 
-    for schema_version in ["v0.2", "v0.3"] {
+    for schema_version in ["v0.2", "v0.3", "v0.4", "v0.5", "v0.6", "v0.7", "v0.8"] {
         let checkpoint = checkpoint_with_selected_evidence_groups(
             schema_version,
             &["first selected evidence one", "first selected evidence two"],
@@ -1412,14 +1421,16 @@ fn operator_surface_ast_policy_locks_schema_predicate_and_facade_call_owners() {
         let file = syn::parse_file(&source)
             .unwrap_or_else(|error| panic!("parse {}: {error}", production_source.path.display()));
         let module = production_source.module.as_deref().unwrap_or("crate");
-        analyze_render_calls_in_items(module, &file.items, &mut call_inventory);
+        analyze_render_calls_in_source_module(module, &file.items, &mut call_inventory);
     }
 
-    let expected_counts = expected_render_call_counts();
-    assert_eq!(call_inventory.counts, expected_counts);
+    assert_eq!(call_inventory.counts, expected_render_source_call_counts());
     assert_eq!(call_inventory.counts.values().sum::<usize>(), 4);
+    let normalized_inventory = normalize_render_call_inventory_for_contract(&call_inventory);
+    let expected_counts = expected_render_call_counts();
+    assert_eq!(normalized_inventory.counts, expected_counts);
     assert_eq!(
-        call_inventory
+        normalized_inventory
             .counts
             .keys()
             .cloned()
@@ -1552,6 +1563,286 @@ fn ast_policy_self_test_rejects_orphan_nested_cli_decoy_sources() {
         orphan_calls.counts,
         BTreeMap::from([("spare::cli::run_live".to_string(), 1)]),
         "the decoy remains syntactically valid but cannot collapse onto layer::cli by file stem"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_preserves_top_level_impl_source_lineage() {
+    let fixture = tempfile::tempdir().expect("create impl-lineage fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create impl-lineage source directory");
+    fs::write(
+        source_root.join("lib.rs"),
+        "mod operator_surface; mod cli; mod adjudication; mod decoy;\n",
+    )
+    .expect("write impl-lineage crate root");
+    fs::write(
+        source_root.join("operator_surface.rs"),
+        concat!(
+            "impl ReplayReport {\n",
+            "    fn to_console_text(&self, presentation: Presentation) {\n",
+            "        presentation.render_console_block(None);\n",
+            "        presentation.render_console_block(None);\n",
+            "    }\n",
+            "}\n",
+        ),
+    )
+    .expect("write real replay owner");
+    fs::write(
+        source_root.join("cli.rs"),
+        "fn run_live(presentation: Presentation) { presentation.render_console_block(None); }\n",
+    )
+    .expect("write cli owner");
+    fs::write(
+        source_root.join("adjudication.rs"),
+        "fn shape_request(presentation: Presentation) { presentation.render_console_block(None); }\n",
+    )
+    .expect("write adjudication owner");
+    fs::write(
+        source_root.join("decoy.rs"),
+        concat!(
+            "impl ReplayReport {\n",
+            "    fn to_console_text(&self, presentation: Presentation) {\n",
+            "        presentation.render_console_block(None);\n",
+            "        presentation.render_console_block(None);\n",
+            "    }\n",
+            "}\n",
+        ),
+    )
+    .expect("write referenced same-named decoy owner");
+
+    let (_, calls) = analyze_compiled_source_inventories(&production_rust_sources(&source_root));
+    assert_eq!(
+        calls.counts,
+        BTreeMap::from([
+            ("adjudication::shape_request".to_string(), 1usize),
+            ("cli::run_live".to_string(), 1usize),
+            ("decoy::ReplayReport::to_console_text".to_string(), 2usize),
+            (
+                "operator_surface::ReplayReport::to_console_text".to_string(),
+                2usize,
+            ),
+        ]),
+        "top-level inherent impl owners must retain their complete source-module lineage"
+    );
+
+    fs::write(
+        source_root.join("operator_surface.rs"),
+        "impl ReplayReport { fn to_console_text(&self, _presentation: Presentation) {} }\n",
+    )
+    .expect("remove the actual replay render calls");
+    let (_, calls_without_actual_owner) =
+        analyze_compiled_source_inventories(&production_rust_sources(&source_root));
+    assert_eq!(
+        calls_without_actual_owner.counts,
+        BTreeMap::from([
+            ("adjudication::shape_request".to_string(), 1usize),
+            ("cli::run_live".to_string(), 1usize),
+            ("decoy::ReplayReport::to_console_text".to_string(), 2usize),
+        ]),
+        "a referenced same-named impl must never substitute for removed calls in the actual owner"
+    );
+    assert!(
+        !render_call_policy_is_exact(&calls_without_actual_owner),
+        "normalization must not let a same-named impl in another source module satisfy the contract"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_discovers_directory_and_explicit_bin_roots() {
+    let fixture = tempfile::tempdir().expect("create target-root fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(source_root.join("bin/tool")).expect("create directory-bin source");
+    fs::create_dir_all(fixture.path().join("custom")).expect("create explicit-bin source");
+    fs::write(source_root.join("main.rs"), "").expect("write package-main root");
+    fs::write(source_root.join("bin/flat.rs"), "").expect("write flat-bin root");
+    fs::write(source_root.join("bin/tool/main.rs"), "").expect("write directory-bin root");
+    fs::write(fixture.path().join("custom/library.rs"), "").expect("write explicit-lib root");
+    fs::write(fixture.path().join("custom/runner.rs"), "").expect("write explicit-bin root");
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        concat!(
+            "[package]\n",
+            "name = \"target-root-fixture\"\n",
+            "version = \"0.0.0\"\n",
+            "edition = \"2021\"\n",
+            "\n",
+            "[lib]\n",
+            "path = \"custom/library.rs\"\n",
+            "\n",
+            "[[bin]]\n",
+            "name = \"custom-runner\"\n",
+            "path = \"custom/runner.rs\"\n",
+        ),
+    )
+    .expect("write target-root manifest");
+
+    let roots = production_rust_sources(&source_root)
+        .into_iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(fixture.path())
+                    .expect("fixture target root")
+                    .to_path_buf(),
+                source.module,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        roots,
+        BTreeSet::from([
+            (PathBuf::from("custom/library.rs"), None),
+            (
+                PathBuf::from("custom/runner.rs"),
+                Some("bin::custom_runner".to_string())
+            ),
+            (
+                PathBuf::from("src/bin/flat.rs"),
+                Some("bin::flat".to_string())
+            ),
+            (
+                PathBuf::from("src/bin/tool/main.rs"),
+                Some("bin::tool".to_string())
+            ),
+            (
+                PathBuf::from("src/main.rs"),
+                Some("bin::target_root_fixture".to_string()),
+            ),
+        ]),
+        "production roots must cover explicit lib/bin paths and every conventional bin form"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_resolves_production_cfg_and_inner_attributes() {
+    let fixture = tempfile::tempdir().expect("create production-cfg fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create production-cfg source directory");
+    fs::write(
+        source_root.join("lib.rs"),
+        concat!(
+            "#[cfg(all(test, unix))] mod compound_test;\n",
+            "#[cfg(feature = \"not_enabled\")] mod feature_disabled;\n",
+            "#[cfg_attr(all(not(test), any(unix, windows)), path = \"renamed.rs\")] mod aliased;\n",
+            "#[cfg_attr(test, path = \"wrong.rs\")]\n",
+            "#[path = \"production.rs\"] mod selected;\n",
+            "#[path = \"inner_disabled.rs\"] mod inner_disabled;\n",
+            "#[path = \"inner_active.rs\"] mod inner_active;\n",
+        ),
+    )
+    .expect("write production-cfg crate root");
+    fs::write(source_root.join("compound_test.rs"), "").expect("write compound test module");
+    fs::write(source_root.join("feature_disabled.rs"), "").expect("write disabled feature module");
+    fs::write(source_root.join("renamed.rs"), "").expect("write cfg_attr-selected module");
+    fs::write(source_root.join("wrong.rs"), "").expect("write inactive cfg_attr path");
+    fs::write(source_root.join("production.rs"), "").expect("write production path");
+    fs::write(
+        source_root.join("inner_disabled.rs"),
+        "#![cfg(all(test, unix))]\nmod unreachable;\n",
+    )
+    .expect("write disabled inner-cfg module");
+    fs::write(
+        source_root.join("inner_active.rs"),
+        "#![cfg(all(not(test), any(unix, windows)))]\nmod leaf;\n",
+    )
+    .expect("write active inner-cfg module");
+    fs::create_dir_all(source_root.join("inner_active")).expect("create active inner module dir");
+    fs::write(source_root.join("inner_active/leaf.rs"), "").expect("write active inner leaf");
+
+    let sources = production_rust_sources(&source_root)
+        .into_iter()
+        .map(|source| {
+            (
+                source
+                    .path
+                    .strip_prefix(&source_root)
+                    .expect("production-cfg source")
+                    .to_path_buf(),
+                source.module,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        sources,
+        BTreeSet::from([
+            (PathBuf::from("inner_active.rs"), Some("inner_active".to_string())),
+            (
+                PathBuf::from("inner_active/leaf.rs"),
+                Some("inner_active::leaf".to_string()),
+            ),
+            (PathBuf::from("lib.rs"), None),
+            (PathBuf::from("production.rs"), Some("selected".to_string())),
+            (PathBuf::from("renamed.rs"), Some("aliased".to_string())),
+        ]),
+        "compound cfg(test), file-level inner cfg, and deterministic cfg_attr must match production"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_fails_closed_on_unknown_production_cfg() {
+    let fixture = tempfile::tempdir().expect("create unknown-cfg fixture");
+    let source_root = fixture.path().join("src");
+    fs::create_dir_all(&source_root).expect("create unknown-cfg source directory");
+    fs::write(
+        source_root.join("lib.rs"),
+        "#[cfg(custom_unknown)] mod hidden;\n",
+    )
+    .expect("write unknown-cfg crate root");
+    fs::write(source_root.join("hidden.rs"), "").expect("write unknown-cfg module");
+
+    let failure = std::panic::catch_unwind(|| production_rust_sources(&source_root))
+        .expect_err("an unknown production cfg must fail closed");
+    let message = failure
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| failure.downcast_ref::<&str>().copied())
+        .unwrap_or("non-string panic");
+    assert!(
+        message.contains("unsupported production cfg predicate `custom_unknown`"),
+        "unknown cfg failure must be explicit: {message}"
+    );
+}
+
+#[test]
+fn ast_policy_self_test_fails_closed_on_canonical_module_path_cycles() {
+    const CHILD_ENV: &str = "SUBSTRATE_AST_POLICY_PATH_CYCLE_CHILD";
+    if std::env::var_os(CHILD_ENV).is_some() {
+        let fixture = tempfile::tempdir().expect("create path-cycle fixture");
+        let source_root = fixture.path().join("src");
+        fs::create_dir_all(&source_root).expect("create path-cycle source directory");
+        fs::write(
+            source_root.join("lib.rs"),
+            "#[path = \"lib.rs\"] mod again;\n",
+        )
+        .expect("write path-cycle crate root");
+        let failure = std::panic::catch_unwind(|| production_rust_sources(&source_root))
+            .expect_err("a canonical active-path cycle must fail closed");
+        let message = failure
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| failure.downcast_ref::<&str>().copied())
+            .unwrap_or("non-string panic");
+        assert!(
+            message.contains("production module source cycle detected"),
+            "path-cycle failure must be explicit: {message}"
+        );
+        return;
+    }
+
+    let output =
+        Command::new(std::env::current_exe().expect("current operator-surface test binary"))
+            .arg("--exact")
+            .arg("ast_policy_self_test_fails_closed_on_canonical_module_path_cycles")
+            .arg("--nocapture")
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("run isolated path-cycle regression");
+    assert!(
+        output.status.success(),
+        "path-cycle regression must fail closed without recursive abort:\n{}",
+        String::from_utf8_lossy(&output.stderr)
     );
 }
 
@@ -1809,14 +2100,17 @@ fn ast_policy_self_test_rejects_a_fifth_call_inside_an_allowed_owner() {
     .expect("parse fifth-call policy fixture");
 
     let mut calls = RenderCallInventory {
-        counts: expected_render_call_counts(),
+        counts: expected_render_source_call_counts(),
         violations: Vec::new(),
     };
-    analyze_render_calls_in_items("operator_surface", &file.items, &mut calls);
+    analyze_render_calls_in_source_module("operator_surface", &file.items, &mut calls);
     assert_eq!(
         calls.counts,
         BTreeMap::from([
-            ("ReplayReport::to_console_text".to_string(), 3usize),
+            (
+                "operator_surface::ReplayReport::to_console_text".to_string(),
+                3usize,
+            ),
             ("adjudication::shape_request".to_string(), 1usize),
             ("cli::run_live".to_string(), 1usize),
         ]),
@@ -4180,10 +4474,44 @@ fn expected_render_call_counts() -> BTreeMap<String, usize> {
     ])
 }
 
+fn expected_render_source_call_counts() -> BTreeMap<String, usize> {
+    BTreeMap::from([
+        (
+            "operator_surface::ReplayReport::to_console_text".to_string(),
+            2usize,
+        ),
+        ("adjudication::shape_request".to_string(), 1usize),
+        ("cli::run_live".to_string(), 1usize),
+    ])
+}
+
+fn normalize_render_call_inventory_for_contract(
+    inventory: &RenderCallInventory,
+) -> RenderCallInventory {
+    let mut normalized = RenderCallInventory {
+        counts: BTreeMap::new(),
+        violations: inventory.violations.clone(),
+    };
+    for (owner, count) in &inventory.counts {
+        let contract_owner = match owner.as_str() {
+            "operator_surface::ReplayReport::to_console_text" => "ReplayReport::to_console_text",
+            "cli::run_live" => "cli::run_live",
+            "adjudication::shape_request" => "adjudication::shape_request",
+            _ => owner,
+        };
+        *normalized
+            .counts
+            .entry(contract_owner.to_string())
+            .or_insert(0) += count;
+    }
+    normalized
+}
+
 fn render_call_policy_is_exact(inventory: &RenderCallInventory) -> bool {
-    inventory.counts == expected_render_call_counts()
-        && inventory.counts.values().sum::<usize>() == 4
-        && inventory.violations.is_empty()
+    let normalized = normalize_render_call_inventory_for_contract(inventory);
+    normalized.counts == expected_render_call_counts()
+        && normalized.counts.values().sum::<usize>() == 4
+        && normalized.violations.is_empty()
 }
 
 fn analyze_render_item_header(owner: &str, item: &syn::Item, inventory: &mut RenderCallInventory) {
@@ -4236,6 +4564,14 @@ fn analyze_render_calls_in_items(
     inventory: &mut RenderCallInventory,
 ) {
     analyze_render_calls_in_items_with_lineage(module, items, false, inventory);
+}
+
+fn analyze_render_calls_in_source_module(
+    module: &str,
+    items: &[syn::Item],
+    inventory: &mut RenderCallInventory,
+) {
+    analyze_render_calls_in_items_with_lineage(module, items, true, inventory);
 }
 
 fn analyze_render_calls_in_items_with_lineage(
@@ -4658,18 +4994,160 @@ struct ProductionRustSource {
     module: Option<String>,
 }
 
+fn conventional_rust_roots(root: &Path) -> Vec<(PathBuf, Option<String>)> {
+    let mut roots = Vec::new();
+    let lib_root = root.join("lib.rs");
+    if lib_root.is_file() {
+        roots.push((lib_root, None));
+    }
+    let main_root = root.join("main.rs");
+    if main_root.is_file() {
+        roots.push((main_root, Some("bin::main".to_string())));
+    }
+
+    let conventional_bins = root.join("bin");
+    if conventional_bins.is_dir() {
+        for entry in fs::read_dir(&conventional_bins).unwrap_or_else(|error| {
+            panic!(
+                "read conventional bin roots {}: {error}",
+                conventional_bins.display()
+            )
+        }) {
+            let path = entry.expect("conventional bin root entry").path();
+            if path.extension().is_some_and(|extension| extension == "rs") {
+                let bin_name = path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .expect("UTF-8 conventional bin root")
+                    .to_string();
+                roots.push((path, Some(format!("bin::{}", rust_identifier(&bin_name)))));
+                continue;
+            }
+            let directory_main = path.join("main.rs");
+            if path.is_dir() && directory_main.is_file() {
+                let bin_name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .expect("UTF-8 directory bin root")
+                    .to_string();
+                roots.push((
+                    directory_main,
+                    Some(format!("bin::{}", rust_identifier(&bin_name))),
+                ));
+            }
+        }
+    }
+    roots
+}
+
+fn cargo_target_roots(root: &Path) -> Option<Vec<(PathBuf, Option<String>)>> {
+    let manifest = root.parent()?.join("Cargo.toml");
+    if !manifest.is_file() {
+        return None;
+    }
+
+    let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--no-deps",
+            "--manifest-path",
+        ])
+        .arg(&manifest)
+        .output()
+        .unwrap_or_else(|error| panic!("run cargo metadata for {}: {error}", manifest.display()));
+    assert!(
+        output.status.success(),
+        "cargo metadata failed for {}:\n{}",
+        manifest.display(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("parse cargo metadata for {}: {error}", manifest.display()));
+    let canonical_manifest = fs::canonicalize(&manifest)
+        .unwrap_or_else(|error| panic!("resolve manifest {}: {error}", manifest.display()));
+    let package = metadata["packages"]
+        .as_array()
+        .and_then(|packages| {
+            packages.iter().find(|package| {
+                package["manifest_path"]
+                    .as_str()
+                    .and_then(|path| fs::canonicalize(path).ok())
+                    .is_some_and(|path| path == canonical_manifest)
+            })
+        })
+        .unwrap_or_else(|| panic!("cargo metadata omitted package {}", manifest.display()));
+
+    let active_features = production_cfg().features.clone();
+    let mut roots = BTreeSet::new();
+    for target in package["targets"]
+        .as_array()
+        .expect("cargo metadata package targets")
+    {
+        let required_features = target["required_features"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|feature| feature.as_str().expect("required feature name"))
+            .collect::<Vec<_>>();
+        if !required_features
+            .iter()
+            .all(|feature| active_features.contains(*feature))
+        {
+            continue;
+        }
+
+        let kinds = target["kind"]
+            .as_array()
+            .expect("cargo metadata target kinds");
+        let module = if kinds.iter().any(|kind| kind.as_str() == Some("bin")) {
+            let name = target["name"].as_str().expect("cargo binary target name");
+            Some(format!("bin::{}", rust_identifier(name)))
+        } else if kinds.iter().any(|kind| {
+            matches!(
+                kind.as_str(),
+                Some("lib" | "rlib" | "dylib" | "cdylib" | "staticlib" | "proc-macro")
+            )
+        }) {
+            None
+        } else {
+            continue;
+        };
+        let path = PathBuf::from(
+            target["src_path"]
+                .as_str()
+                .expect("cargo metadata target source path"),
+        );
+        roots.insert((path, module));
+    }
+    Some(roots.into_iter().collect())
+}
+
+fn rust_identifier(name: &str) -> String {
+    name.chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
     fn module_path_attribute(attributes: &[syn::Attribute]) -> Option<PathBuf> {
-        let path_attributes = attributes
-            .iter()
-            .filter(|attribute| path_is_ident(attribute.path(), "path"))
+        let path_attributes = effective_production_attributes(attributes)
+            .into_iter()
+            .filter(|meta| path_is_ident(meta.path(), "path"))
             .collect::<Vec<_>>();
         assert!(
             path_attributes.len() <= 1,
             "a module may not declare multiple #[path] attributes"
         );
         path_attributes.first().map(|attribute| {
-            let syn::Meta::NameValue(name_value) = &attribute.meta else {
+            let syn::Meta::NameValue(name_value) = attribute else {
                 panic!("module #[path] must be a name-value attribute");
             };
             let syn::Expr::Lit(literal) = &name_value.value else {
@@ -4689,6 +5167,7 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
         lineage: Option<&str>,
         sources: &mut Vec<ProductionRustSource>,
         visited: &mut BTreeSet<(PathBuf, Option<String>)>,
+        active_paths: &mut BTreeSet<PathBuf>,
     ) {
         for item_mod in items.iter().filter_map(|item| match item {
             syn::Item::Mod(item_mod) => Some(item_mod),
@@ -4697,13 +5176,6 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
             if has_cfg_test(&item_mod.attrs) {
                 continue;
             }
-            assert!(
-                !item_mod
-                    .attrs
-                    .iter()
-                    .any(|attribute| path_is_ident(attribute.path(), "cfg_attr")),
-                "cfg_attr on a module is rejected because source reachability would be ambiguous"
-            );
 
             let identifier = identifier_name(&item_mod.ident);
             let nested_lineage = lineage.map_or_else(
@@ -4719,6 +5191,7 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
                     Some(&nested_lineage),
                     sources,
                     visited,
+                    active_paths,
                 );
                 continue;
             }
@@ -4726,10 +5199,15 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
             let explicit_path = module_path_attribute(&item_mod.attrs);
             let (source_path, nested_directory) = if let Some(explicit_path) = explicit_path {
                 let source_path = path_attribute_base.join(explicit_path);
-                let nested_directory = source_path
-                    .parent()
-                    .expect("path-attributed module source parent")
-                    .to_path_buf();
+                let nested_directory =
+                    if source_path.file_name().is_some_and(|name| name == "mod.rs") {
+                        source_path
+                            .parent()
+                            .expect("path-attributed mod.rs parent")
+                            .to_path_buf()
+                    } else {
+                        source_path.with_extension("")
+                    };
                 (source_path, nested_directory)
             } else {
                 let flat_path = module_directory.join(format!("{identifier}.rs"));
@@ -4755,6 +5233,7 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
                 nested_directory,
                 sources,
                 visited,
+                active_paths,
             );
         }
     }
@@ -4765,16 +5244,27 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
         module_directory: PathBuf,
         sources: &mut Vec<ProductionRustSource>,
         visited: &mut BTreeSet<(PathBuf, Option<String>)>,
+        active_paths: &mut BTreeSet<PathBuf>,
     ) {
         let canonical_path = fs::canonicalize(&path)
             .unwrap_or_else(|error| panic!("resolve compiled source {}: {error}", path.display()));
-        if !visited.insert((canonical_path, module.clone())) {
+        assert!(
+            !active_paths.contains(&canonical_path),
+            "production module source cycle detected at {}",
+            canonical_path.display()
+        );
+        if !visited.insert((canonical_path.clone(), module.clone())) {
             return;
         }
+        active_paths.insert(canonical_path.clone());
         let source = fs::read_to_string(&path)
             .unwrap_or_else(|error| panic!("read compiled source {}: {error}", path.display()));
         let file = syn::parse_file(&source)
             .unwrap_or_else(|error| panic!("parse compiled source {}: {error}", path.display()));
+        if !production_attributes_active(&file.attrs) {
+            active_paths.remove(&canonical_path);
+            return;
+        }
         sources.push(ProductionRustSource {
             path: path.clone(),
             module: module.clone(),
@@ -4787,37 +5277,12 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
             module.as_deref(),
             sources,
             visited,
+            active_paths,
         );
+        active_paths.remove(&canonical_path);
     }
 
-    let mut roots = Vec::new();
-    let lib_root = root.join("lib.rs");
-    if lib_root.is_file() {
-        roots.push((lib_root, None));
-    }
-    let main_root = root.join("main.rs");
-    if main_root.is_file() {
-        roots.push((main_root, Some("bin::main".to_string())));
-    }
-    let conventional_bins = root.join("bin");
-    if conventional_bins.is_dir() {
-        for entry in fs::read_dir(&conventional_bins).unwrap_or_else(|error| {
-            panic!(
-                "read conventional bin roots {}: {error}",
-                conventional_bins.display()
-            )
-        }) {
-            let path = entry.expect("conventional bin root entry").path();
-            if path.extension().is_some_and(|extension| extension == "rs") {
-                let bin_name = path
-                    .file_stem()
-                    .and_then(|stem| stem.to_str())
-                    .expect("UTF-8 conventional bin root")
-                    .to_string();
-                roots.push((path, Some(format!("bin::{bin_name}"))));
-            }
-        }
-    }
+    let roots = cargo_target_roots(root).unwrap_or_else(|| conventional_rust_roots(root));
     assert!(
         !roots.is_empty(),
         "no Rust crate roots under {}",
@@ -4826,8 +5291,16 @@ fn production_rust_sources(root: &Path) -> Vec<ProductionRustSource> {
 
     let mut sources = Vec::new();
     let mut visited = BTreeSet::new();
+    let mut active_paths = BTreeSet::new();
     for (path, module) in roots {
-        collect_source(path, module, root.to_path_buf(), &mut sources, &mut visited);
+        collect_source(
+            path,
+            module,
+            root.to_path_buf(),
+            &mut sources,
+            &mut visited,
+            &mut active_paths,
+        );
     }
     sources.sort_by(|left, right| {
         left.path
@@ -4852,7 +5325,7 @@ fn analyze_compiled_source_inventories(
             production_source.module.as_deref(),
             &mut schema,
         );
-        analyze_render_calls_in_items(
+        analyze_render_calls_in_source_module(
             production_source.module.as_deref().unwrap_or("crate"),
             &file.items,
             &mut calls,
@@ -4948,13 +5421,184 @@ fn path_last_is(path: &syn::Path, expected: &str) -> bool {
         .is_some_and(|segment| identifier_is(&segment.ident, expected))
 }
 
-fn has_cfg_test(attributes: &[syn::Attribute]) -> bool {
-    attributes.iter().any(|attribute| {
-        path_is_ident(attribute.path(), "cfg")
-            && attribute.parse_args::<syn::Meta>().is_ok_and(
-                |meta| matches!(meta, syn::Meta::Path(path) if path_is_ident(&path, "test")),
-            )
+#[derive(Debug)]
+struct ProductionCfg {
+    flags: BTreeSet<String>,
+    values: BTreeMap<String, BTreeSet<String>>,
+    features: BTreeSet<String>,
+}
+
+fn production_cfg() -> &'static ProductionCfg {
+    static PRODUCTION_CFG: OnceLock<ProductionCfg> = OnceLock::new();
+    PRODUCTION_CFG.get_or_init(|| {
+        let output = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+            .args(["--print", "cfg"])
+            .output()
+            .expect("query current rustc cfg");
+        assert!(
+            output.status.success(),
+            "rustc --print cfg failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let mut flags = BTreeSet::new();
+        let mut values = BTreeMap::<String, BTreeSet<String>>::new();
+        for line in String::from_utf8(output.stdout)
+            .expect("rustc cfg output must be UTF-8")
+            .lines()
+        {
+            if let Some((key, value)) = line.split_once('=') {
+                let value = value
+                    .strip_prefix('"')
+                    .and_then(|value| value.strip_suffix('"'))
+                    .unwrap_or_else(|| panic!("unsupported rustc cfg value `{line}`"));
+                values
+                    .entry(key.to_string())
+                    .or_default()
+                    .insert(value.to_string());
+            } else {
+                flags.insert(line.to_string());
+            }
+        }
+
+        // Cargo exposes enabled features to build-time subprocesses with these names. The
+        // Sentinel crate currently has no features, so an empty set is also exact for its normal
+        // test wall; retaining this input keeps fixture evaluation honest if features are added.
+        let mut features = BTreeSet::new();
+        for (name, _) in std::env::vars().filter(|(name, _)| name.starts_with("CARGO_FEATURE_")) {
+            let normalized = name
+                .trim_start_matches("CARGO_FEATURE_")
+                .to_ascii_lowercase();
+            features.insert(normalized.clone());
+            features.insert(normalized.replace('_', "-"));
+        }
+        ProductionCfg {
+            flags,
+            values,
+            features,
+        }
     })
+}
+
+fn cfg_meta_name(meta: &syn::Meta) -> String {
+    meta.path()
+        .segments
+        .iter()
+        .map(|segment| identifier_name(&segment.ident))
+        .collect::<Vec<_>>()
+        .join("::")
+}
+
+fn parse_meta_arguments(list: &syn::MetaList, context: &str) -> Vec<syn::Meta> {
+    let parser = syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated;
+    parser
+        .parse2(list.tokens.clone())
+        .unwrap_or_else(|error| panic!("unsupported {context}: {error}"))
+        .into_iter()
+        .collect()
+}
+
+fn evaluate_production_cfg(meta: &syn::Meta) -> bool {
+    let config = production_cfg();
+    match meta {
+        syn::Meta::Path(path) => {
+            let name = path
+                .get_ident()
+                .map(identifier_name)
+                .unwrap_or_else(|| cfg_meta_name(meta));
+            match name.as_str() {
+                "test" => false,
+                // These are the portable target-family flags and are valid even when absent from
+                // the current rustc output. Other unknown bare predicates fail closed.
+                "unix" | "windows" => config.flags.contains(&name),
+                _ if config.flags.contains(&name) => true,
+                _ => panic!("unsupported production cfg predicate `{name}`"),
+            }
+        }
+        syn::Meta::NameValue(name_value) => {
+            let key = cfg_meta_name(meta);
+            let syn::Expr::Lit(literal) = &name_value.value else {
+                panic!("unsupported production cfg predicate `{key}`");
+            };
+            let syn::Lit::Str(value) = &literal.lit else {
+                panic!("unsupported production cfg predicate `{key}`");
+            };
+            if key == "feature" {
+                return config.features.contains(&value.value());
+            }
+            config
+                .values
+                .get(&key)
+                .unwrap_or_else(|| panic!("unsupported production cfg predicate `{key}`"))
+                .contains(&value.value())
+        }
+        syn::Meta::List(list) => {
+            let name = cfg_meta_name(meta);
+            let arguments = parse_meta_arguments(list, &format!("production cfg `{name}`"));
+            match name.as_str() {
+                "all" => arguments.iter().all(evaluate_production_cfg),
+                "any" => arguments.iter().any(evaluate_production_cfg),
+                "not" => {
+                    assert_eq!(
+                        arguments.len(),
+                        1,
+                        "production cfg not(...) requires exactly one predicate"
+                    );
+                    !evaluate_production_cfg(&arguments[0])
+                }
+                _ => panic!("unsupported production cfg predicate `{name}`"),
+            }
+        }
+    }
+}
+
+fn expand_production_attribute(meta: syn::Meta, effective: &mut Vec<syn::Meta>) {
+    if !path_is_ident(meta.path(), "cfg_attr") {
+        effective.push(meta);
+        return;
+    }
+    let syn::Meta::List(list) = meta else {
+        panic!("cfg_attr must be a list attribute");
+    };
+    let mut arguments = parse_meta_arguments(&list, "production cfg_attr").into_iter();
+    let predicate = arguments
+        .next()
+        .expect("production cfg_attr requires a predicate");
+    if evaluate_production_cfg(&predicate) {
+        for attribute in arguments {
+            expand_production_attribute(attribute, effective);
+        }
+    }
+}
+
+fn effective_production_attributes(attributes: &[syn::Attribute]) -> Vec<syn::Meta> {
+    let mut effective = Vec::new();
+    for attribute in attributes {
+        expand_production_attribute(attribute.meta.clone(), &mut effective);
+    }
+    effective
+}
+
+fn production_attributes_active(attributes: &[syn::Attribute]) -> bool {
+    effective_production_attributes(attributes)
+        .iter()
+        .filter(|meta| path_is_ident(meta.path(), "cfg"))
+        .all(|meta| {
+            let syn::Meta::List(list) = meta else {
+                panic!("cfg must be a list attribute");
+            };
+            let arguments = parse_meta_arguments(list, "production cfg attribute");
+            assert_eq!(
+                arguments.len(),
+                1,
+                "cfg attribute requires exactly one predicate"
+            );
+            evaluate_production_cfg(&arguments[0])
+        })
+}
+
+fn has_cfg_test(attributes: &[syn::Attribute]) -> bool {
+    !production_attributes_active(attributes)
 }
 
 fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
