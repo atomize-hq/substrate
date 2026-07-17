@@ -7,7 +7,384 @@ use agent_drift_sentinel::{
 };
 use camino::Utf8Path;
 use serde_json::{json, Value};
+use syn::visit::{self, Visit};
 use tempfile::TempDir;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeliveryStep {
+    AllocateEmissionOrdinal,
+    ObserveRuntime,
+    RecordDelivery,
+    PersistState,
+    AcceptObservation,
+}
+
+#[test]
+fn real_session_live_source_orders_delivery_after_fallible_runtime_observation() {
+    let source_path = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src/real_session_live.rs");
+    let source = fs::read_to_string(&source_path).expect("read real-session live source");
+    let parsed = syn::parse_file(&source).expect("parse real-session live source");
+
+    assert_poll_once_delivery_contract(&parsed).expect("protected delivery order");
+
+    let mut reordered = parsed.clone();
+    let delivery_loop = delivery_loop_mut(poll_once_block_mut(&mut reordered).expect("poll_once"))
+        .expect("delivery loop");
+    let observe_index =
+        statement_index_for_step(&delivery_loop.body.stmts, DeliveryStep::ObserveRuntime)
+            .expect("runtime observe statement");
+    let delivery_index =
+        statement_index_for_step(&delivery_loop.body.stmts, DeliveryStep::RecordDelivery)
+            .expect("record delivery statement");
+    delivery_loop.body.stmts.swap(observe_index, delivery_index);
+    assert!(
+        assert_poll_once_delivery_contract(&reordered).is_err(),
+        "structural guard must reject delivery moved before fallible observation"
+    );
+}
+
+fn assert_poll_once_delivery_contract(file: &syn::File) -> Result<(), String> {
+    let block = poll_once_block(file)
+        .ok_or_else(|| "missing LiveSessionCoordinator::poll_once".to_string())?;
+    let delivery_loop_index = block
+        .stmts
+        .iter()
+        .position(|statement| {
+            statement_delivery_steps(statement).contains(&DeliveryStep::ObserveRuntime)
+        })
+        .ok_or_else(|| "missing runtime-observation delivery loop".to_string())?;
+    let delivery_loop = statement_for_loop(&block.stmts[delivery_loop_index]).ok_or_else(|| {
+        "runtime observation must remain inside the checkpoint delivery loop".to_string()
+    })?;
+
+    let monitor_index = block
+        .stmts
+        .iter()
+        .position(statement_assigns_monitor_linked_closure)
+        .ok_or_else(|| "missing permitted monitor-closure bookkeeping".to_string())?;
+    let begin_poll_index = block
+        .stmts
+        .iter()
+        .position(|statement| {
+            statement_has_method_call(statement, "begin_poll", &["self", "progress"])
+        })
+        .ok_or_else(|| "missing permitted pending-poll bookkeeping".to_string())?;
+    if monitor_index >= delivery_loop_index || begin_poll_index >= delivery_loop_index {
+        return Err(
+            "monitor-closure and pending-poll bookkeeping must precede delivery".to_string(),
+        );
+    }
+
+    let steps = delivery_loop
+        .body
+        .stmts
+        .iter()
+        .flat_map(statement_delivery_steps)
+        .collect::<Vec<_>>();
+    let expected = [
+        DeliveryStep::AllocateEmissionOrdinal,
+        DeliveryStep::ObserveRuntime,
+        DeliveryStep::RecordDelivery,
+        DeliveryStep::PersistState,
+        DeliveryStep::AcceptObservation,
+    ];
+    if steps != expected {
+        return Err(format!(
+            "delivery loop must allocate, observe, record, persist, then accept; found {steps:?}"
+        ));
+    }
+
+    let observe_statement = delivery_loop
+        .body
+        .stmts
+        .iter()
+        .find(|statement| {
+            statement_delivery_steps(statement).contains(&DeliveryStep::ObserveRuntime)
+        })
+        .ok_or_else(|| "missing runtime observation statement".to_string())?;
+    if count_fallible_runtime_observations(observe_statement) != 1 {
+        return Err("runtime.observe must be crossed through exactly one ? boundary".to_string());
+    }
+
+    let mut full_method_steps = DeliveryStepVisitor::default();
+    full_method_steps.visit_block(block);
+    for protected_step in [
+        DeliveryStep::AllocateEmissionOrdinal,
+        DeliveryStep::ObserveRuntime,
+        DeliveryStep::RecordDelivery,
+        DeliveryStep::AcceptObservation,
+    ] {
+        let count = full_method_steps
+            .steps
+            .iter()
+            .filter(|step| **step == protected_step)
+            .count();
+        if count != 1 {
+            return Err(format!(
+                "poll_once must contain exactly one {protected_step:?} step; found {count}"
+            ));
+        }
+    }
+
+    let mut forbidden = ForbiddenProtectedCallVisitor::default();
+    forbidden.visit_block(block);
+    if !forbidden.calls.is_empty() {
+        return Err(format!(
+            "poll_once must not feed adjudication or an operator sink: {:?}",
+            forbidden.calls
+        ));
+    }
+    Ok(())
+}
+
+fn poll_once_block(file: &syn::File) -> Option<&syn::Block> {
+    file.items.iter().find_map(|item| {
+        let syn::Item::Impl(item_impl) = item else {
+            return None;
+        };
+        if type_path(&item_impl.self_ty) != Some(vec!["LiveSessionCoordinator".to_string()]) {
+            return None;
+        }
+        item_impl.items.iter().find_map(|item| match item {
+            syn::ImplItem::Fn(method) if method.sig.ident == "poll_once" => Some(&method.block),
+            _ => None,
+        })
+    })
+}
+
+fn poll_once_block_mut(file: &mut syn::File) -> Option<&mut syn::Block> {
+    file.items.iter_mut().find_map(|item| {
+        let syn::Item::Impl(item_impl) = item else {
+            return None;
+        };
+        if type_path(&item_impl.self_ty) != Some(vec!["LiveSessionCoordinator".to_string()]) {
+            return None;
+        }
+        item_impl.items.iter_mut().find_map(|item| match item {
+            syn::ImplItem::Fn(method) if method.sig.ident == "poll_once" => Some(&mut method.block),
+            _ => None,
+        })
+    })
+}
+
+fn delivery_loop_mut(block: &mut syn::Block) -> Option<&mut syn::ExprForLoop> {
+    block.stmts.iter_mut().find_map(|statement| {
+        if !statement_delivery_steps(statement).contains(&DeliveryStep::ObserveRuntime) {
+            return None;
+        }
+        match statement {
+            syn::Stmt::Expr(syn::Expr::ForLoop(for_loop), _) => Some(for_loop),
+            _ => None,
+        }
+    })
+}
+
+fn statement_for_loop(statement: &syn::Stmt) -> Option<&syn::ExprForLoop> {
+    match statement {
+        syn::Stmt::Expr(syn::Expr::ForLoop(for_loop), _) => Some(for_loop),
+        _ => None,
+    }
+}
+
+fn statement_index_for_step(statements: &[syn::Stmt], step: DeliveryStep) -> Option<usize> {
+    statements
+        .iter()
+        .position(|statement| statement_delivery_steps(statement).contains(&step))
+}
+
+fn statement_delivery_steps(statement: &syn::Stmt) -> Vec<DeliveryStep> {
+    let mut visitor = DeliveryStepVisitor::default();
+    visitor.visit_stmt(statement);
+    visitor.steps
+}
+
+#[derive(Default)]
+struct DeliveryStepVisitor {
+    steps: Vec<DeliveryStep>,
+}
+
+impl<'ast> Visit<'ast> for DeliveryStepVisitor {
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        let receiver = expression_path(&call.receiver);
+        let step = match (call.method.to_string().as_str(), receiver.as_deref()) {
+            ("checkpoint_ready_event", Some([self_name, progress]))
+                if self_name == "self" && progress == "progress" =>
+            {
+                Some(DeliveryStep::AllocateEmissionOrdinal)
+            }
+            ("observe", Some([self_name, runtime]))
+                if self_name == "self" && runtime == "runtime" =>
+            {
+                Some(DeliveryStep::ObserveRuntime)
+            }
+            ("record_delivery", Some([self_name, progress]))
+                if self_name == "self" && progress == "progress" =>
+            {
+                Some(DeliveryStep::RecordDelivery)
+            }
+            ("persist_state", Some([self_name])) if self_name == "self" => {
+                Some(DeliveryStep::PersistState)
+            }
+            ("push", Some([observations])) if observations == "observations" => {
+                Some(DeliveryStep::AcceptObservation)
+            }
+            _ => None,
+        };
+        if let Some(step) = step {
+            self.steps.push(step);
+        }
+        visit::visit_expr_method_call(self, call);
+    }
+}
+
+fn statement_has_method_call(statement: &syn::Stmt, method: &str, receiver: &[&str]) -> bool {
+    struct MethodCallVisitor<'a> {
+        method: &'a str,
+        receiver: &'a [&'a str],
+        found: bool,
+    }
+
+    impl<'ast> Visit<'ast> for MethodCallVisitor<'_> {
+        fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+            let expected = self
+                .receiver
+                .iter()
+                .map(|segment| (*segment).to_string())
+                .collect::<Vec<_>>();
+            if call.method == self.method && expression_path(&call.receiver) == Some(expected) {
+                self.found = true;
+            }
+            visit::visit_expr_method_call(self, call);
+        }
+    }
+
+    let mut visitor = MethodCallVisitor {
+        method,
+        receiver,
+        found: false,
+    };
+    visitor.visit_stmt(statement);
+    visitor.found
+}
+
+fn statement_assigns_monitor_linked_closure(statement: &syn::Stmt) -> bool {
+    struct AssignmentVisitor {
+        found: bool,
+    }
+
+    impl<'ast> Visit<'ast> for AssignmentVisitor {
+        fn visit_expr_assign(&mut self, assignment: &'ast syn::ExprAssign) {
+            if expression_path(&assignment.left)
+                == Some(vec![
+                    "self".to_string(),
+                    "progress".to_string(),
+                    "monitor_linked_closure".to_string(),
+                ])
+            {
+                self.found = true;
+            }
+            visit::visit_expr_assign(self, assignment);
+        }
+    }
+
+    let mut visitor = AssignmentVisitor { found: false };
+    visitor.visit_stmt(statement);
+    visitor.found
+}
+
+fn count_fallible_runtime_observations(statement: &syn::Stmt) -> usize {
+    struct FallibleObserveVisitor {
+        count: usize,
+    }
+
+    impl<'ast> Visit<'ast> for FallibleObserveVisitor {
+        fn visit_expr_try(&mut self, expression: &'ast syn::ExprTry) {
+            if let syn::Expr::MethodCall(call) = expression.expr.as_ref() {
+                if call.method == "observe"
+                    && expression_path(&call.receiver)
+                        == Some(vec!["self".to_string(), "runtime".to_string()])
+                {
+                    self.count += 1;
+                }
+            }
+            visit::visit_expr_try(self, expression);
+        }
+    }
+
+    let mut visitor = FallibleObserveVisitor { count: 0 };
+    visitor.visit_stmt(statement);
+    visitor.count
+}
+
+#[derive(Default)]
+struct ForbiddenProtectedCallVisitor {
+    calls: Vec<String>,
+}
+
+impl<'ast> Visit<'ast> for ForbiddenProtectedCallVisitor {
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        let method = call.method.to_string();
+        let receiver = expression_path(&call.receiver)
+            .map(|path| path.join("."))
+            .unwrap_or_default();
+        if method.contains("adjudicat")
+            || method.contains("operator_sink")
+            || receiver.contains("adjudicat")
+            || receiver.contains("operator_sink")
+        {
+            self.calls.push(format!("{receiver}.{method}"));
+        }
+        visit::visit_expr_method_call(self, call);
+    }
+
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        if let Some(path) = expression_path(&call.func) {
+            let name = path.join("::");
+            if name.contains("adjudicat") || name.contains("operator_sink") {
+                self.calls.push(name);
+            }
+        }
+        visit::visit_expr_call(self, call);
+    }
+}
+
+fn expression_path(expression: &syn::Expr) -> Option<Vec<String>> {
+    match expression {
+        syn::Expr::Path(path) => Some(
+            path.path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect(),
+        ),
+        syn::Expr::Field(field) => {
+            let mut path = expression_path(&field.base)?;
+            path.push(match &field.member {
+                syn::Member::Named(ident) => ident.to_string(),
+                syn::Member::Unnamed(index) => index.index.to_string(),
+            });
+            Some(path)
+        }
+        syn::Expr::Group(group) => expression_path(&group.expr),
+        syn::Expr::Paren(paren) => expression_path(&paren.expr),
+        _ => None,
+    }
+}
+
+fn type_path(ty: &syn::Type) -> Option<Vec<String>> {
+    match ty {
+        syn::Type::Path(path) => Some(
+            path.path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect(),
+        ),
+        syn::Type::Group(group) => type_path(&group.elem),
+        syn::Type::Paren(paren) => type_path(&paren.elem),
+        _ => None,
+    }
+}
 
 #[test]
 fn real_session_live_coordinator_emits_only_checkpoint_deltas_for_append_only_growth() {

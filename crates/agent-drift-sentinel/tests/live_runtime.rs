@@ -112,6 +112,62 @@ fn live_runtime_rejects_synthetic_cursor_mismatches() {
 }
 
 #[test]
+fn live_runtime_malformed_checkpoint_has_zero_acceptance_or_presentation_effects() {
+    let checkpoints = current_schema_sample_checkpoints();
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            1,
+            checkpoints[0].clone(),
+            Some("fixture/runtime-boundary.jsonl:1".to_string()),
+        ))
+        .expect("seed accepted checkpoint");
+
+    let before = runtime.snapshot();
+    let mut control = runtime.clone();
+    let mut malformed = checkpoints[1].clone();
+    malformed.expected_next_step.clear();
+    let error = runtime
+        .observe(LiveCheckpointEvent::checkpoint_ready(
+            2,
+            malformed,
+            Some("fixture/runtime-boundary.jsonl:7".to_string()),
+        ))
+        .expect_err("malformed checkpoint must fail before runtime acceptance");
+
+    assert!(matches!(
+        error,
+        LiveRuntimeError::Input(agent_drift_sentinel::LiveInputError::CompatibilityGap {
+            ref checkpoint_id,
+            field: "expected_next_step",
+            ref reason,
+        }) if checkpoint_id == "session-alpha:0002"
+            && reason.contains("fixture/runtime-boundary.jsonl:7")
+            && reason.contains("non-empty string")
+    ));
+    let after = runtime.snapshot();
+    assert_eq!(after.latest_cursor, before.latest_cursor);
+    assert_eq!(after.latest_checkpoint_id, before.latest_checkpoint_id);
+    assert_eq!(after.last_trigger, before.last_trigger);
+    assert_eq!(after.processed_events, before.processed_events);
+    assert_eq!(after.scheduler_state, before.scheduler_state);
+
+    let accepted = LiveCheckpointEvent::checkpoint_ready(
+        3,
+        checkpoints[1].clone(),
+        Some("fixture/runtime-boundary.jsonl:8".to_string()),
+    );
+    assert_eq!(
+        runtime
+            .observe(accepted.clone())
+            .expect("valid checkpoint remains observable"),
+        control
+            .observe(accepted)
+            .expect("control runtime observes the same checkpoint")
+    );
+}
+
+#[test]
 fn live_runtime_interpretation_error_preserves_all_runtime_state_and_source_detail() {
     let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
     let session_a_first = current_schema_sample_checkpoints()[0].clone();

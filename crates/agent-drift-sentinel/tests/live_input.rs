@@ -67,6 +67,29 @@ fn live_input_rejects_out_of_order_checkpoint_cursor() {
 }
 
 #[test]
+fn live_input_rejects_checkpoint_cursor_mismatch_with_exact_event_detail() {
+    let checkpoint =
+        current_schema_checkpoint("session-cursor-mismatch", 4, 60, true, "repair the plan");
+    let mut event = LiveCheckpointEvent::checkpoint_ready(1, checkpoint, None);
+    event.cursor.ordinal = 5;
+
+    let error = validate_live_event_sequence(&[event])
+        .expect_err("checkpoint payload and event cursor mismatch must fail");
+
+    assert!(matches!(
+        error,
+        LiveInputError::CheckpointCursorMismatch {
+            line_number: 1,
+            ref expected_session_id,
+            expected_ordinal: 4,
+            ref actual_session_id,
+            actual_ordinal: 5,
+        } if expected_session_id == "session-cursor-mismatch"
+            && actual_session_id == "session-cursor-mismatch"
+    ));
+}
+
+#[test]
 fn live_input_rejects_trigger_before_first_checkpoint() {
     let event = LiveCheckpointEvent::heartbeat(
         1,

@@ -1,6 +1,10 @@
 #![allow(unused_crate_dependencies)]
 
+use std::fs;
+
 use camino::Utf8PathBuf;
+use serde_json::Value;
+use tempfile::TempDir;
 
 use agent_drift_sentinel::{
     FixtureLiveCheckpointSource, LiveCheckpointSource, LiveInputError, TriggerClass,
@@ -40,6 +44,49 @@ fn live_input_adapter_rejects_fixture_cursor_regression() {
     assert!(matches!(
         error,
         LiveInputError::OutOfOrderCheckpointCursor { .. }
+    ));
+}
+
+#[test]
+fn live_input_adapter_retains_fixture_path_line_and_checkpoint_contract_detail() {
+    let source =
+        fs::read_to_string(fixture_path("append_only_stream.jsonl")).expect("read source fixture");
+    let mut malformed: Value = serde_json::from_str(
+        source
+            .lines()
+            .next()
+            .expect("append-only fixture should contain a checkpoint"),
+    )
+    .expect("parse checkpoint fixture line");
+    malformed["checkpoint"]["expected_next_step"] = Value::String(String::new());
+
+    let temp_dir = TempDir::new().expect("temp dir");
+    let path = Utf8PathBuf::from_path_buf(temp_dir.path().join("malformed-live.jsonl"))
+        .expect("utf8 temp path");
+    fs::write(
+        &path,
+        format!(
+            "\n{}\n",
+            serde_json::to_string(&malformed).expect("encode malformed fixture")
+        ),
+    )
+    .expect("write malformed fixture");
+
+    let error = FixtureLiveCheckpointSource::from_path(&path)
+        .expect_err("malformed checkpoint fixture must fail closed");
+    assert!(matches!(
+        error,
+        LiveInputError::FixtureContractGap {
+            path: ref actual_path,
+            line_number: 2,
+            ref schema_version,
+            ref field,
+            ref reason,
+        } if actual_path == &path
+            && schema_version == "v0.3"
+            && field == "checkpoint.expected_next_step"
+            && reason.contains("session-alpha:0001")
+            && reason.contains("non-empty string")
     ));
 }
 
