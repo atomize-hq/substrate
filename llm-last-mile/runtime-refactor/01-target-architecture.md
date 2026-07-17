@@ -365,9 +365,14 @@ before private-home/dependency scaffolding; parse/help/version exits are non-mut
 shim deploy, shim doctor/repair, physical shim telemetry, and shell/replay backend-factory callers
 consume explicit context or mapping projections rather than common ambient path resolution.
 Installer-managed product-CLI children use the hidden argv carrier as their child discriminator;
-an environment carrier never selects internal mode. A Substrate-owned sudo child validates that
+an environment carrier never selects internal mode. A context-aware Substrate-owned sudo child validates that
 same argv carrier, while an arbitrary system tool receives only minimal context-derived argv from
 the still-owning installer and never receives a meaningless carrier or preserved ambient home.
+Before any internal-child dispatch, the current Unix account+UID or Windows account+SID must equal
+the committed principal; a self-consistent carrier for another principal fails before projection
+or mutation. Standalone self-derivation accepts the live Unix release link, Unix dev A/bin symlink,
+and Windows release A/bin copy shapes through one exact invocation-witness algorithm; a direct
+repository binary or ambiguous PATH witness still requires an explicit prefix.
 World-deps/doctor/config/policy/gateway leaves receive typed context or a checked projection, and
 host Codex paths derive from the committed Unix principal's account-database home.
 
@@ -375,7 +380,28 @@ A physical symlink shim recovers A from an explicit invocation pathname or exact
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no
 prefix precedence; zero or multiple candidates fail closed. CWD may resolve only an explicitly
 relative invocation pathname and is never a prefix fallback. This preserves the current shim
-deployment shape without granting R2 replacement or cleanup authority.
+deployment shape without granting R2 replacement or cleanup authority. After that witness and
+current-principal check, shell manager initialization and manager hints consume only the generated base `A/manager_hooks.yaml` and
+optional `A/manager_hooks.local.yaml`; ambient home, `SUBSTRATE_MANAGER_MANIFEST`, and the compiled
+repository are not normal physical-shim manifest authority. Dev/release writers project the
+already-selected manifest to A only after IH exists, so its content/location cannot select A.
+Because the shim is a separate public process entry, its exact `context.rs` witness functions are
+the sole additional OS-principal/path observation owner: they resolve the current Unix account+UID
+or Windows account+SID and then construct the shared IH. They do not define a shim-local context,
+hash codec, ambient identity fallback, or second prefix precedence rule.
+
+Trace output and policy-commit metadata are projections of that same decision, not another home
+selector. After IH construction and current-principal binding, a normal shell or physical-shim
+entry installs the existing process-global `TraceContext` with the explicit trace target
+`A/trace.jsonl` and policy Git directory A before any manager, policy, span, or execution logger
+runs. The trace library never reads `SHIM_TRACE_LOG` or `dirs::home_dir()` to construct those
+normal-product paths. A later `init_trace(None)` may only reuse an already-bound output; if no
+explicit target was bound, it fails rather than selecting a default. `get_policy_git_hash` receives
+the bound A directory and returns no commit when its metadata is absent or invalid; it never retries
+under an account default or B. An explicitly constructed diagnostic/test trace context may receive
+a named trace path, is labeled non-product evidence, and has no implicit policy directory. Existing
+trace rotation/retention behavior is byte-frozen: R2 changes the authoritative target carrier, not
+trace lifecycle semantics.
 
 Lima and WSL are separate authority domains. One `PlatformBootstrapMappingV1` binds the host-context
 commitment to an exact platform instance, then independently resolves the platform-native home and
@@ -386,12 +412,42 @@ host context; instance-scoped guest sockets/services and Windows forwarder state
 conflicting commitment rather than silently switch owners. Native macOS and Windows execution is
 required for native proof; static cross-platform inspection is only static evidence.
 
+PM also commits one host platform-control root without making it an install/state root. Lima's is
+the committed host principal's account-database home plus `/.lima`; public parents scrub outer
+`HOME`/`LIMA_HOME`, internal mismatches reject, and every Lima child receives the canonical values
+overwritten. Windows uses the current-token Known Folder `LocalApplicationData`, never the
+`LOCALAPPDATA`/`USERPROFILE` environment. A canonical SID+registered-distro+machine-ID+pipe digest
+scopes the shared PID root there, while config/logs remain exactly under A and are passed explicitly.
+These are typed projections, not side tables, prefix selectors, or R2 deletion provenance.
+
 Lima construction is two-stage: validated host context plus the declared/default VM selector may
 only realize the absent/stopped declared instance; the running guest's machine ID, account-database
 principal, and native home then finalize the mapping before R2-owned guest/service/socket
 propagation. VM delete/rebuild, staged-tree replacement, legacy-unit/socket cleanup, forwarded
 socket unlink, forwarding-handle teardown, and timeout kill remain R3. Shim telemetry and replay pass a typed verified projection into the backend
 factory; the factory never selects a home, socket, pipe, instance, or principal from ambient state.
+For V1 normal-product Lima transport, the finalized mapping selects the exact future SSH
+Unix-domain-socket target from `<selected_host_prefix>/sock/agent.sock` to
+`/run/substrate.sock`; an available `vsock-proxy`, TCP listener, ambient endpoint, or backend
+auto-selector cannot replace it. R2-3 does not activate that target: its validated normal-product
+path stops before forwarding with an explicit R3 lifecycle prerequisite, because the current SSH
+constructor reaches socket unlink, timeout kill, and handle-drop teardown. R3 may activate the
+PM-bound target only after it owns PI-101/PI-113/PI-114. Existing VSock and SSH-TCP code remains
+available only to directly called, explicitly labeled diagnostic/test paths and cannot satisfy PM,
+normal-product, or native mapping proof; R2 neither creates a new selector, deletes that code, nor
+executes or acquires its cleanup semantics.
+The Windows forwarder likewise validates IH/PM/current account+SID before its live WSL child edge;
+`wsl -d` receives only the registered PM distro and overwritten PM-derived target/commitment
+projections. Ambient forwarder target variables, `WSLENV`, config, or defaults cannot replace that
+mapping. Existing TCP compatibility input is diagnostic-only after PM verification and cannot
+satisfy the normal mapping proof.
+
+The Linux ACL bridge is deliberately not a context-aware helper: it never selects A/H/R or an
+intended principal and independently enumerates the fixed `substrate` group. Its root/systemd
+boundary is closed over exactly the fixed socket, state-directory-traverse, and world-deps-tree
+tuples. The owning provisioner validates IH/principal first; any other helper mode/target/group
+fails before ACL mutation. This bounded fixed-system-leaf rule does not weaken the full-carrier
+rule for any Substrate child that reads or reconstructs context.
 
 R2 owns selection and transport of this context, including the exact context later consumed by
 rollback or removal. R3 alone owns deletion authority, current-attempt rollback, managed-artifact

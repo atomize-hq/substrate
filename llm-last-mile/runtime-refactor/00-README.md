@@ -225,7 +225,7 @@ owned and unstarted. Static macOS/Windows inspection in R2-0 is not native platf
 
 The exact next packet is **A1.1d-5R2-1 — Host context construction and Unix dev propagation**.
 It may use only its frozen allowlist in [`03-phase-slice-map.md`](03-phase-slice-map.md), the
-114-edge inventory in [`02-seam-crosswalk.md`](02-seam-crosswalk.md), and the exact authority/carrier
+118-edge inventory in [`02-seam-crosswalk.md`](02-seam-crosswalk.md), and the exact authority/carrier
 rules in [`04-contracts-and-gates.md`](04-contracts-and-gates.md). It must not implement release,
 systemd, Lima, WSL, Windows, cleanup, deletion, rollback-convergence, or managed-artifact ownership.
 

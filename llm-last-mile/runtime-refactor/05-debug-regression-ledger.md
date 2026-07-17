@@ -347,8 +347,8 @@ service/socket/runtime paths matched the initial absent/inactive snapshot.
 ### A1.1d-5R2-0 propagation planning record
 
 **Decision/status:** the docs/evidence-only planning packet starts at
-`6ab2a515e13946324d0aac25b144e1c3408cb2c1` and freezes 114 live propagation edges as
-PI-001–PI-114 in `02-seam-crosswalk.md`. It changes only the existing six control-pack files,
+`6ab2a515e13946324d0aac25b144e1c3408cb2c1` and freezes 118 live propagation edges as
+PI-001–PI-118 in `02-seam-crosswalk.md`. It changes only the existing six control-pack files,
 implements no runtime behavior, performs no privileged/platform mutation, promotes no seam, and
 claims no native macOS or Windows proof. R2 implementation is ordered
 R2-1 -> R2-2 -> R2-3 -> R2-4; R3 follows and remains unimplemented.
@@ -378,15 +378,15 @@ The R2 regression gates are exact labels used by the inventory and packet allowl
 
 | Gate | Required proof before the owning packet can exit |
 |---|---|
-| **R2-UDEV-01** | Unix dev install, uninstall, `dev-shim-bootstrap.sh`, and successful install-sensitive standalone CLI modes each construct exactly one equal A/H/R context from the declared/self-derived/account default source before explicit-context home bootstrap; parse/help/version exits mutate no scaffold; hidden argv carrier alone selects internal-child validation and an environment carrier cannot; custom A works without an outer override; conflicting ambient B/dev-prefix cannot retarget bootstrap, children, preexec, or uninstall selection. |
-| **R2-UREL-01** | Unix release wrapper, direct installer/uninstaller, and installed child distinguish constructor/child modes and preserve the same context across install/uninstall; child cannot reinterpret prefix; repeat install preserves commitment; no removal/convergence claim. |
-| **R2-SHIM-01** | Installer-managed, automatic CLI, standalone declared/self-derived deploy/remove/status/doctor/repair, and physical shim telemetry paths receive one complete context or verified mapping projection; a bare physical shim recovers exactly one no-follow invocation witness without PATH precedence and zero/multiple witnesses fail; repair target derives from the committed principal; custom A is the only shim/trace projection under ambient B; legacy H/R/carriers are consistency checks. Replacement/migration/recursive removal actions remain R3 and byte-frozen in R2. |
-| **R2-GEN-01** | Dev/release `env.sh`, manager, Bash preexec, helper, configuration, version, install-state, dependency, service, intended-principal PATH, and Lima known-hosts projections are prefix-relative or self-derived, encode/project the same context where consumed, and never treat a conflicting ambient B or generated value as selection authority. |
+| **R2-UDEV-01** | Unix dev install, uninstall, `dev-shim-bootstrap.sh`, and successful install-sensitive standalone CLI modes each construct exactly one equal A/H/R context from the declared/installed-witness/account-default source before explicit-context home bootstrap; parse/help/version exits mutate no scaffold; hidden argv carrier alone selects internal-child validation and the current account+UID must equal its committed principal; custom A/bin dev symlink self-derives A without an outer override; direct repo and zero/multiple witnesses fail; conflicting ambient B/dev-prefix cannot retarget bootstrap, children, preexec, or uninstall selection; a forged-principal carrier fails before mutation. |
+| **R2-UREL-01** | Unix release wrapper, direct installer/uninstaller, and installed child distinguish constructor/child modes and preserve the same context across install/uninstall; Unix release A/bin witness self-derives A; every child binds the committed principal to current Unix identity/sudo origin and cannot reinterpret prefix; repeat install preserves commitment; no removal/convergence claim. |
+| **R2-SHIM-01** | Installer-managed, automatic CLI, standalone declared/self-derived deploy/remove/status/doctor/repair, and physical shim paths receive one complete context or verified mapping projection; a bare physical shim recovers exactly one no-follow invocation witness without PATH precedence, resolves the canonical current Unix account+UID or Windows account+SID through its exact OS observation surface, and rejects zero/multiple witnesses or a forged principal before dispatch; repair target derives from the committed principal; telemetry and manager-hint manifest/overlay consume custom A under ambient B, with no compiled-repo or manifest-environment fallback in normal product mode; shell and physical-shim trace output is exactly `A/trace.jsonl`, policy-commit metadata reads only A, unbound trace initialization fails, missing Git metadata does not fall back, and the A/B proof observes zero filesystem access under B; legacy H/R/carriers are consistency checks. Replacement/migration/recursive removal actions and trace rotation/retention semantics remain byte-frozen in R2. |
+| **R2-GEN-01** | Dev/release `env.sh`, manager, Bash preexec, helper, generated `A/manager_hooks.yaml`, configuration, version, install-state, dependency, service, intended-principal PATH, and Lima known-hosts projections are prefix-relative or self-derived, encode/project the same context where consumed, and never treat a conflicting ambient B, repository path, or generated value as selection authority. |
 | **R2-RUNTIME-01** | Dependency add/remove/current/list/sync, world-deps global/current inner leaves, runtime-family/Codex provisioning, config/policy proof producers and consumers, and gateway sync/status/restart leaves receive the exact context; member-dispatch/gateway Codex paths and synthetic-auth creation target the committed principal's account-database home. Rollback and synthetic-auth deletion remain R3. Runtime, policy, gateway, and provider semantics do not change. |
-| **R2-LINUX-01** | Unix account+UID and context survive every release, dev-install, and provision sudo boundary: Substrate helpers validate the full argv carrier, while arbitrary tools receive only exact context-derived argv after parent revalidation and no preserved environment. Linux unit environment carries H=A, R=A, commitment, and intended-principal projection; socket/drop-in and `ReadWritePaths` derive from A; only the fixed same-attempt Linux socket-restart unlink is exercised; focused/static proof passes in R2-2 and dedicated-host service/world/Codex product proof passes in R2-4. |
-| **R2-DIAG-01** | Trace, shim, repair, world, host, health, world-deps, config/policy proof, gateway, Lima/WSL, and pipe diagnostics report selected host commitment and any verified platform mapping/transport; direct mode constructs from declared/principal-default inputs, internal mode validates hidden argv, and no default-home/guest/pipe reconstruction is represented as authority. |
-| **R2-MAP-MAC-01** | IH plus the VM selector performs only Stage-1 declared-instance realization; PM is finalized from running-guest machine ID/account+UID+home before R2 guest projection. Host commitment binds guest unit, A-scoped host socket, and A-scoped known-hosts projection; shell/shim/replay factory callers are explicit; destroy/rebuild/staging/unit/socket/unlink/drop/timeout cleanup remains R3; no path/principal equality. Static proof is labeled static and a native pre-existing-Lima mapping-only run is assigned separately. |
-| **R2-MAP-WIN-01** | Windows account+SID host context survives dev/release/uninstall and `-NoAutoSource`; it binds one WSL instance, WSL-native account+UID+home, one normalized public-selected/default pipe shared by warm/forwarder/backend/status/doctor plus shell/shim/replay factory callers. The fail-closed WSL guards remain byte-identical; timeout kill/stop/deletion remains R3; static proof is labeled static and native existing-instance mapping-only proof is assigned without claiming provisioning. |
+| **R2-LINUX-01** | Unix account+UID and context survive every release, dev-install, and provision sudo boundary: context-aware Substrate helpers validate the full argv carrier; arbitrary tools receive only exact context-derived argv after parent revalidation and no preserved environment; the ACL bridge receives no context and rejects every tuple except its exact three fixed mode/target/`substrate` combinations while preserving group-member enumeration. Linux unit environment carries H=A, R=A, commitment, and intended-principal projection; socket/drop-in and `ReadWritePaths` derive from A; only the fixed same-attempt Linux socket-restart unlink is exercised; focused/static proof passes in R2-2 and dedicated-host service/world/Codex product proof passes in R2-4. |
+| **R2-DIAG-01** | Trace, shim, repair, world, host, health, world-deps, config/policy proof, gateway, Lima/WSL, and pipe diagnostics report selected host commitment, verified platform mapping/transport, and host platform-control root where applicable; direct mode constructs from declared/principal/OS Known Folder inputs, internal mode validates hidden argv and matching scrubbed projections, and no default-home/guest/pipe/`LIMA_HOME`/`LOCALAPPDATA` reconstruction is represented as authority. Normal live trace and policy-commit production use the entry-bound A projections; `SHIM_TRACE_LOG` is explicit diagnostic/test input only and cannot satisfy product proof. |
+| **R2-MAP-MAC-01** | IH plus the VM selector and host account-database-derived `/.lima` control root performs only Stage-1 declared-instance realization; parents scrub/overwrite child `HOME`/`LIMA_HOME`, direct internal mismatch rejects, and PM is finalized from running-guest machine ID/account+UID+home before R2 guest projection. R2 fixes the future V1 SSH-UDS target from `A/sock/agent.sock` to `/run/substrate.sock`; backend auto-selection, `vsock-proxy`, TCP, ambient endpoints, and ambient Lima store cannot replace it. The validated R2 path stops before forwarder launch with an explicit R3 prerequisite, so socket unlink, `StreamLocalBindUnlink`, timeout kill/wait, handle-drop teardown, retry, and convergence remain exclusively R3 and are not exercised as R2 proof. Host commitment also binds the guest unit and future A-scoped known-hosts projection; shell/shim/replay factory callers are explicit; no path/principal equality. Static proof is labeled static and a native pre-existing-Lima no-forwarder A/B mapping-only run is assigned separately; macOS product transport remains pending R3. |
+| **R2-MAP-WIN-01** | Windows account+SID host context survives dev/release/uninstall and `-NoAutoSource`; the release A/bin copy self-derives A under ambient B and every internal carrier is bound to the current account+SID, with forged-principal rejection. It binds one WSL instance, WSL-native account+UID+home, one normalized public-selected/default pipe, and an OS Known Folder control root. A canonical SID+registered-distro+machine-ID+pipe digest scopes the shared PID root; config/logs are under A and all paths are explicit, so `LOCALAPPDATA`/`USERPROFILE` cannot select them. Warm/forwarder/backend/status/doctor plus shell/shim/replay consume the same mapping. The forwarder validates PM/current token before `wsl -d`; its WSL child receives only PM-derived distro, normal-product guest target, and commitment despite conflicting ambient config/target/`WSLENV`. The fail-closed WSL guards remain byte-identical; creation, replacement, timeout kill, stop, PID deletion, and convergence remain R3; static proof is labeled static and native existing-instance A/B mapping-only proof is assigned without claiming provisioning. |
 | **R3-LIFE-01** | R3-only candidate, rollback, manifest, managed-system cleanup, account-state restoration, crash-window, uninstall/reinstall, shim/payload/bin/cache/helper/unit/socket/platform-staging/forwarder unlink/drop/timeout/synthetic-auth cleanup, and unrelated-state preservation matrix. Referencing this gate from R2 transports a target only. |
 | **R3-WIN-01** | R3-only native Windows two-prefix cleanup matrix: no wildcard removal; exact per-prefix versus shared state; version/bin/profile replacement, timeout rollback, uninstall order, WSL/forwarder/shim cleanup, partial install, and unrelated-state preservation. |
 
@@ -397,15 +397,16 @@ action above stays exclusive to R3; host and Lima/WSL paths/principals are never
 acyclic. The exact next packet after a clean R2-0 commit is **A1.1d-5R2-1 — Host context
 construction and Unix dev propagation**.
 
-**Frozen planning validation record:** the inventory contains exactly 114 unique, contiguous rows
-and dispositions: 18 owned by R2-1, 41 by R2-2, 32 by R2-3, one by R2-4, and 22 by R3. Each row
+**Frozen planning validation record:** the inventory contains exactly 118 unique, contiguous rows
+and dispositions: 19 owned by R2-1, 41 by R2-2, 35 by R2-3, one by R2-4, and 22 by R3. Each row
 has exactly one approved edge class and one packet owner; the class totals are 16
-`ContextConstruction`, 26 `ExplicitHostPropagation`, five `PrivilegeBoundaryPropagation`, 16
-`PlatformMapping`, 12 `GeneratedProjectionConsumption`, 13 `DiagnosticProjection`, 22
+`ContextConstruction`, 26 `ExplicitHostPropagation`, five `PrivilegeBoundaryPropagation`, 17
+`PlatformMapping`, 13 `GeneratedProjectionConsumption`, 15 `DiagnosticProjection`, 22
 `R3CleanupOnly`, and four `OutOfScope`. The frozen DAG is exactly
 R1 -> R2-0 -> R2-1 -> R2-2 -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
 field-count, class, owner, packet-count, table-column, fence-pair, relative-link, and allowlist-path
-checks, plus `git diff --check`, `cargo fmt --all -- --check`, and GitNexus change detection. The
+checks across 43 tables/749 pipe rows, 134 fence markers, and 12 relative links, plus
+`git diff --check`, `cargo fmt --all -- --check`, and GitNexus change detection. The
 GitNexus index was refreshed at the starting commit; only generated count lines changed during
 refresh and those exact lines were restored, while final change detection reports six documentation
 files, zero affected execution flows, and LOW risk. Successive isolated read-only review rounds found and
@@ -415,9 +416,67 @@ two-stage Lima realization, Windows timeout-kill ownership, invalid native-smoke
 symlink-shim invocation recovery, generated preexec and Codex-home projections, direct
 world-deps/doctor/config/policy/gateway consumers, exact helper-versus-system-tool sudo carriers,
 Lima known-hosts placement, and forwarding unlink/drop/timeout ownership.
-No reviewer modified the repository. Final fresh review is required against the unchanged validated
-diff before commit; no runtime implementation or native platform proof can be inferred from this
-record.
+The post-push fresh authority audit additionally closed source-layout omissions for the Unix dev
+A/bin symlink and Windows release A/bin copy, and made current Unix account+UID/Windows account+SID
+equality mandatory for every internal carrier, including forged-valid-carrier negative proof.
+The subsequent lifecycle allowlist review closed the remaining Windows implementation-surface gap:
+R2-3 alone may add the exact `windows-sys` 0.52 features `Win32_Security`,
+`Win32_Storage_FileSystem`, `Win32_System_Threading`, `Win32_System_Com`, and `Win32_UI_Shell` in
+`crates/shell/Cargo.toml`; the last two are only for token-bound Known Folder resolution. Dependency,
+version, target-scope, extra-feature, package-graph, and lockfile changes remain outside that authority.
+The next fresh source audit corrected PI-030 to model the ACL bridge's actual mode/target/group-only
+boundary and froze its three accepted tuples, then added PI-115 for the forwarder-to-WSL spawn and
+PI-116 for physical-shim manager-manifest consumption. Those rows require PM-derived WSL child
+argv/environment and A-scoped generated manager data; neither ambient target/`WSLENV` nor ambient
+home/repository manifest fallback is authority.
+The same review froze the only dependency edits: R2-1 adds existing `base64` 0.22/workspace `sha2`
+to `transport-api-types`; R2-3 adds the existing `transport-api-types` 0.2.8 path edge to the
+backend factory, forwarder, and physical shim. Only those four package dependency lists may change in
+`Cargo.lock`; the shim list may additionally gain existing `windows-sys 0.52.0`, while its existing
+`nix` dependency adds feature `user` without a lock hunk. No package/version/checksum change is
+authorized. The physical shim's exact `context.rs` witness functions are the only added
+OS-observation owner; they construct the shared IH and may not define a local principal/context
+type or raw-FFI/ambient fallback.
+The transport-identity review first froze SSH UDS as the only V1 normal-product target. A later
+lifecycle review correctly found that activating it in R2 would newly reach the current
+constructor's socket unlink, `StreamLocalBindUnlink`, timeout kill/wait, and handle-drop cleanup.
+The corrected sequence therefore freezes PM and the A-scoped target in R2-3 but stops before
+forwarder launch; R3 alone activates it after PI-101/PI-113/PI-114 lifecycle ownership lands.
+Existing VSock and SSH-TCP code is not removed, but it remains diagnostic/test-only and cannot
+satisfy PM, product, or native R2 proof.
+The next fresh authority/platform review found two remaining ambient platform-control selectors:
+macOS SSH config lookup still honored `LIMA_HOME`, and Windows forwarder config/log paths still
+honored `LOCALAPPDATA`. The corrected PM now commits `host_platform_control_root`: Lima derives it
+from the committed host principal's account-database home and scrubs/overwrites child
+`HOME`/`LIMA_HOME`; WSL derives it from the current-token Known Folder plus the exact canonical
+SID+registered-distro+machine-ID+pipe scope digest. Windows config/log projections are A-scoped and
+explicit; the shared PID target is control-root-scoped. Ambient conflicts never select either
+platform, and no R2 path gains replacement, rollback, removal, termination, or deletion authority.
+The final platform allowlist audit also corrected one wording inconsistency: the R2-3 `Cargo.lock`
+allowlist now names the three internal `transport-api-types` package-list edges and the already
+frozen existing `windows-sys 0.52.0` shim package-list entry, while still forbidding every
+package/version/checksum change.
+The final authority review then found two trace-specific ambient reads that the broad CLI/shim rows
+had not made independently reviewable. PI-117 now assigns the common shell/global-trace carrier to
+R2-1, and PI-118 assigns the physical-shim binding/reuse calls to R2-3. A normal entry binds exact
+`A/trace.jsonl` plus policy Git directory A after IH/principal validation; unbound
+`init_trace(None)` errors, missing policy metadata returns none without fallback, and
+`SHIM_TRACE_LOG` remains explicit diagnostic/test input only. The R2-1 allowlist therefore adds
+only `trace/src/{context.rs,util.rs}` and the named shell trace call sites; R2-3 adds only shim
+`logger.rs` and `exec/policy.rs` beside its already-allowed shim entry. Trace
+writer/rotation/retention and policy semantics remain frozen. GitNexus reported LOW risk for
+`evaluate_policy`/`get_policy_git_hash` and MEDIUM direct test fan-out for
+`TraceContext::init_trace`; no runtime edit occurred in R2-0.
+No reviewer modified the repository. Because the built-in reviewer-thread allocator would not
+admit new threads, the required fresh isolated read-only `default` review turns used three distinct
+existing built-in identities; each re-read the current diff/source rather than carrying forward its
+prior verdict. The terminal verdicts are `/root/final_authority_security_retry` — **CLEAN** for
+host-context authority/security,
+`/root/final_lifecycle_ownership_retry/final_control_authority/final_control_lifecycle_retry` —
+**CLEAN** for installer/uninstaller lifecycle and R2-versus-R3 ownership, and
+`/root/final_lifecycle_ownership_retry/final_control_authority/final_control_platform_retry` —
+**CLEAN** for cross-platform mapping, allowlists, regression assignments, and native-proof honesty.
+No runtime implementation or native platform proof can be inferred from this record.
 
 ### A1.1d-5R1 Linux effective-authority contract correction
 
