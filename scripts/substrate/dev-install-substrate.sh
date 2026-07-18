@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+if [[ $- == *x* ]]; then
+  set +x
+fi
 set -euo pipefail
 
 SCRIPT_NAME="dev-install-substrate"
@@ -15,6 +18,7 @@ fatal_with_code() {
 
 readonly DISTRO_UNKNOWN_SENTINEL="<unknown>"
 readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
+readonly PRIVILEGED_TOOL_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
 
 resolve_install_bootstrap_context() {
@@ -283,8 +287,23 @@ rollback_agent_runtime_after_failed_sync() {
   local deps_item="$2"
   local runtime_path="$3"
   local original_path="${PATH}"
+  local trace_was_active=0
+  local rollback_succeeded=0
 
-  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global remove "${deps_item}"; then
+  if [[ $- == *x* ]]; then
+    trace_was_active=1
+    set +x
+  fi
+  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" \
+    "${substrate_bin}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps global remove "${deps_item}"; then
+    rollback_succeeded=1
+  fi
+  if [[ "${trace_was_active}" -eq 1 ]]; then
+    set -x
+  fi
+
+  if [[ "${rollback_succeeded}" -eq 1 ]]; then
     warn "Rolled back world deps global enable for '${deps_item}' after sync failure."
     return 0
   fi
@@ -308,12 +327,26 @@ provision_agent_runtime_with_sync() {
   local deps_item
   local runtime_path
   local original_path="${PATH}"
+  local trace_was_active=0
   deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
   runtime_path="${BIN_DIR}:${PATH}"
 
   log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The dev installer will run 'substrate world deps current sync' immediately after this step."
   local add_output
-  add_output="$(PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global add --json "${deps_item}")"
+  local add_status=0
+  if [[ $- == *x* ]]; then
+    trace_was_active=1
+    set +x
+  fi
+  add_output="$(PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" \
+    "${substrate_bin}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps global add --json "${deps_item}")" || add_status=$?
+  if [[ "${trace_was_active}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ "${add_status}" -ne 0 ]]; then
+    return "${add_status}"
+  fi
   if grep -Fq "\"${deps_item}\"" <<<"${add_output}"; then
     PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=1
   else
@@ -323,10 +356,24 @@ provision_agent_runtime_with_sync() {
   log "Syncing world dependencies via 'substrate world deps current sync' for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}..."
   log "This step may download the guest runtime inside the world and can take several minutes. Current world-deps script installs return output only after the guest command exits."
   local rc=0
-  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps current sync; then
-    return
+  local sync_succeeded=0
+  trace_was_active=0
+  if [[ $- == *x* ]]; then
+    trace_was_active=1
+    set +x
+  fi
+  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" \
+    "${substrate_bin}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps current sync; then
+    sync_succeeded=1
   else
     rc=$?
+  fi
+  if [[ "${trace_was_active}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ "${sync_succeeded}" -eq 1 ]]; then
+    return
   fi
 
   if [[ "${PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER}" -ne 1 ]]; then
@@ -350,20 +397,84 @@ provision_agent_runtime_with_sync() {
 }
 
 run_privileged() {
-  if [[ ${EUID} -eq 0 ]]; then
+  local trace_was_active=0
+  if [[ $- == *x* ]]; then
+    trace_was_active=1
+    set +x
+  fi
+  if [[ -z "${PREFIX}" \
+      || "${SUBSTRATE_HOME:-}" != "${PREFIX}" \
+      || "${SUBSTRATE_ROOT:-}" != "${PREFIX}" \
+      || "${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT:-}" != "${INSTALL_BOOTSTRAP_COMMITMENT}" \
+      || "${SUBSTRATE_INSTALL_PRIMARY_USER:-}" != "${INSTALL_BOOTSTRAP_ACCOUNT}" \
+      || "${SUBSTRATE_INSTALL_PRIMARY_UID:-}" != "${INSTALL_BOOTSTRAP_UID}" \
+      || "${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}" != "${INSTALL_BOOTSTRAP_CONTEXT_V1}" ]]; then
+    if [[ "${trace_was_active}" -eq 1 ]]; then
+      set -x
+    fi
+    warn "Install bootstrap context projection changed before privileged tool dispatch."
+    return 2
+  fi
+  local tool="$1"
+  shift
+  local tool_path=""
+  if [[ "${tool}" == */* ]]; then
+    if [[ "${trace_was_active}" -eq 1 ]]; then
+      set -x
+    fi
+    warn "Unsupported absolute privileged tool path: ${tool}"
+    return 126
+  else
+    tool_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- "${tool}" 2>/dev/null || true)"
+  fi
+  if [[ -z "${tool_path}" ]]; then
+    if [[ "${trace_was_active}" -eq 1 ]]; then
+      set -x
+    fi
+    warn "Unable to resolve privileged tool: ${tool}"
+    return 127
+  fi
+  local env_path=""
+  env_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- env 2>/dev/null || true)"
+  if [[ -z "${env_path}" ]]; then
+    if [[ "${trace_was_active}" -eq 1 ]]; then
+      set -x
+    fi
+    warn "Unable to resolve privileged environment scrubber: env"
+    return 127
+  fi
+  local -a scrubbed_command=(
+    "${env_path}" -i
+    "PATH=${PRIVILEGED_TOOL_PATH}"
+    "HOME=/root"
+    "USER=root"
+    "LOGNAME=root"
+    "${tool_path}"
     "$@"
+  )
+  if [[ "${trace_was_active}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ ${EUID} -eq 0 ]]; then
+    "${scrubbed_command[@]}"
     return $?
   fi
   if command -v sudo >/dev/null 2>&1; then
-    if sudo -n true >/dev/null 2>&1; then
-      sudo -n "$@"
+    local true_path
+    true_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- true 2>/dev/null || true)"
+    if [[ -z "${true_path}" ]]; then
+      warn "Unable to resolve privileged sudo probe tool: true"
+      return 127
+    fi
+    if sudo -n -- "${env_path}" -i "PATH=${PRIVILEGED_TOOL_PATH}" "${true_path}" >/dev/null 2>&1; then
+      sudo -n -- "${scrubbed_command[@]}"
       return $?
     fi
     if [[ ! -t 0 && ! -t 1 && ! -t 2 ]]; then
       warn "Command requires elevated privileges but no interactive sudo prompt is possible: $*"
       return 1
     fi
-    sudo "$@"
+    sudo -- "${scrubbed_command[@]}"
     return $?
   fi
   warn "Command requires elevated privileges but sudo is unavailable: $*"
@@ -2007,7 +2118,10 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   ensure_linux_runtime_libraries libseccomp
   use_noninteractive_world_provision=0
   if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
-    if sudo -n true >/dev/null 2>&1; then
+    true_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- true 2>/dev/null || true)"
+    privileged_env_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- env 2>/dev/null || true)"
+    if [[ -n "${true_path}" && -n "${privileged_env_path}" ]] \
+        && sudo -n -- "${privileged_env_path}" -i "PATH=${PRIVILEGED_TOOL_PATH}" "${true_path}" >/dev/null 2>&1; then
       use_noninteractive_world_provision=1
       log "Detected non-interactive sudo for world provisioning."
     else
@@ -2044,14 +2158,27 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	  PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
 	  if [[ -x "${PROVISION_SCRIPT}" ]]; then
 	    log "Provisioning Linux world-service service via ${PROVISION_SCRIPT} (sudo may prompt if needed)..."
-	    provision_args=(--profile "${PROFILE}" --skip-build)
+	    provision_status=0
+	    provision_args=(
+          --home "${PREFIX}"
+          --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}"
+          --profile "${PROFILE}"
+          --skip-build
+        )
 	    if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
 	      provision_args+=(--world-netfilter)
 	    fi
 	    if [[ "${use_noninteractive_world_provision}" -eq 1 ]]; then
 	      provision_args+=(--sudo-noninteractive)
 	    fi
-	    if ! SUBSTRATE_HOME="${PREFIX}" "${PROVISION_SCRIPT}" "${provision_args[@]}"; then
+          SUBSTRATE_HOME="${PREFIX}" \
+          SUBSTRATE_ROOT="${PREFIX}" \
+          SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}" \
+          SUBSTRATE_INSTALL_PRIMARY_USER="${INSTALL_BOOTSTRAP_ACCOUNT}" \
+          SUBSTRATE_INSTALL_PRIMARY_UID="${INSTALL_BOOTSTRAP_UID}" \
+          SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+          "${PROVISION_SCRIPT}" "${provision_args[@]}" || provision_status=$?
+        if [[ "${provision_status}" -ne 0 ]]; then
 	      WORLD_PROVISION_FAILED=1
 	      fail_closed_world_provisioning_for_runtime_request \
 	        "the Linux world-provision helper reported an error." \
