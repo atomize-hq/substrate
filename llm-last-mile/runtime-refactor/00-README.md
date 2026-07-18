@@ -201,10 +201,10 @@ ACL rule conflates non-writing traversal with replacement authority, custom-pref
 not propagated across every install/uninstall child, and partial-install cleanup is not
 convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5R3**. R1 is
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
-**A1.1d-5R2-0 is planning-complete in this control-pack packet; no R2 runtime implementation has
-begun.** R2 implementation is frozen as **R2-1 → R2-2 → R2-3 → R2-4**, followed by R3. R3 is
-unstarted. Until the implementation packets are review-clean and their Linux lifecycle/product smoke
-passes,
+**A1.1d-5R2-0 is planning-complete, and A1.1d-5R2-1 is implementation- and review-complete through
+`2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
+**R2-1 → R2-2 → R2-3 → R2-4**, followed by R3; R2-2, R2-3, R2-4, and R3 are unstarted. Until the
+remaining implementation packets are review-clean and their Linux lifecycle/product smoke passes,
 both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
 remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
 proof is not added as a dependency of the B1/B2.1 corridor.
@@ -241,14 +241,19 @@ descendant `0700`/`0600` contracts remain mandatory. This correction adds no sea
 broker, world capability, policy, gateway, receipt, supervisor, worker, replay, or command change;
 the contract correction is recorded by `17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded
 runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INSTALL-01` remain open,
-A1.1d and A1 remain incomplete, B3.1 remains blocked, and R2 implementation/R3 remain separately
-owned and unstarted. Static macOS/Windows inspection in R2-0 is not native platform proof.
+A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
+owned; R2-1 is complete while R2-2/R2-3/R2-4/R3 remain unstarted. Static macOS/Windows inspection
+in R2-0 is not native platform proof.
 
-The exact next packet is **A1.1d-5R2-1 — Host context construction and Unix dev propagation**.
-It may use only its frozen allowlist in [`03-phase-slice-map.md`](03-phase-slice-map.md), the
-118-edge inventory in [`02-seam-crosswalk.md`](02-seam-crosswalk.md), and the exact authority/carrier
-rules in [`04-contracts-and-gates.md`](04-contracts-and-gates.md). It must not implement release,
-systemd, Lima, WSL, Windows, cleanup, deletion, rollback-convergence, or managed-artifact ownership.
+R2-1 implements the 19 owned rows PI-001–PI-004, PI-010–PI-011, PI-032–PI-034, PI-061–PI-063,
+PI-067, PI-082–PI-085, PI-104, and PI-117. Its shared IH framing, hidden authenticated bootstrap
+action, Unix principal binding, A-over-B dev/shim/generated projection matrix, and shell-only
+explicit trace/policy binding are proven without changing the neutral trace setter, physical shim,
+replay, world-deps production, lifecycle behavior, or any later packet owner.
+
+The exact next packet is **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime
+propagation**. It may use only its frozen allowlist and must not begin R2-3 platform/physical-shim
+mapping, R2-4 joined proof, or R3 cleanup/convergence.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant

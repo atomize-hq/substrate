@@ -619,9 +619,47 @@ provenance gaps; those were remediated with red/green tests. Fresh reviewers
 CLEAN against the frozen runtime hashes. No privileged installer/product wall, native macOS proof,
 or cross-platform completion is claimed.
 
-The exact next packet is **A1.1d-5R2-1 — Host context construction and Unix dev propagation**,
-followed by R2-2, R2-3, R2-4, and the audit-proven **R3**. After the implementation packets are
-independently review-clean, rerun the complete Linux
+### A1.1d-5R2-1 host-context and Unix-dev closeout
+
+**Decision/status:** A1.1d-5R2-1 is implementation- and review-complete through runtime commit
+`2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`. The separately published contract corrections are
+`e42b1a1ead9dbbebd399e6ba6ab056e342a3b4db` (authenticated hidden home-bootstrap action) and
+`1565c2ac0af358b25ef8499cddee1daea051c7b0` (staged trace binding). Runtime commits are
+`1acc8c70`, `d9d991b6`, `aea192f6`, `85798bfe`, `fee75ff0`, `af85adf0`, and `2653c2ef`.
+
+The shared transport codec proves exact IH line framing/base64url/SHA-256 commitment and strict
+missing, duplicate, unknown, malformed, reordered, path, commitment, and principal rejection. Unix
+dev install/uninstall/dev-shim and standalone witnesses construct or validate one context; hidden
+argv alone selects internal mode; the authenticated `--install-bootstrap-home-v1` action binds the
+current account+UID and checked H/R before the unchanged explicit-context R1 bootstrap. The
+unprivileged A/B product matrix proves custom A remains authoritative for bootstrap, shim
+deploy/remove/status/doctor/repair, generated env/manager/preexec/helper projections, uninstall,
+shell `A/trace.jsonl`, and policy Git A, with no product fallback/access under B. Parse/help/version
+exits are non-mutating. The one scaffold-trigger rename preserves its fixture/assertions, and the
+new version-nonmutation test passes.
+
+Focused transport, IH, R1 private-home/HostSessionAuthority, installer, script, shim
+deploy/status/doctor/health, trace, replay, and A/B suites passed. `cargo check --workspace
+--all-targets`, shell all-target warnings-denied Clippy, `cargo fmt --all -- --check`, Bash syntax,
+available ShellCheck, `git diff --check`, and GitNexus detection passed. The final broad shell run is
+**1089 passed / 149 failed / 1238 total** versus inherited **1080/149/1229**: `PassToFail = 0`,
+`NewFail = 0`, no removed/substituted test, and all 149 retained normalized failure signatures are
+byte-identical after the already-audited dynamic orchestration-ID normalization
+(`c818c4f2c4acce52ea5cb057020419bb10dd871148bafcc38112f13437aba6e9`). Windows source-only
+comparison removes all 44 R2-1-introduced errors and adds none; the 47 retained errors are inherited,
+so no Windows IH or platform capability is claimed.
+
+Fresh read-only reviewers `/root/uid_lint_remediation_rereview`,
+`/root/windows_cfg_remediation_review`, and `/root/final_integrated_r2_1_rereview` returned CLEAN.
+The neutral trace setter, default compatibility callers, physical-shim/replay production files,
+world-deps production, trace lifecycle semantics, shim replacement/migration/removal predicates,
+R1 private-home security behavior, and every release/sudo/service/world/platform/lifecycle owner are
+unchanged. PI-118 and compatibility removal remain R2-3-owned. `RG-HOME-01`, `RG-INSTALL-01`,
+A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted.
+
+The exact next packet is **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime
+propagation**. R2-2, R2-3, R2-4, and R3 were not begun. After the remaining implementation packets
+are independently review-clean, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
 product-smoke portion of the B1/B2.1 joint closeout. Native macOS proof remains separately required
@@ -1260,9 +1298,11 @@ adapter and complete recovered-core/B1/B2.1-0 range.
 B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/review-clean:
 **yes**. B1/B2.1-0 review-clean: **yes**. B1/B2.1 joint production integration closeout:
 **not begun**. B3.1 dependency-ready: **no**. Seam promotions: **none**. Within the B corridor, the
-next architectural packet remains the B1/B2.1 joint production integration closeout. The
-repository's exact next packet is A1.1d-5R2-1 — Host context construction and Unix dev
-propagation, followed by R2-2, R2-3, R2-4, and R3; only the joint closeout's Linux
+next architectural packet remains the B1/B2.1 joint production integration closeout. At the
+B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
+and Unix dev propagation; after R2-1 closeout the live next packet is
+A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime propagation, followed by R2-3, R2-4,
+and R3. Only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
 

@@ -480,6 +480,18 @@ layout, umask matrix, wrong-type/owner/mode/symlink/ACL cases, no-descendant-wri
 exit categories, scaffold assertions, idempotency, and no-overwrite proof remain unchanged. No other
 historical test may be renamed, and world-deps production command processing remains R2-2-owned.
 
+**R2-1 closeout:** runtime commits `1acc8c70`, `d9d991b6`, `aea192f6`, `85798bfe`, `fee75ff0`,
+`af85adf0`, and `2653c2ef` implement and remediate this packet after the separately published
+contract corrections `e42b1a1e` and `1565c2ac`. The exact IH golden/tamper wall, current/forged
+principal checks, hidden-action/version nonmutation tests, R1 scaffold wall, A/B installer scripts,
+shim/doctor/health/generated projection tests, trace/replay compatibility tests, workspace
+all-target check, warnings-denied Clippy, formatting, shell checks, and GitNexus detection pass. The
+final shell differential is **1089 passed / 149 failed / 1238 total** against inherited
+**1080/149/1229**: `PassToFail = 0`, `NewFail = 0`, no removed/substituted test, and all 149 retained
+normalized failure signatures are unchanged. The only historical rename is the authorized
+scaffold-trigger mapping; the version-nonmutation test and nine R2-1 unit additions pass. Fresh
+final integrated review is CLEAN. The next packet is R2-2; R2-3/R2-4/R3 remain unstarted.
+
 ###### A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime propagation
 
 | Packet field | Frozen requirement |
@@ -609,8 +621,8 @@ and `RenamedOrSubstituted = 0`; retained failing names/signatures are unchanged 
 R2/R3 proof, native macOS proof, or cross-platform closeout.
 
 The R1 contract correction and bounded runtime are review-clean through
-`4d0acff68e20d86b97fe5367b8a4617554f33ef4`; R2-0 planning is complete while R2 implementation
-and R3 are not begun. `RG-HOME-01` and
+`4d0acff68e20d86b97fe5367b8a4617554f33ef4`; R2-0 planning and R2-1 implementation are complete
+while R2-2/R2-3/R2-4/R3 are not begun. `RG-HOME-01` and
 `RG-INSTALL-01` remain open, A1.1d/A1 remain incomplete, and B3.1 remains blocked.
 Their Linux regression wall and normal product lifecycle smoke are prerequisites for A1.1d Linux
 closeout and for the Linux product-smoke portion of the B1/B2.1 joint closeout. They do not reopen
@@ -626,9 +638,9 @@ The `RG-AUTH-01` and `RG-AUTH-02` references in A1 are scoped gates, not whole-l
 - A1.1d-5 focused private-home implementation is review-clean on Linux; A1.1d integrated Linux
   closeout is open and cross-platform closeout is pending. A1.1d-5I has completed the bounded
   compatibility audit; R1 is review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`,
-  R2-0 planning is complete; R2 runtime implementation and R3 remain unimplemented, and no
-  A1.1d-6 exists or is implied. The exact next packet is **A1.1d-5R2-1 — Host context
-  construction and Unix dev propagation**.
+  R2-0 planning is complete; R2-1 is review-clean through `2653c2ef`; R2-2/R2-3/R2-4/R3 remain
+  unimplemented; and no A1.1d-6 exists or is implied. The exact next packet is
+  **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime propagation**.
 - The public lifecycle failure is owned by A1.2/A1.3, not an A1.1d heartbeat or successor-work
   subpacket. No A1.1d-6 exists or is implied.
 - A1.1e is focused-proof and review clean through `cd676614`; this does not close A1.1d or any

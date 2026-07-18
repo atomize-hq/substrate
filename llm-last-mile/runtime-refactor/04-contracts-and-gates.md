@@ -934,6 +934,16 @@ shell A policy lookup, shell repeated-A reuse, shell A/B zero access, and unchan
 unpromoted compatibility callers. Policy mode/content, span/replay schema, environment hashing,
 writer flush, rotation, retention, rename, and removal bodies do not change in R2.
 
+R2-1 satisfies the shell/common portion of this gate through
+`2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`. Golden and tamper tests prove the frozen IH
+domain/version/line framing, base64url fields, SHA-256 commitment, duplicate/unknown/reordered-field
+rejection, checked H/R equality, and current Unix account+UID binding. Hidden argv alone selects the
+internal bootstrap action; forged/missing/malformed context rejects before mutation; version/help
+and parse exits remain non-mutating. Product-bound shell trace and policy tests prove A-only output,
+repeat reuse, conflicting-path rejection, missing-metadata no-fallback, and no B access. The setter,
+legacy compatibility posture, physical shim, replay, writer/serialization/rotation/retention, and
+R3 lifecycle bodies remain unchanged and unresolved exactly where assigned.
+
 ##### R3-exclusive lifecycle authority
 
 R2 selects and transports the exact context that later lifecycle operations consume. It does not

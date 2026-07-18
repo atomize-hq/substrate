@@ -308,6 +308,13 @@ replace historical `--version` bootstrap invocations with the authenticated hidd
 add version nonmutation proof; its fixture topology, security assertions, and production ownership
 remain unchanged.
 
+R2-1 closes exactly its 19 owned inventory rows at runtime commit
+`2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`: PI-001–PI-004, PI-010–PI-011, PI-032–PI-034,
+PI-061–PI-063, PI-067, PI-082–PI-085, PI-104, and PI-117. PI-050 remains an unchanged guardrail;
+PI-064 and PI-092–PI-093 remain frozen R3 lifecycle rows. PI-118, release/sudo/service/runtime rows,
+platform mappings, and joined R2-4 proof remain unstarted. No row changes classification and no seam
+is promoted.
+
 Inventory closure rules:
 
 1. Every implementation diff must cite affected `PI-*` rows and may not add an unclassified
@@ -461,8 +468,8 @@ to effective authority: `ACL_MASK` corresponds to group-class mode bits. Unknown
 `ENOTSUP`, malformed bytes, or other distinguishable retrieval failures fail closed rather than
 being projected into HostSessionAuthority truth. Physical ACL-xattr absence would require a
 separately approved privileged platform-attestation boundary; R1 neither implies nor adds one.
-The bounded R1 implementation and reviews are clean; R2-0 planning is complete while R2
-implementation/R3 remain unstarted, and the R1 evidence does
+The bounded R1 implementation and reviews are clean; R2-0 planning and R2-1 implementation are
+complete while R2-2/R2-3/R2-4/R3 remain unstarted, and the R1 evidence does
 not promote this seam, and all later lifecycle/product gates remain open.
 
 **A1.2a-WB/A1.2a-S closeout:** A1.2a-WB makes Start issuance, application/persistence, and exact

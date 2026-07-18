@@ -418,6 +418,14 @@ compatibility-posture removal, and the final global rule that unbound `init_trac
 caller-identity side table is permitted. Existing trace serialization, writer, flush,
 rotation/retention, rename, span, replay, policy, and environment-hash behavior is byte-frozen.
 
+R2-1 realizes exactly this shell-side boundary through runtime commit
+`2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`: the shared IH carrier authenticates one normalized A
+and current Unix account+UID before shell mutation; every migrated shell trace/policy consumer reuses
+`ExplicitProduct(A/trace.jsonl, A)`; and the unprivileged A/B matrix observes no product access under
+B. `set_global_trace_context`, physical-shim and replay production files, trace lifecycle bodies,
+and `LegacyAmbientCompatibility` behavior remain unchanged. Their migration/removal remains PI-118
+and R2-3 work, not a latent R2-1 completion claim.
+
 Lima and WSL are separate authority domains. One `PlatformBootstrapMappingV1` binds the host-context
 commitment to an exact platform instance, then independently resolves the platform-native home and
 principal. The host path/account is never asserted equal to the guest path/account. A host prefix
