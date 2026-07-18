@@ -85,7 +85,6 @@ pub(crate) fn current_unix_principal_and_home() -> Result<(PlatformPrincipalV1, 
             "effective UID 0 requires the R2-2 intended-principal boundary"
         ));
     }
-    let uid = u32::try_from(uid).context("effective UID does not fit u32")?;
     let (account, home) = lookup_unix_account_by_uid(uid)?;
     Ok((PlatformPrincipalV1::Unix { account, uid }, home))
 }
