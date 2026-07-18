@@ -631,20 +631,37 @@ but cannot be selected by typed Health or satisfy R2-2 product proof. Physical-s
 compatibility migration remains R2-3. No diagnostic reconstructs a default home or changes
 dependency/result classification.
 
-For this exact Route A closure, the preserved ten-file WIP remains fixed at patch SHA-256
-`0302cce29b9c85be4eb925b17fe1e03f473d2eaffe6d5093f824056586820a4e` and its final
-detection reported CRITICAL, 37 changed symbols, and the same 18 existing Route A processes. The
-final implementation diff is exactly eleven files: that WIP plus only `shim_doctor/report.rs`, with
-only the item-level Unix `dead_code` annotation on `collect_report` added there. GitNexus may
-retain 37 symbols or mechanically attribute `collect_report` as symbol 38; in either case it must
-retain those same 18 processes, introduce no new process family, and introduce no module owner
-except the already-existing Shim_doctor module. Authorization remains confined to explicit typed-IH
-forwarding through the Host/Health/Config/Policy arms and named consumers, the Unix crate-private
-context-aware name exposure, focused test-carrier remediation/line-hunk attribution, and the two
-runtime-neutral item-level lint annotations. It does not authorize another production semantic
-change, environment/global authority, physical-shim migration, product capability, output, repair,
-cleanup, rollback, or lifecycle behavior. More than 38 symbols, eleven files, or those 18 processes
-is a new `ImpactDecisionRequired` stop.
+For this exact Route A closure, the final preserved WIP is fixed at patch SHA-256
+`ea4abf43043013994e698d54f21c04bba58833b3bb3247bf6d5d3b454f51b943`. Its manifest and
+file SHA-256 fingerprints are:
+
+| File | SHA-256 |
+|---|---|
+| `crates/shell/src/builtins/health.rs` | `997f138b72dce898cc707c128bf726e0f882da7f3a0c1cdcc3ff71e9b94e7405` |
+| `crates/shell/src/builtins/shim_doctor/mod.rs` | `3035df6e3bca693c5e8c10e5f5cfee3fd1e1a6ad57d40c443979d25282bda748` |
+| `crates/shell/src/builtins/shim_doctor/report.rs` | `0337379b8c4f1ce5169a60eb099b4d66cf7e9dfc32cc9f314ca4194ddd6f0b60` |
+| `crates/shell/src/execution/config_cmd.rs` | `ef102e015759a784c8601a9cc4a8d2c220c467679f3eac111bb87f527eca12c6` |
+| `crates/shell/src/execution/config_model.rs` | `42b7e851f7c3a63f3c739295bd12bacca1e51f4ecf9fb7037e919a3ea1985a07` |
+| `crates/shell/src/execution/invocation/plan.rs` | `cc8a9d52db3bad5d571f64012ca37ec2b6219757b47d1802e91cae804c730c01` |
+| `crates/shell/src/execution/platform/mod.rs` | `b93601f17f120bc3c28b544eb569b671750224b741d893ed0eb2d02252f04274` |
+| `crates/shell/src/execution/policy_cmd.rs` | `a9f90acf883b264d0b76bbda4ca5dc9b5fdcf42f0d3119c49843981086a25d7b` |
+| `crates/shell/src/execution/policy_model.rs` | `a04940b54c68d284dcc1ed65245180676b2822dbe596386e6bbba544507f2931` |
+| `crates/shell/tests/config_show.rs` | `7a9819b02b507c35ef289a492cbd9c9b3e75ba462644e02914b1959b4de0f444` |
+| `crates/shell/tests/policy_discovery.rs` | `7bad42c95925c1fb8f74c277e37710c8c8d69d2e866f7d4eb4f34a65df6226d1` |
+
+GitNexus observed CRITICAL, 39 changed symbols, and the same 18 existing Route A processes, with no
+new process family or module owner. Containment is determined in this order: exact patch bytes;
+the exact eleven-file manifest and fingerprints above; the unchanged 18-process set with no new
+family; and independent semantic-diff review proving that only typed-IH forwarding through the
+Host/Health/Config/Policy arms and named consumers, the Unix crate-private context-aware exposure,
+focused test-carrier remediation, and the two runtime-neutral item-level lint annotations changed.
+The observed symbol count is diagnostic evidence after those controls. If a refreshed index changes
+only that count while every binding control remains exact, record `GitNexusAttributionDrift` and
+continue. A patch-byte/fingerprint difference, twelfth file, nineteenth process, new process family
+or module owner, or semantic expansion is an `ImpactDecisionRequired` stop. This exception is
+specific to this patch and authorizes no other HIGH/CRITICAL increment, environment/global
+authority, physical-shim migration, product capability, output, repair, cleanup, rollback, or
+lifecycle behavior.
 
 ##### Hidden installer bootstrap action
 
