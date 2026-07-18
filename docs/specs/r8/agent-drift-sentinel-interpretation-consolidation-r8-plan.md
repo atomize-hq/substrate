@@ -3,22 +3,36 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-plan.md`
 
-Status: **R8-IMPLEMENT ACTIVE / R8-1 `ec2c5da7d` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
-R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
-R8-3 `963a8202` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-4 DOCS-ONLY AUTHORITY
-AMENDMENT `849393029` LANDED / FRESH INDEPENDENT REVIEW PENDING / NO R8-4 SOURCE OR TEST EDITS**.
+Status: **R8-IMPLEMENT ACTIVE / R8-1 THROUGH R8-5.2 LANDED AND FRESH INDEPENDENT BUILT-IN
+`default` `CLEAN` / R8-6 CANONICAL RECEIPT LANDED CANDIDATE / FRESH INDEPENDENT REVIEW PENDING /
+NO PHASE TRANSITION OR R8 FAMILY-COMPLETE CLAIM**.
 
-R8-SPEC and the R8-IMPLEMENT entry gate remain review-clean. R8-1 commit `ec2c5da7d`, R8-2 series
-`08e0d0e2a` + `5669e1f6e` + `911dd49b`, and R8-3 commit `963a8202` each received fresh
-independent built-in `default` `CLEAN` with no actionable findings. R8-4 is blocked only on
-fresh independent review of landed bounded Markdown-only authority amendment `849393029`; no R8-4
-source or test edit has started. Recorded R8-4 decisions are
+R8-SPEC and the R8-IMPLEMENT entry gate remain review-clean. R8-1 `ec2c5da7d`, R8-2
+`08e0d0e2a` + `5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2
+`2616c4651` + `bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh
+independent built-in `default` `CLEAN` with no actionable findings. The exact R8-4 chronological
+implementation/review-fix series is
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a`; fresh independent review returned `CLEAN` with no
+actionable findings at `00111d66a`.
+
+At implementation HEAD `ad6340190`, the R8-6 final wall is green with Sentinel `233 / 233` and
+workspace `2,657` passed / `2` ignored / zero failed. The exact five-doc receipt is the landed
+candidate pending fresh independent built-in `default` review, so this plan claims neither receipt
+`CLEAN` nor a phase transition. Recorded decisions are
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
 `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
 `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
 `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
-`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
-`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. Landed amendment candidate `849393029` is pending
-fresh independent review, has no review result, makes no `CLEAN` claim, and starts no code.
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
 
 ## Objective
 
@@ -115,7 +129,7 @@ interpret_checkpoint ---------- CheckpointInterpretation / CheckpointContractErr
 
 public infallible compatibility facades
         --> centralized non-validating compatibility projection
-        --> the same typed renderer
+        --> shared typed presentation core with compatibility evidence-limit mode
 ```
 
 The core replay and live paths never call the infallible compatibility facades as validation
@@ -136,7 +150,9 @@ scheduler, or cursor-visible runtime state.
    retaining fixture path/line or event/source detail, then existing `LiveRuntimeError::Input`.
 4. **Locked total public facades.** The four public function signatures remain exact. Infallible
    presentation/report APIs use crate-private `project_checkpoint_compatibility`, which returns the
-   same `CheckpointInterpretation` consumed by `present_interpretation`. Exact supported literals
+   same `CheckpointInterpretation` shape as the validated core. Facades then use
+   `present_compatibility_interpretation`, validated replay/live use `present_interpretation`, and
+   both adapters share one private renderer with separately locked evidence-limit modes. Exact supported literals
    select `CheckpointProjectionProfile::Schema(...)` without validating the typed shape; every other
    typed facade literal selects distinct `CompatibilityOnly` and preserves current total behavior
    without being relabeled v0.2. The helper does not call or catch `interpret_checkpoint` and does
@@ -166,9 +182,8 @@ scheduler, or cursor-visible runtime state.
    explicit three-consumer parity-test cost; on the adjudication path, the predicate may affect only
    preserved rendered operator-summary content, and `adjudication.rs` remains unchanged read-only
    evidence. Option B does not claim the internal `Option` reaches final rendering. The operator
-   rejected Option A's public-field/source-compatibility cost. No R8-4 source/test symbol is editable
-   until the landed authority amendment/status series `849393029` + `bf954c4a` receives fresh
-   independent review.
+   rejected Option A's public-field/source-compatibility cost. The exact R8-4 implementation and
+   proof series is now landed and fresh-review-clean.
 6. **Crate-private implementation/testing.** `checkpoint_interpretation` and every additive item are
    `pub(crate)` only as needed. R8-1 RED/GREEN is an in-module `#[cfg(test)]` unit-test matrix; public-
    flow integration tests begin with R8-2/R8-3 and exercise the existing public facades.
@@ -255,6 +270,8 @@ Every R8 implementation packet follows the same bounded cycle:
 
 ## R8-1 — Shared Typed Interpretation And Error Contract
 
+Status: **COMPLETE / `ec2c5da7d` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`**.
+
 Create the origin-neutral module and prove the exact central compatibility matrix before any core
 adapter cutover.
 
@@ -286,9 +303,9 @@ cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 Route replay through complete-set validation/interpretation before scheduler/report construction,
 add the internal fallible report core, and keep public replay/report signatures exact.
 
-Status/dependency gate: **UNSTARTED / BLOCKED** until R8-1 is landed and fresh-review-clean **and**
-the operator replies `DECISION R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`. A `B` reply stops R8-2 for
-respec; silence is not authorization.
+Status/dependency gate: **COMPLETE / `08e0d0e2a` + `5669e1f6e` + `911dd49b` FRESH INDEPENDENT
+BUILT-IN `default` `CLEAN`**. Operator decision `R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A` authorized
+only this exact cutover.
 
 Exact manifest (5 files):
 
@@ -332,11 +349,9 @@ cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 Delegate live serialized/typed compatibility to the central contract and make
 `LiveRuntime::observe` interpret checkpoint-ready events before any state or scheduler mutation.
 
-Status/dependency gate: **UNSTARTED / BLOCKED** until R8-2 is landed and fresh-review-clean **and**
-the operator separately replies `A` to both
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01` and
-`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`. A `B` reply stops the owning seam for respec; silence on either
-ID is not authorization.
+Status/dependency gate: **COMPLETE / `963a8202f` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`**.
+Operator decisions `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A` and
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A` authorized only the exact two cutovers.
 
 Exact manifest (5 files):
 
@@ -382,18 +397,22 @@ cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings
 ## R8-4 — Presentation-Only Operator Facades
 
 Remove remaining schema/state/evidence inference from `operator_surface.rs`, route public facades
-through centralized non-validating projection and `present_interpretation`, and lock exact public
-signatures plus current total behavior, including unsupported typed facade input.
+through centralized non-validating projection and `present_compatibility_interpretation`, and lock
+exact public signatures plus current total behavior, including unsupported typed facade input. The
+validated and compatibility adapters share one private renderer but retain distinct evidence-limit
+policies.
 
-Status/dependency gate: **UNSTARTED / BLOCKED ONLY ON FRESH INDEPENDENT REVIEW OF LANDED DOCS-ONLY
-AMENDMENT `849393029`**. R8-3 commit `963a8202` is fresh independent built-in `default` `CLEAN`.
-The operator recorded `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+Status/dependency gate: **COMPLETE / EXACT IMPLEMENTATION AND REVIEW-FIX SERIES FRESH INDEPENDENT
+BUILT-IN `default` `CLEAN` AT `00111d66a`**. The operator recorded
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
 `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
 `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
-`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
-`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. No R8-4 source/test edit has started. The amendment
-candidate `849393029` is pending fresh independent review, has no review result, and makes no
-`CLEAN` claim.
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`. The exact chronological commit list and final review
+result are recorded in the status receipt above and in canonical TASKS/ledger evidence.
 
 Exact manifest (6 files):
 
@@ -460,8 +479,10 @@ or reported as `CheckpointSchemaVersion::V0_2`. The helper treats its supplied o
 checkpoint exactly as the current total facade does; it performs no schema/field/explicit-state/
 same-session validation, does not call/catch `interpret_checkpoint`, and cannot be called by core
 replay/live. `present_checkpoint`, `present_checkpoint_with_previous`, and `render_replay_report`
-delegate only to that total projection and `present_interpretation`; the review-clean `input.rs`,
-`live_input.rs`, and `live_runtime.rs` call sites do not change.
+delegate only to that total projection and `present_compatibility_interpretation`; the review-clean
+`input.rs`, `live_input.rs`, and `live_runtime.rs` call sites do not change. Validated replay/live
+continue through `present_interpretation`; both adapters share the private renderer while keeping
+their flattened-core and grouped-stop evidence-limit policies distinct.
 
 The compatibility facades may not contain supported-version tables, analyzer-state classification,
 legacy evidence-prefix recognition, panic/unwrap, error swallowing, or failure fallback. The single
@@ -554,6 +575,8 @@ facts.
 
 ## R8-5.1 — Replay/Live Parity And Compatibility Matrix
 
+Status: **COMPLETE / `8ef705d8a` FRESH INDEPENDENT BUILT-IN `default` `CLEAN`**.
+
 Add the focused, test-only parity wall after both cores and the operator facades are review-clean.
 
 Exact manifest (4 files):
@@ -580,6 +603,9 @@ cargo test -p agent-drift-sentinel --test live_end_to_end -- --nocapture
 ```
 
 ## R8-5.2 — Zero-Effect And Protected-Boundary Proof
+
+Status: **COMPLETE / `2616c4651` + `bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190`
+FRESH INDEPENDENT BUILT-IN `default` `CLEAN`**.
 
 Prove adapter, runtime, and real-session error effects without editing protected production code.
 
@@ -609,6 +635,10 @@ cargo test -p agent-drift-sentinel --test real_session_live -- --nocapture
 
 ## R8-6 — Final Wall And Canonical Family Status Checkpoint
 
+Status: **FINAL WALL GREEN / FIVE-DOC CANONICAL RECEIPT LANDED CANDIDATE / FRESH INDEPENDENT
+BUILT-IN `default` REVIEW PENDING**. No `CLEAN`, family completion, or phase-transition claim is
+assigned to this receipt.
+
 Run the family wall only after R8-1 through R8-5.2 and all review-fix series are fresh-review-clean.
 Record exact counts and receipts; do not infer a phase transition from green commands alone.
 
@@ -634,6 +664,38 @@ rg -n 'unwrap\(|expect\(|panic!|v0\.2' crates/agent-drift-sentinel/src/{checkpoi
 The second command must confirm that `execute` and `LiveRuntime::observe` do not call compatibility
 facades; the third is manually classified so existing unrelated `expect` uses are not silently
 treated as proof or opportunistically changed.
+
+Observed at implementation HEAD `ad6340190`:
+
+| Exact command | Result | Observed duration / count |
+|---|---|---|
+| `cargo fmt --all -- --check` | PASS | `5.821s`; no output |
+| `cargo clippy -p agent-drift-sentinel --all-targets -- -D warnings` | PASS | `1.141s`; Cargo finished in `0.97s` |
+| `cargo test -p agent-drift-sentinel -- --nocapture` | PASS | `5.706s`; `233` passed, `0` failed, `0` ignored across `16` result blocks |
+| `cargo clippy --workspace --all-targets -- -D warnings` | PASS | `5.176s`; Cargo finished in `4.91s` |
+| `cargo test --workspace -- --nocapture` | PASS | `754.165s`; `2,657` passed, `0` failed, `2` ignored across `224` result blocks |
+| `git diff --check` | PASS | `0.132s`; no output |
+
+Static classification is also green. The ordering query returned `13` lines in `0.134s`: validated
+replay completes all fallible `interpret_checkpoint` calls before its scheduler loop, then calls
+`scheduler.observe` before `present_interpretation`; live delegates through
+`interpret_live_checkpoint` before accepted-state mutation and calls `scheduler.observe` before
+`present_interpretation`. The compatibility-only replay facade lines are intentionally separate
+from the validated core. The negated facade query returned zero matches in `0.110s`, confirming
+that neither `execute` nor `LiveRuntime::observe` uses a compatibility facade as validation. The
+final query returned `33` lines in `0.289s`: the only three production matches are the supported
+schema description, `CheckpointSchemaVersion::from_literal`'s v0.2 arm, and the total compatibility
+profile's v0.2 arm. All `16` `expect(` matches, the sole `panic!`, and the remaining v0.2 fixtures/
+assertions are below `#[cfg(test)]`; there is no exact `unwrap(` match and no match at all in
+`input.rs`, `live_input.rs`, `live_runtime.rs`, or `operator_surface.rs`.
+
+`CheckpointSchemaVersion::from_literal` remained read-only: its current `698` bytes are identical
+to `ec2c5da7d` (`sha256 4886d6b36e75dcc2df71d5616618e175ee7a6886b1812f85370191435200cbe5`).
+Zero-limit evidence behavior is deliberately parity-locked by surface: validated replay/live share
+the flattened-core behavior for v0.2-v0.8, while the public compatibility facades preserve the
+pre-R8 grouped-stop behavior, including the empty-first-group and nonempty-first-group zero-limit
+cases. This is tested compatibility, not an accidental claim that both surface classes use the
+same zero-limit algorithm.
 
 Exact status-receipt manifest (5 docs):
 
@@ -661,26 +723,30 @@ Legend: **D** = direct proof, **G** = preserved guardrail, **E** = entry/review 
 | R8-5.2 | G | E | D | D | G | D |
 | R8-6 | D | D only after fresh review | D | D | D | D |
 
-`CTX-R8-01` and the entry dependency `CTX-R8-02` remain proven. R8-1, R8-2, and R8-3 are landed and
-fresh-review-clean. R8-4's `CTX-R8-05` direct-proof cell remains unproven until implementation and
-proof complete; recorded Option B cannot be claimed from `Checkpoint.delegation` alone.
+`CTX-R8-01` remains proven/preserved, and the entry meaning of `CTX-R8-02` remains proven. R8-1
+through R8-5.2 are landed and fresh-review-clean. `CTX-R8-03..06` have review-clean packet proof
+plus the green final wall and are `PROVEN — RECEIPT REVIEW PENDING`; Option B is proven by its
+explicit presence, AST owner/count, consumer-path, and behavior locks, never by
+`Checkpoint.delegation` alone. The final R8-6 receipt-review cell of `CTX-R8-02` remains pending.
 
 ## Recorded Decisions And Future Triggers
 
 | Stable ID | Recorded result | Evidence and exact boundary |
 |---|---|---|
 | `R8-2-HIGH-IMPACT-REPLAY-LOADER-01` | `A` | Authorized only the exact R8-2 loader cutover; landed series `08e0d0e2a` + `5669e1f6e` + `911dd49b` is fresh independent built-in `default` `CLEAN`. |
-| `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01` | `A` | Authorized only the exact compatibility delegation; R8-3 commit `963a8202` is fresh independent built-in `default` `CLEAN`. |
-| `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01` | `A` | Authorized only the exact pre-mutation runtime cutover; R8-3 commit `963a8202` is fresh independent built-in `default` `CLEAN`. |
+| `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01` | `A` | Authorized only the exact compatibility delegation; R8-3 commit `963a8202f` is fresh independent built-in `default` `CLEAN`. |
+| `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01` | `A` | Authorized only the exact pre-mutation runtime cutover; R8-3 commit `963a8202f` is fresh independent built-in `default` `CLEAN`. |
 | `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01` | `A` | `uses_explicit_analyzer_state`: HIGH, 10 impacted, 2 direct, 0 currently mapped processes, 3 modules. Authorizes only its R8-4 move/removal under the locked proof. |
 | `R8-4-PRESENTATION-DELEGATION-PRESENCE-01` | `B` | Preserve public shapes/output; accept dev-only `syn`/lockfile cost and exactly one final-facade literal-v0.8 predicate plus exact owner/count and behavior parity proof. |
 | `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01` | `A` | `score_has_historical_evidence`: HIGH, 5 impacted, 2 direct, 0 processes, 3 modules. Authorizes only the central semantic-ownership move/removal. |
 | `R8-4-HIGH-IMPACT-EVIDENCE-LINES-01` | `A` | `push_evidence_lines`: HIGH, 7 impacted, 3 direct, 1 affected `execute` process, 3 modules. Authorizes only the typed-evidence cutover. |
 | `R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01` | `A` | Expands only R8-4's exact manifest from five files to six by adding `src/checkpoint_interpretation.rs`; requires the total central compatibility profile/projection contract in this amendment. |
+| `R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01` | `A` | Authorized only the exact high-impact central projection seam used by validated and compatibility paths; it did not authorize validation fallback or another manifest file. |
+| `R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01` | `A` | Authorized only the exact compatibility-input seam for the total public facade projection; validated replay/live cannot select `CompatibilityOnly`. |
+| `R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01` | `A` | Authorized the bounded zero-limit preservation fix and proof: validated replay/live retain flattened-core parity, while compatibility facades retain their pre-R8 grouped-stop behavior. |
 
-No table row authorizes an additional HIGH/CRITICAL symbol, a seventh R8-4 file, or code before the
-landed authority amendment/status series `849393029` + `bf954c4a` receives fresh independent review.
-Any such need requires a new structured `DECISION REQUIRED` gate.
+No table row authorizes an additional HIGH/CRITICAL symbol, a seventh R8-4 file, or any later
+scope expansion. Any such need requires a new structured `DECISION REQUIRED` gate.
 
 Stop and emit a concrete `DECISION REQUIRED <ID>: A|B` prompt when any of these occurs:
 
@@ -699,10 +765,9 @@ Stop and emit a concrete `DECISION REQUIRED <ID>: A|B` prompt when any of these 
 
 ## Completion Condition
 
-R8 is not complete merely because R8-IMPLEMENT is active at entry, code compiles, or a focused suite
-is green. Completion requires every
-packet and fix series fresh-review-clean, the full wall recorded with exact counts, the canonical
-status receipt fresh-review-clean, `CTX-R8-01..06` reconciled against the control ledger, and a
-separate authorized phase/status transition. R8-1 through R8-3 are landed and fresh-review-clean;
-R8-4 remains unstarted until the landed authority amendment/status series `849393029` + `bf954c4a`
-receives fresh independent review. This plan claims no R8-4 or family completion.
+R8 is not complete merely because all implementation/proof packets are review-clean and the final
+wall is green. R8-1 through R8-5.2 satisfy those prerequisites, and this plan records the exact wall
+and reconciled candidate gate states. Completion still requires the canonical five-doc receipt to
+receive fresh independent built-in `default` `CLEAN`, followed by a separate authorized docs-only
+mirror/phase transition. This plan claims neither its receipt's own review result nor R8 family
+completion.

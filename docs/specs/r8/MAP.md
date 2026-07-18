@@ -1,26 +1,36 @@
 # R8 Map: Sentinel Interpretation Consolidation / Integration
 
-Status: **R8-IMPLEMENT ACTIVE / R8-1 `ec2c5da7d` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
-R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
-R8-3 `963a8202` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-4 DOCS-ONLY AUTHORITY
-AMENDMENT `849393029` LANDED / FRESH INDEPENDENT REVIEW PENDING / NO R8-4 SOURCE OR TEST EDITS**.
+Status: **R8-IMPLEMENT ACTIVE / R8-1 THROUGH R8-5.2 LANDED AND FRESH INDEPENDENT BUILT-IN
+`default` `CLEAN` / R8-6 CANONICAL RECEIPT LANDED CANDIDATE / FRESH INDEPENDENT REVIEW PENDING /
+NO PHASE TRANSITION OR R8 FAMILY-COMPLETE CLAIM**.
 
-R8-SPEC is `COMPLETE`, and the R8-SPEC -> R8-IMPLEMENT transition/entry gate remains review-clean.
-R8-1 commit `ec2c5da7d`, R8-2 series `08e0d0e2a` + `5669e1f6e` + `911dd49b`, and R8-3 commit
-`963a8202` each received fresh independent built-in `default` `CLEAN` with no actionable findings.
-R8-IMPLEMENT remains the sole active phase. R8-4 is blocked only on fresh independent review of
-landed bounded Markdown-only authority amendment `849393029`; no R8-4 source or test edit has
-started.
-The operator resolved every current R8-4 gate as
+R8-SPEC and the R8-SPEC -> R8-IMPLEMENT transition/entry gate remain review-clean. R8-1
+`ec2c5da7d`, R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1
+`8ef705d8a`, and R8-5.2 `2616c4651` + `bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190`
+each received fresh independent built-in `default` `CLEAN` with no actionable findings. The exact
+R8-4 implementation/review-fix series is
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a`; fresh independent review of that full chronological
+series returned `CLEAN` with no actionable findings at `00111d66a`.
+
+At implementation HEAD `ad6340190`, the exact R8-6 wall is green: Sentinel tests pass `233` with
+zero failures, and workspace tests pass `2,657` with zero failures and `2` ignored. The canonical
+five-doc receipt is the landed R8-6 candidate and remains pending fresh independent built-in
+`default` review; it assigns itself no `CLEAN` result and starts no phase transition. The operator
+resolved every R8 implementation gate as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
 `R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
 `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
 `R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
-`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`, and
-`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`. The last decision expands the R8-4 exact code
-manifest from five files to six by adding
-`crates/agent-drift-sentinel/src/checkpoint_interpretation.rs`. Landed amendment candidate
-`849393029` is pending fresh independent review, has no review result, makes no `CLEAN` claim, and
-authorizes no R8-4 code until it is fresh-review-clean.
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
 
 ## Objective
 
@@ -100,9 +110,11 @@ is authorized.
   compatibility facades with their current behavior; core replay/live do not use them as validation
   boundaries.
 - Compatibility facades delegate to a crate-private, total, non-validating compatibility projection
-  owned by `checkpoint_interpretation.rs`, then feed the returned `CheckpointInterpretation` to the
-  same `present_interpretation` renderer used by validated replay/live interpretations. The central
-  module owns one shared posture/evidence/delegation normalization implementation. Its explicit
+  owned by `checkpoint_interpretation.rs`, then feed the returned `CheckpointInterpretation` to
+  `present_compatibility_interpretation`; validated replay/live use `present_interpretation`. Both
+  adapters share `present_interpretation_with_evidence_limit` but select their separately locked
+  flattened-core versus grouped-stop evidence-limit policies. The central module owns one shared
+  posture/evidence/delegation normalization implementation. Its explicit
   `CheckpointProjectionProfile` distinguishes supported `Schema(CheckpointSchemaVersion)` input
   from `CompatibilityOnly`; an unsupported typed facade input selects `CompatibilityOnly` and
   preserves the current total facade behavior without being relabeled as v0.2. The compatibility
@@ -136,9 +148,8 @@ is authorized.
   This is a localized compatibility/presentation exception with an explicit parity-test cost, not
   a claim that the erased internal `Option` reaches later rendering and not an adjudication-policy
   exception. The operator rejected Option A's public-field/source-compatibility cost by selecting B.
-  R8-4 still may not edit any source/test symbol until the landed authority amendment/status series
-  `849393029` + `bf954c4a` receives fresh independent review. Changing the upstream analyzer
-  `Checkpoint` schema is outside R8.
+  The review-clean R8-4 series implemented and locked this exception without changing the upstream
+  analyzer `Checkpoint` schema, which remains outside R8.
 
 ## Compatibility Contract
 
@@ -200,10 +211,12 @@ tests may claim the compatibility projection validates input or converts a core 
 | `CTX-R8-05` | Recorded decision `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B` requires exactly one direct field use and one equality predicate with literal `"v0.8"` in `CheckpointPresentation::render_console_block`, zero in every other item, and permits that unchanged facade to serve the exact allowed owner set `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`. A `syn`-based AST/call-path visitor independently proves that exact owner-set equality and exact raw direct `render_console_block` call-expression count `4` — two replay, one live, and one adjudication — and fails on any fifth call even within an allowed owner. Separate behavior tests prove facade/core output, the three actual consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. On the adjudication path, the predicate reaches only preserved presentation content, never adjudication policy/request shaping or decision semantics; `adjudication.rs` is read-only evidence, not an edit-manifest file. |
 | `CTX-R8-06` | Existing pre-observe transport bookkeeping is permitted; after interpretation failure there is no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance. |
 
-`CTX-R8-01` is `PROVEN`, and `CTX-R8-02` is `PROVEN` / `SATISFIED` by the complete review-clean
-authority family through `806e53740`. `CTX-R8-03` is `OPEN` / current at R8-IMPLEMENT entry;
-`CTX-R8-04..06` remain `BLOCKED` / `UNPROVEN` in dependency order. The control-pack ledger remains
-authoritative until reviewed implementation evidence updates those rows.
+`CTX-R8-01` remains `PROVEN` / preserved, and the R8-IMPLEMENT entry meaning of `CTX-R8-02`
+remains `PROVEN` / `SATISFIED` by the review-clean authority family. `CTX-R8-03..06` now have
+review-clean implementation/proof series plus a green R8-6 wall and are recorded as `PROVEN —
+RECEIPT REVIEW PENDING`; this does not make the current five-doc receipt review-clean. The final
+R8-6 receipt-review cell of `CTX-R8-02`, R8 family completion, and any phase transition remain
+pending fresh independent review and a separate authorized docs-only transition packet.
 
 ## Required Docs Before Implementation
 
@@ -214,7 +227,7 @@ authoritative until reviewed implementation evidence updates those rows.
    the amended six-file R8-4 boundary.
 
 All four artifacts are included in the complete authoring/review-fix series through `806e53740`,
-which received fresh independent built-in `default` `CLEAN` with no findings. This satisfies
-`CTX-R8-02` and the R8-IMPLEMENT entry gate. Later decisions and review-clean R8-1..R8-3 commits do
-not authorize R8-4 code before the landed authority amendment/status series `849393029` +
-`bf954c4a` receives fresh independent review.
+which received fresh independent built-in `default` `CLEAN` with no findings. This satisfies the
+entry meaning of `CTX-R8-02`. R8-1 through R8-5.2 are now landed and fresh-review-clean; the R8-6
+canonical receipt remains a landed candidate pending fresh independent review, with wider
+root/control-pack mirrors and phase transition explicitly deferred.
