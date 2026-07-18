@@ -9,13 +9,20 @@ readonly INSTALLER_NAME
 readonly INSTALLER_VERSION="0.1.0-dev"
 readonly DEFAULT_FALLBACK_VERSION="0.2.2"
 readonly LATEST_RELEASE_API="${SUBSTRATE_INSTALL_LATEST_API:-https://api.github.com/repos/atomize-hq/substrate/releases/latest}"
-readonly DEFAULT_PREFIX="${HOME}/.substrate"
+readonly DEFAULT_PREFIX=""
 readonly DEFAULT_BASE_URL="https://github.com/atomize-hq/substrate/releases/download"
 
 VERSION_RAW=""
 VERSION=""
 VERSION_TAG=""
 PREFIX="$DEFAULT_PREFIX"
+PREFIX_DECLARED=0
+INSTALL_BOOTSTRAP_CONTEXT_V1=""
+INSTALL_BOOTSTRAP_CONTEXT_DECLARED=0
+INSTALL_BOOTSTRAP_COMMITMENT=""
+INSTALL_BOOTSTRAP_ACCOUNT=""
+INSTALL_BOOTSTRAP_UID=""
+INSTALL_BOOTSTRAP_ACCOUNT_HOME=""
 NO_WORLD=0
 NO_SHIMS=0
 DRY_RUN=0
@@ -72,6 +79,231 @@ fatal_with_code() {
   shift
   printf '[%s][ERROR] %s\n' "${INSTALLER_NAME}" "$*" >&2
   exit "${code}"
+}
+
+resolve_install_bootstrap_context() {
+  local declared="$1"
+  local raw_prefix="$2"
+  local supplied_carrier="$3"
+  local carrier_declared="$4"
+  local context_fd
+
+  exec {context_fd}< <(python3 - "${declared}" "${raw_prefix}" "${supplied_carrier}" "${carrier_declared}" <<'PY'
+import base64
+import hashlib
+import os
+import pwd
+import re
+import sys
+
+DOMAIN = "substrate.install_bootstrap_context"
+KEYS = (
+    "domain",
+    "version",
+    "selected_host_prefix",
+    "host_substrate_home",
+    "host_substrate_root",
+    "principal_kind",
+    "principal_account",
+    "principal_uid",
+    "host_context_commitment",
+)
+
+
+def fail():
+    raise ValueError("invalid install bootstrap context")
+
+
+def normalize_path(raw):
+    if not raw or raw == "/" or not raw.startswith("/") or raw.startswith("//") or "\0" in raw:
+        fail()
+    parts = []
+    for part in raw[1:].split("/"):
+        if not part:
+            continue
+        if part in (".", ".."):
+            fail()
+        parts.append(part)
+    if not parts:
+        fail()
+    return "/" + "/".join(parts)
+
+
+def b64_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+
+def b64_decode(value):
+    if not value or not re.fullmatch(rb"[A-Za-z0-9_-]+", value):
+        fail()
+    decoded = base64.urlsafe_b64decode(value + b"=" * ((-len(value)) % 4))
+    if b64_encode(decoded) != value:
+        fail()
+    return decoded.decode("utf-8")
+
+
+def entry_by_uid(uid):
+    if uid == 0 or uid > 0xFFFFFFFF:
+        fail()
+    entry = pwd.getpwuid(uid)
+    if not entry.pw_name or pwd.getpwnam(entry.pw_name).pw_uid != uid:
+        fail()
+    if any(ch in entry.pw_name for ch in "\0\r\n"):
+        fail()
+    return entry
+
+
+def entry_by_name(account):
+    if not account or any(ch in account for ch in "\0\r\n"):
+        fail()
+    entry = pwd.getpwnam(account)
+    if entry.pw_uid == 0 or pwd.getpwuid(entry.pw_uid).pw_name != entry.pw_name:
+        fail()
+    return entry
+
+
+def public_principal():
+    effective_uid = os.geteuid()
+    if effective_uid != 0:
+        return entry_by_uid(effective_uid)
+    explicit = os.environ.get("SUBSTRATE_INSTALL_PRIMARY_USER", "")
+    if explicit:
+        return entry_by_name(explicit)
+    sudo_user = os.environ.get("SUDO_USER", "")
+    sudo_uid = os.environ.get("SUDO_UID", "")
+    if not sudo_user or not sudo_uid or not re.fullmatch(r"0|[1-9][0-9]*", sudo_uid):
+        fail()
+    entry = entry_by_name(sudo_user)
+    if str(entry.pw_uid) != sudo_uid:
+        fail()
+    return entry
+
+
+def internal_principal():
+    effective_uid = os.geteuid()
+    if effective_uid != 0:
+        return entry_by_uid(effective_uid)
+    sudo_user = os.environ.get("SUDO_USER", "")
+    sudo_uid = os.environ.get("SUDO_UID", "")
+    if not sudo_user or not sudo_uid or not re.fullmatch(r"0|[1-9][0-9]*", sudo_uid):
+        fail()
+    entry = entry_by_name(sudo_user)
+    if str(entry.pw_uid) != sudo_uid:
+        fail()
+    return entry
+
+
+def frame(prefix, account, uid):
+    encoded_prefix = b64_encode(prefix.encode("utf-8")).decode("ascii")
+    return (
+        f"domain={DOMAIN}\n"
+        "version=1\n"
+        f"selected_host_prefix={encoded_prefix}\n"
+        f"host_substrate_home={encoded_prefix}\n"
+        f"host_substrate_root={encoded_prefix}\n"
+        "principal_kind=unix\n"
+        f"principal_account={b64_encode(account.encode('utf-8')).decode('ascii')}\n"
+        f"principal_uid={uid}\n"
+    ).encode("ascii")
+
+
+def decode_carrier(encoded):
+    raw_encoded = encoded.encode("ascii")
+    if not raw_encoded or not re.fullmatch(rb"[A-Za-z0-9_-]+", raw_encoded):
+        fail()
+    record = base64.urlsafe_b64decode(raw_encoded + b"=" * ((-len(raw_encoded)) % 4))
+    if b64_encode(record) != raw_encoded or not record.endswith(b"\n") or b"\r" in record or b"\0" in record:
+        fail()
+    lines = record[:-1].split(b"\n")
+    if len(lines) != len(KEYS):
+        fail()
+    values = {}
+    for expected, line in zip(KEYS, lines):
+        if line.count(b"=") != 1:
+            fail()
+        key, value = line.split(b"=", 1)
+        if key.decode("ascii") != expected:
+            fail()
+        values[expected] = value
+    if values["domain"] != DOMAIN.encode("ascii") or values["version"] != b"1" or values["principal_kind"] != b"unix":
+        fail()
+    prefix = normalize_path(b64_decode(values["selected_host_prefix"]))
+    if b64_decode(values["host_substrate_home"]) != prefix or b64_decode(values["host_substrate_root"]) != prefix:
+        fail()
+    account = b64_decode(values["principal_account"])
+    raw_uid = values["principal_uid"]
+    if not re.fullmatch(rb"0|[1-9][0-9]*", raw_uid):
+        fail()
+    uid = int(raw_uid)
+    if uid == 0 or uid > 0xFFFFFFFF:
+        fail()
+    commitment = values["host_context_commitment"].decode("ascii")
+    if not re.fullmatch(r"[0-9a-f]{64}", commitment):
+        fail()
+    expected_frame = frame(prefix, account, uid)
+    if record != expected_frame + b"host_context_commitment=" + commitment.encode("ascii") + b"\n":
+        fail()
+    if hashlib.sha256(expected_frame).hexdigest() != commitment:
+        fail()
+    return prefix, account, uid, commitment
+
+
+try:
+    declared = sys.argv[1] == "1"
+    raw_prefix = sys.argv[2]
+    supplied = sys.argv[3]
+    internal = sys.argv[4] == "1"
+    if internal:
+        prefix, account, uid, commitment = decode_carrier(supplied)
+        entry = internal_principal()
+        if account != entry.pw_name or uid != entry.pw_uid:
+            fail()
+        if declared and normalize_path(raw_prefix) != prefix:
+            fail()
+        expected = {
+            "SUBSTRATE_HOME": prefix,
+            "SUBSTRATE_ROOT": prefix,
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT": commitment,
+            "SUBSTRATE_INSTALL_PRIMARY_USER": account,
+            "SUBSTRATE_INSTALL_PRIMARY_UID": str(uid),
+            "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1": supplied,
+        }
+        for key, value in expected.items():
+            if key in os.environ and os.environ[key] != value:
+                fail()
+        carrier = supplied
+    else:
+        entry = public_principal()
+        account = entry.pw_name
+        uid = entry.pw_uid
+        prefix = normalize_path(raw_prefix if declared else entry.pw_dir.rstrip("/") + "/.substrate")
+        commitment_input = frame(prefix, account, uid)
+        commitment = hashlib.sha256(commitment_input).hexdigest()
+        carrier = b64_encode(
+            commitment_input + f"host_context_commitment={commitment}\n".encode("ascii")
+        ).decode("ascii")
+    account_home = normalize_path(entry.pw_dir)
+    for value in (prefix, carrier, commitment, account, str(uid), account_home):
+        sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+except Exception:
+    print("invalid install bootstrap context", file=sys.stderr)
+    raise SystemExit(2)
+PY
+  )
+  IFS= read -r -d '' PREFIX <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1 <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
+  exec {context_fd}<&-
+
+  export SUBSTRATE_HOME="${PREFIX}"
+  export SUBSTRATE_ROOT="${PREFIX}"
+  export SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}"
+  export SUBSTRATE_INSTALL_PRIMARY_USER="${INSTALL_BOOTSTRAP_ACCOUNT}"
+  export SUBSTRATE_INSTALL_PRIMARY_UID="${INSTALL_BOOTSTRAP_UID}"
+  export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_BOOTSTRAP_CONTEXT_V1}"
 }
 
 print_usage() {
@@ -218,6 +450,10 @@ fail_no_supported_pkg_manager() {
 }
 
 detect_primary_user() {
+  if [[ -n "${INSTALL_BOOTSTRAP_ACCOUNT:-}" ]]; then
+    printf '%s\n' "${INSTALL_BOOTSTRAP_ACCOUNT}"
+    return
+  fi
   if [[ -n "${SUBSTRATE_INSTALL_PRIMARY_USER:-}" ]]; then
     printf '%s\n' "${SUBSTRATE_INSTALL_PRIMARY_USER}"
     return
@@ -241,22 +477,27 @@ detect_primary_user() {
 
 bootstrap_private_substrate_home() {
   local substrate_bin="$1"
-  local primary_user="${2:-}"
+  local _primary_user="${2:-}"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] SUBSTRATE_HOME=%s %s --version\n' \
-      "${INSTALLER_NAME}" "${PREFIX}" "${substrate_bin}" >&2
+    printf '[%s][dry-run] SUBSTRATE_HOME=%s SUBSTRATE_ROOT=%s %s --install-bootstrap-context-v1 <carrier> --install-bootstrap-home-v1\n' \
+      "${INSTALLER_NAME}" "${PREFIX}" "${PREFIX}" "${substrate_bin}" >&2
     return 0
   fi
   if [[ ! -x "${substrate_bin}" ]]; then
     fatal "Substrate bootstrap binary not found at ${substrate_bin}."
   fi
 
-  local -a bootstrap_env=("SUBSTRATE_HOME=${PREFIX}")
-  if [[ -n "${primary_user}" && "${primary_user}" != "root" ]]; then
-    bootstrap_env+=("SUBSTRATE_INSTALL_PRIMARY_USER=${primary_user}")
-  fi
-  if ! env "${bootstrap_env[@]}" "${substrate_bin}" --version >/dev/null; then
+  if ! env \
+    "SUBSTRATE_HOME=${PREFIX}" \
+    "SUBSTRATE_ROOT=${PREFIX}" \
+    "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${INSTALL_BOOTSTRAP_COMMITMENT}" \
+    "SUBSTRATE_INSTALL_PRIMARY_USER=${INSTALL_BOOTSTRAP_ACCOUNT}" \
+    "SUBSTRATE_INSTALL_PRIMARY_UID=${INSTALL_BOOTSTRAP_UID}" \
+    "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    "${substrate_bin}" \
+      --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+      --install-bootstrap-home-v1 >/dev/null; then
     fatal "Private SUBSTRATE_HOME bootstrap rejected ${PREFIX}; no existing root was repaired."
   fi
 }
@@ -1360,6 +1601,20 @@ parse_args() {
       --prefix)
         [[ $# -lt 2 ]] && fatal "Missing value for --prefix"
         PREFIX="$2"
+        PREFIX_DECLARED=1
+        shift 2
+        ;;
+      --prefix=*)
+        PREFIX="${1#--prefix=}"
+        PREFIX_DECLARED=1
+        shift
+        ;;
+      --install-bootstrap-context-v1)
+        [[ $# -lt 2 ]] && fatal "Missing value for --install-bootstrap-context-v1"
+        [[ "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -eq 1 ]] && fatal "Duplicate --install-bootstrap-context-v1"
+        [[ -z "$2" ]] && fatal "Empty value for --install-bootstrap-context-v1"
+        INSTALL_BOOTSTRAP_CONTEXT_V1="$2"
+        INSTALL_BOOTSTRAP_CONTEXT_DECLARED=1
         shift 2
         ;;
       --pkg-manager)
@@ -1570,26 +1825,72 @@ write_manager_env_script() {
   mkdir -p "${env_dir}"
   local today
   today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  local legacy_literal
-  legacy_literal="\${HOME}/.substrate_bashenv"
+  local substrate_home_literal commitment_literal account_literal uid_literal carrier_literal legacy_literal
+  substrate_home_literal="$(printf '%q' "${PREFIX}")"
+  commitment_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_COMMITMENT}")"
+  account_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_ACCOUNT}")"
+  uid_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_UID}")"
+  carrier_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_CONTEXT_V1}")"
+  legacy_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_ACCOUNT_HOME}/.substrate_bashenv")"
   cat > "${MANAGER_ENV_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 # Managed by ${INSTALLER_NAME} on ${today}
 if [[ -n "\${SUBSTRATE_MANAGER_ENV_ACTIVE:-}" ]]; then
   return 0
 fi
-export SUBSTRATE_MANAGER_ENV_ACTIVE=1
 
-substrate_home="\${SUBSTRATE_HOME:-}"
-if [[ -z "\${substrate_home}" ]]; then
-  substrate_home="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+expected_substrate_home=${substrate_home_literal}
+expected_substrate_commitment=${commitment_literal}
+expected_substrate_account=${account_literal}
+expected_substrate_uid=${uid_literal}
+expected_substrate_carrier=${carrier_literal}
+
+verify_projection() {
+  local projection_name="\$1"
+  local projection_actual="\$2"
+  local projection_expected="\$3"
+  if [[ -n "\${projection_actual}" && "\${projection_actual}" != "\${projection_expected}" ]]; then
+    printf '[substrate-manager-env][ERROR] conflicting %s projection\n' "\${projection_name}" >&2
+    return 1
+  fi
+}
+
+verify_projection SUBSTRATE_HOME "\${SUBSTRATE_HOME:-}" "\${expected_substrate_home}" || { return 1 2>/dev/null || exit 1; }
+verify_projection SUBSTRATE_ROOT "\${SUBSTRATE_ROOT:-}" "\${expected_substrate_home}" || { return 1 2>/dev/null || exit 1; }
+verify_projection SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT "\${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT:-}" "\${expected_substrate_commitment}" || { return 1 2>/dev/null || exit 1; }
+verify_projection SUBSTRATE_INSTALL_PRIMARY_USER "\${SUBSTRATE_INSTALL_PRIMARY_USER:-}" "\${expected_substrate_account}" || { return 1 2>/dev/null || exit 1; }
+verify_projection SUBSTRATE_INSTALL_PRIMARY_UID "\${SUBSTRATE_INSTALL_PRIMARY_UID:-}" "\${expected_substrate_uid}" || { return 1 2>/dev/null || exit 1; }
+verify_projection SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1 "\${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}" "\${expected_substrate_carrier}" || { return 1 2>/dev/null || exit 1; }
+
+substrate_home="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd -P)" || {
+  printf '[substrate-manager-env][ERROR] unable to resolve manager projection directory\n' >&2
+  return 1 2>/dev/null || exit 1
+}
+if [[ "\${substrate_home}" != "\${expected_substrate_home}" ]]; then
+  printf '[substrate-manager-env][ERROR] manager projection directory does not match committed SUBSTRATE_HOME\n' >&2
+  return 1 2>/dev/null || exit 1
 fi
 
 substrate_env="\${substrate_home}/env.sh"
-if [[ -f "\${substrate_env}" ]]; then
-  # shellcheck disable=SC1090
-  source "\${substrate_env}"
+if [[ ! -f "\${substrate_env}" ]]; then
+  printf '[substrate-manager-env][ERROR] missing committed environment projection at %s\n' "\${substrate_env}" >&2
+  return 1 2>/dev/null || exit 1
 fi
+# shellcheck disable=SC1090
+if ! source "\${substrate_env}"; then
+  printf '[substrate-manager-env][ERROR] committed environment projection failed at %s\n' "\${substrate_env}" >&2
+  return 1 2>/dev/null || exit 1
+fi
+if [[ "\${SUBSTRATE_HOME:-}" != "\${expected_substrate_home}" \
+  || "\${SUBSTRATE_ROOT:-}" != "\${expected_substrate_home}" \
+  || "\${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT:-}" != "\${expected_substrate_commitment}" \
+  || "\${SUBSTRATE_INSTALL_PRIMARY_USER:-}" != "\${expected_substrate_account}" \
+  || "\${SUBSTRATE_INSTALL_PRIMARY_UID:-}" != "\${expected_substrate_uid}" \
+  || "\${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}" != "\${expected_substrate_carrier}" ]]; then
+  printf '[substrate-manager-env][ERROR] committed environment projection mismatch at %s\n' "\${substrate_env}" >&2
+  return 1 2>/dev/null || exit 1
+fi
+export SUBSTRATE_MANAGER_ENV_ACTIVE=1
 
 manager_init_path="\${substrate_home}/manager_init.sh"
 if [[ -f "\${manager_init_path}" ]]; then
@@ -1603,7 +1904,7 @@ if [[ -n "\${substrate_original}" && -f "\${substrate_original}" ]]; then
   source "\${substrate_original}"
 fi
 
-legacy_bashenv="${legacy_literal}"
+legacy_bashenv=${legacy_literal}
 if [[ -f "\${legacy_bashenv}" ]]; then
   # shellcheck disable=SC1090
   source "\${legacy_bashenv}"
@@ -1629,8 +1930,12 @@ write_env_sh_script() {
   env_dir="$(dirname "${ENV_SH_PATH}")"
   mkdir -p "${env_dir}"
 
-  local substrate_home_literal anchor_mode_literal anchor_path_literal policy_mode_literal world_literal
+  local substrate_home_literal commitment_literal account_literal uid_literal carrier_literal anchor_mode_literal anchor_path_literal policy_mode_literal world_literal
   substrate_home_literal="$(printf '%q' "${PREFIX}")"
+  commitment_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_COMMITMENT}")"
+  account_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_ACCOUNT}")"
+  uid_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_UID}")"
+  carrier_literal="$(printf '%q' "${INSTALL_BOOTSTRAP_CONTEXT_V1}")"
   anchor_mode_literal="$(printf '%q' "workspace")"
   anchor_path_literal="$(printf '%q' "")"
   policy_mode_literal="$(printf '%q' "observe")"
@@ -1638,6 +1943,11 @@ write_env_sh_script() {
   cat > "${ENV_SH_PATH}.tmp" <<EOF
 #!/usr/bin/env bash
 export SUBSTRATE_HOME=${substrate_home_literal}
+export SUBSTRATE_ROOT=${substrate_home_literal}
+export SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${commitment_literal}
+export SUBSTRATE_INSTALL_PRIMARY_USER=${account_literal}
+export SUBSTRATE_INSTALL_PRIMARY_UID=${uid_literal}
+export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${carrier_literal}
 export SUBSTRATE_WORLD=${world_literal}
 export SUBSTRATE_CAGED=1
 export SUBSTRATE_ANCHOR_MODE=${anchor_mode_literal}
@@ -1696,6 +2006,7 @@ ensure_version_config_present() {
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     printf '[%s][dry-run] ensure config manifests exist under %s\n' "${INSTALLER_NAME}" "${config_dir}" >&2
+    printf '[%s][dry-run] project %s to %s\n' "${INSTALLER_NAME}" "${manager_manifest}" "${PREFIX}/manager_hooks.yaml" >&2
     return
   fi
 
@@ -1704,6 +2015,10 @@ ensure_version_config_present() {
   if [[ ! -f "${manager_manifest}" ]]; then
     fatal "manager manifest missing from bundle (expected ${manager_manifest})"
   fi
+
+  cp "${manager_manifest}" "${PREFIX}/manager_hooks.yaml.tmp"
+  mv "${PREFIX}/manager_hooks.yaml.tmp" "${PREFIX}/manager_hooks.yaml"
+  chmod 0644 "${PREFIX}/manager_hooks.yaml" || true
 
   if [[ ! -f "${world_deps}" ]]; then
     local scripts_world_deps
@@ -2043,7 +2358,9 @@ deploy_shims() {
   fi
 
   log "Deploying shims..."
-  run_cmd "${substrate_bin}" --shim-deploy
+  run_cmd "${substrate_bin}" \
+    --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    --shim-deploy
 }
 
 harden_shim_symlinks() {
@@ -2281,12 +2598,14 @@ run_world_checks() {
     return
   fi
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] %s world doctor --json\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    printf '[%s][dry-run] %s --install-bootstrap-context-v1 <carrier> world doctor --json\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
     return
   fi
 
   log "Running substrate world doctor..."
-  if ! "${substrate_bin}" world doctor --json | jq '.'; then
+  if ! "${substrate_bin}" \
+    --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world doctor --json | jq '.'; then
     warn "World doctor reported issues. Review output above."
   fi
 }
@@ -2294,12 +2613,14 @@ run_world_checks() {
 print_world_deps_summary() {
   local substrate_bin="$1"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] %s world deps current list applied --json\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    printf '[%s][dry-run] %s --install-bootstrap-context-v1 <carrier> world deps current list applied --json\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
     return
   fi
 
   log "World dependency status (in world):"
-  if ! "${substrate_bin}" world deps current list applied --json | jq -r '
+  if ! "${substrate_bin}" \
+    --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps current list applied --json | jq -r '
     if (.items | length) == 0 then
       "  (no enabled deps items)"
     else
@@ -2315,7 +2636,9 @@ rollback_agent_runtime_world_deps_enable() {
   local substrate_bin="$1"
   local deps_item="$2"
 
-  if "${substrate_bin}" world deps global remove "${deps_item}"; then
+  if "${substrate_bin}" \
+    --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps global remove "${deps_item}"; then
     warn "Rolled back world deps global enable for '${deps_item}' after sync failure."
     return 0
   fi
@@ -2334,7 +2657,7 @@ sync_world_deps() {
     return
   fi
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] %s world deps current sync\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
+    printf '[%s][dry-run] %s --install-bootstrap-context-v1 <carrier> world deps current sync\n' "${INSTALLER_NAME}" "${substrate_bin}" >&2
     print_world_deps_summary "${substrate_bin}"
     return
   fi
@@ -2345,7 +2668,9 @@ sync_world_deps() {
     log "Syncing world dependencies via 'substrate world deps current sync'..."
   fi
   local rc=0
-  if "${substrate_bin}" world deps current sync; then
+  if "${substrate_bin}" \
+    --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps current sync; then
     rc=0
   else
     rc=$?
@@ -2395,13 +2720,15 @@ provision_agent_runtime_world_deps() {
   deps_item="$(world_deps_item_for_agent_runtime "${PROVISION_AGENT_RUNTIME}")"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] %s world deps global add %s\n' "${INSTALLER_NAME}" "${substrate_bin}" "${deps_item}" >&2
+    printf '[%s][dry-run] %s --install-bootstrap-context-v1 <carrier> world deps global add %s\n' "${INSTALLER_NAME}" "${substrate_bin}" "${deps_item}" >&2
     return
   fi
 
   log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The installer will run 'substrate world deps current sync' immediately after this step."
   local add_output
-  add_output="$("${substrate_bin}" world deps global add --json "${deps_item}")"
+  add_output="$("${substrate_bin}" \
+    --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps global add --json "${deps_item}")"
   if grep -Fq "\"${deps_item}\"" <<<"${add_output}"; then
     PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=1
   else
@@ -2483,6 +2810,7 @@ update_shell_path() {
   fi
 
   local bin_dir="$1"
+  local account_home="$2"
   local shell_basename
   shell_basename="$(basename "${SHELL:-}")"
 
@@ -2490,24 +2818,24 @@ update_shell_path() {
     zsh)
       local snippet
       snippet="$(render_path_snippet_sh "${bin_dir}")"
-      upsert_path_snippet "${HOME}/.zprofile" "${snippet}"
-      upsert_path_snippet "${HOME}/.zshrc" "${snippet}"
+      upsert_path_snippet "${account_home}/.zprofile" "${snippet}"
+      upsert_path_snippet "${account_home}/.zshrc" "${snippet}"
       ;;
     bash)
       local snippet
       snippet="$(render_path_snippet_sh "${bin_dir}")"
-      upsert_path_snippet "${HOME}/.bashrc" "${snippet}"
-      upsert_path_snippet "${HOME}/.bash_profile" "${snippet}"
+      upsert_path_snippet "${account_home}/.bashrc" "${snippet}"
+      upsert_path_snippet "${account_home}/.bash_profile" "${snippet}"
       ;;
     fish)
       local snippet
       snippet="$(render_path_snippet_fish "${bin_dir}")"
-      upsert_path_snippet "${HOME}/.config/fish/config.fish" "${snippet}"
+      upsert_path_snippet "${account_home}/.config/fish/config.fish" "${snippet}"
       ;;
     *)
       local snippet
       snippet="$(render_path_snippet_sh "${bin_dir}")"
-      upsert_path_snippet "${HOME}/.profile" "${snippet}"
+      upsert_path_snippet "${account_home}/.profile" "${snippet}"
       ;;
   esac
 }
@@ -2569,7 +2897,7 @@ install_macos() {
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
-  update_shell_path "${bin_dir}"
+  update_shell_path "${bin_dir}" "${INSTALL_BOOTSTRAP_ACCOUNT_HOME}"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "Installation complete (dry run). After a real install add ${bin_dir} to your PATH or run ${bin_dir}/substrate directly."
@@ -2657,7 +2985,7 @@ install_linux() {
   PATH="${doctor_original_path}" SHIM_ORIGINAL_PATH="${ORIGINAL_PATH}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" sync_world_deps "${substrate_bin}"
 
   finalize_install_metadata "${world_enabled}"
-  update_shell_path "${bin_dir}"
+  update_shell_path "${bin_dir}" "${INSTALL_BOOTSTRAP_ACCOUNT_HOME}"
 
   if [[ "${IS_WSL}" -eq 1 ]]; then
     log "Detected WSL environment. Windows host components (forwarder, uninstall) must be managed via PowerShell scripts."
@@ -2692,6 +3020,11 @@ install_linux() {
 main() {
   sanitize_env_path
   parse_args "$@"
+  resolve_install_bootstrap_context \
+    "${PREFIX_DECLARED}" \
+    "${PREFIX}" \
+    "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}"
   validate_agent_runtime_provision_request
   normalize_prefix
   initialize_metadata_paths
