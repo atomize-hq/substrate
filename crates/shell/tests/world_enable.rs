@@ -18,7 +18,32 @@ set -euo pipefail
 log="${SUBSTRATE_TEST_WORLD_LOG:?missing log path}"
 mkdir -p "$(dirname "$log")"
 
-echo "world-enable invoked: $*" >>"$log"
+carrier=""
+visible_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-bootstrap-context-v1)
+      [[ $# -ge 2 && -z "${carrier}" ]] || exit 90
+      carrier="$2"
+      visible_args+=("--install-bootstrap-context-v1" "<redacted>")
+      shift 2
+      ;;
+    *)
+      visible_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+[[ -n "${carrier}" ]] || exit 91
+[[ "${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}" == "${carrier}" ]] || exit 92
+if [[ -n "${SUBSTRATE_TEST_EXPECTED_CARRIER:-}" ]]; then
+  [[ "${carrier}" == "${SUBSTRATE_TEST_EXPECTED_CARRIER}" ]] || exit 93
+fi
+
+printf 'world-enable invoked:' >>"$log"
+printf ' %s' "${visible_args[@]}" >>"$log"
+printf '\ncarrier argv validated\n' >>"$log"
 if [[ -n "${SUBSTRATE_PREFIX:-}" ]]; then
   echo "prefix=${SUBSTRATE_PREFIX}" >>"$log"
 fi
@@ -602,6 +627,29 @@ fn world_enable_internal_carrier_and_matching_selector_reach_runner() {
     let mut cmd = fixture.command_skip_doctor_without_override();
     add_internal_install_context(&mut cmd, &fixture.substrate_home);
     cmd.arg("--dry-run").assert().success();
+}
+
+#[test]
+fn world_enable_child_receives_exact_carrier_on_argv_without_disclosure() {
+    let fixture = WorldEnableFixture::new();
+    let (carrier, _, _, _) = current_install_context(&fixture.substrate_home);
+
+    let mut cmd = fixture.command_skip_doctor();
+    let assert = cmd
+        .env("SUBSTRATE_TEST_EXPECTED_CARRIER", &carrier)
+        .assert()
+        .success();
+
+    let output = assert.get_output();
+    assert!(!String::from_utf8_lossy(&output.stdout).contains(&carrier));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains(&carrier));
+
+    let log = fixture.log_contents().expect("helper log missing");
+    assert!(log.contains("carrier argv validated"), "helper log: {log}");
+    assert!(
+        !log.contains(&carrier),
+        "carrier bytes leaked to helper log"
+    );
 }
 
 #[test]
