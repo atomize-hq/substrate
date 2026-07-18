@@ -15,6 +15,7 @@ pub(super) fn run_helper_script(
     args: &WorldEnableArgs,
     substrate_home: &Path,
     log_path: &Path,
+    #[cfg(unix)] install_context_carrier: &str,
     socket_override: Option<&Path>,
 ) -> Result<()> {
     append_log_line(
@@ -30,6 +31,9 @@ pub(super) fn run_helper_script(
 
     let mut cmd = Command::new(script);
     cmd.arg("--home").arg(substrate_home);
+    #[cfg(unix)]
+    cmd.arg("--install-bootstrap-context-v1")
+        .arg(install_context_carrier);
     cmd.arg("--profile").arg(&args.profile);
     if args.dry_run {
         cmd.arg("--dry-run");
