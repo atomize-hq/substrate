@@ -7,6 +7,126 @@ if [[ -n "${SCRIPT_SOURCE}" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_SOURCE}")" && pwd)"
 fi
 
+resolve_public_install_bootstrap_context() {
+  local declared="$1"
+  local raw_prefix="$2"
+  local context_fd
+
+  exec {context_fd}< <(python3 - "${declared}" "${raw_prefix}" <<'PY'
+import base64
+import hashlib
+import os
+import pwd
+import sys
+
+DOMAIN = "substrate.install_bootstrap_context"
+
+
+def fail():
+    raise ValueError("invalid install bootstrap context")
+
+
+def normalize_path(raw):
+    if not raw or raw == "/" or not raw.startswith("/") or raw.startswith("//") or "\0" in raw:
+        fail()
+    parts = []
+    for part in raw[1:].split("/"):
+        if not part:
+            continue
+        if part in (".", ".."):
+            fail()
+        parts.append(part)
+    if not parts:
+        fail()
+    return "/" + "/".join(parts)
+
+
+def b64_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+
+def account_entry(account):
+    entry = pwd.getpwnam(account)
+    if entry.pw_uid == 0 or pwd.getpwuid(entry.pw_uid).pw_name != entry.pw_name:
+        fail()
+    if not entry.pw_name or any(ch in entry.pw_name for ch in "\0\r\n"):
+        fail()
+    return entry
+
+
+def public_principal():
+    effective_uid = os.geteuid()
+    if effective_uid != 0:
+        entry = pwd.getpwuid(effective_uid)
+        if entry.pw_uid != effective_uid or pwd.getpwnam(entry.pw_name).pw_uid != effective_uid:
+            fail()
+        if not entry.pw_name or any(ch in entry.pw_name for ch in "\0\r\n"):
+            fail()
+        return entry
+
+    explicit = os.environ.get("SUBSTRATE_INSTALL_PRIMARY_USER", "")
+    if explicit:
+        return account_entry(explicit)
+
+    sudo_user = os.environ.get("SUDO_USER", "")
+    sudo_uid = os.environ.get("SUDO_UID", "")
+    if not sudo_user or not sudo_uid or not sudo_uid.isdecimal():
+        fail()
+    entry = account_entry(sudo_user)
+    if str(entry.pw_uid) != sudo_uid:
+        fail()
+    return entry
+
+
+def frame(prefix, account, uid):
+    encoded_prefix = b64_encode(prefix.encode("utf-8")).decode("ascii")
+    encoded_account = b64_encode(account.encode("utf-8")).decode("ascii")
+    return (
+        f"domain={DOMAIN}\n"
+        "version=1\n"
+        f"selected_host_prefix={encoded_prefix}\n"
+        f"host_substrate_home={encoded_prefix}\n"
+        f"host_substrate_root={encoded_prefix}\n"
+        "principal_kind=unix\n"
+        f"principal_account={encoded_account}\n"
+        f"principal_uid={uid}\n"
+    ).encode("ascii")
+
+
+try:
+    declared = sys.argv[1] == "1"
+    raw_prefix = sys.argv[2]
+    entry = public_principal()
+    prefix = normalize_path(raw_prefix if declared else entry.pw_dir.rstrip("/") + "/.substrate")
+    commitment_input = frame(prefix, entry.pw_name, entry.pw_uid)
+    commitment = hashlib.sha256(commitment_input).hexdigest()
+    carrier = b64_encode(
+        commitment_input + f"host_context_commitment={commitment}\n".encode("ascii")
+    ).decode("ascii")
+    account_home = normalize_path(entry.pw_dir)
+    for value in (prefix, carrier, commitment, entry.pw_name, str(entry.pw_uid), account_home):
+        sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+except Exception:
+    print("invalid install bootstrap context", file=sys.stderr)
+    raise SystemExit(2)
+PY
+  )
+  IFS= read -r -d '' PREFIX <&"${context_fd}" || return 2
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1 <&"${context_fd}" || return 2
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || return 2
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || return 2
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || return 2
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&"${context_fd}" || return 2
+  exec {context_fd}<&-
+
+  export SUBSTRATE_HOME="${PREFIX}"
+  export SUBSTRATE_ROOT="${PREFIX}"
+  export SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}"
+  export SUBSTRATE_INSTALL_PRIMARY_USER="${INSTALL_BOOTSTRAP_ACCOUNT}"
+  export SUBSTRATE_INSTALL_PRIMARY_UID="${INSTALL_BOOTSTRAP_UID}"
+  export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_BOOTSTRAP_CONTEXT_V1}"
+}
+
 ASSET_TMP_DIR=""
 ASSET_ROOT="${SCRIPT_DIR}"
 if [[ -z "${ASSET_ROOT}" || ! -f "${ASSET_ROOT}/install-substrate.sh" ]]; then
@@ -74,14 +194,14 @@ fi
 source "${LOADER_DIR}/bash_loading_animations.sh"
 
 detect_rc_file() {
+  local account_home="$1"
   case "$(basename "${SHELL:-}")" in
-    bash) echo "${HOME}/.bashrc" ;;
-    zsh) echo "${HOME}/.zshrc" ;;
-    fish) echo "${HOME}/.config/fish/config.fish" ;;
+    bash) echo "${account_home}/.bashrc" ;;
+    zsh) echo "${account_home}/.zshrc" ;;
+    fish) echo "${account_home}/.config/fish/config.fish" ;;
     *) echo "your shell's rc file" ;;
   esac
 }
-RC_TARGET="$(detect_rc_file)"
 
 detect_prefix() {
   local prefix=""
@@ -102,10 +222,19 @@ detect_prefix() {
     done
   fi
 
-  if [[ -z "${prefix}" ]]; then
-    prefix="${HOME}/.substrate"
-  fi
-  printf '%s\n' "${prefix%/}"
+  printf '%s\n' "${prefix}"
+}
+
+args_declare_prefix() {
+  local arg=""
+  for arg in "$@"; do
+    case "${arg}" in
+      --prefix|--prefix=*)
+        return 0
+        ;;
+    esac
+  done
+  return 1
 }
 
 args_request_help() {
@@ -120,8 +249,11 @@ args_request_help() {
   return 1
 }
 
-PREFIX="$(detect_prefix "$@")"
-BIN_DIR="${PREFIX}/bin"
+PREFIX_RAW="$(detect_prefix "$@")"
+PREFIX_DECLARED=0
+if args_declare_prefix "$@"; then
+  PREFIX_DECLARED=1
+fi
 
 TMP_LOG="$(mktemp -t substrate-install-log.XXXXXX)"
 LOADER_STARTED=0
@@ -145,12 +277,24 @@ if args_request_help "$@"; then
   exit $?
 fi
 
+if ! resolve_public_install_bootstrap_context "${PREFIX_DECLARED}" "${PREFIX_RAW}"; then
+  echo "[substrate-install] unable to construct install bootstrap context." >&2
+  exit 2
+fi
+BIN_DIR="${PREFIX}/bin"
+RC_TARGET="$(detect_rc_file "${INSTALL_BOOTSTRAP_ACCOUNT_HOME}")"
+UPSTREAM_ARGS=("$@")
+if [[ "${PREFIX_DECLARED}" -eq 0 ]]; then
+  UPSTREAM_ARGS+=(--prefix "${PREFIX}")
+fi
+UPSTREAM_ARGS+=(--install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}")
+
 printf "\033[32mSubstrate installer running…\033[0m\n"
 if [[ -t 1 && -n "${BLA_braille_fill_bar[*]}" ]]; then
   BLA::start_loading_animation "${BLA_braille_fill_bar[@]}"
   LOADER_STARTED=1
 fi
-if "${UPSTREAM_INSTALL}" "$@" >"${TMP_LOG}" 2>&1; then
+if "${UPSTREAM_INSTALL}" "${UPSTREAM_ARGS[@]}" >"${TMP_LOG}" 2>&1; then
   stop_loader
   printf "\033[32mSubstrate install successful!\033[0m\n"
   printf "Added %s to PATH via %s.\n" "${BIN_DIR}" "${RC_TARGET}"
