@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+RELEASE_UNINSTALL_INHERITED_XTRACE=0
+if [[ $- == *x* ]]; then
+  RELEASE_UNINSTALL_INHERITED_XTRACE=1
+  set +x
+fi
 set -euo pipefail
 
 log() { printf '[substrate-uninstall] %s\n' "$1"; }
@@ -587,6 +592,7 @@ INSTALL_BOOTSTRAP_COMMITMENT=""
 INSTALL_BOOTSTRAP_ACCOUNT=""
 INSTALL_BOOTSTRAP_UID=""
 INSTALL_BOOTSTRAP_ACCOUNT_HOME=""
+HELP_REQUESTED=0
 SUBSTRATE_HOME=""
 HOST_STATE_PATH=""
 HOST_STATE_METADATA_LOADED=0
@@ -633,8 +639,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      usage
-      exit 0
+      HELP_REQUESTED=1
+      shift
       ;;
     *)
       log "Unknown argument: $1"
@@ -644,11 +650,25 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${HELP_REQUESTED}" -eq 1 && "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -eq 0 ]]; then
+  if [[ "${RELEASE_UNINSTALL_INHERITED_XTRACE}" -eq 1 ]]; then
+    set -x
+  fi
+  usage
+  exit 0
+fi
 resolve_install_bootstrap_context \
   "${PREFIX_DECLARED}" \
   "${PREFIX}" \
   "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
   "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}"
+if [[ "${RELEASE_UNINSTALL_INHERITED_XTRACE}" -eq 1 ]]; then
+  set -x
+fi
+if [[ "${HELP_REQUESTED}" -eq 1 ]]; then
+  usage
+  exit 0
+fi
 SUBSTRATE_HOME="${PREFIX}"
 HOST_STATE_PATH="${SUBSTRATE_HOME}/install_state.json"
 
