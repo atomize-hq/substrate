@@ -66,6 +66,9 @@ done
 
 maybe_skip_platform
 
+CURRENT_ACCOUNT="$(id -un)"
+CURRENT_UID="$(id -u)"
+
 WORK_ROOT="$(mktemp -d "/tmp/substrate-world-provision.XXXXXX")"
 STUB_BIN="${WORK_ROOT}/stub-bin"
 mkdir -p "${STUB_BIN}"
@@ -85,6 +88,8 @@ write_stub_sudo() {
 set -euo pipefail
 FAKE_ROOT="${FAKE_ROOT:-}"
 SYSTEMCTL_LOG="${SUBSTRATE_TEST_SYSTEMCTL_LOG:-}"
+TEST_STUB_BIN="${SUBSTRATE_TEST_STUB_BIN:-}"
+TOOL_LOG="${SUBSTRATE_TEST_SUDO_TOOL_LOG:-}"
 if [[ $# -lt 1 ]]; then
   exit 0
 fi
@@ -96,6 +101,57 @@ while [[ "${cmd}" == -* && $# -gt 0 ]]; do
 done
 if [[ "${cmd}" == -* ]]; then
   exit 0
+fi
+if [[ -n "${TOOL_LOG}" ]]; then
+  printf 'outer:%s\n' "${cmd}" >>"${TOOL_LOG}"
+fi
+
+scrubbed=0
+seen_path=0
+seen_home=0
+seen_user=0
+seen_logname=0
+if [[ "${cmd##*/}" == "env" ]]; then
+  [[ "${1:-}" == "-i" ]] || exit 90
+  scrubbed=1
+  shift
+  while [[ $# -gt 0 && "$1" == *=* ]]; do
+    case "$1" in
+      PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)
+        seen_path=1
+        ;;
+      HOME=/root)
+        seen_home=1
+        ;;
+      USER=root)
+        seen_user=1
+        ;;
+      LOGNAME=root)
+        seen_logname=1
+        ;;
+      *)
+        exit 91
+        ;;
+    esac
+    shift
+  done
+  [[ $# -gt 0 ]] || exit 92
+  cmd="$1"
+  shift
+fi
+cmd_name="${cmd##*/}"
+if [[ -n "${TOOL_LOG}" ]]; then
+  printf '%s\n' "${cmd}" >>"${TOOL_LOG}"
+fi
+dispatch_cmd="${cmd}"
+if [[ -n "${TEST_STUB_BIN}" && -x "${TEST_STUB_BIN}/${cmd_name}" ]]; then
+  dispatch_cmd="${TEST_STUB_BIN}/${cmd_name}"
+fi
+if [[ "${scrubbed}" -eq 1 ]]; then
+  [[ "${seen_path}" -eq 1 ]] || exit 93
+  if [[ "${cmd_name}" != "true" ]]; then
+    [[ "${seen_home}" -eq 1 && "${seen_user}" -eq 1 && "${seen_logname}" -eq 1 ]] || exit 94
+  fi
 fi
 
 rewrite_dest_arg() {
@@ -131,29 +187,41 @@ log_systemctl() {
   printf 'systemctl %s\n' "$*" >>"${SYSTEMCTL_LOG}"
 }
 
-case "${cmd}" in
+case "${cmd_name}" in
   systemctl)
     log_systemctl "$@"
-    exec "${cmd}" "$@"
+    exec "${dispatch_cmd}" "$@"
     ;;
   getfacl|test)
     args=("$@")
     rewrite_all_paths
-    exec "${cmd}" "${args[@]}"
+    exec "${dispatch_cmd}" "${args[@]}"
     ;;
   install|cp|mv|ln)
     args=("$@")
     rewrite_dest_arg
-    exec "${cmd}" "${args[@]}"
+    exec "${dispatch_cmd}" "${args[@]}"
     ;;
   rm|mkdir|chmod|chown|ls)
     args=("$@")
     rewrite_all_paths
-    exec "${cmd}" "${args[@]}"
+    exec "${dispatch_cmd}" "${args[@]}"
+    ;;
+  substrate-apply-socket-acl)
+    case "$*" in
+      "--socket /run/substrate.sock substrate"|\
+      "--directory-traverse /var/lib/substrate substrate"|\
+      "--tree-readonly /var/lib/substrate/world-deps substrate")
+        exit 0
+        ;;
+      *)
+        exit 95
+        ;;
+    esac
     ;;
   *)
     args=("$@")
-    exec "${cmd}" "${args[@]}"
+    exec "${dispatch_cmd}" "${args[@]}"
     ;;
 esac
 EOF
@@ -410,7 +478,20 @@ write_stub_substrate() {
 #!/usr/bin/env bash
 set -euo pipefail
 log="${SUBSTRATE_TEST_GATEWAY_LOG:-}"
-case "$*" in
+command_args=("$@")
+expected_carrier="${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}"
+if [[ -n "${expected_carrier}" ]]; then
+  [[ "${command_args[0]:-}" == "--install-bootstrap-context-v1" ]] || exit 91
+  [[ "${command_args[1]:-}" == "${expected_carrier}" ]] || exit 92
+  command_args=("${command_args[@]:2}")
+elif [[ "${command_args[0]:-}" == "--install-bootstrap-context-v1" ]]; then
+  exit 93
+fi
+command="${command_args[*]}"
+case "${command}" in
+  "--install-bootstrap-home-v1")
+    exit 0
+    ;;
   "config current show --json")
     printf '%s\n' "${SUBSTRATE_TEST_CONFIG_JSON:-}"
     exit 0
@@ -420,20 +501,24 @@ case "$*" in
     exit 0
     ;;
   "world gateway sync")
-    [[ -n "${log}" ]] && printf 'substrate %s\n' "$*" >>"${log}"
+    if [[ -n "${SUBSTRATE_TEST_EXPECTED_SYNTHETIC_AUTH:-}" ]]; then
+      [[ -f "${SUBSTRATE_TEST_EXPECTED_SYNTHETIC_AUTH}" ]] || exit 94
+      [[ -n "${log}" ]] && printf 'synthetic-auth-present %s\n' "${SUBSTRATE_TEST_EXPECTED_SYNTHETIC_AUTH}" >>"${log}"
+    fi
+    [[ -n "${log}" ]] && printf 'substrate %s\n' "${command}" >>"${log}"
     exit 0
     ;;
   "world gateway status --json")
-    [[ -n "${log}" ]] && printf 'substrate %s\n' "$*" >>"${log}"
+    [[ -n "${log}" ]] && printf 'substrate %s\n' "${command}" >>"${log}"
     printf '{"status":"available","openai_base_url":"http://127.0.0.1:43123"}\n'
     exit 0
     ;;
   "world gateway restart")
-    [[ -n "${log}" ]] && printf 'substrate %s\n' "$*" >>"${log}"
+    [[ -n "${log}" ]] && printf 'substrate %s\n' "${command}" >>"${log}"
     exit 0
     ;;
 esac
-printf 'unexpected substrate args: %s\n' "$*" >&2
+printf 'unexpected substrate args\n' >&2
 exit 1
 EOF
   chmod +x "${bin_path}"
@@ -485,6 +570,38 @@ EOF
   write_stub_substrate
 }
 
+verify_synthetic_auth_account_home_cleanup() (
+  set -euo pipefail
+  local isolated_root="${WORK_ROOT}/synthetic-auth-isolated"
+  local account_home="${isolated_root}/account-home"
+  local auth_path="${account_home}/.codex/auth.json"
+  local gateway_log="${isolated_root}/gateway.log"
+  local carrier="isolated-authenticated-carrier"
+  local substrate_stub="${REPO_ROOT}/target/${PROFILE}/substrate"
+  mkdir -p "${account_home}"
+  : > "${gateway_log}"
+
+  # shellcheck disable=SC1090
+  source <(awk '/^while \[\[ \$# -gt 0 \]\]; do/ { exit } { print }' \
+    "${REPO_ROOT}/scripts/linux/world-provision.sh")
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  INSTALL_BOOTSTRAP_ACCOUNT_HOME="${account_home}"
+  INVOKING_HOME="${account_home}"
+  INSTALL_BOOTSTRAP_CONTEXT_V1="${carrier}"
+  SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${carrier}"
+  export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1
+  export SUBSTRATE_TEST_GATEWAY_LOG="${gateway_log}"
+  export SUBSTRATE_TEST_EXPECTED_SYNTHETIC_AUTH="${auth_path}"
+  PATH="${STUB_BIN}:${PATH}"
+
+  run_gateway_lifecycle_proof "${substrate_stub}" synthetic_auth_file
+
+  assert_contains "synthetic-auth-present ${auth_path}" "${gateway_log}" \
+    "gateway proof must create synthetic auth in the committed account home before dispatch"
+  [[ ! -e "${auth_path}" ]] \
+    || fatal "gateway proof did not remove the synthetic auth file it created at ${auth_path}"
+)
+
 assert_contains() {
   local needle="$1"
   local path="$2"
@@ -512,6 +629,25 @@ assert_socket_unit() {
   assert_contains "SocketMode=0660" "${unit}" "socket mode must be 0660"
   assert_contains "SocketUser=root" "${unit}" "socket user must remain root"
   assert_contains "SocketGroup=substrate" "${unit}" "socket group must be substrate"
+}
+
+assert_service_context_unit() {
+  local fake_root="$1"
+  local selected_prefix="$2"
+  local unit="${fake_root}/etc/systemd/system/substrate-world-service.service"
+  local dropin="${fake_root}/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf"
+  local acl_helper="${fake_root}/usr/libexec/substrate/substrate-apply-socket-acl"
+  [[ -f "${unit}" ]] || fatal "service unit missing at ${unit}"
+  assert_contains "Environment=\"SUBSTRATE_HOME=${selected_prefix}\"" "${unit}" "service H must derive from A"
+  assert_contains "Environment=\"SUBSTRATE_ROOT=${selected_prefix}\"" "${unit}" "service R must derive from A"
+  assert_contains "Environment=\"SUBSTRATE_INSTALL_PRIMARY_USER=${CURRENT_ACCOUNT}\"" "${unit}" "service account must derive from IH"
+  assert_contains "Environment=\"SUBSTRATE_INSTALL_PRIMARY_UID=${CURRENT_UID}\"" "${unit}" "service UID must derive from IH"
+  assert_contains 'Environment="SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=' "${unit}" "service commitment projection missing"
+  assert_contains 'Environment="SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=' "${unit}" "service carrier projection missing"
+  assert_contains "ReadWritePaths=\"${selected_prefix}\" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp" "${unit}" "ReadWritePaths must derive from A"
+  [[ -f "${dropin}" ]] || fatal "socket ACL drop-in missing at ${dropin}"
+  assert_contains 'ExecStartPost=-/usr/libexec/substrate/substrate-apply-socket-acl --socket /run/substrate.sock substrate' "${dropin}" "socket ACL drop-in tuple changed"
+  [[ -x "${acl_helper}" ]] || fatal "installed ACL helper missing at ${acl_helper}"
 }
 
 assert_group_ops() {
@@ -564,7 +700,7 @@ assert_configured_eligible_proof() {
   local provision_log="$1"
   local gateway_log="$2"
   local fake_home="$3"
-  assert_contains "Running gateway lifecycle proof (auth: synthetic_auth_file)" "${provision_log}" "eligible install should run the gateway proof"
+  assert_contains "Running gateway lifecycle proof (auth: env_handoff)" "${provision_log}" "eligible install should run the gateway proof"
   assert_not_contains "Skipping gateway lifecycle proof" "${provision_log}" "eligible install should not skip the gateway proof"
   assert_contains "substrate world gateway sync" "${gateway_log}" "gateway proof should sync the gateway"
   assert_contains "substrate world gateway status --json" "${gateway_log}" "gateway proof should read gateway status"
@@ -578,7 +714,7 @@ assert_configured_eligible_proof() {
 assert_world_deps_probe_verified() {
   local provision_log="$1"
   local probe_path="$2"
-  assert_contains "Verified named-user ACL bridge for substrate-smoke on runtime probe ${probe_path}." "${provision_log}" "world-deps verification should go green only on the real probe path"
+  assert_contains "Verified named-user ACL bridge for ${CURRENT_ACCOUNT} on runtime probe ${probe_path}." "${provision_log}" "world-deps verification should go green only on the real probe path"
 }
 
 assert_world_deps_probe_missing_warning() {
@@ -642,15 +778,22 @@ run_scenario() {
   local group_log="${logs_dir}/group_ops.log"
   local linger_log="${logs_dir}/linger.log"
   local gateway_log="${logs_dir}/gateway.log"
+  local sudo_tool_log="${logs_dir}/sudo-tools.log"
   local provision_log="${logs_dir}/provision.log"
   local usermod_state="${scenario_root}/usermod.state"
   local path_env="${STUB_BIN}:$PATH"
+  local selected_prefix="${scenario_root}/selected-prefix"
 
-  mkdir -p "${fake_root}" "${logs_dir}" "${fake_home}"
+  if [[ "${assertion_mode}" == eligible_run* ]]; then
+    policy_json="${policy_json/\"env_allowed\":[]/\"env_allowed\":[\"SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN\"]}"
+  fi
+
+  mkdir -p "${fake_root}" "${logs_dir}" "${fake_home}" "${selected_prefix}"
   : > "${systemctl_log}"
   : > "${group_log}"
   : > "${linger_log}"
   : > "${gateway_log}"
+  : > "${sudo_tool_log}"
   : > "${provision_log}"
 
   prepare_world_deps_probe "${fake_root}" "${probe_mode}"
@@ -664,6 +807,8 @@ run_scenario() {
       FAKE_ROOT="${fake_root}" \
       SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR="${fake_root}/var/lib/substrate/world-deps/bin" \
       SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
+      SUBSTRATE_TEST_STUB_BIN="${STUB_BIN}" \
+      SUBSTRATE_TEST_SUDO_TOOL_LOG="${sudo_tool_log}" \
       SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
       SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
       SUBSTRATE_TEST_GATEWAY_LOG="${gateway_log}" \
@@ -677,7 +822,8 @@ run_scenario() {
       SUBSTRATE_TEST_USERMOD_STATE="${usermod_state}" \
       SUBSTRATE_TEST_CONFIG_JSON="${config_json}" \
       SUBSTRATE_TEST_POLICY_JSON="${policy_json}" \
-      scripts/linux/world-provision.sh --profile "${PROFILE}" --skip-build >"${provision_log}" 2>&1
+      SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="test-only-token" \
+      scripts/linux/world-provision.sh --home "${selected_prefix}" --profile "${PROFILE}" --skip-build >"${provision_log}" 2>&1
   ); then
     log "Provisioner output for scenario '${scenario_name}':"
     sed 's/^/[provision] /' "${provision_log}" >&2 || true
@@ -685,10 +831,16 @@ run_scenario() {
   fi
 
   assert_socket_unit "${fake_root}"
+  assert_service_context_unit "${fake_root}" "${selected_prefix}"
   assert_group_ops "${group_log}"
   assert_linger_guidance "${provision_log}"
   assert_group_guidance "${provision_log}"
   assert_contains "Provisioning complete" "${provision_log}" "provisioner should report completion"
+  assert_not_contains "${STUB_BIN}/" "${sudo_tool_log}" \
+    "world-provision sudo boundary must not select privileged tools from ambient PATH"
+  if grep -Fxq -- "outer:env" "${sudo_tool_log}"; then
+    fatal "world-provision sudo boundary left env selection to ambient PATH"
+  fi
 
   case "${assertion_mode}" in
     clean_skip)
@@ -711,6 +863,7 @@ run_scenario() {
 
 write_stub_helpers
 ensure_stub_binaries
+verify_synthetic_auth_account_home_cleanup
 
 run_scenario \
   "clean-install" \
