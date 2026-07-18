@@ -8,6 +8,7 @@ INSTALL_CHILD="${REPO_ROOT}/scripts/substrate/install-substrate.sh"
 UNINSTALL_WRAPPER="${REPO_ROOT}/scripts/substrate/uninstall.sh"
 UNINSTALL_CHILD="${REPO_ROOT}/scripts/substrate/uninstall-substrate.sh"
 CURRENT_UID="$(id -u)"
+CURRENT_ACCOUNT="$(id -un)"
 FIXTURE_PARENT="${XDG_RUNTIME_DIR:-/run/user/${CURRENT_UID}}"
 ACCOUNT_HOME="$(getent passwd "${CURRENT_UID}" | awk -F: 'NR == 1 { print $6 }')"
 
@@ -176,6 +177,48 @@ read_context wrapper_context "${UNINSTALL_WRAPPER}" 1 "${SELECTED_A}"
 read_context child_context "${UNINSTALL_CHILD}" 1 "${SELECTED_A}" "${CTX_CARRIER}" 'PATH_SNIPPET_START='
 [[ "${CTX_CARRIER}" == "${INSTALL_WRAPPER_CARRIER}" ]] || fail "uninstall child changed the wrapper carrier"
 
+release_entry_stdout="${WORK_ROOT}/release-entry.stdout"
+release_entry_stderr="${WORK_ROOT}/release-entry.stderr"
+set +e
+HOME="${AMBIENT_B}" \
+  SUBSTRATE_HOME="${SELECTED_A}" \
+  SUBSTRATE_ROOT="${SELECTED_A}" \
+  SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_WRAPPER_COMMITMENT}" \
+  SUBSTRATE_INSTALL_PRIMARY_USER="${CURRENT_ACCOUNT}" \
+  SUBSTRATE_INSTALL_PRIMARY_UID="${CURRENT_UID}" \
+  SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_WRAPPER_CARRIER}" \
+  bash -x "${INSTALL_CHILD}" \
+    --prefix "${SELECTED_A}" \
+    --install-bootstrap-context-v1 "${INSTALL_WRAPPER_CARRIER}" \
+    --help >"${release_entry_stdout}" 2>"${release_entry_stderr}"
+release_entry_status=$?
+set -e
+[[ "${release_entry_status}" -eq 0 ]] || fail "validated release internal help failed"
+if grep -Fq -- "${INSTALL_WRAPPER_CARRIER}" "${release_entry_stdout}" "${release_entry_stderr}"; then
+  fail "release full-entry inherited xtrace disclosed the carrier"
+fi
+grep -Fq -- "Usage:" "${release_entry_stdout}" \
+  || fail "validated release internal help did not print usage"
+grep -Eq '^\+ .*print_usage' "${release_entry_stderr}" \
+  || fail "release internal help did not resume nonsensitive tracing after validation"
+
+set +e
+HOME="${AMBIENT_B}" \
+  SUBSTRATE_HOME="${SELECTED_A}" \
+  SUBSTRATE_ROOT="${SELECTED_A}" \
+  SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_WRAPPER_COMMITMENT}" \
+  SUBSTRATE_INSTALL_PRIMARY_USER="${CURRENT_ACCOUNT}" \
+  SUBSTRATE_INSTALL_PRIMARY_UID="${CURRENT_UID}" \
+  SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="not!base64" \
+  bash "${INSTALL_CHILD}" \
+    --prefix "${SELECTED_A}" \
+    --install-bootstrap-context-v1 "not!base64" \
+    --help >"${release_entry_stdout}" 2>"${release_entry_stderr}"
+release_malformed_help_status=$?
+set -e
+[[ "${release_malformed_help_status}" -ne 0 ]] \
+  || fail "release malformed internal carrier fell through to public help"
+
 run_wrapper_capture() {
   local wrapper="$1"
   local child_name="$2"
@@ -286,8 +329,19 @@ verify_release_projections() (
   cmp "${version_dir}/config/manager_hooks.yaml" "${PREFIX}/manager_hooks.yaml" \
     || fail "release manager manifest projection did not derive from A"
 
-  write_env_sh_script 1
-  write_manager_env_script 1
+  local release_projection_trace
+  release_projection_trace="$({
+    set -x
+    write_env_sh_script 1
+    write_manager_env_script 1
+    { set +x; } 2>/dev/null
+  } 2>&1)"
+  if [[ "${release_projection_trace}" == *"${INSTALL_BOOTSTRAP_CONTEXT_V1}"* ]]; then
+    fail "release generated projections disclosed the authenticated carrier under inherited xtrace"
+  fi
+  [[ "${release_projection_trace}" == *"write_env_sh_script 1"* \
+    && "${release_projection_trace}" == *"write_manager_env_script 1"* ]] \
+    || fail "release generated projections did not resume nonsensitive tracing"
   bash -n "${PREFIX}/env.sh" "${PREFIX}/manager_env.sh"
   for projection in \
     SUBSTRATE_HOME \
@@ -390,7 +444,17 @@ verify_release_projections() (
 printf '%s\n' "$@" > "${ARGV_RECORD}"
 STUB
   chmod +x "${substrate_stub}"
-  ARGV_RECORD="${argv_record}" deploy_shims "${substrate_stub}"
+  local release_shim_trace
+  release_shim_trace="$({
+    set -x
+    ARGV_RECORD="${argv_record}" deploy_shims "${substrate_stub}"
+    { set +x; } 2>/dev/null
+  } 2>&1)"
+  if [[ "${release_shim_trace}" == *"${INSTALL_BOOTSTRAP_CONTEXT_V1}"* ]]; then
+    fail "release shim leaf disclosed the authenticated carrier under inherited xtrace"
+  fi
+  [[ "${release_shim_trace}" == *"deploy_shims ${substrate_stub}"* ]] \
+    || fail "release shim leaf did not resume nonsensitive tracing"
   mapfile -t shim_argv < "${argv_record}"
   [[ "${shim_argv[0]}" == "--install-bootstrap-context-v1" ]] \
     || fail "shim leaf omitted the explicit carrier option"
@@ -407,9 +471,297 @@ STUB
     || fail "doctor leaf received a different carrier"
   [[ "${doctor_argv[2]}" == "world" && "${doctor_argv[3]}" == "doctor" && "${doctor_argv[4]}" == "--json" ]] \
     || fail "doctor leaf action changed"
+
+  local release_sudo_capture="${WORK_ROOT}/release-sudo-capture"
+  local release_sudo_stub="${WORK_ROOT}/release-sudo"
+  local release_malicious_bin="${WORK_ROOT}/release-malicious-bin"
+  local release_malicious_systemctl="${release_malicious_bin}/systemctl"
+  local release_malicious_env="${release_malicious_bin}/env"
+  local release_malicious_true="${release_malicious_bin}/true"
+  local release_malicious_pacman="${release_malicious_bin}/pacman"
+  mkdir -p "${release_malicious_bin}"
+  cat > "${release_sudo_stub}" <<'STUB'
+#!/usr/bin/env bash
+{
+  printf '%s\n' '--call--'
+  printf '%s\n' "$@"
+} >> "${SUDO_CAPTURE:?}"
+exit 0
+STUB
+  printf '#!/usr/bin/env bash\nexit 97\n' > "${release_malicious_systemctl}"
+  printf '#!/usr/bin/env bash\nexit 98\n' > "${release_malicious_env}"
+  printf '#!/usr/bin/env bash\nexit 99\n' > "${release_malicious_true}"
+  printf '#!/usr/bin/env bash\nexit 96\n' > "${release_malicious_pacman}"
+  chmod +x "${release_sudo_stub}" "${release_malicious_systemctl}" \
+    "${release_malicious_env}" "${release_malicious_true}" "${release_malicious_pacman}"
+  # shellcheck disable=SC2034 # consumed by the sourced run_with_sudo implementation
+  SUDO_CMD=("${release_sudo_stub}")
+  # shellcheck disable=SC2034 # consumed by the sourced run_with_sudo implementation
+  SUDO_INITIALIZED=1
+  : > "${release_sudo_capture}"
+  local release_fixed_systemctl
+  local release_fixed_env
+  local release_fixed_true
+  local release_fixed_pacman
+  release_fixed_systemctl="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P systemctl)"
+  release_fixed_env="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P env)"
+  release_fixed_true="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P true)"
+  release_fixed_pacman="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P pacman)"
+  # shellcheck disable=SC2218 # sourced production definition precedes the test-local override below
+  PATH="${release_malicious_bin}:${PATH}" SUDO_CAPTURE="${release_sudo_capture}" run_with_sudo \
+    systemctl \
+    --selected-prefix "${PREFIX}" \
+    --account "${INSTALL_BOOTSTRAP_ACCOUNT}" \
+    --uid "${INSTALL_BOOTSTRAP_UID}"
+  for expected in \
+    -- "${release_fixed_env}" -i \
+    "PATH=${PRIVILEGED_TOOL_PATH}" \
+    HOME=/root USER=root LOGNAME=root \
+    "${release_fixed_systemctl}" \
+    --selected-prefix "${PREFIX}" \
+    --account "${INSTALL_BOOTSTRAP_ACCOUNT}" \
+    --uid "${INSTALL_BOOTSTRAP_UID}"
+  do
+    grep -Fxq -- "${expected}" "${release_sudo_capture}" \
+      || fail "release sudo boundary omitted '${expected}'"
+  done
+  if grep -Eq -- '(^-E$|SUBSTRATE_(HOME|ROOT|INSTALL_BOOTSTRAP_CONTEXT_V1)=)' "${release_sudo_capture}"; then
+    fail "release arbitrary privileged tool inherited installation authority"
+  fi
+  if grep -Fq -- "${INSTALL_BOOTSTRAP_CONTEXT_V1}" "${release_sudo_capture}"; then
+    fail "release arbitrary privileged tool received the authenticated carrier"
+  fi
+  if grep -Fq -- "${release_malicious_systemctl}" "${release_sudo_capture}"; then
+    fail "release sudo boundary selected a privileged tool from ambient PATH"
+  fi
+  if grep -Fq -- "${release_malicious_env}" "${release_sudo_capture}"; then
+    fail "release sudo boundary selected env from ambient PATH"
+  fi
+  grep -Fxq -- "${release_fixed_true}" "${release_sudo_capture}" \
+    || fail "release sudo probe did not use fixed-path true"
+  if grep -Fq -- "${release_malicious_true}" "${release_sudo_capture}"; then
+    fail "release sudo probe selected true from ambient PATH"
+  fi
+  local release_trace_output
+  release_trace_output="$({
+    set -x
+    PATH="${release_malicious_bin}:${PATH}" SUDO_CAPTURE="${release_sudo_capture}" \
+      run_with_sudo systemctl --selected-prefix "${PREFIX}"
+    { set +x; } 2>/dev/null
+  } 2>&1)"
+  if [[ "${release_trace_output}" == *"${INSTALL_BOOTSTRAP_CONTEXT_V1}"* ]]; then
+    fail "release inherited xtrace disclosed the authenticated carrier"
+  fi
+  [[ "${release_trace_output}" == *"run_with_sudo systemctl"* ]] \
+    || fail "release inherited xtrace did not resume for nonsensitive dispatch"
+
+  : > "${release_sudo_capture}"
+  PKG_MANAGER=pacman
+  DRY_RUN=0
+  PATH="${release_malicious_bin}:${PATH}" SUDO_CAPTURE="${release_sudo_capture}" \
+    install_packages review-package
+  [[ "$(grep -Fxc -- "${release_fixed_pacman}" "${release_sudo_capture}")" -eq 1 ]] \
+    || fail "release package installation bypassed fixed-path privileged dispatch"
+  [[ "$(grep -Fxc -- "${release_fixed_env}" "${release_sudo_capture}")" -ge 1 ]] \
+    || fail "release package installation bypassed the fixed environment scrubber"
+  if grep -Fq -- "${release_malicious_pacman}" "${release_sudo_capture}"; then
+    fail "release package installation selected pacman from ambient PATH"
+  fi
+  local release_sudo_lines_before
+  local release_sudo_lines_after
+  release_sudo_lines_before="$(wc -l < "${release_sudo_capture}")"
+  set +e
+  (
+    SUBSTRATE_ROOT="${AMBIENT_B}"
+    SUDO_CAPTURE="${release_sudo_capture}" run_with_sudo \
+      true --selected-prefix "${PREFIX}"
+  ) >/dev/null 2>&1
+  local release_tamper_status=$?
+  set -e
+  release_sudo_lines_after="$(wc -l < "${release_sudo_capture}")"
+  [[ "${release_tamper_status}" -ne 0 ]] \
+    || fail "release sudo boundary accepted a conflicting checked projection"
+  [[ "${release_sudo_lines_after}" == "${release_sudo_lines_before}" ]] \
+    || fail "release sudo boundary crossed after projection validation failed"
+
+  local service_fixture="${WORK_ROOT}/release-service"
+  local service_version="${service_fixture}/version"
+  local service_root="${service_fixture}/root"
+  local service_tmp="${service_fixture}/tmp"
+  local sudo_log="${service_fixture}/sudo.log"
+  mkdir -p \
+    "${service_version}/bin" \
+    "${service_version}/scripts/linux" \
+    "${service_root}" \
+    "${service_tmp}"
+  for binary in world-service substrate-gateway; do
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${service_version}/bin/${binary}"
+    chmod +x "${service_version}/bin/${binary}"
+  done
+  cp "${REPO_ROOT}/scripts/linux/substrate-apply-socket-acl.sh" \
+    "${service_version}/scripts/linux/substrate-apply-socket-acl.sh"
+
+  # shellcheck disable=SC2329 # invoked indirectly by the sourced provision_linux_world implementation
+  run_with_sudo() {
+    local tool="$1"
+    shift
+    printf '%s %s\n' "${tool}" "$*" >> "${sudo_log}"
+    case "${tool}" in
+      install)
+        if [[ "${1:-}" == -Dm* ]]; then
+          local source_path="$2"
+          local destination="$3"
+          mkdir -p "$(dirname "${service_root}${destination}")"
+          cp "${source_path}" "${service_root}${destination}"
+        elif [[ "${1:-}" == "-d" ]]; then
+          local destination="${!#}"
+          mkdir -p "${service_root}${destination}"
+        else
+          fail "unexpected release service install tuple: $*"
+        fi
+        ;;
+      systemctl|rm)
+        ;;
+      /usr/libexec/substrate/substrate-apply-socket-acl)
+        case "$*" in
+          "--socket /run/substrate.sock substrate"|\
+          "--directory-traverse /var/lib/substrate substrate"|\
+          "--tree-readonly /var/lib/substrate/world-deps substrate")
+            ;;
+          *)
+            fail "release service emitted a noncanonical ACL tuple: $*"
+            ;;
+        esac
+        ;;
+      *)
+        fail "unexpected release privileged tool: ${tool}"
+        ;;
+    esac
+  }
+
+  TMPDIR="${service_tmp}"
+  # shellcheck disable=SC2034 # consumed by the sourced provision_linux_world implementation
+  ENABLE_WORLD_NETFILTER=0
+  provision_linux_world "${service_version}"
+
+  local service_unit="${service_root}/etc/systemd/system/substrate-world-service.service"
+  local socket_dropin="${service_root}/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf"
+  [[ -f "${service_unit}" ]] || fail "release service unit was not generated"
+  [[ -f "${socket_dropin}" ]] || fail "release socket ACL drop-in was not generated"
+  grep -Fq "Environment=\"SUBSTRATE_HOME=${SELECTED_A}\"" "${service_unit}" \
+    || fail "release service H did not derive from A"
+  grep -Fq "Environment=\"SUBSTRATE_ROOT=${SELECTED_A}\"" "${service_unit}" \
+    || fail "release service R did not derive from A"
+  grep -Fq "Environment=\"SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${INSTALL_BOOTSTRAP_COMMITMENT}\"" "${service_unit}" \
+    || fail "release service commitment projection changed"
+  grep -Fq "Environment=\"SUBSTRATE_INSTALL_PRIMARY_USER=${INSTALL_BOOTSTRAP_ACCOUNT}\"" "${service_unit}" \
+    || fail "release service intended account projection changed"
+  grep -Fq "Environment=\"SUBSTRATE_INSTALL_PRIMARY_UID=${INSTALL_BOOTSTRAP_UID}\"" "${service_unit}" \
+    || fail "release service intended UID projection changed"
+  grep -Fq "Environment=\"SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${INSTALL_BOOTSTRAP_CONTEXT_V1}\"" "${service_unit}" \
+    || fail "release service carrier projection changed"
+  grep -Fq "ReadWritePaths=\"${SELECTED_A}\" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp" "${service_unit}" \
+    || fail "release ReadWritePaths did not derive from A"
+  if grep -Fq -- "${AMBIENT_B}" "${service_unit}"; then
+    fail "ambient B retargeted the release service unit"
+  fi
+  grep -Fq 'ExecStartPost=-/usr/libexec/substrate/substrate-apply-socket-acl --socket /run/substrate.sock substrate' "${socket_dropin}" \
+    || fail "release socket ACL drop-in tuple changed"
+  grep -Fq 'rm -f /run/substrate.sock' "${sudo_log}" \
+    || fail "release fixed same-attempt socket restart unlink changed"
 )
 
 verify_release_projections
+
+verify_dev_privileged_boundary() (
+  set -euo pipefail
+  # shellcheck disable=SC1090
+  source <(awk '/^while \[\[ \$# -gt 0 \]\]; do/ { exit } { print }' \
+    "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh")
+  resolve_install_bootstrap_context 1 "${SELECTED_A}" ""
+
+  local fixture="${WORK_ROOT}/dev-sudo"
+  local stub_bin="${fixture}/bin"
+  local sudo_capture="${fixture}/sudo-capture"
+  local malicious_systemctl="${stub_bin}/systemctl"
+  local malicious_env="${stub_bin}/env"
+  local malicious_true="${stub_bin}/true"
+  mkdir -p "${stub_bin}"
+  cat > "${stub_bin}/sudo" <<'STUB'
+#!/usr/bin/env bash
+{
+  printf '%s\n' '--call--'
+  printf '%s\n' "$@"
+} >> "${SUDO_CAPTURE:?}"
+exit 0
+STUB
+  printf '#!/usr/bin/env bash\nexit 97\n' > "${malicious_systemctl}"
+  printf '#!/usr/bin/env bash\nexit 98\n' > "${malicious_env}"
+  printf '#!/usr/bin/env bash\nexit 99\n' > "${malicious_true}"
+  chmod +x "${stub_bin}/sudo" "${malicious_systemctl}" "${malicious_env}" "${malicious_true}"
+  : > "${sudo_capture}"
+  local fixed_systemctl
+  local fixed_env
+  local fixed_true
+  fixed_systemctl="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P systemctl)"
+  fixed_env="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P env)"
+  fixed_true="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P true)"
+
+  PATH="${stub_bin}:${PATH}" SUDO_CAPTURE="${sudo_capture}" \
+    run_privileged \
+      systemctl \
+      --selected-prefix "${SELECTED_A}" \
+      --account "${CURRENT_ACCOUNT}" \
+      --uid "${CURRENT_UID}"
+
+  for expected in \
+    -- "${fixed_env}" -i \
+    "PATH=${PRIVILEGED_TOOL_PATH}" \
+    HOME=/root USER=root LOGNAME=root \
+    "${fixed_systemctl}" \
+    --selected-prefix "${SELECTED_A}" \
+    --account "${CURRENT_ACCOUNT}" \
+    --uid "${CURRENT_UID}"
+  do
+    grep -Fxq -- "${expected}" "${sudo_capture}" \
+      || fail "dev sudo boundary omitted '${expected}'"
+  done
+  if grep -Eq -- '(^-E$|SUBSTRATE_(HOME|ROOT|INSTALL_BOOTSTRAP_CONTEXT_V1)=)' "${sudo_capture}"; then
+    fail "dev arbitrary privileged tool inherited installation authority"
+  fi
+  if grep -Fq -- "${INSTALL_WRAPPER_CARRIER}" "${sudo_capture}"; then
+    fail "dev arbitrary privileged tool received the authenticated carrier"
+  fi
+  if grep -Fq -- "${malicious_systemctl}" "${sudo_capture}"; then
+    fail "dev sudo boundary selected a privileged tool from ambient PATH"
+  fi
+  if grep -Fq -- "${malicious_env}" "${sudo_capture}"; then
+    fail "dev sudo boundary selected env from ambient PATH"
+  fi
+  grep -Fxq -- "${fixed_true}" "${sudo_capture}" \
+    || fail "dev sudo probe did not use fixed-path true"
+  if grep -Fq -- "${malicious_true}" "${sudo_capture}"; then
+    fail "dev sudo probe selected true from ambient PATH"
+  fi
+  local sudo_lines_before
+  local sudo_lines_after
+  sudo_lines_before="$(wc -l < "${sudo_capture}")"
+  set +e
+  (
+    SUBSTRATE_ROOT="${AMBIENT_B}"
+    PATH="${stub_bin}:${PATH}" SUDO_CAPTURE="${sudo_capture}" \
+      run_privileged true --selected-prefix "${SELECTED_A}"
+  ) >/dev/null 2>&1
+  local tamper_status=$?
+  set -e
+  sudo_lines_after="$(wc -l < "${sudo_capture}")"
+  [[ "${tamper_status}" -ne 0 ]] \
+    || fail "dev sudo boundary accepted a conflicting checked projection"
+  [[ "${sudo_lines_after}" == "${sudo_lines_before}" ]] \
+    || fail "dev sudo boundary crossed after projection validation failed"
+)
+
+verify_dev_privileged_boundary
 
 [[ "$(find "${AMBIENT_B}" -mindepth 1 -maxdepth 1 -printf '%f\n')" == "sentinel" ]] \
   || fail "release context construction mutated ambient B"
