@@ -173,7 +173,8 @@ try:
         commitment_input = frame(prefix, account, uid)
         commitment = hashlib.sha256(commitment_input).hexdigest()
         carrier = b64_encode(commitment_input + f"host_context_commitment={commitment}\n".encode("ascii")).decode("ascii")
-    for value in (prefix, carrier, commitment, account, str(uid)):
+    account_home = normalize_path(entry.pw_dir)
+    for value in (prefix, carrier, commitment, account, str(uid), account_home):
         sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
 except Exception:
     print("invalid install bootstrap context", file=sys.stderr)
@@ -185,6 +186,7 @@ PY
   IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
   IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
   IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
   exec {context_fd}<&-
 
   export SUBSTRATE_HOME="${PREFIX}"
@@ -477,7 +479,7 @@ if [[ -n "\${substrate_original}" && -f "\${substrate_original}" ]]; then
   source "\${substrate_original}"
 fi
 
-legacy_bashenv="\${HOME}/.substrate_bashenv"
+legacy_bashenv=$(printf '%q' "${INSTALL_BOOTSTRAP_ACCOUNT_HOME%/}/.substrate_bashenv")
 if [[ -f "\${legacy_bashenv}" ]]; then
   # shellcheck disable=SC1090
   source "\${legacy_bashenv}"
