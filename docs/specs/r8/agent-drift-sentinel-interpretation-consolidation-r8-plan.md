@@ -645,7 +645,7 @@ cargo test -p agent-drift-sentinel --test real_session_live -- --nocapture
 ## R8-6 — Final Wall And Canonical Family Status Checkpoint
 
 Status: **COMPLETE / FIVE-DOC CANONICAL RECEIPT
-`549160ebc1d93b26fdbe8203d748dfb1a64787ef` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / TERMINAL
+`549160ebc1d93b26fdbe8203d748dfb1a64787ef` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
 TERMINAL TRANSITION COMMIT `65eac5ab` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` /
 CURRENT REVIEW RECEIPT PENDING ITS OWN FRESH INDEPENDENT REVIEW**. The receipt and terminal
 transition gates are satisfied; this separate review receipt claims no hash or review result for itself.
