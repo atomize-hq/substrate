@@ -1,4 +1,5 @@
 use super::report::{build_manifest_paths, legacy_bashenv_path, manifest_spec_map};
+#[cfg(unix)]
 use crate::execution::install_bootstrap::bind_unix_install_bootstrap_context;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
@@ -10,8 +11,11 @@ use std::{
 };
 use substrate_common::{log_schema, manager_manifest::ManagerManifest};
 use substrate_trace::append_to_trace;
+#[cfg(not(unix))]
+use substrate_trace::{init_trace, set_global_trace_context, TraceContext};
 use tempfile::NamedTempFile;
 use tracing::warn;
+#[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
 use uuid::Uuid;
 
@@ -40,10 +44,14 @@ pub enum RepairOutcome {
 pub(crate) fn run_repair(
     manager: &str,
     auto_confirm: bool,
-    install_context: &InstallBootstrapContextCarrierV1,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<RepairOutcome> {
+    #[cfg(unix)]
     bind_unix_install_bootstrap_context(install_context)?;
+    #[cfg(unix)]
     let (manifest_info, _) = build_manifest_paths(install_context)?;
+    #[cfg(not(unix))]
+    let (manifest_info, _) = build_manifest_paths()?;
     let manifest = ManagerManifest::load(&manifest_info.base, manifest_info.overlay.as_deref())?;
     let spec_map = manifest_spec_map(manifest);
     let Some(spec) = spec_map
@@ -70,7 +78,10 @@ pub(crate) fn run_repair(
             )
         })?;
 
+    #[cfg(unix)]
     let bashenv_path = legacy_bashenv_path(install_context)?;
+    #[cfg(not(unix))]
+    let bashenv_path = legacy_bashenv_path()?;
     if !prompt_for_repair(auto_confirm, &spec.name, &bashenv_path, &snippet)? {
         return Ok(RepairOutcome::Skipped {
             manager: spec.name.clone(),
@@ -215,7 +226,14 @@ fn log_repair_event(manager: &str, bashenv_path: &Path, backup_path: Option<&Pat
         "backup_path": backup_path.map(|p| p.display().to_string()),
         "snippet_length": block.lines().count()
     });
-    if let Err(err) = append_to_trace(&entry) {
+    #[cfg(unix)]
+    let result = append_to_trace(&entry);
+    #[cfg(not(unix))]
+    let result = {
+        let _ = set_global_trace_context(TraceContext::default());
+        init_trace(None).and_then(|_| append_to_trace(&entry))
+    };
+    if let Err(err) = result {
         warn!(
             target = "substrate::shell",
             manager = manager,

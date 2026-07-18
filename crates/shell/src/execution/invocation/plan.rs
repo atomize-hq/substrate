@@ -23,6 +23,7 @@ use std::sync::{Mutex, OnceLock};
 use substrate_broker::{set_global_broker, BrokerHandle};
 use substrate_common::{dedupe_path, paths as substrate_paths, WorldRootMode};
 use substrate_trace::{init_trace, set_global_trace_context, TraceContext};
+#[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
 use uuid::Uuid;
 
@@ -64,26 +65,28 @@ pub struct ShellConfig {
 }
 
 impl ShellConfig {
-    pub fn from_args(install_context: &InstallBootstrapContextCarrierV1) -> Result<Self> {
-        Self::from_cli(Cli::parse(), install_context)
+    pub fn from_args(
+        #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+    ) -> Result<Self> {
+        #[cfg(unix)]
+        {
+            Self::from_cli(Cli::parse(), install_context)
+        }
+        #[cfg(not(unix))]
+        {
+            Self::from_cli(Cli::parse())
+        }
     }
 
-    pub fn from_cli(cli: Cli, install_context: &InstallBootstrapContextCarrierV1) -> Result<Self> {
+    pub fn from_cli(
+        cli: Cli,
+        #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+    ) -> Result<Self> {
         #[cfg(test)]
         let _env_lock = FROM_CLI_ENV_LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
             .expect("env mutex poisoned");
-
-        let encoded_context = install_context.encode()?;
-        crate::execution::install_bootstrap::validate_install_bootstrap_projections(
-            install_context,
-            &encoded_context,
-            |key| env::var_os(key),
-        )?;
-        let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
-        let shims_dir = substrate_home.join("shims");
-        let version_file = shims_dir.join(".version");
 
         // macOS-only: apply CLI overrides to environment for platform detection precedence
         #[cfg(target_os = "macos")]
@@ -108,9 +111,25 @@ impl ShellConfig {
             std::process::exit(0);
         }
 
+        #[cfg(unix)]
+        let (substrate_home, shims_dir, version_file) = {
+            let encoded_context = install_context.encode()?;
+            crate::execution::install_bootstrap::validate_install_bootstrap_projections(
+                install_context,
+                &encoded_context,
+                |key| env::var_os(key),
+            )?;
+            let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
+            let shims_dir = substrate_home.join("shims");
+            let version_file = shims_dir.join(".version");
+            (substrate_home, shims_dir, version_file)
+        };
         // Handle --shim-deploy flag
         if cli.shim_deploy {
+            #[cfg(unix)]
             let deployer = ShimDeployer::with_context(install_context, false)?;
+            #[cfg(not(unix))]
+            let deployer = ShimDeployer::with_skip(false)?;
             match deployer.ensure_deployed() {
                 Ok(DeploymentStatus::Deployed) => {
                     println!("✓ Shims deployed successfully");
@@ -137,6 +156,8 @@ impl ShellConfig {
 
         // Handle --shim-remove flag
         if cli.shim_remove {
+            #[cfg(not(unix))]
+            let shims_dir = substrate_common::paths::shims_dir()?;
             if shims_dir.exists() {
                 std::fs::remove_dir_all(&shims_dir)?;
                 println!("✓ Removed shims from {shims_dir:?}");
@@ -148,6 +169,10 @@ impl ShellConfig {
 
         // Handle --shim-status-json flag (CI)
         if cli.shim_status_json {
+            #[cfg(not(unix))]
+            let shims_dir = substrate_common::paths::shims_dir()?;
+            #[cfg(not(unix))]
+            let version_file = substrate_common::paths::version_file()?;
             if env::var("SUBSTRATE_NO_SHIMS").is_ok() {
                 let out = json!({
                     "status": "disabled",
@@ -275,6 +300,10 @@ impl ShellConfig {
 
         // Handle --shim-status flag
         if cli.shim_status {
+            #[cfg(not(unix))]
+            let shims_dir = substrate_common::paths::shims_dir()?;
+            #[cfg(not(unix))]
+            let version_file = substrate_common::paths::version_file()?;
             // Respect explicit disable
             if env::var("SUBSTRATE_NO_SHIMS").is_ok() {
                 println!("Shims: Deployment disabled (SUBSTRATE_NO_SHIMS=1)");
@@ -512,7 +541,10 @@ impl ShellConfig {
                     std::process::exit(code);
                 }
                 SubCommands::Shim(shim_cmd) => {
+                    #[cfg(unix)]
                     handle_shim_command(shim_cmd, &cli, install_context);
+                    #[cfg(not(unix))]
+                    handle_shim_command(shim_cmd, &cli);
                 }
                 SubCommands::Health(health_cmd) => {
                     handle_health_command(health_cmd, &cli)?;
@@ -541,7 +573,21 @@ impl ShellConfig {
 
         let session_id = env::var("SHIM_SESSION_ID").unwrap_or_else(|_| Uuid::now_v7().to_string());
 
+        #[cfg(not(unix))]
+        let home = env::var("HOME")
+            .or_else(|_| env::var("USERPROFILE"))
+            .context("HOME/USERPROFILE not set")?;
+        #[cfg(not(unix))]
+        let substrate_home = substrate_paths::substrate_home()?;
+        #[cfg(not(unix))]
+        let shims_dir = substrate_common::paths::shims_dir()?;
+
+        #[cfg(unix)]
         let trace_log_file = substrate_home.join("trace.jsonl");
+        #[cfg(not(unix))]
+        let trace_log_file = env::var("SHIM_TRACE_LOG")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| substrate_home.join("trace.jsonl"));
 
         let original_path = env::var("SHIM_ORIGINAL_PATH")
             .or_else(|_| env::var("PATH"))
@@ -575,7 +621,10 @@ impl ShellConfig {
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
+        #[cfg(unix)]
         let bash_preexec_path = substrate_home.join(".substrate_preexec");
+        #[cfg(not(unix))]
+        let bash_preexec_path = PathBuf::from(home).join(".substrate_preexec");
         let host_bash_env = env::var("BASH_ENV").ok();
 
         let skip_shims_flag = cli.shim_skip || env::var("SUBSTRATE_NO_SHIMS").is_ok();

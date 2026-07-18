@@ -5,12 +5,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use substrate_common::paths as substrate_paths;
 use tempfile::NamedTempFile;
+#[cfg(unix)]
 use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformPrincipalV1};
 
 pub(crate) fn env_sh_path() -> Result<PathBuf> {
     Ok(substrate_paths::substrate_home()?.join("env.sh"))
 }
 
+#[cfg(unix)]
 pub(crate) fn write_env_sh(cfg: &SubstrateConfig) -> Result<()> {
     let substrate_home = substrate_paths::substrate_home()?;
     let install_context =
@@ -34,6 +36,12 @@ pub(crate) fn write_env_sh(cfg: &SubstrateConfig) -> Result<()> {
     tmp.persist(&path)
         .map_err(|err| anyhow!("failed to persist {}: {}", path.display(), err.error))?;
     Ok(())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn write_env_sh(cfg: &SubstrateConfig) -> Result<()> {
+    let substrate_home = substrate_paths::substrate_home()?;
+    write_env_sh_at(&substrate_home.join("env.sh"), &substrate_home, cfg)
 }
 
 pub(crate) fn export_runtime_config_env(cfg: &SubstrateConfig) {
@@ -102,6 +110,7 @@ fn render_env_sh(substrate_home: &Path, cfg: &SubstrateConfig) -> String {
     out
 }
 
+#[cfg(unix)]
 fn render_env_sh_for_context(
     substrate_home: &Path,
     cfg: &SubstrateConfig,
@@ -163,21 +172,28 @@ fn bash_quote(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{render_env_sh, write_env_sh};
+    use super::render_env_sh;
+    #[cfg(unix)]
+    use super::write_env_sh;
     use crate::execution::config_model::SubstrateConfig;
+    #[cfg(unix)]
     use crate::execution::install_bootstrap::{
         current_unix_principal_and_home, install_bootstrap_projections,
         INSTALL_BOOTSTRAP_ACCOUNT_ENV, INSTALL_BOOTSTRAP_COMMITMENT_ENV,
         INSTALL_BOOTSTRAP_CONTEXT_ENV, INSTALL_BOOTSTRAP_UID_ENV,
     };
+    #[cfg(unix)]
     use std::ffi::OsString;
     use std::path::Path;
+    #[cfg(unix)]
     use transport_api_types::{
         InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformPrincipalV1,
     };
 
+    #[cfg(unix)]
     struct ProjectionEnvGuard(Vec<(&'static str, Option<OsString>)>);
 
+    #[cfg(unix)]
     impl ProjectionEnvGuard {
         fn capture() -> Self {
             Self(
@@ -196,6 +212,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     impl Drop for ProjectionEnvGuard {
         fn drop(&mut self) {
             for (key, value) in self.0.drain(..) {
@@ -224,6 +241,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     #[serial_test::serial]
     fn write_env_sh_preserves_authenticated_install_projection() {
         let _guard = ProjectionEnvGuard::capture();

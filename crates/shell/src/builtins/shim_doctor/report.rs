@@ -1,11 +1,12 @@
 use crate::builtins::world_deps::{self, WorldDepsDoctorSnapshotV1};
+#[cfg(unix)]
+use crate::execution::install_bootstrap::{
+    bind_unix_install_bootstrap_context, checked_install_bootstrap_context_from_projections,
+    unix_account_home_for_principal,
+};
 use crate::execution::{
     config_model::{self, CliConfigOverrides},
     current_platform,
-    install_bootstrap::{
-        bind_unix_install_bootstrap_context, checked_install_bootstrap_context_from_projections,
-        unix_account_home_for_principal,
-    },
     manager_init::{self, ManagerInitConfig, ManifestPaths},
     manager_manifest_base_path,
 };
@@ -25,12 +26,16 @@ use substrate_common::{
     manager_manifest::{ManagerManifest, ManagerSpec},
     paths as substrate_paths,
 };
+#[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct ShimDoctorReport {
+    #[cfg(unix)]
     pub selected_host_prefix: PathBuf,
+    #[cfg(unix)]
     pub host_context_commitment: String,
+    #[cfg(unix)]
     pub install_context_source: &'static str,
     pub manifest: ManifestInfo,
     pub path: PathDoctorStatus,
@@ -141,10 +146,18 @@ pub(crate) fn collect_report(
     cli_no_world: bool,
     cli_force_world: bool,
 ) -> Result<ShimDoctorReport> {
-    let install_context = checked_install_bootstrap_context_from_projections()?;
-    collect_report_for_context(cli_no_world, cli_force_world, &install_context)
+    #[cfg(unix)]
+    {
+        let install_context = checked_install_bootstrap_context_from_projections()?;
+        collect_report_for_context(cli_no_world, cli_force_world, &install_context)
+    }
+    #[cfg(not(unix))]
+    {
+        build_report(cli_no_world, cli_force_world)
+    }
 }
 
+#[cfg(unix)]
 pub(crate) fn collect_report_for_context(
     cli_no_world: bool,
     cli_force_world: bool,
@@ -155,11 +168,28 @@ pub(crate) fn collect_report_for_context(
 }
 
 pub(crate) fn build_manifest_paths(
-    install_context: &InstallBootstrapContextCarrierV1,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<(ManifestInfo, ManifestPaths)> {
-    bind_unix_install_bootstrap_context(install_context)?;
-    let base = manager_manifest_base_path(install_context);
-    let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
+    #[cfg(unix)]
+    {
+        bind_unix_install_bootstrap_context(install_context)?;
+        let base = manager_manifest_base_path(install_context);
+        let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
+        build_manifest_paths_at(base, substrate_home)
+    }
+    #[cfg(not(unix))]
+    {
+        build_manifest_paths_at(
+            manager_manifest_base_path(),
+            substrate_paths::substrate_home()?,
+        )
+    }
+}
+
+fn build_manifest_paths_at(
+    base: PathBuf,
+    substrate_home: PathBuf,
+) -> Result<(ManifestInfo, ManifestPaths)> {
     let overlay_path = substrate_home.join("manager_hooks.local.yaml");
     let overlay_exists = overlay_path.exists();
     let manifest_info = ManifestInfo {
@@ -183,13 +213,22 @@ pub(crate) fn manifest_spec_map(manifest: ManagerManifest) -> HashMap<String, Ma
 }
 
 pub(crate) fn legacy_bashenv_path(
-    install_context: &InstallBootstrapContextCarrierV1,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<PathBuf> {
-    bind_unix_install_bootstrap_context(install_context)?;
-    Ok(
-        unix_account_home_for_principal(&install_context.context.intended_host_principal)?
-            .join(".substrate_bashenv"),
-    )
+    #[cfg(unix)]
+    {
+        bind_unix_install_bootstrap_context(install_context)?;
+        Ok(
+            unix_account_home_for_principal(&install_context.context.intended_host_principal)?
+                .join(".substrate_bashenv"),
+        )
+    }
+    #[cfg(not(unix))]
+    {
+        dirs::home_dir()
+            .map(|home| home.join(".substrate_bashenv"))
+            .ok_or_else(|| anyhow!("unable to determine home directory for ~/.substrate_bashenv"))
+    }
 }
 
 pub(crate) fn path_separator() -> char {
@@ -223,7 +262,7 @@ pub(crate) fn normalize_path(segment: &str) -> String {
 fn build_report(
     cli_no_world: bool,
     cli_force_world: bool,
-    install_context: &InstallBootstrapContextCarrierV1,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<ShimDoctorReport> {
     let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let cli_world_enabled = if cli_force_world {
@@ -253,11 +292,17 @@ fn build_report(
         )
     };
 
+    #[cfg(unix)]
     let (manifest_info, manifest_paths) = build_manifest_paths(install_context)?;
+    #[cfg(not(unix))]
+    let (manifest_info, manifest_paths) = build_manifest_paths()?;
     let manifest = ManagerManifest::load(&manifest_info.base, manifest_info.overlay.as_deref())?;
     let spec_map = manifest_spec_map(manifest);
     let (mut states, skip_requested) = collect_states(&manifest_paths, &spec_map)?;
+    #[cfg(unix)]
     let trace_log = trace_log_path(install_context)?;
+    #[cfg(not(unix))]
+    let trace_log = trace_log_path()?;
     let mut hints = read_hint_records(&trace_log)?;
     hints.sort_by(|a, b| a.name.cmp(&b.name));
     let mut hint_lookup = HashMap::new();
@@ -272,11 +317,17 @@ fn build_report(
     }
 
     Ok(ShimDoctorReport {
+        #[cfg(unix)]
         selected_host_prefix: PathBuf::from(&install_context.context.selected_host_prefix),
+        #[cfg(unix)]
         host_context_commitment: install_context.host_context_commitment.clone(),
+        #[cfg(unix)]
         install_context_source: "install_context",
         manifest: manifest_info,
+        #[cfg(unix)]
         path: build_path_status(install_context)?,
+        #[cfg(not(unix))]
+        path: build_path_status()?,
         trace_log,
         skip_all_requested: skip_requested,
         states,
@@ -330,11 +381,17 @@ fn collect_states(
 }
 
 fn build_path_status(
-    install_context: &InstallBootstrapContextCarrierV1,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<PathDoctorStatus> {
-    bind_unix_install_bootstrap_context(install_context)?;
-    let shim_dir = PathBuf::from(&install_context.context.selected_host_prefix).join("shims");
-    let bashenv_path = legacy_bashenv_path(install_context)?;
+    #[cfg(unix)]
+    let (shim_dir, bashenv_path) = {
+        bind_unix_install_bootstrap_context(install_context)?;
+        let shim_dir = PathBuf::from(&install_context.context.selected_host_prefix).join("shims");
+        let bashenv_path = legacy_bashenv_path(install_context)?;
+        (shim_dir, bashenv_path)
+    };
+    #[cfg(not(unix))]
+    let (shim_dir, bashenv_path) = (substrate_paths::shims_dir()?, legacy_bashenv_path()?);
     let path_value = env::var("PATH").unwrap_or_default();
     let separator = path_separator();
     let shim_dir_str = shim_dir.display().to_string();
@@ -364,9 +421,23 @@ fn build_path_status(
     })
 }
 
-fn trace_log_path(install_context: &InstallBootstrapContextCarrierV1) -> Result<PathBuf> {
-    bind_unix_install_bootstrap_context(install_context)?;
-    Ok(PathBuf::from(&install_context.context.selected_host_prefix).join("trace.jsonl"))
+fn trace_log_path(
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<PathBuf> {
+    #[cfg(unix)]
+    {
+        bind_unix_install_bootstrap_context(install_context)?;
+        Ok(PathBuf::from(&install_context.context.selected_host_prefix).join("trace.jsonl"))
+    }
+    #[cfg(not(unix))]
+    {
+        if let Ok(path) = env::var("SHIM_TRACE_LOG") {
+            return Ok(PathBuf::from(path));
+        }
+        dirs::home_dir()
+            .map(|home| home.join(".substrate/trace.jsonl"))
+            .ok_or_else(|| anyhow!("unable to determine home directory for trace log"))
+    }
 }
 
 fn read_hint_records(trace_path: &Path) -> Result<Vec<HintRecord>> {

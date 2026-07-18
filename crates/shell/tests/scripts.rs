@@ -1,8 +1,10 @@
 use substrate_shell::scripts::{write_bash_preexec_script, BASH_PREEXEC_SCRIPT};
+#[cfg(unix)]
 use transport_api_types::{
     InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformPrincipalV1,
 };
 
+#[cfg(unix)]
 fn current_install_context(prefix: &std::path::Path) -> InstallBootstrapContextCarrierV1 {
     let output = std::process::Command::new("id")
         .args(["-u"])
@@ -40,16 +42,25 @@ fn bash_preexec_script_contains_hooks() {
 fn write_bash_preexec_script_writes_constant() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join(".substrate_preexec");
+    #[cfg(unix)]
     let context = current_install_context(dir.path());
 
+    #[cfg(unix)]
     write_bash_preexec_script(&path, &context).unwrap();
+    #[cfg(not(unix))]
+    write_bash_preexec_script(&path).unwrap();
 
     let written = std::fs::read_to_string(&path).unwrap();
-    assert!(written.ends_with(BASH_PREEXEC_SCRIPT));
-    assert!(written.contains(&context.host_context_commitment));
-    assert!(written.contains("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1"));
-    assert!(!written.contains("$HOME/.substrate"));
-    assert!(!written.contains("~/.bashrc"));
+    #[cfg(unix)]
+    {
+        assert!(written.ends_with(BASH_PREEXEC_SCRIPT));
+        assert!(written.contains(&context.host_context_commitment));
+        assert!(written.contains("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1"));
+        assert!(!written.contains("$HOME/.substrate"));
+        assert!(!written.contains("~/.bashrc"));
+    }
+    #[cfg(not(unix))]
+    assert_eq!(written, BASH_PREEXEC_SCRIPT);
 }
 
 #[cfg(unix)]

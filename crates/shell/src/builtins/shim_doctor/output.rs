@@ -5,12 +5,15 @@ use super::report::{
 
 pub(crate) fn print_text_report(report: &ShimDoctorReport) {
     println!("== substrate shim doctor ==");
-    println!("Install prefix: {}", report.selected_host_prefix.display());
-    println!(
-        "Host context commitment: {}",
-        report.host_context_commitment
-    );
-    println!("Install context source: {}", report.install_context_source);
+    #[cfg(unix)]
+    {
+        println!("Install prefix: {}", report.selected_host_prefix.display());
+        println!(
+            "Host context commitment: {}",
+            report.host_context_commitment
+        );
+        println!("Install context source: {}", report.install_context_source);
+    }
     println!("Manifest: {}", report.manifest.base.display());
     if let Some(overlay) = &report.manifest.overlay {
         let status = if report.manifest.overlay_exists {

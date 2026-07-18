@@ -7,6 +7,7 @@ use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
+#[cfg(unix)]
 fn bind_test_install_context(
     prefix: &std::path::Path,
 ) -> transport_api_types::InstallBootstrapContextCarrierV1 {
@@ -88,8 +89,12 @@ fn wrap_mode_uses_cli_shell_and_shimmed_path() {
     std::env::remove_var("SUBSTRATE_NO_SHIMS");
 
     let cli = Cli::parse_from(["substrate", "-c", "echo hi", "--shell", "/bin/zsh"]);
+    #[cfg(unix)]
     let install_context = bind_test_install_context(&substrate_home);
+    #[cfg(unix)]
     let config = ShellConfig::from_cli(cli, &install_context).expect("build shell config from CLI");
+    #[cfg(not(unix))]
+    let config = ShellConfig::from_cli(cli).expect("build shell config from CLI");
 
     match &config.mode {
         ShellMode::Wrap(cmd) => assert_eq!(cmd, "echo hi"),
@@ -147,8 +152,12 @@ fn skip_shims_and_no_world_disable_shimmed_path() {
     std::env::remove_var("SHIM_ORIGINAL_PATH");
 
     let cli = Cli::parse_from(["substrate", "--no-world", "-c", "echo hi"]);
+    #[cfg(unix)]
     let install_context = bind_test_install_context(&substrate_home);
+    #[cfg(unix)]
     let config = ShellConfig::from_cli(cli, &install_context).expect("config honors skip flags");
+    #[cfg(not(unix))]
+    let config = ShellConfig::from_cli(cli).expect("config honors skip flags");
 
     assert!(config.no_world);
     assert!(config.skip_shims);

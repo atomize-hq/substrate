@@ -8,6 +8,7 @@ use std::path::Path;
 use std::{ffi::CString, mem::MaybeUninit};
 
 use substrate_common::paths as substrate_paths;
+#[cfg(unix)]
 use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformPrincipalV1};
 
 #[derive(Debug, Clone)]

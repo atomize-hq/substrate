@@ -22,6 +22,7 @@ use clap::Parser;
 use std::env;
 use std::fs;
 use std::io::{self, IsTerminal};
+#[cfg(unix)]
 use std::path::Path;
 // (avoid unused: import Read/Write locally where needed)
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -29,6 +30,7 @@ use std::sync::Arc;
 use substrate_broker::{set_global_broker, BrokerHandle};
 use substrate_trace::{init_trace, set_global_trace_context, TraceContext};
 use tracing::warn;
+#[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
 
 // Reedline imports
@@ -192,16 +194,16 @@ pub(crate) fn handle_graph_command(cmd: &GraphCmd) -> Result<()> {
 pub(crate) fn handle_shim_command(
     cmd: &ShimCmd,
     cli: &Cli,
-    install_context: &InstallBootstrapContextCarrierV1,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> ! {
     match &cmd.action {
         ShimAction::Doctor { json } => {
-            let exit = match commands::shim_doctor::run_doctor(
-                *json,
-                cli.no_world,
-                cli.world,
-                install_context,
-            ) {
+            #[cfg(unix)]
+            let result =
+                commands::shim_doctor::run_doctor(*json, cli.no_world, cli.world, install_context);
+            #[cfg(not(unix))]
+            let result = commands::shim_doctor::run_doctor(*json, cli.no_world, cli.world);
+            let exit = match result {
                 Ok(_) => 0,
                 Err(err) if config_model::is_user_error(&err) => {
                     eprintln!("substrate shim doctor failed: {:#}", err);
@@ -215,15 +217,22 @@ pub(crate) fn handle_shim_command(
             std::process::exit(exit);
         }
         ShimAction::Repair { manager, yes } => {
-            println!(
-                "Install prefix: {}",
-                install_context.context.selected_host_prefix
-            );
-            println!(
-                "Host context commitment: {}",
-                install_context.host_context_commitment
-            );
-            let exit = match commands::shim_doctor::run_repair(manager, *yes, install_context) {
+            #[cfg(unix)]
+            {
+                println!(
+                    "Install prefix: {}",
+                    install_context.context.selected_host_prefix
+                );
+                println!(
+                    "Host context commitment: {}",
+                    install_context.host_context_commitment
+                );
+            }
+            #[cfg(unix)]
+            let result = commands::shim_doctor::run_repair(manager, *yes, install_context);
+            #[cfg(not(unix))]
+            let result = commands::shim_doctor::run_repair(manager, *yes);
+            let exit = match result {
                 Ok(commands::shim_doctor::RepairOutcome::Applied {
                     manager,
                     bashenv_path,
@@ -271,6 +280,7 @@ pub fn run_shell() -> Result<i32> {
 }
 
 pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
+    #[cfg(unix)]
     if cli.install_bootstrap_home_v1
         && (cli.install_bootstrap_context_v1.is_none()
             || !install_bootstrap_home_action_is_exclusive(&cli))
@@ -284,6 +294,16 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         return Ok(0);
     }
 
+    #[cfg(not(unix))]
+    if cli.install_bootstrap_home_v1
+        || cli.install_bootstrap_context_v1.is_some()
+        || cli.install_prefix.is_some()
+    {
+        eprintln!("substrate: install bootstrap context is supported only on Unix");
+        return Ok(2);
+    }
+
+    #[cfg(unix)]
     let install_context = if let Some(encoded) = cli.install_bootstrap_context_v1.as_deref() {
         match super::install_bootstrap::decode_and_bind_unix_install_bootstrap_context(
             encoded,
@@ -316,11 +336,13 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         }
     };
 
+    #[cfg(unix)]
     if super::install_bootstrap::install_bootstrap_projections(&install_context).is_err() {
         eprintln!("substrate: invalid install bootstrap context");
         return Ok(2);
     }
 
+    #[cfg(unix)]
     if cli.install_bootstrap_home_v1 {
         return match super::home_bootstrap::ensure_substrate_home_deps_scaffold_for_context(
             &install_context,
@@ -333,6 +355,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         };
     }
 
+    #[cfg(unix)]
     if let Err(err) =
         super::home_bootstrap::ensure_substrate_home_deps_scaffold_for_context(&install_context)
     {
@@ -340,14 +363,28 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         return Ok(err.exit_code());
     }
 
-    let trace_context =
-        TraceContext::explicit_product(Path::new(&install_context.context.selected_host_prefix))?;
-    let _ = set_global_trace_context(trace_context);
-    if let Err(e) = init_trace(None) {
-        eprintln!("substrate: warning: failed to initialize trace: {}", e);
+    #[cfg(unix)]
+    {
+        let trace_context = TraceContext::explicit_product(Path::new(
+            &install_context.context.selected_host_prefix,
+        ))?;
+        let _ = set_global_trace_context(trace_context);
+        if let Err(e) = init_trace(None) {
+            eprintln!("substrate: warning: failed to initialize trace: {}", e);
+        }
     }
 
-    let mut config = match ShellConfig::from_cli(cli, &install_context) {
+    #[cfg(not(unix))]
+    if let Err(err) = super::home_bootstrap::ensure_substrate_home_deps_scaffold() {
+        eprintln!("{err}");
+        return Ok(err.exit_code());
+    }
+
+    #[cfg(unix)]
+    let config_result = ShellConfig::from_cli(cli, &install_context);
+    #[cfg(not(unix))]
+    let config_result = ShellConfig::from_cli(cli);
+    let mut config = match config_result {
         Ok(config) => config,
         Err(err) if config_model::is_user_error(&err) => {
             eprintln!("{err}");
@@ -368,11 +405,25 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
     }
 
     let _ = set_global_broker(BrokerHandle::new());
+    #[cfg(not(unix))]
+    {
+        let _ = set_global_trace_context(TraceContext::default());
+        if let Err(e) = init_trace(None) {
+            eprintln!("substrate: warning: failed to initialize trace: {}", e);
+        }
+    }
 
     let manager_init_result = if config.no_world {
         None
     } else {
-        configure_manager_init(&config, &install_context)
+        #[cfg(unix)]
+        {
+            configure_manager_init(&config, &install_context)
+        }
+        #[cfg(not(unix))]
+        {
+            configure_manager_init(&config)
+        }
     };
 
     if let Some(result) = &manager_init_result {
@@ -391,7 +442,11 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
     } else {
         env::remove_var("SUBSTRATE_MANAGER_ENV");
         if !config.skip_shims {
-            if let Err(err) = write_manager_env_script(&config, &install_context) {
+            #[cfg(unix)]
+            let write_result = write_manager_env_script(&config, &install_context);
+            #[cfg(not(unix))]
+            let write_result = write_manager_env_script(&config);
+            if let Err(err) = write_result {
                 warn!(
                     target = "substrate::shell",
                     error = %err,
@@ -402,7 +457,11 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         if let Some(parent) = config.bash_preexec_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        match write_bash_preexec_script(&config.bash_preexec_path, &install_context) {
+        #[cfg(unix)]
+        let write_result = write_bash_preexec_script(&config.bash_preexec_path, &install_context);
+        #[cfg(not(unix))]
+        let write_result = write_bash_preexec_script(&config.bash_preexec_path);
+        match write_result {
             Ok(()) => config.preexec_available = true,
             Err(err) => {
                 config.preexec_available = false;
@@ -420,7 +479,11 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
     // Deploy shims if needed (non-blocking, continues on error)
     // Skip if either the CLI flag is set or the environment variable is set
     let skip_shims = config.skip_shims;
-    match ShimDeployer::with_context(&install_context, skip_shims)?.ensure_deployed() {
+    #[cfg(unix)]
+    let deployment = ShimDeployer::with_context(&install_context, skip_shims)?.ensure_deployed();
+    #[cfg(not(unix))]
+    let deployment = ShimDeployer::with_skip(skip_shims)?.ensure_deployed();
+    match deployment {
         Ok(DeploymentStatus::Deployed) => {
             // Shims were deployed, no additional action needed
         }
@@ -471,6 +534,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
     }
 }
 
+#[cfg(unix)]
 fn install_bootstrap_home_action_is_exclusive(cli: &Cli) -> bool {
     cli.command.is_none()
         && cli.script.is_none()

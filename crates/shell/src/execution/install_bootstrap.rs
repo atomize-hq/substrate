@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use anyhow::{anyhow, Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
